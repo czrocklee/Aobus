@@ -33,7 +33,7 @@ namespace ao::rt::test
                                                        .conductor = "Conductor",
                                                        .ensemble = "Ensemble",
                                                        .soloist = "Soloist",
-                                                       .uri = "/tmp/query-completion.flac",
+                                                       .uri = "query-completion.flac",
                                                        .tags = {tags.begin(), tags.end()},
                                                        .customMetadata = {custom.begin(), custom.end()},
                                                        .duration = std::chrono::seconds{120}});

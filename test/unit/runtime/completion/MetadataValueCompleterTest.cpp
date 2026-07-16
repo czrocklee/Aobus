@@ -26,7 +26,7 @@ namespace ao::rt::test
                               library::test::TrackSpec{.title = "Metadata Value Track",
                                                        .artist = std::move(artist),
                                                        .album = std::move(album),
-                                                       .uri = "/tmp/metadata-value-completion.flac",
+                                                       .uri = "metadata-value-completion.flac",
                                                        .duration = std::chrono::seconds{120}});
     }
 

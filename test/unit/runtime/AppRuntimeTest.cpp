@@ -199,14 +199,15 @@ namespace ao::rt::test
     audioStatePtr->onDevicesChanged(makeReadyAudioStatus().devices);
     executor->drain();
 
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto const fixtureUri =
+      audio::test::installAudioFixture(appPtr->musicLibrary().rootPath(), "basic_metadata.flac", "playable.flac");
     auto const firstTrackId =
       addRuntimeTrack(*appPtr,
-                      library::test::TrackSpec{.title = "First", .uri = fixturePath, .codec = AudioCodec::Flac},
+                      library::test::TrackSpec{.title = "First", .uri = fixtureUri, .codec = AudioCodec::Flac},
                       [executor] { executor->drain(); });
     auto const secondTrackId =
       addRuntimeTrack(*appPtr,
-                      library::test::TrackSpec{.title = "Second", .uri = fixturePath, .codec = AudioCodec::Flac},
+                      library::test::TrackSpec{.title = "Second", .uri = fixtureUri, .codec = AudioCodec::Flac},
                       [executor] { executor->drain(); });
     appPtr->sources().reloadAllTracks();
     auto const listId = ao::test::requireValue(appPtr->library().writer().createList(LibraryWriter::ListDraft{

@@ -8,6 +8,7 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
@@ -46,19 +47,6 @@ namespace ao::rt
 {
   namespace
   {
-    std::string_view modeToString(ExportMode mode)
-    {
-      switch (mode)
-      {
-        case ExportMode::Delta: return "delta";
-        case ExportMode::Metadata: return "metadata";
-        case ExportMode::Full: return "full";
-        case ExportMode::ListOnly: return "listOnly";
-      }
-
-      return "unknown";
-    }
-
     using MetadataStringGetter = std::string_view (*)(library::TrackView const&, library::DictionaryStore const&);
     using MetadataStringBaseGetter = std::string_view (*)(library::TrackBuilder::MetadataBuilder const&);
     using MetadataNumberGetter = std::uint16_t (*)(library::TrackView const&);
@@ -257,7 +245,9 @@ namespace ao::rt
        .u32Get = [](auto const& prop) { return static_cast<std::uint32_t>(prop.duration().count()); }},
       {.field = TrackField::Bitrate, .u32Get = [](auto const& prop) { return prop.bitrate().raw(); }},
       {.field = TrackField::SampleRate, .u32Get = [](auto const& prop) { return prop.sampleRate().raw(); }},
-      {.field = TrackField::Codec, .stringGet = [](auto const& prop) { return audioCodecName(prop.codec()); }},
+      {.field = TrackField::Codec,
+       .stringGet = [](auto const& prop)
+       { return prop.codec() == AudioCodec::Unknown ? std::string_view{"UNKNOWN"} : audioCodecName(prop.codec()); }},
       {.field = TrackField::Channels, .u8Get = [](auto const& prop) { return prop.channels().raw(); }},
       {.field = TrackField::BitDepth, .u8Get = [](auto const& prop) { return prop.bitDepth().raw(); }},
     });
@@ -366,11 +356,11 @@ namespace ao::rt
       return false;
     }
 
-    void emitSingleCover(ryml::NodeRef& coverNode,
-                         ResourceId resId,
-                         std::uint8_t typeValue,
-                         std::unordered_map<ResourceId, std::string>& exportedCovers,
-                         library::ResourceStore::Reader const& resReader)
+    Result<> emitSingleCover(ryml::NodeRef& coverNode,
+                             ResourceId resId,
+                             std::uint8_t typeValue,
+                             std::unordered_map<ResourceId, std::string>& exportedCovers,
+                             library::ResourceStore::Reader const& resReader)
     {
       coverNode.append_child() << ryml::key("type") << static_cast<std::uint32_t>(typeValue);
 
@@ -379,34 +369,39 @@ namespace ao::rt
         auto dataNode = coverNode.append_child();
         dataNode << ryml::key("data");
         dataNode.set_val_ref(yaml::copyToArena(dataNode, it->second));
-        return;
+        return {};
       }
 
-      if (auto const optDbData = resReader.get(resId); optDbData && !optDbData->empty())
+      auto const optDbData = resReader.get(resId);
+
+      if (!optDbData || optDbData->empty())
       {
-        auto const b64 = utility::base64Encode(*optDbData);
-        auto const anchorName = "cover_" + std::to_string(resId.raw());
-
-        auto dataNode = coverNode.append_child();
-        dataNode << ryml::key("data") << b64;
-        dataNode.set_val_anchor(yaml::copyToArena(dataNode, anchorName));
-        exportedCovers[resId] = anchorName;
+        return makeError(Error::Code::CorruptData, std::format("Cover resource {} is missing or empty", resId.raw()));
       }
+
+      auto const b64 = utility::base64Encode(*optDbData);
+      auto const anchorName = "cover_" + std::to_string(resId.raw());
+
+      auto dataNode = coverNode.append_child();
+      dataNode << ryml::key("data") << b64;
+      dataNode.set_val_anchor(yaml::copyToArena(dataNode, anchorName));
+      exportedCovers[resId] = anchorName;
+      return {};
     }
 
-    void emitTrackCover(ryml::NodeRef& node,
-                        library::ReadTransaction const& transaction,
-                        library::TrackView const& view,
-                        std::optional<library::TrackBuilder> const& optBaseline,
-                        ExportMode mode,
-                        std::unordered_map<ResourceId, std::string>& exportedCovers,
-                        library::ResourceStore const& resources)
+    Result<> emitTrackCover(ryml::NodeRef& node,
+                            library::ReadTransaction const& transaction,
+                            library::TrackView const& view,
+                            std::optional<library::TrackBuilder> const& optBaseline,
+                            ExportMode mode,
+                            std::unordered_map<ResourceId, std::string>& exportedCovers,
+                            library::ResourceStore const& resources)
     {
       auto const resReader = resources.reader(transaction);
 
       if (!shouldExportCovers(view, optBaseline, mode, resReader))
       {
-        return;
+        return {};
       }
 
       auto coversNode = node.append_child();
@@ -421,8 +416,15 @@ namespace ao::rt
         auto coverNode = coversNode.append_child();
         coverNode |= ryml::MAP;
 
-        emitSingleCover(coverNode, cover.resourceId, static_cast<std::uint8_t>(cover.type), exportedCovers, resReader);
+        if (auto result = emitSingleCover(
+              coverNode, cover.resourceId, static_cast<std::uint8_t>(cover.type), exportedCovers, resReader);
+            !result)
+        {
+          return result;
+        }
       }
+
+      return {};
     }
 
     void emitTrackCommon(ryml::NodeRef& node,
@@ -440,6 +442,72 @@ namespace ao::rt
           yaml::setValue(tagsNode.append_child(), dictionary.get(tagId));
         }
       }
+    }
+
+    Result<> emitList(ryml::NodeRef& listsNode,
+                      ListId const listId,
+                      library::ListView const& listView,
+                      ExportMode const mode,
+                      library::TrackStore::Reader const& trackReader)
+    {
+      auto listNode = listsNode.append_child();
+      listNode |= ryml::MAP;
+
+      listNode.append_child() << ryml::key("id") << listId.raw();
+      listNode.append_child() << ryml::key("parentId") << listView.parentId().raw();
+      appendString(listNode, "name", listView.name());
+
+      if (!listView.description().empty())
+      {
+        appendString(listNode, "description", listView.description());
+      }
+
+      if (listView.isSmart())
+      {
+        appendString(listNode, "filter", listView.filter());
+        return {};
+      }
+
+      auto const tracks = listView.tracks();
+
+      if (tracks.empty())
+      {
+        return {};
+      }
+
+      auto tracksNode = listNode.append_child();
+      yaml::setKey(tracksNode, "tracks");
+      tracksNode |= ryml::SEQ;
+
+      for (auto const trackId : tracks)
+      {
+        if (mode != ExportMode::ListOnly)
+        {
+          tracksNode.append_child() << trackId.raw();
+          continue;
+        }
+
+        auto const optTrackView = trackReader.get(trackId);
+
+        if (!optTrackView)
+        {
+          continue;
+        }
+
+        auto uri = library::LibraryUri::parse(optTrackView->property().uri());
+
+        if (!uri || uri->value() != optTrackView->property().uri())
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", trackId.raw()));
+        }
+
+        auto refNode = tracksNode.append_child();
+        refNode |= ryml::MAP;
+        appendString(refNode, "uri", uri->value());
+      }
+
+      return {};
     }
   } // namespace
 
@@ -492,9 +560,9 @@ namespace ao::rt
       return std::unexpected{header.error()};
     }
 
-    root.append_child() << ryml::key("version") << 1;
+    root.append_child() << ryml::key("version") << 2;
     appendString(root, "libraryId", utility::formatUuid(header->libraryId));
-    appendString(root, "export_mode", modeToString(mode));
+    appendString(root, "export_mode", exportModeName(mode));
 
     auto library = root.append_child();
     yaml::setKey(library, "library");
@@ -574,7 +642,14 @@ namespace ao::rt
     trackNode.append_child() << ryml::key("id") << id.raw();
 
     auto const property = view.property();
-    appendString(trackNode, "uri", property.uri());
+    auto uri = library::LibraryUri::parse(property.uri());
+
+    if (!uri || uri->value() != property.uri())
+    {
+      return makeError(Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", id.raw()));
+    }
+
+    appendString(trackNode, "uri", uri->value());
 
     auto optMediaTrack = std::optional<MediaTrack>{};
     auto optBaseline = std::optional<library::TrackBuilder>{};
@@ -583,7 +658,14 @@ namespace ao::rt
     {
       auto fileEc = std::error_code{};
 
-      if (auto const fullPath = ml.rootPath() / property.uri(); std::filesystem::exists(fullPath, fileEc) && !fileEc)
+      auto fullPathResult = uri->resolveUnder(ml.rootPath());
+
+      if (!fullPathResult)
+      {
+        return std::unexpected{fullPathResult.error()};
+      }
+
+      if (auto const& fullPath = *fullPathResult; std::filesystem::exists(fullPath, fileEc) && !fileEc)
       {
         if (auto mediaTrackResult = readMediaTrack(fullPath); mediaTrackResult)
         {
@@ -611,7 +693,11 @@ namespace ao::rt
       }
     }
 
-    emitTrackCover(trackNode, transaction, view, optBaseline, mode, exportedCovers, resources);
+    if (auto result = emitTrackCover(trackNode, transaction, view, optBaseline, mode, exportedCovers, resources);
+        !result)
+    {
+      return result;
+    }
 
     emitTrackCommon(trackNode, view.tags(), dictionary);
     return {};
@@ -630,47 +716,9 @@ namespace ao::rt
 
     for (auto const& [listId, listView] : listReader)
     {
-      auto listNode = listsNode.append_child();
-      listNode |= ryml::MAP;
-
-      listNode.append_child() << ryml::key("id") << listId.raw();
-      listNode.append_child() << ryml::key("parentId") << listView.parentId().raw();
-      appendString(listNode, "name", listView.name());
-
-      if (!listView.description().empty())
+      if (auto result = emitList(listsNode, listId, listView, mode, trackReader); !result)
       {
-        appendString(listNode, "description", listView.description());
-      }
-
-      if (listView.isSmart())
-      {
-        appendString(listNode, "filter", listView.filter());
-      }
-      else
-      {
-        if (auto const tracks = listView.tracks(); !tracks.empty())
-        {
-          auto tracksSeqNode = listNode.append_child();
-          yaml::setKey(tracksSeqNode, "tracks");
-          tracksSeqNode |= ryml::SEQ;
-
-          for (auto const tid : tracks)
-          {
-            if (mode == ExportMode::ListOnly)
-            {
-              if (auto const optTrackView = trackReader.get(tid); optTrackView)
-              {
-                auto refNode = tracksSeqNode.append_child();
-                refNode |= ryml::MAP;
-                appendString(refNode, "uri", optTrackView->property().uri());
-              }
-            }
-            else
-            {
-              tracksSeqNode.append_child() << tid.raw();
-            }
-          }
-        }
+        return result;
       }
     }
 

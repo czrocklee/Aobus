@@ -181,7 +181,8 @@ namespace ao::gtk::test
 
         stack->set_visible_child("edit");
         REQUIRE(emitFocusEnter(*entry));
-        REQUIRE(fixture.runtime().library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+        REQUIRE(fixture.runtime().library().writer().createList(
+          rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
         drainGtkEvents();
 
         CHECK(stack->get_visible_child_name() == "display");

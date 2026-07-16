@@ -6,6 +6,7 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -157,6 +158,32 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("LibraryYaml - export rejects a track with a missing cover resource",
+            "[runtime][workflow][import-export][cover]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      auto resourceIdResult = ml.resources().writer(transaction).create(lmdb::test::createTestData(8));
+      REQUIRE(resourceIdResult);
+
+      auto builder = TrackBuilder::makeEmpty();
+      builder.property().uri("song.flac");
+      builder.coverArt().add(PictureType::FrontCover, *resourceIdResult);
+      auto const [hot, cold] = prepareTrack(builder, transaction, ml.resources());
+      auto trackWriter = ml.tracks().writer(transaction);
+      createPreparedTrack(trackWriter, hot, cold);
+      REQUIRE(ml.resources().writer(transaction).remove(*resourceIdResult));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const result = LibraryYamlExporter{ml}.exportToYaml(temp.path() / "covers.yaml", ExportMode::Full);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
+  }
+
   TEST_CASE("LibraryYaml - merge replaces and removes cover art", "[runtime][workflow][import-export][cover]")
   {
     auto const temp = ao::test::TempDir{};
@@ -190,7 +217,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: full
 library:
   tracks:
@@ -225,7 +252,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: delta
 library:
   tracks:

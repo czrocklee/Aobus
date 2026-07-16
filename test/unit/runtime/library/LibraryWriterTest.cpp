@@ -279,6 +279,7 @@ namespace ao::rt::test
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
+    draft.kind = LibraryWriter::ListKind::Manual;
     draft.name = "Original";
     auto const listId = ao::test::requireValue(service.createList(draft));
 
@@ -286,6 +287,7 @@ namespace ao::rt::test
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { upserted = ev.listsUpserted; });
 
     auto updateDraft = LibraryWriter::ListDraft{};
+    updateDraft.kind = LibraryWriter::ListKind::Manual;
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
     auto const updateResult = service.updateList(updateDraft);
@@ -315,6 +317,18 @@ namespace ao::rt::test
       CHECK(result.error().message.contains("invalid list filter"));
       CHECK(libraryFixture.library().lists().reader(libraryFixture.library().readTransaction()).begin() ==
             library::ListStore::Reader::Iterator{});
+    }
+
+    SECTION("empty smart filter")
+    {
+      auto draft = LibraryWriter::ListDraft{};
+      draft.kind = LibraryWriter::ListKind::Smart;
+      draft.name = "Empty";
+
+      auto const result = service.createList(draft);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
+      CHECK(result.error().message.contains("must be non-empty"));
     }
 
     SECTION("missing parent")
@@ -420,6 +434,7 @@ namespace ao::rt::test
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
+    draft.kind = LibraryWriter::ListKind::Manual;
     draft.name = "ToDelete";
     auto const listId = ao::test::requireValue(service.createList(draft));
 

@@ -71,11 +71,10 @@ namespace ao::rt::test
 
       TrackId addPlayableTrack(std::string title, std::uint16_t const year = 2020)
       {
-        auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac");
-        auto const playablePath = libraryFixture.root() / std::format("playable-{}.flac", nextPlayableFile++);
-        REQUIRE(std::filesystem::copy_file(fixturePath, playablePath));
+        auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
+        audio::test::installAudioFixture(libraryFixture.root(), "basic_metadata.flac", playableUri);
         return libraryFixture.addTrack(library::test::TrackSpec{
-          .title = std::move(title), .uri = playablePath.string(), .year = year, .codec = AudioCodec::Flac});
+          .title = std::move(title), .uri = playableUri, .year = year, .codec = AudioCodec::Flac});
       }
 
       void removePlayableFile(TrackId const trackId)
@@ -86,7 +85,7 @@ namespace ao::rt::test
                                .reader(transaction)
                                .get(trackId, library::TrackStore::Reader::LoadMode::Cold);
         REQUIRE(optView);
-        REQUIRE(std::filesystem::remove(std::filesystem::path{optView->property().uri()}));
+        REQUIRE(std::filesystem::remove(libraryFixture.root() / std::filesystem::path{optView->property().uri()}));
       }
 
       void openManualView(std::span<TrackId const> const trackIds, TrackListViewConfig config = {})
@@ -145,9 +144,10 @@ namespace ao::rt::test
 
       TrackId addPlayableTrack(std::string title)
       {
-        auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac");
+        auto const fixtureUri = audio::test::installAudioFixture(
+          transport.libraryFixture.root(), "basic_metadata.flac", "transport-playable.flac");
         return transport.libraryFixture.addTrack(
-          library::test::TrackSpec{.title = std::move(title), .uri = fixturePath.string(), .codec = AudioCodec::Flac});
+          library::test::TrackSpec{.title = std::move(title), .uri = fixtureUri, .codec = AudioCodec::Flac});
       }
 
       void buildThreeTrackManualView()
@@ -337,7 +337,7 @@ namespace ao::rt::test
     auto const current = fixture.addPlayableTrack("Current");
     auto const successor = fixture.addPlayableTrack("Successor");
     auto const broken = fixture.libraryFixture.addTrack(
-      library::test::TrackSpec{.title = "Broken", .uri = "/missing/relaunch.flac", .codec = AudioCodec::Flac});
+      library::test::TrackSpec{.title = "Broken", .uri = "missing/relaunch.flac", .codec = AudioCodec::Flac});
     fixture.openManualView(std::array{current, successor, broken});
     auto& sequence = *fixture.sequencePtr;
 
@@ -850,11 +850,11 @@ namespace ao::rt::test
     auto fixture = PlaybackSequenceFixture{};
     auto const playable = fixture.addPlayableTrack("Current");
     auto const brokenOne = fixture.libraryFixture.addTrack(
-      library::test::TrackSpec{.title = "Broken one", .uri = "/missing/one.flac", .codec = AudioCodec::Flac});
+      library::test::TrackSpec{.title = "Broken one", .uri = "missing/one.flac", .codec = AudioCodec::Flac});
     auto const brokenTwo = fixture.libraryFixture.addTrack(
-      library::test::TrackSpec{.title = "Broken two", .uri = "/missing/two.flac", .codec = AudioCodec::Flac});
+      library::test::TrackSpec{.title = "Broken two", .uri = "missing/two.flac", .codec = AudioCodec::Flac});
     auto const brokenThree = fixture.libraryFixture.addTrack(
-      library::test::TrackSpec{.title = "Broken three", .uri = "/missing/three.flac", .codec = AudioCodec::Flac});
+      library::test::TrackSpec{.title = "Broken three", .uri = "missing/three.flac", .codec = AudioCodec::Flac});
     auto const unreachable = fixture.addPlayableTrack("Unreachable");
     fixture.openManualView(std::array{playable, brokenOne, brokenTwo, brokenThree, unreachable});
     REQUIRE(fixture.sequencePtr->playFromView(fixture.viewId, playable));

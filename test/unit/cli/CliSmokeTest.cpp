@@ -664,19 +664,31 @@ namespace ao::cli::test
     CHECK(fs::exists(exportPath));
 
     auto target = CliFixture{};
-    result = target.run({"-O", "json", "lib", "import", "--dry-run", exportPath.string()});
+    result = target.run({"-O", "json", "lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
+    CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
+
+    result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "Payload: YAML v2, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
 
     result = target.run({"track", "show"});
     REQUIRE(result.status == 0);
     CHECK(result.out.empty());
 
-    result = target.run({"-O", "json", "lib", "import", exportPath.string()});
+    checkDomainFailure(target.run({"lib", "import", "--mode", "restore", exportPath.string()}),
+                       "restore requires --confirm-destructive-restore");
+
+    result = target.run(
+      {"-O", "json", "lib", "import", "--mode", "restore", "--confirm-destructive-restore", exportPath.string()});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
     tree = parseYaml(result.out);
@@ -685,6 +697,29 @@ namespace ao::cli::test
     result = target.run({"track", "show"});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Test Title"));
+  }
+
+  TEST_CASE("CLI - lib import defaults to merge and preserves absent target tracks",
+            "[cli][workflow][lib][import-export]")
+  {
+    auto source = CliFixture{};
+    source.copyAudio("basic_metadata.flac", "imported.flac");
+    REQUIRE(source.run({"init"}).status == 0);
+
+    auto const exportPath = source.root() / "library.yaml";
+    REQUIRE(source.run({"lib", "export", exportPath.string()}).status == 0);
+
+    auto target = CliFixture{};
+    target.copyAudio("hires.flac", "kept.flac");
+    REQUIRE(target.run({"init"}).status == 0);
+
+    auto result = target.run({"lib", "import", exportPath.string()});
+    REQUIRE(result.status == 0);
+    CHECK(result.err.empty());
+
+    result = target.run({"lib", "stats"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "tracks: 2"));
   }
 
   TEST_CASE("CLI - init dry-run reports scan plan without importing tracks", "[cli][workflow][init][dry-run]")

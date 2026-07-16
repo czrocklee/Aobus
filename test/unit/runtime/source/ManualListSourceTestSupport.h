@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
@@ -33,7 +34,7 @@ namespace ao::rt::test
         builder.tracks().add(id);
       }
 
-      return builder.serialize();
+      return ao::test::requireValue(builder.serialize());
     }
 
     std::vector<std::byte> _payload;

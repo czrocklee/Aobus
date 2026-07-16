@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string_view>
 
 namespace ao::library
 {
@@ -26,6 +27,19 @@ namespace ao::rt
     Full,     // Everything
     ListOnly  // Playlists only
   };
+
+  constexpr std::string_view exportModeName(ExportMode const mode) noexcept
+  {
+    switch (mode)
+    {
+      case ExportMode::Delta: return "delta";
+      case ExportMode::Metadata: return "metadata";
+      case ExportMode::Full: return "full";
+      case ExportMode::ListOnly: return "listOnly";
+    }
+
+    return {};
+  }
 
   /**
    * LibraryYamlExporter - logical YAML exporter for library::MusicLibrary.

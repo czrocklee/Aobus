@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -81,7 +82,7 @@ namespace ao::gtk::layout::test
     {
       auto output = std::ofstream{path};
       REQUIRE(output);
-      output << "version: 1\n"
+      output << "version: 2\n"
                 "export_mode: full\n"
                 "library:\n"
                 "  tracks:\n"
@@ -102,24 +103,25 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("PlaybackImage - applies declarative image properties", "[gtk][unit][image]")
   {
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto mutableCoverTrackId = kInvalidTrackId;
     auto coverTrackId = kInvalidTrackId;
     auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test",
                                         [&](library::MusicLibrary& musicLibrary)
                                         {
+                                          auto const fixtureUri = audio::test::installAudioFixture(
+                                            musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
                                           mutableCoverTrackId =
                                             library::test::addTrack(musicLibrary,
                                                                     library::test::TrackSpec{
                                                                       .title = "Mutable Cover Track",
-                                                                      .uri = fixturePath,
+                                                                      .uri = fixtureUri,
                                                                       .coverArtId = ResourceId{42},
                                                                       .duration = std::chrono::seconds{1},
                                                                     });
                                           coverTrackId = library::test::addTrack(musicLibrary,
                                                                                  library::test::TrackSpec{
                                                                                    .title = "Cover Track",
-                                                                                   .uri = fixturePath,
+                                                                                   .uri = fixtureUri,
                                                                                    .coverArtId = ResourceId{42},
                                                                                    .duration = std::chrono::seconds{1},
                                                                                  });
@@ -267,7 +269,11 @@ namespace ao::gtk::layout::test
       REQUIRE(firstPaintablePtr);
 
       std::int32_t importCount = 0;
-      auto callbacks = portal::ImportExportCallbacks{.onLibraryDataMutated = [&importCount] { ++importCount; }};
+      auto callbacks = portal::ImportExportCallbacks{
+        .onLibraryDataMutated = [&importCount] { ++importCount; },
+        .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
+        { completion(true); },
+      };
       auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
       auto const importPath = fixture.runtime().musicRoot() / "cover-import.yaml";
       auto const secondCover = encodedPng(ao::gtk::test::makePixbuf(96, 96));

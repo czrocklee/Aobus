@@ -303,9 +303,9 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackFixture<InlineExecutor>{};
     makeReady(fixture);
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const currentTrackId = fixture.libraryFixture.addTrack({.title = "Current", .uri = fixturePath});
-    auto const nextTrackId = fixture.libraryFixture.addTrack({.title = "Next", .uri = fixturePath});
+    auto const fixtureUri = fixture.installAudioFixture();
+    auto const currentTrackId = fixture.libraryFixture.addTrack({.title = "Current", .uri = fixtureUri});
+    auto const nextTrackId = fixture.libraryFixture.addTrack({.title = "Next", .uri = fixtureUri});
 
     REQUIRE(fixture.playbackService.playTrack(currentTrackId, kSourceListId));
     auto const tokenResult = fixture.playbackService.prepareNext(nextTrackId, kSourceListId);

@@ -15,6 +15,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
@@ -78,12 +79,16 @@ namespace ao::cli
     std::string action{};
     std::string path{};
     std::string mode{};
+    std::uint32_t payloadVersion = 0;
+    std::string payloadMode{};
+    std::string targetScope{};
     bool dryRun = false;
     std::uint64_t tracksCreated = 0;
     std::uint64_t tracksUpdated = 0;
     std::uint64_t tracksDeleted = 0;
     std::uint64_t listsCreated = 0;
     std::uint64_t listsDeleted = 0;
+    std::uint64_t danglingReferencesIgnored = 0;
   };
 
   struct LibraryStats final
@@ -167,21 +172,40 @@ namespace ao::cli
     {
       if (format != OutputFormat::Plain)
       {
+        auto const* const targetScope = report.targetScope == rt::ImportTargetScope::Library ? "library" : "lists";
         emitDocument(os,
                      format,
                      ImportReportDto{.action = "import",
                                      .path = path,
                                      .mode = modeStr,
+                                     .payloadVersion = report.payloadVersion,
+                                     .payloadMode = std::string{rt::exportModeName(report.payloadMode)},
+                                     .targetScope = targetScope,
                                      .dryRun = dryRun,
                                      .tracksCreated = report.tracksCreated,
                                      .tracksUpdated = report.tracksUpdated,
                                      .tracksDeleted = report.tracksDeleted,
                                      .listsCreated = report.listsCreated,
-                                     .listsDeleted = report.listsDeleted});
+                                     .listsDeleted = report.listsDeleted,
+                                     .danglingReferencesIgnored = report.danglingReferencesIgnored});
         return;
       }
 
-      std::println(os, "Library imported from '{}' using mode '{}'.{}", path, modeStr, dryRun ? " (dry-run)" : "");
+      auto const* const targetScope = report.targetScope == rt::ImportTargetScope::Library ? "library" : "lists";
+      std::println(os, "Library import{} for '{}' using strategy '{}'.", dryRun ? " preview" : "", path, modeStr);
+      std::println(os,
+                   "Payload: YAML v{}, mode '{}', target scope '{}'.",
+                   report.payloadVersion,
+                   rt::exportModeName(report.payloadMode),
+                   targetScope);
+      std::println(os,
+                   "Changes: tracks +{}/~{}/-{}, lists +{}/-{}, dangling references ignored {}.",
+                   report.tracksCreated,
+                   report.tracksUpdated,
+                   report.tracksDeleted,
+                   report.listsCreated,
+                   report.listsDeleted,
+                   report.danglingReferencesIgnored);
     }
 
     void exportLib(library::MusicLibrary const& ml,
@@ -230,6 +254,7 @@ namespace ao::cli
                    std::string const& path,
                    std::string const& modeStr,
                    bool dryRun,
+                   bool confirmDestructiveRestore,
                    OutputFormat format,
                    std::ostream& os)
     {
@@ -249,21 +274,27 @@ namespace ao::cli
           Error::Code::InvalidInput, "invalid import mode '{}'. Valid modes are: restore, merge.", modeStr);
       }
 
+      if (mode == rt::ImportMode::Restore && !dryRun && !confirmDestructiveRestore)
+      {
+        throwCommandError(
+          Error::Code::InvalidInput, "restore requires --confirm-destructive-restore after reviewing --dry-run output");
+      }
+
+      auto planResult = cli.runTask(cli.library().taskService().prepareLibraryImportAsync(path, mode));
+
+      if (!planResult)
+      {
+        auto const& error = planResult.error();
+        throwCommandError(error, "import failed: {}", error.message);
+      }
+
       if (dryRun)
       {
-        auto const result = cli.runTask(cli.library().taskService().previewLibraryImportAsync(path, mode));
-
-        if (!result)
-        {
-          auto const& error = result.error();
-          throwCommandError(error, "import failed: {}", error.message);
-        }
-
-        printLibraryImport(os, format, path, modeStr, true, *result);
+        printLibraryImport(os, format, path, modeStr, true, planResult->report());
         return;
       }
 
-      auto const result = cli.runTask(cli.library().taskService().importLibraryAsync(path, mode));
+      auto const result = cli.runTask(cli.library().taskService().applyLibraryImportPlanAsync(std::move(*planResult)));
 
       if (!result)
       {
@@ -632,22 +663,14 @@ namespace ao::cli
       }
 
       path = path.lexically_normal();
-      auto const uri = path.generic_string();
+      auto uri = library::LibraryUri::parse(path.generic_string());
 
-      if (uri.empty() || uri == "." || path.is_absolute())
+      if (!uri)
       {
-        throwCommandError(Error::Code::InvalidInput, "invalid library URI '{}'", input);
+        throwCommandError(uri.error(), "invalid library URI '{}': {}", input, uri.error().message);
       }
 
-      for (auto const& part : path)
-      {
-        if (part == "..")
-        {
-          throwCommandError(Error::Code::InvalidInput, "path is outside the music root: {}", input);
-        }
-      }
-
-      return uri;
+      return std::string{uri->value()};
     }
 
     std::vector<RelinkCandidateDto> relinkCandidates(rt::ScanPlan const& plan)
@@ -1389,15 +1412,18 @@ namespace ao::cli
 
     auto* importCmd = lib->add_subcommand("import", "Import library from YAML");
     auto* importPath = importCmd->add_option("input,-i,--input", "Input YAML file path")->required();
-    auto* importMode = importCmd->add_option("-m,--mode", "Import mode (restore, merge)")->default_val("restore");
+    auto* importMode = importCmd->add_option("-m,--mode", "Import mode (restore, merge)")->default_val("merge");
     auto* importDryRun = addDryRunFlag(*importCmd);
+    auto* importConfirmRestore = importCmd->add_flag(
+      "--confirm-destructive-restore", "Confirm replacing the payload-selected target scope in restore mode");
     importCmd->callback(
-      [&cli, importPath, importMode, importDryRun]
+      [&cli, importPath, importMode, importDryRun, importConfirmRestore]
       {
         importLib(cli,
                   importPath->as<std::string>(),
                   importMode->as<std::string>(),
                   isDryRun(importDryRun),
+                  importConfirmRestore->count() > 0,
                   cli.options().format,
                   cli.io().out);
       });

@@ -4,6 +4,7 @@
 #include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/Executor.h>
@@ -22,6 +23,7 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -29,8 +31,11 @@
 #include <cstddef>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -157,9 +162,62 @@ namespace ao::rt::test
         throw;
       }
     }
+
+    void writeImportPayload(std::filesystem::path const& path, std::string_view title)
+    {
+      auto yaml = std::ofstream{path};
+      yaml << "version: 2\n"
+              "export_mode: full\n"
+              "library:\n"
+              "  tracks:\n"
+              "    - uri: imported.flac\n"
+              "      title: \""
+           << title
+           << "\"\n"
+              "  lists: []\n";
+    }
+
+    class CompletionFlag final
+    {
+    public:
+      explicit CompletionFlag(std::shared_ptr<std::atomic_bool> completedPtr)
+        : _completedPtr{std::move(completedPtr)}
+      {
+      }
+
+      ~CompletionFlag() { _completedPtr->store(true); }
+
+      CompletionFlag(CompletionFlag const&) = delete;
+      CompletionFlag& operator=(CompletionFlag const&) = delete;
+      CompletionFlag(CompletionFlag&&) = delete;
+      CompletionFlag& operator=(CompletionFlag&&) = delete;
+
+    private:
+      std::shared_ptr<std::atomic_bool> _completedPtr;
+    };
+
+    template<typename T>
+    async::Task<T> flagCompletion(std::shared_ptr<std::atomic_bool> completedPtr, async::Task<T> task)
+    {
+      [[maybe_unused]] auto completionFlag = CompletionFlag{std::move(completedPtr)};
+      co_return co_await std::move(task);
+    }
+
+    template<typename T>
+    auto spawnFuture(async::Runtime& runtime,
+                     async::Task<T> task,
+                     std::shared_ptr<std::atomic_bool> const& completedPtr)
+    {
+      return runtime.spawn(flagCompletion(completedPtr, std::move(task)));
+    }
+
+    bool isReady(std::shared_ptr<std::atomic_bool> const& completedPtr)
+    {
+      return completedPtr->load();
+    }
   } // namespace
 
-  TEST_CASE("LibraryTaskService - importLibraryAsync returns failure for invalid path",
+  TEST_CASE("LibraryTaskService - prepareLibraryImportAsync returns failure for invalid path",
             "[runtime][unit][library][task]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -169,13 +227,188 @@ namespace ao::rt::test
     auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
     auto& service = runtimeLibrary.taskService();
 
-    auto future = runtime.spawn(service.importLibraryAsync("/nonexistent_path_123.yaml", ImportMode::Restore));
+    auto future = runtime.spawn(service.prepareLibraryImportAsync("/nonexistent_path_123.yaml", ImportMode::Restore));
     auto const result = future.get();
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::IoError);
     CHECK(result.error().message.contains("Failed to read"));
     CHECK(std::string_view{result.error().location.file_name()}.contains("LibraryYamlImporter.cpp"));
+  }
+
+  TEST_CASE("LibraryTaskService - import plans bind preview bytes and target state",
+            "[runtime][unit][library-import][authorization]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const existingTrackId =
+      libraryFixture.addTrack(library::test::TrackSpec{.title = "Existing", .uri = "existing.flac"});
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Prepared");
+    auto planResult = runtime.spawn(service.prepareLibraryImportAsync(yamlPath, ImportMode::Restore)).get();
+
+    REQUIRE(planResult);
+    CHECK(planResult->report().payloadVersion == 2);
+    CHECK(planResult->report().payloadMode == ExportMode::Full);
+    CHECK(planResult->report().targetScope == ImportTargetScope::Library);
+    CHECK(planResult->report().tracksCreated == 1);
+
+    SECTION("unchanged preview applies")
+    {
+      auto result = runtime.spawn(service.applyLibraryImportPlanAsync(std::move(*planResult))).get();
+
+      INFO((result ? "import applied" : result.error().message));
+      REQUIRE(result);
+      CHECK(result->tracksCreated == 1);
+    }
+
+    SECTION("changed source is rejected")
+    {
+      writeImportPayload(yamlPath, "Changed");
+      auto result = runtime.spawn(service.applyLibraryImportPlanAsync(std::move(*planResult))).get();
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::Conflict);
+    }
+
+    SECTION("changed target revision is rejected")
+    {
+      auto deleteResult = runtimeLibrary.writer().deleteTrack(existingTrackId);
+      INFO((deleteResult ? "target changed" : deleteResult.error().message));
+      REQUIRE(deleteResult);
+      auto result = runtime.spawn(service.applyLibraryImportPlanAsync(std::move(*planResult))).get();
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::Conflict);
+    }
+
+    SECTION("consumed plan cannot be applied again")
+    {
+      auto plan = std::move(*planResult);
+      auto const firstApplication = runtime.spawn(service.applyLibraryImportPlanAsync(std::move(plan))).get();
+      REQUIRE(firstApplication);
+
+      // LibraryImportPlan specifies an empty moved-from state so callers receive
+      // InvalidState when an already-consumed authorization is submitted again.
+      // NOLINTNEXTLINE(bugprone-use-after-move)
+      auto const reused = runtime.spawn(service.applyLibraryImportPlanAsync(std::move(plan))).get();
+      REQUIRE_FALSE(reused);
+      CHECK(reused.error().code == Error::Code::InvalidState);
+    }
+  }
+
+  TEST_CASE("LibraryTaskService - import plans reject a different runtime over the same library",
+            "[runtime][unit][library-import][authorization]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Prepared");
+    auto optPlan = std::optional<LibraryImportPlan>{};
+
+    {
+      auto executor = InlineExecutor{};
+      auto runtime = async::Runtime{executor};
+      auto changes = LibraryChanges{};
+      auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+      auto result =
+        runtime.spawn(runtimeLibrary.taskService().prepareLibraryImportAsync(yamlPath, ImportMode::Restore)).get();
+
+      REQUIRE(result);
+      optPlan.emplace(std::move(*result));
+    }
+
+    auto otherExecutor = InlineExecutor{};
+    auto otherRuntime = async::Runtime{otherExecutor};
+    auto otherChanges = LibraryChanges{};
+    auto otherLibrary = Library{otherRuntime, libraryFixture.library(), otherChanges};
+    auto result = otherRuntime.spawn(otherLibrary.taskService().applyLibraryImportPlanAsync(std::move(*optPlan))).get();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::Conflict);
+  }
+
+  TEST_CASE("LibraryTaskService - cancelled import preparation never enters maintenance",
+            "[runtime][unit][library-import][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Prepared");
+    auto stopSource = std::stop_source{};
+
+    SECTION("before start")
+    {
+      REQUIRE(stopSource.request_stop());
+      auto future = runtime.spawn(
+        runtimeLibrary.taskService().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()));
+      CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+    }
+
+    SECTION("while callback admission is suspended")
+    {
+      auto completedPtr = std::make_shared<std::atomic_bool>(false);
+      auto future = spawnFuture(
+        runtime,
+        runtimeLibrary.taskService().prepareLibraryImportAsync(yamlPath, ImportMode::Restore, stopSource.get_token()),
+        completedPtr);
+      executor.checkQueued();
+
+      REQUIRE(stopSource.request_stop());
+      REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+      CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+    }
+
+    CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LibraryTaskService - cancellation after import commit preserves mandatory completion",
+            "[runtime][regression][library-import][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto const yamlPath = libraryFixture.root() / "import.yaml";
+    writeImportPayload(yamlPath, "Committed");
+    auto prepareCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto prepareFuture =
+      spawnFuture(runtime, service.prepareLibraryImportAsync(yamlPath, ImportMode::Restore), prepareCompletedPtr);
+
+    REQUIRE(executor.drainUntil([&prepareCompletedPtr] { return isReady(prepareCompletedPtr); }));
+    auto planResult = prepareFuture.get();
+    REQUIRE(planResult);
+    executor.drain();
+    REQUIRE(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
+
+    auto committed = AsyncTestState<bool>::create(false);
+    auto changeSubscription = changes.onChanged([committed](LibraryChangeSet const&) { committed.set(true); });
+    auto stopSource = std::stop_source{};
+    auto applyCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto applyFuture = spawnFuture(
+      runtime, service.applyLibraryImportPlanAsync(std::move(*planResult), stopSource.get_token()), applyCompletedPtr);
+
+    REQUIRE(executor.drainUntil([&committed] { return committed.load(); }));
+    REQUIRE(stopSource.request_stop());
+    REQUIRE(executor.drainUntil([&applyCompletedPtr] { return isReady(applyCompletedPtr); }));
+    auto result = applyFuture.get();
+
+    REQUIRE(result);
+    CHECK(result->tracksCreated == 1);
+    executor.drain();
+    CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
+    runtime.requestStop();
+    runtime.join();
   }
 
   TEST_CASE("LibraryTaskService - exportLibraryAsync returns failure for invalid path",
@@ -303,7 +536,8 @@ namespace ao::rt::test
       REQUIRE(authoringResult);
       CHECK(authoringResult->status == TrackAuthoringStatus::Unavailable);
 
-      auto listResult = runtimeLibrary.writer().createList(LibraryWriter::ListDraft{.name = "Blocked"});
+      auto listResult = runtimeLibrary.writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Blocked"});
       REQUIRE_FALSE(listResult);
       CHECK(listResult.error().code == Error::Code::InvalidState);
     }

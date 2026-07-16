@@ -8,6 +8,7 @@
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
@@ -38,6 +39,7 @@ namespace ao::rt
     {
       std::string uri{};
       std::filesystem::path fullPath{};
+      std::string pathError{};
       std::uint64_t fileSize = 0;
       std::uint64_t mtime = 0;
     };
@@ -106,10 +108,22 @@ namespace ao::rt
           continue;
         }
 
-        rows.push_back(PendingIdentityRow{.uri = uri,
-                                          .fullPath = ml.rootPath() / std::filesystem::path{uri},
-                                          .fileSize = view.fileSize(),
-                                          .mtime = view.mtime()});
+        auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .mtime = view.mtime()};
+
+        if (auto parsed = library::LibraryUri::parse(uri); !parsed)
+        {
+          row.pathError = parsed.error().message;
+        }
+        else if (auto resolved = parsed->resolveUnder(ml.rootPath()); resolved)
+        {
+          row.fullPath = std::move(*resolved);
+        }
+        else
+        {
+          row.pathError = resolved.error().message;
+        }
+
+        rows.push_back(std::move(row));
 
         if (rows.size() == kPendingIdentityBatchSize)
         {
@@ -211,6 +225,12 @@ namespace ao::rt
 
     RowSlot processPendingRow(FingerprintBatch& batch, PendingIdentityRow const& row)
     {
+      if (!row.pathError.empty())
+      {
+        reportFailure(batch, row.uri, "resolve", row.pathError);
+        return RowSlot{.outcome = RowOutcome::Failed};
+      }
+
       auto ec = std::error_code{};
       auto const exists = std::filesystem::exists(row.fullPath, ec);
 

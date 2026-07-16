@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -327,43 +328,45 @@ namespace ao::rt
       bool sawOutsideRoot = false;
 
       auto const resolveInsideRoot =
-        [&root, &sawOutsideRoot](std::filesystem::path const& candidate) -> std::optional<std::filesystem::path>
+        [&root, &sawOutsideRoot](std::filesystem::path const& candidate) -> std::optional<ImportTarget>
       {
         auto ec = std::error_code{};
         auto fullPath = std::filesystem::weakly_canonical(candidate, ec);
 
-        if (ec || !std::filesystem::is_regular_file(fullPath, ec) || ec)
+        if (ec)
         {
           return std::nullopt;
         }
 
-        auto const rel = std::filesystem::relative(fullPath, root, ec);
+        auto const rel = fullPath.lexically_relative(root);
 
-        if (ec || rel.empty() || rel.is_absolute())
+        auto uri = library::LibraryUri::parse(rel.generic_string());
+
+        if (!uri)
+        {
+          sawOutsideRoot = true;
+          return std::nullopt;
+        }
+
+        auto resolvedPath = uri->resolveUnder(root);
+
+        if (!resolvedPath)
+        {
+          sawOutsideRoot = true;
+          return std::nullopt;
+        }
+
+        if (!std::filesystem::is_regular_file(*resolvedPath, ec) || ec)
         {
           return std::nullopt;
         }
 
-        for (auto const& part : rel)
-        {
-          if (part == "..")
-          {
-            sawOutsideRoot = true;
-            return std::nullopt;
-          }
-        }
-
-        return fullPath;
+        return ImportTarget{.fullPath = std::move(*resolvedPath), .uri = std::string{uri->value()}};
       };
 
-      auto optFullPath = resolveInsideRoot(path);
+      auto optTarget = resolveInsideRoot(path.is_absolute() ? path : root / path);
 
-      if (!optFullPath && !path.is_absolute())
-      {
-        optFullPath = resolveInsideRoot(root / path);
-      }
-
-      if (!optFullPath)
+      if (!optTarget)
       {
         if (sawOutsideRoot)
         {
@@ -375,22 +378,14 @@ namespace ao::rt
           Error::Code::NotFound, std::format("track file not found under music root: {}", path.string()));
       }
 
-      auto const rel = std::filesystem::relative(*optFullPath, root, ec);
-
-      if (ec)
-      {
-        return makeError(Error::Code::IoError,
-                         std::format("failed to resolve track URI for '{}': {}", optFullPath->string(), ec.message()));
-      }
-
-      return ImportTarget{.fullPath = std::move(*optFullPath), .uri = rel.generic_string()};
+      return std::move(*optTarget);
     }
 
     Result<> validateSmartExpression(std::string const& expression)
     {
       if (expression.empty())
       {
-        return {};
+        return makeError(Error::Code::InvalidInput, "list filter must be non-empty");
       }
 
       auto expr = query::parse(expression);
@@ -414,7 +409,7 @@ namespace ao::rt
       std::vector<TrackId> canonicalTrackIds{};
     };
 
-    PreparedListPayload payloadForDraft(LibraryWriter::ListDraft const& draft)
+    Result<PreparedListPayload> payloadForDraft(LibraryWriter::ListDraft const& draft)
     {
       auto builder =
         library::ListBuilder::makeEmpty().name(draft.name).description(draft.description).parentId(draft.parentId);
@@ -432,7 +427,14 @@ namespace ao::rt
       }
 
       auto canonicalTrackIds = std::vector<TrackId>{builder.tracks().ids().begin(), builder.tracks().ids().end()};
-      return PreparedListPayload{.payload = builder.serialize(), .canonicalTrackIds = std::move(canonicalTrackIds)};
+      auto payload = builder.serialize();
+
+      if (!payload)
+      {
+        return std::unexpected{payload.error()};
+      }
+
+      return PreparedListPayload{.payload = std::move(*payload), .canonicalTrackIds = std::move(canonicalTrackIds)};
     }
 
     Result<> validateListDraft(library::ListStore::Writer const& listWriter,
@@ -515,7 +517,7 @@ namespace ao::rt
       return {builder.tracks().ids().begin(), builder.tracks().ids().end()};
     }
 
-    std::vector<std::byte> manualListPayload(library::ListView const& view, std::span<TrackId const> trackIds)
+    Result<std::vector<std::byte>> manualListPayload(library::ListView const& view, std::span<TrackId const> trackIds)
     {
       auto builder = library::ListBuilder::fromView(view);
       builder.tracks().clear();
@@ -604,9 +606,16 @@ namespace ao::rt
           auto const selectedTrackIds = std::unordered_set<TrackId>{trackId};
           auto builder = library::ListBuilder::fromView(view);
           builder.tracks().remove(trackId);
+          auto payload = builder.serialize();
+
+          if (!payload)
+          {
+            return std::unexpected{payload.error()};
+          }
+
           updates.push_back(PendingManualListRemoval{
             .listId = listId,
-            .payload = builder.serialize(),
+            .payload = std::move(*payload),
             .contentChange =
               ManualListContentChange{
                 .listId = listId,
@@ -1157,12 +1166,17 @@ namespace ao::rt
     auto trackWriter = library.tracks().writer(transaction);
     auto prepared = payloadForDraft(draft);
 
-    if (auto result = validateListDraft(listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
+    if (!prepared)
+    {
+      return std::unexpected{prepared.error()};
+    }
+
+    if (auto result = validateListDraft(listWriter, trackWriter, draft, prepared->canonicalTrackIds); !result)
     {
       return std::unexpected{result.error()};
     }
 
-    auto createResult = listWriter.create(prepared.payload);
+    auto createResult = listWriter.create(prepared->payload);
 
     if (!createResult)
     {
@@ -1207,21 +1221,26 @@ namespace ao::rt
     auto const existingWasManual = !optExisting->isSmart();
     auto prepared = payloadForDraft(draft);
 
-    if (auto result = validateListDraft(listWriter, trackWriter, draft, prepared.canonicalTrackIds); !result)
+    if (!prepared)
+    {
+      return std::unexpected{prepared.error()};
+    }
+
+    if (auto result = validateListDraft(listWriter, trackWriter, draft, prepared->canonicalTrackIds); !result)
     {
       return std::unexpected{result.error()};
     }
 
-    auto reply = diffListUpdate(*optExisting, draft, prepared.canonicalTrackIds);
+    auto reply = diffListUpdate(*optExisting, draft, prepared->canonicalTrackIds);
 
-    if (std::ranges::equal(optExisting->rawData(), prepared.payload))
+    if (std::ranges::equal(optExisting->rawData(), prepared->payload))
     {
       return reply;
     }
 
     reply.changed = true;
 
-    if (auto result = listWriter.update(draft.listId, prepared.payload); !result)
+    if (auto result = listWriter.update(draft.listId, prepared->payload); !result)
     {
       return storageError("Failed to update list", result.error());
     }
@@ -1317,7 +1336,12 @@ namespace ao::rt
                           reply.insertedTrackIds.end());
     auto const payload = manualListPayload(view, storedTrackIds);
 
-    if (auto result = listWriter.update(listId, payload); !result)
+    if (!payload)
+    {
+      return std::unexpected{payload.error()};
+    }
+
+    if (auto result = listWriter.update(listId, *payload); !result)
     {
       return storageError("Failed to insert manual list tracks", result.error());
     }
@@ -1402,7 +1426,12 @@ namespace ao::rt
     std::erase_if(storedTrackIds, [&selectedTrackIds](TrackId trackId) { return selectedTrackIds.contains(trackId); });
     auto const payload = manualListPayload(view, storedTrackIds);
 
-    if (auto result = listWriter.update(listId, payload); !result)
+    if (!payload)
+    {
+      return std::unexpected{payload.error()};
+    }
+
+    if (auto result = listWriter.update(listId, *payload); !result)
     {
       return storageError("Failed to remove manual list tracks", result.error());
     }
@@ -1509,7 +1538,12 @@ namespace ao::rt
     auto removals = removalRangesFor(storedTrackIds, selectedMembership);
     auto const payload = manualListPayload(view, nextTrackIds);
 
-    if (auto result = listWriter.update(listId, payload); !result)
+    if (!payload)
+    {
+      return std::unexpected{payload.error()};
+    }
+
+    if (auto result = listWriter.update(listId, *payload); !result)
     {
       return storageError("Failed to move manual list tracks", result.error());
     }

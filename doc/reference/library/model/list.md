@@ -43,6 +43,8 @@ The exact filter text surface belongs to the [predicate language](../../../refer
 ## Validation rules
 
 Names, descriptions, filters, membership arrays, and aggregate serialized size must fit the `ListHeader` offset/length widths.
+Each text field is limited to 65,535 bytes, the track-id array is limited to 16,383 entries, and the track-id bytes plus name and description must fit the 65,535-byte filter offset.
+`ListBuilder::serialize()` returns `ValueTooLarge` instead of narrowing an out-of-range value.
 Parent relationships must identify an allowed root or existing list and must not create a cycle.
 Smart expressions must compile before a committing create or update.
 Full manual drafts contain unique existing track ids after canonicalization.

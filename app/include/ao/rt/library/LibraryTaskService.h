@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
@@ -42,12 +43,11 @@ namespace ao::rt
     using ScanProgressCallback = std::move_only_function<void(ScanApplyProgress const& progress)>;
     using ScanFailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
 
-    async::Task<Result<ImportReport>> importLibraryAsync(std::filesystem::path path,
-                                                         ImportMode mode,
-                                                         std::stop_token stopToken = {});
-    async::Task<Result<ImportReport>> previewLibraryImportAsync(std::filesystem::path path,
-                                                                ImportMode mode,
-                                                                std::stop_token stopToken = {});
+    async::Task<Result<LibraryImportPlan>> prepareLibraryImportAsync(std::filesystem::path path,
+                                                                     ImportMode mode,
+                                                                     std::stop_token stopToken = {});
+    async::Task<Result<ImportReport>> applyLibraryImportPlanAsync(LibraryImportPlan plan,
+                                                                  std::stop_token stopToken = {});
     async::Task<Result<>> exportLibraryAsync(std::filesystem::path path,
                                              ExportMode mode,
                                              std::stop_token stopToken = {});

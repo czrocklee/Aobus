@@ -150,7 +150,10 @@ namespace ao::uimodel::test
 
     SECTION("an intervening commit makes the edit stale without retargeting it")
     {
-      auto draft = rt::LibraryWriter::ListDraft{.name = "Unrelated"};
+      auto draft = rt::LibraryWriter::ListDraft{
+        .kind = rt::LibraryWriter::ListKind::Manual,
+        .name = "Unrelated",
+      };
       REQUIRE(fixture.library().writer().createList(draft));
 
       auto const result = applyTrackInlineEdit(

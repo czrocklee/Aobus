@@ -98,7 +98,7 @@ namespace ao::rt::test
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
     auto const smartListName = std::string{"Smart List "} + std::string(256, 'S');
-    auto const smartFilter = std::string{"@duration > 60 and "} + std::string(256, 'x');
+    auto const smartFilter = std::string{"$title = \""} + std::string(256, 'x') + "\"";
     auto const manualListName = std::string{"Manual List "} + std::string(256, 'M');
     auto const manualListDescription = std::string{"Manual Description "} + std::string(256, 'D');
 
@@ -132,11 +132,11 @@ namespace ao::rt::test
       auto listTransaction = library::test::writeTransaction(ml1);
 
       auto smartListBuilder = ListBuilder::makeEmpty().name(smartListName).filter(smartFilter);
-      createList(ml1.lists().writer(listTransaction), smartListBuilder.serialize());
+      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(smartListBuilder.serialize()));
 
       auto manualListBuilder = ListBuilder::makeEmpty().name(manualListName).description(manualListDescription);
       manualListBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(listTransaction), manualListBuilder.serialize());
+      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(manualListBuilder.serialize()));
 
       REQUIRE(listTransaction.commit());
     }
@@ -362,7 +362,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: delta
 library:
   tracks:
@@ -426,7 +426,7 @@ library:
     SECTION("omitted collections preserve the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: full
 library:
   tracks:
@@ -448,7 +448,7 @@ library:
     SECTION("present empty collections clear the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: full
 library:
   tracks:
@@ -482,7 +482,7 @@ library:
       auto listTransaction = library::test::writeTransaction(source);
       auto listBuilder = ListBuilder::makeEmpty().name("Source List");
       listBuilder.tracks().add(trackId);
-      createList(source.lists().writer(listTransaction), listBuilder.serialize());
+      createList(source.lists().writer(listTransaction), ao::test::requireValue(listBuilder.serialize()));
       REQUIRE(listTransaction.commit());
 
       auto const yamlPath = std::filesystem::path{sourceTemp.path()} / "restore.yaml";
@@ -521,7 +521,7 @@ library:
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {
         auto yaml = std::ofstream{yamlPath};
-        yaml << R"(version: 1
+        yaml << R"(version: 2
 export_mode: delta
 library:
   tracks:
@@ -578,7 +578,8 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - id: 1
@@ -649,15 +650,15 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n";
+      yaml << "version: 2\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
       yaml << "    - uri: \"A.flac\"\n";
       yaml << "      year: 2024\n";
-      yaml << "      track_number: 1\n";
-      yaml << "      disc_number: 1\n";
+      yaml << "      track-number: 1\n";
+      yaml << "      disc-number: 1\n";
 
       // Test hex decode
       std::filesystem::copy_file(songPath, std::filesystem::path{temp.path()} / "J.flac");
@@ -665,7 +666,6 @@ library:
       yaml << "  lists:\n";
       yaml << "    - id: 1\n";
       yaml << "      name: \"Coverage List\"\n";
-      yaml << "      type: manual\n";
       yaml << "      tracks:\n";
       yaml << "        - id: 1\n";
       yaml << "        - 2\n";
@@ -684,19 +684,18 @@ library:
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
-      yaml << "version: 1\n";
+      yaml << "version: 2\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: delta\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
       yaml << "    - uri: \"A.flac\"\n";
       yaml << "      year: 2024\n";
-      yaml << "      track_number: 1\n";
-      yaml << "      disc_number: 1\n";
+      yaml << "      track-number: 1\n";
+      yaml << "      disc-number: 1\n";
       yaml << "  lists:\n";
       yaml << "    - id: 1\n";
       yaml << "      name: \"Coverage List\"\n";
-      yaml << "      type: manual\n";
       yaml << "      tracks:\n";
       yaml << "        - id: 1\n";
     }
@@ -705,36 +704,46 @@ library:
     REQUIRE(resultDelta);
   }
 
-  TEST_CASE("LibraryYaml - import accepts the minimum mode alias and ignores extension fields",
-            "[runtime][workflow][import-export][compatibility]")
+  TEST_CASE("LibraryYaml - version 2 rejects aliases and extension fields",
+            "[runtime][workflow][import-export][schema]")
   {
     auto const temp = ao::test::TempDir{};
     auto ml = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto const yamlPath = std::filesystem::path{temp.path()} / "compatibility.yaml";
+    auto importer = LibraryYamlImporter{ml};
+    auto const yamlPath = std::filesystem::path{temp.path()} / "strict.yaml";
+
+    SECTION("legacy mode alias")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: minimum
-extension_root: future
 library:
-  extension_library: future
-  tracks:
-    - uri: compatible.flac
-      title: Compatible
-      codec: FUTURE-CODEC
-      extension_track: future
+  tracks: []
   lists: []
 )";
+      yaml.close();
+
+      auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
     }
 
-    auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
+    SECTION("unknown root field")
+    {
+      auto yaml = std::ofstream{yamlPath};
+      yaml << R"(version: 2
+export_mode: full
+extension_root: future
+library:
+  tracks: []
+  lists: []
+)";
+      yaml.close();
 
-    auto transaction = ml.readTransaction();
-    auto const optView = ml.tracks().reader(transaction).get(TrackId{1}, TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView);
-    CHECK(optView->metadata().title() == "Compatible");
-    CHECK(optView->property().codec() == AudioCodec::Unknown);
+      auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+    }
   }
 
   TEST_CASE("LibraryYaml - metadata import clears absent classical fields from file tags",
@@ -749,13 +758,14 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n";
+      yaml << "version: 2\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
       yaml << "  tracks:\n";
       yaml << "    - uri: \"tagged.flac\"\n";
       yaml << "      title: \"YAML Title\"\n";
+      yaml << "  lists: []\n";
     }
 
     auto importer = LibraryYamlImporter{ml};

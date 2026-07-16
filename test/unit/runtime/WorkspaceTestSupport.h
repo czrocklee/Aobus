@@ -29,8 +29,8 @@ namespace ao::rt::test
 
     ListId createList(std::string name)
     {
-      return ao::test::requireValue(
-        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = std::move(name)}));
+      return ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = std::move(name)}));
     }
 
     // These fixture values are intentionally public as the tests' assertion surface.

@@ -85,6 +85,7 @@ add_executable(ao_core_test
     unit/library/TrackViewValidationTest.cpp
     unit/library/FileManifestViewTest.cpp
     unit/library/FileManifestStoreTest.cpp
+    unit/library/LibraryUriTest.cpp
     unit/library/FileManifestBuilderTest.cpp
     unit/library/TrackBuilderTest.cpp
     unit/library/TrackBuilderCoverArtTest.cpp
@@ -300,6 +301,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportDeltaTest.cpp
     unit/runtime/library/LibraryExportImportErrorTest.cpp
     unit/runtime/library/LibraryExportImportListTest.cpp
+    unit/runtime/library/LibraryYamlSchemaTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
 )
 

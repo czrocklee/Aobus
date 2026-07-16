@@ -12,6 +12,7 @@
 #include "portal/LibraryImportExportWorkflow.h"
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>
@@ -31,7 +32,10 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <format>
+#include <functional>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace ao::gtk::portal
@@ -55,6 +59,9 @@ namespace ao::gtk::portal
     , _fileDialogCancellablePtr{Gio::Cancellable::create()}
     , _callbackScope{[cancellablePtr = _fileDialogCancellablePtr] { cancellablePtr->cancel(); }}
   {
+    _callbacks.requestLibraryRestoreConfirmation =
+      [this](rt::ImportReport const& report, std::function<void(bool)> completion)
+    { presentLibraryRestoreConfirmation(report, std::move(completion)); };
   }
 
   void ImportExportCoordinator::openLibrary()
@@ -228,6 +235,43 @@ namespace ao::gtk::portal
   void ImportExportCoordinator::importLibraryFrom(std::filesystem::path path)
   {
     _workflow.importFrom(std::move(path));
+  }
+
+  void ImportExportCoordinator::presentLibraryRestoreConfirmation(rt::ImportReport const& report,
+                                                                  std::function<void(bool)> completion)
+  {
+    auto const* const scopeName =
+      report.targetScope == rt::ImportTargetScope::Library ? "library tracks and lists" : "lists";
+    auto const* const actionLabel =
+      report.targetScope == rt::ImportTargetScope::Library ? "Restore Library" : "Restore Lists";
+    auto const message =
+      std::format("This restore will replace the current {}.\n\n"
+                  "Payload: YAML v{}, mode '{}'.\n"
+                  "Preview: {} tracks created, {} updated, {} deleted; {} lists created, {} deleted; "
+                  "{} dangling references ignored.\n\n"
+                  "Continue only if this matches the selected backup.",
+                  scopeName,
+                  report.payloadVersion,
+                  rt::exportModeName(report.payloadMode),
+                  report.tracksCreated,
+                  report.tracksUpdated,
+                  report.tracksDeleted,
+                  report.listsCreated,
+                  report.listsDeleted,
+                  report.danglingReferencesIgnored);
+
+    auto* const dialog = AppDialog::presentMessage(
+      _parent,
+      "Confirm Library Restore",
+      message,
+      {AppDialogAction{.label = "Cancel", .responseId = Gtk::ResponseType::CANCEL, .role = AppDialogActionRole::Cancel},
+       AppDialogAction{
+         .label = actionLabel, .responseId = Gtk::ResponseType::OK, .role = AppDialogActionRole::Primary}},
+      Gtk::ResponseType::CANCEL,
+      _callbackScope.guard([completion = std::move(completion)](std::int32_t const responseId)
+                           { completion(responseId == Gtk::ResponseType::OK); }));
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
   }
 
   void ImportExportCoordinator::handleLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,

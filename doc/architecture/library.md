@@ -97,6 +97,11 @@ coordinated cursor traversal internally, so smart-list evaluators and
 projections do not duplicate LMDB access policy. Combined hot/cold traversal is
 an ID merge join: only IDs present in both stores produce a combined view.
 
+`LibraryUri` is the shared core value for paths in the music-root namespace.
+YAML import, runtime Writer, scanner, `FileManifestStore`, and runtime file consumers converge on this value instead of maintaining independent path checks.
+Its bounded canonical text is root-relative and separator-stable; each actual access resolves it beneath the root so an escaping or unresolved symlink is rejected at that boundary.
+This narrows path races but is not an adversarial filesystem sandbox: the music tree is assumed not to change between resolution and the operating-system open.
+
 ### Runtime library facade
 
 `ao::rt::Library` is the application access boundary over `MusicLibrary`.
@@ -110,6 +115,11 @@ It exposes four cooperating roles and owns one private mutation coordinator:
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
 It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
+
+Library import has a prepared capability boundary rather than a path-based commit command.
+`LibraryTaskService` produces a move-only `LibraryImportPlan` after strict parsing and an uncommitted preview, binding it to exact source bytes plus the target runtime, library identity, and committed revision.
+Applying consumes that plan once and revalidates every binding before opening the committing mutation.
+Frontends may present the report or drop the plan, but cannot manufacture or retarget commit evidence.
 
 The coordinator publishes `LibraryAuthoringAvailability` as `Available`, `Maintenance`, or terminal `Faulted` state.
 Maintenance identifies import, scan apply, or audio-identity backfill and rejects every interactive command for the whole operation, including slow preparation between bounded write transactions.
@@ -172,9 +182,19 @@ runtime command
   -> Available(runtimeInstanceId, committedRevision)
 ```
 
-An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a bounded coordinator mutation only for apply/commit.
+An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a bounded coordinator mutation only for preview or apply/commit.
 Export and scan-plan construction remain independent read snapshots.
 Progress and completion return through `LibraryChanges`, while committed content changes use `LibraryChangeSet`.
+
+A library transfer follows a two-operation path:
+
+```text
+strict parse + prepared data + uncommitted preview
+  -> LibraryImportPlan(report, source bytes, target runtime/id/revision)
+  -> frontend authorization or drop
+  -> binding revalidation
+  -> one atomic import commit + LibraryChanges publication
+```
 
 A scan plan is an opaque move-only runtime value whose immutable items are bound to the persisted library id and committed revision from the planner's read snapshot.
 Scan apply validates that evidence after maintenance admission and again at its bounded write boundary, so callers cannot fabricate items, cross libraries, or replay an already superseded snapshot.
@@ -203,6 +223,8 @@ Changing presentation reshapes the projection without changing base-list or filt
 
 - One `MusicLibrary` instance and its runtime facade belong to one `CoreRuntime` and one music root.
 - A scan plan can mutate only the library id and immediate successor revision captured by its construction snapshot.
+- A library import plan can mutate only its captured runtime, library identity, committed revision, and exact source-byte snapshot, and applying it consumes the plan.
+- Manifest keys and runtime-created track URIs are canonical `LibraryUri` values; every file-access boundary re-resolves them beneath the music root.
 - A library transaction is accepted only by stores carrying the same stable `MusicLibrary` identity.
 - Library write transactions are process-serialized and non-nested; dictionary mappings are append-only within one open library.
 - One OS lease excludes another writable process, and an active transaction retains that lease even if its originating capability is destroyed.
@@ -244,10 +266,12 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`WriteTransaction`](../../include/ao/library/WriteTransaction.h) owns native write lifetime, transaction-local dictionary interning, commit, rollback, and publication ordering.
 - [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns committed synchronized dictionary access, stable published values, generation, and bounded read contexts/caches.
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
+- [`LibraryUri`](../../include/ao/library/LibraryUri.h) owns the canonical music-root-relative path namespace and resolved containment check.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
 - [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns live-runtime write admission, revision validation, commit, and publication completion.
 - [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
 - [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations.
+- [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
 - [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned changes and task status.
 - [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) owns reusable sources and their dependency graph.
 - [`LiveTrackListProjection`](../../app/include/ao/rt/projection/LiveTrackListProjection.h) is the primary ordered-list projection boundary.

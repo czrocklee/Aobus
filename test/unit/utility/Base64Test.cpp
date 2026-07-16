@@ -108,5 +108,14 @@ namespace ao::utility::test
       auto const d1 = std::vector{std::byte{'A'}};
       CHECK(base64Decode("QQ") == d1);
     }
+
+    SECTION("Padding terminates the encoded value exactly")
+    {
+      CHECK_FALSE(base64Decode("QQ==garbage"));
+      CHECK_FALSE(base64Decode("QQ==="));
+      CHECK_FALSE(base64Decode("QQ="));
+      CHECK_FALSE(base64Decode("QUJD="));
+      CHECK(base64Decode("QQ== \n\t") == std::vector{std::byte{'A'}});
+    }
   }
 } // namespace ao::utility::test

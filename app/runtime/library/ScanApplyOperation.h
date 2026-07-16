@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -89,6 +90,7 @@ namespace ao::rt
     };
 
     Result<> validatePlan() const;
+    Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
 
     void applyScanItem(std::size_t itemIndex,
                        PreparedScanItem const* preparedItem,

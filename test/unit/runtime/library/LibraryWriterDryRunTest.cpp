@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestStore.h>
@@ -141,7 +142,8 @@ namespace ao::rt::test
         builder.tracks().add(trackId);
       }
 
-      auto const createResult = libraryFixture.library().lists().writer(transaction).create(builder.serialize());
+      auto const createResult =
+        libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
       REQUIRE(createResult);
       REQUIRE(transaction.commit());
       return createResult->first;

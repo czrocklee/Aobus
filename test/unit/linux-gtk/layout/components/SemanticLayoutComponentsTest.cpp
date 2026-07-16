@@ -411,7 +411,8 @@ namespace ao::gtk::layout::test
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
     CHECK(feed.entries.back().message == "Tags added 1 for 1 track");
 
-    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(runtime.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
     auto const secondAddition = std::array{std::string{"Second"}};
     editor->signalTagsChanged().emit(std::span<std::string const>{secondAddition}, std::span<std::string const>{});
 
@@ -491,7 +492,8 @@ namespace ao::gtk::layout::test
     auto controller = TrackDetailUndoController{};
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
 
-    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(runtime.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
     REQUIRE(controller.pendingCustomMetadataUndo());
     CHECK(controller.pendingCustomMetadataUndo()->sessionPtr->state() == TrackAuthoringSessionState::Stale);
 
@@ -551,7 +553,8 @@ namespace ao::gtk::layout::test
 
     emitClicked(titleEditor->editButton());
     REQUIRE(titleEditor->isEditing());
-    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(runtime.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
     drainGtkEvents();
 
     CHECK_FALSE(titleEditor->isEditing());
@@ -586,7 +589,8 @@ namespace ao::gtk::layout::test
     moodEditor->startEditing();
     REQUIRE(moodEditor->isEditing());
     moodEditor->entry().set_text("Dark");
-    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(runtime.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
     moodEditor->stopEditing(true);
 
     auto const spec = trackSpecFor(runtime.musicLibrary(), trackId);

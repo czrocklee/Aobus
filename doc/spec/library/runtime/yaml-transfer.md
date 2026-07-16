@@ -3,62 +3,77 @@ id: library.yaml-transfer
 type: spec
 status: current
 domain: library
-summary: Defines export, restore, merge, preview, reporting, and change-publication behavior for library YAML transfers.
+summary: Defines strict export, restore, merge, preview authorization, reporting, and publication for library YAML transfers.
 ---
 # Library YAML transfer
 
 ## Scope
 
-This specification defines the behavior of library YAML export and import.
-It owns mode semantics, baselines, payload scope, overlay rules, atomicity, reports, previews, and change publication.
+This specification defines library YAML export and import behavior.
+It owns mode semantics, baselines, payload scope, overlays, preview-bound authorization, atomicity, reports, and change publication.
 
-The exact version 1 document shape is defined by the [library YAML format reference](../../../reference/library/format/yaml.md).
+The exact version 2 document shape is defined by the [library YAML format reference](../../../reference/library/format/yaml.md).
 Library ownership and the storage/change pipeline are defined by [library architecture](../../../architecture/library.md).
-CLI flags, command spelling, and output rendering belong to the [CLI command reference](../../../reference/cli/command.md).
+CLI flags and output rendering belong to the [CLI command reference](../../../reference/cli/command.md).
 
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
-`LibraryYamlExporter`, `LibraryYamlImporter`, and their asynchronous adaptation live under `ao::rt::library`; they translate between a portable document and the core `ao::library::MusicLibrary` without making YAML a physical storage format.
+`LibraryYamlExporter`, `LibraryYamlImporter`, and `LibraryTaskService` translate between a portable document and `ao::library::MusicLibrary`; YAML is not a physical storage format.
+Interactive and CLI callers use `LibraryTaskService` so a commit consumes preview evidence rather than accepting a bare path.
 
 ## Terminology
 
-- **Source library** is the `MusicLibrary` being exported.
-- **Target library** is the `MusicLibrary` being imported into.
-- **Payload mode** is the `export_mode` recorded in the YAML document and controls payload scope and baseline reconstruction.
+- **Source library** is the library being exported.
+- **Target library** is the library being imported into.
+- **Payload mode** is the document's `export_mode` and controls payload scope and baseline reconstruction.
 - **Import mode** is `restore` or `merge` and controls how the payload combines with target state.
-- **File baseline** is a `TrackBuilder` loaded from the audio file at the track URI when that file can be opened and parsed.
-- **Merge baseline** is an existing target track matched by normalized manifest URI.
+- **File baseline** is a track builder loaded from the audio file named by a Library URI when that file is readable.
+- **Merge baseline** is an existing target track matched by canonical manifest URI.
+- **Import plan** is a move-only, one-shot authorization containing the prepared payload, preview report, exact source bytes, target library identity and revision, and runtime identity.
 - **Present collection** means `tags`, `custom`, or `covers` exists in a track record, including an explicitly empty sequence or map.
 
 ## Invariants
 
-- One export observes metadata header, tracks, lists, resources, dictionary values, and manifest facts through one library read transaction.
-- Import parses and structurally validates the complete document before opening its write transaction.
-- One committed import applies content and an adopted `libraryId` through one write transaction and one library revision.
-- Preview executes the same validation and mutation path but commits no storage, metadata header, or change event.
+- One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
+- Version 2 uses the closed schema and explicit collection scope defined by the format reference.
+- Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
+- Import validates the complete document before applying any persistent mutation.
+- One committed import applies content and any adopted `libraryId` through one write transaction and one library revision.
+- Preview runs the same mutation path in an uncommitted transaction and publishes no content change.
+- A prepared plan can commit only against the exact source bytes and target runtime, library identity, and committed revision it previewed.
 - A collection field that is present replaces its complete baseline collection; an omitted collection preserves its baseline.
-- Restore scope is determined by payload mode, not by which optional sequences happen to be present.
-- Merge matches tracks only by normalized manifest URI; payload track IDs are for intra-payload list references.
+- Restore scope is determined by payload mode, never inferred from omitted collections.
+- A payload has at most one track record for each canonical URI; merge matches tracks only by canonical manifest URI, and payload track IDs exist only for intra-payload references.
 - Lists in the payload are recreated with new target IDs and then have parents remapped.
 
 ## State model
 
-An import has these phases:
+The application import path has two operations:
 
 ```text
-read and parse
-  -> validate complete payload
-  -> collect pre-import report/change facts
-  -> open write transaction
-  -> clear restore scope when requested
-  -> import tracks and manifest rows
-  -> create lists and remap parents
-  -> preview: abort by leaving transaction uncommitted
-  -> commit: commit once, then publish one changeset when configured
+prepare(path, import mode)
+  -> read exact source bytes
+  -> parse and validate version 2
+  -> prepare track/list data
+  -> capture target runtime + library id + committed revision
+  -> run mutation path in an uncommitted preview transaction
+  -> return LibraryImportPlan + ImportReport
+
+explicit authorization
+  -> consume LibraryImportPlan
+  -> recheck runtime + library id + committed revision
+  -> reread and compare exact source bytes
+  -> run prepared mutation path in one write transaction
+  -> commit once
+  -> publish one change set
 ```
 
-No target mutation is visible before the commit phase.
+Rejecting or dropping a plan performs no persistent mutation.
+A plan has no time-based expiry; its source and target bindings make stale plans unusable.
+
+The synchronous offline importer remains a lower-level composition and test surface.
+It provides preview and atomic import behavior but is not the frontend authorization boundary.
 
 ## Commands and transitions
 
@@ -66,147 +81,154 @@ No target mutation is visible before the commit phase.
 
 | Payload mode | Metadata | Custom metadata | Tags | Covers | Technical and manifest facts | Lists |
 |---|---|---|---|---|---|---|
-| `delta` | Fields different from the readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Complete sequence when different from the readable file baseline; otherwise omitted. | Omitted. | Included. |
+| `delta` | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Complete sequence when different from a readable file baseline; otherwise omitted. | Omitted. | Included. |
 | `metadata` | All non-empty curated metadata. | Complete map when non-empty. | Complete sequence when non-empty. | Always present, including empty. | Omitted. | Included. |
 | `full` | All non-empty curated metadata. | Complete map when non-empty. | Complete sequence when non-empty. | Always present, including empty. | Included, including zero values. | Included. |
 | `listOnly` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI membership references. |
 
-The exporter keeps one read transaction for the complete document.
-It writes the file only after the in-memory YAML tree has been constructed successfully.
-
-For `delta`, each source URI is inspected for a file baseline.
-A missing file, unsupported file, tag-open failure, or tag-load failure means no baseline and causes the exporter to emit all non-empty metadata plus the current non-empty custom metadata and tags.
-A filesystem error while inspecting whether the path exists fails export with `IoError`.
+The exporter constructs the complete YAML tree before opening the destination file.
+For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values.
+A filesystem inspection error fails export with `IoError`.
 
 ### Restore
 
-For a payload other than `listOnly`, restore clears tracks, manifest rows, and lists inside the import transaction before rebuilding from the payload.
+For `delta`, `metadata`, and `full`, restore clears tracks, manifest rows, and lists inside the import transaction before rebuilding them.
 For `listOnly`, restore preserves tracks and manifest rows and clears only lists.
 
 Restore chooses a track baseline by payload mode:
 
-- `full` starts from an empty track and applies only payload values.
-- `delta` starts from a readable file baseline when available, then overlays the payload.
-- `metadata` may use a readable file for technical properties and cover resources, but clears file-derived curated metadata, tags, and custom metadata before applying the payload.
-- When the required file baseline cannot be opened or parsed, restore starts from an empty track without failing.
+- `full` starts from an empty track and applies payload values;
+- `delta` starts from a readable file baseline when available;
+- `metadata` may retain file technical properties and cover resources, but clears file-derived curated metadata, tags, and custom metadata before applying the payload;
+- when an optional file baseline cannot be opened or parsed, restore starts from an empty track.
 
-If the payload contains `libraryId`, restore writes it in the same transaction as the restored content.
-An absent `libraryId` preserves the target library identity.
+If a track-bearing payload contains `libraryId`, restore writes it in the same transaction as restored content.
+An absent `libraryId` preserves target identity.
+`listOnly` restore always preserves target identity because its target scope is lists rather than the whole library.
 Merge never adopts `libraryId`.
 
 ### Merge
 
-Merge preserves tracks and lists outside the payload.
-Each imported track whose normalized URI matches a target manifest row updates that existing target track; an unmatched URI creates a new track and manifest row.
+Merge preserves target tracks and lists absent from the payload.
+An imported track whose canonical URI matches a target manifest row updates that track; an unmatched URI creates a track and manifest row.
 
 The existing target track is the merge baseline.
-For `delta` and `metadata`, a readable source file refreshes the baseline's technical properties; delta also supplies file cover art when the existing baseline has none.
+For `delta` and `metadata`, a readable source file refreshes technical properties; delta also supplies file cover art when the baseline has none.
 Payload fields then overlay that baseline.
 
 Merge does not match or update existing lists.
-Every payload list is created as a new target list, after which payload parent IDs are remapped to the newly allocated target IDs.
+Every payload list is created as a new target list, after which parent IDs are remapped.
 
 ### Track overlays
 
 Present metadata and technical scalar fields replace the corresponding baseline value.
-Omitted scalar fields preserve the baseline value.
+Omitted scalar fields preserve it.
 
-`tags`, `custom`, and `covers` use collection replacement semantics:
+Collections use replacement semantics:
 
 - omitted field: preserve the baseline collection;
-- present non-empty field: replace the complete baseline collection;
-- present empty sequence or map: clear the complete baseline collection.
+- present non-empty field: replace the complete collection;
+- present empty sequence or map: clear the complete collection.
 
-An accepted codec name replaces the baseline codec.
-An unrecognized codec name leaves the baseline unchanged.
-
-Manifest facts start from an existing manifest row when present, otherwise from current filesystem size and modification time when the source path exists, otherwise from zero.
-Present `fileSize` and `mtime` payload fields override those baseline facts.
+A recognized codec token replaces the baseline codec; any other token rejects the payload.
+Manifest facts start from an existing manifest row, otherwise current filesystem facts when the path exists, otherwise zero.
+Present `fileSize` and `mtime` fields override those facts.
 
 ### Lists
 
-Lists are created in payload order, then parent relationships are applied in a second pass so a child may appear before its parent.
-Manual membership resolves payload track IDs through tracks created or updated by this import and resolves URI references through the target manifest.
+Lists are created in payload order, then parent relationships are applied in a second pass so a child may precede its parent.
+Manual membership resolves payload IDs through tracks created or updated by this import and URI references through the target manifest.
 
-Unresolved parent and track references are ignored.
-Manual membership keeps the first resolved occurrence of a track and preserves first-occurrence order.
+A Smart List filter must be non-empty and must parse and compile under the current query grammar.
+Known payload parent relationships must be self-free and acyclic before any list is written.
+Every recreated list must fit the fixed-width core list layout; an oversized text field, track array, or combined offset rejects the import instead of truncating data.
+
+Unresolved parent and track references are ignored and counted.
+Manual membership keeps the first resolved occurrence and preserves first-occurrence order.
 
 ### Reports
 
-Every import and preview returns an `ImportReport`:
+Every import, preview, and plan returns an `ImportReport`:
 
 | Field | Meaning |
 |---|---|
-| `tracksCreated` | Imported track records that did not match a merge baseline. |
-| `tracksUpdated` | Imported track records that matched an existing target manifest URI. |
-| `tracksDeleted` | Tracks in the pre-restore target when payload scope clears tracks; otherwise `0`. |
-| `listsCreated` | Payload list records created by the import. |
-| `listsDeleted` | Lists in the pre-restore target; otherwise `0`. |
+| `payloadVersion` | Accepted interchange version; currently `2`. |
+| `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
+| `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
+| `tracksCreated` | Imported records that do not match a merge baseline. |
+| `tracksUpdated` | Imported records that match a target manifest URI. |
+| `tracksDeleted` | Pre-restore tracks when scope clears tracks; otherwise `0`. |
+| `listsCreated` | Payload lists created by the import. |
+| `listsDeleted` | Pre-restore lists; otherwise `0`. |
+| `danglingReferencesIgnored` | Unresolved parent, payload-track-ID, and manifest-URI references. |
 
-The report counts processed matches and creations, not only records whose serialized bytes differ.
-Preview returns the same report that the corresponding commit path would return against the same starting state.
+Counts describe processed matches and creations, not only byte-different records.
+Preview and commit produce the same report when source bytes and target binding remain unchanged.
 
 ### Change publication
 
-When the importer has a `LibraryChanges` collaborator, a committed import publishes one `LibraryChangeSet` carrying the transaction's library revision.
+A committed application import publishes one `LibraryChangeSet` carrying the transaction revision.
 Preview publishes nothing.
 
 Restore publishes `libraryReset: true` and no incremental ID lists.
-The reset covers content and any adopted `libraryId` because both commit under the same revision.
-
-Merge publishes `libraryReset: false` with:
-
-- `tracksInserted` for target tracks newly created by this import;
-- `tracksMutated` for imported URIs that matched tracks present before the import;
-- `listsUpserted` for lists newly created by this import.
-
-Merge import does not populate track/list deletion or manual-list operation fields.
+Merge publishes `libraryReset: false` with newly inserted tracks, matched tracks as mutated, and newly created lists as upserted.
 
 ## Failure and cancellation
 
-File-read failures before parsing report `IoError`.
-Malformed YAML, unsupported versions, invalid node kinds or scalar widths, invalid UUIDs, and invalid cover data report `FormatRejected` as defined by the [format validation rules](../../../reference/library/format/yaml.md#validation-rules).
+File-read failures report `IoError`.
+Malformed YAML, unsupported versions, closed-schema violations, invalid values, and unsafe URIs report `FormatRejected` as defined by the [format validation rules](../../../reference/library/format/yaml.md#validation-rules).
+Applying a plan to different source bytes, another runtime, another library identity, or another target revision reports `Conflict`.
+Every apply attempt consumes the plan, including an attempt that returns a pre-commit error; replay reports `InvalidState` and a retry requires a fresh preview.
 
-Validation finishes before the write transaction begins.
-Any failure while clearing, building, serializing, or writing a record leaves that transaction uncommitted, so target content and metadata header remain unchanged.
-Commit failure likewise publishes no changeset.
+Any failure before commit leaves target content, metadata identity, and revision unchanged and publishes no content change.
+Commit failure likewise publishes no change set.
 
-The synchronous exporter/importer APIs have no stop-token surface.
-`LibraryTaskService` owns asynchronous scheduling, but once synchronous transfer work begins it has no in-operation cancellation checkpoint; the exact boundary is defined by [library task execution](task-execution.md#cancellation).
+After durable commit, publication enqueue or observer failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and the live runtime enters terminal `Faulted`.
+
+`LibraryTaskService` honors cancellation on executor transitions.
+Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.
+The operation matrix belongs to [library task execution](task-execution.md#cancellation).
+
+Version 2 currently defines no transfer-specific total-document, aggregate-cover, or per-cover byte budget beyond the exact field and core-storage limits in the format reference.
+Configurable prepared-memory ceilings, streaming, and bounded transfer execution remain part of [RFC 0004](../../../rfc/0004-scalable-library-tasks.md), rather than an arbitrary limit that would let the current exporter produce a file the importer cannot read back.
 
 ## Persistence and versioning
 
-Version 1 payloads are portable interchange documents, not the physical library database.
-Restore and merge always write through the current `MusicLibrary` stores and therefore produce the current physical storage version.
-
-Payload versioning and compatibility are owned by the [format reference](../../../reference/library/format/yaml.md#compatibility-and-versioning).
-An export never emits the legacy `minimum` mode token even though import accepts it.
+Version 2 is a portable interchange format, not the physical database format.
+Restore and merge always write current `MusicLibrary` records.
+The importer accepts no earlier interchange version and provides no migration or legacy-restore path.
 
 ## Frontend observations
 
-CLI and GTK use the same runtime exporter/importer behavior.
-CLI owns argument parsing, dry-run flag spelling, report rendering, and exit-code mapping.
-GTK owns chooser/dialog lifecycle and maps task progress and completion to frontend presentation.
+CLI and GTK use the same plan-producing runtime operation and one-shot apply operation.
+Neither frontend may commit a restore from a bare path or reinterpret scope, counts, matching, or publication.
 
-Neither frontend may reinterpret restore scope, merge matching, preview, report counts, or change publication.
+GTK prepares a restore plan after file selection, presents its version, payload mode, scope, counts, and ignored references, and applies only after an explicit positive response.
+Closing or rejecting the confirmation drops the plan.
+
+CLI defaults import to `merge`.
+`--mode restore --dry-run` prepares and prints a plan report without committing; a non-dry-run restore additionally requires `--confirm-destructive-restore`.
+The apply step still revalidates source and target evidence, so the flag cannot authorize a changed preview.
 
 ## Implementation map
 
 - [`LibraryYamlExporter`](../../../../app/include/ao/rt/library/LibraryYamlExporter.h) and [`LibraryYamlExporter.cpp`](../../../../app/runtime/library/LibraryYamlExporter.cpp) implement export modes and baselines.
-- [`LibraryYamlImporter`](../../../../app/include/ao/rt/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) implement validation, restore, merge, preview, reports, and publication.
-- [`LibraryTaskService`](../../../../app/include/ao/rt/library/LibraryTaskService.h) provides the asynchronous application boundary.
-- [`LibraryChanges`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines published library change values.
-- [`MusicLibrary`](../../../../include/ao/library/MusicLibrary.h) and [`MetadataStore`](../../../../include/ao/library/MetadataStore.h) provide the single-transaction content/header commit boundary.
+- [`LibraryYamlImporter`](../../../../app/include/ao/rt/library/LibraryYamlImporter.h) and [`LibraryYamlImporter.cpp`](../../../../app/runtime/library/LibraryYamlImporter.cpp) implement strict parsing and prepared mutation behavior.
+- [`LibraryImportPlan`](../../../../app/include/ao/rt/library/LibraryImportPlan.h) and [`LibraryTaskService`](../../../../app/include/ao/rt/library/LibraryTaskService.h) define preview-bound application authorization.
+- [`LibraryUri`](../../../../include/ao/library/LibraryUri.h) defines canonical root-relative path evidence.
+- [`LibraryChanges`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines published change values.
 
 ## Test map
 
-- [`LibraryExportImportTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportTest.cpp) proves full restore, merge overlays, collection omission/clearing, URI normalization, reports, and preview equivalence.
-- [`LibraryExportImportDeltaTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta baselines, inspection failures, atomic library-ID adoption, preview non-mutation, and changesets.
-- [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) proves ordered cover round trips and replace/clear behavior.
-- [`LibraryExportImportListTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, ID/URI references, parent remapping, dangling references, and membership order.
-- [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves structural and scalar rejection.
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves the async worker/callback integration.
-- [`CliSmokeTest.cpp`](../../../../test/unit/cli/CliSmokeTest.cpp) proves CLI export/import and dry-run adaptation.
+- [`LibraryExportImportTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportTest.cpp) proves mode baselines, overlays, reports, and preview equivalence.
+- [`LibraryExportImportDeltaTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportDeltaTest.cpp) proves delta behavior, identity adoption, rollback, and change sets.
+- [`LibraryExportImportCoverArtTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportCoverArtTest.cpp) proves cover round trips and replacement.
+- [`LibraryExportImportListTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportListTest.cpp) proves list-only transfer, references, remapping, and dangling counts.
+- [`LibraryYamlSchemaTest.cpp`](../../../../test/unit/runtime/library/LibraryYamlSchemaTest.cpp) proves closed-schema, scope, enum, URI, duplicate-key, list-semantic, and storage-limit rejection.
+- [`LibraryExportImportErrorTest.cpp`](../../../../test/unit/runtime/library/LibraryExportImportErrorTest.cpp) proves scalar rejection and transactional rollback.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves source/target binding, one-shot plans, cancellation before maintenance, and mandatory callback completion after commit.
+- [`LibraryImportExportWorkflowTest.cpp`](../../../../test/unit/linux-gtk/portal/LibraryImportExportWorkflowTest.cpp) proves confirmation precedes GTK mutation.
+- [`CliSmokeTest.cpp`](../../../../test/unit/cli/CliSmokeTest.cpp) proves CLI preview and explicit restore confirmation.
 
 ## Related documents
 
@@ -214,4 +236,3 @@ Neither frontend may reinterpret restore scope, merge matching, preview, report 
 - [Library architecture](../../../architecture/library.md)
 - [Outcome channel specification](../../failure/outcome-channel.md)
 - [Error value reference](../../../reference/failure/error.md)
-- [Track model](../../../reference/library/model/track.md)

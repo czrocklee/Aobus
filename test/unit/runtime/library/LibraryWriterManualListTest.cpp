@@ -71,7 +71,8 @@ namespace ao::rt::test
           builder.tracks().add(trackId);
         }
 
-        auto const result = libraryFixture.library().lists().writer(transaction).create(builder.serialize());
+        auto const result =
+          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
         REQUIRE(result);
         REQUIRE(transaction.commit());
         listEvents.clear();

@@ -93,7 +93,7 @@ namespace ao::tui::test
     library::test::addTrack(libraryFixture.library(),
                             library::test::TrackSpec{.title = "Expression Track",
                                                      .artist = "Aimer",
-                                                     .uri = "/tmp/tui-expression-completion.flac",
+                                                     .uri = "tui-expression-completion.flac",
                                                      .duration = std::chrono::seconds{120}});
     auto changes = rt::LibraryChanges{};
     auto service = rt::CompletionService{libraryFixture.library(), changes};

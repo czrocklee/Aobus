@@ -10,11 +10,14 @@
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -22,7 +25,10 @@
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/ThreadName.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -39,6 +45,43 @@
 
 namespace ao::rt
 {
+  struct LibraryImportPlan::Impl final
+  {
+    Impl(LibraryYamlImportOperation::PreparedImport preparedValue,
+         ImportReport reportValue,
+         std::array<std::byte, 16> targetLibraryIdValue,
+         std::uint64_t runtimeInstanceIdValue,
+         std::uint64_t targetRevisionValue)
+      : prepared{std::move(preparedValue)}
+      , report{reportValue}
+      , targetLibraryId{targetLibraryIdValue}
+      , runtimeInstanceId{runtimeInstanceIdValue}
+      , targetRevision{targetRevisionValue}
+    {
+    }
+
+    LibraryYamlImportOperation::PreparedImport prepared;
+    ImportReport report;
+    std::array<std::byte, 16> targetLibraryId{};
+    std::uint64_t runtimeInstanceId = 0;
+    std::uint64_t targetRevision = 0;
+  };
+
+  LibraryImportPlan::LibraryImportPlan(std::unique_ptr<Impl> implPtr)
+    : _implPtr{std::move(implPtr)}
+  {
+  }
+
+  LibraryImportPlan::~LibraryImportPlan() = default;
+  LibraryImportPlan::LibraryImportPlan(LibraryImportPlan&&) noexcept = default;
+  LibraryImportPlan& LibraryImportPlan::operator=(LibraryImportPlan&&) noexcept = default;
+
+  ImportReport const& LibraryImportPlan::report() const noexcept
+  {
+    gsl_Expects(_implPtr != nullptr);
+    return _implPtr->report;
+  }
+
   namespace
   {
     using LibraryTaskCompletionStatus = LibraryChanges::LibraryTaskCompletionStatus;
@@ -328,9 +371,9 @@ namespace ao::rt
 
   LibraryTaskService::~LibraryTaskService() = default;
 
-  async::Task<Result<ImportReport>> LibraryTaskService::importLibraryAsync(std::filesystem::path path,
-                                                                           ImportMode const mode,
-                                                                           std::stop_token const stopToken)
+  async::Task<Result<LibraryImportPlan>> LibraryTaskService::prepareLibraryImportAsync(std::filesystem::path path,
+                                                                                       ImportMode const mode,
+                                                                                       std::stop_token const stopToken)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
     auto maintenanceResult = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
@@ -341,91 +384,141 @@ namespace ao::rt
     }
 
     auto maintenance = std::move(*maintenanceResult);
+    auto const availability = _implPtr->mutationService.availability();
     co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("LibraryImport");
-    auto result = Result<ImportReport>{ImportReport{}};
-    auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-    auto importOperation = LibraryYamlImportOperation{importer};
-    auto preparedResult = importOperation.prepare(path, mode, true);
+    setCurrentThreadName("LibraryImportPreview");
 
-    if (!preparedResult)
+    auto result = [&] -> Result<LibraryImportPlan>
     {
-      result = std::unexpected{preparedResult.error()};
-    }
-    else
-    {
+      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+      auto importOperation = LibraryYamlImportOperation{importer};
+      auto preparedResult = importOperation.prepare(path, mode, true);
+
+      if (!preparedResult)
+      {
+        return std::unexpected{preparedResult.error()};
+      }
+
+      auto targetLibraryId = std::array<std::byte, 16>{};
+      std::uint64_t targetRevision = 0;
+
+      {
+        auto readTransaction = _implPtr->library.readTransaction();
+        auto const headerResult = _implPtr->library.metadata().load(readTransaction);
+
+        if (!headerResult)
+        {
+          return std::unexpected{headerResult.error()};
+        }
+
+        targetLibraryId = headerResult->libraryId;
+        targetRevision = _implPtr->library.libraryRevision(readTransaction);
+      }
+
       auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
 
       if (!mutationResult)
       {
-        result = std::unexpected{mutationResult.error()};
+        return std::unexpected{mutationResult.error()};
       }
-      else
-      {
-        auto mutation = std::move(*mutationResult);
-        auto changeSet = LibraryChangeSet{};
-        auto importResult = importOperation.apply(*preparedResult, mutation.transaction(), changeSet);
 
-        if (!importResult)
+      auto mutation = std::move(*mutationResult);
+      auto reportResult = importOperation.preview(*preparedResult, mutation.transaction());
+
+      if (!reportResult)
+      {
+        return std::unexpected{reportResult.error()};
+      }
+
+      return LibraryImportPlan{std::make_unique<LibraryImportPlan::Impl>(
+        std::move(*preparedResult), *reportResult, targetLibraryId, availability.runtimeInstanceId, targetRevision)};
+    }();
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_return std::move(result);
+  }
+
+  async::Task<Result<ImportReport>> LibraryTaskService::applyLibraryImportPlanAsync(LibraryImportPlan plan,
+                                                                                    std::stop_token const stopToken)
+  {
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+
+    if (!plan._implPtr)
+    {
+      co_return makeError(Error::Code::InvalidState, "Import plan has already been consumed");
+    }
+
+    auto maintenanceResult = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
+
+    if (!maintenanceResult)
+    {
+      co_return std::unexpected{maintenanceResult.error()};
+    }
+
+    auto maintenance = std::move(*maintenanceResult);
+    auto const availability = _implPtr->mutationService.availability();
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+    setCurrentThreadName("LibraryImport");
+
+    auto result = [&] -> Result<ImportReport>
+    {
+      auto const& binding = *plan._implPtr;
+
+      if (availability.runtimeInstanceId != binding.runtimeInstanceId)
+      {
+        return makeError(Error::Code::Conflict, "Import plan belongs to a different library runtime");
+      }
+
+      {
+        auto readTransaction = _implPtr->library.readTransaction();
+        auto const headerResult = _implPtr->library.metadata().load(readTransaction);
+
+        if (!headerResult)
         {
-          result = std::unexpected{importResult.error()};
+          return std::unexpected{headerResult.error()};
         }
-        else if (auto commitResult = mutation.commit(std::move(changeSet)); !commitResult)
+
+        if (headerResult->libraryId != binding.targetLibraryId ||
+            _implPtr->library.libraryRevision(readTransaction) != binding.targetRevision)
         {
-          result = std::unexpected{commitResult.error()};
-        }
-        else
-        {
-          result = *importResult;
+          return makeError(Error::Code::Conflict, "Target library changed after the import preview");
         }
       }
-    }
+
+      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+      auto importOperation = LibraryYamlImportOperation{importer};
+
+      if (auto sourceResult = importOperation.revalidateSource(binding.prepared); !sourceResult)
+      {
+        return std::unexpected{sourceResult.error()};
+      }
+
+      auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
+
+      if (!mutationResult)
+      {
+        return std::unexpected{mutationResult.error()};
+      }
+
+      auto mutation = std::move(*mutationResult);
+      auto changeSet = LibraryChangeSet{};
+      auto importResult = importOperation.apply(binding.prepared, mutation.transaction(), changeSet);
+
+      if (!importResult)
+      {
+        return std::unexpected{importResult.error()};
+      }
+
+      if (auto commitResult = mutation.commit(std::move(changeSet)); !commitResult)
+      {
+        return std::unexpected{commitResult.error()};
+      }
+
+      return *importResult;
+    }();
 
     // Once a maintenance transaction may have committed, callback completion
     // is mandatory even if the caller requested cancellation in the meantime.
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
-    co_return result;
-  }
-
-  async::Task<Result<ImportReport>> LibraryTaskService::previewLibraryImportAsync(std::filesystem::path path,
-                                                                                  ImportMode const mode,
-                                                                                  std::stop_token const stopToken)
-  {
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
-    auto maintenanceResult = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::Import);
-
-    if (!maintenanceResult)
-    {
-      co_return std::unexpected{maintenanceResult.error()};
-    }
-
-    auto maintenance = std::move(*maintenanceResult);
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("LibraryImportPreview");
-    auto result = Result<ImportReport>{ImportReport{}};
-    auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-    auto importOperation = LibraryYamlImportOperation{importer};
-    auto preparedResult = importOperation.prepare(path, mode, false);
-
-    if (!preparedResult)
-    {
-      result = std::unexpected{preparedResult.error()};
-    }
-    else
-    {
-      auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
-
-      if (!mutationResult)
-      {
-        result = std::unexpected{mutationResult.error()};
-      }
-      else
-      {
-        auto mutation = std::move(*mutationResult);
-        result = importOperation.preview(*preparedResult, mutation.transaction());
-      }
-    }
-
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
     co_return result;
   }

@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -21,6 +22,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
@@ -58,8 +60,8 @@ namespace ao::rt
       }
     };
 
-    void scanEntry(std::filesystem::directory_entry const& entry,
-                   std::filesystem::path const& root,
+    void scanEntry(std::filesystem::path const& path,
+                   std::string const& uri,
                    library::FileManifestStore::Reader const& manifestReader,
                    std::unordered_set<std::string>& seenUris,
                    std::vector<ScanItem>& items)
@@ -69,7 +71,7 @@ namespace ao::rt
 
       try
       {
-        isFile = entry.is_regular_file(entryEc);
+        isFile = std::filesystem::is_regular_file(path, entryEc);
       }
       catch (std::exception const& /*e*/)
       {
@@ -79,11 +81,9 @@ namespace ao::rt
 
       if (entryEc)
       {
-        auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
-        auto item = ScanItem{.uri = uri,
-                             .fullPath = entry.path(),
-                             .classification = ScanClassification::Error,
-                             .errorMessage = entryEc.message()};
+        seenUris.insert(uri);
+        auto item = ScanItem{
+          .uri = uri, .fullPath = path, .classification = ScanClassification::Error, .errorMessage = entryEc.message()};
         items.push_back(std::move(item));
         return;
       }
@@ -93,18 +93,18 @@ namespace ao::rt
         return;
       }
 
-      auto const& path = entry.path();
-
       // Only files we can actually decode belong in the plan. Everything else -
       // cover art, playlists, logs, or formats we have no reader for (.ogg,
       // a literal .alac) - is not music we support and is ignored here.
-      if (!media::file::File::isSupported(path))
+      if (!media::file::File::isSupported(std::filesystem::path{uri}))
       {
         return;
       }
 
-      auto const uri = std::filesystem::relative(path, root, entryEc).generic_string();
-      seenUris.insert(uri);
+      if (!seenUris.insert(uri).second)
+      {
+        return;
+      }
 
       auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
 
@@ -157,13 +157,37 @@ namespace ao::rt
 
       items.push_back(std::move(item));
     }
+    bool hasBlockedUriPrefix(std::string_view uri, std::unordered_set<std::string> const& blockedUriPrefixes)
+    {
+      while (!uri.empty())
+      {
+        if (blockedUriPrefixes.contains(std::string{uri}))
+        {
+          return true;
+        }
+
+        auto const separator = uri.rfind('/');
+
+        if (separator == std::string_view::npos)
+        {
+          return false;
+        }
+
+        uri = uri.substr(0, separator);
+      }
+
+      return false;
+    }
+
     void addMissingEntries(std::vector<ScanItem>& items,
                            library::FileManifestStore::Reader const& manifestReader,
-                           std::unordered_set<std::string> const& seenUris)
+                           std::unordered_set<std::string> const& seenUris,
+                           std::unordered_set<std::string> const& blockedUriPrefixes)
     {
       for (auto const& [uriView, view] : manifestReader)
       {
-        if (auto const uri = std::string{uriView}; !seenUris.contains(uri))
+        if (auto const uri = std::string{uriView};
+            !hasBlockedUriPrefix(uriView, blockedUriPrefixes) && !seenUris.contains(uri))
         {
           auto item = ScanItem{.uri = uri,
                                .classification = ScanClassification::Missing,
@@ -312,6 +336,15 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, "Library root path does not exist: " + root.string());
     }
 
+    auto rootEc = std::error_code{};
+    auto const resolvedRoot = std::filesystem::weakly_canonical(root, rootEc);
+
+    if (rootEc)
+    {
+      return makeError(
+        Error::Code::IoError, "Failed to resolve library root path " + root.string() + ": " + rootEc.message());
+    }
+
     auto transaction = _ml.readTransaction();
     auto const headerResult = _ml.metadata().load(transaction);
 
@@ -326,6 +359,9 @@ namespace ao::rt
 
     // Track which URIs we've seen on disk to identify MISSING tracks later
     auto seenUris = std::unordered_set<std::string>{};
+    // A present entry that cannot be inspected safely prevents both that URI
+    // and its descendants from being classified as missing.
+    auto blockedUriPrefixes = std::unordered_set<std::string>{};
 
     // 1. Walk Filesystem
     auto ec = std::error_code{};
@@ -348,19 +384,66 @@ namespace ao::rt
         progress(entry.path());
       }
 
+      auto uri = library::LibraryUri::parse(entry.path().lexically_relative(root).generic_string());
+
+      if (!uri)
+      {
+        auto item = ScanItem{.uri = entry.path().filename().generic_string(),
+                             .fullPath = entry.path(),
+                             .classification = ScanClassification::Error,
+                             .errorMessage = uri.error().message};
+        items.push_back(std::move(item));
+        it.disable_recursion_pending();
+        it.increment(ec);
+        ec.clear();
+        continue;
+      }
+
+      auto resolvedPath = uri->resolveUnder(root);
+
+      if (!resolvedPath)
+      {
+        blockedUriPrefixes.insert(std::string{uri->value()});
+        auto item = ScanItem{.uri = std::string{uri->value()},
+                             .fullPath = entry.path(),
+                             .classification = ScanClassification::Error,
+                             .errorMessage = resolvedPath.error().message};
+        items.push_back(std::move(item));
+        it.disable_recursion_pending();
+        it.increment(ec);
+        ec.clear();
+        continue;
+      }
+
+      auto canonicalUri = library::LibraryUri::parse(resolvedPath->lexically_relative(resolvedRoot).generic_string());
+
+      if (!canonicalUri)
+      {
+        blockedUriPrefixes.insert(std::string{uri->value()});
+        auto item = ScanItem{.uri = std::string{uri->value()},
+                             .fullPath = *resolvedPath,
+                             .classification = ScanClassification::Error,
+                             .errorMessage = canonicalUri.error().message};
+        items.push_back(std::move(item));
+        it.disable_recursion_pending();
+        it.increment(ec);
+        ec.clear();
+        continue;
+      }
+
       // Proactively check if this is a directory we can't enter
-      if (entry.is_directory(entryEc))
+      if (std::filesystem::is_directory(*resolvedPath, entryEc))
       {
         auto testEc = std::error_code{};
         {
-          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{entry.path(), testEc};
+          [[maybe_unused]] auto const testIt = std::filesystem::directory_iterator{*resolvedPath, testEc};
         }
 
         if (testEc)
         {
-          auto const uri = std::filesystem::relative(entry.path(), root, entryEc).generic_string();
-          auto item = ScanItem{.uri = uri,
-                               .fullPath = entry.path(),
+          blockedUriPrefixes.insert(std::string{canonicalUri->value()});
+          auto item = ScanItem{.uri = std::string{canonicalUri->value()},
+                               .fullPath = *resolvedPath,
                                .classification = ScanClassification::Error,
                                .errorMessage = testEc.message()};
           items.push_back(std::move(item));
@@ -377,7 +460,7 @@ namespace ao::rt
         }
       }
 
-      scanEntry(entry, root, manifestReader, seenUris, items);
+      scanEntry(*resolvedPath, std::string{canonicalUri->value()}, manifestReader, seenUris, items);
 
       it.increment(ec);
 
@@ -388,7 +471,7 @@ namespace ao::rt
     }
 
     // 2. Identify MISSING (In manifest but not on disk)
-    addMissingEntries(items, manifestReader, seenUris);
+    addMissingEntries(items, manifestReader, seenUris, blockedUriPrefixes);
     classifyMovedEntries(items);
 
     return ScanPlan{headerResult->libraryId, libraryRevision, std::move(items)};

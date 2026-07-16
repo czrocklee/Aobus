@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <ios>
 #include <iterator>
 #include <memory>
@@ -65,6 +66,8 @@ namespace ao::gtk::test
     {
       return portal::ImportExportCallbacks{
         .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
+        .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
+        { completion(true); },
       };
     }
 
@@ -449,6 +452,168 @@ namespace ao::gtk::test
 
     CHECK(mutationCallbackCount == 2);
     CHECK(trackTitles(targetFixture) == std::vector<std::string>{"Test Title"});
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - restore waits for explicit preview confirmation",
+            "[gtk][unit][workflow][import-confirmation]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    std::int32_t mutationCallbackCount = 0;
+    auto confirmation = std::function<void(bool)>{};
+    auto optPreview = std::optional<rt::ImportReport>{};
+    auto callbacks = portal::ImportExportCallbacks{
+      .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
+      .requestLibraryRestoreConfirmation =
+        [&confirmation, &optPreview](rt::ImportReport const& report, std::function<void(bool)> completion)
+      {
+        optPreview = report;
+        confirmation = std::move(completion);
+      },
+    };
+    auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+    auto const importPath = fixture.tempDir().path() / "restore.yaml";
+    {
+      auto yaml = std::ofstream{importPath};
+      yaml << R"(version: 2
+export_mode: full
+library:
+  tracks:
+    - uri: restored.flac
+      title: Restored
+  lists: []
+)";
+    }
+
+    workflow.importFrom(importPath);
+
+    REQUIRE(pumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
+    REQUIRE(optPreview);
+    CHECK(optPreview->tracksCreated == 1);
+    CHECK(mutationCallbackCount == 0);
+    CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
+
+    confirmation(false);
+    drainGtkEvents();
+
+    CHECK(mutationCallbackCount == 0);
+    CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - confirmation becomes inert after workflow destruction",
+            "[gtk][regression][workflow][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto confirmation = std::function<void(bool)>{};
+    auto callbacks = portal::ImportExportCallbacks{
+      .requestLibraryRestoreConfirmation = [&confirmation](
+                                             rt::ImportReport const&, std::function<void(bool)> completion)
+      { confirmation = std::move(completion); },
+    };
+    auto const importPath = fixture.tempDir().path() / "restore.yaml";
+    {
+      auto yaml = std::ofstream{importPath};
+      yaml << R"(version: 2
+export_mode: full
+library:
+  tracks:
+    - uri: restored.flac
+      title: Restored
+  lists: []
+)";
+    }
+
+    {
+      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(fixture.runtime(), callbacks);
+      workflowPtr->importFrom(importPath);
+      REQUIRE(pumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
+    }
+
+    confirmation(true);
+    drainGtkEvents();
+
+    CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
+    CHECK(fixture.runtime().notifications().feed().entries.empty());
+  }
+
+  TEST_CASE("LibraryImportExportWorkflow - destruction after commit suppresses frontend completion",
+            "[gtk][regression][workflow][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executorPtr = std::move(executorPtr),
+      .musicRoot = tempDir.path() / "music",
+      .databasePath = tempDir.path() / "db",
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
+    }};
+    auto confirmation = std::function<void(bool)>{};
+    std::int32_t mutationCallbackCount = 0;
+    auto callbacks = portal::ImportExportCallbacks{
+      .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
+      .requestLibraryRestoreConfirmation = [&confirmation](
+                                             rt::ImportReport const&, std::function<void(bool)> completion)
+      { confirmation = std::move(completion); },
+    };
+    auto const importPath = tempDir.path() / "restore.yaml";
+    {
+      auto yaml = std::ofstream{importPath};
+      yaml << R"(version: 2
+export_mode: full
+library:
+  tracks:
+    - uri: restored.flac
+      title: Restored
+  lists: []
+)";
+    }
+
+    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime, callbacks);
+    workflowPtr->importFrom(importPath);
+
+    while (!confirmation)
+    {
+      executor->checkQueued();
+      REQUIRE(executor->runOne());
+    }
+
+    executor->runUntilIdle();
+    confirmation(true);
+
+    // The worker commits before it queues the mandatory callback hop. Leave
+    // that hop pending so destruction can invalidate the UI continuation.
+    bool committed = false;
+
+    while (!committed)
+    {
+      executor->checkQueued();
+      {
+        auto transaction = runtime.musicLibrary().readTransaction();
+        auto reader = runtime.musicLibrary().tracks().reader(transaction);
+
+        for (auto const& [trackId, view] : reader)
+        {
+          std::ignore = trackId;
+          committed = committed || view.metadata().title() == "Restored";
+        }
+      }
+
+      if (!committed)
+      {
+        REQUIRE(executor->runOne());
+      }
+    }
+
+    workflowPtr.reset();
+    executor->runUntilIdle();
+
+    CHECK(mutationCallbackCount == 0);
+    CHECK_FALSE(std::ranges::any_of(runtime.notifications().feed().entries,
+                                    [](auto const& entry)
+                                    { return entry.message == "Library imported successfully"; }));
   }
 
   TEST_CASE("LibraryImportExportWorkflow - import reports read errors without mutation", "[gtk][unit][workflow][error]")

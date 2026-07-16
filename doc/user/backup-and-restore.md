@@ -18,8 +18,14 @@ It does not copy the audio files themselves.
 Back up the music files separately and preserve their paths relative to the music root.
 
 `restore` replaces the payload-selected target scope; `merge` preserves target entities absent from the payload and adds imported lists as new lists.
-The current GTK import path uses destructive `restore` by default and does not present a preview-bound confirmation.
-Use the CLI preview below before importing, especially into a non-empty library.
+GTK prepares a restore preview and requires confirmation before changing the library.
+CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
+
+Only version 2 YAML is accepted.
+Earlier interchange files have no compatibility or conversion path and must be recreated from their source library with a current exporter.
+
+Track paths belong to the selected music root.
+Symlinks whose existing targets remain inside that root are supported, while dangling symlinks and symlinks into another tree are rejected during export, import baselining, scanning, and playback.
 
 ## Steps
 
@@ -44,7 +50,7 @@ Run the same mode you intend to commit:
 aobus -C /target -O json lib import /backup/library.yaml --mode restore --dry-run
 ```
 
-Review `tracksCreated`, `tracksUpdated`, `tracksDeleted`, `listsCreated`, and `listsDeleted`.
+Review `payloadVersion`, `payloadMode`, `targetScope`, the track/list create-update-delete counts, and `danglingReferencesIgnored`.
 Do not continue if the root, mode, or deletion counts are unexpected.
 
 ### Apply the import
@@ -52,7 +58,7 @@ Do not continue if the root, mode, or deletion counts are unexpected.
 For a deliberate replacement:
 
 ```bash
-aobus -C /target lib import /backup/library.yaml --mode restore
+aobus -C /target lib import /backup/library.yaml --mode restore --confirm-destructive-restore
 ```
 
 For an additive import that preserves target tracks and lists outside the payload:
@@ -61,7 +67,8 @@ For an additive import that preserves target tracks and lists outside the payloa
 aobus -C /target lib import /backup/library.yaml --mode merge
 ```
 
-GTK **File → Import Library Data...** currently performs restore immediately after file selection, so it should be used only when that replacement behavior has already been previewed and accepted.
+GTK **File → Import Library Data...** parses and previews the selected file, displays its scope and counts, and applies the bound plan only after **Restore Library** or **Restore Lists** is selected.
+Canceling the dialog leaves the target unchanged.
 
 ## Verify the result
 

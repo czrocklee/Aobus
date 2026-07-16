@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListView.h>
@@ -9,6 +10,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -111,7 +114,7 @@ namespace ao::library
   // ListBuilder - serialization
   //=============================================================================
 
-  std::vector<std::byte> ListBuilder::serialize() const
+  Result<std::vector<std::byte>> ListBuilder::serialize() const
   {
     auto const& name = _name;
     auto const& description = _description;
@@ -121,7 +124,28 @@ namespace ao::library
     auto const nameLength = name.size();
     auto const descLength = description.size();
     auto const filterLength = expression.size();
+    constexpr auto kMaxFieldValue = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max());
+
+    if (trackIds.size() > kMaxFieldValue / sizeof(TrackId))
+    {
+      return makeError(
+        Error::Code::ValueTooLarge,
+        std::format(
+          "List contains {} tracks; at most {} can be serialized", trackIds.size(), kMaxFieldValue / sizeof(TrackId)));
+    }
+
     auto const trackIdsSize = trackIds.size() * sizeof(TrackId);
+
+    if (nameLength > kMaxFieldValue || descLength > kMaxFieldValue || filterLength > kMaxFieldValue)
+    {
+      return makeError(Error::Code::ValueTooLarge, "List text field exceeds the 65535-byte storage limit");
+    }
+
+    if (trackIdsSize + nameLength > kMaxFieldValue || trackIdsSize + nameLength + descLength > kMaxFieldValue)
+    {
+      return makeError(
+        Error::Code::ValueTooLarge, "List track IDs, name, and description exceed the storage offset limit");
+    }
 
     // Offsets are relative to kListHeaderSize (start of trackIds array)
     // No internal alignment, just pack fields consecutively

@@ -29,8 +29,9 @@ namespace ao::rt::test
 
     TrackId addPlayableTrack(std::string_view title)
     {
-      auto const path = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      auto const trackId = addRuntimeTrack(runtime, {.title = std::string{title}, .uri = path});
+      auto const uri =
+        audio::test::installAudioFixture(runtime.musicLibrary().rootPath(), "basic_metadata.flac", "ui-playable.flac");
+      auto const trackId = addRuntimeTrack(runtime, {.title = std::string{title}, .uri = uri});
       runtime.reloadAllTracks();
       return trackId;
     }

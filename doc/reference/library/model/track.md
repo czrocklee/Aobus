@@ -10,7 +10,7 @@ summary: Enumerates persisted track metadata, technical properties, codec values
 ## Scope and version
 
 This reference enumerates the current logical track values owned by library storage and core read models.
-Physical byte placement belongs to [library database version 4](../storage/database.md), and portable names belong to [library YAML version 1](../format/yaml.md).
+Physical byte placement belongs to [library database version 4](../storage/database.md), and portable names belong to [library YAML version 2](../format/yaml.md).
 Application-facing ids, presentation capabilities, sort/group mappings, completion flags, and query bridges belong to the [runtime track field catalog](track-field.md).
 
 Zero numeric values and invalid ids represent unknown or absent values unless a narrower contract states otherwise.

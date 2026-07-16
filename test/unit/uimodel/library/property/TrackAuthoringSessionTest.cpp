@@ -70,7 +70,8 @@ namespace ao::uimodel::test
     CHECK(fixture.title(targetIds[0]) == "Applied");
     CHECK(fixture.title(targetIds[1]) == "Applied");
 
-    REQUIRE(fixture.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(fixture.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
     CHECK(sessionPtr->state() == TrackAuthoringSessionState::Stale);
     CHECK(states == std::vector{TrackAuthoringSessionState::Submitting,
                                 TrackAuthoringSessionState::Applied,

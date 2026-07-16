@@ -49,7 +49,7 @@ namespace ao::gtk::test
                                                               .artist = "Artist",
                                                               .album = album,
                                                               .albumArtist = "Album Artist",
-                                                              .uri = "/tmp/track.flac",
+                                                              .uri = "track.flac",
                                                               .trackNumber = 1,
                                                               .duration = std::chrono::minutes{3}});
     }
@@ -69,7 +69,7 @@ namespace ao::gtk::test
           .artist = std::format("Artist {:03}", index % 100),
           .album = std::format("Album {:04}", index % 1000),
           .albumArtist = std::format("Album Artist {:03}", index % 100),
-          .uri = std::format("/music/track_{}.flac", index),
+          .uri = std::format("music/track_{}.flac", index),
           .duration = std::chrono::minutes{3},
         };
         library::test::applyTrackSpec(builder, spec);

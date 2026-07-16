@@ -137,19 +137,19 @@ namespace ao::tui::test
                                                                   .artist = "Artist",
                                                                   .album = "Album B",
                                                                   .albumArtist = "Artist",
-                                                                  .uri = "/tmp/b1.flac",
+                                                                  .uri = "b1.flac",
                                                                   .year = 2021});
     auto const targetId = fixture.addTrack(library::test::TrackSpec{.title = "A One",
                                                                     .artist = "Artist",
                                                                     .album = "Album A",
                                                                     .albumArtist = "Artist",
-                                                                    .uri = "/tmp/a1.flac",
+                                                                    .uri = "a1.flac",
                                                                     .year = 2020});
     auto const secondId = fixture.addTrack(library::test::TrackSpec{.title = "A Two",
                                                                     .artist = "Artist",
                                                                     .album = "Album A",
                                                                     .albumArtist = "Artist",
-                                                                    .uri = "/tmp/a2.flac",
+                                                                    .uri = "a2.flac",
                                                                     .year = 2020});
 
     auto controller = LibraryController{fixture.runtime};
@@ -211,9 +211,9 @@ namespace ao::tui::test
   {
     auto fixture = LibraryControllerFixture{};
     auto const olderId = fixture.addTrack(library::test::TrackSpec{
-      .title = "Older", .artist = "Same Artist", .album = "Z Album", .uri = "/tmp/older.flac", .year = 2000});
+      .title = "Older", .artist = "Same Artist", .album = "Z Album", .uri = "older.flac", .year = 2000});
     fixture.addTrack(library::test::TrackSpec{
-      .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "/tmp/newer.flac", .year = 2025});
+      .title = "Newer", .artist = "Same Artist", .album = "A Album", .uri = "newer.flac", .year = 2025});
 
     auto controller = LibraryController{fixture.runtime};
     REQUIRE(controller.tracks().size() == 2);

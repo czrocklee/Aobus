@@ -10,6 +10,8 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
@@ -91,6 +93,11 @@ namespace ao::rt::test
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
+    auto const sourceLibraryId = [&]
+    {
+      auto transaction = ml1.readTransaction();
+      return ao::test::requireValue(ml1.metadata().load(transaction)).libraryId;
+    }();
 
     auto trackId = kInvalidTrackId;
     auto const* const uri = "special-list-song.flac";
@@ -107,7 +114,7 @@ namespace ao::rt::test
 
       auto listBuilder = ListBuilder::makeEmpty().name("My URI List");
       listBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(transaction), listBuilder.serialize());
+      createList(ml1.lists().writer(transaction), ao::test::requireValue(listBuilder.serialize()));
 
       REQUIRE(transaction.commit());
     }
@@ -129,6 +136,12 @@ namespace ao::rt::test
     // 4. Import into a library that has the SAME track but DIFFERENT TrackId
     auto const temp2 = ao::test::TempDir{};
     auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
+    auto const targetLibraryId = [&]
+    {
+      auto transaction = ml2.readTransaction();
+      return ao::test::requireValue(ml2.metadata().load(transaction)).libraryId;
+    }();
+    REQUIRE(targetLibraryId != sourceLibraryId);
 
     auto targetTrackId = kInvalidTrackId;
     {
@@ -173,6 +186,7 @@ namespace ao::rt::test
 
       // Verify tracks were NOT cleared
       CHECK(ml2.tracks().reader(transaction).begin() != ml2.tracks().reader(transaction).end());
+      CHECK(ao::test::requireValue(ml2.metadata().load(transaction)).libraryId == targetLibraryId);
     }
   }
 
@@ -190,7 +204,8 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
+export_mode: full
 library:
   tracks:
     - id: 10
@@ -254,7 +269,8 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - id: 10
@@ -272,7 +288,12 @@ library:
 )";
     }
 
-    REQUIRE(importer.importFromYamlOffline(yamlPath));
+    auto const report = importer.importFromYamlOffline(yamlPath);
+    REQUIRE(report);
+    CHECK(report->payloadVersion == 2);
+    CHECK(report->payloadMode == ExportMode::Full);
+    CHECK(report->targetScope == ImportTargetScope::Library);
+    CHECK(report->danglingReferencesIgnored == 3);
 
     auto transaction = ml.readTransaction();
     auto const listReader = ml.lists().reader(transaction);
@@ -306,7 +327,8 @@ library:
 
     {
       auto yaml = std::ofstream{inputPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
+export_mode: full
 library:
   tracks:
     - id: 10

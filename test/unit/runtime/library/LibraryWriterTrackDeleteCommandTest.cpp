@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -23,7 +24,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-delete]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId = libraryFixture.addTrack("Test Track");
+    auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Test Track", .uri = "test.flac"});
 
     auto changes = LibraryChanges{};
     auto mutated = std::vector<TrackId>{};
@@ -37,15 +38,17 @@ namespace ao::rt::test
     {
       auto transaction = library::test::writeTransaction(libraryFixture.library());
       auto manifest = library::FileManifestBuilder::makeEmpty().trackId(trackId).fileSize(10).mtime(20).serialize();
-      CHECK(libraryFixture.library().manifest().writer(transaction).put("/tmp/test.flac", manifest));
+      CHECK(libraryFixture.library().manifest().writer(transaction).put("test.flac", manifest));
 
       for (auto const* const name : std::array{"Manual A", "Manual B"})
       {
         auto listBuilder = library::ListBuilder::makeEmpty();
         listBuilder.name(name).tracks().add(trackId);
-        listIds.push_back(
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(listBuilder.serialize()))
-            .first);
+        listIds.push_back(ao::test::requireValue(libraryFixture.library()
+                                                   .lists()
+                                                   .writer(transaction)
+                                                   .create(ao::test::requireValue(listBuilder.serialize())))
+                            .first);
       }
 
       REQUIRE(transaction.commit());
@@ -64,7 +67,7 @@ namespace ao::rt::test
     auto const optTrackView =
       libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     CHECK_FALSE(optTrackView);
-    CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("/tmp/test.flac"));
+    CHECK_FALSE(libraryFixture.library().manifest().reader(transaction).get("test.flac"));
 
     auto listReader = libraryFixture.library().lists().reader(transaction);
 

@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Task.h>
+#include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
@@ -56,9 +58,13 @@ namespace ao::gtk::portal
   private:
     async::Task<void> scanWorkflow(ScanRequestMode mode, std::stop_token stopToken);
     async::Task<void> backfillAudioIdentityWorkflow(std::stop_token stopToken);
-    async::Task<void> importWorkflow(ImportExportCallbacks callbacks,
-                                     std::filesystem::path importPath,
-                                     std::stop_token stopToken);
+    async::Task<void> prepareImportWorkflow(ImportExportCallbacks callbacks,
+                                            std::filesystem::path importPath,
+                                            std::stop_token stopToken);
+    async::Task<void> applyImportWorkflow(ImportExportCallbacks callbacks,
+                                          rt::LibraryImportPlan plan,
+                                          std::stop_token stopToken);
+    void applyPreparedImport(ImportExportCallbacks callbacks, rt::LibraryImportPlan plan);
     async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode, std::stop_token stopToken);
 
     // Scan-library pipeline split into coroutine + sync helpers so that scanWorkflow() stays a flat orchestrator.
@@ -78,5 +84,6 @@ namespace ao::gtk::portal
     ImportExportCallbacks const& _callbacks;
 
     async::LifetimeScope _tasks;
+    MainContextCallbackScope _confirmationCallbacks;
   };
 } // namespace ao::gtk::portal

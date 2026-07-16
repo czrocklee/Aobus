@@ -23,6 +23,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -140,13 +141,13 @@ namespace ao::rt::test
 
       auto manualListBuilder = library::ListBuilder::makeEmpty();
       manualListBuilder.name("Manual List").description("Pinned songs").tracks().add(trackId);
-      [[maybe_unused]] auto [manualListId, manualListView] =
-        ao::test::requireValue(musicLibrary.lists().writer(transaction).create(manualListBuilder.serialize()));
+      [[maybe_unused]] auto [manualListId, manualListView] = ao::test::requireValue(
+        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(manualListBuilder.serialize())));
 
       auto smartListBuilder = library::ListBuilder::makeEmpty();
       smartListBuilder.name("Smart List").parentId(manualListId).filter("@artist = \"An Artist\"");
-      [[maybe_unused]] auto [smartListId, smartListView] =
-        ao::test::requireValue(musicLibrary.lists().writer(transaction).create(smartListBuilder.serialize()));
+      [[maybe_unused]] auto [smartListId, smartListView] = ao::test::requireValue(
+        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(smartListBuilder.serialize())));
 
       REQUIRE(transaction.commit());
       auto const artistId = musicLibrary.dictionary().lookupId("An Artist");
@@ -241,6 +242,29 @@ namespace ao::rt::test
     REQUIRE(optResource);
     CHECK(*optResource == std::vector<std::byte>{kCoverBytes.begin(), kCoverBytes.end()});
     CHECK_FALSE(scope.loadResource(ResourceId{999999}).has_value());
+  }
+
+  TEST_CASE("LibraryReader - URI paths reject symlinks escaping the library root",
+            "[runtime][unit][library][readmodel]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const outsideRoot = temp.path() / "outside";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(outsideRoot);
+    std::filesystem::create_directory_symlink(outsideRoot, musicRoot / "alias");
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto const trackId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
+
+    auto executor = InlineExecutor{};
+    auto asyncRuntime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{asyncRuntime, ml, changes};
+    auto reader = runtimeLibrary.reader();
+    CHECK_FALSE(reader.trackUriPath(trackId));
+    auto const optRow = reader.trackRow(trackId);
+    REQUIRE(optRow);
+    CHECK_FALSE(optRow->optUriPath);
   }
 
   TEST_CASE("LibraryReader - snapshots list tree DTOs", "[runtime][unit][library][readmodel]")

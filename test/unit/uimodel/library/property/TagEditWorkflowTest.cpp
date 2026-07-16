@@ -76,7 +76,8 @@ namespace ao::uimodel::test
     {
       auto sessionPtr = beginSession(fixture, std::array{trackId});
       auto workflow = TagEditWorkflow{*sessionPtr};
-      REQUIRE(fixture.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+      REQUIRE(fixture.library().writer().createList(
+        rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
 
       auto const result = workflow.apply(TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"Tag1"}});
 

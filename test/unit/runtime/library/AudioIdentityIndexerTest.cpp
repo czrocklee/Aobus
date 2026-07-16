@@ -343,6 +343,39 @@ namespace ao::rt::test
     CHECK(failures.front().message == "injected fingerprint failure");
   }
 
+  TEST_CASE("AudioIdentityIndexer - rejects a stored URI whose symlink now escapes the root",
+            "[runtime][unit][library][audio-identity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const outsideRoot = temp.path() / "outside";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(outsideRoot);
+    copyFixture(outsideRoot, "song.flac");
+    std::filesystem::create_directory_symlink(outsideRoot, musicRoot / "alias");
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      auto builder = library::FileManifestBuilder::makeEmpty();
+      builder.trackId(TrackId{1});
+      REQUIRE(ml.manifest().writer(transaction).put("alias/song.flac", builder.serialize()));
+      REQUIRE(transaction.commit());
+    }
+
+    auto failures = std::vector<AudioIdentityIndexFailure>{};
+    auto result = runIndexPending(
+      ml, {}, {}, [&failures](AudioIdentityIndexFailure const& failure) { failures.push_back(failure); });
+
+    REQUIRE(result);
+    CHECK(result->completedCount == 0);
+    CHECK(result->failureCount == 1);
+    REQUIRE(failures.size() == 1);
+    CHECK(failures.front().uri == "alias/song.flac");
+    CHECK(failures.front().stage == "resolve");
+    CHECK(failures.front().message.contains("outside the library root"));
+  }
+
   TEST_CASE("AudioIdentityIndexer - skips rows whose file stat changed before write",
             "[runtime][unit][library][audio-identity]")
   {

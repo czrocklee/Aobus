@@ -59,6 +59,7 @@ The planner recursively walks the configured music root, skips unsupported and n
 
 A missing root or root-level walk failure is a plan-building error.
 Per-entry problems may appear as error items without erasing other classifications.
+An entry that is present but cannot be resolved or inspected safely is `Error`, not also `Missing`; its existing manifest row remains unchanged when the plan is applied.
 The planner reads the persisted library id, committed revision, and manifest from the same LMDB snapshot and stores that binding in the returned plan.
 
 The planner performs URI matching before identity matching.

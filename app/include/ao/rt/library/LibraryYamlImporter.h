@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
+#include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -26,13 +27,23 @@ namespace ao::rt
     Merge    // Additive/update import: preserves existing records outside payload scope.
   };
 
+  enum class ImportTargetScope : std::uint8_t
+  {
+    Library,
+    Lists,
+  };
+
   struct ImportReport final
   {
+    std::uint32_t payloadVersion = 0;
+    ExportMode payloadMode = ExportMode::Full;
+    ImportTargetScope targetScope = ImportTargetScope::Library;
     std::uint64_t tracksCreated = 0;
     std::uint64_t tracksUpdated = 0;
     std::uint64_t tracksDeleted = 0;
     std::uint64_t listsCreated = 0;
     std::uint64_t listsDeleted = 0;
+    std::uint64_t danglingReferencesIgnored = 0;
 
     bool operator==(ImportReport const&) const = default;
   };

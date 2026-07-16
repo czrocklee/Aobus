@@ -9,6 +9,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/utility/Xxh3.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -16,6 +17,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::library::test
@@ -65,6 +67,34 @@ namespace ao::library::test
     CHECK(viewResult->audioSignature() == signature);
     CHECK(viewResult->status() == FileStatus::Available);
     CHECK(std::ranges::equal(viewResult->rawData(), payload));
+  }
+
+  TEST_CASE("FileManifestStore - rejects non-canonical or root-escaping URI keys", "[library][unit][manifest]")
+  {
+    auto fixture = LibraryStoreFixture{};
+    auto& library = fixture.library;
+    auto transaction = writeTransaction(library);
+    auto writer = library.manifest().writer(transaction);
+
+    for (auto const uri : {std::string_view{},
+                           std::string_view{"/absolute.flac"},
+                           std::string_view{"../outside.flac"},
+                           std::string_view{"album/../song.flac"},
+                           std::string_view{R"(album\song.flac)"}})
+    {
+      CAPTURE(uri);
+      auto const putResult = writer.put(uri, std::span<std::byte const>{});
+      REQUIRE_FALSE(putResult);
+      CHECK(putResult.error().code == Error::Code::InvalidInput);
+
+      auto const getResult = writer.get(uri);
+      REQUIRE_FALSE(getResult);
+      CHECK(getResult.error().code == Error::Code::InvalidInput);
+
+      auto const removeResult = writer.remove(uri);
+      REQUIRE_FALSE(removeResult);
+      CHECK(removeResult.error().code == Error::Code::InvalidInput);
+    }
   }
 
   TEST_CASE("FileManifestStore - URI padding boundaries preserve read, write, and remove behavior",

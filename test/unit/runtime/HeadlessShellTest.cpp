@@ -39,8 +39,8 @@ namespace ao::rt::test
     SECTION("Navigate to list ID creates a view and marks it active")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const listId =
-        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Headless"}));
+      auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Headless"}));
       REQUIRE(runtime.workspace().navigateTo(listId));
 
       auto const layout = runtime.workspace().snapshot();
@@ -73,10 +73,10 @@ namespace ao::rt::test
     SECTION("Closing a view updates the layout")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const firstListId =
-        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First"}));
-      auto const secondListId =
-        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second"}));
+      auto const firstListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First"}));
+      auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second"}));
       REQUIRE(runtime.workspace().navigateTo(firstListId));
       REQUIRE(runtime.workspace().navigateTo(secondListId));
 
@@ -97,10 +97,10 @@ namespace ao::rt::test
     {
       {
         auto runtime = makeRuntime(tempDir);
-        auto const firstListId = ao::test::requireValue(
-          runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First saved"}));
-        auto const secondListId = ao::test::requireValue(
-          runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second saved"}));
+        auto const firstListId = ao::test::requireValue(runtime.library().writer().createList(
+          LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First saved"}));
+        auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
+          LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second saved"}));
         REQUIRE(runtime.workspace().navigateTo(firstListId));
         REQUIRE(runtime.workspace().navigateTo(secondListId));
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
@@ -125,8 +125,8 @@ namespace ao::rt::test
     {
       {
         auto runtime = makeRuntime(tempDir);
-        auto const listId = ao::test::requireValue(
-          runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Grouped saved"}));
+        auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+          LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Grouped saved"}));
         REQUIRE(runtime.workspace().navigateTo(listId));
         auto const viewId = runtime.workspace().snapshot().activeViewId;
         auto const* artistPreset = builtinTrackPresentationPreset("artists");
@@ -160,8 +160,8 @@ namespace ao::rt::test
     {
       {
         auto runtime = makeRuntime(tempDir);
-        auto const listId =
-          ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Flat saved"}));
+        auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+          LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Flat saved"}));
         REQUIRE(runtime.workspace().navigateTo(listId));
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
       }

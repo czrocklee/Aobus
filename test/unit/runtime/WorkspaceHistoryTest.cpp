@@ -290,10 +290,10 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    auto const listA =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"}));
-    auto const listB =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"}));
+    auto const listA = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "A"}));
+    auto const listB = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "B"}));
 
     requireNavigation(runtime, listA, {.recordHistory = true});
     auto const viewA = runtime.workspace().snapshot().activeViewId;

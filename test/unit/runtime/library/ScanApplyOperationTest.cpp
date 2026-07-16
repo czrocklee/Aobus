@@ -657,7 +657,7 @@ namespace ao::rt::test
       auto transaction = library::test::writeTransaction(ml);
       auto listBuilder = library::ListBuilder::makeEmpty();
       listBuilder.name("Manual").tracks().add(originalTrackId);
-      auto createResult = ml.lists().writer(transaction).create(listBuilder.serialize());
+      auto createResult = ml.lists().writer(transaction).create(ao::test::requireValue(listBuilder.serialize()));
       REQUIRE(createResult);
       manualListId = createResult->first;
       REQUIRE(transaction.commit());

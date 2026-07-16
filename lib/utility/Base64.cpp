@@ -81,6 +81,9 @@ namespace ao::utility
 
     std::uint32_t buffer = 0;
     std::int32_t bits = 0;
+    std::size_t symbolCount = 0;
+    std::size_t paddingCount = 0;
+    bool sawPadding = false;
 
     for (auto const charVal : base64)
     {
@@ -91,7 +94,20 @@ namespace ao::utility
 
       if (charVal == '=')
       {
-        break;
+        sawPadding = true;
+        ++paddingCount;
+
+        if (paddingCount > 2)
+        {
+          return std::nullopt;
+        }
+
+        continue;
+      }
+
+      if (sawPadding)
+      {
+        return std::nullopt;
       }
 
       // The index is a uint8_t (0-255) and the table has 256 entries, so the
@@ -105,6 +121,7 @@ namespace ao::utility
 
       buffer = (buffer << kBase64BitsPerChar) | static_cast<std::uint32_t>(decodedValue);
       bits += kBase64BitsPerChar;
+      ++symbolCount;
 
       if (bits >= kBitsPerByte)
       {
@@ -117,6 +134,26 @@ namespace ao::utility
     if (bits >= kBase64BitsPerChar || (bits > 0 && buffer != 0))
     {
       return std::nullopt;
+    }
+
+    if (paddingCount != 0)
+    {
+      auto const remainder = symbolCount % kBase64EncodedChunkSize;
+      std::size_t expectedPadding = 0;
+
+      if (remainder == 2)
+      {
+        expectedPadding = 2;
+      }
+      else if (remainder == 3)
+      {
+        expectedPadding = 1;
+      }
+
+      if ((symbolCount + paddingCount) % kBase64EncodedChunkSize != 0 || paddingCount != expectedPadding)
+      {
+        return std::nullopt;
+      }
     }
 
     return result;

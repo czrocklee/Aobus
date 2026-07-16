@@ -67,7 +67,8 @@ library:
     SECTION("Unsupported version")
     {
       testError(R"(
-version: 2
+version: 1
+export_mode: full
 library:
   tracks: []
 )",
@@ -78,7 +79,8 @@ library:
     SECTION("Missing library section")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 )",
                 Error::Code::FormatRejected,
                 "Missing 'library' section");
@@ -87,7 +89,8 @@ version: 1
     SECTION("Track missing URI")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - id: 1
@@ -101,7 +104,8 @@ library:
     SECTION("Track empty URI")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - id: 1
@@ -109,13 +113,14 @@ library:
   lists: []
 )",
                 Error::Code::FormatRejected,
-                "empty 'uri'");
+                "non-empty path");
     }
 
     SECTION("Duplicate track ID")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - id: 1
@@ -131,7 +136,8 @@ library:
     SECTION("List missing ID")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: []
   lists:
@@ -144,7 +150,8 @@ library:
     SECTION("List ID 0 (Reserved)")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: []
   lists:
@@ -158,7 +165,8 @@ library:
     SECTION("Duplicate list ID")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: []
   lists:
@@ -174,7 +182,8 @@ library:
     SECTION("List missing name")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: []
   lists:
@@ -187,7 +196,8 @@ library:
     SECTION("Malformed Base64 cover art rejects the import")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - uri: "song1.flac"
@@ -203,7 +213,7 @@ library:
     SECTION("Unknown export mode is rejected")
     {
       testError(R"(
-version: 1
+version: 2
 export_mode: mystery
 library:
   tracks: []
@@ -216,7 +226,7 @@ library:
     SECTION("Malformed numeric version is rejected")
     {
       testError(R"(
-version: 1x
+version: 2x
 library:
   tracks: []
   lists: []
@@ -228,7 +238,8 @@ library:
     SECTION("Malformed track ID is rejected")
     {
       testError(R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks:
     - id: 1x
@@ -252,7 +263,8 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: "not-a-sequence"
   lists: []
@@ -269,7 +281,8 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: []
   lists:
@@ -287,7 +300,8 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 1
+version: 2
+export_mode: full
 library:
   tracks: []
   lists:
@@ -330,7 +344,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: full
 library:
   tracks:

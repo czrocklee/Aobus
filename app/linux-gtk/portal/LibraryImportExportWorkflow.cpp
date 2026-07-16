@@ -6,6 +6,7 @@
 #include "common/UiWorkflow.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/AppRuntime.h>
@@ -14,6 +15,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -22,6 +24,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -88,6 +91,7 @@ namespace ao::gtk::portal
 
   LibraryImportExportWorkflow::~LibraryImportExportWorkflow()
   {
+    _confirmationCallbacks.close();
     _tasks.cancelAll();
   }
 
@@ -115,7 +119,7 @@ namespace ao::gtk::portal
       kImportExceptionContext,
       [callbacks = std::move(callbacks), importPath = std::move(path)](
         LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->importWorkflow(std::move(callbacks), std::move(importPath), stopToken); },
+      { return self->prepareImportWorkflow(std::move(callbacks), std::move(importPath), stopToken); },
       [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Import failed: Internal error"); });
   }
 
@@ -196,12 +200,74 @@ namespace ao::gtk::portal
     _runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
   }
 
-  async::Task<void> LibraryImportExportWorkflow::importWorkflow(ImportExportCallbacks callbacks,
-                                                                std::filesystem::path importPath,
-                                                                std::stop_token const stopToken)
+  async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflow(ImportExportCallbacks callbacks,
+                                                                       std::filesystem::path importPath,
+                                                                       std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().importLibraryAsync(
+    auto result = co_await _runtime.library().taskService().prepareLibraryImportAsync(
       std::move(importPath), rt::ImportMode::Restore, stopToken);
+
+    if (!result)
+    {
+      presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
+      co_return;
+    }
+
+    if (!callbacks.requestLibraryRestoreConfirmation)
+    {
+      auto const error =
+        Error{.code = Error::Code::InvalidState, .message = "Library restore confirmation is unavailable"};
+      presentFailure("Import failed", "Import failed: Confirmation is unavailable", error);
+      co_return;
+    }
+
+    auto requestConfirmation = std::move(callbacks.requestLibraryRestoreConfirmation);
+    auto const report = result->report();
+    auto pendingPlanPtr = std::make_shared<std::optional<rt::LibraryImportPlan>>(std::move(*result));
+    requestConfirmation(report,
+                        _confirmationCallbacks.guard(
+                          [this, callbacks = std::move(callbacks), pendingPlanPtr](bool const confirmed) mutable
+                          {
+                            if (!pendingPlanPtr->has_value())
+                            {
+                              return;
+                            }
+
+                            if (!confirmed)
+                            {
+                              *pendingPlanPtr = std::nullopt;
+                              return;
+                            }
+
+                            auto plan = std::move(**pendingPlanPtr);
+                            *pendingPlanPtr = std::nullopt;
+                            applyPreparedImport(std::move(callbacks), std::move(plan));
+                          }));
+  }
+
+  void LibraryImportExportWorkflow::applyPreparedImport(ImportExportCallbacks callbacks, rt::LibraryImportPlan plan)
+  {
+    spawnUiWorkflow(
+      _runtime.async(),
+      _tasks,
+      *this,
+      kImportExceptionContext,
+      [callbacks = std::move(callbacks), plan = std::move(plan)](
+        LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+      { return self->applyImportWorkflow(std::move(callbacks), std::move(plan), stopToken); },
+      [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Import failed: Internal error"); });
+  }
+
+  async::Task<void> LibraryImportExportWorkflow::applyImportWorkflow(ImportExportCallbacks callbacks,
+                                                                     rt::LibraryImportPlan plan,
+                                                                     std::stop_token const stopToken)
+  {
+    auto result = co_await _runtime.library().taskService().applyLibraryImportPlanAsync(std::move(plan), stopToken);
+
+    // Apply deliberately reaches callback completion after a possible commit,
+    // even when cancellation races with the worker. Recheck the UI lifetime
+    // before accessing this workflow or its frontend callbacks.
+    async::throwIfStopRequested(stopToken);
 
     if (!result)
     {

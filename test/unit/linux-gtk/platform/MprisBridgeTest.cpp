@@ -162,15 +162,16 @@ namespace ao::gtk::platform::test
     CHECK(MprisArtUrlCache::extensionForBytes(kUnknownBytes) == ".img");
 
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto resourceId = kInvalidResourceId;
     auto trackId = kInvalidTrackId;
     auto fixture = ao::gtk::test::GtkRuntimeFixture{
       [&](library::MusicLibrary& musicLibrary)
       {
+        auto const fixtureUri =
+          audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
         resourceId = addResource(musicLibrary, kPngBytes);
         trackId = library::test::addTrack(
-          musicLibrary, library::test::TrackSpec{.title = "Cover Track", .uri = fixturePath, .coverArtId = resourceId});
+          musicLibrary, library::test::TrackSpec{.title = "Cover Track", .uri = fixtureUri, .coverArtId = resourceId});
       }};
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime.playback());

@@ -60,7 +60,8 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("ManualList");
         listId =
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+          ao::test::requireValue(
+            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
             .first;
         REQUIRE(transaction.commit());
       }
@@ -82,7 +83,8 @@ namespace ao::rt::test
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
         listId =
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+          ao::test::requireValue(
+            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
             .first;
         REQUIRE(transaction.commit());
       }
@@ -133,7 +135,8 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("Manual");
         listId =
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+          ao::test::requireValue(
+            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
             .first;
         REQUIRE(transaction.commit());
       }
@@ -150,7 +153,10 @@ namespace ao::rt::test
         auto optView = libraryFixture.library().lists().reader(transaction).get(listId);
         auto builder = ListBuilder::fromView(*optView);
         builder.tracks().add(t1);
-        CHECK(libraryFixture.library().lists().writer(transaction).update(listId, builder.serialize()));
+        CHECK(libraryFixture.library()
+                .lists()
+                .writer(transaction)
+                .update(listId, ao::test::requireValue(builder.serialize())));
         REQUIRE(transaction.commit());
       }
 
@@ -168,7 +174,8 @@ namespace ao::rt::test
         builder.name("Smart");
         builder.filter("$year >= 2020");
         listId =
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+          ao::test::requireValue(
+            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
             .first;
         REQUIRE(transaction.commit());
       }
@@ -200,7 +207,8 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("DeleteMe");
         listId =
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+          ao::test::requireValue(
+            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
             .first;
         REQUIRE(transaction.commit());
       }
@@ -234,17 +242,18 @@ namespace ao::rt::test
 
         auto parentBuilder = ListBuilder::makeEmpty();
         parentBuilder.name("Parent");
-        parentId = ao::test::requireValue(listWriter.create(parentBuilder.serialize())).first;
+        parentId = ao::test::requireValue(listWriter.create(ao::test::requireValue(parentBuilder.serialize()))).first;
 
         auto childBuilder = ListBuilder::makeEmpty();
         childBuilder.name("Child");
         childBuilder.parentId(parentId);
-        childId = ao::test::requireValue(listWriter.create(childBuilder.serialize())).first;
+        childId = ao::test::requireValue(listWriter.create(ao::test::requireValue(childBuilder.serialize()))).first;
 
         auto grandchildBuilder = ListBuilder::makeEmpty();
         grandchildBuilder.name("Grandchild");
         grandchildBuilder.parentId(childId);
-        grandchildId = ao::test::requireValue(listWriter.create(grandchildBuilder.serialize())).first;
+        grandchildId =
+          ao::test::requireValue(listWriter.create(ao::test::requireValue(grandchildBuilder.serialize()))).first;
 
         REQUIRE(transaction.commit());
       }
@@ -280,7 +289,8 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("ToErase");
         listId =
-          ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize()))
+          ao::test::requireValue(
+            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
             .first;
         REQUIRE(transaction.commit());
       }
@@ -311,7 +321,9 @@ namespace ao::rt::test
       builder.name("Matching title");
       builder.filter("$title = \"After\"");
       smartListId =
-        ao::test::requireValue(libraryFixture.library().lists().writer(transaction).create(builder.serialize())).first;
+        ao::test::requireValue(
+          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
+          .first;
       REQUIRE(transaction.commit());
     }
 

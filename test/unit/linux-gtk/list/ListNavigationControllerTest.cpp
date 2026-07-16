@@ -33,8 +33,11 @@ namespace ao::gtk::test
   {
     ListId createList(rt::Library& library, std::string const& name, ListId parentId = kInvalidListId)
     {
-      return ao::test::requireValue(
-        uimodel::ListEditWorkflow{library}.create(rt::LibraryListDraft{.parentId = parentId, .name = name}));
+      return ao::test::requireValue(uimodel::ListEditWorkflow{library}.create(rt::LibraryListDraft{
+        .kind = rt::LibraryListKind::Manual,
+        .parentId = parentId,
+        .name = name,
+      }));
     }
 
     Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
@@ -149,6 +152,7 @@ namespace ao::gtk::test
     SECTION("submitListDraft creates a list and selects it on rebuild")
     {
       auto draft = rt::LibraryListDraft{};
+      draft.kind = rt::LibraryListKind::Smart;
       draft.name = "Recently Played";
       draft.description = "Tracks touched this week";
       draft.expression = "$title ~ \"Recent\"";
@@ -172,6 +176,7 @@ namespace ao::gtk::test
       auto const listId = createList(fixture.runtime().library(), "Old Name");
 
       auto draft = rt::LibraryListDraft{};
+      draft.kind = rt::LibraryListKind::Smart;
       draft.listId = listId;
       draft.name = "High Energy";
       draft.description = "Updated description";
@@ -195,6 +200,7 @@ namespace ao::gtk::test
     SECTION("submitListDraft rejects invalid drafts without saving presentation")
     {
       auto draft = rt::LibraryListDraft{};
+      draft.kind = rt::LibraryListKind::Smart;
       draft.name = "Invalid";
       draft.expression = "(";
 

@@ -547,4 +547,66 @@ namespace ao::rt::test
       CHECK_FALSE(item.uri.contains("./"));
     }
   }
+
+  TEST_CASE("ScanPlanBuilder - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const outsideRoot = temp.path() / "outside";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(outsideRoot);
+    auto const outsideFile = outsideRoot / "outside.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), outsideFile);
+    std::filesystem::create_symlink(outsideFile, musicRoot / "alias.flac");
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    putManifestEntry(library, "alias.flac", TrackId{42}, AudioIdentity{});
+    auto const plan = ScanPlanBuilder{library}.buildPlan().value();
+
+    REQUIRE(plan.size() == 1);
+    CHECK(plan.count(ScanClassification::New) == 0);
+    CHECK(plan.count(ScanClassification::Missing) == 0);
+    CHECK(plan.count(ScanClassification::Error) == 1);
+    CHECK(plan.items().front().uri == "alias.flac");
+    CHECK(plan.items().front().errorMessage.contains("outside the library root"));
+  }
+
+  TEST_CASE("ScanPlanBuilder - in-root symlinks use one canonical target URI", "[runtime][unit][library-scan][uri]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    std::filesystem::create_directories(musicRoot);
+    auto const actualFile = musicRoot / "actual.flac";
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), actualFile);
+    std::filesystem::create_symlink(actualFile, musicRoot / "alias.flac");
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto const plan = ScanPlanBuilder{library}.buildPlan().value();
+
+    REQUIRE(plan.size() == 1);
+    CHECK(plan.count(ScanClassification::New) == 1);
+    CHECK(plan.items().front().uri == "actual.flac");
+    CHECK(plan.items().front().fullPath == std::filesystem::canonical(actualFile));
+  }
+
+  TEST_CASE("ScanPlanBuilder - an escaping directory symlink does not mark descendants missing",
+            "[runtime][regression][library-scan][uri]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const outsideRoot = temp.path() / "outside";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(outsideRoot);
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), outsideRoot / "song.flac");
+    std::filesystem::create_directory_symlink(outsideRoot, musicRoot / "alias");
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    putManifestEntry(library, "alias/song.flac", TrackId{42}, AudioIdentity{});
+    auto const plan = ScanPlanBuilder{library}.buildPlan().value();
+
+    REQUIRE(plan.size() == 1);
+    CHECK(plan.count(ScanClassification::Missing) == 0);
+    CHECK(plan.count(ScanClassification::Error) == 1);
+    CHECK(plan.items().front().uri == "alias");
+  }
 } // namespace ao::rt::test

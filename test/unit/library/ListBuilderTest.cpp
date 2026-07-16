@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -16,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -51,12 +53,12 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - smart list", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty()
-                           .name("My Smart List")
-                           .description("A smart list")
-                           .filter("@artist = 'Test'")
-                           .parentId(ListId{17})
-                           .serialize();
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty()
+                                                  .name("My Smart List")
+                                                  .description("A smart list")
+                                                  .filter("@artist = 'Test'")
+                                                  .parentId(ListId{17})
+                                                  .serialize());
     auto const view = ListView{payload};
 
     CHECK(view.isSmart() == true);
@@ -71,7 +73,7 @@ namespace ao::library::test
     builder.tracks().add(TrackId{100});
     builder.tracks().add(TrackId{200});
     builder.tracks().add(TrackId{300});
-    auto const payload = builder.serialize();
+    auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
 
     CHECK(view.isSmart() == false);
@@ -87,7 +89,7 @@ namespace ao::library::test
     auto builder = ListBuilder::makeEmpty();
     builder.tracks().add(TrackId{30}).add(TrackId{10}).add(TrackId{30}).add(TrackId{20}).add(TrackId{10});
 
-    auto const payload = builder.serialize();
+    auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
 
     REQUIRE(view.tracks().size() == 3);
@@ -103,7 +105,7 @@ namespace ao::library::test
 
     builder.tracks().remove(TrackId{10});
 
-    auto const payload = builder.serialize();
+    auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
     REQUIRE(view.tracks().size() == 2);
     CHECK(view.tracks()[0] == TrackId{20});
@@ -118,7 +120,7 @@ namespace ao::library::test
     REQUIRE(legacyView.isValid());
     REQUIRE(legacyView.tracks().size() == 5);
 
-    auto const rebuiltPayload = ListBuilder::fromView(legacyView).serialize();
+    auto const rebuiltPayload = ao::test::requireValue(ListBuilder::fromView(legacyView).serialize());
     auto const rebuiltView = ListView{rebuiltPayload};
 
     REQUIRE(rebuiltView.tracks().size() == 3);
@@ -129,7 +131,8 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - manual list empty trackIds", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().name("Empty List").description("No tracks").serialize();
+    auto const payload =
+      ao::test::requireValue(ListBuilder::makeEmpty().name("Empty List").description("No tracks").serialize());
     auto const view = ListView{payload};
 
     CHECK(view.isSmart() == false);
@@ -145,12 +148,12 @@ namespace ao::library::test
                      .filter("$year >= 2021")
                      .parentId(ListId{42});
 
-    auto const payload = builder.serialize();
+    auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
 
     CHECK(view.parentId() == ListId{42});
 
-    auto const rebuilt = ListBuilder::fromView(view).serialize();
+    auto const rebuilt = ao::test::requireValue(ListBuilder::fromView(view).serialize());
     auto const rebuiltView = ListView{rebuilt};
     CHECK(rebuiltView.parentId() == ListId{42});
     CHECK(rebuiltView.name() == "Nested Smart List");
@@ -166,7 +169,7 @@ namespace ao::library::test
     auto builder = ListBuilder::makeEmpty().name("RoundTrip Test").description("Testing round-trip");
     builder.tracks().add(TrackId{42});
     builder.tracks().add(TrackId{99});
-    auto const payload = builder.serialize();
+    auto const payload = ao::test::requireValue(builder.serialize());
 
     auto wtxn2 = writeTransaction(library);
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
@@ -190,11 +193,11 @@ namespace ao::library::test
     auto& library = fixture.library;
     auto const& store = library.lists();
 
-    auto const payload = ListBuilder::makeEmpty()
-                           .name("Smart RoundTrip")
-                           .description("Testing smart list round-trip")
-                           .filter("@year > 2020")
-                           .serialize();
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty()
+                                                  .name("Smart RoundTrip")
+                                                  .description("Testing smart list round-trip")
+                                                  .filter("@year > 2020")
+                                                  .serialize());
 
     auto wtxn2 = writeTransaction(library);
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
@@ -213,10 +216,29 @@ namespace ao::library::test
 
   TEST_CASE("ListBuilder - name and description offsets", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().name("Offset Test").description("Desc Here").serialize();
+    auto const payload =
+      ao::test::requireValue(ListBuilder::makeEmpty().name("Offset Test").description("Desc Here").serialize());
     auto const view = ListView{payload};
 
     CHECK(view.name() == "Offset Test");
     CHECK(view.description() == "Desc Here");
+  }
+
+  TEST_CASE("ListBuilder - serialization rejects values that overflow its fixed-width layout", "[library][unit][list]")
+  {
+    auto const longTextResult = ListBuilder::makeEmpty().name(std::string(65'536, 'n')).serialize();
+    REQUIRE_FALSE(longTextResult);
+    CHECK(longTextResult.error().code == Error::Code::ValueTooLarge);
+
+    auto builder = ListBuilder::makeEmpty();
+
+    for (std::uint32_t rawId = 1; rawId <= 16'384; ++rawId)
+    {
+      builder.tracks().add(TrackId{rawId});
+    }
+
+    auto const trackCountResult = builder.serialize();
+    REQUIRE_FALSE(trackCountResult);
+    CHECK(trackCountResult.error().code == Error::Code::ValueTooLarge);
   }
 } // namespace ao::library::test

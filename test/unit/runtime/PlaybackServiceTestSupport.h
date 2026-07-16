@@ -157,6 +157,12 @@ namespace ao::rt::test
     PlaybackFixture& operator=(PlaybackFixture&&) = delete;
     ~PlaybackFixture() = default;
 
+    std::string installAudioFixture(std::string_view const fileName = "basic_metadata.flac",
+                                    std::string_view const libraryUri = "playable.flac")
+    {
+      return audio::test::installAudioFixture(libraryFixture.root(), fileName, libraryUri);
+    }
+
     // Declaration order matters: the executor must outlive PlaybackService,
     // and playbackService (destroyed first)
     // tears down its Player while the provider mock is still alive.

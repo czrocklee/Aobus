@@ -75,8 +75,8 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
-    auto const listId =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Existing"}));
+    auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Existing"}));
     REQUIRE(runtime.workspace().navigateTo(listId));
     auto const before = runtime.workspace().snapshot();
     auto const configPath = tempDir.path() / "other-group.yaml";
@@ -100,8 +100,8 @@ namespace ao::rt::test
 
     {
       auto runtime = makeRuntime(tempDir);
-      listId =
-        ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Restored"}));
+      listId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Restored"}));
       REQUIRE(runtime.workspace().navigateTo(listId));
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
@@ -126,10 +126,10 @@ namespace ao::rt::test
 
     {
       auto runtime = makeRuntime(tempDir);
-      firstListId = ao::test::requireValue(
-        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First restored"}));
-      secondListId = ao::test::requireValue(
-        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "After restore"}));
+      firstListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First restored"}));
+      secondListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "After restore"}));
       REQUIRE(runtime.workspace().navigateTo(firstListId));
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
@@ -151,10 +151,10 @@ namespace ao::rt::test
 
     {
       auto runtime = makeRuntime(tempDir);
-      auto const firstListId = ao::test::requireValue(
-        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First snapshot"}));
-      auto const secondListId = ao::test::requireValue(
-        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second snapshot"}));
+      auto const firstListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First snapshot"}));
+      auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second snapshot"}));
       REQUIRE(runtime.workspace().navigateTo(firstListId));
       REQUIRE(runtime.workspace().navigateTo(secondListId));
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
@@ -209,8 +209,8 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const listId =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A list"}));
+    auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "A list"}));
     auto const configPath = tempDir.path() / "config.yaml";
 
     writeWorkspaceConfig(configPath, {listId.raw()}, 9999);
@@ -228,8 +228,8 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
-    auto const listId =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
+    auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Valid"}));
     auto const configPath = tempDir.path() / "partial.yaml";
 
     writeWorkspaceConfig(configPath, {listId.raw(), 999999}, listId.raw());
@@ -253,8 +253,8 @@ namespace ao::rt::test
   {
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
-    auto const listId =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
+    auto const listId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Valid"}));
     auto const configPath = tempDir.path() / "versioned.yaml";
 
     SECTION("Unsupported presentation version")

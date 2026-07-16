@@ -57,7 +57,7 @@ namespace ao::library::test
     std::string work{};
     std::string movement{};
     std::string soloist{};
-    std::string uri = "/tmp/test.flac";
+    std::string uri = "test.flac";
     std::vector<std::string> tags{};
     std::vector<std::pair<std::string, std::string>> customMetadata{};
     ResourceId coverArtId = kInvalidResourceId;

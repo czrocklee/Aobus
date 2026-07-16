@@ -145,8 +145,8 @@ namespace ao::rt::test
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
       [&](LibraryChangeSet const&)
       {
-        auto nestedResult =
-          fixture.runtimeLibrary().writer().createList(LibraryWriter::ListDraft{.name = "Nested mutation"});
+        auto nestedResult = fixture.runtimeLibrary().writer().createList(
+          LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Nested mutation"});
         nestedMutationRejected = !nestedResult && nestedResult.error().code == Error::Code::InvalidState;
       });
 
@@ -272,7 +272,10 @@ namespace ao::rt::test
     auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
     REQUIRE(boundResult);
 
-    auto draft = LibraryWriter::ListDraft{.name = "Unrelated"};
+    auto draft = LibraryWriter::ListDraft{
+      .kind = LibraryWriter::ListKind::Manual,
+      .name = "Unrelated",
+    };
     REQUIRE(fixture.runtimeLibrary().writer().createList(draft));
 
     auto patch = MetadataPatch{};

@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/RenderTarget.h>
@@ -32,12 +31,12 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService selection - teardown is deferred after pending engine notification",
             "[runtime][regression][playback][concurrency]")
   {
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto fixturePtr = std::make_unique<PlaybackFixture<QueuedExecutor>>();
     fixturePtr->onDevicesChangedCb(fixturePtr->status.devices);
     fixturePtr->executor.drain();
 
-    auto const trackId = fixturePtr->libraryFixture.addTrack({.title = "A Track", .uri = fixturePath});
+    auto const fixtureUri = fixturePtr->installAudioFixture();
+    auto const trackId = fixturePtr->libraryFixture.addTrack({.title = "A Track", .uri = fixtureUri});
     REQUIRE(fixturePtr->playbackService.playTrack(trackId, ListId{1}));
     REQUIRE(fixturePtr->renderTarget != nullptr);
 

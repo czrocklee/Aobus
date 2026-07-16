@@ -58,7 +58,7 @@ Each row records the outgoing direct edges of one RFC; sequence numbers alone im
 Entries below retain durable proposal history; most are `draft` candidates, while terminal entries state their disposition.
 The front-matter lifecycle state is authoritative; `in-review` identifies active adjudication.
 
-- [RFC 0001: Safe library transfer](0001-safe-library-transfer.md) proposes fail-closed import validation, root-contained URIs, and preview-bound destructive authorization.
+- [RFC 0001: Safe library transfer](0001-safe-library-transfer.md) is implemented with a version-2 closed schema, shared root-contained LibraryUri, and preview-bound one-shot restore authorization, without a legacy reader or migration path.
 - [RFC 0002: Durable library storage lifecycle](0002-durable-library-storage.md) proposes explicit durability classes, stepwise migration, checkpoints, recovery, and storage maintenance.
 - [RFC 0003: Unified library mutation pipeline](0003-library-mutation-pipeline.md) is implemented with one coordinator-owned writable capability, maintenance admission, commit revision, and semantic change publication barrier.
 - [RFC 0004: Scalable library task execution](0004-scalable-library-tasks.md) proposes phased preparation, stable-file revalidation, bounded commits, cancellation, and production scale budgets.

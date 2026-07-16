@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 
 namespace ao::rt
 {
@@ -75,6 +76,7 @@ namespace ao::gtk::portal
   private:
     void handleLibraryImportSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
                                      Glib::RefPtr<Gtk::FileDialog> const& dialogPtr);
+    void presentLibraryRestoreConfirmation(rt::ImportReport const& report, std::function<void(bool)> completion);
 
     void handleExportModeConfirmed(std::int32_t responseId, Gtk::DropDown* modeCombo, AppDialog* dialog);
     void handleExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,

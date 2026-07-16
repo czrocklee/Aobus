@@ -110,6 +110,7 @@ The fixed per-track value cost is 68 bytes before arrays, blocks, title, and URI
 `ListHeader` is 20 bytes and four-byte aligned.
 It contains track-id count, offset/length pairs for name, description, and filter, and a parent list id.
 The track-id array immediately follows the header; string offsets are relative to the start of that array region.
+The three lengths and offsets are unsigned 16-bit values; current builders reject values that cannot be represented instead of truncating them.
 
 ## Resource and dictionary records
 

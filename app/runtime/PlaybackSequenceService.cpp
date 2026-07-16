@@ -12,6 +12,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -40,6 +41,7 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
+#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -72,11 +74,29 @@ namespace ao::rt
       auto const& view = *optView;
       auto const metadata = view.metadata();
       auto const property = view.property();
-      auto const uri = std::filesystem::path{property.uri()};
-      auto const optFilePath =
-        uri.empty() ? std::optional<std::filesystem::path>{}
-                    : std::optional<std::filesystem::path>{
-                        uri.is_absolute() ? uri.lexically_normal() : (library.rootPath() / uri).lexically_normal()};
+      auto optFilePath = std::optional<std::filesystem::path>{};
+
+      if (auto const uriText = property.uri(); !uriText.empty())
+      {
+        auto uri = library::LibraryUri::parse(uriText);
+
+        if (!uri)
+        {
+          return makeError(
+            Error::Code::CorruptData,
+            std::format("track {} contains an invalid library URI: {}", trackId.raw(), uri.error().message));
+        }
+
+        auto resolved = uri->resolveUnder(library.rootPath());
+
+        if (!resolved)
+        {
+          return std::unexpected{resolved.error()};
+        }
+
+        optFilePath = std::move(*resolved);
+      }
+
       auto request = PlaybackService::PlaybackRequest{
         .item =
           NowPlayingInfo{

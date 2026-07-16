@@ -57,8 +57,8 @@ Exactly one top-level command is required.
 | `lib verify` | none |
 | `lib relink` | `[--from <old-uri> --to <new-uri>] [--dry-run]` |
 | `lib fingerprint` | `--pending [--verbose]` |
-| `lib export` | `<output> [-m, --mode delta|metadata|full|listOnly]` |
-| `lib import` | `<input> [-m, --mode restore|merge] [--dry-run]` |
+| `lib export` | `(<output> | -o, --output <file>) [-m, --mode delta|metadata|full|listOnly]`; default mode is `full` |
+| `lib import` | `(<input> | -i, --input <file>) [-m, --mode restore|merge] [--dry-run] [--confirm-destructive-restore]`; default mode is `merge` |
 | `lib dump` | `[--dict] [--manifest] [--meta] [--resources] [--raw]` |
 | `lib resource list` | none |
 | `lib resource export` | `<id> -o, --output <file>` |
@@ -121,13 +121,14 @@ Mutation/administrative shapes:
 | `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength}]` |
 | `lib relink` apply | `dryRun, oldUri, newUri, trackId` |
 | `lib fingerprint` | `completed, skipped, failures, cancelled` |
-| `lib import` | `action, path, mode, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted` |
+| `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored` |
 | `lib export` | `action, path, mode` |
 | `lib resource list` | `resources[{id,size}]` |
 | `lib resource export` | `id, output, size` |
 | `lib dump` | selected optional `meta`, `dictionary`, `manifest`, `resources` sections |
 
 Change-record nested fields are defined by the runtime mutation reply types and are emitted without CLI reinterpretation.
+For `lib import`, `payloadMode` uses `delta`, `metadata`, `full`, or `listOnly`, and `targetScope` uses exact lowercase `library` or `lists`.
 
 ### Plain scan/status text
 
@@ -140,6 +141,8 @@ new N  changed C  moved R  missing M  unchanged U  errors E
 Fingerprint summary is `fingerprinted N  skipped N  failed N`.
 Tag list is descending frequency then name.
 `tag show` returns the intersection across all supplied tracks.
+
+Plain `lib import` output identifies whether the operation is a preview, then prints payload version, payload mode, target scope, track/list create-update-delete counts, and ignored dangling references.
 
 ### Streams and exit codes
 
@@ -160,6 +163,9 @@ Tag list is descending frequency then name.
 - `lib verify` fails only for Missing or Error, while still reporting Changed/Moved.
 - `lib resource export` fails for missing id or file IO.
 - Create dry-runs omit transaction-allocated ids.
+- `lib import --mode restore --dry-run` validates and previews without requiring confirmation.
+- A committing restore requires `--confirm-destructive-restore`; merge requires neither that flag nor an interactive prompt.
+- Import apply fails when the YAML bytes or target library identity/revision change after its in-process preview.
 
 ## Compatibility and versioning
 
@@ -174,6 +180,8 @@ Library YAML and database versioning are independent.
 aobus -C /music track show --filter '$artist == "Miles Davis"' -O json
 aobus track update 42 --composer "J. S. Bach" --set source=manual --dry-run
 aobus lib export backup.yaml --mode full
+aobus -O json lib import backup.yaml --mode restore --dry-run
+aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 ```
 
 ## Implementation authority

@@ -160,5 +160,22 @@ namespace ao::rt::test
       CHECK(trackIdResult.error().code == Error::Code::InvalidInput);
       CHECK(trackIdResult.error().message.contains("outside music root"));
     }
+
+    SECTION("symlink escaping root")
+    {
+      auto const outsideTemp = ao::test::TempDir{};
+      auto const outsideFile = outsideTemp.path() / "outside.flac";
+      {
+        auto output = std::ofstream{outsideFile};
+        output << "outside";
+      }
+      auto const alias = libraryFixture.root() / "alias.flac";
+      std::filesystem::create_symlink(outsideFile, alias);
+
+      auto const trackIdResult = writer.createTrackFromFile(alias);
+      REQUIRE_FALSE(trackIdResult);
+      CHECK(trackIdResult.error().code == Error::Code::InvalidInput);
+      CHECK(trackIdResult.error().message.contains("outside music root"));
+    }
   }
 } // namespace ao::rt::test

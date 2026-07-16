@@ -7,6 +7,7 @@
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -80,14 +81,15 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      auto const path = std::filesystem::path{uri};
+      auto parsed = library::LibraryUri::parse(uri);
 
-      if (path.is_absolute())
+      if (!parsed)
       {
-        return path.lexically_normal();
+        return std::nullopt;
       }
 
-      return (libraryRoot / path).lexically_normal();
+      auto resolved = parsed->resolveUnder(libraryRoot);
+      return resolved ? std::optional<std::filesystem::path>{std::move(*resolved)} : std::nullopt;
     }
 
     TrackRow rowDataFromView(TrackId id,

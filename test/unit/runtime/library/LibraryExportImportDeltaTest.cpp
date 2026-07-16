@@ -26,8 +26,10 @@
 
 #include <chrono>
 #include <cstddef>
+#include <expected>
 #include <filesystem>
 #include <fstream>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -55,7 +57,14 @@ namespace ao::rt::test
       auto executor = InlineExecutor{};
       auto runtime = async::Runtime{executor};
       auto runtimeLibrary = Library{runtime, library, changes};
-      return runtime.spawn(runtimeLibrary.taskService().importLibraryAsync(path, mode)).get();
+      auto planResult = runtime.spawn(runtimeLibrary.taskService().prepareLibraryImportAsync(path, mode)).get();
+
+      if (!planResult)
+      {
+        return std::unexpected{planResult.error()};
+      }
+
+      return runtime.spawn(runtimeLibrary.taskService().applyLibraryImportPlanAsync(std::move(*planResult))).get();
     }
   } // namespace
 
@@ -210,7 +219,7 @@ namespace ao::rt::test
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n"
+      yaml << "version: 2\n"
            << "export_mode: delta\n"
            << "library:\n"
            << "  tracks:\n"
@@ -250,7 +259,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "changes.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 1
+      yaml << R"(version: 2
 export_mode: delta
 library:
   tracks:
@@ -283,7 +292,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\nlibrary:\n  tracks: []\n  lists: []\n";
+      yaml << "version: 2\nexport_mode: full\nlibrary:\n  tracks: []\n  lists: []\n";
     }
 
     auto changes = LibraryChanges{};
@@ -305,8 +314,9 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "restore-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n"
+      yaml << "version: 2\n"
            << "libraryId: 123E4567-E89B-12D3-A456-426614174000\n"
+           << "export_mode: full\n"
            << "library:\n"
            << "  tracks: []\n"
            << "  lists: []\n";
@@ -333,8 +343,9 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "preview-with-id.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 1\n"
+      yaml << "version: 2\n"
            << "libraryId: 123e4567-e89b-12d3-a456-426614174000\n"
+           << "export_mode: full\n"
            << "library:\n"
            << "  tracks: []\n"
            << "  lists: []\n";

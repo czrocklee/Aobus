@@ -5,6 +5,7 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/FileManifestView.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/ByteView.h>
@@ -22,16 +23,20 @@ namespace ao::library
 {
   namespace
   {
-    constexpr std::size_t kMaxUriLength = 500;
-    constexpr std::size_t kUriPaddingBufferSize = 504;
+    constexpr std::size_t kUriPaddingBufferSize = (LibraryUri::kMaxLength + 3U) & ~std::size_t{3U};
 
     Result<> validateUri(std::string_view uri)
     {
-      if (uri.length() > kMaxUriLength)
+      auto parsed = LibraryUri::parse(uri);
+
+      if (!parsed)
       {
-        return makeError(
-          Error::Code::ValueTooLarge,
-          std::format("URI length {} exceeds maximum supported length of {} bytes", uri.length(), kMaxUriLength));
+        return std::unexpected{parsed.error()};
+      }
+
+      if (parsed->value() != uri)
+      {
+        return makeError(Error::Code::InvalidInput, std::format("File manifest URI '{}' is not canonical", uri));
       }
 
       return {};
@@ -90,11 +95,6 @@ namespace ao::library
       return std::unexpected{result.error()};
     }
 
-    if (uri.empty())
-    {
-      return makeError(Error::Code::NotFound, "File manifest entry for empty URI was not found");
-    }
-
     auto const key = PaddedUriKey{uri};
 
     auto optData = _reader.get(key.view());
@@ -132,11 +132,6 @@ namespace ao::library
     if (auto result = validateUri(uri); !result)
     {
       return std::unexpected{result.error()};
-    }
-
-    if (uri.empty())
-    {
-      return makeError(Error::Code::NotFound, "File manifest entry for empty URI was not found");
     }
 
     auto const key = PaddedUriKey{uri};

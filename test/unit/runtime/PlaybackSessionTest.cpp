@@ -77,10 +77,12 @@ namespace ao::rt::test
                              std::uint16_t const year = 2020,
                              std::move_only_function<void()> settlePublication = {})
     {
+      auto const uri = audio::test::installAudioFixture(
+        runtime.musicLibrary().rootPath(), "basic_metadata.flac", "session-playable.flac");
       return addRuntimeTrack(runtime,
                              library::test::TrackSpec{
                                .title = std::move(title),
-                               .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
+                               .uri = uri,
                                .year = year,
                                .duration = std::chrono::seconds{10},
                              },

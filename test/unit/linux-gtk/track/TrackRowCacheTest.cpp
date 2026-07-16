@@ -168,7 +168,7 @@ namespace ao::gtk::test
 
       auto const optUri = provider.uriPath(helperId);
       REQUIRE(optUri);
-      CHECK(optUri->string() == "/tmp/test.flac");
+      CHECK(*optUri == runtime.musicLibrary().rootPath() / "test.flac");
 
       CHECK(provider.coverArtId(helperId) == kInvalidResourceId);
 

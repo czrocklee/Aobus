@@ -67,7 +67,7 @@ namespace ao::gtk::test
         auto const album = std::format("Album {}", i % 1000);
         auto const albumArtist = std::format("AlbumArtist {}", i % 400);
         auto const genre = std::format("Genre {}", i % 40);
-        auto const uri = std::format("/music/track_{}.flac", i);
+        auto const uri = std::format("music/track_{}.flac", i);
 
         auto builder = library::TrackBuilder::makeEmpty();
         // Spread metadata across many distinct dictionary strings so resolution

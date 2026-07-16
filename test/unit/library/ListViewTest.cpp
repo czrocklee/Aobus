@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
@@ -17,14 +18,15 @@ namespace ao::library::test
 {
   TEST_CASE("ListView - constructs from serialized data", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().serialize();
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
     auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }
 
   TEST_CASE("ListView - returns serialized field values", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().name("Test").description("Desc").parentId(ListId{9}).serialize();
+    auto const payload =
+      ao::test::requireValue(ListBuilder::makeEmpty().name("Test").description("Desc").parentId(ListId{9}).serialize());
     auto const view = ListView{payload};
 
     CHECK(view.tracks().empty());
@@ -42,7 +44,7 @@ namespace ao::library::test
     builder.tracks().add(TrackId{100});
     builder.tracks().add(TrackId{200});
     builder.tracks().add(TrackId{300});
-    auto const payload = builder.serialize();
+    auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
 
     CHECK(view.tracks().size() == 3);
@@ -57,8 +59,8 @@ namespace ao::library::test
 
   TEST_CASE("ListView - returns filters for smart lists", "[library][unit][list]")
   {
-    auto const payload =
-      ListBuilder::makeEmpty().name("Smart List").description("A smart list").filter("@year > 2020").serialize();
+    auto const payload = ao::test::requireValue(
+      ListBuilder::makeEmpty().name("Smart List").description("A smart list").filter("@year > 2020").serialize());
     auto const view = ListView{payload};
 
     CHECK(view.tracks().empty());
@@ -70,7 +72,7 @@ namespace ao::library::test
 
   TEST_CASE("ListView - returns empty strings when lengths are zero", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().serialize();
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
     auto const view = ListView{payload};
 
     CHECK(view.name().empty());
@@ -119,24 +121,25 @@ namespace ao::library::test
 
   TEST_CASE("ListView - valid records report isValid", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().name("Test").serialize();
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("Test").serialize());
     CHECK(ListView{payload}.isValid());
   }
 
   TEST_CASE("ListView - isSmart", "[library][unit][list]")
   {
-    auto const manualPayload = ListBuilder::makeEmpty().name("Manual").serialize();
+    auto const manualPayload = ao::test::requireValue(ListBuilder::makeEmpty().name("Manual").serialize());
     auto const manualView = ListView{manualPayload};
     CHECK(manualView.isSmart() == false);
 
-    auto const smartPayload = ListBuilder::makeEmpty().name("Smart").filter("@year > 2020").serialize();
+    auto const smartPayload =
+      ao::test::requireValue(ListBuilder::makeEmpty().name("Smart").filter("@year > 2020").serialize());
     auto const smartView = ListView{smartPayload};
     CHECK(smartView.isSmart() == true);
   }
 
   TEST_CASE("ListView - returns large track ID counts", "[library][unit][list]")
   {
-    auto const payload = ListBuilder::makeEmpty().name("Test").serialize();
+    auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("Test").serialize());
     auto const view = ListView{payload};
     CHECK(view.tracks().empty());
   }

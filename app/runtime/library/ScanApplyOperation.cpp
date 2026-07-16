@@ -12,6 +12,7 @@
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -25,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -266,6 +268,18 @@ namespace ao::rt
     return {};
   }
 
+  Result<std::filesystem::path> ScanApplyOperation::resolveItemPath(ScanItem const& item) const
+  {
+    auto uri = library::LibraryUri::parse(item.uri);
+
+    if (!uri)
+    {
+      return std::unexpected{uri.error()};
+    }
+
+    return uri->resolveUnder(_ml.rootPath());
+  }
+
   Result<ScanApplyResult> ScanApplyOperation::revalidatePreparedFiles(std::stop_token stopToken)
   {
     if (_state != State::Prepared)
@@ -296,7 +310,16 @@ namespace ao::rt
         break;
       }
 
-      auto fileResult = media::file::File::open(item.fullPath);
+      auto fullPath = resolveItemPath(item);
+
+      if (!fullPath)
+      {
+        reportFailure(item.uri, "resolve moved destination for", fullPath.error().message);
+        _abortTransaction = true;
+        break;
+      }
+
+      auto fileResult = media::file::File::open(*fullPath);
 
       if (!fileResult)
       {
@@ -570,7 +593,15 @@ namespace ao::rt
 
   std::optional<MediaTrack> ScanApplyOperation::loadTrackBuilder(ScanItem const& item)
   {
-    auto mediaTrackResult = readMediaTrack(item.fullPath);
+    auto fullPath = resolveItemPath(item);
+
+    if (!fullPath)
+    {
+      reportFailure(item.uri, "resolve media file", fullPath.error().message);
+      return std::nullopt;
+    }
+
+    auto mediaTrackResult = readMediaTrack(*fullPath);
 
     if (!mediaTrackResult)
     {

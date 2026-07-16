@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/ListView.h>
 
 #include <cstddef>
@@ -73,8 +74,8 @@ namespace ao::library
     ListBuilder& filter(std::string_view filter);
     ListBuilder& parentId(ListId parentId);
 
-    // Serialization - returns binary payload for ListStore
-    std::vector<std::byte> serialize() const;
+    // Serialization validates every field against the fixed-width ListHeader layout.
+    Result<std::vector<std::byte>> serialize() const;
 
   private:
     explicit ListBuilder() = default;

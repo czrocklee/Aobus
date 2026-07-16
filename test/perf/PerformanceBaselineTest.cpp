@@ -4,6 +4,7 @@
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -1429,7 +1430,8 @@ namespace ao::rt::test
           builder.tracks().add(trackId);
         }
 
-        auto result = _libraryFixture.library().lists().writer(transaction).create(builder.serialize());
+        auto result =
+          _libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
         REQUIRE(result);
         _manualListId = result->first;
         REQUIRE(transaction.commit());
@@ -1531,7 +1533,10 @@ namespace ao::rt::test
           builder.tracks().add(trackId);
         }
 
-        REQUIRE(_libraryFixture.library().lists().writer(transaction).update(_manualListId, builder.serialize()));
+        REQUIRE(_libraryFixture.library()
+                  .lists()
+                  .writer(transaction)
+                  .update(_manualListId, ao::test::requireValue(builder.serialize())));
         auto const start = std::chrono::steady_clock::now();
         REQUIRE(transaction.commit());
         return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);

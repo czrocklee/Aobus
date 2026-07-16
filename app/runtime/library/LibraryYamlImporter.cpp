@@ -11,6 +11,7 @@
 #include <ao/PictureType.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
@@ -20,6 +21,8 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/query/Parser.h>
+#include <ao/query/QueryCompiler.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
@@ -219,11 +222,103 @@ namespace ao::rt
       return {};
     }
 
-    std::string normalizedUri(std::string_view uri)
+    Result<std::string> parseLibraryUri(std::string_view uri, std::string_view context)
     {
-      auto rawUriStr = std::string{uri};
-      std::ranges::replace(rawUriStr, '\\', '/');
-      return std::filesystem::path{rawUriStr}.lexically_normal().generic_string();
+      auto parsed = library::LibraryUri::parse(uri);
+
+      if (!parsed)
+      {
+        return makeError(Error::Code::FormatRejected, std::format("{}: {}", context, parsed.error().message));
+      }
+
+      return std::string{parsed->value()};
+    }
+
+    Result<> rejectUnknownFields(ryml::ConstNodeRef const& node,
+                                 std::span<std::string_view const> allowedFields,
+                                 std::string_view context)
+    {
+      auto seenFields = std::unordered_set<std::string_view>{};
+
+      for (auto const& child : node.children())
+      {
+        auto const key = yaml::keyView(child);
+
+        if (!std::ranges::contains(allowedFields, key))
+        {
+          return makeError(Error::Code::FormatRejected, std::format("{} contains unknown field '{}'", context, key));
+        }
+
+        if (!seenFields.insert(key).second)
+        {
+          return makeError(Error::Code::FormatRejected, std::format("{} contains duplicate field '{}'", context, key));
+        }
+      }
+
+      return {};
+    }
+
+    constexpr auto kRootFields = std::to_array<std::string_view>({"version", "libraryId", "export_mode", "library"});
+    constexpr auto kLibraryFields = std::to_array<std::string_view>({"tracks", "lists"});
+    constexpr auto kTrackFields = std::to_array<std::string_view>({
+      "id",           "uri",         "title",       "artist",     "album",           "album-artist",   "genre",
+      "composer",     "conductor",   "ensemble",    "work",       "movement",        "soloist",        "year",
+      "track-number", "track-total", "disc-number", "disc-total", "movement-number", "movement-total", "custom",
+      "tags",         "covers",      "duration",    "bitrate",    "sample-rate",     "codec",          "channels",
+      "bit-depth",    "fileSize",    "mtime",
+    });
+    constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "data"});
+    constexpr auto kListFields =
+      std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "tracks"});
+    constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
+
+    Result<> validateTrackNestedSchema(ryml::ConstNodeRef const& trackNode)
+    {
+      if (auto const custom = yaml::findChild(trackNode, "custom"); custom.readable())
+      {
+        if (auto result = requireMap(custom, "Track record.custom"); !result)
+        {
+          return result;
+        }
+
+        auto keys = std::unordered_set<std::string_view>{};
+
+        for (auto const& entry : custom.children())
+        {
+          if (auto const key = yaml::keyView(entry); !keys.insert(key).second)
+          {
+            return makeError(
+              Error::Code::FormatRejected, std::format("Track record.custom contains duplicate field '{}'", key));
+          }
+        }
+      }
+
+      auto const covers = yaml::findChild(trackNode, "covers");
+
+      if (!covers.readable())
+      {
+        return {};
+      }
+
+      if (auto result = requireSequence(covers, "Track record.covers"); !result)
+      {
+        return result;
+      }
+
+      for (auto const& cover : covers.children())
+      {
+        if (auto result = requireMap(cover, "Track cover"); !result)
+        {
+          return result;
+        }
+
+        if (auto result = rejectUnknownFields(cover, kCoverFields, "Track cover"); !result)
+        {
+          return result;
+        }
+      }
+
+      return {};
     }
 
     bool isHexDigit(char ch) noexcept
@@ -267,7 +362,7 @@ namespace ao::rt
 
     std::optional<ExportMode> parseExportMode(std::string_view modeStr)
     {
-      if (modeStr == "delta" || modeStr == "minimum")
+      if (modeStr == "delta")
       {
         return ExportMode::Delta;
       }
@@ -418,7 +513,20 @@ namespace ao::rt
         return makeError(Error::Code::FormatRejected, "List track reference must be a scalar or map");
       }
 
-      if (auto const trackIdNode = yaml::findChild(trackRef, "id"); trackIdNode.readable())
+      if (auto result = rejectUnknownFields(trackRef, kListReferenceFields, "List track reference"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      auto const trackIdNode = yaml::findChild(trackRef, "id");
+      auto const uriNode = yaml::findChild(trackRef, "uri");
+
+      if (trackIdNode.readable() == uriNode.readable())
+      {
+        return makeError(Error::Code::FormatRejected, "List track reference must contain exactly one of 'id' or 'uri'");
+      }
+
+      if (trackIdNode.readable())
       {
         auto trackId = requireScalarAs<std::uint32_t>(trackIdNode, "List record.tracks[].id");
 
@@ -430,13 +538,6 @@ namespace ao::rt
         return ValidatedListTrackIdReference{.yamlId = *trackId};
       }
 
-      auto const uriNode = yaml::findChild(trackRef, "uri");
-
-      if (!uriNode.readable())
-      {
-        return makeError(Error::Code::FormatRejected, "List track reference missing 'id' or 'uri'");
-      }
-
       auto uri = requireScalar(uriNode, "List record.tracks[].uri");
 
       if (!uri)
@@ -444,14 +545,14 @@ namespace ao::rt
         return std::unexpected{uri.error()};
       }
 
-      auto normalized = normalizedUri(*uri);
+      auto normalized = parseLibraryUri(*uri, "List record.tracks[].uri");
 
-      if (normalized.empty())
+      if (!normalized)
       {
-        return makeError(Error::Code::FormatRejected, "List track reference has empty 'uri'");
+        return std::unexpected{normalized.error()};
       }
 
-      return ValidatedListTrackUriReference{.uri = std::move(normalized)};
+      return ValidatedListTrackUriReference{.uri = std::move(*normalized)};
     }
 
     Result<> validateManualListTracks(ryml::ConstNodeRef const& tracksNode, ValidatedList& list)
@@ -478,7 +579,15 @@ namespace ao::rt
 
     Result<> validateListContents(ryml::ConstNodeRef const& listNode, ValidatedList& list)
     {
-      if (auto const filterNode = yaml::findChild(listNode, "filter"); filterNode.readable())
+      auto const filterNode = yaml::findChild(listNode, "filter");
+      auto const tracksNode = yaml::findChild(listNode, "tracks");
+
+      if (filterNode.readable() && tracksNode.readable())
+      {
+        return makeError(Error::Code::FormatRejected, "List record cannot contain both 'filter' and 'tracks'");
+      }
+
+      if (filterNode.readable())
       {
         auto filter = requireScalar(filterNode, "List record.filter");
 
@@ -487,12 +596,31 @@ namespace ao::rt
           return std::unexpected{filter.error()};
         }
 
+        if (filter->empty())
+        {
+          return makeError(Error::Code::FormatRejected, "List record.filter must be non-empty");
+        }
+
+        auto expression = query::parse(*filter);
+
+        if (!expression)
+        {
+          return makeError(
+            Error::Code::FormatRejected, std::format("List record.filter is invalid: {}", expression.error().message));
+        }
+
+        if (auto plan = query::compileQuery(*expression); !plan)
+        {
+          return makeError(
+            Error::Code::FormatRejected, std::format("List record.filter is invalid: {}", plan.error().message));
+        }
+
         list.isSmart = true;
         list.filter = *filter;
         return {};
       }
 
-      if (auto const tracksNode = yaml::findChild(listNode, "tracks"); tracksNode.readable())
+      if (tracksNode.readable())
       {
         return validateManualListTracks(tracksNode, list);
       }
@@ -504,6 +632,11 @@ namespace ao::rt
                                              std::unordered_set<std::uint32_t>& seenYamlIds)
     {
       if (auto result = requireMap(listNode, "List record"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      if (auto result = rejectUnknownFields(listNode, kListFields, "List record"); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -543,6 +676,7 @@ namespace ao::rt
     std::filesystem::path sourcePath;
     ImportMode mode = ImportMode::Restore;
     bool buildChangeSet = false;
+    std::vector<char> sourceBytes;
     std::vector<char> buffer;
     yaml::ErrorCallbackState yamlErrorState;
     ryml::Tree tree;
@@ -620,13 +754,15 @@ namespace ao::rt
                                              library::TrackBuilder::PreparedHot const& preparedHot,
                                              library::TrackBuilder::PreparedCold const& preparedCold) const;
 
-    void buildStaticListTracks(library::ListBuilder& builder,
-                               ValidatedList const& importedList,
-                               std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                               library::FileManifestStore::Reader const& manifestReader) const;
+    Result<> buildStaticListTracks(library::ListBuilder& builder,
+                                   ValidatedList const& importedList,
+                                   std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+                                   library::FileManifestStore::Reader const& manifestReader,
+                                   ImportReport& report) const;
     Result<> updateListParent(ValidatedList const& importedList,
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
-                              library::ListStore::Writer& listWriter) const;
+                              library::ListStore::Writer& listWriter,
+                              ImportReport& report) const;
 
     Result<> overlayMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
     Result<> overlayTagsAndCustomMetadata(library::TrackBuilder& builder, ryml::ConstNodeRef const& trackNode) const;
@@ -702,6 +838,7 @@ namespace ao::rt
     }
 
     preparedPtr->buffer = std::move(*bufferResult);
+    preparedPtr->sourceBytes = preparedPtr->buffer;
 
     try
     {
@@ -722,6 +859,11 @@ namespace ao::rt
     }
 
     preparedPtr->validated = std::move(*validationResult);
+    preparedPtr->initialReport.payloadVersion = preparedPtr->validated.version;
+    preparedPtr->initialReport.payloadMode = preparedPtr->validated.payloadMode;
+    preparedPtr->initialReport.targetScope = preparedPtr->validated.payloadMode == ExportMode::ListOnly
+                                               ? ImportTargetScope::Lists
+                                               : ImportTargetScope::Library;
 
     if (mode == ImportMode::Restore)
     {
@@ -754,6 +896,25 @@ namespace ao::rt
 
     preparedPtr->tracks = std::move(*tracksResult);
     return PreparedImport{std::move(preparedPtr)};
+  }
+
+  Result<> LibraryYamlImportOperation::revalidateSource(PreparedImport const& prepared) const
+  {
+    auto currentBytes = yaml::readFileResult(prepared._implPtr->sourcePath);
+
+    if (!currentBytes)
+    {
+      return makeError(
+        Error::Code::IoError,
+        std::format("Failed to reread '{}': {}", prepared._implPtr->sourcePath.string(), currentBytes.error().message));
+    }
+
+    if (*currentBytes != prepared._implPtr->sourceBytes)
+    {
+      return makeError(Error::Code::Conflict, "Import file changed after its preview was prepared");
+    }
+
+    return {};
   }
 
   Result<ImportReport> LibraryYamlImportOperation::apply(PreparedImport const& prepared,
@@ -817,7 +978,7 @@ namespace ao::rt
                                                              ImportMode mode,
                                                              library::WriteTransaction& transaction) const
   {
-    if (mode != ImportMode::Restore || !validated.optLibraryId)
+    if (mode != ImportMode::Restore || validated.payloadMode == ExportMode::ListOnly || !validated.optLibraryId)
     {
       return {};
     }
@@ -1015,35 +1176,35 @@ namespace ao::rt
       return std::unexpected{version.error()};
     }
 
-    if (*version != 1)
+    constexpr std::uint32_t kYamlFormatVersion = 2;
+
+    if (*version != kYamlFormatVersion)
     {
       return makeError(Error::Code::FormatRejected, std::format("Unsupported YAML version {}", *version));
     }
 
     validated.version = *version;
 
-    if (auto const exportModeNode = yaml::findChild(root, "export_mode"); exportModeNode.readable())
+    if (auto result = rejectUnknownFields(root, kRootFields, "YAML root"); !result)
     {
-      auto exportModeText = requireScalar(exportModeNode, "export_mode");
-
-      if (!exportModeText)
-      {
-        return std::unexpected{exportModeText.error()};
-      }
-
-      auto optExportMode = parseExportMode(*exportModeText);
-
-      if (!optExportMode)
-      {
-        return makeError(Error::Code::FormatRejected, std::format("Unknown export_mode '{}'", *exportModeText));
-      }
-
-      validated.payloadMode = *optExportMode;
+      return result;
     }
-    else
+
+    auto exportModeText = requireScalarField(root, "export_mode", "YAML root");
+
+    if (!exportModeText)
     {
-      validated.payloadMode = ExportMode::Full;
+      return std::unexpected{exportModeText.error()};
     }
+
+    auto optExportMode = parseExportMode(*exportModeText);
+
+    if (!optExportMode)
+    {
+      return makeError(Error::Code::FormatRejected, std::format("Unknown export_mode '{}'", *exportModeText));
+    }
+
+    validated.payloadMode = *optExportMode;
 
     if (auto const libraryIdNode = yaml::findChild(root, "libraryId"); libraryIdNode.readable())
     {
@@ -1079,33 +1240,52 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    if (validated.payloadMode != ExportMode::ListOnly)
+    if (auto result = rejectUnknownFields(library, kLibraryFields, "library"); !result)
     {
-      if (auto const tracks = yaml::findChild(library, "tracks"); tracks.readable())
-      {
-        if (auto result = requireSequence(tracks, "library.tracks"); !result)
-        {
-          return std::unexpected{result.error()};
-        }
+      return result;
+    }
 
-        if (auto const result = validateTracks(tracks, validated); !result)
-        {
-          return std::unexpected{result.error()};
-        }
+    auto const tracks = yaml::findChild(library, "tracks");
+    auto const lists = yaml::findChild(library, "lists");
+
+    if (validated.payloadMode == ExportMode::ListOnly)
+    {
+      if (tracks.readable())
+      {
+        return makeError(Error::Code::FormatRejected, "library.tracks is forbidden for a listOnly payload");
+      }
+    }
+    else
+    {
+      if (!tracks.readable())
+      {
+        return makeError(Error::Code::FormatRejected, "library missing required 'tracks' field");
+      }
+
+      if (auto result = requireSequence(tracks, "library.tracks"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      if (auto result = validateTracks(tracks, validated); !result)
+      {
+        return std::unexpected{result.error()};
       }
     }
 
-    if (auto const lists = yaml::findChild(library, "lists"); lists.readable())
+    if (!lists.readable())
     {
-      if (auto result = requireSequence(lists, "library.lists"); !result)
-      {
-        return std::unexpected{result.error()};
-      }
+      return makeError(Error::Code::FormatRejected, "library missing required 'lists' field");
+    }
 
-      if (auto const result = validateLists(lists, validated); !result)
-      {
-        return std::unexpected{result.error()};
-      }
+    if (auto result = requireSequence(lists, "library.lists"); !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    if (auto result = validateLists(lists, validated); !result)
+    {
+      return std::unexpected{result.error()};
     }
 
     return {};
@@ -1114,10 +1294,21 @@ namespace ao::rt
   Result<> LibraryYamlImporter::Impl::validateTracks(ryml::ConstNodeRef const& tracks, ValidatedImport& validated) const
   {
     auto seenYamlIds = std::unordered_set<std::uint32_t>{};
+    auto seenUris = std::unordered_set<std::string>{};
 
     for (auto const& trackNode : tracks.children())
     {
       if (auto result = requireMap(trackNode, "Track record"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      if (auto result = rejectUnknownFields(trackNode, kTrackFields, "Track record"); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      if (auto result = validateTrackNestedSchema(trackNode); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -1130,11 +1321,19 @@ namespace ao::rt
         return std::unexpected{uri.error()};
       }
 
-      track.uri = normalizedUri(*uri);
+      auto parsedUri = parseLibraryUri(*uri, "Track record.uri");
 
-      if (track.uri.empty())
+      if (!parsedUri)
       {
-        return makeError(Error::Code::FormatRejected, "Track record has empty 'uri'");
+        return std::unexpected{parsedUri.error()};
+      }
+
+      track.uri = std::move(*parsedUri);
+
+      if (!seenUris.insert(track.uri).second)
+      {
+        return makeError(
+          Error::Code::FormatRejected, std::format("Duplicate canonical track URI '{}' in payload", track.uri));
       }
 
       if (auto const idNode = yaml::findChild(trackNode, "id"); idNode.readable())
@@ -1181,6 +1380,51 @@ namespace ao::rt
       }
 
       validated.lists.push_back(std::move(*list));
+    }
+
+    auto parents = std::unordered_map<std::uint32_t, std::uint32_t>{};
+    parents.reserve(validated.lists.size());
+
+    for (auto const& list : validated.lists)
+    {
+      parents.emplace(list.yamlId, list.yamlParentId);
+    }
+
+    auto resolved = std::unordered_set<std::uint32_t>{};
+    resolved.reserve(parents.size());
+
+    for (auto const& list : validated.lists)
+    {
+      if (resolved.contains(list.yamlId))
+      {
+        continue;
+      }
+
+      auto seenAncestors = std::unordered_set<std::uint32_t>{};
+      auto path = std::vector<std::uint32_t>{};
+      auto cursor = list.yamlId;
+
+      while (cursor != 0 && !resolved.contains(cursor))
+      {
+        if (!seenAncestors.insert(cursor).second)
+        {
+          return makeError(
+            Error::Code::FormatRejected, std::format("List parent graph contains a cycle at YAML id {}", cursor));
+        }
+
+        path.push_back(cursor);
+
+        auto const parent = parents.find(cursor);
+
+        if (parent == parents.end())
+        {
+          break;
+        }
+
+        cursor = parent->second;
+      }
+
+      resolved.insert(path.begin(), path.end());
     }
 
     return {};
@@ -1406,9 +1650,12 @@ namespace ao::rt
           return std::unexpected{data.error()};
         }
 
-        auto const picType = *rawType <= static_cast<std::uint32_t>(PictureType::PublisherLogo)
-                               ? static_cast<PictureType>(*rawType)
-                               : PictureType::Other;
+        if (*rawType > static_cast<std::uint32_t>(PictureType::PublisherLogo))
+        {
+          return makeError(Error::Code::FormatRejected, std::format("Unknown cover type {}", *rawType));
+        }
+
+        auto const picType = static_cast<PictureType>(*rawType);
 
         // Keep the borrowed blob alive in decodedCoverBlobs until the builder serializes below.
         if (auto optDecoded = utility::base64Decode(*data); optDecoded && !optDecoded->empty())
@@ -1439,8 +1686,23 @@ namespace ao::rt
     else
     {
       auto fileEc = std::error_code{};
+      auto uri = library::LibraryUri::parse(uriStr);
 
-      if (auto const fullPath = ml.rootPath() / uriStr; std::filesystem::exists(fullPath, fileEc) && !fileEc)
+      if (!uri)
+      {
+        return makeError(Error::Code::FormatRejected, uri.error().message);
+      }
+
+      auto fullPathResult = uri->resolveUnder(ml.rootPath());
+
+      if (!fullPathResult)
+      {
+        auto const code = fullPathResult.error().code == Error::Code::InvalidInput ? Error::Code::FormatRejected
+                                                                                   : fullPathResult.error().code;
+        return makeError(code, fullPathResult.error().message);
+      }
+
+      if (auto const& fullPath = *fullPathResult; std::filesystem::exists(fullPath, fileEc) && !fileEc)
       {
         auto const fileSize = std::filesystem::file_size(fullPath, fileEc);
 
@@ -1559,7 +1821,23 @@ namespace ao::rt
                                                        std::optional<MediaTrack>& optMediaTrack) const
   {
     auto fileEc = std::error_code{};
-    auto const fullPath = ml.rootPath() / uriStr;
+    auto uri = library::LibraryUri::parse(uriStr);
+
+    if (!uri)
+    {
+      return makeError(Error::Code::FormatRejected, uri.error().message);
+    }
+
+    auto fullPathResult = uri->resolveUnder(ml.rootPath());
+
+    if (!fullPathResult)
+    {
+      auto const code = fullPathResult.error().code == Error::Code::InvalidInput ? Error::Code::FormatRejected
+                                                                                 : fullPathResult.error().code;
+      return makeError(code, fullPathResult.error().message);
+    }
+
+    auto const& fullPath = *fullPathResult;
     auto const fileExists = std::filesystem::exists(fullPath, fileEc);
 
     if (fileEc)
@@ -1801,6 +2079,10 @@ namespace ao::rt
       {
         builder.property().codec(*optCodec);
       }
+      else
+      {
+        return makeError(Error::Code::FormatRejected, std::format("Unknown codec '{}'", *codec));
+      }
     }
 
     for (auto const& map : kPropertyDispatch)
@@ -1871,10 +2153,24 @@ namespace ao::rt
       }
       else
       {
-        buildStaticListTracks(builder, importedList, yamlTrackIdToInternalId, manifestReader);
+        if (auto result = buildStaticListTracks(builder, importedList, yamlTrackIdToInternalId, manifestReader, report);
+            !result)
+        {
+          return result;
+        }
       }
 
-      auto createResult = listWriter.create(builder.serialize());
+      auto payload = builder.serialize();
+
+      if (!payload)
+      {
+        return makeError(
+          Error::Code::FormatRejected,
+          std::format(
+            "List YAML id {} exceeds the binary storage limits: {}", importedList.yamlId, payload.error().message));
+      }
+
+      auto createResult = listWriter.create(*payload);
 
       if (!createResult)
       {
@@ -1888,7 +2184,7 @@ namespace ao::rt
 
     for (auto const& importedList : lists)
     {
-      if (auto result = updateListParent(importedList, yamlListIdToNewListId, listWriter); !result)
+      if (auto result = updateListParent(importedList, yamlListIdToNewListId, listWriter, report); !result)
       {
         return std::unexpected{result.error()};
       }
@@ -1897,11 +2193,12 @@ namespace ao::rt
     return {};
   }
 
-  void LibraryYamlImporter::Impl::buildStaticListTracks(
+  Result<> LibraryYamlImporter::Impl::buildStaticListTracks(
     library::ListBuilder& builder,
     ValidatedList const& importedList,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-    library::FileManifestStore::Reader const& manifestReader) const
+    library::FileManifestStore::Reader const& manifestReader,
+    ImportReport& report) const
   {
     for (auto const& trackReference : importedList.trackReferences)
     {
@@ -1910,6 +2207,10 @@ namespace ao::rt
         if (auto const it = yamlTrackIdToInternalId.find(idReference->yamlId); it != yamlTrackIdToInternalId.end())
         {
           builder.tracks().add(it->second);
+        }
+        else
+        {
+          ++report.danglingReferencesIgnored;
         }
 
         continue;
@@ -1921,13 +2222,24 @@ namespace ao::rt
       {
         builder.tracks().add(manifestResult->trackId());
       }
+      else if (manifestResult.error().code == Error::Code::NotFound)
+      {
+        ++report.danglingReferencesIgnored;
+      }
+      else
+      {
+        return std::unexpected{manifestResult.error()};
+      }
     }
+
+    return {};
   }
 
   Result<> LibraryYamlImporter::Impl::updateListParent(
     ValidatedList const& importedList,
     std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
-    library::ListStore::Writer& listWriter) const
+    library::ListStore::Writer& listWriter,
+    ImportReport& report) const
   {
     if (importedList.yamlParentId == 0)
     {
@@ -1938,6 +2250,7 @@ namespace ao::rt
 
     if (parentIt == yamlListIdToNewListId.end())
     {
+      ++report.danglingReferencesIgnored;
       return {};
     }
 
@@ -1950,8 +2263,14 @@ namespace ao::rt
     }
 
     auto builder = library::ListBuilder::fromView(*optListView).parentId(parentIt->second);
+    auto payload = builder.serialize();
 
-    if (auto result = listWriter.update(childId, builder.serialize()); !result)
+    if (!payload)
+    {
+      return std::unexpected{payload.error()};
+    }
+
+    if (auto result = listWriter.update(childId, *payload); !result)
     {
       return std::unexpected{result.error()};
     }

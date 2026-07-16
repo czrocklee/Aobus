@@ -210,11 +210,14 @@ namespace ao::gtk::test
             "[gtk][unit][main-window-playback][session]")
   {
     auto const appPtr = ensureGtkApplication();
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto trackId = kInvalidTrackId;
-    auto fixture = GtkRuntimeFixture{
-      [&](library::MusicLibrary& library)
-      { trackId = library::test::addTrack(library, {.title = "Restored Track", .uri = fixturePath}); }};
+    auto fixture =
+      GtkRuntimeFixture{[&](library::MusicLibrary& library)
+                        {
+                          auto const fixtureUri = audio::test::installAudioFixture(
+                            library.rootPath(), "basic_metadata.flac", "restored-track.flac");
+                          trackId = library::test::addTrack(library, {.title = "Restored Track", .uri = fixtureUri});
+                        }};
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime.playback());
     auto const sourceListId = ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
