@@ -185,8 +185,9 @@ The old version is then rejected or explicitly migrated; the current database im
 Library YAML, playback-session state, workspace state, and CLI automation independently own the compatibility of predicate text they contain or accept.
 An expression carries no nested dialect id or version; [RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) rejected that additional version axis.
 
-The core variable catalog is also used by completion, generated CLI help, and unknown-field diagnostics.
+The public typed core variable descriptor catalog is also used by runtime field bridges, completion, generated CLI help, canonical diagnostic field names, and unknown-field diagnostics.
 Those consumers must change with this surface rather than maintaining parallel inventories.
+Application-generated variable source text uses the core variable formatter, while constants use the core serializer; application layers do not reconstruct prefixes or quoting rules.
 
 ## Examples
 
@@ -220,6 +221,7 @@ Representative invalid forms are:
 ## Implementation authority
 
 - [`Parser.cpp`](../../../lib/query/Parser.cpp) defines the shared grammar.
+- [`FieldCatalog.h`](../../../include/ao/query/FieldCatalog.h) defines the public typed descriptor and lookup surface.
 - [`FieldCatalog.cpp`](../../../lib/query/FieldCatalog.cpp) defines canonical `$`/`@` variables and aliases.
 - [`UnitDispatch.gperf`](../../../lib/query/UnitDispatch.gperf) defines unit spellings.
 - [`ExecutionPlan.cpp`](../../../lib/query/ExecutionPlan.cpp) enforces the predicate subset.
@@ -228,7 +230,7 @@ Representative invalid forms are:
 
 - [`ParserTest.cpp`](../../../test/unit/query/ParserTest.cpp) and [`ExpressionTest.cpp`](../../../test/unit/query/ExpressionTest.cpp) lock grammar and AST shape.
 - Execution-plan tests under [`test/unit/query/`](../../../test/unit/query/) lock variables, operators, lists, ranges, units, and invalid forms.
-- [`CompletionVariableTest.cpp`](../../../test/unit/query/CompletionVariableTest.cpp) locks the shared variable and alias catalog.
+- [`CompletionVariableTest.cpp`](../../../test/unit/query/CompletionVariableTest.cpp) locks the shared descriptor, variable, alias, and lookup catalog.
 
 ## Related documents
 

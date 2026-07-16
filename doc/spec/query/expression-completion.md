@@ -14,6 +14,7 @@ It owns cursor-context analysis, variable/operator/value/logical suggestions, ra
 
 The complete language surface belongs to the [predicate language reference](../../reference/query/predicate-language.md).
 Metadata-editor completion behavior belongs to [track-field value completion](../presentation/field-completion.md), even though both consumers share the runtime vocabulary service.
+Classification and completion of a mixed Quick-filter/expression input surface belongs to [track filtering](../presentation/track-filter.md).
 
 ## Code boundary
 
@@ -42,10 +43,11 @@ Core analysis is public under `include/ao/query/`; runtime composition is public
 
 ### Variables
 
-`$` and `@` suggestions come from the core canonical field catalog.
+`$` and `@` suggestions come from the core `QueryVariableDescriptor` catalog.
 Canonical names match by ASCII-insensitive prefix.
 Aliases match only when the typed alias is complete, and exact-alias matches rank before canonical-prefix matches.
 Duplicate canonical results are suppressed.
+Display and insertion text is produced by the core variable formatter from the matched canonical descriptor rather than assembled by the runtime.
 
 `#` and `%` suggestions come from the active library's tag and custom-key vocabularies.
 Insertion uses the query serializer so names that require quoting produce valid variable text.
@@ -73,7 +75,7 @@ Prefix negation is not offered at this connection point.
 ### Values
 
 After a complete binary operator, and inside subsequent elements of an `in [...]` list, completion retains the left-hand query field as context.
-Runtime suggestions are currently provided only for query fields mapped to value-completable runtime track fields.
+Runtime suggestions are currently provided only for query fields whose typed reverse bridge resolves to a value-completable runtime track field.
 
 Insertion serializes the suggested value as a string constant, so a value such as `Massive Attack` becomes `"Massive Attack"`.
 Custom values, numeric templates, unit templates, and codec templates are not currently populated.
@@ -98,16 +100,19 @@ Live vocabulary access is confined to the `CompletionService` owner thread as de
 
 Runtime returns frontend-neutral display text, insertion text, detail text, rank, and one replacement range.
 GTK's entry adapter owns popover, keyboard, pointer, and borrowed-entry lifetime behavior.
-TUI command completion offsets a nested query replacement range into the command line before applying it.
+UIModel's `TrackFilterCompleter` delegates text with an explicit leading query variable to `QueryExpressionCompleter` and otherwise applies Quick-filter completion policy.
+GTK's Quick-filter entry and TUI command completion both consume that composition; TUI offsets its nested replacement range into the command line before applying it.
 
 Frontends cannot invent additional query fields or operators that the core completion catalog does not expose.
 
 ## Implementation map
 
-- [`Completion.h`](../../../include/ao/query/Completion.h) defines core contexts and catalog queries.
+- [`Completion.h`](../../../include/ao/query/Completion.h) defines core contexts and completion queries.
+- [`FieldCatalog.h`](../../../include/ao/query/FieldCatalog.h) defines the canonical typed variable descriptors and lookup surface.
 - [`Completion.cpp`](../../../lib/query/Completion.cpp) owns tolerant analysis and core suggestions.
 - [`CompletionTokenizer.cpp`](../../../lib/query/detail/CompletionTokenizer.cpp) adapts shared lexical rules.
 - [`QueryExpressionCompleter.cpp`](../../../app/runtime/completion/QueryExpressionCompleter.cpp) composes core analysis with live vocabularies.
+- [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) composes expression completion into the interactive filter surface.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK adapter.
 - [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) is the TUI command adapter.
 
@@ -116,6 +121,7 @@ Frontends cannot invent additional query fields or operators that the core compl
 - Completion tests under [`test/unit/query/`](../../../test/unit/query/) prove cursor contexts, lexical agreement, operator families, logical boundaries, aliases, values, and latency baseline.
 - Runtime completion tests under [`test/unit/runtime/completion/`](../../../test/unit/runtime/completion/) prove live composition and replacement output.
 - [`EntryCompletionControllerTest.cpp`](../../../test/unit/linux-gtk/completion/EntryCompletionControllerTest.cpp) and TUI command-completion tests protect adapters.
+- [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the mode boundary around this expression completer.
 
 ## Related documents
 
@@ -123,4 +129,5 @@ Frontends cannot invent additional query fields or operators that the core compl
 - [Predicate language](../../reference/query/predicate-language.md)
 - [Predicate evaluation](predicate-evaluation.md)
 - [Track-field value completion](../presentation/field-completion.md)
+- [Track filtering](../presentation/track-filter.md)
 - [Track field catalog](../../reference/library/model/track-field.md)

@@ -3,14 +3,14 @@
 
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/detail/FieldCatalog.h>
+#include <ao/query/FieldCatalog.h>
 
 #include <algorithm>
 #include <array>
 #include <span>
 #include <string_view>
 
-namespace ao::query::detail
+namespace ao::query
 {
   namespace
   {
@@ -38,7 +38,7 @@ namespace ao::query::detail
     constexpr auto kSampleRateAliases = std::to_array<std::string_view>({"sr"});
     constexpr auto kBitDepthAliases = std::to_array<std::string_view>({"bd"});
 
-    constexpr auto kMetadataSpecs = std::to_array<QueryVariableCompletionSpec>({
+    constexpr auto kMetadataDescriptors = std::to_array<QueryVariableDescriptor>({
       {.type = VariableType::Metadata,
        .field = Field::Title,
        .canonicalName = "title",
@@ -117,7 +117,7 @@ namespace ao::query::detail
        .aliases = std::span{kCoverArtAliases}},
     });
 
-    constexpr auto kPropertySpecs = std::to_array<QueryVariableCompletionSpec>({
+    constexpr auto kPropertyDescriptors = std::to_array<QueryVariableDescriptor>({
       {.type = VariableType::Property,
        .field = Field::Duration,
        .canonicalName = "duration",
@@ -144,39 +144,55 @@ namespace ao::query::detail
        .aliases = std::span{kNoAliases}},
     });
 
-    constexpr auto kEmptySpecs = std::array<QueryVariableCompletionSpec, 0>{};
+    constexpr auto kEmptyDescriptors = std::array<QueryVariableDescriptor, 0>{};
 
-    bool matchesCatalogName(QueryVariableCompletionSpec const& spec, std::string_view name)
+    bool matchesCatalogName(QueryVariableDescriptor const& descriptor, std::string_view name)
     {
-      return spec.canonicalName == name ||
-             std::ranges::any_of(spec.aliases, [name](std::string_view alias) { return alias == name; });
+      return descriptor.canonicalName == name ||
+             std::ranges::any_of(descriptor.aliases, [name](std::string_view alias) { return alias == name; });
     }
   } // namespace
 
-  std::span<QueryVariableCompletionSpec const> queryVariableCompletionSpecs(VariableType type)
+  std::span<QueryVariableDescriptor const> queryVariableDescriptors(VariableType type)
   {
     switch (type)
     {
-      case VariableType::Metadata: return std::span{kMetadataSpecs};
-      case VariableType::Property: return std::span{kPropertySpecs};
+      case VariableType::Metadata: return std::span{kMetadataDescriptors};
+      case VariableType::Property: return std::span{kPropertyDescriptors};
       case VariableType::Tag:
-      case VariableType::Custom: return std::span{kEmptySpecs};
+      case VariableType::Custom: return std::span{kEmptyDescriptors};
     }
 
-    return std::span{kEmptySpecs};
+    return std::span{kEmptyDescriptors};
   }
 
-  QueryVariableCompletionSpec const* findQueryVariableCompletionSpec(VariableType type, std::string_view name)
+  QueryVariableDescriptor const* findQueryVariableDescriptor(VariableType type, std::string_view name)
   {
-    auto const specs = queryVariableCompletionSpecs(type);
+    auto const descriptors = queryVariableDescriptors(type);
     auto const iter = std::ranges::find_if(
-      specs, [name](QueryVariableCompletionSpec const& spec) { return matchesCatalogName(spec, name); });
+      descriptors, [name](QueryVariableDescriptor const& descriptor) { return matchesCatalogName(descriptor, name); });
 
-    if (iter == specs.end())
+    if (iter == descriptors.end())
     {
       return nullptr;
     }
 
     return &*iter;
   }
-} // namespace ao::query::detail
+
+  QueryVariableDescriptor const* findQueryVariableDescriptor(Field field)
+  {
+    for (auto const type : {VariableType::Metadata, VariableType::Property})
+    {
+      auto const descriptors = queryVariableDescriptors(type);
+      auto const iter = std::ranges::find(descriptors, field, &QueryVariableDescriptor::field);
+
+      if (iter != descriptors.end())
+      {
+        return &*iter;
+      }
+    }
+
+    return nullptr;
+  }
+} // namespace ao::query

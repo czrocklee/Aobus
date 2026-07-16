@@ -3,10 +3,8 @@
 
 #pragma once
 
-#include "LibraryNavigation.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/rt/completion/CompletionService.h>
 
 #include <cstddef>
 #include <functional>
@@ -18,12 +16,10 @@ namespace ao::tui
 {
   struct CommandCompletionContext final
   {
-    std::span<LibraryNavEntry const> lists{};
-    std::span<rt::VocabularyEntry const> artists{};
     std::span<rt::TrackPresentationPreset const> builtinPresentations{};
     std::span<rt::CustomTrackPresentationPreset const> customPresentations{};
     std::function<std::optional<rt::CompletionResult>(std::string_view text, std::size_t cursor, std::size_t limit)>
-      expressionCompleter{};
+      filterCompleter{};
   };
 
   std::optional<rt::CompletionResult> completeCommandDraft(std::string_view draft,

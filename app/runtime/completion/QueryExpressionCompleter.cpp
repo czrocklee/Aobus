@@ -10,6 +10,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
+#include <ao/rt/completion/CompletionText.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
 
 #include <algorithm>
@@ -42,9 +43,7 @@ namespace ao::rt
           return;
         }
 
-        auto text = std::string{};
-        text.push_back(query::variablePrefix(match.type));
-        text += match.canonicalName;
+        auto const text = query::variableDisplayName(match.type, match.canonicalName);
 
         items.push_back(CompletionItem{
           .displayText = text,
@@ -76,24 +75,6 @@ namespace ao::rt
             .detail = completionFrequencyDetail(entry.frequency),
           };
         });
-    }
-
-    std::optional<TrackField> trackFieldForQueryField(query::Field field)
-    {
-      switch (field)
-      {
-        case query::Field::ArtistId: return TrackField::Artist;
-        case query::Field::AlbumId: return TrackField::Album;
-        case query::Field::AlbumArtistId: return TrackField::AlbumArtist;
-        case query::Field::GenreId: return TrackField::Genre;
-        case query::Field::ComposerId: return TrackField::Composer;
-        case query::Field::ConductorId: return TrackField::Conductor;
-        case query::Field::EnsembleId: return TrackField::Ensemble;
-        case query::Field::WorkId: return TrackField::Work;
-        case query::Field::MovementId: return TrackField::Movement;
-        case query::Field::SoloistId: return TrackField::Soloist;
-        default: return std::nullopt;
-      }
     }
 
     std::string insertionForOperator(std::string_view op)
@@ -159,9 +140,9 @@ namespace ao::rt
                           std::string_view prefix,
                           std::size_t limit)
     {
-      auto optTrackField = trackFieldForQueryField(field);
+      auto const optTrackField = trackFieldFromQueryField(field);
 
-      if (!optTrackField)
+      if (!optTrackField || !supportsTrackFieldValueCompletion(*optTrackField))
       {
         return;
       }

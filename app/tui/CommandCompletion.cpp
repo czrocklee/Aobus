@@ -8,10 +8,8 @@
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionText.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -22,32 +20,6 @@ namespace ao::tui
 {
   namespace
   {
-    std::size_t argumentBegin(std::string_view const draft, std::string_view const commandPrefix)
-    {
-      return std::min(commandPrefix.size(), draft.size());
-    }
-
-    bool isExpressionLike(std::string_view const value)
-    {
-      auto const first = value.find_first_not_of(" \t");
-
-      if (first == std::string_view::npos)
-      {
-        return false;
-      }
-
-      switch (value[first])
-      {
-        case '$':
-        case '@':
-        case '#':
-        case '%':
-        case '(':
-        case '!': return true;
-        default: return false;
-      }
-    }
-
     std::string_view commandDisplayText(std::string_view prefix)
     {
       if (!prefix.empty() && prefix.back() == ' ')
@@ -154,44 +126,6 @@ namespace ao::tui
       }
     }
 
-    void appendQuickFilterItems(std::vector<rt::CompletionItem>& items,
-                                CommandCompletionContext const& context,
-                                std::string_view const prefix,
-                                std::size_t const limit)
-    {
-      for (auto const& artist : context.artists)
-      {
-        if (items.size() >= limit)
-        {
-          return;
-        }
-
-        if (rt::startsWithCompletionPrefixInsensitive(artist.value, prefix))
-        {
-          if (!appendItem(items, limit, artist.value, artist.value, "artist"))
-          {
-            return;
-          }
-        }
-      }
-
-      for (auto const& list : context.lists)
-      {
-        if (items.size() >= limit)
-        {
-          return;
-        }
-
-        if (!list.completionText.empty() && rt::startsWithCompletionPrefixInsensitive(list.completionText, prefix))
-        {
-          if (!appendItem(items, limit, list.completionText, list.completionText, "list"))
-          {
-            return;
-          }
-        }
-      }
-    }
-
     std::optional<rt::CompletionResult> buildResult(std::size_t const replaceBegin,
                                                     std::size_t const replaceEnd,
                                                     std::vector<rt::CompletionItem> items)
@@ -208,17 +142,17 @@ namespace ao::tui
       };
     }
 
-    std::optional<rt::CompletionResult> completeExpression(CommandCompletionContext const& context,
-                                                           std::string_view const expression,
-                                                           std::size_t const offset,
-                                                           std::size_t const limit)
+    std::optional<rt::CompletionResult> completeFilter(CommandCompletionContext const& context,
+                                                       std::string_view const filter,
+                                                       std::size_t const offset,
+                                                       std::size_t const limit)
     {
-      if (!context.expressionCompleter)
+      if (!context.filterCompleter)
       {
         return std::nullopt;
       }
 
-      auto optResult = context.expressionCompleter(expression, expression.size(), limit);
+      auto optResult = context.filterCompleter(filter, filter.size(), limit);
 
       if (!optResult)
       {
@@ -242,7 +176,7 @@ namespace ao::tui
     {
       if (rt::startsWithCompletionPrefixInsensitive(draft, spec.prefix))
       {
-        auto const replaceBegin = argumentBegin(draft, spec.prefix);
+        auto const replaceBegin = spec.prefix.size();
         auto const argumentPrefix = draft.substr(replaceBegin);
 
         if (spec.action == CommandAction::SetPresentation)
@@ -251,16 +185,7 @@ namespace ao::tui
           return buildResult(replaceBegin, draft.size(), std::move(items));
         }
 
-        if (isExpressionLike(argumentPrefix))
-        {
-          if (auto optResult = completeExpression(context, argumentPrefix, replaceBegin, limit); optResult)
-          {
-            return optResult;
-          }
-        }
-
-        appendQuickFilterItems(items, context, argumentPrefix, limit);
-        return buildResult(replaceBegin, draft.size(), std::move(items));
+        return completeFilter(context, argumentPrefix, replaceBegin, limit);
       }
     }
 
@@ -268,21 +193,12 @@ namespace ao::tui
     {
       appendCommandItems(items, draft, limit);
 
-      if (draft.empty())
+      if (!items.empty())
       {
-        return buildResult(0, 0, std::move(items));
+        return buildResult(0, draft.size(), std::move(items));
       }
     }
 
-    if (isExpressionLike(draft))
-    {
-      if (auto optResult = completeExpression(context, draft, 0, limit); optResult)
-      {
-        return optResult;
-      }
-    }
-
-    appendQuickFilterItems(items, context, draft, limit);
-    return buildResult(0, draft.size(), std::move(items));
+    return completeFilter(context, draft, 0, limit);
   }
 } // namespace ao::tui

@@ -3,42 +3,33 @@
 
 #include "QueryHelp.h"
 
-#include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
+#include <ao/query/FieldCatalog.h>
 
 #include <cstddef>
 #include <string>
-#include <string_view>
 
 namespace ao::cli
 {
   namespace
   {
-    std::string variableText(query::VariableType type, std::string_view name)
+    std::string fieldSummaryText(query::QueryVariableDescriptor const& descriptor)
     {
-      auto text = std::string{};
-      text.push_back(query::variablePrefix(type));
-      text += name;
-      return text;
-    }
+      auto text = query::variableDisplayName(descriptor.type, descriptor.canonicalName);
 
-    std::string fieldSummaryText(query::QueryVariableSummary const& summary)
-    {
-      auto text = variableText(summary.type, summary.canonicalName);
-
-      if (!summary.aliases.empty())
+      if (!descriptor.aliases.empty())
       {
         text += "(";
 
-        for (std::size_t index = 0; index < summary.aliases.size(); ++index)
+        for (std::size_t index = 0; index < descriptor.aliases.size(); ++index)
         {
           if (index > 0)
           {
             text += ",";
           }
 
-          text += variableText(summary.type, summary.aliases[index]);
+          text += query::variableDisplayName(descriptor.type, descriptor.aliases[index]);
         }
 
         text += ")";
@@ -49,14 +40,14 @@ namespace ao::cli
 
     void appendSummaries(std::string& text, query::VariableType type)
     {
-      for (auto const& summary : query::queryVariableSummaries(type))
+      for (auto const& descriptor : query::queryVariableDescriptors(type))
       {
         if (!text.empty())
         {
           text += " ";
         }
 
-        text += fieldSummaryText(summary);
+        text += fieldSummaryText(descriptor);
       }
     }
 

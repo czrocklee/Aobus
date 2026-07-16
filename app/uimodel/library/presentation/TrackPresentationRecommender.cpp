@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/query/Expression.h>
+#include <ao/query/Field.h>
+#include <ao/query/FieldCatalog.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
@@ -68,48 +70,26 @@ namespace ao::uimodel
           return;
         }
 
-        if (var.type == query::VariableType::Property)
-        {
-          if (var.name == "sampleRate" || var.name == "bitDepth" || var.name == "bitrate")
-          {
-            _hasTechnical = true;
-          }
+        auto const* const descriptor = query::findQueryVariableDescriptor(var.type, var.name);
 
-          return;
-        }
-
-        if (var.type != query::VariableType::Metadata)
+        if (descriptor == nullptr)
         {
           return;
         }
 
-        if (var.name == "work")
+        switch (descriptor->field)
         {
-          _hasWork = true;
-        }
-        else if (var.name == "composer")
-        {
-          _hasComposer = true;
-        }
-        else if (var.name == "genre")
-        {
-          _hasGenre = true;
-        }
-        else if (var.name == "year")
-        {
-          _hasYear = true;
-        }
-        else if (var.name == "albumArtist")
-        {
-          _hasAlbumArtist = true;
-        }
-        else if (var.name == "artist")
-        {
-          _hasArtist = true;
-        }
-        else if (var.name == "album")
-        {
-          _hasAlbum = true;
+          case query::Field::WorkId: _hasWork = true; break;
+          case query::Field::ComposerId: _hasComposer = true; break;
+          case query::Field::GenreId: _hasGenre = true; break;
+          case query::Field::Year: _hasYear = true; break;
+          case query::Field::AlbumArtistId: _hasAlbumArtist = true; break;
+          case query::Field::ArtistId: _hasArtist = true; break;
+          case query::Field::AlbumId: _hasAlbum = true; break;
+          case query::Field::SampleRate:
+          case query::Field::BitDepth:
+          case query::Field::Bitrate: _hasTechnical = true; break;
+          default: break;
         }
       }
 

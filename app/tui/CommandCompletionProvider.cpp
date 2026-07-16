@@ -4,8 +4,6 @@
 #include "CommandCompletionProvider.h"
 
 #include "CommandCompletion.h"
-#include "LibraryController.h"
-#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -17,10 +15,9 @@
 
 namespace ao::tui
 {
-  CommandCompletionProvider::CommandCompletionProvider(LibraryController& library,
-                                                       rt::CompletionService& completion,
+  CommandCompletionProvider::CommandCompletionProvider(rt::CompletionService& completion,
                                                        rt::WorkspaceService& workspace)
-    : _library{library}, _completion{completion}, _workspace{workspace}, _expressionCompleter{completion}
+    : _workspace{workspace}, _filterCompleter{completion}
   {
   }
 
@@ -29,12 +26,10 @@ namespace ao::tui
     return completeCommandDraft(
       draft,
       CommandCompletionContext{
-        .lists = _library.libraryEntries(),
-        .artists = _completion.valuesFor(rt::TrackField::Artist),
         .builtinPresentations = rt::builtinTrackPresentationPresets(),
         .customPresentations = _workspace.customPresets(),
-        .expressionCompleter = [this](std::string_view const text, std::size_t const cursor, std::size_t const limit)
-          -> std::optional<rt::CompletionResult> { return _expressionCompleter.complete(text, cursor, limit); },
+        .filterCompleter = [this](std::string_view const text, std::size_t const cursor, std::size_t const limit)
+          -> std::optional<rt::CompletionResult> { return _filterCompleter.complete(text, cursor, limit); },
       });
   }
 } // namespace ao::tui

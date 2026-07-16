@@ -16,7 +16,6 @@ namespace ao::tui
     ListId id{};
     std::string label{};
     std::string detail{};
-    std::string completionText{};
   };
 
   std::string listNodeIcon(rt::ListNodeKind kind);

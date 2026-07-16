@@ -68,7 +68,6 @@ namespace ao::tui
       .id = rt::kAllTracksListId,
       .label = "All Tracks",
       .detail = "library",
-      .completionText = "All Tracks",
     });
 
     auto sorted = lists;
@@ -85,17 +84,16 @@ namespace ao::tui
 
     for (auto const& node : sorted)
     {
-      auto const completionText = node.name.empty() ? std::string{"<Unnamed List>"} : node.name;
+      auto const displayName = node.name.empty() ? std::string{"<Unnamed List>"} : node.name;
       auto label = std::string(depthOf(node, sorted) * 2, ' ');
       label.append(listNodeIcon(node.kind));
       label.push_back(' ');
-      label.append(completionText);
+      label.append(displayName);
 
       items.push_back(LibraryNavEntry{
         .id = node.id,
         .label = std::move(label),
         .detail = node.smartExpression.empty() ? std::string{} : std::format("[{}]", node.smartExpression),
-        .completionText = completionText,
       });
     }
 

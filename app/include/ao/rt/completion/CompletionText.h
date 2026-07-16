@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace ao::rt
@@ -25,5 +27,10 @@ namespace ao::rt
                       prefix.end(),
                       candidate.begin(),
                       [](char lhs, char rhs) { return completionLowerAscii(lhs) == completionLowerAscii(rhs); });
+  }
+
+  inline std::string completionFrequencyDetail(std::uint32_t frequency)
+  {
+    return std::to_string(frequency);
   }
 } // namespace ao::rt

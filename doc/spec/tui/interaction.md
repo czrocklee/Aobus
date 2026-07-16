@@ -49,7 +49,8 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 `LibraryController` retains active runtime view, terminal row snapshot, selected track index, sections, filter draft, and presentation adaptation.
 
 The command palette completion result carries a replacement range, ranked items, display text, insertion text, and detail.
-Expression-shaped arguments delegate to the shared expression completer; presentation and quick-filter contexts add TUI/runtime values.
+Filter drafts delegate to the shared UIModel track-filter completer, which selects live Quick-filter values or structured expression candidates according to the same boundary as GTK.
+Presentation contexts add built-in and custom preset ids.
 
 ## Commands and transitions
 
@@ -58,6 +59,8 @@ Expression-shaped arguments delegate to the shared expression completer; present
 `/` or `:` opens command mode.
 Text appends as UTF-8, backspace removes one complete code point, arrows move completion selection, Tab applies the selected completion, Return submits, and Escape cancels.
 Known prefixes/aliases produce typed actions; otherwise the submitted text becomes a quick filter.
+The palette completes command names and aliases, presentation ids, structured expression tokens, and live Quick-filter values from titles, the common search fields, and tags.
+Applying a live value replaces the active filter term with one safely quoted term.
 
 The palette is a centered bounded fraction of terminal width/height and renders category, command text, shortcut, and detail.
 Runtime/query completions without TUI category metadata retain their core detail.
@@ -117,6 +120,7 @@ The notification center can be opened explicitly even when compact status is not
 
 - [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns command and overlay state.
+- [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command, presentation, and shared filter-completion routing.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch.
 - [`Render.cpp`](../../../app/tui/Render.cpp), [`Style.cpp`](../../../app/tui/Style.cpp), and [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) own terminal output.
 - [`PlaybackPanel.cpp`](../../../app/tui/PlaybackPanel.cpp) and [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) own the dock.
@@ -127,7 +131,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects key/mouse routing, modality, seek, overlays, and resizing.
 - [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) protects sections, viewport, widths, and selection.
 - [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`TuiHitRegionsTest.cpp`](../../../test/unit/tui/TuiHitRegionsTest.cpp) protect rendering and hit geometry.
-- Command completion tests under [`test/unit/tui/`](../../../test/unit/tui/) protect prefix, alias, runtime, and expression completion.
+- Command completion tests under [`test/unit/tui/`](../../../test/unit/tui/) protect prefix, alias, presentation, Quick-filter, and expression completion.
 
 ## Related documents
 

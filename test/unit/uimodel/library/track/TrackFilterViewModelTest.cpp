@@ -148,13 +148,13 @@ namespace ao::uimodel::test
     auto reply = ao::test::requireValue(fixture.viewService.createView(config));
     fixture.workspaceService.setFocusedView(reply.viewId);
 
-    fixture.viewModel.updateFilter("artist == 'Muse'");
+    fixture.viewModel.updateFilter("$artist = \"Muse\"");
 
     auto const state = fixture.viewService.trackListState(reply.viewId);
-    CHECK(state.filterExpression == "artist == 'Muse'");
+    CHECK(state.filterExpression == "$artist = \"Muse\"");
     CHECK(state.presentation.id == "custom");
-    CHECK(fixture.renderLog.last().entryText == "artist == 'Muse'");
-    CHECK(fixture.renderLog.last().resolvedExpression == "artist == 'Muse'");
+    CHECK(fixture.renderLog.last().entryText == "$artist = \"Muse\"");
+    CHECK(fixture.renderLog.last().resolvedExpression == "$artist = \"Muse\"");
   }
 
   TEST_CASE("TrackFilterViewModel - quoted plain text is escaped in quick search", "[uimodel][unit][track-filter]")

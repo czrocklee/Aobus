@@ -4,6 +4,7 @@
 #include "track/TrackQuickFilter.h"
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
@@ -14,6 +15,9 @@
 #include <giomm/listmodel.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
+#include <gtkmm/label.h>
+#include <gtkmm/popover.h>
+#include <gtkmm/window.h>
 
 #include <string_view>
 
@@ -88,5 +92,29 @@ namespace ao::gtk::test
 
     CHECK(filter.text() == "$al");
     CHECK(filter.position() == 3);
+  }
+
+  TEST_CASE("TrackQuickFilter - renders shared Quick-filter value completion", "[gtk][unit][track][completion]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    library::test::addTrack(
+      runtime.musicLibrary(), library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
+
+    auto window = Gtk::Window{};
+    auto filter = TrackQuickFilter{runtime};
+    window.set_child(filter);
+    auto* const popover = findWidget<Gtk::Popover>(filter.entry());
+    REQUIRE(popover != nullptr);
+
+    filter.setText("Aim");
+    filter.setPosition(3);
+    ::g_signal_emit_by_name(filter.entry().gobj(), "changed");
+    drainGtkEvents();
+
+    auto* const title = findWidgetByClass<Gtk::Label>(*popover, "ao-query-completion-row-title");
+    REQUIRE(title != nullptr);
+    CHECK(title->get_text() == "Aimer");
   }
 } // namespace ao::gtk::test

@@ -57,7 +57,7 @@ Its feature capsules contain view models, editor/form models, interaction models
 UIModel may subscribe to runtime services, combine several runtime snapshots, format display values, maintain an edit draft or gesture, and emit a runtime command or typed edit result.
 It does not own storage transactions, playback succession, audio control, runtime retry policy, or platform lifecycle.
 
-UIModel may resolve quick-search text into a core query expression and may inspect a valid Smart List expression to recommend a presentation.
+UIModel may resolve and complete quick-search text through runtime vocabulary ports, and may inspect a valid Smart List expression to recommend a presentation.
 Those are authoring and recommendation policies: UIModel does not evaluate membership or redefine query grammar.
 
 Metadata editors currently derive patches from a detail snapshot but submit only target ids and patch values; the runtime command does not carry the snapshot baseline or library generation.
@@ -83,6 +83,7 @@ TUI owns FTXUI components, terminal geometry, key/mouse routing, overlays, refre
 It constructs the same `AppRuntime`, uses shared runtime services and selected UIModel view models/policies, and builds terminal elements from their state.
 
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
+Its command palette consumes the same UIModel track-filter completer as GTK's Quick-filter entry, while retaining terminal-only command and presentation routing.
 
 ### CLI
 
@@ -99,6 +100,7 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 - UIModel cannot include direct LMDB stores or audio player/engine/backend control headers.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
+- Interactive track-filter field selection, expression classification, live-value ranking, and safe insertion are one UIModel policy shared by GTK and TUI; runtime owns only vocabulary storage mechanics.
 - Presentation affects ordering, grouping, visible fields, and rendering but never changes source membership.
 - Expression formatting that produces a scalar CLI string is owned by the track expression system and is not a presentation spec or UI column model.
 - CLI command and output inventories remain reference concerns even though their adapter code lives at the frontend edge.

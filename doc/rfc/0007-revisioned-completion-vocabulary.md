@@ -1,12 +1,43 @@
 ---
 id: rfc.0007.revisioned-completion-vocabulary
 type: rfc
-status: draft
+status: rejected
 domain: presentation
-summary: Proposes deletion-correct, revisioned, asynchronously maintained completion vocabulary snapshots.
+summary: Rejected a revisioned asynchronous index after deletion-correct invalidation, a typed field bridge, and one shared lazy frequency snapshot closed the verified gaps without per-track contribution state.
 depends-on: none
 ---
 # RFC 0007: Revisioned completion vocabulary
+
+## Disposition
+
+Rejected on 2026-07-16.
+
+The deletion correctness problem was real, but the proposed revisioned snapshot service, worker rebuild protocol, per-track contribution index, generation barriers, degraded modes, and production memory budgets were broader than the verified need.
+A narrower implementation now:
+
+- invalidates one shared live-frequency snapshot after every committed track insertion, mutation, deletion, or library reset;
+- leaves list-only changes alone;
+- derives the value-completable field set and dictionary extraction from the typed runtime-to-query bridge implemented with [RFC 0008](0008-declarative-track-capability-bridge.md);
+- rebuilds source-preserving title, tag, custom-key, and dictionary-field frequencies in one lazy traversal with both track-store tiers;
+- materializes sorted individual vocabularies and a caller-selected unordered aggregate from those retained frequencies without further track-store scans; and
+- covers deletion of the final contributor for tags, custom keys, and every supported metadata field with one regression contract.
+
+Before cross-field Quick-filter completion existed, a targeted Release measurement on a Ryzen 9 9950X with a warm tmpfs-backed library found that coalescing every dirty field in a tier made a representative 100k-track first read take about 13.9 ms for the hot tier and 20.9 ms for the cold tier.
+Scanning only the requested artist or work field reduced those paths to about 4.2 ms and 9.6 ms; a 50k-track unique-value stress case fell from about 43 ms per tier to about 8 ms per requested field.
+That evidence initially justified requested-field scans instead of eager final materialization for every field.
+
+A follow-up Release experiment used 50k tracks, 93,670 distinct live Quick-filter values, and 60,170 interned dictionary values.
+The production one-pass unordered aggregate rebuilt in about 5.7 ms median and 6.2 ms p95.
+Cached top-eight lookup took about 0.21 ms for a miss, 0.52 ms for a narrow artist prefix, 0.70 ms for a narrow work prefix, and 1.05 ms for a broad title prefix.
+In the preceding strategy comparison, pre-sorting by frequency raised rebuild cost to about 18–19 ms, while a prefix-ordered index raised it to about 55–56 ms without improving the broad-prefix case enough to justify either structure.
+Once that cross-tier aggregate became the common GTK and TUI Quick-filter source, letting later structured completers rescan the same library generation was redundant.
+The production path therefore retains source frequencies from one scan, keeps final vectors lazy, and selects top aggregate matches without a global aggregate sort.
+With all ten dictionary-backed fields, tags, and 20 custom keys included, the revised 50k-track Release baseline contains 60,190 dictionary entries and rebuilds the shared snapshot plus 93,670-value aggregate in about 7.6 ms median and 8.8 ms p95.
+Subsequent in-memory materialization takes about 0.24 ms for 5,000 artists, 1.29 ms for 25,000 works, 0.005 ms for 120 tags, and below the baseline's one-microsecond resolution for 20 custom keys.
+The tracked log-only performance baseline measures the shared rebuild, in-memory materialization, and cached lookup without imposing a machine-dependent timing threshold.
+
+The [track expression architecture](../architecture/track-expression.md), [track-field value completion specification](../spec/presentation/field-completion.md), and [runtime track field catalog](../reference/library/model/track-field.md) own current behavior.
+Those authorities supersede this proposal; this RFC remains the record of why the larger completion index was not adopted.
 
 ## Problem
 
@@ -16,7 +47,7 @@ Deleting the last track that contributes a tag, key, artist, genre, or other val
 
 Dirty caches rebuild lazily on the owner thread.
 The first completion request after a change scans the complete hot or cold track store, counts values, sorts them, and only then returns suggestions.
-The implementation coalesces fields by storage tier, but large-library I/O and counting still occur on the interactive completion path.
+The implementation historically coalesced fields by storage tier, but large-library I/O and counting still occurred on the interactive completion path.
 
 Thread safety is documented through owner-thread confinement and guarded with the C `assert` macro.
 Release builds may compile that check out, turning a future off-executor delivery change into an unguarded data race rather than a deterministic contract failure.
@@ -32,6 +63,8 @@ The service has no retained per-track contribution state with which to subtract 
 
 ## Goals
 
+The proposal sought to:
+
 - Remove deleted values immediately and correctly from every vocabulary.
 - Keep completion reads bounded and free of full-library scans on the interactive thread.
 - Maintain one immutable vocabulary snapshot correlated to a library revision.
@@ -40,6 +73,9 @@ The service has no retained per-track contribution state with which to subtract 
 - Keep query and metadata editors on one shared runtime vocabulary authority.
 - Enforce executor/lifetime rules in release builds.
 - Bound memory and worker concurrency for production-scale libraries.
+
+Deletion correctness, one shared field authority, and one coherent lazy source snapshot were achieved by the narrower implementation.
+The asynchronous snapshot, incremental contribution, release executor-contract, and production-scale budget goals were not adopted without measured need.
 
 ## Non-goals
 
@@ -50,7 +86,7 @@ The service has no retained per-track contribution state with which to subtract 
 - Replacing library mutation publication; RFC 0003 remains the proposal for that pipeline.
 - Defining query-to-TrackField mappings; [RFC 0008](0008-declarative-track-capability-bridge.md) owns that bridge.
 
-## Proposed design
+## Rejected design
 
 ### Completion index owner
 
@@ -144,17 +180,38 @@ Acceptance establishes budgets for contribution bytes per track, startup rebuild
 If the contribution index exceeds its memory budget, an explicit degraded mode may retain only tags/custom keys or fall back to scheduled full rebuilds.
 It cannot silently return stale deleted values.
 
+## Implemented alternative
+
+`CompletionService` remains an owner-thread-confined lazy cache.
+Its one `LibraryChanges` subscription invalidates only when a change set contains a library reset or inserted, mutated, or deleted tracks.
+The next supported live-vocabulary reader rebuilds one shared source-frequency snapshot from a coherent library read transaction.
+
+The runtime `TrackFieldDefinition` catalog is the sole authority for value-completion eligibility and carries an optional typed `query::Field` bridge.
+For every dictionary-backed runtime field, `CompletionService` uses the core query field helper to extract the dictionary id while traversing hot and cold track data once.
+This removes the former private completion-field table and dictionary-field switch without making query grammar part of the service's public API.
+
+The change-set track ids remain intentionally unused because the service retains no per-track contribution state.
+Invalidation followed by one complete lazy traversal is simple and deletion-correct.
+The retained snapshot contains owned title frequencies and compressed dictionary-id frequencies separated by tag, custom-key, and track-field source.
+Final tag, custom-key, and individual-field vectors resolve and sort only when requested, so the shared scan does not reintroduce eager sorting for every consumer.
+
+For aggregate requests, the caller supplies a unique typed field set plus an optional tag contribution.
+The service caches the last specification, combines only its selected retained sources, resolves live ids, and merges equal text without another track-store scan.
+The resulting aggregate remains unordered; UIModel's `TrackFilterCompleter` performs ASCII-insensitive prefix matching and retains only the requested frequency-ranked top results.
+This lets GTK and TUI share library-wide Quick-filter completion without moving the Quick-search field policy into runtime metadata or exposing unused historical dictionary entries.
+
 ## Alternatives
 
-### Add `tracksDeleted` to `markDirty()`
+### Invalidate on deleted tracks
 
-This fixes correctness after the next access but still moves a full scan onto the interactive completion path.
-It should be applied as an immediate bug fix if the full RFC is delayed.
+This is the implemented correction.
+It fixes correctness on the next access while retaining one synchronous full-library scan for the new shared snapshot.
+Measured shared-rebuild latency does not justify replacing it with the larger asynchronous index.
 
 ### Keep lazy scans but run them on a worker
 
-Worker scans improve responsiveness, but without per-track contributions every mutation still invalidates an entire tier and deletion correctness waits for a full rebuild.
-The selected design makes ordinary changes incremental.
+Worker scans improve responsiveness, but without per-track contributions every mutation still invalidates the complete source snapshot and deletion correctness waits for a full rebuild.
+Measured shared rebuild and aggregate lookup latency does not yet justify the additional lifetime, revision, and stale-candidate protocol.
 
 ### Derive vocabulary only from the dictionary store
 
@@ -172,48 +229,36 @@ Mutexes prevent races but do not fix deletion omission, full-scan latency, or mi
 
 ## Compatibility and migration
 
-No user configuration or library database format change is required.
-Suggestion ordering remains frequency descending and value ascending; deleted values disappear sooner, which is a correctness change.
-
-Implementation phases are:
-
-1. Include deletions in invalidation and add last-occurrence deletion regression tests.
-2. Introduce immutable snapshots and make completion reads I/O-free while rebuild remains full-scan.
-3. Move startup/reset rebuild to worker execution with revisioned installation.
-4. Add per-track contributions and symmetric incremental updates.
-5. Replace debug-only thread checks with the production executor contract and add shutdown/concurrency tests.
-
-The existing `CompletionService` API may remain as a facade during migration.
+No user configuration, library database, query syntax, or existing metadata/query completion ordering changes.
+Deleted last-occurrence values now disappear on the next completion access instead of remaining cached until another insertion, mutation, or restart.
+Interactive GTK and TUI Quick filters now add live cross-field value suggestions; applying one inserts a quoted Quick-filter term.
+The runtime service remains synchronous and adds a parameterized aggregate vocabulary API without giving runtime ownership of the product field set.
 
 ## Validation
 
-- Deleting the last occurrence of every supported tag, custom key, and metadata value removes it from the next installed snapshot.
-- Mutating one track from value A to B decrements A, increments B, and preserves deterministic frequency ordering.
-- Insert, mutate, and delete storms produce the same snapshot as a clean full rebuild at the same library revision.
-- Completion reads perform no library transaction and remain within a defined latency budget while a rebuild is active.
-- A slow startup scan does not block callback-executor heartbeat or ordinary commands.
-- A stale rebuild cannot overwrite a snapshot that incorporates a newer revision.
-- Query and metadata completion observe the same vocabulary revision.
-- System fields and operators remain completable while live values are `Building` or failed.
-- Shutdown and library switching produce no callback or read after library destruction.
-- ThreadSanitizer and repeated mutation tests report no race.
-- Memory and rebuild benchmarks cover representative small, large, and high-cardinality libraries.
-- Completed implementation passes `./ao check`.
+The narrower disposition is validated by:
+
+- a regression that populates every tag, custom-key, and supported metadata vocabulary, deletes its only contributing track through `LibraryWriter`, and observes every vocabulary empty on its next access;
+- exhaustive runtime tests proving every value-completable field has one dictionary-backed typed query bridge;
+- one-snapshot coherence across tag, custom-key, field, and aggregate consumers;
+- explicit insertion and reset invalidation, existing mutation invalidation, frequency ordering, query completion, and metadata completion tests;
+- aggregate frequency merging, specification replacement, and insertion/mutation/deletion/reset invalidation tests;
+- shared UIModel, TUI, and GTK Quick-filter completion contracts;
+- a log-only 50k-track baseline for the shared rebuild, in-memory materialization, and cached Quick-filter lookup;
+- documentation validation; and
+- the repository full validation gate.
 
 ## Open questions
 
-- Should incremental snapshot publication occur after every library revision or coalesce within one callback turn?
-- Is a persistent rebuildable completion cache justified after measuring startup cost?
-- What memory budget and degraded behavior are acceptable for high-cardinality custom metadata?
-- Should vocabulary matching remain ASCII-insensitive until the predicate evaluator adopts a shared Unicode normalization contract?
+None for this RFC.
+Any future asynchronous rebuild requires shared-snapshot latency on target hardware to violate the interaction budget and can choose the smallest design warranted by that evidence.
 
 ## Promotion plan
 
-If accepted and implemented, update:
+No proposal promotion remains.
+The narrower current behavior is owned by:
 
-- [Library architecture](../architecture/library.md) with completion-index ownership and lifetime;
-- [Track expression architecture](../architecture/track-expression.md) with immutable vocabulary composition;
-- [Track-field value completion](../spec/presentation/field-completion.md) with revision, phases, and incremental behavior;
-- [Query expression completion](../spec/query/expression-completion.md) with snapshot availability behavior;
-- [Runtime track field catalog](../reference/library/model/track-field.md) if the indexed capability surface changes;
-- runtime execution and concurrency development guidance for the worker/callback snapshot pattern.
+- [Track expression architecture](../architecture/track-expression.md)
+- [Track-field value completion](../spec/presentation/field-completion.md)
+- [Query expression completion](../spec/query/expression-completion.md)
+- [Runtime track field catalog](../reference/library/model/track-field.md)

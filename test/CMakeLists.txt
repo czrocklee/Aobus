@@ -192,6 +192,7 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TagEditWorkflowTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/track/TrackFilterCompleterTest.cpp
     unit/uimodel/library/track/TrackFilterResolverTest.cpp
     unit/uimodel/library/track/TrackFilterViewModelTest.cpp
     unit/uimodel/library/track/TrackPageRouteTest.cpp
@@ -532,6 +533,7 @@ endif()
 
 # ao_perf_baseline: standalone performance baseline (not run by default in ./ao check)
 add_executable(ao_perf_baseline
+    perf/CompletionVocabularyBaselineTest.cpp
     perf/PerformanceBaselineTest.cpp
 )
 

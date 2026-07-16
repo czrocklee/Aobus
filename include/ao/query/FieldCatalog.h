@@ -3,6 +3,24 @@
 
 #pragma once
 
-// FieldCatalog moved to <ao/query/detail/FieldCatalog.h>.
-// The QueryVariableCompletionSpec struct and its accessors are no longer public API;
-// they are internal to the query subsystem (ao::query::detail).
+#include <ao/query/Expression.h>
+#include <ao/query/Field.h>
+
+#include <span>
+#include <string_view>
+
+namespace ao::query
+{
+  struct QueryVariableDescriptor final
+  {
+    VariableType type = VariableType::Metadata;
+    Field field = Field::Title;
+    std::string_view canonicalName;
+    std::span<std::string_view const> aliases;
+  };
+
+  std::span<QueryVariableDescriptor const> queryVariableDescriptors(VariableType type);
+
+  QueryVariableDescriptor const* findQueryVariableDescriptor(VariableType type, std::string_view name);
+  QueryVariableDescriptor const* findQueryVariableDescriptor(Field field);
+} // namespace ao::query

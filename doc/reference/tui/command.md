@@ -127,8 +127,10 @@ Any submitted text that is not a known prefix or exact alias becomes a quick fil
 ## Validation rules
 
 - Command prefixes match before aliases; unknown input is quick-filter text.
-- Expression-like filter arguments delegate completion to the query expression completer.
+- Bare filter drafts and `/filter` arguments use the shared UIModel track-filter completer.
+- An explicit leading query variable produces structured query suggestions; otherwise a non-empty active term produces frequency-ranked live Quick-filter value suggestions.
 - Presentation completion includes built-in and custom preset ids.
+- Quick-filter values come from live titles, artist, album, album artist, genre, composer, work, and tags; list names and other fields are excluded.
 - Command mode and overlays disable workspace seek/table gestures.
 - A duration-zero seek rail is inert.
 
@@ -149,6 +151,7 @@ Changing a key, alias, option, or default path requires updating this reference 
 
 - [`Main.cpp`](../../../app/tui/Main.cpp) registers startup options.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) registers prefixes and aliases.
+- [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) routes command, presentation, and shared filter completion.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) maps keys and mouse events.
 
 ## Test authority

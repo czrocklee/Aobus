@@ -71,6 +71,12 @@ namespace ao::uimodel::test
       CHECK(recommendSmart("@bitrate > 320000") == "technical");
     }
 
+    SECTION("query aliases use the same recommendation signals")
+    {
+      CHECK(recommendSmart("$w = \"Symphony 9\"") == "classical-works");
+      CHECK(recommendSmart("@sr >= 96000") == "technical");
+    }
+
     SECTION("tag")
     {
       CHECK(recommendSmart("#tag = \"favorite\"") == "tagging");

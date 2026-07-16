@@ -4,9 +4,10 @@
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/detail/FieldCatalog.h>
+#include <ao/query/FieldCatalog.h>
 #include <ao/query/detail/FieldResolver.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
@@ -35,14 +36,14 @@ namespace ao::query::test
     }
 
     bool containsMatch(std::span<QueryVariableCompletionMatch const> matches,
-                       detail::QueryVariableCompletionSpec const& spec,
+                       QueryVariableDescriptor const& descriptor,
                        QueryVariableCompletionMatchKind kind)
     {
       return std::ranges::any_of(matches,
-                                 [&spec, kind](QueryVariableCompletionMatch const& match)
+                                 [&descriptor, kind](QueryVariableCompletionMatch const& match)
                                  {
-                                   return match.type == spec.type && match.field == spec.field &&
-                                          match.canonicalName == spec.canonicalName && match.kind == kind;
+                                   return match.type == descriptor.type && match.field == descriptor.field &&
+                                          match.canonicalName == descriptor.canonicalName && match.kind == kind;
                                  });
     }
   } // namespace
@@ -147,9 +148,9 @@ namespace ao::query::test
     }
   }
 
-  TEST_CASE("Completion - lists query variable specs in UI catalog order", "[query][unit][completion]")
+  TEST_CASE("FieldCatalog - lists query variable descriptors in UI order", "[query][unit][field-catalog]")
   {
-    auto const metadata = detail::queryVariableCompletionSpecs(VariableType::Metadata);
+    auto const metadata = queryVariableDescriptors(VariableType::Metadata);
     REQUIRE(metadata.size() == 19);
     CHECK(metadata[0].canonicalName == "title");
     CHECK(metadata[1].canonicalName == "artist");
@@ -163,14 +164,14 @@ namespace ao::query::test
     CHECK(metadata[16].canonicalName == "movementNumber");
     CHECK(metadata[18].canonicalName == "coverArt");
 
-    auto const properties = detail::queryVariableCompletionSpecs(VariableType::Property);
+    auto const properties = queryVariableDescriptors(VariableType::Property);
     REQUIRE(properties.size() == 6);
     CHECK(properties[0].canonicalName == "duration");
     CHECK(properties[1].canonicalName == "bitrate");
     CHECK(properties[5].canonicalName == "codec");
 
-    CHECK(detail::queryVariableCompletionSpecs(VariableType::Tag).empty());
-    CHECK(detail::queryVariableCompletionSpecs(VariableType::Custom).empty());
+    CHECK(queryVariableDescriptors(VariableType::Tag).empty());
+    CHECK(queryVariableDescriptors(VariableType::Custom).empty());
   }
 
   TEST_CASE("Completion - completes canonical query variables", "[query][unit][completion]")
@@ -212,38 +213,38 @@ namespace ao::query::test
           std::vector<std::string_view>{"discNumber", "discTotal"});
   }
 
-  TEST_CASE("Completion - resolves query variable specs through the catalog", "[query][unit][completion]")
+  TEST_CASE("FieldCatalog - resolves every descriptor through parsing and completion", "[query][unit][field-catalog]")
   {
     for (auto const type : {VariableType::Metadata, VariableType::Property})
     {
-      for (auto const& spec : detail::queryVariableCompletionSpecs(type))
+      for (auto const& descriptor : queryVariableDescriptors(type))
       {
-        DYNAMIC_SECTION("Canonical: " << spec.canonicalName)
+        DYNAMIC_SECTION("Canonical: " << descriptor.canonicalName)
         {
-          auto const* found = detail::findQueryVariableCompletionSpec(spec.type, spec.canonicalName);
+          auto const* found = findQueryVariableDescriptor(descriptor.type, descriptor.canonicalName);
           REQUIRE(found != nullptr);
-          CHECK(found->field == spec.field);
-          auto const field = detail::resolveVariableField(spec.type, spec.canonicalName);
+          CHECK(found->field == descriptor.field);
+          auto const field = detail::resolveVariableField(descriptor.type, descriptor.canonicalName);
           REQUIRE(field.has_value());
-          CHECK(*field == spec.field);
+          CHECK(*field == descriptor.field);
 
-          auto const matches = completeQueryVariable(spec.type, spec.canonicalName);
-          CHECK(containsMatch(matches, spec, QueryVariableCompletionMatchKind::CanonicalPrefix));
+          auto const matches = completeQueryVariable(descriptor.type, descriptor.canonicalName);
+          CHECK(containsMatch(matches, descriptor, QueryVariableCompletionMatchKind::CanonicalPrefix));
         }
 
-        for (auto const alias : spec.aliases)
+        for (auto const alias : descriptor.aliases)
         {
           DYNAMIC_SECTION("Alias: " << alias)
           {
-            auto const* found = detail::findQueryVariableCompletionSpec(spec.type, alias);
+            auto const* found = findQueryVariableDescriptor(descriptor.type, alias);
             REQUIRE(found != nullptr);
-            CHECK(found->field == spec.field);
-            auto const field = detail::resolveVariableField(spec.type, alias);
+            CHECK(found->field == descriptor.field);
+            auto const field = detail::resolveVariableField(descriptor.type, alias);
             REQUIRE(field.has_value());
-            CHECK(*field == spec.field);
+            CHECK(*field == descriptor.field);
 
-            auto const matches = completeQueryVariable(spec.type, alias);
-            CHECK(containsMatch(matches, spec, QueryVariableCompletionMatchKind::ExactAlias));
+            auto const matches = completeQueryVariable(descriptor.type, alias);
+            CHECK(containsMatch(matches, descriptor, QueryVariableCompletionMatchKind::ExactAlias));
           }
         }
       }
@@ -385,39 +386,72 @@ namespace ao::query::test
            .aliases = std::span{kNoAliases}},
     };
 
-    auto const checkSpecs = [&](std::span<detail::QueryVariableCompletionSpec const> actual, auto const& expected)
+    auto const checkDescriptors = [&](std::span<QueryVariableDescriptor const> actual, auto const& expected)
     {
       REQUIRE(actual.size() == expected.size());
 
-      for (std::size_t index = 0; auto const& spec : actual)
+      for (std::size_t index = 0; auto const& descriptor : actual)
       {
-        DYNAMIC_SECTION("Spec: " << spec.canonicalName)
+        DYNAMIC_SECTION("Descriptor: " << descriptor.canonicalName)
         {
           auto const& exp = expected.at(index);
-          CHECK(spec.type == exp.type);
-          CHECK(spec.canonicalName == exp.canonicalName);
-          CHECK(spec.field == exp.field);
-          CHECK(std::ranges::equal(spec.aliases, exp.aliases));
+          CHECK(descriptor.type == exp.type);
+          CHECK(descriptor.canonicalName == exp.canonicalName);
+          CHECK(descriptor.field == exp.field);
+          CHECK(std::ranges::equal(descriptor.aliases, exp.aliases));
         }
 
         ++index;
       }
     };
 
-    checkSpecs(detail::queryVariableCompletionSpecs(VariableType::Metadata), expectedMetadata);
-    checkSpecs(detail::queryVariableCompletionSpecs(VariableType::Property), expectedProperties);
+    checkDescriptors(queryVariableDescriptors(VariableType::Metadata), expectedMetadata);
+    checkDescriptors(queryVariableDescriptors(VariableType::Property), expectedProperties);
   }
 
-  TEST_CASE("Completion - exposes public query variable summaries", "[query][unit][completion]")
+  TEST_CASE("FieldCatalog - finds descriptors by canonical name, alias, and field", "[query][unit][field-catalog]")
   {
-    auto const summaries = queryVariableSummaries(VariableType::Metadata);
-    auto const iter = std::ranges::find_if(
-      summaries, [](QueryVariableSummary const& summary) { return summary.canonicalName == "movement"; });
+    auto const* const canonical = findQueryVariableDescriptor(VariableType::Metadata, "movement");
+    auto const* const alias = findQueryVariableDescriptor(VariableType::Metadata, "m");
+    auto const* const byField = findQueryVariableDescriptor(Field::MovementId);
 
-    REQUIRE(iter != summaries.end());
-    CHECK(iter->type == VariableType::Metadata);
-    CHECK(iter->field == Field::MovementId);
-    REQUIRE(iter->aliases.size() == 1);
-    CHECK(iter->aliases[0] == "m");
+    REQUIRE(canonical != nullptr);
+    CHECK(canonical->type == VariableType::Metadata);
+    CHECK(canonical->field == Field::MovementId);
+    REQUIRE(canonical->aliases.size() == 1);
+    CHECK(canonical->aliases[0] == "m");
+    CHECK(alias == canonical);
+    CHECK(byField == canonical);
+
+    CHECK(findQueryVariableDescriptor(VariableType::Metadata, "missing") == nullptr);
+    CHECK(findQueryVariableDescriptor(Field::Uri) == nullptr);
+  }
+
+  TEST_CASE("FieldCatalog - supplies canonical diagnostic names and formatted variable text",
+            "[query][unit][field-catalog]")
+  {
+    for (auto const type : {VariableType::Metadata, VariableType::Property})
+    {
+      for (auto const& descriptor : queryVariableDescriptors(type))
+      {
+        INFO("Field: " << descriptor.canonicalName);
+        auto const variable =
+          VariableExpression{.type = descriptor.type, .name = std::string{descriptor.canonicalName}};
+        auto const expectedVariable =
+          std::string(1, variablePrefix(descriptor.type)) + std::string{descriptor.canonicalName};
+
+        CHECK(findQueryVariableDescriptor(descriptor.field) == &descriptor);
+        CHECK(fieldDisplayName(descriptor.field) == descriptor.canonicalName);
+        CHECK(variableDisplayName(descriptor.type, descriptor.canonicalName) == expectedVariable);
+        CHECK(variableDisplayName(variable) == expectedVariable);
+      }
+    }
+
+    CHECK(fieldDisplayName(Field::Uri) == "field");
+    CHECK(variableDisplayName(VariableType::Tag, "90s Rock") == R"(#"90s Rock")");
+    CHECK(variableDisplayName(VariableExpression{.type = VariableType::Tag, .name = "90s Rock"}) == R"(#"90s Rock")");
+    CHECK(variableDisplayName(VariableType::Custom, R"(quote"key)") == R"(%"quote\"key")");
+    CHECK(variableDisplayName(VariableExpression{.type = VariableType::Custom, .name = R"(quote"key)"}) ==
+          R"(%"quote\"key")");
   }
 } // namespace ao::query::test

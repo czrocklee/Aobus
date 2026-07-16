@@ -5,7 +5,7 @@
 
 #include "completion/EntryCompletionController.h"
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/rt/completion/QueryExpressionCompleter.h>
+#include <ao/uimodel/library/track/TrackFilterCompleter.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <glibmm/ustring.h>
@@ -76,7 +76,7 @@ namespace ao::gtk
     Gtk::Button _createSmartListButton;
     Glib::RefPtr<Gtk::EventControllerFocus> _focusControllerPtr;
     std::string _resolvedExpression;
-    rt::QueryExpressionCompleter _completer;
+    uimodel::TrackFilterCompleter _completer;
     EntryCompletionController _completionController;
     DebounceScheduler _debounceScheduler;
 

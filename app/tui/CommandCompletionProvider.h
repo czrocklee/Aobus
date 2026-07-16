@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/completion/CompletionResult.h>
-#include <ao/rt/completion/QueryExpressionCompleter.h>
+#include <ao/uimodel/library/track/TrackFilterCompleter.h>
 
 #include <optional>
 #include <string_view>
@@ -17,21 +17,15 @@ namespace ao::rt
 
 namespace ao::tui
 {
-  class LibraryController;
-
   class CommandCompletionProvider final
   {
   public:
-    CommandCompletionProvider(LibraryController& library,
-                              rt::CompletionService& completion,
-                              rt::WorkspaceService& workspace);
+    CommandCompletionProvider(rt::CompletionService& completion, rt::WorkspaceService& workspace);
 
     std::optional<rt::CompletionResult> complete(std::string_view draft);
 
   private:
-    LibraryController& _library;
-    rt::CompletionService& _completion;
     rt::WorkspaceService& _workspace;
-    rt::QueryExpressionCompleter _expressionCompleter;
+    uimodel::TrackFilterCompleter _filterCompleter;
   };
 } // namespace ao::tui

@@ -40,7 +40,7 @@ Application composition lives in `app/runtime/`, platform-neutral input and reco
 
 ### Shared expression core
 
-`ao::query` owns the parser, AST, serializer, variable catalog, field resolution, tolerant completion analysis, predicate compiler and evaluator, and format compiler and evaluator.
+`ao::query` owns the parser, AST, serializer, public typed variable-descriptor catalog, field resolution, tolerant completion analysis, predicate compiler and evaluator, and format compiler and evaluator.
 The parser accepts the common syntactic superset while the predicate and format compilers enforce distinct result types.
 
 An `ExecutionPlan` answers whether one track matches.
@@ -56,7 +56,10 @@ Evaluation that needs dictionary data receives an explicit bounded read context 
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
 During one membership rebuild, `SmartListEvaluator` creates one dictionary read cache/context, binds each plan once, and reuses those bindings across track evaluations; cache presence and eviction do not change predicate results.
 
-`CompletionService` owns live library vocabularies and `QueryExpressionCompleter` combines them with the core completion analysis.
+The runtime `TrackFieldDefinition` catalog bridges application fields to those core descriptors with typed `query::Field` identities.
+`CompletionService` derives its value-completable fields and dictionary extraction from that bridge, and `QueryExpressionCompleter` combines the live vocabularies with core completion analysis through the reverse mapping.
+The service captures titles, tags, custom keys, and dictionary-backed track fields in one source-preserving live frequency snapshot after invalidation.
+Single-field completion and a caller-selected cross-field aggregate materialize from that snapshot without additional track-store scans; runtime owns storage access and invalidation but not the aggregate field choice.
 The runtime does not redefine expression grammar or field aliases.
 
 ### UIModel authoring and recommendation
@@ -64,12 +67,14 @@ The runtime does not redefine expression grammar or field aliases.
 UIModel owns platform-neutral interpretation of quick-filter input, filter view state, Smart List draft and preview policy, and track-presentation recommendation.
 It may parse or serialize a core expression, but it cannot implement a second grammar or evaluator.
 
-Presentation recommendation may inspect which variables occur in a valid Smart List expression.
+Quick-search policy retains a typed runtime-field list, obtains canonical expression variables through the bridge, and delegates system-variable source text to the core variable formatter and constants and dynamic variables to the core serializer.
+`TrackFilterCompleter` reuses that field list and the resolver's explicit-expression boundary, ranks matching aggregate values, and otherwise delegates structured input to the runtime query completer.
+Presentation recommendation resolves parsed names and aliases to typed query fields before applying its UIModel-local signal priority.
 That inspection selects a view shape only; it never changes membership or expression meaning.
 
 ### Frontend adapters
 
-GTK and TUI bind raw input, completion results, filter state, and Smart List editing to their native interaction models.
+GTK and TUI bind the same UIModel filter completion and resolution results to their native interaction models.
 They send the resolved expression to runtime rather than evaluating tracks themselves.
 
 The CLI uses the core predicate path for `--filter` and the core string path for `track show --format`.
@@ -170,10 +175,13 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 - Plans own every expression symbol needed for later dictionary binding and can outlive the library against which they were first evaluated.
 - A dictionary-using plan is bound explicitly for one bounded batch; a later batch creates a new binding and can observe a newer committed dictionary generation.
 - Transaction-backed evaluation opens its read snapshot before binding, so batch dictionary resolution is not older than the tracks being evaluated.
-- Parser, compiler, completion, serializer, generated CLI help, and diagnostics use the same core variable catalog.
+- Parser, compiler, completion, variable formatting, serializer, generated CLI help, and diagnostics use the same core variable catalog.
+- Application layers generate variable source text through the core query formatter and constants through the core serializer rather than duplicating prefix or quoting rules.
 - Smart and transient filters use the same predicate compiler and source evaluation path after authoring policy resolves their input.
 - Quick search expansion is UIModel policy, not grammar; direct query entry points receive expression text.
-- The runtime field catalog may advertise a query-variable bridge only when that variable is accepted by the core query catalog.
+- Runtime aggregate vocabulary requests carry typed fields selected by UIModel; no Quick-search or frontend role is added to runtime field metadata.
+- The runtime field catalog may advertise a query-variable bridge only when that typed field resolves in the core query descriptor catalog.
+- Query-to-runtime reverse lookup, value-completion eligibility, quick-search construction, and presentation recommendation consume that typed identity instead of maintaining raw variable-name mappings.
 - A frontend must not scan `MusicLibrary` to implement ordinary expression evaluation or completion when a runtime service exists.
 - The GTK Smart List preview's direct construction of `SmartListEvaluator` against `MusicLibrary` is a contained migration seam, not the normal frontend boundary.
 
@@ -184,7 +192,7 @@ Smart-list mutation rejects an invalid expression before commit, while an alread
 View filtering publishes the accepted expression, replacement projection, revision, and optional expression error through runtime state.
 
 Completion is synchronous and tolerant of incomplete text.
-`CompletionService` caches are owner-thread confined and are invalidated by library changes before their next lazy rebuild.
+`CompletionService` caches are owner-thread confined; committed track insertion, mutation, deletion, or library reset invalidates the shared snapshot before its next lazy one-pass rebuild.
 
 Execution and format plans own no dictionary state.
 `PlanBinding` and `FormatBinding` borrow their plan and a synchronous `DictionaryReadContext`; those bindings and the context cannot outlive the backing `MusicLibrary`.
@@ -199,11 +207,13 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`PlanEvaluator`](../../include/ao/query/PlanEvaluator.h) and `PlanBinding` evaluate predicates against explicit batch dictionary state.
 - [`FormatExpression.h`](../../include/ao/query/FormatExpression.h) defines pure format compilation, `FormatBinding`, and scalar evaluation.
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.
+- [`FieldCatalog.h`](../../include/ao/query/FieldCatalog.h) defines typed variable descriptors and lookup.
+- [`TrackField`](../../app/include/ao/rt/TrackField.h) defines the application capability catalog and typed query bridge.
 - [`LibraryWriter.cpp`](../../app/runtime/library/LibraryWriter.cpp) validates persisted Smart List definitions.
 - [`SmartListSource`](../../app/include/ao/rt/source/SmartListSource.h), [`SmartListEvaluator`](../../app/include/ao/rt/source/SmartListEvaluator.h), and [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) materialize predicate membership.
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.
-- [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live completion.
-- [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) owns quick-filter authoring policy.
+- [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
+- [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) own shared quick-filter authoring and completion policy.
 - [`TrackCommand.cpp`](../../app/cli/TrackCommand.cpp) is the current format-expression consumer.
 
 ## Test map
@@ -211,7 +221,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - Query tests under [`test/unit/query/`](../../test/unit/query/) protect parsing, compilation, evaluation, serialization, completion, access profiles, and formatting.
 - Smart source tests under [`test/unit/runtime/source/`](../../test/unit/runtime/source/) protect persisted and transient membership materialization.
 - Completion tests under [`test/unit/runtime/completion/`](../../test/unit/runtime/completion/) protect live vocabulary composition.
-- [`TrackFilterResolverTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) protects quick-filter resolution.
+- [`TrackFilterResolverTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) and [`TrackFilterCompleterTest.cpp`](../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protect quick-filter resolution and completion.
 - Presentation recommendation tests under [`test/unit/uimodel/library/presentation/`](../../test/unit/uimodel/library/presentation/) protect the read-only expression-to-preset seam.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI filter and format workflows.
 

@@ -72,6 +72,7 @@ Smart-list recommendation inspects successfully parsed filter variables with thi
 | Artist or album | Albums |
 | No recognized signal | Albums |
 
+Canonical variable names and their documented aliases resolve through the same typed core descriptor before UIModel applies this priority.
 Recommendation is a one-way read of expression structure.
 It neither compiles the predicate nor changes Smart List or transient-filter membership.
 

@@ -109,6 +109,7 @@ namespace ao::query
 
   std::string_view fieldDisplayName(Field field);
   char variablePrefix(VariableType type);
+  std::string variableDisplayName(VariableType type, std::string_view name);
   std::string variableDisplayName(VariableExpression const& variable);
 
   bool isHotDataRequired(AccessProfile profile);

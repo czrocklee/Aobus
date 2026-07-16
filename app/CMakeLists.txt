@@ -98,6 +98,8 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
+    uimodel/library/track/TrackFilterPolicy.cpp
+    uimodel/library/track/TrackFilterCompleter.cpp
     uimodel/library/track/TrackFilterResolver.cpp
     uimodel/library/track/TrackFilterViewModel.cpp
     uimodel/library/track/TrackPageRoute.cpp

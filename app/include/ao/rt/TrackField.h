@@ -3,11 +3,14 @@
 
 #pragma once
 
+#include <ao/query/Field.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace ao::rt
@@ -146,15 +149,17 @@ namespace ao::rt
     std::optional<TrackSortField> optSortField{};
     std::optional<TrackGroupKey> optGroupKey{};
 
-    std::string_view filterExpressionVariable{};
+    std::optional<query::Field> optQueryField{};
   };
 
   std::span<TrackFieldDefinition const> trackFieldDefinitions();
   TrackFieldDefinition const* trackFieldDefinition(TrackField field);
   std::optional<TrackField> trackFieldFromId(std::string_view id);
+  std::optional<TrackField> trackFieldFromQueryField(query::Field field);
   std::string_view trackFieldId(TrackField field);
 
-  std::string_view trackFieldFilterExpressionVariable(TrackField field);
+  std::optional<query::Field> trackFieldQueryField(TrackField field);
+  std::string trackFieldFilterExpressionVariable(TrackField field);
   bool supportsTrackFieldFilterExpression(TrackField field);
   bool supportsTrackFieldValueCompletion(TrackField field);
 } // namespace ao::rt

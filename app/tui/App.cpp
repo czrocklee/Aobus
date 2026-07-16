@@ -436,7 +436,7 @@ namespace ao::tui
     auto volumeSub = playback.onVolumeChanged([requestRefresh](float) { requestRefresh(); });
     auto mutedSub = playback.onMutedChanged([requestRefresh](bool) { requestRefresh(); });
     auto outputDevices = OutputDeviceController{playback, requestRefresh};
-    auto commandCompletions = CommandCompletionProvider{library, runtime.completion(), runtime.workspace()};
+    auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
     auto events = EventController{screen,
                                   shell,
                                   library,

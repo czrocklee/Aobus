@@ -6,11 +6,13 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/query/Field.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
@@ -30,133 +32,99 @@ namespace ao::rt
 {
   namespace
   {
-    using LoadMode = library::TrackStore::Reader::LoadMode;
-
-    struct ValueCompletionFieldSpec final
+    struct TransparentStringHash final
     {
-      TrackField field;
-      bool coldStore;
+      using is_transparent = void;
+
+      std::size_t operator()(std::string_view value) const { return std::hash<std::string_view>{}(value); }
+      std::size_t operator()(std::string const& value) const { return (*this)(std::string_view{value}); }
     };
 
-    constexpr auto kValueCompletionFields = std::to_array<ValueCompletionFieldSpec>({
-      {.field = TrackField::Artist, .coldStore = false},
-      {.field = TrackField::Album, .coldStore = false},
-      {.field = TrackField::AlbumArtist, .coldStore = false},
-      {.field = TrackField::Genre, .coldStore = false},
-      {.field = TrackField::Composer, .coldStore = false},
-      {.field = TrackField::Conductor, .coldStore = true},
-      {.field = TrackField::Ensemble, .coldStore = true},
-      {.field = TrackField::Work, .coldStore = true},
-      {.field = TrackField::Movement, .coldStore = true},
-      {.field = TrackField::Soloist, .coldStore = true},
-    });
+    using OwnedValueFrequencies =
+      boost::unordered_flat_map<std::string, std::uint32_t, TransparentStringHash, std::equal_to<>>;
 
-    using ValueFrequencies = boost::unordered_flat_map<std::string_view, std::uint32_t, std::hash<std::string_view>>;
-
-    constexpr ValueCompletionFieldSpec const* valueCompletionSpecForField(TrackField field)
+    void addValue(OwnedValueFrequencies& counts, std::string_view value, std::uint32_t frequency = 1)
     {
-      for (auto const& spec : kValueCompletionFields)
+      if (value.empty())
       {
-        if (spec.field == field)
-        {
-          return &spec;
-        }
+        return;
       }
 
-      return nullptr;
-    }
-
-    // kValueCompletionFields carries the per-field storage tier this service scans, while the
-    // TrackField definition table's valueCompletion flag is the public predicate every caller uses
-    // (supportsTrackFieldValueCompletion: GTK editors, MetadataValueCompleter, QueryExpressionCompleter).
-    // The two must name the same set of fields: a field listed here but unflagged would be rebuilt yet
-    // never queried, and a flagged field missing here would pass the caller gate but resolve to an empty
-    // vocabulary -- both silent. Validate they agree once, instead of letting the lists drift.
-    void assertValueCompletionFieldsConsistent()
-    {
-      for ([[maybe_unused]] auto const& spec : kValueCompletionFields)
+      if (auto const iter = counts.find(value); iter != counts.end())
       {
-        assert(supportsTrackFieldValueCompletion(spec.field) &&
-               "kValueCompletionFields lists a field the TrackField table does not flag for value completion");
+        iter->second += frequency;
       }
-
-      for ([[maybe_unused]] auto const& def : trackFieldDefinitions())
+      else
       {
-        assert((!def.valueCompletion || valueCompletionSpecForField(def.field) != nullptr) &&
-               "TrackField table flags a value-completion field absent from kValueCompletionFields");
+        counts.emplace(std::string{value}, frequency);
       }
     }
 
-    std::size_t fieldIndex(TrackField field)
+    void countDictionaryId(std::span<std::uint32_t> frequencies, DictionaryId id, std::uint32_t frequency = 1)
     {
-      return static_cast<std::size_t>(field);
-    }
-
-    void addValue(ValueFrequencies& counts, std::string_view value)
-    {
-      if (!value.empty())
+      if (id != kInvalidDictionaryId && id.raw() < frequencies.size())
       {
-        ++counts[value];
+        frequencies[id.raw()] += frequency;
       }
     }
 
-    std::vector<VocabularyEntry> sortedVocabulary(ValueFrequencies const& counts)
+    void sortVocabulary(std::vector<VocabularyEntry>& entries)
     {
-      auto entries = std::vector<VocabularyEntry>{};
-      entries.reserve(counts.size());
-
-      for (auto const& [value, frequency] : counts)
-      {
-        entries.push_back(VocabularyEntry{.value = std::string{value}, .frequency = frequency});
-      }
-
       std::ranges::sort(
         entries,
         [](VocabularyEntry const& lhs, VocabularyEntry const& rhs)
         { return lhs.frequency > rhs.frequency || (lhs.frequency == rhs.frequency && lhs.value < rhs.value); });
+    }
 
+    template<typename Frequencies>
+    std::vector<VocabularyEntry> sortedDictionaryVocabulary(Frequencies const& frequencies,
+                                                            library::DictionaryStore const& dictionary)
+    {
+      auto entries = std::vector<VocabularyEntry>{};
+      entries.reserve(frequencies.size());
+
+      for (auto const& entry : frequencies)
+      {
+        if (auto const value = dictionary.getOrDefault(entry.id); !value.empty())
+        {
+          entries.push_back(VocabularyEntry{.value = std::string{value}, .frequency = entry.frequency});
+        }
+      }
+
+      sortVocabulary(entries);
       return entries;
     }
 
-    DictionaryId dictionaryIdForField(TrackField field, library::TrackView const& view)
+    void validateAggregateFields(std::span<TrackField const> fields)
     {
-      switch (field)
+      for (std::size_t index = 0; index < fields.size(); ++index)
       {
-        case TrackField::Artist: return view.metadata().artistId();
-        case TrackField::Album: return view.metadata().albumId();
-        case TrackField::AlbumArtist: return view.metadata().albumArtistId();
-        case TrackField::Genre: return view.metadata().genreId();
-        case TrackField::Composer: return view.metadata().composerId();
-        case TrackField::Conductor: return view.classical().conductorId();
-        case TrackField::Ensemble: return view.classical().ensembleId();
-        case TrackField::Work: return view.classical().workId();
-        case TrackField::Movement: return view.classical().movementId();
-        case TrackField::Soloist: return view.classical().soloistId();
-        default: return kInvalidDictionaryId;
+        auto const field = fields[index];
+        auto const optQueryField = trackFieldQueryField(field);
+        auto const precedingFields = fields.first(index);
+        gsl_Expects(optQueryField && (field == TrackField::Title || query::isDictionaryField(*optQueryField)));
+        gsl_Expects(std::ranges::find(precedingFields, field) == precedingFields.end());
       }
-    }
-
-    bool hasDirtyField(bool coldStore, std::array<bool, kTrackFieldCount> const& dirty)
-    {
-      return std::ranges::any_of(kValueCompletionFields,
-                                 [coldStore, &dirty](ValueCompletionFieldSpec const& spec)
-                                 { return spec.coldStore == coldStore && dirty.at(fieldIndex(spec.field)); });
     }
   } // namespace
 
   CompletionService::CompletionService(library::MusicLibrary& library, LibraryChanges const& changes)
     : _library{library}
     , _ownerThread{std::this_thread::get_id()}
-    , _tracksMutatedSubscription{changes.onChanged(
+    , _libraryChangeSubscription{changes.onChanged(
         [this](LibraryChangeSet const& changeSet)
         {
-          auto trackIds = changeSet.tracksInserted;
-          trackIds.append_range(changeSet.tracksMutated);
-          markDirty(trackIds);
+          if (changeSet.libraryReset || !changeSet.tracksInserted.empty() || !changeSet.tracksDeleted.empty() ||
+              !changeSet.tracksMutated.empty())
+          {
+            invalidate();
+          }
         })}
   {
-    assertValueCompletionFieldsConsistent();
-    _valueDirty.fill(true);
+    for (auto const& definition : trackFieldDefinitions())
+    {
+      gsl_Assert(!definition.valueCompletion || supportsTrackFieldValueCompletion(definition.field));
+    }
   }
 
   CompletionService::~CompletionService() = default;
@@ -170,24 +138,11 @@ namespace ao::rt
   std::span<VocabularyEntry const> CompletionService::tags()
   {
     assertOwnerThread();
+    ensureSnapshot();
 
-    if (_tagsDirty)
+    if (!_tagsReady)
     {
-      auto counts = ValueFrequencies{};
-      auto const transaction = _library.readTransaction();
-      auto const reader = _library.tracks().reader(transaction);
-      auto const& dictionary = _library.dictionary();
-
-      for (auto const& [_, view] : reader.hot())
-      {
-        for (auto const tagId : view.tags())
-        {
-          addValue(counts, dictionary.getOrDefault(tagId));
-        }
-      }
-
-      _tags = sortedVocabulary(counts);
-      _tagsDirty = false;
+      materializeTags();
     }
 
     return _tags;
@@ -196,24 +151,11 @@ namespace ao::rt
   std::span<VocabularyEntry const> CompletionService::customKeys()
   {
     assertOwnerThread();
+    ensureSnapshot();
 
-    if (_customKeysDirty)
+    if (!_customKeysReady)
     {
-      auto counts = ValueFrequencies{};
-      auto const transaction = _library.readTransaction();
-      auto const reader = _library.tracks().reader(transaction);
-      auto const& dictionary = _library.dictionary();
-
-      for (auto const& [_, view] : reader.cold())
-      {
-        for (auto const dictionaryId : view.customMetadata() | std::views::keys)
-        {
-          addValue(counts, dictionary.getOrDefault(dictionaryId));
-        }
-      }
-
-      _customKeys = sortedVocabulary(counts);
-      _customKeysDirty = false;
+      materializeCustomKeys();
     }
 
     return _customKeys;
@@ -223,70 +165,240 @@ namespace ao::rt
   {
     assertOwnerThread();
 
-    auto const* const spec = valueCompletionSpecForField(field);
+    auto const* const definition = trackFieldDefinition(field);
 
-    if (spec == nullptr)
+    if (definition == nullptr || !supportsTrackFieldValueCompletion(field))
     {
       static auto const kEmpty = std::vector<VocabularyEntry>{};
       return kEmpty;
     }
 
-    if (auto const index = fieldIndex(field); _valueDirty.at(index))
+    ensureSnapshot();
+
+    if (!trackFieldArrayAt(_valuesReady, field))
     {
-      rebuildDirtyValueVocabularies(spec->coldStore);
+      materializeValues(definition->field);
     }
 
-    return _values.at(fieldIndex(field));
+    return trackFieldArrayAt(_values, field);
   }
 
-  void CompletionService::markDirty(std::span<TrackId const> /*trackIds*/)
+  std::span<VocabularyEntry const> CompletionService::aggregateValues(TrackValueVocabularySpec spec)
   {
     assertOwnerThread();
 
-    _tagsDirty = true;
-    _customKeysDirty = true;
-
-    for (auto const& spec : kValueCompletionFields)
+    if (!std::ranges::equal(spec.fields, _aggregateFields) || spec.includeTags != _aggregateIncludesTags)
     {
-      _valueDirty.at(fieldIndex(spec.field)) = true;
+      validateAggregateFields(spec.fields);
+      _aggregateFields.assign(spec.fields.begin(), spec.fields.end());
+      _aggregateIncludesTags = spec.includeTags;
+      _aggregateValuesReady = false;
+    }
+
+    if (_aggregateFields.empty() && !_aggregateIncludesTags)
+    {
+      _aggregateValues.clear();
+      _aggregateValuesReady = true;
+      return _aggregateValues;
+    }
+
+    ensureSnapshot();
+
+    if (!_aggregateValuesReady)
+    {
+      materializeAggregateValues();
+    }
+
+    return _aggregateValues;
+  }
+
+  void CompletionService::invalidate()
+  {
+    assertOwnerThread();
+    _snapshotDirty = true;
+  }
+
+  void CompletionService::ensureSnapshot()
+  {
+    if (_snapshotDirty)
+    {
+      rebuildSnapshot();
     }
   }
 
-  void CompletionService::rebuildDirtyValueVocabularies(bool cold)
+  void CompletionService::rebuildSnapshot()
   {
-    auto const mode = cold ? LoadMode::Cold : LoadMode::Hot;
-
-    if (!hasDirtyField(cold, _valueDirty))
+    struct FieldSource final
     {
-      return;
+      TrackField field;
+      query::Field queryField;
+    };
+
+    auto const transaction = _library.readTransaction();
+    auto const dictionarySize = _library.dictionary().size();
+    auto titleCounts = OwnedValueFrequencies{};
+    titleCounts.reserve(dictionarySize);
+    auto tagCounts = std::vector<std::uint32_t>(dictionarySize + 1);
+    auto customKeyCounts = std::vector<std::uint32_t>(dictionarySize + 1);
+    auto valueCounts = std::array<std::vector<std::uint32_t>, kTrackFieldCount>{};
+    auto fieldSources = std::vector<FieldSource>{};
+
+    for (auto const& definition : trackFieldDefinitions())
+    {
+      if (definition.optQueryField && query::isDictionaryField(*definition.optQueryField))
+      {
+        fieldSources.push_back(FieldSource{.field = definition.field, .queryField = *definition.optQueryField});
+        trackFieldArrayAt(valueCounts, definition.field).resize(dictionarySize + 1);
+      }
     }
 
-    auto counts = std::array<ValueFrequencies, kTrackFieldCount>{};
-    auto const transaction = _library.readTransaction();
     auto const reader = _library.tracks().reader(transaction);
-    auto const& dictionary = _library.dictionary();
 
-    for (auto iter = reader.begin(mode); iter != reader.end(mode); ++iter)
+    for (auto const& [_, view] : reader.both())
     {
-      auto const& [_, view] = *iter;
+      addValue(titleCounts, view.metadata().title());
 
-      for (auto const& spec : kValueCompletionFields)
+      for (auto const source : fieldSources)
       {
-        if (spec.coldStore == cold && _valueDirty.at(fieldIndex(spec.field)))
+        countDictionaryId(
+          trackFieldArrayAt(valueCounts, source.field), query::dictionaryFieldId(view, source.queryField));
+      }
+
+      for (auto const tagId : view.tags())
+      {
+        countDictionaryId(tagCounts, tagId);
+      }
+
+      for (auto const dictionaryId : view.customMetadata() | std::views::keys)
+      {
+        countDictionaryId(customKeyCounts, dictionaryId);
+      }
+    }
+
+    auto compress = [](std::span<std::uint32_t const> counts)
+    {
+      auto frequencies = std::vector<DictionaryFrequency>{};
+
+      for (std::size_t rawId = 1; rawId < counts.size(); ++rawId)
+      {
+        if (auto const frequency = counts[rawId]; frequency != 0)
         {
-          addValue(counts.at(fieldIndex(spec.field)), dictionary.getOrDefault(dictionaryIdForField(spec.field, view)));
+          frequencies.push_back(DictionaryFrequency{
+            .id = DictionaryId{static_cast<std::uint32_t>(rawId)},
+            .frequency = frequency,
+          });
         }
       }
+
+      return frequencies;
+    };
+
+    auto titleFrequencies = std::vector<VocabularyEntry>{};
+    titleFrequencies.reserve(titleCounts.size());
+
+    for (auto const& [value, frequency] : titleCounts)
+    {
+      titleFrequencies.push_back(VocabularyEntry{.value = value, .frequency = frequency});
     }
 
-    for (auto const& spec : kValueCompletionFields)
+    auto valueFrequencies = std::array<std::vector<DictionaryFrequency>, kTrackFieldCount>{};
+
+    for (auto const source : fieldSources)
     {
-      if (spec.coldStore == cold && _valueDirty.at(fieldIndex(spec.field)))
+      trackFieldArrayAt(valueFrequencies, source.field) = compress(trackFieldArrayAt(valueCounts, source.field));
+    }
+
+    _titleFrequencies = std::move(titleFrequencies);
+    _tagFrequencies = compress(tagCounts);
+    _customKeyFrequencies = compress(customKeyCounts);
+    _valueFrequencies = std::move(valueFrequencies);
+
+    _tags.clear();
+    _customKeys.clear();
+    _aggregateValues.clear();
+
+    for (auto& values : _values)
+    {
+      values.clear();
+    }
+
+    _tagsReady = false;
+    _customKeysReady = false;
+    _aggregateValuesReady = false;
+    _valuesReady.fill(false);
+    _snapshotDirty = false;
+  }
+
+  void CompletionService::materializeTags()
+  {
+    _tags = sortedDictionaryVocabulary(_tagFrequencies, _library.dictionary());
+    _tagsReady = true;
+  }
+
+  void CompletionService::materializeCustomKeys()
+  {
+    _customKeys = sortedDictionaryVocabulary(_customKeyFrequencies, _library.dictionary());
+    _customKeysReady = true;
+  }
+
+  void CompletionService::materializeValues(TrackField field)
+  {
+    trackFieldArrayAt(_values, field) =
+      sortedDictionaryVocabulary(trackFieldArrayAt(_valueFrequencies, field), _library.dictionary());
+    trackFieldArrayAt(_valuesReady, field) = true;
+  }
+
+  void CompletionService::materializeAggregateValues()
+  {
+    auto counts = OwnedValueFrequencies{};
+    counts.reserve(_library.dictionary().size());
+    auto dictionaryFrequencies = std::vector<std::uint32_t>(_library.dictionary().size() + 1);
+
+    for (auto const field : _aggregateFields)
+    {
+      if (field == TrackField::Title)
       {
-        auto const index = fieldIndex(spec.field);
-        _values.at(index) = sortedVocabulary(counts.at(index));
-        _valueDirty.at(index) = false;
+        for (auto const& entry : _titleFrequencies)
+        {
+          addValue(counts, entry.value, entry.frequency);
+        }
+
+        continue;
+      }
+
+      for (auto const& entry : trackFieldArrayAt(_valueFrequencies, field))
+      {
+        countDictionaryId(dictionaryFrequencies, entry.id, entry.frequency);
       }
     }
+
+    if (_aggregateIncludesTags)
+    {
+      for (auto const& entry : _tagFrequencies)
+      {
+        countDictionaryId(dictionaryFrequencies, entry.id, entry.frequency);
+      }
+    }
+
+    auto const& dictionary = _library.dictionary();
+
+    for (std::size_t rawId = 1; rawId < dictionaryFrequencies.size(); ++rawId)
+    {
+      if (auto const frequency = dictionaryFrequencies[rawId]; frequency != 0)
+      {
+        addValue(counts, dictionary.getOrDefault(DictionaryId{static_cast<std::uint32_t>(rawId)}), frequency);
+      }
+    }
+
+    auto values = std::vector<VocabularyEntry>{};
+    values.reserve(counts.size());
+
+    for (auto const& [value, frequency] : counts)
+    {
+      values.push_back(VocabularyEntry{.value = value, .frequency = frequency});
+    }
+
+    _aggregateValues = std::move(values);
+    _aggregateValuesReady = true;
   }
 } // namespace ao::rt

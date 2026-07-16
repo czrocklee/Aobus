@@ -6,8 +6,8 @@
 #include <ao/query/Completion.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
+#include <ao/query/FieldCatalog.h>
 #include <ao/query/Parser.h>
-#include <ao/query/detail/FieldCatalog.h>
 #include <ao/query/detail/FieldResolver.h>
 #include <ao/query/detail/Predicate.h>
 
@@ -68,10 +68,10 @@ namespace ao::query
       }
     }
 
-    bool hasExactAlias(detail::QueryVariableCompletionSpec const& spec, std::string_view prefix)
+    bool hasExactAlias(QueryVariableDescriptor const& descriptor, std::string_view prefix)
     {
       return std::ranges::any_of(
-        spec.aliases, [prefix](std::string_view alias) { return equalsInsensitive(alias, prefix); });
+        descriptor.aliases, [prefix](std::string_view alias) { return equalsInsensitive(alias, prefix); });
     }
 
     bool containsCanonical(std::span<QueryVariableCompletionMatch const> matches, std::string_view canonicalName)
@@ -638,54 +638,36 @@ namespace ao::query
   std::vector<QueryVariableCompletionMatch> completeQueryVariable(VariableType type, std::string_view prefix)
   {
     auto matches = std::vector<QueryVariableCompletionMatch>{};
-    auto const specs = detail::queryVariableCompletionSpecs(type);
+    auto const descriptors = queryVariableDescriptors(type);
 
-    for (auto const& spec : specs)
+    for (auto const& descriptor : descriptors)
     {
-      if (hasExactAlias(spec, prefix))
+      if (hasExactAlias(descriptor, prefix))
       {
         matches.push_back(QueryVariableCompletionMatch{
-          .type = spec.type,
-          .field = spec.field,
-          .canonicalName = spec.canonicalName,
+          .type = descriptor.type,
+          .field = descriptor.field,
+          .canonicalName = descriptor.canonicalName,
           .kind = QueryVariableCompletionMatchKind::ExactAlias,
         });
       }
     }
 
-    for (auto const& spec : specs)
+    for (auto const& descriptor : descriptors)
     {
-      if (startsWithInsensitive(spec.canonicalName, prefix) && !containsCanonical(matches, spec.canonicalName))
+      if (startsWithInsensitive(descriptor.canonicalName, prefix) &&
+          !containsCanonical(matches, descriptor.canonicalName))
       {
         matches.push_back(QueryVariableCompletionMatch{
-          .type = spec.type,
-          .field = spec.field,
-          .canonicalName = spec.canonicalName,
+          .type = descriptor.type,
+          .field = descriptor.field,
+          .canonicalName = descriptor.canonicalName,
           .kind = QueryVariableCompletionMatchKind::CanonicalPrefix,
         });
       }
     }
 
     return matches;
-  }
-
-  std::vector<QueryVariableSummary> queryVariableSummaries(VariableType type)
-  {
-    auto summaries = std::vector<QueryVariableSummary>{};
-    auto const specs = detail::queryVariableCompletionSpecs(type);
-    summaries.reserve(specs.size());
-
-    for (auto const& spec : specs)
-    {
-      summaries.push_back(QueryVariableSummary{
-        .type = spec.type,
-        .field = spec.field,
-        .canonicalName = spec.canonicalName,
-        .aliases = spec.aliases,
-      });
-    }
-
-    return summaries;
   }
 
   std::vector<std::string_view> completeQueryOperator(Field field, std::string_view prefix)

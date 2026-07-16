@@ -20,8 +20,8 @@ Runtime `FilterStatusChanged::pending` does not model real work.
 The current filter command synchronously acquires an ad-hoc source, compiles its expression, reads the complete upstream source, evaluates every required track, constructs a projection, and only then returns.
 Large libraries can block the interactive callback thread during quick filtering, Smart List opening, and preview rebuild.
 
-Quick-filter authoring also maintains a tolerant quote splitter and string-quoting implementation separate from the core query lexer and serializer.
-A term containing both quote styles is normalized by replacing double quotes with apostrophes, changing the requested search text; unmatched quotes are accepted without an explicit authoring result.
+Quick-filter authoring still maintains a tolerant quote splitter separate from the core query lexer.
+Generated system variables now use the core variable formatter, while tag variables and string constants use the core serializer, so terms containing both quote styles are preserved exactly, but unmatched quotes remain accepted without an explicit authoring result.
 
 Finally, GTK `SmartListDialog` constructs `SmartListEvaluator` and `SmartListSource` directly against `AppRuntime::musicLibrary()` for preview.
 That frontend seam duplicates runtime source composition and prevents one cancellation, revision, and stale-result policy from covering ordinary views and previews.
@@ -30,7 +30,7 @@ That frontend seam duplicates runtime source composition and prevents one cancel
 
 - Hard: [RFC 0009](0009-pure-expression-binding.md) supplies plan-owned symbols and explicit dictionary contexts required to complete worker-safe materialization.
 - Conditional: None.
-- Integration: [RFC 0008](0008-declarative-track-capability-bridge.md) may supply the quick-search field set without changing this RFC's command or execution protocol.
+- Integration: [RFC 0008](0008-declarative-track-capability-bridge.md) supplies typed field identities for the UIModel-owned quick-search field set without changing this RFC's command or execution protocol.
 
 ## Goals
 
@@ -113,8 +113,11 @@ It does not build expression strings with manual quote selection.
 Quoted term delimiters are removed only when a matching closing delimiter exists.
 Backslash and quote behavior is defined once by this authoring contract and covered with differential tests against `query::parse(query::serialize(ast))`.
 
+The current resolver already delegates system-variable formatting and tag-variable and string-constant encoding to the core query layer and has a mixed-quote regression.
+This proposal retains only the dedicated tokenizer, explicit authoring result, direct AST composition, and broader differential coverage.
+
 Expression-mode detection remains UIModel policy, not parser grammar.
-[RFC 0008](0008-declarative-track-capability-bridge.md) may later replace the hard-coded quick-search field set with declarative field capabilities without changing this command protocol.
+[RFC 0008](0008-declarative-track-capability-bridge.md) replaced the hard-coded source-variable strings with an explicit typed runtime-field list without changing this command protocol.
 
 ### Asynchronous materialization
 

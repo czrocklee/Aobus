@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/Expression.h>
+#include <ao/query/Field.h>
+#include <ao/query/FieldCatalog.h>
 #include <ao/rt/TrackField.h>
 
 #include <catch2/catch_message.hpp>
@@ -303,6 +306,7 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::TrackNumber) == "$trackNumber");
     CHECK(trackFieldFilterExpressionVariable(TrackField::TrackTotal) == "$trackTotal");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Duration) == "@duration");
+    CHECK(trackFieldFilterExpressionVariable(TrackField::Codec) == "@codec");
     CHECK(trackFieldFilterExpressionVariable(TrackField::SampleRate) == "@sampleRate");
     CHECK(trackFieldFilterExpressionVariable(TrackField::Channels) == "@channels");
     CHECK(trackFieldFilterExpressionVariable(TrackField::BitDepth) == "@bitDepth");
@@ -314,6 +318,7 @@ namespace ao::rt::test
     CHECK(supportsTrackFieldFilterExpression(TrackField::Artist));
     CHECK(supportsTrackFieldFilterExpression(TrackField::AlbumArtist));
     CHECK(supportsTrackFieldFilterExpression(TrackField::Duration));
+    CHECK(supportsTrackFieldFilterExpression(TrackField::Codec));
 
     CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::Tags));
     CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::TechnicalSummary));
@@ -338,10 +343,60 @@ namespace ao::rt::test
     CHECK_FALSE(supportsTrackFieldValueCompletion(TrackField::Tags));
   }
 
+  TEST_CASE("TrackField - typed query bridges are exhaustive and unique", "[runtime][unit][trackfield]")
+  {
+    auto const definitions = trackFieldDefinitions();
+
+    for (auto const type : {query::VariableType::Metadata, query::VariableType::Property})
+    {
+      for (auto const& descriptor : query::queryVariableDescriptors(type))
+      {
+        auto const optTrackField = trackFieldFromQueryField(descriptor.field);
+
+        if (descriptor.field == query::Field::CoverArtId)
+        {
+          CHECK_FALSE(optTrackField);
+          continue;
+        }
+
+        INFO("Missing runtime bridge for query variable: " << descriptor.canonicalName);
+        REQUIRE(optTrackField);
+        CHECK(trackFieldQueryField(*optTrackField) == descriptor.field);
+      }
+    }
+
+    for (auto const& definition : definitions)
+    {
+      INFO("Invalid query bridge for track field: " << definition.id);
+      CHECK(supportsTrackFieldFilterExpression(definition.field) == definition.optQueryField.has_value());
+      CHECK(supportsTrackFieldValueCompletion(definition.field) == definition.valueCompletion);
+
+      if (definition.valueCompletion)
+      {
+        REQUIRE(definition.optQueryField);
+        CHECK(query::isDictionaryField(*definition.optQueryField));
+      }
+
+      if (!definition.optQueryField)
+      {
+        CHECK(trackFieldFilterExpressionVariable(definition.field).empty());
+        continue;
+      }
+
+      CHECK(query::findQueryVariableDescriptor(*definition.optQueryField) != nullptr);
+      CHECK_FALSE(trackFieldFilterExpressionVariable(definition.field).empty());
+      CHECK(countIf(definitions,
+                    [&definition](TrackFieldDefinition const& candidate)
+                    { return candidate.optQueryField == definition.optQueryField; }) == 1);
+    }
+  }
+
   TEST_CASE("TrackField - helpers return empty values for invalid fields", "[runtime][unit][trackfield]")
   {
     auto const invalidField = static_cast<TrackField>(255);
     CHECK(trackFieldId(invalidField).empty());
+    CHECK_FALSE(trackFieldQueryField(invalidField));
     CHECK(trackFieldFilterExpressionVariable(invalidField).empty());
+    CHECK_FALSE(trackFieldFromQueryField(query::Field::Uri));
   }
 } // namespace ao::rt::test

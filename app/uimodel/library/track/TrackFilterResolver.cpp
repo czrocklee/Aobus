@@ -1,129 +1,64 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "TrackFilterPolicy.h"
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/trim.hpp>
+#include <gsl-lite/gsl-lite.hpp>
 
-#include <algorithm>
-#include <cctype>
+#include <array>
 #include <cstddef>
 #include <format>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::uimodel
 {
   namespace
   {
-    bool isExpressionLike(std::string_view value)
+    std::array<std::string, detail::kQuickFilterFields.size()> const& quickSearchVariables()
     {
-      return std::ranges::any_of(value,
-                                 [](char ch)
-                                 {
-                                   switch (ch)
-                                   {
-                                     case '$':
-                                     case '@':
-                                     case '#':
-                                     case '%':
-                                     case '=':
-                                     case '!':
-                                     case '<':
-                                     case '>':
-                                     case '~':
-                                     case '(':
-                                     case ')':
-                                     case '&':
-                                     case '|':
-                                     case '+': return true;
-                                     default: return false;
-                                   }
-                                 });
-    }
-
-    std::vector<std::string> splitQuickTerms(std::string_view value)
-    {
-      auto result = std::vector<std::string>{};
-      auto current = std::string{};
-      char quote = '\0';
-
-      for (auto const ch : value)
+      static auto const kVariables = []
       {
-        if (quote != '\0')
-        {
-          if (ch == quote)
-          {
-            quote = '\0';
-          }
-          else
-          {
-            current.push_back(ch);
-          }
+        auto variables = std::array<std::string, detail::kQuickFilterFields.size()>{};
 
-          continue;
+        for (std::size_t index = 0; index < detail::kQuickFilterFields.size(); ++index)
+        {
+          variables[index] = rt::trackFieldFilterExpressionVariable(detail::kQuickFilterFields[index]);
+          gsl_Assert(!variables[index].empty());
         }
 
-        if (ch == '\'' || ch == '"')
-        {
-          quote = ch;
-          continue;
-        }
+        return variables;
+      }();
 
-        if (std::isspace(static_cast<unsigned char>(ch)) != 0)
-        {
-          if (!current.empty())
-          {
-            result.push_back(std::move(current));
-            current.clear();
-          }
-
-          continue;
-        }
-
-        current.push_back(ch);
-      }
-
-      if (!current.empty())
-      {
-        result.push_back(std::move(current));
-      }
-
-      return result;
-    }
-
-    std::string quoteExpressionString(std::string_view value)
-    {
-      if (!value.contains('"'))
-      {
-        return std::format("\"{}\"", value);
-      }
-
-      if (!value.contains('\''))
-      {
-        return std::format("'{}'", value);
-      }
-
-      auto sanitized = std::string{value};
-      std::ranges::replace(sanitized, '"', '\'');
-      return std::format("\"{}\"", sanitized);
+      return kVariables;
     }
 
     std::string buildQuickTermExpression(std::string_view term)
     {
-      auto const quoted = quoteExpressionString(term);
-      auto expression = std::format("($title ~ {0} or $artist ~ {0} or $album ~ {0} or $albumArtist ~ {0} or $genre ~ "
-                                    "{0} or $composer ~ {0} or $work ~ {0})",
-                                    quoted);
+      auto const quoted = query::serialize(query::ConstantExpression{std::string{term}});
+      auto const& variables = quickSearchVariables();
+      auto expression = std::string{"("};
+
+      for (std::size_t index = 0; index < variables.size(); ++index)
+      {
+        if (index > 0)
+        {
+          expression += " or ";
+        }
+
+        expression += std::format("{} ~ {}", variables[index], quoted);
+      }
 
       auto const tagExpression =
         query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{term}});
-      expression.insert(expression.size() - 1, std::format(" or {}", tagExpression));
+      expression += std::format(" or {})", tagExpression);
 
       return expression;
     }
@@ -138,12 +73,12 @@ namespace ao::uimodel
       return ResolvedTrackFilter{};
     }
 
-    if (isExpressionLike(trimmed))
+    if (detail::isExplicitTrackFilterExpression(trimmed))
     {
       return ResolvedTrackFilter{.mode = TrackFilterMode::Expression, .expression = trimmed};
     }
 
-    auto const terms = splitQuickTerms(trimmed);
+    auto const terms = detail::splitQuickFilterTerms(trimmed);
 
     if (terms.empty())
     {

@@ -28,7 +28,8 @@ namespace ao::uimodel
    * Supports:
    * - Empty input (None)
    * - Quoted/multiple quick search terms (Quick)
-   * - Complex expressions starting with $ or @ (Expression)
+   * - Explicit expressions starting with a query variable, optionally after
+   *   parentheses or unary negation (Expression)
    */
   ResolvedTrackFilter resolveTrackFilterExpression(std::string_view rawFilter);
 } // namespace ao::uimodel

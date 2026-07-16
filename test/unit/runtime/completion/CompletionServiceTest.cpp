@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <span>
@@ -32,6 +33,13 @@ namespace ao::rt::test
         result.emplace_back(entry.value, entry.frequency);
       }
 
+      return result;
+    }
+
+    std::vector<std::pair<std::string, std::uint32_t>> sortedPairs(std::span<VocabularyEntry const> entries)
+    {
+      auto result = pairs(entries);
+      std::ranges::sort(result);
       return result;
     }
   } // namespace
@@ -149,6 +157,177 @@ namespace ao::rt::test
     CHECK(service.valuesFor(TrackField::Title).empty());
   }
 
+  TEST_CASE("CompletionService - aggregates selected live track values and tags",
+            "[runtime][unit][completion-vocabulary][aggregate]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrack(libraryFixture.library(),
+                            library::test::TrackSpec{.title = "Shared",
+                                                     .artist = "Shared",
+                                                     .album = "Excluded Album",
+                                                     .conductor = "Excluded Conductor",
+                                                     .work = "Selected Work",
+                                                     .tags = {"Shared", "Tag Only"}});
+    library::test::addTrack(libraryFixture.library(),
+                            library::test::TrackSpec{.title = "Other",
+                                                     .artist = "Shared",
+                                                     .album = "Another Excluded Album",
+                                                     .conductor = "Another Excluded Conductor",
+                                                     .work = "Selected Work",
+                                                     .tags = {"Tag Only"}});
+
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{libraryFixture.library(), changes};
+    constexpr auto kFields = std::to_array({TrackField::Work, TrackField::Artist, TrackField::Title});
+
+    CHECK(sortedPairs(service.aggregateValues({.fields = kFields, .includeTags = true})) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{
+            {"Other", 1},
+            {"Selected Work", 2},
+            {"Shared", 4},
+            {"Tag Only", 2},
+          });
+
+    constexpr auto kTitlesOnly = std::to_array({TrackField::Title});
+    CHECK(sortedPairs(service.aggregateValues({.fields = kTitlesOnly})) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{
+            {"Other", 1},
+            {"Shared", 1},
+          });
+  }
+
+  TEST_CASE("CompletionService - one library snapshot serves every live vocabulary",
+            "[runtime][unit][completion-vocabulary][cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    library::test::addTrack(libraryFixture.library(),
+                            library::test::TrackSpec{.title = "First Title",
+                                                     .artist = "First Artist",
+                                                     .work = "First Work",
+                                                     .tags = {"First Tag"},
+                                                     .customMetadata = {{"First Key", "Value"}}});
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{libraryFixture.library(), changes};
+    constexpr auto kAggregateFields = std::to_array({TrackField::Title, TrackField::Artist, TrackField::Work});
+
+    REQUIRE(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"First Tag", 1}});
+
+    // The fixture write intentionally bypasses LibraryChanges. Every other vocabulary must keep
+    // using the already-built snapshot until the committed change is published below.
+    auto const secondId =
+      library::test::addTrack(libraryFixture.library(),
+                              library::test::TrackSpec{.title = "Second Title",
+                                                       .artist = "Second Artist",
+                                                       .work = "Second Work",
+                                                       .tags = {"Second Tag"},
+                                                       .customMetadata = {{"Second Key", "Value"}}});
+
+    CHECK(pairs(service.customKeys()) == std::vector<std::pair<std::string, std::uint32_t>>{{"First Key", 1}});
+    CHECK(pairs(service.valuesFor(TrackField::Artist)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"First Artist", 1}});
+    CHECK(pairs(service.valuesFor(TrackField::Work)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"First Work", 1}});
+    CHECK(sortedPairs(service.aggregateValues({.fields = kAggregateFields, .includeTags = true})) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{
+            {"First Artist", 1},
+            {"First Tag", 1},
+            {"First Title", 1},
+            {"First Work", 1},
+          });
+
+    changes.publish(LibraryChangeSet{.libraryRevision = 1, .tracksInserted = {secondId}});
+
+    CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                     {"First Tag", 1},
+                                     {"Second Tag", 1},
+                                   });
+    CHECK(pairs(service.customKeys()) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                           {"First Key", 1},
+                                           {"Second Key", 1},
+                                         });
+    CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                            {"First Artist", 1},
+                                                            {"Second Artist", 1},
+                                                          });
+    CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
+                                                          {"First Work", 1},
+                                                          {"Second Work", 1},
+                                                        });
+    CHECK(sortedPairs(service.aggregateValues({.fields = kAggregateFields, .includeTags = true})) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{
+            {"First Artist", 1},
+            {"First Tag", 1},
+            {"First Title", 1},
+            {"First Work", 1},
+            {"Second Artist", 1},
+            {"Second Tag", 1},
+            {"Second Title", 1},
+            {"Second Work", 1},
+          });
+  }
+
+  TEST_CASE("CompletionService - invalidates aggregate values for every track change kind",
+            "[runtime][unit][completion-vocabulary][cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const originalId = library::test::addTrack(
+      libraryFixture.library(), library::test::TrackSpec{.title = "Original", .artist = "Original Artist"});
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
+    constexpr auto kFields = std::to_array({TrackField::Title, TrackField::Artist});
+    auto vocabulary = [&] { return sortedPairs(service.aggregateValues({.fields = kFields})); };
+
+    REQUIRE(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
+                              {"Original", 1},
+                              {"Original Artist", 1},
+                            });
+
+    SECTION("Insertion")
+    {
+      auto const insertedId = library::test::addTrack(
+        libraryFixture.library(), library::test::TrackSpec{.title = "Inserted", .artist = "Inserted Artist"});
+      changes.publish(LibraryChangeSet{.libraryRevision = 1, .tracksInserted = {insertedId}});
+
+      CHECK(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
+                              {"Inserted", 1},
+                              {"Inserted Artist", 1},
+                              {"Original", 1},
+                              {"Original Artist", 1},
+                            });
+    }
+
+    SECTION("Mutation")
+    {
+      REQUIRE(writer.updateMetadata(std::array{originalId}, MetadataPatch{.optTitle = "Changed"}));
+
+      CHECK(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
+                              {"Changed", 1},
+                              {"Original Artist", 1},
+                            });
+    }
+
+    SECTION("Deletion")
+    {
+      REQUIRE(writer.deleteTrack(originalId));
+      CHECK(vocabulary().empty());
+    }
+
+    SECTION("Library reset")
+    {
+      auto const insertedId = library::test::addTrack(
+        libraryFixture.library(), library::test::TrackSpec{.title = "Reset", .artist = "Reset Artist"});
+      changes.publish(LibraryChangeSet{.libraryRevision = 1, .libraryReset = true, .tracksInserted = {insertedId}});
+
+      CHECK(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
+                              {"Original", 1},
+                              {"Original Artist", 1},
+                              {"Reset", 1},
+                              {"Reset Artist", 1},
+                            });
+    }
+  }
+
   TEST_CASE("CompletionService - invalidates tag snapshots on track mutation",
             "[runtime][unit][completion-vocabulary][cache]")
   {
@@ -229,7 +408,96 @@ namespace ao::rt::test
                                                              });
   }
 
-  TEST_CASE("CompletionService - lazily rebuilds dirty value vocabularies",
+  TEST_CASE("CompletionService - deleting the last contributor removes every cached vocabulary value",
+            "[runtime][regression][completion-vocabulary]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = library::test::addTrack(libraryFixture.library(),
+                                                 library::test::TrackSpec{.title = "Only Track",
+                                                                          .artist = "Only Artist",
+                                                                          .album = "Only Album",
+                                                                          .albumArtist = "Only Album Artist",
+                                                                          .genre = "Only Genre",
+                                                                          .composer = "Only Composer",
+                                                                          .conductor = "Only Conductor",
+                                                                          .ensemble = "Only Ensemble",
+                                                                          .work = "Only Work",
+                                                                          .movement = "Only Movement",
+                                                                          .soloist = "Only Soloist",
+                                                                          .tags = {"Only Tag"},
+                                                                          .customMetadata = {{"Only Key", "Value"}}});
+
+    auto changes = LibraryChanges{};
+    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto service = CompletionService{libraryFixture.library(), changes};
+    constexpr auto kValueFields = std::to_array({TrackField::Artist,
+                                                 TrackField::Album,
+                                                 TrackField::AlbumArtist,
+                                                 TrackField::Genre,
+                                                 TrackField::Composer,
+                                                 TrackField::Conductor,
+                                                 TrackField::Ensemble,
+                                                 TrackField::Work,
+                                                 TrackField::Movement,
+                                                 TrackField::Soloist});
+
+    REQUIRE_FALSE(service.tags().empty());
+    REQUIRE_FALSE(service.customKeys().empty());
+
+    for (auto const field : kValueFields)
+    {
+      REQUIRE_FALSE(service.valuesFor(field).empty());
+    }
+
+    REQUIRE(writer.deleteTrack(trackId));
+
+    CHECK(service.tags().empty());
+    CHECK(service.customKeys().empty());
+
+    for (auto const field : kValueFields)
+    {
+      CHECK(service.valuesFor(field).empty());
+    }
+  }
+
+  TEST_CASE("CompletionService - insertion and reset changes invalidate every vocabulary kind",
+            "[runtime][unit][completion-vocabulary][cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = LibraryChanges{};
+    auto service = CompletionService{libraryFixture.library(), changes};
+
+    REQUIRE(service.tags().empty());
+    REQUIRE(service.customKeys().empty());
+    REQUIRE(service.valuesFor(TrackField::Artist).empty());
+    REQUIRE(service.valuesFor(TrackField::Work).empty());
+
+    auto const trackId = library::test::addTrack(libraryFixture.library(),
+                                                 library::test::TrackSpec{.title = "Added",
+                                                                          .artist = "Added Artist",
+                                                                          .work = "Added Work",
+                                                                          .tags = {"Added Tag"},
+                                                                          .customMetadata = {{"Added Key", "Value"}}});
+
+    SECTION("Track insertion")
+    {
+      changes.publish(LibraryChangeSet{.libraryRevision = 1, .tracksInserted = {trackId}});
+    }
+
+    SECTION("Library reset")
+    {
+      changes.publish(LibraryChangeSet{.libraryRevision = 1, .libraryReset = true});
+    }
+
+    CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Added Tag", 1}});
+    CHECK(pairs(service.customKeys()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Added Key", 1}});
+    CHECK(pairs(service.valuesFor(TrackField::Artist)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"Added Artist", 1}});
+    CHECK(pairs(service.valuesFor(TrackField::Work)) ==
+          std::vector<std::pair<std::string, std::uint32_t>>{{"Added Work", 1}});
+  }
+
+  TEST_CASE("CompletionService - lazily rebuilds one dirty snapshot before deriving field values",
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};

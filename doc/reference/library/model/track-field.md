@@ -58,7 +58,7 @@ Movement name and movement number intentionally map to the same `Movement` sort 
 | 18 | `Duration` | `duration` | Duration | Technical | Duration | `Duration` | `@duration` |
 | 19 | `Tags` | `tags` | Tags | Tag | TagList | — | — |
 | 20 | `FilePath` | `file-path` | File Path | Technical | FilePath | — | — |
-| 21 | `Codec` | `codec` | Codec | Technical | TechnicalText | — | — |
+| 21 | `Codec` | `codec` | Codec | Technical | TechnicalText | — | `@codec` |
 | 22 | `SampleRate` | `sample-rate` | Sample Rate | Technical | TechnicalText | — | `@sampleRate` |
 | 23 | `Channels` | `channels` | Channels | Technical | TechnicalText | — | `@channels` |
 | 24 | `BitDepth` | `bit-depth` | Bit Depth | Technical | TechnicalText | — | `@bitDepth` |
@@ -68,7 +68,6 @@ Movement name and movement number intentionally map to the same `Movement` sort 
 
 These fields are not editable and do not support metadata-value completion.
 Tags use dynamic `#name` variables rather than one fixed query-variable mapping.
-The core predicate language accepts `@codec`, but the runtime field catalog currently does not advertise a `Codec -> @codec` filter bridge.
 
 ### Synthetic fields
 
@@ -121,8 +120,11 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 - Field ids and enum values are unique.
 - A sortable field has a valid sort mapping, and a non-sortable field has none.
 - A groupable field has a valid group mapping, and a non-groupable field has none.
-- Every value-completable field is present in the runtime vocabulary service and vice versa.
-- An empty query-variable mapping means the application field cannot be converted directly into one fixed filter variable.
+- Every field carrying the value-completion flag has a resolvable typed bridge to a dictionary-backed query field; the runtime support predicate and vocabulary service enforce and derive the same set from those definitions.
+- An absent typed query-field mapping means the application field cannot be converted directly into one fixed filter variable.
+- Every typed runtime bridge resolves to one core `QueryVariableDescriptor`, and no two runtime fields claim the same scalar query field.
+- Every canonical core `$` or `@` query field has one runtime bridge except `$coverArt`, whose resource identity has no application `TrackField` counterpart.
+- Canonical query-variable text is derived from the core descriptor rather than stored as a second string in the runtime catalog.
 - `trackFieldFromId` is case-sensitive and returns no value for unknown, empty, or differently cased ids.
 - Invalid enum inputs to lookup helpers return empty or absent values rather than indexing the catalog.
 
@@ -132,7 +134,7 @@ Track-field ids appear in application-facing state and must not be renamed witho
 Enum raw values are serialized by current configuration surfaces; reordering or inserting values requires an explicit compatibility migration.
 
 Query-variable text is owned by the predicate language.
-Changing a mapping requires both catalogs and their tests to agree; it does not authorize a new query variable by itself.
+Changing a typed mapping requires both catalogs and their exhaustive tests to agree; it does not authorize a new query variable by itself.
 
 Adding a field requires coordinated decisions about persistence source, projection materialization, editing, sorting, grouping, completion, filtering, display formatting, and saved configuration.
 
@@ -140,6 +142,7 @@ Adding a field requires coordinated decisions about persistence source, projecti
 
 - `TrackField::Artist` is editable, sortable, groupable, value-completable, and maps to `$artist`.
 - `TrackField::MovementNumber` is editable and maps to `$movementNumber`, while its presentation sort key is `TrackSortField::Movement`.
+- `TrackField::Codec` maps to the existing `@codec` query variable without becoming value-completable.
 - `TrackField::Tags` is presentable but has no fixed query-variable bridge because each tag is a distinct `#name` predicate.
 - `TrackField::Quality` is a synthetic presentation field with no library edit or query mapping.
 
@@ -147,11 +150,12 @@ Adding a field requires coordinated decisions about persistence source, projecti
 
 - [`TrackField.h`](../../../../app/include/ao/rt/TrackField.h) defines enum and catalog shapes.
 - [`TrackField.cpp`](../../../../app/runtime/TrackField.cpp) defines every row and lookup helper.
-- [`CompletionService.cpp`](../../../../app/runtime/completion/CompletionService.cpp) defines storage-tier scans for the value-completable subset.
+- [`FieldCatalog.h`](../../../../include/ao/query/FieldCatalog.h) and [`FieldCatalog.cpp`](../../../../lib/query/FieldCatalog.cpp) define the core typed descriptors.
+- [`CompletionService.cpp`](../../../../app/runtime/completion/CompletionService.cpp) derives source-preserving dictionary-field frequencies and field materialization for the value-completable subset.
 
 ## Test authority
 
-- [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks catalog completeness, ids, labels, capabilities, mappings, and invalid lookup behavior.
+- [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks catalog completeness, ids, labels, capabilities, exhaustive typed mappings, and invalid lookup behavior.
 - [`TrackFieldPresentationPolicyTest.cpp`](../../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) ensures every presentable field has UIModel column policy.
 - [`CompletionServiceTest.cpp`](../../../../test/unit/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
 - [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects persisted field enum compatibility at the GTK boundary.

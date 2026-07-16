@@ -7,7 +7,8 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/detail/FieldCatalog.h>
+#include <ao/query/FieldCatalog.h>
+#include <ao/query/Serializer.h>
 #include <ao/query/detail/FieldResolver.h>
 
 #include <algorithm>
@@ -25,39 +26,31 @@ namespace ao::query::detail
 {
   namespace
   {
-    std::string variableText(VariableType type, std::string_view name)
-    {
-      auto text = std::string{};
-      text.push_back(variablePrefix(type));
-      text += name;
-      return text;
-    }
-
     std::string fieldListText(VariableType type)
     {
       auto result = std::string{};
 
-      for (auto const& spec : queryVariableCompletionSpecs(type))
+      for (auto const& descriptor : queryVariableDescriptors(type))
       {
         if (!result.empty())
         {
           result += ", ";
         }
 
-        result += variableText(type, spec.canonicalName);
+        result += variableDisplayName(type, descriptor.canonicalName);
 
-        if (!spec.aliases.empty())
+        if (!descriptor.aliases.empty())
         {
           result += " (";
 
-          for (std::size_t index = 0; index < spec.aliases.size(); ++index)
+          for (std::size_t index = 0; index < descriptor.aliases.size(); ++index)
           {
             if (index > 0)
             {
               result += ", ";
             }
 
-            result += variableText(type, spec.aliases[index]);
+            result += variableDisplayName(type, descriptor.aliases[index]);
           }
 
           result += ")";
@@ -109,7 +102,7 @@ namespace ao::query::detail
       auto bestDistance = std::numeric_limits<std::size_t>::max();
       auto bestName = std::string_view{};
 
-      for (auto const& spec : queryVariableCompletionSpecs(type))
+      for (auto const& descriptor : queryVariableDescriptors(type))
       {
         auto const check = [&](std::string_view candidate)
         {
@@ -118,13 +111,13 @@ namespace ao::query::detail
           if (distance < bestDistance)
           {
             bestDistance = distance;
-            bestName = spec.canonicalName;
+            bestName = descriptor.canonicalName;
           }
         };
 
-        check(spec.canonicalName);
+        check(descriptor.canonicalName);
 
-        for (auto const alias : spec.aliases)
+        for (auto const alias : descriptor.aliases)
         {
           check(alias);
         }
@@ -135,7 +128,7 @@ namespace ao::query::detail
         return {};
       }
 
-      return variableText(type, bestName);
+      return variableDisplayName(type, bestName);
     }
 
     std::string variableDomainName(VariableType type)
@@ -153,7 +146,7 @@ namespace ao::query::detail
 
     Error unknownFieldError(VariableType type, std::string_view name)
     {
-      auto message = std::format("unknown {} field '{}'", variableDomainName(type), variableText(type, name));
+      auto message = std::format("unknown {} field '{}'", variableDomainName(type), variableDisplayName(type, name));
 
       if (auto const suggestion = closestFieldSuggestion(type, name); !suggestion.empty())
       {
@@ -171,18 +164,18 @@ namespace ao::query::detail
     {
       case VariableType::Property:
       {
-        if (auto const* spec = findQueryVariableCompletionSpec(type, name); spec != nullptr)
+        if (auto const* descriptor = findQueryVariableDescriptor(type, name); descriptor != nullptr)
         {
-          return spec->field;
+          return descriptor->field;
         }
 
         return std::unexpected{unknownFieldError(type, name)};
       }
       case VariableType::Metadata:
       {
-        if (auto const* spec = findQueryVariableCompletionSpec(type, name); spec != nullptr)
+        if (auto const* descriptor = findQueryVariableDescriptor(type, name); descriptor != nullptr)
         {
-          return spec->field;
+          return descriptor->field;
         }
 
         return std::unexpected{unknownFieldError(type, name)};
@@ -207,9 +200,9 @@ namespace ao::query::detail
       case VariableType::Property:
       case VariableType::Metadata:
       {
-        if (auto const* spec = findQueryVariableCompletionSpec(type, name); spec != nullptr)
+        if (auto const* descriptor = findQueryVariableDescriptor(type, name); descriptor != nullptr)
         {
-          return spec->field;
+          return descriptor->field;
         }
 
         return std::nullopt;
@@ -289,32 +282,12 @@ namespace ao::query
 
   std::string_view fieldDisplayName(Field field)
   {
-    switch (field)
+    if (auto const* const descriptor = findQueryVariableDescriptor(field); descriptor != nullptr)
     {
-      case Field::Duration: return "duration";
-      case Field::Bitrate: return "bitrate";
-      case Field::SampleRate: return "sampleRate";
-      case Field::Channels: return "channels";
-      case Field::BitDepth: return "bitDepth";
-      case Field::Year: return "year";
-      case Field::TrackNumber: return "trackNumber";
-      case Field::TrackTotal: return "trackTotal";
-      case Field::DiscNumber: return "discNumber";
-      case Field::DiscTotal: return "discTotal";
-      case Field::MovementNumber: return "movementNumber";
-      case Field::MovementTotal: return "movementTotal";
-      case Field::ArtistId: return "artist";
-      case Field::AlbumId: return "album";
-      case Field::GenreId: return "genre";
-      case Field::AlbumArtistId: return "albumArtist";
-      case Field::ComposerId: return "composer";
-      case Field::ConductorId: return "conductor";
-      case Field::EnsembleId: return "ensemble";
-      case Field::WorkId: return "work";
-      case Field::MovementId: return "movement";
-      case Field::SoloistId: return "soloist";
-      default: return "field";
+      return descriptor->canonicalName;
     }
+
+    return "field";
   }
 
   char variablePrefix(VariableType type)
@@ -329,12 +302,23 @@ namespace ao::query
     }
   }
 
+  std::string variableDisplayName(VariableType const type, std::string_view const name)
+  {
+    if (type == VariableType::Tag || type == VariableType::Custom)
+    {
+      return serialize(VariableExpression{.type = type, .name = std::string{name}});
+    }
+
+    auto result = std::string{};
+    result.reserve(name.size() + 1);
+    result.push_back(variablePrefix(type));
+    result += name;
+    return result;
+  }
+
   std::string variableDisplayName(VariableExpression const& variable)
   {
-    auto name = std::string{};
-    name.push_back(variablePrefix(variable.type));
-    name += variable.name;
-    return name;
+    return variableDisplayName(variable.type, variable.name);
   }
 
   bool isHotDataRequired(AccessProfile profile)

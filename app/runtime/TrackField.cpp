@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/Field.h>
+#include <ao/query/FieldCatalog.h>
 #include <ao/rt/TrackField.h>
 
 #include <algorithm>
 #include <array>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace ao::rt
@@ -15,6 +18,7 @@ namespace ao::rt
   {
     using F = TrackField;
     using Cat = TrackFieldCategory;
+    using Q = query::Field;
     using Vk = TrackFieldValueKind;
 
     constexpr auto kDefinitions = std::to_array<TrackFieldDefinition>({
@@ -29,7 +33,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::Title,
-        .filterExpressionVariable = "$title",
+        .optQueryField = Q::Title,
       },
       {
         .field = F::Artist,
@@ -44,7 +48,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Artist,
         .optGroupKey = TrackGroupKey::Artist,
-        .filterExpressionVariable = "$artist",
+        .optQueryField = Q::ArtistId,
       },
       {
         .field = F::Album,
@@ -59,7 +63,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Album,
         .optGroupKey = TrackGroupKey::Album,
-        .filterExpressionVariable = "$album",
+        .optQueryField = Q::AlbumId,
       },
       {
         .field = F::AlbumArtist,
@@ -74,7 +78,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::AlbumArtist,
         .optGroupKey = TrackGroupKey::AlbumArtist,
-        .filterExpressionVariable = "$albumArtist",
+        .optQueryField = Q::AlbumArtistId,
       },
       {
         .field = F::Genre,
@@ -89,7 +93,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Genre,
         .optGroupKey = TrackGroupKey::Genre,
-        .filterExpressionVariable = "$genre",
+        .optQueryField = Q::GenreId,
       },
       {
         .field = F::Composer,
@@ -104,7 +108,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Composer,
         .optGroupKey = TrackGroupKey::Composer,
-        .filterExpressionVariable = "$composer",
+        .optQueryField = Q::ComposerId,
       },
       {
         .field = F::Conductor,
@@ -119,7 +123,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Conductor,
         .optGroupKey = TrackGroupKey::Conductor,
-        .filterExpressionVariable = "$conductor",
+        .optQueryField = Q::ConductorId,
       },
       {
         .field = F::Ensemble,
@@ -134,7 +138,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Ensemble,
         .optGroupKey = TrackGroupKey::Ensemble,
-        .filterExpressionVariable = "$ensemble",
+        .optQueryField = Q::EnsembleId,
       },
       {
         .field = F::Work,
@@ -149,7 +153,7 @@ namespace ao::rt
         .valueCompletion = true,
         .optSortField = TrackSortField::Work,
         .optGroupKey = TrackGroupKey::Work,
-        .filterExpressionVariable = "$work",
+        .optQueryField = Q::WorkId,
       },
       {
         .field = F::Movement,
@@ -163,7 +167,7 @@ namespace ao::rt
         .groupable = false,
         .valueCompletion = true,
         .optSortField = TrackSortField::Movement,
-        .filterExpressionVariable = "$movement",
+        .optQueryField = Q::MovementId,
       },
       {
         .field = F::Soloist,
@@ -177,7 +181,7 @@ namespace ao::rt
         .groupable = false,
         .valueCompletion = true,
         .optSortField = TrackSortField::Soloist,
-        .filterExpressionVariable = "$soloist",
+        .optQueryField = Q::SoloistId,
       },
       // --- Metadata: number ---
       {
@@ -192,7 +196,7 @@ namespace ao::rt
         .groupable = true,
         .optSortField = TrackSortField::Year,
         .optGroupKey = TrackGroupKey::Year,
-        .filterExpressionVariable = "$year",
+        .optQueryField = Q::Year,
       },
       {
         .field = F::DiscNumber,
@@ -204,7 +208,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::DiscNumber,
-        .filterExpressionVariable = "$discNumber",
+        .optQueryField = Q::DiscNumber,
       },
       {
         .field = F::DiscTotal,
@@ -214,7 +218,7 @@ namespace ao::rt
         .valueKind = Vk::Number,
         .presentable = true,
         .editable = true,
-        .filterExpressionVariable = "$discTotal",
+        .optQueryField = Q::DiscTotal,
       },
       {
         .field = F::TrackNumber,
@@ -226,7 +230,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::TrackNumber,
-        .filterExpressionVariable = "$trackNumber",
+        .optQueryField = Q::TrackNumber,
       },
       {
         .field = F::TrackTotal,
@@ -236,7 +240,7 @@ namespace ao::rt
         .valueKind = Vk::Number,
         .presentable = true,
         .editable = true,
-        .filterExpressionVariable = "$trackTotal",
+        .optQueryField = Q::TrackTotal,
       },
       {
         .field = F::MovementNumber,
@@ -248,7 +252,7 @@ namespace ao::rt
         .editable = true,
         .sortable = true,
         .optSortField = TrackSortField::Movement,
-        .filterExpressionVariable = "$movementNumber",
+        .optQueryField = Q::MovementNumber,
       },
       {
         .field = F::MovementTotal,
@@ -258,7 +262,7 @@ namespace ao::rt
         .valueKind = Vk::Number,
         .presentable = true,
         .editable = true,
-        .filterExpressionVariable = "$movementTotal",
+        .optQueryField = Q::MovementTotal,
       },
       // --- Duration ---
       {
@@ -270,7 +274,7 @@ namespace ao::rt
         .presentable = true,
         .sortable = true,
         .optSortField = TrackSortField::Duration,
-        .filterExpressionVariable = "@duration",
+        .optQueryField = Q::Duration,
       },
       // --- Tags ---
       {
@@ -297,6 +301,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
+        .optQueryField = Q::Codec,
       },
       {
         .field = F::SampleRate,
@@ -305,7 +310,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
-        .filterExpressionVariable = "@sampleRate",
+        .optQueryField = Q::SampleRate,
       },
       {
         .field = F::Channels,
@@ -314,7 +319,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
-        .filterExpressionVariable = "@channels",
+        .optQueryField = Q::Channels,
       },
       {
         .field = F::BitDepth,
@@ -323,7 +328,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
-        .filterExpressionVariable = "@bitDepth",
+        .optQueryField = Q::BitDepth,
       },
       {
         .field = F::Bitrate,
@@ -332,7 +337,7 @@ namespace ao::rt
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
-        .filterExpressionVariable = "@bitrate",
+        .optQueryField = Q::Bitrate,
       },
       {
         .field = F::FileSize,
@@ -381,6 +386,16 @@ namespace ao::rt
     });
 
     static_assert(kDefinitions.size() == kTrackFieldCount, "Track Field registry must match kTrackFieldCount");
+
+    query::QueryVariableDescriptor const* queryVariableDescriptor(TrackFieldDefinition const& definition)
+    {
+      if (!definition.optQueryField)
+      {
+        return nullptr;
+      }
+
+      return query::findQueryVariableDescriptor(*definition.optQueryField);
+    }
   } // namespace
 
   std::span<TrackFieldDefinition const> trackFieldDefinitions()
@@ -402,6 +417,15 @@ namespace ao::rt
     return it != kDefinitions.end() ? std::optional{it->field} : std::nullopt;
   }
 
+  std::optional<TrackField> trackFieldFromQueryField(query::Field field)
+  {
+    // NOLINTNEXTLINE(readability-qualified-auto) -- std::array iterator representations differ across libraries.
+    auto const iter = std::ranges::find_if(kDefinitions,
+                                           [field](TrackFieldDefinition const& definition)
+                                           { return definition.optQueryField && *definition.optQueryField == field; });
+    return iter != kDefinitions.end() ? std::optional{iter->field} : std::nullopt;
+  }
+
   std::string_view trackFieldId(TrackField field)
   {
     if (auto const* def = trackFieldDefinition(field); def != nullptr)
@@ -412,28 +436,51 @@ namespace ao::rt
     return {};
   }
 
-  std::string_view trackFieldFilterExpressionVariable(TrackField const field)
+  std::optional<query::Field> trackFieldQueryField(TrackField const field)
   {
     if (auto const* const def = trackFieldDefinition(field); def != nullptr)
     {
-      return def->filterExpressionVariable;
+      return def->optQueryField;
     }
 
-    return {};
+    return std::nullopt;
+  }
+
+  std::string trackFieldFilterExpressionVariable(TrackField const field)
+  {
+    auto const* const definition = trackFieldDefinition(field);
+
+    if (definition == nullptr)
+    {
+      return {};
+    }
+
+    auto const* const descriptor = queryVariableDescriptor(*definition);
+
+    if (descriptor == nullptr)
+    {
+      return {};
+    }
+
+    return query::variableDisplayName(descriptor->type, descriptor->canonicalName);
   }
 
   bool supportsTrackFieldFilterExpression(TrackField const field)
   {
-    return !trackFieldFilterExpressionVariable(field).empty();
+    auto const* const definition = trackFieldDefinition(field);
+    return definition != nullptr && queryVariableDescriptor(*definition) != nullptr;
   }
 
   bool supportsTrackFieldValueCompletion(TrackField const field)
   {
-    if (auto const* const def = trackFieldDefinition(field); def != nullptr)
+    auto const* const definition = trackFieldDefinition(field);
+
+    if (definition == nullptr || !definition->valueCompletion)
     {
-      return def->valueCompletion;
+      return false;
     }
 
-    return false;
+    auto const* const descriptor = queryVariableDescriptor(*definition);
+    return descriptor != nullptr && query::isDictionaryField(descriptor->field);
   }
 } // namespace ao::rt
