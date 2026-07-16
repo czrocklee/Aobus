@@ -54,7 +54,8 @@ These values describe structure, stable command identity, validation metadata, a
 The controller is the current GTK shell composition owner: it selects and loads a preset, owns the active layout session, component and action registries, runtime component state, layout host, editor workflow, stores, action export, and the borrowed collaborators used by factories.
 
 This is a broad current responsibility set, not a general-purpose runtime facade.
-Persistence calls in several editor and panel-size paths are log-only or void, so a rebuild can proceed without a coherent durable commit receipt; [RFC 0015](../rfc/0015-fail-closed-config-store.md) owns the proposed fail-closed store boundary.
+Persistence calls in several editor and panel-size paths remain log-only or void, so a rebuild can proceed without workflow-level durable acknowledgement.
+The underlying grouped store now provides a fail-closed one-shot replacement result; [RFC 0015](../rfc/0015-fail-closed-config-store.md) records why broader generic receipts and recovery were rejected.
 
 ### Component and action registries
 
@@ -157,7 +158,8 @@ Layout load runs on the shared worker pool and returns to the frontend callback 
 Unknown or recursive templates become error nodes.
 Unknown component types become visible layout-error widgets.
 Malformed custom layout or component-state files currently fall back or log according to their store; several save/remove operations do not return a complete commit outcome to the shell coordinator.
-Those current best-effort boundaries are documented by the shell specifications and persistence architecture, while RFC 0015 proposes stronger transaction semantics.
+Those current best-effort workflow boundaries are documented by the shell specifications and persistence architecture.
+The grouped store preserves the previous document on returned failure, while [RFC 0015](../rfc/0015-fail-closed-config-store.md) records the rejected broader transaction and receipt design.
 Authored layout version values are currently decoded without a supported-version gate, and file/model/template/widget construction has no shared product budget; [RFC 0025](../rfc/0025-bounded-shell-layout-documents.md) proposes one strict bounded candidate pipeline.
 
 During teardown the controller clears the host while runtime state, stores, registries, and borrowed dependencies are still alive.

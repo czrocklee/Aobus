@@ -109,8 +109,7 @@ namespace ao::gtk::test
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    REQUIRE(runtime.playbackSessionConfigStore().saveResult("playback-session", rt::AppSessionState{}));
-    REQUIRE(runtime.playbackSessionConfigStore().flush());
+    REQUIRE(runtime.playbackSessionConfigStore().save("playback-session", rt::AppSessionState{}));
 
     auto window = MainWindow{runtime, configStorePtr, nullptr};
     REQUIRE(window.prepareForLibrarySwitch());

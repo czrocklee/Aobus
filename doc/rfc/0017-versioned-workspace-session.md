@@ -44,12 +44,13 @@ The aggregate declarations and shared codec are currently the only exact authori
 ## Dependencies
 
 - Hard: [RFC 0016](0016-coherent-workspace-transactions.md) supplies the validated candidate-install boundary required for one atomic restored workspace revision.
-- Conditional: [RFC 0010](0010-versioned-presentation-state.md) blocks canonical version-1 emission of nested stable presentation identifiers, and [RFC 0015](0015-fail-closed-config-store.md) blocks activation of the canonical grouped-document commit and unsupported-version preservation phases.
+- Conditional: [RFC 0010](0010-versioned-presentation-state.md) blocks canonical version-1 emission of nested stable presentation identifiers.
 - Integration: [RFC 0013](0013-coherent-application-reporting-policy.md) defines user-visible dispositions for incompatible, corrupt, recovered, and unsaved workspace sessions.
 
 The semantic envelope, library binding, exact active-view reference, limits, and validation can be implemented before the conditional phases.
 Version-1 writes must not claim stable nested presentation encoding until RFC 0010's codec is available.
-The grouped `workspace` writer must not replace rejected or unsupported input until RFC 0015 provides candidate reads, blocked-store recovery, and result-bearing commits.
+The current grouped store already provides candidate reads and result-bearing whole-document commits.
+This RFC's workspace owner must retain unresolved schema state and suppress ordinary checkpoints because the generic store cannot infer that a syntactically valid group has an unsupported semantic version.
 
 ## Goals
 
@@ -218,7 +219,7 @@ Errors preserve typed storage, parse, schema, library, and view-preparation evid
 
 Save captures one canonical workspace revision and returns a commit receipt naming that revision.
 If the workspace advances while encoding or writing, the receipt acknowledges only the captured revision and the owner remains dirty for a newer checkpoint.
-RFC 0015 supplies the grouped-document generation and commit receipt for the canonical writer phase.
+The current grouped-store result proves one applied candidate replacement; this RFC owns correlation between that result and the captured workspace revision.
 
 Reporting policy under RFC 0013 decides which outcomes are silent first-run behavior, visible recovery, actionable incompatibility, or diagnostic-only preference loss.
 The codec and store never post notifications directly.
@@ -251,7 +252,7 @@ Replacing rejected input requires an explicit recovery choice owned by the appli
 - select the correct library;
 - retry after a transient store failure.
 
-Recovery uses RFC 0015's explicit blocked-document transaction when available.
+Recovery authorization belongs to the workspace-session owner and may use the current candidate save only after that explicit choice.
 Starting with defaults is not itself authorization to destroy the rejected session.
 
 ## Alternatives
@@ -303,7 +304,7 @@ Implementation proceeds in phases:
 3. Add successful outcome variants and rejected-session suppression so startup defaults cannot overwrite unresolved input.
 4. Implement candidate restore through RFC 0016 and remove implicit append behavior.
 5. Integrate RFC 0010's nested stable presentation codec and enable canonical version-1 encoding.
-6. Integrate RFC 0015's candidate read, grouped transaction, generation receipt, and explicit recovery before enabling ordinary version-1 checkpoints.
+6. Integrate the current candidate read/save boundary with workspace revision acknowledgement and explicit owner-controlled recovery before enabling ordinary version-1 checkpoints.
 7. Migrate preset mutation to stable-id identity and remove reflected workspace aggregate encoding.
 8. Add reporting dispositions and reset/export workflows, then remove temporary compatibility adapters.
 
@@ -346,7 +347,7 @@ If accepted and implemented, update the [workspace architecture](../architecture
 Replace current snapshot, restore, fallback, failure, observation, and versioning behavior in the [workspace session specification](../spec/workspace/session.md) phase by phase.
 Replace the unversioned field inventory in the [workspace session state reference](../reference/workspace/session-state.md) with the implemented versioned envelope, stable keys, UUID binding, limits, validation, canonical encoding, and any frozen legacy mapping.
 
-Update the [persistence and managed-state architecture](../architecture/persistence-and-managed-state.md), [grouped configuration store specification](../spec/persistence/config-store.md), and [application managed-state surface](../reference/persistence/application-config.md) when RFC 0015 supplies blocked-document recovery and revision-bearing commits.
+Update the [persistence and managed-state architecture](../architecture/persistence-and-managed-state.md), [grouped configuration store specification](../spec/persistence/config-store.md), and [application managed-state surface](../reference/persistence/application-config.md) only if workspace recovery adds a new generic persistence contract; otherwise keep unresolved-session state and revision acknowledgement with the workspace owner.
 Update presentation architecture/spec/reference owners when RFC 0010's stable nested codec is integrated; do not duplicate its field catalog in the workspace reference.
 Update library metadata reference only if workspace consumers need a new public library-identity accessor, not to redefine the UUID format.
 

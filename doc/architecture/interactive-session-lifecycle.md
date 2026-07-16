@@ -127,7 +127,8 @@ TUI exits its event loop, stops runtime work, and releases its single compositio
 
 GTK aborts active-library replacement when preparation cannot discard the old restorable playback session.
 Several current checkpoint paths remain best-effort or log-only, so successful preparation is not proof that every old payload became durable.
-[RFC 0015](../rfc/0015-fail-closed-config-store.md) proposes a fail-closed transaction boundary.
+The grouped store now makes each requested mutation a fail-closed one-shot replacement, but it does not add workflow acknowledgement.
+[RFC 0015](../rfc/0015-fail-closed-config-store.md) records why a generic transaction receipt and recovery state machine were rejected.
 
 GTK defers replacement until after the portal callback returns so a dialog callback does not synchronously destroy its own window and coordinator.
 A prepared old window cannot later overwrite the new global selection during hide or destruction.

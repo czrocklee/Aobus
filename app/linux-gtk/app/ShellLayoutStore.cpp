@@ -63,11 +63,10 @@ namespace ao::gtk
     auto const path = filePath(presetId);
 
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadWrite};
-    uimodel::saveLayout(store, "layout", doc);
 
-    if (auto const res = store.flush(); !res)
+    if (auto const res = uimodel::saveLayout(store, "layout", doc); !res)
     {
-      APP_LOG_ERROR("ShellLayoutStore: Failed to flush layout ({}): {}", path.string(), res.error().message);
+      APP_LOG_ERROR("ShellLayoutStore: Failed to save layout ({}): {}", path.string(), res.error().message);
     }
   }
 

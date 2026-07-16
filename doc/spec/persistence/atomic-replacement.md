@@ -210,7 +210,7 @@ No platform barrier receipt crosses into `ConfigStore` or frontend state owners.
 - [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) uses the private state-machine seam to inject normalization, parent, creation, partial-write, data-barrier, close, replacement, and cleanup failures; every pre-replacement case preserves the old target.
 - Real-filesystem sections protect creation, overwrite, empty and embedded-null payloads, POSIX mode `0600`, unwritable-parent failure, directory-target rejection, and successful temporary cleanup.
 - Native Windows sections protect the exact protected DACL, extended-length paths, distinct temporary names under concurrent different-target writes, final contents, and cleanup.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) proves that malformed YAML loading returns `FormatRejected`, preserves the caller's seeded object, and does not modify or automatically overwrite the original bytes.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) proves that malformed YAML returns `FormatRejected`, preserves seeded objects, and cannot be overwritten by an ordinary group save.
 - [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects integration through the other production caller.
 
 The private failure seam proves state effects rather than platform error text.
@@ -225,4 +225,4 @@ Native platform tests remain necessary because the seam does not emulate filesys
 - [Outcome channel specification](../failure/outcome-channel.md)
 - [RFC 0010: versioned presentation state](../../rfc/0010-versioned-presentation-state.md)
 - [RFC 0014: observable atomic replacement](../../rfc/0014-observable-atomic-replacement.md), rejected after this narrower hardening closed the verified integrity gaps
-- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md)
+- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md), rejected after candidate saves closed the destructive store paths without generic receipts or recovery

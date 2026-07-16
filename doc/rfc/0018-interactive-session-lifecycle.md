@@ -46,12 +46,12 @@ The frontends should supply platform resources and UI-local state, but they shou
 ## Dependencies
 
 - Hard: [RFC 0017](0017-versioned-workspace-session.md) supplies exact library-bound workspace restore outcomes and the unresolved-input protection required by this lifecycle.
-- Conditional: [RFC 0005](0005-coherent-playback-boundary.md) blocks migration of playback startup, restore, checkpoint, and quiescence to one coherent lifecycle port, and [RFC 0015](0015-fail-closed-config-store.md) blocks the final result-bearing managed-state checkpoint and retry phases.
+- Conditional: [RFC 0005](0005-coherent-playback-boundary.md) blocks migration of playback startup, restore, checkpoint, and quiescence to one coherent lifecycle port.
 - Integration: [RFC 0010](0010-versioned-presentation-state.md), [RFC 0013](0013-coherent-application-reporting-policy.md).
 
 The lifecycle state machine and frontend convergence can begin with adapters over current playback and store APIs.
 The final playback role cannot be declared coherent while callers still coordinate transport and succession through separate public services.
-The final checkpoint receipt cannot claim applied grouped commits while workspace and GTK stores still use void save-plus-flush wrappers.
+The final checkpoint receipt cannot claim applied grouped commits while workspace and GTK semantic wrappers still hide the current store's result behind void/log-only APIs.
 
 ## Goals
 
@@ -231,8 +231,8 @@ No cross-file atomicity is claimed.
 If workspace commits and playback fails, the receipt says so and playback remains dirty for retry.
 Shutdown and switching policy decides which component failures block transition.
 
-RFC 0015 supplies candidate grouped transactions and document generations.
-Those receipts inherit the current atomic replacement boundary: a returned error is pre-replacement, while success records an applied platform replacement without stronger power-loss evidence.
+The current grouped store supplies candidate-isolated whole-document saves.
+Lifecycle receipts correlate those results with captured semantic revisions; they inherit the atomic replacement boundary in which a returned error is pre-replacement and success records an applied platform replacement without stronger power-loss evidence.
 
 ### Degraded state and recovery
 
@@ -332,7 +332,7 @@ Implementation proceeds in phases:
 3. Move workspace bootstrap, exact presentation precedence, and default-view creation into the lifecycle using RFC 0017 and RFC 0016.
 4. Migrate TUI to the same start path and add managed versus ephemeral session behavior tests.
 5. Add checkpoint operation ids, captured revisions, coalescing, unresolved-input suppression, and per-component receipts.
-6. Integrate RFC 0015 writers and RFC 0013 dispositions, then remove void/log-only lifecycle save paths.
+6. Expose current store results through semantic writers, integrate RFC 0013 dispositions, and remove void/log-only lifecycle save paths.
 7. Integrate RFC 0005's coherent playback lifecycle role and remove composition-root use of internal playback services.
 8. Move GTK and TUI teardown to explicit lifecycle shutdown and add admission/quiescence guardrails.
 9. Remove legacy `initializeSession()`, direct workspace/playback restore orchestration, and frontend async stop/join sequences.
@@ -385,5 +385,5 @@ Update the [GTK active-library lifecycle specification](../spec/linux-gtk/active
 Add or update TUI lifecycle documentation with managed and ephemeral behavior.
 Update presentation specifications with the accepted restored-view/default precedence and keep exact persisted stable ids in RFC 0010's promoted reference.
 
-Update persistence and reporting documents when RFC 0015 and RFC 0013 outcomes cross this lifecycle.
+Update persistence and reporting documents when new lifecycle acknowledgement and RFC 0013 outcomes cross their current boundaries.
 Record an ADR if explicit degraded readiness, presentation precedence, or lifecycle ownership is accepted as a durable architectural choice.

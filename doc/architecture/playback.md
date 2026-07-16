@@ -222,7 +222,7 @@ Save and restore coordinate the two application authorities:
 Sequence persistence intent + transport persistence intent
   -> PlaybackSessionPersistence captures both snapshots
   -> reject mismatched current subjects
-  -> ConfigStore save/flush with composite revision acknowledgement
+  -> ConfigStore candidate save with composite revision acknowledgement
 
 stored payload
   -> validate against storage and format
@@ -275,7 +275,7 @@ Player is the intentional bridge between the callback-executor domain and the th
 Engine is the intentional bridge between serialized control and the dedicated event, decode, and render domains.
 The Engine control domain is a synchronization domain, not a dedicated control thread: public control calls execute synchronously on their caller and are serialized internally.
 Through Player the caller is normally the runtime callback executor, so current track opening, source construction, preroll, and route activation performed during staging remain on that synchronous call path; only later event delivery, streaming decode, and rendering use dedicated threads.
-Playback-session timers sleep outside the callback executor, but snapshot construction and `ConfigStore` save/flush run synchronously after resuming on it.
+Playback-session timers sleep outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
 
 Runtime playback signals are delivered synchronously within the callback domain.
 PlaybackService batches outbound events and rejects ordinary transport mutation while a batch is draining; sequence-owned collaboration uses a narrow grant, while Sequence separately guards accepted starts, session installation, restore, and observer publication.
@@ -297,7 +297,7 @@ These guards contain reentrant commands but do not create a third transaction ex
 - Decoder and backend implementations remain replaceable without changing succession or session-persistence policy.
 - Persisted listening intent contains application semantics, not transient projections, prepared handles, audio generations, or thread state.
 - A coherent durable session requires matching sequence and transport current subjects; persistence reports an invariant failure rather than persisting split generations.
-- Synchronous callback-executor work includes current audio preflight and configuration flush, so it remains part of interactive latency even though steady-state decode and render are off-thread.
+- Synchronous callback-executor work includes current audio preflight and configuration save, so it remains part of interactive latency even though steady-state decode and render are off-thread.
 
 ## Failure, cancellation, and lifetime boundaries
 

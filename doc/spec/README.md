@@ -35,7 +35,7 @@ Use the [specification template](../template/spec.md).
 ## Persistence
 
 - [Reusable YAML adapter](persistence/yaml-adapter.md) defines RapidYAML callback containment, parsing, arena lifetime, file reading, node helpers, and scalar conversion.
-- [Grouped configuration store](persistence/config-store.md) defines lazy whole-file loading, grouped decode modes, mutation, flush, failure, and concurrency behavior.
+- [Grouped configuration store](persistence/config-store.md) defines lazy whole-file loading, candidate decoding, atomic group saves and removals, failure, and concurrency behavior.
 - [Atomic file replacement](persistence/atomic-replacement.md) defines complete temporary writes, data barriers, replacement, permissions, cleanup, and platform failure behavior.
 
 ## Library

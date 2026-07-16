@@ -4,7 +4,7 @@ type: rfc
 status: draft
 domain: linux-gtk
 summary: Proposes a transactional active-library host with canonical location identity, prepared runtime candidates, rollback-safe activation, and library-bound sessions.
-depends-on: rfc.0015.fail-closed-config-store, rfc.0018.interactive-session-lifecycle
+depends-on: rfc.0018.interactive-session-lifecycle
 ---
 # RFC 0019: Transactional active-library switching
 
@@ -24,9 +24,9 @@ The current different-root sequence is:
 The old graph is gone and its playback session has been discarded before the new runtime, database, workspace, views, playback stack, window, and subscriptions are known to be viable.
 An exception or initialization failure after old-pair destruction can leave no active window, a global path that may name the failed candidate, and no automatic route back to the previously working library.
 
-Global selection persistence has no commit outcome.
-`AppConfigStore::saveAppSession()` currently participates in the void save-plus-flush family tracked by RFC 0015.
-The switch proceeds without knowing whether the selected path became visible or durable, and a later old-window callback is prevented only by one local `librarySwitchPrepared` boolean.
+Global selection persistence has no caller-visible commit outcome.
+`AppConfigStore::saveAppSession()` calls the current fail-closed `ConfigStore::save()` operation but logs its result behind a void wrapper.
+The switch therefore proceeds without knowing whether the selected path was replaced successfully, and a later old-window callback is prevented only by one local `librarySwitchPrepared` boolean.
 
 Location identity is inconsistent.
 An Open Library selection becomes an absolute lexically normalized path, while startup accepts the saved path when `exists()` is true without requiring a directory or applying the same normalization.
@@ -56,12 +56,13 @@ The application has no explicit `NoLibrarySelected` or ephemeral-bootstrap ident
 
 ## Dependencies
 
-- Hard: [RFC 0015](0015-fail-closed-config-store.md) supplies the result-bearing global selection transaction, and [RFC 0018](0018-interactive-session-lifecycle.md) supplies prepared startup, checkpoint, quiescence, activation, and shutdown receipts for each runtime candidate.
+- Hard: [RFC 0018](0018-interactive-session-lifecycle.md) supplies prepared startup, checkpoint, quiescence, activation, and shutdown receipts for each runtime candidate.
 - Conditional: None.
 - Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0013](0013-coherent-application-reporting-policy.md).
 
 RFC 0005's playback owner must align session binding and activation so a candidate cannot restore another library's succession state.
 RFC 0013 owns switch progress, rejection, rollback, degraded activation, and checkpoint reporting dispositions.
+The current [grouped configuration store](../spec/persistence/config-store.md) already supplies candidate-isolated, result-bearing whole-document replacement; this RFC must expose that result through the global selection owner and correlate it with the host request rather than requiring a store-generation protocol.
 The current [atomic replacement contract](../spec/persistence/atomic-replacement.md) makes a returned error pre-replacement and a successful platform replacement applied, without claiming absolute power-loss durability.
 
 ## Goals
@@ -72,7 +73,7 @@ The current [atomic replacement contract](../spec/persistence/atomic-replacement
 - Reuse the active pair for an equivalent physical location and replace it for a genuinely different selected root.
 - Bind global selection and restorable sessions to the opened library UUID.
 - Make every fallible candidate step occur before one no-fail in-memory activation commit.
-- Commit global selected-library state through a result-bearing generation transaction before activation.
+- Commit global selected-library state through a result-bearing host command before activation.
 - Resume the old pair when candidate preparation or pre-activation persistence fails.
 - Prevent stale portal, idle, window, and shutdown callbacks from mutating a newer active selection.
 - Preserve each library's restorable playback intent instead of destructively deleting another library's session.
@@ -202,10 +203,10 @@ If preparation fails, candidate resources are released and the old pair remains 
 
 ### Global selection transaction
 
-Global selected-library state is one semantic group transaction under RFC 0015.
-It writes the canonical location, expected library UUID, and any active-selection generation needed to reject stale saves.
+Global selected-library state is one semantic group commit through the current candidate-isolated `ConfigStore::save()` boundary.
+It writes the canonical location, expected library UUID, and any active-selection request identity needed for diagnostics and restore validation.
 
-The transaction compares the host's captured selection generation before commit.
+The serialized host compares its captured selection generation before invoking the synchronous store commit.
 A stale request cannot overwrite a newer selection merely because its delayed file operation completes.
 
 Pre-replacement failure keeps the old global selection and resumes the old pair.
@@ -341,7 +342,7 @@ Implementation proceeds in phases:
 3. Unify startup and Open Library location resolution with canonical/equivalent identity plus saved library UUID verification.
 4. Add prepared candidates while retaining the old pair; initially keep current global-save ordering behind a test adapter.
 5. Integrate RFC 0018 candidate startup, replacement preparation, resume, activation, and shutdown gates.
-6. Integrate RFC 0015 global selection transactions and generation receipts, then make the active-slot swap no-fail after selection application.
+6. Make `AppConfigStore` return the current candidate-save result, correlate it with the host generation, and make the active-slot swap no-fail after selection application.
 7. Bind playback sessions by library UUID with RFC 0005 and remove destructive pre-switch discard.
 8. Introduce explicit `NoLibrary` or ephemeral-bootstrap state and stop persisting the temporary fallback root.
 9. Add RFC 0013 reporting dispositions.
@@ -391,7 +392,7 @@ Add an exact active-library host runtime surface reference if switch states, rec
 
 Update the [application managed-state surface](../reference/persistence/application-config.md) with canonical location, expected library UUID, selection generation, and any legacy path migration after implementation.
 Update the [managed file locations reference](../reference/persistence/location.md) if playback sessions or ephemeral bootstrap paths move.
-Update persistence architecture/specification owners with RFC 0015's global selection transaction and the current atomic replacement boundary.
+Update persistence architecture/specification owners only if active-library selection adds a new semantic command above the current candidate-save and atomic-replacement boundaries.
 
 Update playback architecture, session specifications, and format reference with library-bound session association when implemented with RFC 0005.
 Update RFC 0018's promoted lifecycle specification with candidate preparation, resume, activation, and shutdown gates.

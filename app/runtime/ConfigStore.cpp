@@ -8,12 +8,15 @@
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <cassert>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 
 namespace ao::rt
@@ -21,19 +24,6 @@ namespace ao::rt
   ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode)
     : _filePath{std::move(filePath)}, _yamlErrorState{_filePath.string()}, _mode{mode}
   {
-  }
-
-  Result<> ConfigStore::flush()
-  {
-    if (_mode == OpenMode::ReadOnly)
-    {
-      throwException<Exception>("flush() called on ReadOnly ConfigStore");
-    }
-
-    APP_LOG_INFO("Saving config to: {}", _filePath.string());
-
-    auto const yaml = ryml::emitrs_yaml<std::string>(_root);
-    return utility::writeAtomically(_filePath, yaml);
   }
 
   Result<bool> ConfigStore::contains(std::string_view const group)
@@ -46,33 +36,26 @@ namespace ao::rt
     return _root.is_map(0) && _root.rootref()[yaml::toCsubstr(group)].readable();
   }
 
-  Result<bool> ConfigStore::removeGroup(std::string_view const group)
+  Result<> ConfigStore::removeGroup(std::string_view const group)
   {
-    if (_mode == OpenMode::ReadOnly)
+    auto candidateResult = prepareWriteCandidate();
+
+    if (!candidateResult)
     {
-      throwException<Exception>("removeGroup() called on ReadOnly ConfigStore");
+      return std::unexpected{candidateResult.error()};
     }
 
-    if (auto const loaded = ensureLoaded(); !loaded)
-    {
-      return std::unexpected{loaded.error()};
-    }
-
-    if (!_root.is_map(0))
-    {
-      return false;
-    }
-
+    auto candidate = std::move(*candidateResult);
     auto const groupName = yaml::toCsubstr(group);
-    auto root = _root.rootref();
+    auto root = candidate.rootref();
 
     if (!root[groupName].readable())
     {
-      return false;
+      return {};
     }
 
     root.remove_child(groupName);
-    return true;
+    return commitCandidate(std::move(candidate));
   }
 
   Result<> ConfigStore::ensureLoaded()
@@ -110,12 +93,12 @@ namespace ao::rt
       return std::unexpected{bufferResult.error()};
     }
 
-    _inputBuffer = std::move(*bufferResult);
+    auto inputBuffer = std::move(*bufferResult);
+    auto root = ryml::Tree{yaml::callbacks(_yamlErrorState)};
 
     try
     {
-      _root = ryml::Tree{yaml::callbacks(_yamlErrorState)};
-      yaml::parseInPlace(_root, _inputBuffer, _yamlErrorState);
+      yaml::parseInPlace(root, inputBuffer, _yamlErrorState);
     }
     catch (std::exception const& e)
     {
@@ -123,7 +106,50 @@ namespace ao::rt
         Error::Code::FormatRejected, std::format("Failed to parse config file '{}': {}", _filePath.string(), e.what()));
     }
 
+    if (!root.is_map(0))
+    {
+      return makeError(Error::Code::FormatRejected,
+                       std::format("Config file '{}' does not contain a top-level mapping", _filePath.string()));
+    }
+
+    _inputBuffer = std::move(inputBuffer);
+    _root = std::move(root);
     _loaded = true;
+    return {};
+  }
+
+  Result<ryml::Tree> ConfigStore::prepareWriteCandidate()
+  {
+    if (_mode == OpenMode::ReadOnly)
+    {
+      throwException<Exception>("write called on ReadOnly ConfigStore");
+    }
+
+    if (auto const loaded = ensureLoaded(); !loaded)
+    {
+      return std::unexpected{loaded.error()};
+    }
+
+    assert(_root.is_map(0) && "Successful ConfigStore initialization must establish a top-level mapping");
+
+    // The complete-tree snapshot isolates encoding failures until atomic replacement succeeds.
+    return _root;
+  }
+
+  Result<> ConfigStore::commitCandidate(ryml::Tree&& candidate)
+  {
+    static_assert(std::is_nothrow_move_assignable_v<ryml::Tree>);
+
+    APP_LOG_INFO("Saving config to: {}", _filePath.string());
+
+    auto const yaml = ryml::emitrs_yaml<std::string>(candidate);
+
+    if (auto const written = utility::writeAtomically(_filePath, yaml); !written)
+    {
+      return written;
+    }
+
+    _root = std::move(candidate);
     return {};
   }
 } // namespace ao::rt

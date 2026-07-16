@@ -262,8 +262,8 @@ namespace ao::uimodel
     return store.load(group, doc);
   }
 
-  void saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc)
+  Result<> saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc)
   {
-    store.save(group, doc);
+    return store.save(group, doc);
   }
 } // namespace ao::uimodel

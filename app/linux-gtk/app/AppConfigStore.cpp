@@ -36,11 +36,9 @@ namespace ao::gtk
 
   void AppConfigStore::saveWindow(WindowState const& state)
   {
-    _storePtr->save("window", state);
-
-    if (auto const res = _storePtr->flush(); !res)
+    if (auto const res = _storePtr->save("window", state); !res)
     {
-      APP_LOG_ERROR("AppConfigStore: Failed to flush window config: {}", res.error().message);
+      APP_LOG_ERROR("AppConfigStore: Failed to save window config: {}", res.error().message);
     }
   }
 
@@ -54,11 +52,9 @@ namespace ao::gtk
 
   void AppConfigStore::saveAppPrefs(rt::AppPrefsState const& state)
   {
-    _storePtr->save("runtime", state);
-
-    if (auto const res = _storePtr->flush(); !res)
+    if (auto const res = _storePtr->save("runtime", state); !res)
     {
-      APP_LOG_ERROR("AppConfigStore: Failed to flush app prefs: {}", res.error().message);
+      APP_LOG_ERROR("AppConfigStore: Failed to save app prefs: {}", res.error().message);
     }
   }
 
@@ -72,11 +68,9 @@ namespace ao::gtk
 
   void AppConfigStore::saveAppSession(rt::AppSessionState const& state)
   {
-    _storePtr->save("session", state);
-
-    if (auto const res = _storePtr->flush(); !res)
+    if (auto const res = _storePtr->save("session", state); !res)
     {
-      APP_LOG_ERROR("AppConfigStore: Failed to flush app session: {}", res.error().message);
+      APP_LOG_ERROR("AppConfigStore: Failed to save app session: {}", res.error().message);
     }
   }
 

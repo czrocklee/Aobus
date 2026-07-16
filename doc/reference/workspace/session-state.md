@@ -125,8 +125,9 @@ Consequently:
 - `activeListId` cannot distinguish two restored views over the same base list beyond the current focus-selection heuristic.
 
 [RFC 0010](../../rfc/0010-versioned-presentation-state.md) proposes a versioned presentation-state codec and migration boundary.
-[RFC 0015](../../rfc/0015-fail-closed-config-store.md) proposes result-bearing grouped transactions.
-[RFC 0017](../../rfc/0017-versioned-workspace-session.md) proposes a library-bound root envelope, exact session-local active-view identity, bounded strict validation, and integration with both proposals; none changes this current reference until implemented.
+The current grouped store uses a result-bearing one-shot candidate save, while `WorkspaceService` still classifies save failure through logging.
+[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why the larger generic transaction, recovery, and receipt system was rejected.
+[RFC 0017](../../rfc/0017-versioned-workspace-session.md) proposes a library-bound root envelope, exact session-local active-view identity, bounded strict validation, and integration with RFC 0010; neither proposal changes this current reference until implemented.
 
 ## Examples
 

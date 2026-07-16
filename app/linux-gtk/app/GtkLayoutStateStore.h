@@ -38,7 +38,7 @@ namespace ao::gtk
     void load(uimodel::TrackColumnLayoutState& layoutState, uimodel::ListPresentationPreferenceState& prefState) const;
 
     /**
-     * @brief Save the layout state to disk and flush.
+     * @brief Save the layout state to disk.
      */
     void save(uimodel::TrackColumnLayoutState const& layoutState,
               uimodel::ListPresentationPreferenceState const& prefState);

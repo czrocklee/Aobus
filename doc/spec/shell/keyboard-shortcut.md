@@ -53,7 +53,7 @@ GTK application accelerator state is a platform projection of the current effect
 The preferences keyboard page enumerates eligible actions from `LayoutActionCatalog` and edits live.
 When a requested chord belongs to another action, the GTK editor names the current owner and asks for Reassign or Cancel.
 Reassign removes the old binding and adds the new one; cancel changes neither action.
-Every accepted add, remove, reset, or reassignment persists the delta and reapplies accelerators immediately.
+Every accepted add, remove, reset, or reassignment reapplies accelerators immediately and requests persistence of the delta.
 
 GTK application first clears `win.*` accelerator descriptions absent from the new mapping, then translates and applies the effective chords for each action.
 This reconciliation prevents removed or reset shortcuts from remaining active until restart.
@@ -65,7 +65,9 @@ Neutral keys that cannot map to GTK accelerators are skipped with a warning.
 Unknown action ids are reportable by the model and cannot become valid catalog-backed editor rows.
 
 The editor never silently steals a conflicting binding.
-Persistence currently uses application configuration's best-effort save wrapper, so a live accelerator update can precede proof of durable storage; the persistence architecture and RFC 0015 own that limitation.
+The grouped store makes each requested save a fail-closed complete-document replacement, but the application wrapper reports failure only through logging.
+A live accelerator update can therefore precede proof of durable storage; this workflow-level acknowledgement and reporting policy remains owned by the shell rather than the generic store.
+[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why a generic commit-receipt system was rejected.
 
 Shortcut operations are synchronous and expose no cancellation.
 The transient capture popup defers self-destruction through an idle callback whose connection is cancelled by its destructor.

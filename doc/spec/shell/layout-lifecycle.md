@@ -107,7 +107,9 @@ Invalid stateful ids are diagnosed; duplicate stateful ids block editor save, wh
 
 Load work observes the shell lifetime stop token at executor transitions.
 Component construction and rebuild are callback-executor GTK operations and have no independent cancellation point.
-Current layout save and several state mutations report only through logging or booleans; RFC 0015 proposes coherent result-bearing persistence transactions.
+The grouped store now makes each effective mutation a result-bearing fail-closed replacement, but layout and component-state wrappers still classify several outcomes only through logging or booleans.
+The store preserves its prior live document and backing bytes on a returned failure; workflow-level save acknowledgement remains a shell concern.
+[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why a larger generic receipt and recovery system was rejected.
 
 ## Persistence and versioning
 

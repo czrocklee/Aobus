@@ -599,11 +599,9 @@ namespace ao::rt
                                                     .optPresentation = viewState.presentation});
     }
 
-    store.save("workspace", state);
-
-    if (auto const res = store.flush(); !res)
+    if (auto const res = store.save("workspace", state); !res)
     {
-      APP_LOG_ERROR("WorkspaceService: Failed to flush session - {}", res.error().message);
+      APP_LOG_ERROR("WorkspaceService: Failed to save session - {}", res.error().message);
     }
   }
 

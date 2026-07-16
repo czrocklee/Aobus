@@ -109,17 +109,17 @@ Observer exceptions are logged and do not stop other persistence behavior.
 Ordinary dirty state schedules a one-second debounce.
 Significant events request immediate checkpoint through the same save state machine.
 
-Save writes the exact payload through result-bearing `ConfigStore::saveResult` and flushes.
+Save writes the exact payload through one result-bearing `ConfigStore::save` candidate commit.
 Only complete success acknowledges the captured revision and resets retry delay.
-Load, encode, save, or flush failure keeps dirty and schedules bounded exponential retry even while paused.
+Load, encode, emission, or replacement failure keeps dirty and schedules bounded exponential retry even while paused.
 
 Periodic and shutdown checkpoints are safety nets, not the only route to durability.
 Frontends start, restore/checkpoint, and shut down the owner but do not implement the timer policy.
 
 ### Discard
 
-Discard removes the `playback-session` group and flushes.
-Only after both succeed does it clear succession/transport restorable snapshots and enter discarded state.
+Discard atomically removes the `playback-session` group through `ConfigStore`.
+Only after removal succeeds does it clear succession/transport restorable snapshots and enter discarded state.
 Periodic saves remain no-ops while discarded until a later discrete active-session mutation establishes new dirty intent.
 
 ## Failure and cancellation

@@ -25,7 +25,7 @@ namespace ao::uimodel
   KeymapModel loadKeymap(rt::ConfigStore& store, KeymapBindings defaults);
 
   /**
-   * @brief Persists the keymap's delta-from-defaults into the "shortcuts" group and flushes.
+   * @brief Persists the keymap's delta-from-defaults into the "shortcuts" group.
    */
   void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap);
 } // namespace ao::uimodel

@@ -514,14 +514,9 @@ namespace ao::rt
     auto const session =
       snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, transport, _sequence.state());
 
-    if (auto const saved = _config.saveResult(kPlaybackSessionConfigGroup, session); !saved)
+    if (auto const saved = _config.save(kPlaybackSessionConfigGroup, session); !saved)
     {
       return saved;
-    }
-
-    if (auto const flushed = _config.flush(); !flushed)
-    {
-      return flushed;
     }
 
     _sessionRevision.acknowledge(capturedRevision);
@@ -715,11 +710,6 @@ namespace ao::rt
     if (auto const removed = _config.removeGroup(kPlaybackSessionConfigGroup); !removed)
     {
       return std::unexpected{removed.error()};
-    }
-
-    if (auto const flushed = _config.flush(); !flushed)
-    {
-      return flushed;
     }
 
     _sequence.discardPlaybackSessionSnapshot();

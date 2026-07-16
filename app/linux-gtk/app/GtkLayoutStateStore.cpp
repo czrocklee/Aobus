@@ -43,12 +43,10 @@ namespace ao::gtk
   void GtkLayoutStateStore::save(uimodel::TrackColumnLayoutState const& layoutState,
                                  uimodel::ListPresentationPreferenceState const& prefState)
   {
-    _storePtr->save("trackView.columnLayouts", layoutState);
-    _storePtr->save("trackView.presentations", prefState);
-
-    if (auto const res = _storePtr->flush(); !res)
+    if (auto const res = _storePtr->save("trackView.columnLayouts", layoutState, "trackView.presentations", prefState);
+        !res)
     {
-      APP_LOG_ERROR("GtkLayoutStateStore: Failed to flush: {}", res.error().message);
+      APP_LOG_ERROR("GtkLayoutStateStore: Failed to save: {}", res.error().message);
     }
   }
 } // namespace ao::gtk

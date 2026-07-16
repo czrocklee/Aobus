@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <map>
@@ -113,6 +114,14 @@ namespace ao::rt::test
     ComplexAggregate level1{};
     std::vector<ComplexAggregate> more{};
   };
+
+  class ThrowingValue final
+  {
+  public:
+    ThrowingValue() = default;
+
+    std::int32_t raw() const { throwException<Exception>("encoding failed"); }
+  };
   // NOLINTEND(misc-use-internal-linkage)
   TEST_CASE("ConfigStore - persists aggregate values and defaults", "[runtime][unit][config]")
   {
@@ -134,8 +143,7 @@ namespace ao::rt::test
                          .scores = {{"alpha", 10}, {"beta", 20}},
                          .nested = Inner{.value = 99, .label = "nested-inner"}};
 
-      configStore.save("complex", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("complex", original));
       CHECK(ao::test::readFile(configPath).contains("enabled: false"));
 
       auto reloaded = ConfigStore{configPath};
@@ -166,8 +174,7 @@ namespace ao::rt::test
     SECTION("Default-constructed aggregate round-trips preserving defaults")
     {
       auto const original = ComplexAggregate{};
-      configStore.save("complex", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("complex", original));
       CHECK(ao::test::readFile(configPath).contains("enabled: true"));
 
       auto reloaded = ConfigStore{configPath};
@@ -197,8 +204,7 @@ namespace ao::rt::test
     {
       auto const original = WithEnums{.simple = Color::Green, .bitmask = Flags::Read | Flags::Write};
 
-      configStore.save("enums", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("enums", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithEnums{};
@@ -212,8 +218,7 @@ namespace ao::rt::test
     {
       auto const original = WithEnums{.simple = Color::Red, .bitmask = Flags::None};
 
-      configStore.save("enums", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("enums", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithEnums{.simple = Color::Blue, .bitmask = Flags::Execute};
@@ -234,8 +239,7 @@ namespace ao::rt::test
       auto const original =
         AllOptional{.optInt = 42, .optDouble = std::numbers::e, .optString = "hello", .optColor = Color::Green};
 
-      configStore.save("opt", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("opt", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = AllOptional{};
@@ -255,8 +259,7 @@ namespace ao::rt::test
     {
       auto const original = AllOptional{};
 
-      configStore.save("opt", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("opt", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = AllOptional{.optInt = 100, .optString = "dirty"};
@@ -272,8 +275,7 @@ namespace ao::rt::test
     {
       auto const original = AllOptional{.optInt = 7, .optColor = Color::Blue};
 
-      configStore.save("opt", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("opt", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = AllOptional{};
@@ -297,8 +299,7 @@ namespace ao::rt::test
     {
       auto const original = WithTaggedId{.id = TestId{12345}, .label = "tagged-test"};
 
-      configStore.save("tagged", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("tagged", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithTaggedId{};
@@ -312,8 +313,7 @@ namespace ao::rt::test
     {
       auto const original = WithTaggedId{};
 
-      configStore.save("tagged", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("tagged", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithTaggedId{.id = TestId{999}};
@@ -326,8 +326,7 @@ namespace ao::rt::test
     {
       auto const original = WithStrongId{.id = TestStringId{"my-unique-id"}, .count = 5};
 
-      configStore.save("strong", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("strong", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithStrongId{};
@@ -341,8 +340,7 @@ namespace ao::rt::test
     {
       auto const original = WithStrongId{};
       // default-constructed StrongId has empty string
-      configStore.save("strong", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("strong", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithStrongId{.id = TestStringId{"not-empty"}};
@@ -361,8 +359,7 @@ namespace ao::rt::test
     {
       auto const original = WithEmptyContainers{};
 
-      configStore.save("empty", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("empty", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = WithEmptyContainers{.numbers = {42}, .dictionary = {{"z", 99}}};
@@ -379,8 +376,7 @@ namespace ao::rt::test
                    .more = {ComplexAggregate{.count = 20, .optScore = 60},
                             ComplexAggregate{.count = 30, .name = "second", .color = Color::Green}}};
 
-      configStore.save("deep", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("deep", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = DeepNested{};
@@ -478,17 +474,23 @@ namespace ao::rt::test
       REQUIRE(!secondResult);
       CHECK(secondResult.error().code == Error::Code::IoError);
       CHECK(obj.count == 99);
+
+      std::filesystem::remove(configDirectory);
+      REQUIRE(failingStore.save("recovered", ComplexAggregate{.count = 7}));
+
+      auto reloaded = ConfigStore{configDirectory};
+      auto recovered = ComplexAggregate{};
+      REQUIRE(reloaded.load("recovered", recovered));
+      CHECK(recovered.count == 7);
     }
 
     SECTION("Overwriting an existing key replaces data")
     {
       auto const first = ComplexAggregate{.count = 1, .name = "first"};
-      configStore.save("overwrite", first);
+      REQUIRE(configStore.save("overwrite", first));
 
       auto const second = ComplexAggregate{.count = 2, .name = "second", .optScore = 88};
-      configStore.save("overwrite", second);
-
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("overwrite", second));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = ComplexAggregate{};
@@ -503,15 +505,10 @@ namespace ao::rt::test
     SECTION("Multiple independent keys in same file")
     {
       auto const agg = ComplexAggregate{.count = 100, .name = "agg-data"};
-      configStore.save("complex", agg);
-
       auto const enums = WithEnums{.simple = Color::Blue, .bitmask = Flags::Read | Flags::Execute};
-      configStore.save("enums", enums);
-
       auto const opt = AllOptional{.optInt = -5, .optString = "partial"};
-      configStore.save("opt", opt);
 
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("complex", agg, "enums", enums, "opt", opt));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
@@ -539,8 +536,7 @@ namespace ao::rt::test
     {
       auto const original = ComplexAggregate{.name = "line1\nline2\twith\"quotes\"and/slashes"};
 
-      configStore.save("complex", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("complex", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = ComplexAggregate{};
@@ -555,8 +551,7 @@ namespace ao::rt::test
                                              .rate = std::numeric_limits<double>::max(),
                                              .optScore = std::numeric_limits<int>::max()};
 
-      configStore.save("complex", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("complex", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = ComplexAggregate{};
@@ -572,8 +567,7 @@ namespace ao::rt::test
     {
       auto const original = ComplexAggregate{.enabled = false};
 
-      configStore.save("complex", original);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("complex", original));
 
       auto reloaded = ConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
       auto loaded = ComplexAggregate{.enabled = true};
@@ -583,7 +577,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ConfigStore - flush uses saved string copies", "[runtime][unit][config]")
+  TEST_CASE("ConfigStore - later saves preserve previously owned strings", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};
     auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
@@ -592,17 +586,156 @@ namespace ao::rt::test
       auto configStore = ConfigStore{configPath};
       {
         auto const original = ComplexAggregate{.name = "temporary string that will go out of scope"};
-        configStore.save("test", original);
+        REQUIRE(configStore.save("test", original));
       } // original is destroyed here
 
-      // Flush should still work and use the copied string in the arena
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.save("other", ComplexAggregate{.count = 7}));
     }
 
     auto reloaded = ConfigStore{configPath};
     auto loaded = ComplexAggregate{};
     REQUIRE(reloaded.load("test", loaded));
     CHECK(loaded.name == "temporary string that will go out of scope");
+  }
+
+  TEST_CASE("ConfigStore - save preserves rejected backing documents", "[runtime][regression][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+
+    SECTION("Empty document")
+    {
+      {
+        auto output = std::ofstream{configPath};
+        REQUIRE(output.is_open());
+      }
+
+      auto configStore = ConfigStore{configPath};
+      auto const result = configStore.save("replacement", ComplexAggregate{.count = 7});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(ao::test::readFile(configPath).empty());
+    }
+
+    SECTION("Malformed YAML")
+    {
+      constexpr auto kOriginalContents = std::string_view{"existing: [unterminated"};
+      {
+        auto output = std::ofstream{configPath};
+        output << kOriginalContents;
+      }
+
+      auto configStore = ConfigStore{configPath};
+      auto const result = configStore.save("replacement", ComplexAggregate{.count = 7});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(ao::test::readFile(configPath) == kOriginalContents);
+    }
+
+    SECTION("Non-mapping YAML")
+    {
+      constexpr auto kOriginalContents = std::string_view{"- existing\n- values\n"};
+      {
+        auto output = std::ofstream{configPath};
+        output << kOriginalContents;
+      }
+
+      auto configStore = ConfigStore{configPath};
+      auto const result = configStore.save("replacement", ComplexAggregate{.count = 7});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+      CHECK(ao::test::readFile(configPath) == kOriginalContents);
+    }
+  }
+
+  TEST_CASE("ConfigStore - failed batch encoding preserves the live document", "[runtime][regression][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+    auto configStore = ConfigStore{configPath};
+    REQUIRE(configStore.save("retained", ComplexAggregate{.count = 11, .name = "before"}));
+    auto const originalContents = ao::test::readFile(configPath);
+
+    CHECK_THROWS_AS(configStore.save("staged", ComplexAggregate{.count = 22}, "broken", ThrowingValue{}), Exception);
+
+    CHECK(ao::test::readFile(configPath) == originalContents);
+    REQUIRE(configStore.save("later", ComplexAggregate{.count = 33}));
+
+    auto reloaded = ConfigStore{configPath};
+    auto retained = ComplexAggregate{};
+    auto later = ComplexAggregate{};
+    REQUIRE(reloaded.load("retained", retained));
+    REQUIRE(reloaded.load("later", later));
+    CHECK(retained.count == 11);
+    CHECK(retained.name == "before");
+    CHECK(later.count == 33);
+
+    auto const containsStaged = reloaded.contains("staged");
+    auto const containsBroken = reloaded.contains("broken");
+    REQUIRE(containsStaged);
+    REQUIRE(containsBroken);
+    CHECK_FALSE(*containsStaged);
+    CHECK_FALSE(*containsBroken);
+  }
+
+  TEST_CASE("ConfigStore - failed replacement preserves the live document", "[runtime][regression][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+    auto const backupPath = std::filesystem::path{tempDir.path()} / "config.backup.yaml";
+    auto configStore = ConfigStore{configPath};
+    REQUIRE(configStore.save("retained", ComplexAggregate{.count = 11, .name = "before"}));
+    auto const originalContents = ao::test::readFile(configPath);
+
+    std::filesystem::rename(configPath, backupPath);
+    std::filesystem::create_directory(configPath);
+
+    auto const failedSave = configStore.save("staged", ComplexAggregate{.count = 22});
+
+    REQUIRE_FALSE(failedSave);
+    CHECK(failedSave.error().code == Error::Code::IoError);
+    CHECK(ao::test::readFile(backupPath) == originalContents);
+
+    std::filesystem::remove(configPath);
+    std::filesystem::rename(backupPath, configPath);
+    REQUIRE(configStore.save("later", ComplexAggregate{.count = 33}));
+
+    auto reloaded = ConfigStore{configPath};
+    auto const containsRetained = reloaded.contains("retained");
+    auto const containsStaged = reloaded.contains("staged");
+    auto const containsLater = reloaded.contains("later");
+    REQUIRE(containsRetained);
+    REQUIRE(containsStaged);
+    REQUIRE(containsLater);
+    CHECK(*containsRetained);
+    CHECK_FALSE(*containsStaged);
+    CHECK(*containsLater);
+  }
+
+  TEST_CASE("ConfigStore - failed decode leaves the target unchanged", "[runtime][regression][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = std::filesystem::path{tempDir.path()} / "config.yaml";
+    {
+      auto output = std::ofstream{configPath};
+      output << "complex:\n"
+                "  count: 7\n"
+                "  rate: invalid\n"
+                "  name: changed\n";
+    }
+
+    auto configStore = ConfigStore{configPath};
+    auto target = ComplexAggregate{.count = 99, .rate = 2.5, .name = "unchanged"};
+    auto const result = configStore.load("complex", target);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(target.count == 99);
+    CHECK(target.rate == 2.5);
+    CHECK(target.name == "unchanged");
   }
 
   TEST_CASE("ConfigStore - removes groups", "[runtime][unit][config]")
@@ -613,12 +746,9 @@ namespace ao::rt::test
     SECTION("Removal is exact, durable, and idempotent")
     {
       auto configStore = ConfigStore{configPath};
-      configStore.save("removed", ComplexAggregate{.count = 1});
-      configStore.save("retained", ComplexAggregate{.count = 2});
+      REQUIRE(configStore.save("removed", ComplexAggregate{.count = 1}, "retained", ComplexAggregate{.count = 2}));
 
-      auto removed = configStore.removeGroup("removed");
-      REQUIRE(removed);
-      CHECK(*removed);
+      REQUIRE(configStore.removeGroup("removed"));
       auto containsRemoved = configStore.contains("removed");
       auto containsRetained = configStore.contains("retained");
       REQUIRE(containsRemoved);
@@ -626,10 +756,7 @@ namespace ao::rt::test
       CHECK_FALSE(*containsRemoved);
       CHECK(*containsRetained);
 
-      auto removedAgain = configStore.removeGroup("removed");
-      REQUIRE(removedAgain);
-      CHECK_FALSE(*removedAgain);
-      REQUIRE(configStore.flush());
+      REQUIRE(configStore.removeGroup("removed"));
 
       auto reloaded = ConfigStore{configPath};
       containsRemoved = reloaded.contains("removed");
@@ -644,9 +771,8 @@ namespace ao::rt::test
     {
       auto configStore = ConfigStore{configPath};
 
-      auto removed = configStore.removeGroup("missing");
-      REQUIRE(removed);
-      CHECK_FALSE(*removed);
+      REQUIRE(configStore.removeGroup("missing"));
+      CHECK_FALSE(std::filesystem::exists(configPath));
     }
 
     SECTION("Malformed input is reported without mutation")
@@ -684,11 +810,6 @@ namespace ao::rt::test
       auto obj = ComplexAggregate{};
 
       CHECK_THROWS_AS(configStore.save("key", obj), ao::Exception);
-    }
-
-    SECTION("flush() on ReadOnly throws")
-    {
-      CHECK_THROWS_AS(configStore.flush(), ao::Exception);
     }
 
     SECTION("removeGroup() on ReadOnly throws")

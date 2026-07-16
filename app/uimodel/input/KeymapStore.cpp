@@ -39,11 +39,9 @@ namespace ao::uimodel
 
   void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap)
   {
-    store.save(kKeymapConfigGroup, keymap.toOverrides());
-
-    if (auto const res = store.flush(); !res)
+    if (auto const res = store.save(kKeymapConfigGroup, keymap.toOverrides()); !res)
     {
-      APP_LOG_ERROR("KeymapStore: failed to flush keymap overrides: {}", res.error().message);
+      APP_LOG_ERROR("KeymapStore: failed to save keymap overrides: {}", res.error().message);
     }
   }
 } // namespace ao::uimodel

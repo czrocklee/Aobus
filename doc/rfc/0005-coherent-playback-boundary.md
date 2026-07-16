@@ -59,9 +59,9 @@ The existing prepared-start type cannot simply be moved to an arbitrary worker.
 `Player::stagePlayback()` enforces executor affinity, and `Engine::PreparedPlaybackStart` unregisters itself through a raw owner pointer during destruction.
 Its safety depends on Engine lifetime and its captured start context.
 
-Playback-session scheduling sleeps away from the callback executor, but it resumes there before snapshot capture, `ConfigStore::saveResult()`, YAML emission, and atomic file replacement.
-`ConfigStore` owns one mutable ryml tree and has no concurrent-access contract; the playback session store may also be the workspace store.
-Moving only `flush()` or calling the same `ConfigStore` from a worker would introduce a race or lost-update boundary instead of fixing latency.
+Playback-session scheduling sleeps away from the callback executor, but it resumes there before snapshot capture and the one-shot `ConfigStore::save()` operation, including candidate cloning, YAML emission, and atomic file replacement.
+`ConfigStore` owns one cached ryml document and has no concurrent-access contract; the playback session store may also be the workspace store.
+Moving only one caller's save to a worker while other clients continue accessing the same store would introduce a race or lost-update boundary instead of fixing latency.
 
 ### Responsibilities and evidence leak across domains
 
@@ -354,11 +354,11 @@ Collapsing application identity, audio identity, generations, and durability int
 Those values have different allocation, invalidation, and lifetime rules.
 The selected transition envelope retains typed evidence from every authority.
 
-### Move only `ConfigStore::flush()` to a worker
+### Move only playback's `ConfigStore::save()` to a worker
 
-`saveResult()` mutates the same ryml tree that `flush()` reads, and a store can be shared by playback and workspace groups.
-Moving only file replacement either requires unsafe concurrent tree access or snapshots YAML before the worker while still leaving emission on the callback executor.
-The selected serialized writer owns mutation, emission, ordering, and file replacement together.
+The one-shot save safely isolates one candidate, but the store's cached document can still be shared by playback and workspace groups and remains executor-confined.
+Moving only playback save requires unsafe concurrent store access or allows a callback-executor workspace save to race from an older complete-document snapshot.
+The selected serialized writer owns every shared-store save, ordering, emission, and file replacement together.
 
 ## Compatibility and migration
 

@@ -29,7 +29,7 @@ Frontends inject and schedule the store but do not decode workspace fields.
 - **Session snapshot** is one `WorkspaceSessionState` captured from the live workspace.
 - **Candidate view** is a view created during restore before the restored aggregate is installed.
 - **Active-list hint** is the persisted `ListId` used to choose a focused restored view without persisting `ViewId`.
-- **Checkpoint** is the current save-then-flush attempt at an explicit frontend lifecycle point.
+- **Checkpoint** is the current one-shot group-save attempt at an explicit frontend lifecycle point.
 
 ## Invariants
 
@@ -61,8 +61,8 @@ For each live view it records the base list, filter expression, group and sort s
 When the view is active, its base `ListId` becomes the active-list hint.
 The snapshot also copies all custom presets.
 
-The current implementation calls the compatibility `ConfigStore::save("workspace", snapshot)` operation and then `flush()` synchronously.
-A flush failure is logged and the void command returns normally.
+The current implementation calls the result-bearing `ConfigStore::save("workspace", snapshot)` operation synchronously.
+A load, encode, emission, or replacement failure leaves the prior document unchanged; recoverable failure is logged and the void command returns normally.
 There is no dirty revision, retry schedule, or durable acknowledgement for workspace state.
 
 ### Load and prepare
@@ -111,8 +111,9 @@ Ordinary decoding is permissive: missing aggregate fields retain defaults and in
 The exact consequences belong to the [workspace session state reference](../../reference/workspace/session-state.md) and [grouped configuration store specification](../persistence/config-store.md).
 
 Save is currently best effort.
-It does not return encoding or flush failure, and a discarded failure cannot block a library switch or shutdown transition.
-[RFC 0015](../../rfc/0015-fail-closed-config-store.md) proposes a result-bearing grouped transaction and explicit workspace commit acknowledgement; that proposal does not override this current behavior.
+The workspace wrapper does not return the store failure, so a failed checkpoint cannot block a library switch or shutdown transition.
+The grouped store nevertheless keeps the previous live document and backing bytes unchanged when its candidate save fails.
+[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why a larger transaction, recovery, and commit-receipt system was rejected after that narrower store boundary was implemented.
 
 Save and restore are synchronous and expose no cancellation point.
 They run under the runtime/frontend serialized application-control boundary.
@@ -137,7 +138,7 @@ A successful empty restore is distinguished from a restored non-empty workspace 
 GTK uses that snapshot to decide whether to create the default All Tracks view.
 
 Workspace save publishes no success or failure event.
-Current flush failure is diagnostic logging only.
+Current recoverable save failure is diagnostic logging only.
 
 ## Implementation map
 
@@ -145,7 +146,7 @@ Current flush failure is diagnostic logging only.
 - [`WorkspaceSessionState`](../../../app/include/ao/rt/WorkspaceSessionState.h) defines the candidate aggregate.
 - [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) captures, prepares, commits, falls back, and seeds history.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) creates and destroys candidate views.
-- [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) provides the current group decode, compatibility save, and flush operations.
+- [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) provides candidate group decoding and one-shot atomic group save.
 - [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns current GTK restore/default/checkpoint sequencing.
 - [`app/tui/App.cpp`](../../../app/tui/App.cpp) owns the current TUI store injection without session lifecycle calls.
 

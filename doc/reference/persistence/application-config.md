@@ -233,4 +233,4 @@ No single test currently enumerates every registered group across all logical do
 - [Shell layout lifecycle specification](../../spec/shell/layout-lifecycle.md)
 - [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)
 - [RFC 0010: versioned presentation state](../../rfc/0010-versioned-presentation-state.md)
-- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md)
+- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md), rejected after the narrower candidate-save boundary was implemented

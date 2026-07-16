@@ -84,7 +84,7 @@ namespace ao::rt::test
 
     void storeSession(AppRuntime& runtime, PlaybackSessionState const& session)
     {
-      REQUIRE(runtime.playbackSessionConfigStore().saveResult(kPlaybackSessionConfigGroup, session));
+      REQUIRE(runtime.playbackSessionConfigStore().save(kPlaybackSessionConfigGroup, session));
     }
 
     struct ManualView final

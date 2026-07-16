@@ -18,7 +18,7 @@ Transient quick-filter behavior belongs to [track filtering](track-filter.md).
 ## Code boundary
 
 This contract spans the **application runtime**, **UIModel**, and GTK persistence adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation](../../architecture/presentation.md), [workspace](../../architecture/workspace.md), and [persistence and managed-state](../../architecture/persistence-and-managed-state.md) architectures.
-Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map and recommendation policy; GTK owns the per-library persistence location and flush boundary.
+Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map and recommendation policy; GTK owns the per-library persistence location and save boundary.
 
 ## Terminology
 
@@ -91,7 +91,7 @@ An unknown or removed presentation id is recoverable and selects the recommendat
 An empty built-in catalog may produce an empty fallback spec; ordinary application composition supplies the built-in catalog.
 
 UIModel preference operations and recommendation are synchronous and have no cancellation point.
-GTK load/flush failures follow the frontend-owned preference fallback policy and do not mutate library list records.
+GTK load/save failures follow the frontend-owned preference fallback policy and do not mutate library list records.
 
 ## Persistence and versioning
 
