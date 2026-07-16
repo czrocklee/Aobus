@@ -2,12 +2,14 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -131,7 +133,7 @@ namespace ao::rt::test
                             std::string_view name,
                             std::vector<TrackId> trackIds = {})
     {
-      auto transaction = libraryFixture.library().writeTransaction();
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
       auto builder = library::ListBuilder::makeEmpty().name(name);
 
       for (auto const trackId : trackIds)
@@ -166,7 +168,8 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
     auto const patch = MetadataPatch{.optTitle = "After"};
 
@@ -180,7 +183,7 @@ namespace ao::rt::test
     CHECK(trackTitle(libraryFixture, trackId) == "Before");
     CHECK(recorder.tracksMutated == 0);
 
-    auto const commit = writer.updateMetadata(std::array{trackId}, patch);
+    auto const commit = writerFixture.updateMetadata(std::array{trackId}, patch);
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
     CHECK(trackTitle(libraryFixture, trackId) == "After");
@@ -195,7 +198,8 @@ namespace ao::rt::test
     auto const initialSize = dictionary.size();
     auto const initialGeneration = dictionary.generation();
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     bool callbackSawDictionary = false;
     [[maybe_unused]] auto subscription = changes.onChanged(
       [&](LibraryChangeSet const&)
@@ -212,7 +216,7 @@ namespace ao::rt::test
     CHECK_FALSE(dictionary.findId("Preview Key"));
     CHECK_FALSE(callbackSawDictionary);
 
-    auto const commit = writer.updateMetadata(std::array{trackId}, patch);
+    auto const commit = writerFixture.updateMetadata(std::array{trackId}, patch);
 
     REQUIRE(commit);
     CHECK(*commit == *preview);
@@ -226,7 +230,8 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
     auto const tags = std::array{std::string{"Favorite"}};
     auto const& dictionary = libraryFixture.library().dictionary();
@@ -244,7 +249,7 @@ namespace ao::rt::test
     CHECK(dictionary.generation() == initialGeneration);
     CHECK(recorder.tracksMutated == 0);
 
-    auto const commit = writer.editTags(std::array{trackId}, tags, {});
+    auto const commit = writerFixture.editTags(std::array{trackId}, tags, {});
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
     CHECK(trackHasTag(libraryFixture, trackId, "Favorite"));
@@ -258,7 +263,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
     auto draft = LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Draft"};
 
@@ -280,7 +286,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Track");
     auto const listId = createManualList(libraryFixture, "Before");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
     auto draft = LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual, .listId = listId, .name = "After", .trackIds = {trackId}};
@@ -309,7 +316,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Track");
     auto const listId = createManualList(libraryFixture, "Delete Me", {trackId});
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
 
     auto const dryRun = writer.previewDeleteList(listId);
@@ -334,7 +342,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Delete Track");
     auto const listId = createManualList(libraryFixture, "Manual", {trackId});
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
 
     auto const dryRun = writer.previewDeleteTrack(trackId);
@@ -363,7 +372,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
     auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
 

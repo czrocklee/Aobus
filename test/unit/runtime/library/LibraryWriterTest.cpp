@@ -30,13 +30,13 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Original Title");
 
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
-    auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
+    auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
 
     REQUIRE(result);
     CHECK_FALSE(result->mutatedIds.empty());
@@ -50,7 +50,7 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Original Title");
 
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto observedTitle = std::string{};
     auto sub = changes.onChanged(
@@ -70,7 +70,7 @@ namespace ao::rt::test
       });
 
     auto const targetIds = std::array{trackId};
-    auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "Committed Title"});
+    auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Committed Title"});
 
     REQUIRE(result);
     CHECK_FALSE(result->mutatedIds.empty());
@@ -84,13 +84,13 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Original Title");
 
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
-    auto const result = service.updateMetadata(targetIds, MetadataPatch{.optTitle = "Original Title"});
+    auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Original Title"});
 
     REQUIRE(result);
     CHECK(result->mutatedIds.empty());
@@ -102,7 +102,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const targetIds = std::array{trackId};
     auto const patch = MetadataPatch{.optTitle = "New Title",
@@ -122,7 +122,7 @@ namespace ao::rt::test
                                      .optDiscNumber = 1,
                                      .optDiscTotal = 2};
 
-    auto const result = service.updateMetadata(targetIds, patch);
+    auto const result = writerFixture.updateMetadata(targetIds, patch);
     REQUIRE(result);
     CHECK_FALSE(result->mutatedIds.empty());
 
@@ -142,7 +142,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const targetIds = std::array{trackId};
 
@@ -150,7 +150,7 @@ namespace ao::rt::test
     {
       auto patch = MetadataPatch{};
       patch.customUpdates["MyKey"] = "MyValue";
-      REQUIRE(service.updateMetadata(targetIds, patch));
+      REQUIRE(writerFixture.updateMetadata(targetIds, patch));
 
       auto const transaction = libraryFixture.library().readTransaction();
       auto const optView =
@@ -169,14 +169,14 @@ namespace ao::rt::test
       {
         auto patch = MetadataPatch{};
         patch.customUpdates["ToDelete"] = "Value";
-        REQUIRE(service.updateMetadata(targetIds, patch));
+        REQUIRE(writerFixture.updateMetadata(targetIds, patch));
       }
 
       // Then remove it
       {
         auto patch = MetadataPatch{};
         patch.customUpdates["ToDelete"] = std::nullopt;
-        REQUIRE(service.updateMetadata(targetIds, patch));
+        REQUIRE(writerFixture.updateMetadata(targetIds, patch));
       }
 
       auto const transaction = libraryFixture.library().readTransaction();
@@ -193,7 +193,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
@@ -201,7 +201,7 @@ namespace ao::rt::test
     auto patch = MetadataPatch{};
     patch.customUpdates["oversized"] = std::string(70'000, 'x');
 
-    auto const result = service.updateMetadata(std::array{trackId}, patch);
+    auto const result = writerFixture.updateMetadata(std::array{trackId}, patch);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::ValueTooLarge);
@@ -222,28 +222,28 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const trackIdsArr = std::array{trackId};
     auto const toAdd = std::array{std::string{"rock"}};
     auto const toRemove = std::array{std::string{"pop"}};
-    auto const result = service.editTags(trackIdsArr, toAdd, toRemove);
+    auto const result = writerFixture.editTags(trackIdsArr, toAdd, toRemove);
 
     REQUIRE(result);
     CHECK_FALSE(result->mutatedIds.empty());
   }
 
-  TEST_CASE("LibraryWriter - editTags skips missing tracks without mutations", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryWriter - editTags rejects missing targets before mutation", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const trackIdsArr = std::array{TrackId{999}};
     auto const toAdd = std::array{std::string{"rock"}};
-    auto const result = service.editTags(trackIdsArr, toAdd, {});
-    REQUIRE(result);
-    CHECK(result->mutatedIds.empty());
+    auto const result = writerFixture.editTags(trackIdsArr, toAdd, {});
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("LibraryWriter - manual lists can be created and updated", "[runtime][unit][library][list]")
@@ -251,7 +251,8 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const t1 = libraryFixture.addTrack("A");
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
     draft.name = "Manual List";
@@ -274,7 +275,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
     draft.name = "Original";
@@ -297,7 +299,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& service = writerFixture.writer();
 
     SECTION("invalid smart filter")
     {
@@ -374,7 +377,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
     draft.kind = LibraryWriter::ListKind::Manual;
@@ -394,7 +398,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
     draft.kind = LibraryWriter::ListKind::Manual;
@@ -411,7 +416,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto service = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
     draft.name = "ToDelete";

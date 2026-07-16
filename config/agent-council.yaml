@@ -8,7 +8,7 @@ harnesses:
     environment-whitelist: [PATH, HOME, USER, XDG_CONFIG_HOME, OPENCODE_CONFIG_DIR]
     timeout-ms: 1200000
   codex:
-    argv: [codex, exec, --ephemeral, --ignore-rules, -s, danger-full-access, --skip-git-repo-check, -m, "{model}"]
+    argv: [codex, exec, --ephemeral, --ignore-rules, -s, danger-full-access, --skip-git-repo-check, -c, 'model_reasoning_effort="{effort}"', -m, "{model}"]
     prompt-delivery: stdin
     environment-whitelist: [PATH, HOME, USER, CODEX_HOME]
     timeout-ms: 1200000
@@ -31,6 +31,7 @@ agents:
     harness: codex
     model: gpt-5.6-sol
     vendor: openai
+    effort: ultra
   anthropic-opus:
     harness: claude
     model: claude-opus-4-8
@@ -49,6 +50,7 @@ agents:
     harness: codex
     model: gpt-5.4-mini
     vendor: openai
+    effort: medium
     timeout-ms: 600000
   anthropic-sonnet:
     harness: claude

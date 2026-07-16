@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -15,7 +16,6 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/SmartListEvaluator.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -24,10 +24,8 @@
 #include <catch2/matchers/catch_matchers.hpp>
 
 #include <array>
-#include <cstddef>
 #include <optional>
 #include <ranges>
-#include <tuple>
 #include <variant>
 #include <vector>
 
@@ -40,7 +38,6 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
 
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
 
@@ -59,7 +56,7 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("ManualList");
         listId =
@@ -80,7 +77,7 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
@@ -116,6 +113,8 @@ namespace ao::rt::test
       cache.reloadAllTracks();
       REQUIRE(cache.allTracks().size() == 1);
       auto spy = TrackSourceBatchSpy{cache.allTracks()};
+      auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+      auto& writer = writerFixture.writer();
 
       CHECK(writer.deleteTrack(trackId).has_value());
       CHECK(cache.allTracks().size() == 0);
@@ -130,7 +129,7 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("Manual");
         listId =
@@ -147,7 +146,7 @@ namespace ao::rt::test
       cache.reloadAllTracks(); // ensure parent source has it
 
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto optView = libraryFixture.library().lists().reader(transaction).get(listId);
         auto builder = ListBuilder::fromView(*optView);
         builder.tracks().add(t1);
@@ -164,7 +163,7 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("Smart");
         builder.filter("$year >= 2020");
@@ -197,7 +196,7 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("DeleteMe");
         listId =
@@ -209,7 +208,7 @@ namespace ao::rt::test
       auto lease = ao::test::requireValue(cache.acquire(listId));
 
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         libraryFixture.library().lists().writer(transaction).remove(listId);
         REQUIRE(transaction.commit());
       }
@@ -230,7 +229,7 @@ namespace ao::rt::test
       auto grandchildId = ListId{0};
 
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto listWriter = libraryFixture.library().lists().writer(transaction);
 
         auto parentBuilder = ListBuilder::makeEmpty();
@@ -256,7 +255,7 @@ namespace ao::rt::test
       auto grandchildLease = ao::test::requireValue(cache.acquire(grandchildId));
 
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         libraryFixture.library().lists().writer(transaction).remove(grandchildId);
         libraryFixture.library().lists().writer(transaction).remove(childId);
         libraryFixture.library().lists().writer(transaction).remove(parentId);
@@ -277,7 +276,7 @@ namespace ao::rt::test
     {
       auto listId = ListId{0};
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("ToErase");
         listId =
@@ -287,6 +286,8 @@ namespace ao::rt::test
       }
 
       auto lease = ao::test::requireValue(cache.acquire(listId));
+      auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+      auto& writer = writerFixture.writer();
 
       REQUIRE(writer.deleteList(listId));
 
@@ -305,7 +306,7 @@ namespace ao::rt::test
     auto smartListId = kInvalidListId;
 
     {
-      auto transaction = libraryFixture.library().writeTransaction();
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
       auto builder = ListBuilder::makeEmpty();
       builder.name("Matching title");
       builder.filter("$title = \"After\"");
@@ -315,7 +316,7 @@ namespace ao::rt::test
     }
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto smartLease = ao::test::requireValue(cache.acquire(smartListId));
@@ -329,7 +330,7 @@ namespace ao::rt::test
     auto smartSubscription =
       smartSource.subscribe([&](TrackSourceDeltaBatch const& batch) { smartBatches.push_back(batch); });
 
-    auto const result = writer.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"});
+    auto const result = writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"});
 
     REQUIRE(result);
     REQUIRE(smartSource.size() == 1);
@@ -383,7 +384,8 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Inserted after eviction");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Leased",
@@ -427,7 +429,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Original",
@@ -462,7 +465,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Parent",
@@ -511,7 +515,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Old parent",
@@ -559,7 +564,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto draft = LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Before",
@@ -595,7 +601,8 @@ namespace ao::rt::test
     auto const third = libraryFixture.addTrack("Third");
     auto const inserted = libraryFixture.addTrack("Inserted");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Detailed",
@@ -659,14 +666,15 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("TrackSourceCache - reentrant metadata refresh during detailed publication preserves exact batch",
+  TEST_CASE("TrackSourceCache - reentrant metadata mutation is rejected during detailed publication",
             "[runtime][regression][source][manual-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const inserted = libraryFixture.addTrack("Inserted");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Before",
@@ -678,9 +686,7 @@ namespace ao::rt::test
     auto* const identity = &lease.source();
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     bool handledInsertion = false;
-    bool metadataUpdateSucceeded = false;
-    bool metadataChanged = false;
-    std::size_t batchCountAfterNestedRefresh = 0;
+    auto nestedError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = lease->subscribe(
       [&](TrackSourceDeltaBatch const& batch)
       {
@@ -698,18 +704,17 @@ namespace ao::rt::test
           .name = "Renamed while publishing",
           .trackIds = {first, inserted},
         });
-        metadataUpdateSucceeded = result.has_value();
-        metadataChanged = result && result->changed;
-        cache.refreshList(listId);
-        batchCountAfterNestedRefresh = batches.size();
+
+        if (!result)
+        {
+          nestedError = result.error().code;
+        }
       });
 
     auto const result = writer.insertManualListTracks(listId, 1, std::array{inserted});
 
     REQUIRE(result);
-    CHECK(metadataUpdateSucceeded);
-    CHECK(metadataChanged);
-    CHECK(batchCountAfterNestedRefresh == 1);
+    CHECK(nestedError == Error::Code::InvalidState);
     CHECK(&lease.source() == identity);
     CHECK(lease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(lease.source()) == std::vector{first, inserted});
@@ -723,17 +728,18 @@ namespace ao::rt::test
     auto const transaction = libraryFixture.library().readTransaction();
     auto const optView = libraryFixture.library().lists().reader(transaction).get(listId);
     REQUIRE(optView);
-    CHECK(optView->name() == "Renamed while publishing");
+    CHECK(optView->name() == "Before");
   }
 
-  TEST_CASE("TrackSourceCache - reentrant reparent waits until detailed batch publication completes",
+  TEST_CASE("TrackSourceCache - reentrant reparent is rejected during detailed publication",
             "[runtime][regression][source][manual-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const inserted = libraryFixture.addTrack("Inserted");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Old parent",
@@ -758,8 +764,7 @@ namespace ao::rt::test
     auto trailingBatches = std::vector<TrackSourceDeltaBatch>{};
     auto snapshotAfterNestedUpdate = std::vector<TrackId>{};
     bool handledInsertion = false;
-    bool reparentSucceeded = false;
-    std::size_t batchCountAfterNestedUpdate = 0;
+    auto nestedError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = childLease->subscribe(
       [&](TrackSourceDeltaBatch const& batch)
       {
@@ -778,9 +783,13 @@ namespace ao::rt::test
           .name = "Child",
           .trackIds = {first, inserted},
         });
-        reparentSucceeded = result.has_value();
+
+        if (!result)
+        {
+          nestedError = result.error().code;
+        }
+
         snapshotAfterNestedUpdate = sourceTrackIds(childLease.source());
-        batchCountAfterNestedUpdate = batches.size();
       });
     [[maybe_unused]] auto trailingSubscription =
       childLease->subscribe([&](TrackSourceDeltaBatch const& batch) { trailingBatches.push_back(batch); });
@@ -788,43 +797,39 @@ namespace ao::rt::test
     auto const result = writer.insertManualListTracks(childId, 1, std::array{inserted});
 
     REQUIRE(result);
-    CHECK(reparentSucceeded);
-    CHECK(batchCountAfterNestedUpdate == 1);
+    CHECK(nestedError == Error::Code::InvalidState);
     CHECK(snapshotAfterNestedUpdate == std::vector{first, inserted});
     CHECK(&childLease.source() == identity);
     CHECK(childLease->state() == TrackSourceState::Live);
-    CHECK(sourceTrackIds(childLease.source()) == std::vector{inserted});
-    CHECK(childLease->revision() == 2);
-    REQUIRE(batches.size() == 2);
+    CHECK(sourceTrackIds(childLease.source()) == std::vector{first, inserted});
+    CHECK(childLease->revision() == 1);
+    REQUIRE(batches.size() == 1);
     REQUIRE(batches[0].deltas.size() == 1);
     auto const& insertion = std::get<SourceInsertRange>(batches[0].deltas.front());
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{inserted});
-    REQUIRE(batches[1].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(batches[1].deltas.front()));
-    REQUIRE(trailingBatches.size() == 2);
+    REQUIRE(trailingBatches.size() == 1);
     CHECK(std::holds_alternative<SourceInsertRange>(trailingBatches[0].deltas.front()));
-    CHECK(std::holds_alternative<SourceReset>(trailingBatches[1].deltas.front()));
 
     {
       auto const transaction = libraryFixture.library().readTransaction();
       auto const optView = libraryFixture.library().lists().reader(transaction).get(childId);
       REQUIRE(optView);
-      CHECK(optView->parentId() == newParentId);
+      CHECK(optView->parentId() == oldParentId);
     }
 
-    REQUIRE(writer.deleteList(oldParentId));
-    CHECK(childLease->state() == TrackSourceState::Live);
-    CHECK(batches.size() == 2);
-
     REQUIRE(writer.deleteList(newParentId));
+    CHECK(childLease->state() == TrackSourceState::Live);
+    CHECK(batches.size() == 1);
+
+    REQUIRE(writer.deleteList(oldParentId));
     CHECK(childLease->state() == TrackSourceState::Invalidated);
-    REQUIRE(batches.size() == 3);
-    REQUIRE(batches[2].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches[2].deltas.front()));
+    REQUIRE(batches.size() == 2);
+    REQUIRE(batches[1].deltas.size() == 1);
+    CHECK(std::holds_alternative<SourceInvalidated>(batches[1].deltas.front()));
   }
 
-  TEST_CASE("TrackSourceCache - nested detailed mutation flushes latest rebind after observer exception",
+  TEST_CASE("TrackSourceCache - reentrant mutations are rejected before an observer exception faults authoring",
             "[runtime][regression][source][manual-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -832,7 +837,8 @@ namespace ao::rt::test
     auto const second = libraryFixture.addTrack("Second");
     auto const third = libraryFixture.addTrack("Third");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Old parent",
@@ -859,81 +865,82 @@ namespace ao::rt::test
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto* const identity = &childLease.source();
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    std::size_t callbackDepth = 0;
-    bool intermediateReparentSucceeded = false;
-    bool finalReparentSucceeded = false;
+    bool callbackInvoked = false;
+    auto nestedInsertError = Error::Code::Generic;
+    auto intermediateReparentError = Error::Code::Generic;
+    auto finalReparentError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = childLease->subscribe(
       [&](TrackSourceDeltaBatch const& batch)
       {
         batches.push_back(batch);
 
-        if (callbackDepth == 0)
+        if (callbackInvoked)
         {
-          callbackDepth = 1;
-          std::ignore = writer.insertManualListTracks(childId, 2, std::array{third});
           return;
         }
 
-        if (callbackDepth == 1)
+        callbackInvoked = true;
+        auto const nestedInsertResult = writer.insertManualListTracks(childId, 2, std::array{third});
+
+        if (!nestedInsertResult)
         {
-          callbackDepth = 2;
-          auto const intermediateResult = writer.updateList(LibraryWriter::ListDraft{
-            .kind = LibraryWriter::ListKind::Manual,
-            .parentId = intermediateParentId,
-            .listId = childId,
-            .name = "Child",
-            .trackIds = {first, second, third},
-          });
-          intermediateReparentSucceeded = intermediateResult.has_value();
-          auto const finalResult = writer.updateList(LibraryWriter::ListDraft{
-            .kind = LibraryWriter::ListKind::Manual,
-            .parentId = finalParentId,
-            .listId = childId,
-            .name = "Child",
-            .trackIds = {first, second, third},
-          });
-          finalReparentSucceeded = finalResult.has_value();
-          throwException<Exception>("reentrant observer failure");
+          nestedInsertError = nestedInsertResult.error().code;
         }
+
+        auto const intermediateResult = writer.updateList(LibraryWriter::ListDraft{
+          .kind = LibraryWriter::ListKind::Manual,
+          .parentId = intermediateParentId,
+          .listId = childId,
+          .name = "Child",
+          .trackIds = {first, second, third},
+        });
+
+        if (!intermediateResult)
+        {
+          intermediateReparentError = intermediateResult.error().code;
+        }
+
+        auto const finalResult = writer.updateList(LibraryWriter::ListDraft{
+          .kind = LibraryWriter::ListKind::Manual,
+          .parentId = finalParentId,
+          .listId = childId,
+          .name = "Child",
+          .trackIds = {first, second, third},
+        });
+
+        if (!finalResult)
+        {
+          finalReparentError = finalResult.error().code;
+        }
+
+        throwException<Exception>("reentrant observer failure");
       });
 
     CHECK_THROWS_WITH(writer.insertManualListTracks(childId, 1, std::array{second}), "reentrant observer failure");
 
-    CHECK(intermediateReparentSucceeded);
-    CHECK(finalReparentSucceeded);
+    CHECK(nestedInsertError == Error::Code::InvalidState);
+    CHECK(intermediateReparentError == Error::Code::InvalidState);
+    CHECK(finalReparentError == Error::Code::InvalidState);
     CHECK(&childLease.source() == identity);
     CHECK(childLease->state() == TrackSourceState::Live);
-    CHECK(sourceTrackIds(childLease.source()) == std::vector{third});
-    CHECK(childLease->revision() == 3);
-    REQUIRE(batches.size() == 3);
+    CHECK(sourceTrackIds(childLease.source()) == std::vector{first, second});
+    CHECK(childLease->revision() == 1);
+    REQUIRE(batches.size() == 1);
     REQUIRE(batches[0].deltas.size() == 1);
     auto const& outerInsertion = std::get<SourceInsertRange>(batches[0].deltas.front());
     CHECK(outerInsertion.start == 1);
     CHECK(outerInsertion.trackIds == std::vector{second});
-    REQUIRE(batches[1].deltas.size() == 1);
-    auto const& nestedInsertion = std::get<SourceInsertRange>(batches[1].deltas.front());
-    CHECK(nestedInsertion.start == 2);
-    CHECK(nestedInsertion.trackIds == std::vector{third});
-    REQUIRE(batches[2].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(batches[2].deltas.front()));
 
     {
       auto const transaction = libraryFixture.library().readTransaction();
       auto const optView = libraryFixture.library().lists().reader(transaction).get(childId);
       REQUIRE(optView);
-      CHECK(optView->parentId() == finalParentId);
+      CHECK(optView->parentId() == oldParentId);
     }
 
-    REQUIRE(writer.deleteList(oldParentId));
-    REQUIRE(writer.deleteList(intermediateParentId));
-    CHECK(childLease->state() == TrackSourceState::Live);
-    CHECK(batches.size() == 3);
-
-    REQUIRE(writer.deleteList(finalParentId));
-    CHECK(childLease->state() == TrackSourceState::Invalidated);
-    REQUIRE(batches.size() == 4);
-    REQUIRE(batches[3].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches[3].deltas.front()));
+    auto const rejectedAfterFault = writer.deleteList(finalParentId);
+    REQUIRE_FALSE(rejectedAfterFault);
+    CHECK(rejectedAfterFault.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("TrackSourceCache - hidden manual insert stays revisionless and re-enters in stored order",
@@ -943,7 +950,8 @@ namespace ao::rt::test
     auto const visible = libraryFixture.addTrack("Visible");
     auto const hidden = libraryFixture.addTrack("Parent hidden");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Parent",
@@ -989,7 +997,8 @@ namespace ao::rt::test
     auto const deleted = libraryFixture.addTrack("Deleted");
     auto const third = libraryFixture.addTrack("Third");
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Delete target",

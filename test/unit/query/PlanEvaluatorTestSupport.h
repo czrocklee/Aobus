@@ -5,6 +5,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -91,7 +92,7 @@ namespace ao::query::test
     }
 
     DictionaryStore const& dictionary() { return _library.dictionary(); }
-    WriteTransaction writeTransaction() { return _library.writeTransaction(); }
+    WriteTransaction writeTransaction() { return library::test::writeTransaction(_library); }
 
     DictionaryId intern(std::string_view text)
     {
@@ -153,13 +154,13 @@ namespace ao::query::test
   {
   public:
     TrackFixture()
-      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{library::test::writeTransaction(_library)}
     {
       setup(TrackSpec{}, nullptr);
     }
 
     explicit TrackFixture(TrackSpec const& spec, DictionaryStore const* dictionary = nullptr)
-      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{library::test::writeTransaction(_library)}
     {
       setup(spec, dictionary);
     }
@@ -181,7 +182,7 @@ namespace ao::query::test
                  std::vector<std::uint32_t> const& tagIds = {},
                  std::string composer = "",
                  std::string work = "")
-      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{library::test::writeTransaction(_library)}
     {
       auto spec = TrackSpec{};
       spec.title = std::move(title);

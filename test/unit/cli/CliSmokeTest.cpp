@@ -5,6 +5,7 @@
 #include "Run.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AppVersion.h>
 #include <ao/CoreIds.h>
 #include <ao/library/AudioIdentity.h>
@@ -252,7 +253,7 @@ namespace ao::cli::test
       ResourceId addResource(std::span<std::byte const> bytes) const
       {
         auto musicLibrary = library::test::makeTestMusicLibrary(root(), root() / ".aobus/library");
-        auto transaction = musicLibrary.writeTransaction();
+        auto transaction = library::test::writeTransaction(musicLibrary);
         auto idResult = musicLibrary.resources().writer(transaction).create(bytes);
         REQUIRE(idResult);
         REQUIRE(transaction.commit());

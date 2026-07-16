@@ -27,7 +27,7 @@ namespace ao::rt::test
     auto engine = SmartListEvaluator{libraryFixture.library()};
     auto sourcePtr = makeMutableTrackSource({});
     auto weakSourcePtr = std::weak_ptr<MutableTrackSource>{sourcePtr};
-    auto filteredPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), engine);
+    auto filteredPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, engine);
 
     sourcePtr = nullptr;
     REQUIRE_FALSE(weakSourcePtr.expired());
@@ -41,7 +41,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto sourcePtr = makeMutableTrackSource({});
     auto enginePtr = std::make_unique<SmartListEvaluator>(libraryFixture.library());
-    auto listPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), *enginePtr);
+    auto listPtr = std::make_unique<SmartListSource>(TrackSourceLease{sourcePtr}, *enginePtr);
 
     // Destroy engine BEFORE source and list
     // Note: list won't be able to reload anymore but we just want to hit the destructor
@@ -54,7 +54,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto engine = SmartListEvaluator{libraryFixture.library()};
     auto sourcePtr = makeMutableTrackSource({});
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.reload();
 
     auto batches = std::vector<TrackSourceDeltaBatch>{};
@@ -79,7 +79,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.setExpression("$year >= 2020");
     list.reload();
 

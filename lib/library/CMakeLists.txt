@@ -2,6 +2,7 @@
 add_library(ao_library STATIC
     MetadataStore.cpp
     MusicLibrary.cpp
+    WritableMusicLibrary.cpp
     ReadTransaction.cpp
     WriteTransaction.cpp
     ResourceStore.cpp
@@ -18,6 +19,11 @@ add_library(ao_library STATIC
     ListBuilder.cpp
     AudioIdentity.cpp
 )
+if(WIN32)
+    target_sources(ao_library PRIVATE WriterSessionLeaseWindows.cpp)
+else()
+    target_sources(ao_library PRIVATE WriterSessionLeasePosix.cpp)
+endif()
 target_include_directories(ao_library PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_library PUBLIC ao_lmdb)
 

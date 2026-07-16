@@ -19,6 +19,7 @@
 #include <ao/audio/Player.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
+#include <ao/library/TrackStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
@@ -43,6 +44,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <span>
 #include <string>
@@ -57,7 +59,7 @@ namespace ao::rt::test
     {
       PlaybackSequenceFixture()
         : asyncRuntime{executor}
-        , writer{libraryFixture.library(), changes}
+        , writerFixture{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
         , playback{makePlaybackService(executor, libraryFixture.library(), notifications)}
@@ -65,17 +67,32 @@ namespace ao::rt::test
         playback.addProvider(makeReadyAudioProvider());
       }
 
+      LibraryWriter& writer() { return writerFixture.writer(); }
+
       TrackId addPlayableTrack(std::string title, std::uint16_t const year = 2020)
       {
         auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac");
+        auto const playablePath = libraryFixture.root() / std::format("playable-{}.flac", nextPlayableFile++);
+        REQUIRE(std::filesystem::copy_file(fixturePath, playablePath));
         return libraryFixture.addTrack(library::test::TrackSpec{
-          .title = std::move(title), .uri = fixturePath.string(), .year = year, .codec = AudioCodec::Flac});
+          .title = std::move(title), .uri = playablePath.string(), .year = year, .codec = AudioCodec::Flac});
+      }
+
+      void removePlayableFile(TrackId const trackId)
+      {
+        auto transaction = libraryFixture.library().readTransaction();
+        auto const optView = libraryFixture.library()
+                               .tracks()
+                               .reader(transaction)
+                               .get(trackId, library::TrackStore::Reader::LoadMode::Cold);
+        REQUIRE(optView);
+        REQUIRE(std::filesystem::remove(std::filesystem::path{optView->property().uri()}));
       }
 
       void openManualView(std::span<TrackId const> const trackIds, TrackListViewConfig config = {})
       {
         sources.reloadAllTracks();
-        listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+        listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
           .kind = LibraryWriter::ListKind::Manual,
           .name = "Playback order",
           .trackIds = {trackIds.begin(), trackIds.end()},
@@ -98,7 +115,7 @@ namespace ao::rt::test
       InlineExecutor executor;
       async::Runtime asyncRuntime;
       LibraryChanges changes;
-      LibraryWriter writer;
+      LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
       NotificationService notifications;
@@ -109,19 +126,22 @@ namespace ao::rt::test
       TrackId thirdTrackId = kInvalidTrackId;
       ListId listId = kInvalidListId;
       ViewId viewId = kInvalidViewId;
+      std::uint32_t nextPlayableFile = 0;
     };
 
     struct PlaybackSequenceTransportFixture final
     {
       PlaybackSequenceTransportFixture()
         : asyncRuntime{transport.executor}
-        , writer{transport.libraryFixture.library(), changes}
+        , writerFixture{transport.libraryFixture.library(), changes}
         , sources{transport.libraryFixture.library(), changes}
         , views{transport.executor, transport.libraryFixture.library(), sources}
       {
         transport.onDevicesChangedCb(transport.status.devices);
         transport.executor.drain();
       }
+
+      LibraryWriter& writer() { return writerFixture.writer(); }
 
       TrackId addPlayableTrack(std::string title)
       {
@@ -136,7 +156,7 @@ namespace ao::rt::test
         secondTrackId = addPlayableTrack("Second");
         thirdTrackId = addPlayableTrack("Third");
         sources.reloadAllTracks();
-        listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+        listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
           .kind = LibraryWriter::ListKind::Manual,
           .name = "Transport order",
           .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
@@ -162,7 +182,7 @@ namespace ao::rt::test
       PlaybackFixture<QueuedExecutor> transport;
       async::Runtime asyncRuntime;
       LibraryChanges changes;
-      LibraryWriter writer;
+      LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
       std::unique_ptr<PlaybackSequenceService> sequencePtr;
@@ -177,7 +197,7 @@ namespace ao::rt::test
     {
       explicit PlaybackSequenceSeekFixture(audio::test::StagedFailureGate* const failureGate = nullptr)
         : asyncRuntime{executor}
-        , writer{libraryFixture.library(), changes}
+        , writerFixture{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
       {
@@ -216,6 +236,8 @@ namespace ao::rt::test
         executor.drain();
       }
 
+      LibraryWriter& writer() { return writerFixture.writer(); }
+
       void buildThreeTrackManualView()
       {
         firstTrackId = libraryFixture.addTrack(library::test::TrackSpec{
@@ -225,7 +247,7 @@ namespace ao::rt::test
         thirdTrackId = libraryFixture.addTrack(library::test::TrackSpec{
           .title = "Third", .uri = "third.flac", .duration = std::chrono::seconds{10}, .codec = AudioCodec::Flac});
         sources.reloadAllTracks();
-        listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+        listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
           .kind = LibraryWriter::ListKind::Manual,
           .name = "Long playback order",
           .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
@@ -240,7 +262,7 @@ namespace ao::rt::test
         firstTrackId = libraryFixture.addTrack(library::test::TrackSpec{
           .title = "Failing current", .uri = "failing-current.flac", .codec = AudioCodec::Flac});
         sources.reloadAllTracks();
-        listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+        listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
           .kind = LibraryWriter::ListKind::Manual,
           .name = "Failing playback order",
           .trackIds = {firstTrackId},
@@ -254,7 +276,7 @@ namespace ao::rt::test
       QueuedExecutor executor;
       async::Runtime asyncRuntime;
       LibraryChanges changes;
-      LibraryWriter writer;
+      LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
       NotificationService notifications;
@@ -272,6 +294,7 @@ namespace ao::rt::test
             "[runtime][unit][playback-sequence][launch]")
   {
     auto fixture = PlaybackSequenceFixture{};
+    auto const outsideTrackId = fixture.addPlayableTrack("Outside");
     fixture.buildThreeTrackManualView();
     auto& sequence = *fixture.sequencePtr;
     std::uint32_t changedCount = 0;
@@ -297,8 +320,6 @@ namespace ao::rt::test
 
     SECTION("start absent from captured projection")
     {
-      auto const outsideTrackId = fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Outside"});
-      fixture.sources.reloadAllTracks();
       auto const rejected = sequence.playFromView(fixture.viewId, outsideTrackId);
       REQUIRE_FALSE(rejected);
       CHECK(rejected.error().code == Error::Code::NotFound);
@@ -431,7 +452,7 @@ namespace ao::rt::test
     REQUIRE(sequence.playFromView(fixture.viewId, fixture.firstTrackId));
     auto const beforeRemoval = sequence.state();
 
-    auto const removed = fixture.writer.removeManualListTracks(fixture.listId, std::array{fixture.firstTrackId});
+    auto const removed = fixture.writer().removeManualListTracks(fixture.listId, std::array{fixture.firstTrackId});
     REQUIRE(removed);
     REQUIRE(removed->changed);
 
@@ -443,7 +464,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.state().transport == audio::Transport::Playing);
     CHECK(fixture.playback.state().nowPlaying.trackId == fixture.firstTrackId);
 
-    REQUIRE(fixture.writer.deleteList(fixture.listId));
+    REQUIRE(fixture.writer().deleteList(fixture.listId));
     auto const invalidated = sequence.state();
     CHECK(invalidated.sourceState == PlaybackSequenceSourceState::Invalidated);
     CHECK(invalidated.currentTrackId == fixture.firstTrackId);
@@ -511,7 +532,7 @@ namespace ao::rt::test
     {
       auto fixture = PlaybackSequenceFixture{};
       fixture.buildThreeTrackManualView();
-      REQUIRE(fixture.writer.deleteList(fixture.listId));
+      REQUIRE(fixture.writer().deleteList(fixture.listId));
 
       auto const result = fixture.sequencePtr->playFromView(fixture.viewId, fixture.firstTrackId);
 
@@ -534,7 +555,7 @@ namespace ao::rt::test
     auto const beforeMove = sequence.state();
 
     auto const moved =
-      fixture.writer.moveManualListTracks(fixture.listId, std::array{fixture.thirdTrackId}, std::size_t{1});
+      fixture.writer().moveManualListTracks(fixture.listId, std::array{fixture.thirdTrackId}, std::size_t{1});
     REQUIRE(moved);
     REQUIRE(moved->changed);
 
@@ -546,7 +567,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.state().transport == audio::Transport::Playing);
 
     auto const noOp =
-      fixture.writer.moveManualListTracks(fixture.listId, std::array{fixture.thirdTrackId}, std::size_t{1});
+      fixture.writer().moveManualListTracks(fixture.listId, std::array{fixture.thirdTrackId}, std::size_t{1});
     REQUIRE(noOp);
     CHECK_FALSE(noOp->changed);
     CHECK(sequence.state().semanticRevision == beforeMove.semanticRevision + 1);
@@ -561,7 +582,7 @@ namespace ao::rt::test
     fixture.secondTrackId = fixture.addPlayableTrack("Second", 2000);
     fixture.thirdTrackId = fixture.addPlayableTrack("Third", 2010);
     fixture.sources.reloadAllTracks();
-    fixture.listId = ao::test::requireValue(fixture.writer.createList(LibraryWriter::ListDraft{
+    fixture.listId = ao::test::requireValue(fixture.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Smart,
       .name = "Recent",
       .expression = "$year >= 2000",
@@ -587,16 +608,16 @@ namespace ao::rt::test
     auto const beforeAddition = sequence.state();
     REQUIRE(beforeAddition.optResolvedSuccessor == fixture.thirdTrackId);
 
-    REQUIRE(
-      fixture.writer.updateMetadata(std::array{fixture.firstTrackId}, MetadataPatch{.optYear = std::uint16_t{2005}}));
+    REQUIRE(fixture.writerFixture.updateMetadata(
+      std::array{fixture.firstTrackId}, MetadataPatch{.optYear = std::uint16_t{2005}}));
     auto const afterAddition = sequence.state();
     CHECK(afterAddition.currentTrackId == fixture.secondTrackId);
     CHECK(afterAddition.optResolvedSuccessor == fixture.firstTrackId);
     CHECK(afterAddition.semanticRevision == beforeAddition.semanticRevision + 1);
     CHECK(fixture.playback.state().nowPlaying.trackId == fixture.secondTrackId);
 
-    REQUIRE(
-      fixture.writer.updateMetadata(std::array{fixture.secondTrackId}, MetadataPatch{.optYear = std::uint16_t{1990}}));
+    REQUIRE(fixture.writerFixture.updateMetadata(
+      std::array{fixture.secondTrackId}, MetadataPatch{.optYear = std::uint16_t{1990}}));
     auto const currentRemoved = sequence.state();
     CHECK(currentRemoved.sourceState == PlaybackSequenceSourceState::Live);
     CHECK(currentRemoved.currentTrackId == fixture.secondTrackId);
@@ -616,14 +637,14 @@ namespace ao::rt::test
     REQUIRE(sequence.playFromView(fixture.viewId, fixture.firstTrackId));
     sequence.setRepeatMode(RepeatMode::One);
 
-    REQUIRE(fixture.writer.removeManualListTracks(fixture.listId, std::array{fixture.firstTrackId}));
+    REQUIRE(fixture.writer().removeManualListTracks(fixture.listId, std::array{fixture.firstTrackId}));
     auto const emptyLive = sequence.state();
     CHECK(emptyLive.sourceState == PlaybackSequenceSourceState::Live);
     CHECK(emptyLive.hasNext);
     CHECK(emptyLive.optResolvedSuccessor == fixture.firstTrackId);
     CHECK(fixture.playback.state().transport == audio::Transport::Playing);
 
-    REQUIRE(fixture.writer.deleteList(fixture.listId));
+    REQUIRE(fixture.writer().deleteList(fixture.listId));
     auto const invalidated = sequence.state();
     CHECK(invalidated.sourceState == PlaybackSequenceSourceState::Invalidated);
     CHECK_FALSE(invalidated.hasNext);
@@ -661,7 +682,7 @@ namespace ao::rt::test
       sequence.setRepeatMode(RepeatMode::All);
     }
 
-    REQUIRE(fixture.writer.removeManualListTracks(fixture.listId, std::array{fixture.firstTrackId}));
+    REQUIRE(fixture.writer().removeManualListTracks(fixture.listId, std::array{fixture.firstTrackId}));
     CHECK(sequence.state().sourceState == PlaybackSequenceSourceState::Live);
     CHECK_FALSE(sequence.hasNext());
     CHECK_FALSE(sequence.state().hasNext);
@@ -910,7 +931,7 @@ namespace ao::rt::test
     REQUIRE(fixture.sequencePtr->playFromView(fixture.viewId, fixture.firstTrackId));
     REQUIRE(failureGate.waitForRead());
 
-    REQUIRE(fixture.writer.deleteList(fixture.listId));
+    REQUIRE(fixture.writer().deleteList(fixture.listId));
     REQUIRE(fixture.sequencePtr->state().sourceState == PlaybackSequenceSourceState::Invalidated);
     releaseGuard.release();
     REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
@@ -1015,10 +1036,7 @@ namespace ao::rt::test
     {
       auto const optFailedCandidate = sequence.state().optResolvedSuccessor;
       REQUIRE(optFailedCandidate);
-      library::test::updateTrackSpec(fixture.libraryFixture.library(),
-                                     *optFailedCandidate,
-                                     [](library::test::TrackSpec& spec)
-                                     { spec.uri = "/missing/shuffle-forward.flac"; });
+      fixture.removePlayableFile(*optFailedCandidate);
 
       sequence.next();
 
@@ -1034,10 +1052,7 @@ namespace ao::rt::test
       REQUIRE(currentTrackId != fixture.firstTrackId);
       REQUIRE(sequence.hasPrevious());
       auto const revisionBeforeFailure = sequence.state().semanticRevision;
-      library::test::updateTrackSpec(fixture.libraryFixture.library(),
-                                     fixture.firstTrackId,
-                                     [](library::test::TrackSpec& spec)
-                                     { spec.uri = "/missing/shuffle-history.flac"; });
+      fixture.removePlayableFile(fixture.firstTrackId);
 
       sequence.previous();
 

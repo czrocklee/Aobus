@@ -43,7 +43,7 @@ namespace ao::rt
     static Result<std::unique_ptr<PlaybackCursorSession>> create(PlaybackLaunchSpec launchSpec,
                                                                  TrackId startTrackId,
                                                                  TrackSourceCache& sources,
-                                                                 library::MusicLibrary& library,
+                                                                 library::MusicLibrary const& library,
                                                                  RepeatMode repeatMode,
                                                                  ShuffleMode shuffleMode,
                                                                  ShuffleHistory::CandidateChooser candidateChooser);
@@ -54,7 +54,7 @@ namespace ao::rt
       TrackId currentTrackId,
       std::size_t anchorIndex,
       TrackSourceCache& sources,
-      library::MusicLibrary& library,
+      library::MusicLibrary const& library,
       RepeatMode repeatMode,
       ShuffleMode shuffleMode,
       ShuffleHistory::CandidateChooser candidateChooser);

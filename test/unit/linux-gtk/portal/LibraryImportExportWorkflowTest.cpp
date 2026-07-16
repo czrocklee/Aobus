@@ -135,7 +135,11 @@ namespace ao::gtk::test
 
     auto optCompletedCount = std::optional<std::size_t>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      {
+        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletedCount = event.affectedCount;
+      });
 
     workflow.scan();
 
@@ -164,7 +168,11 @@ namespace ao::gtk::test
     auto optCompletedCount = std::optional<std::size_t>{};
     auto progressEvents = std::vector<rt::LibraryChanges::LibraryTaskProgressUpdated>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      {
+        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletedCount = event.affectedCount;
+      });
     auto progressSub = fixture.runtime().library().changes().onLibraryTaskProgress(
       [&progressEvents](auto const& event) { progressEvents.push_back(event); });
 
@@ -249,7 +257,11 @@ namespace ao::gtk::test
     fixture.runtime().notifications().dismissAll();
     auto optCompletedCount = std::optional<std::size_t>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      {
+        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletedCount = event.affectedCount;
+      });
 
     auto const movedPath = fixture.runtime().musicRoot() / "renamed.flac";
     std::filesystem::rename(fixture.runtime().musicRoot() / "song.flac", movedPath);
@@ -283,7 +295,11 @@ namespace ao::gtk::test
     fixture.runtime().notifications().dismissAll();
     auto optCompletedCount = std::optional<std::size_t>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](std::size_t count) { optCompletedCount = count; });
+      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      {
+        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletedCount = event.affectedCount;
+      });
 
     std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
 

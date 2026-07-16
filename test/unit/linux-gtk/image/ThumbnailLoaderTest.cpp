@@ -7,6 +7,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/MusicLibrary.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
@@ -24,9 +25,16 @@ namespace ao::gtk::test
   TEST_CASE("ThumbnailLoader - resolves image sources into pixbuf results", "[gtk][unit][thumbnail][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
+    auto validResourceId = kInvalidResourceId;
+    auto malformedResourceId = kInvalidResourceId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      {
+        validResourceId = writeCoverResource(musicLibrary, 256);
+        auto const badBytes = std::array{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
+        malformedResourceId = writeRawResource(musicLibrary, std::span<std::byte const>{badBytes});
+      }};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
     auto cache = ImageCache{200};
     auto loader = ThumbnailLoader{runtime.library(), cache, runtime.async()};
 
@@ -34,7 +42,7 @@ namespace ao::gtk::test
 
     SECTION("request decodes off-thread, populates the cache, and invokes the callback")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
 
       auto receivedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
       std::int32_t callbackCount = 0;
@@ -62,7 +70,7 @@ namespace ao::gtk::test
 
     SECTION("concurrent requests for the same id coalesce into a single decode")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
 
       auto firstPtr = Glib::RefPtr<Gdk::Pixbuf>{};
       auto secondPtr = Glib::RefPtr<Gdk::Pixbuf>{};
@@ -95,7 +103,7 @@ namespace ao::gtk::test
 
     SECTION("waiters for a coalesced decode are invoked in request order")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
       auto callbackOrder = std::vector<int>{};
       auto requests = std::vector<ThumbnailLoader::Request>{};
 
@@ -111,7 +119,7 @@ namespace ao::gtk::test
 
     SECTION("larger requests are not satisfied by smaller in-flight decodes")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
 
       auto smallPtr = Glib::RefPtr<Gdk::Pixbuf>{};
       auto largePtr = Glib::RefPtr<Gdk::Pixbuf>{};
@@ -132,7 +140,7 @@ namespace ao::gtk::test
 
     SECTION("prefetch warms the cache without a callback")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
 
       loader.prefetch(resourceId, kPixelSize);
 
@@ -142,7 +150,7 @@ namespace ao::gtk::test
 
     SECTION("prefetch is a no-op for invalid, cached, and already in-flight requests")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
 
       loader.prefetch(kInvalidResourceId, kPixelSize);
       CHECK_FALSE(loader.get(kInvalidResourceId, kPixelSize));
@@ -178,7 +186,7 @@ namespace ao::gtk::test
 
     SECTION("request accepts an empty callback and still warms the cache")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
 
       auto request = loader.request(resourceId, kPixelSize, ThumbnailLoader::OnThumbnailReady{});
       CHECK_FALSE(request);
@@ -232,8 +240,7 @@ namespace ao::gtk::test
 
     SECTION("malformed image bytes report an empty result and are not cached")
     {
-      auto const badBytes = std::array{std::byte{0xDE}, std::byte{0xAD}, std::byte{0xBE}, std::byte{0xEF}};
-      auto const resourceId = writeRawResource(library, std::span<std::byte const>{badBytes});
+      auto const resourceId = malformedResourceId;
       std::int32_t callbackCount = 0;
       bool wasEmpty = false;
 
@@ -253,7 +260,7 @@ namespace ao::gtk::test
 
     SECTION("destroying a request cancels its callback without cancelling the shared decode")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
       std::int32_t callbackCount = 0;
 
       auto request = loader.request(resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
@@ -267,7 +274,7 @@ namespace ao::gtk::test
 
     SECTION("destroying the loader cancels pending callbacks")
     {
-      auto const resourceId = writeCoverResource(library, 256);
+      auto const resourceId = validResourceId;
       std::int32_t callbackCount = 0;
       auto request = ThumbnailLoader::Request{};
 

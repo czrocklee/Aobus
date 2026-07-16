@@ -7,7 +7,9 @@
 #include "CommandError.h"
 #include "Output.h"
 #include "ScanOutput.h"
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryScan.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/yaml/Reflect.h>
 
@@ -122,7 +124,7 @@ namespace ao::cli
         {
           report.optItems = std::vector<ScanItemDto>{};
 
-          for (auto const& item : plan.items)
+          for (auto const& item : plan.items())
           {
             if (item.classification == rt::ScanClassification::Unchanged)
             {
@@ -151,7 +153,7 @@ namespace ao::cli
         return;
       }
 
-      for (auto const& item : plan.items)
+      for (auto const& item : plan.items())
       {
         if (item.classification == rt::ScanClassification::Unchanged)
         {
@@ -182,9 +184,10 @@ namespace ao::cli
 
     void printApplySummary(rt::ScanApplyResult const& result, std::ostream& os)
     {
-      if (result.relinkedCount > 0)
+      if (!result.relinkedIds.empty())
       {
-        std::println(os, "Relinked {} moved file{}", result.relinkedCount, result.relinkedCount == 1 ? "" : "s");
+        std::println(
+          os, "Relinked {} moved file{}", result.relinkedIds.size(), result.relinkedIds.size() == 1 ? "" : "s");
       }
 
       if (result.missingCount > 0)
@@ -211,7 +214,7 @@ namespace ao::cli
 
   void runScan(CliRuntime& cli, bool dryRun, bool verbose, bool deferFingerprint)
   {
-    auto& ml = cli.musicLibrary();
+    auto const& ml = cli.musicLibrary();
     auto scanService = rt::LibraryScan{ml};
     auto buildProgress = rt::LibraryScan::BuildProgressCallback{};
 
@@ -244,7 +247,7 @@ namespace ao::cli
       options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
     }
 
-    auto applyProgress = rt::LibraryScan::ApplyProgressCallback{};
+    auto applyProgress = rt::LibraryTaskService::ScanProgressCallback{};
 
     if (verbose)
     {
@@ -257,11 +260,12 @@ namespace ao::cli
       };
     }
 
-    if (auto const applyResult =
-          scanService.applyPlan(std::move(plan),
-                                options,
-                                std::move(applyProgress),
-                                [&cli](rt::ScanFailure const& failure) { printFailure(failure, cli.io().err); });
+    if (auto const applyResult = cli.runTask(cli.library().taskService().applyScanPlanAsync(
+          std::move(plan),
+          options,
+          {},
+          std::move(applyProgress),
+          [&cli](rt::ScanFailure const& failure) { printFailure(failure, cli.io().err); }));
         !applyResult)
     {
       auto const& error = applyResult.error();
@@ -271,7 +275,7 @@ namespace ao::cli
     {
       printApplySummary(*applyResult, cli.io().out);
 
-      if (deferFingerprint && !applyResult->cancelled)
+      if (deferFingerprint)
       {
         std::println(
           cli.io().out,

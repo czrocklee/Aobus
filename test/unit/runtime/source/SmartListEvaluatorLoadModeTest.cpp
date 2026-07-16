@@ -23,10 +23,10 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     hotList.setExpression("$year >= 2020"); // Hot metadata
 
-    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     coldList.setExpression("@duration >= 3m"); // Cold property
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2022, std::chrono::seconds{200}));
@@ -48,7 +48,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     // Requires both metadata and property reader
     list.setExpression("$year >= 2020 && @duration >= 3m");
 

@@ -18,12 +18,13 @@ It does not define tag-file import mappings or query grammar.
 ## Code boundary
 
 Runtime `TrackDetailProjection` owns the authoritative aggregate snapshot and observes library/view changes.
-`LibraryWriter` owns committed metadata/tag mutation and change publication.
+`LibraryMutationService` owns admission, commit, and change publication; `LibraryWriter` exposes bound metadata/tag commands.
 UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`, and `field/` owns schema, visibility, display formatting, validation, edit codecs, and patch/workflow construction.
 
-UIModel may call the narrow runtime writer supplied by composition.
+`TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits and may call the narrow runtime writer supplied by composition.
 It does not open transactions or mutate `MusicLibrary` stores directly.
-Frontends may render and collect edit intent but cannot reinterpret patch semantics.
+Interactive GTK/TUI frontends may render and collect edit intent but cannot call `LibraryWriter` directly, replace the bound targets, or reinterpret patch semantics.
+The non-interactive CLI may bind command-selected ids immediately before invoking the runtime writer, as defined by the [CLI execution specification](../cli/execution.md).
 
 ## Terminology
 
@@ -33,6 +34,7 @@ Frontends may render and collect edit intent but cannot reinterpret patch semant
 - A **technical field** is an objective read-only property in the detail editor.
 - A **common tag** is present on every selected track.
 - An **undo-eligible deletion** removes a custom key that was present on all selected tracks with one non-mixed value.
+- An **authoring binding** identifies one runtime instance, one committed library revision, and one exact ordered target-id set.
 
 ## Invariants
 
@@ -44,6 +46,10 @@ Frontends may render and collect edit intent but cannot reinterpret patch semant
 - A custom key cannot be added when already present in the snapshot or when it collides with a reserved built-in field id.
 - Built-in metadata can be cleared but not structurally deleted.
 - A tag edit with no selected ids or no additions/removals is a no-op.
+- One open editor owns one `TrackAuthoringSession`; changing selection or recycling a row cannot retarget that session.
+- Any intervening effective library commit, maintenance entry, fault, or runtime replacement makes an open non-submitting session stale.
+- Missing targets reject the complete metadata/tag command; multi-selection authoring never applies a surviving subset.
+- A semantic no-op does not commit and leaves the current session binding usable.
 - File tag readers map only explicitly supported Aobus fields; unknown vendor fields do not become custom metadata.
 
 ## State model
@@ -55,12 +61,20 @@ Each `CustomMetadataItem` carries key, aggregate string value, `presentOnAll`, a
 The field-grid schema divides supported definitions into metadata, composite metadata, and technical fields according to the requested categories.
 Visibility policy depends on category enablement, selection, section expansion, show-empty state, editor activity, and current display text.
 
+`TrackAuthoringSession` has `Editing`, `Submitting`, `Applied`, `Stale`, and `Rejected` states.
+Beginning a session binds its explicit targets and immediately reconciles current runtime availability after subscribing, closing the bind-to-subscribe event gap.
+An applied submission replaces the retained binding with the returned next-revision binding; a later effective commit makes it stale.
+Operational failure or a missing target rejects the session, while stale or unavailable submission makes it stale.
+Every submission reconciles runtime availability after mapping its outcome, including events ignored while the session was `Submitting`.
+A durably applied command whose publication exception is contained by the callback executor therefore retains its `Applied` outcome but leaves the session `Stale` because that runtime is faulted.
+
 ## Commands and transitions
 
 ### Built-in metadata
 
 The frontend decodes edit text through the shared field codec and creates a typed `MetadataPatch`.
-Applying the patch through `LibraryWriter` updates every selected id that can be mutated and publishes the runtime library change.
+Applying the patch through the retained authoring session updates the complete bound target set or none of it.
+The result is `Applied`, `NoOp`, `Stale`, `Missing`, or `Unavailable`; `Result` errors remain operational or validation failures.
 An empty metadata display value remains hidden by default unless show-empty is active or its editor is open.
 
 ### Custom metadata
@@ -70,12 +84,14 @@ Update creates `customUpdates[key] = value`; delete creates `customUpdates[key] 
 The mutation result's `mutatedIds` determines whether the visible operation applied.
 
 Before deletion, UIModel returns an undo value only for a key present on all targets with a non-mixed value.
-Presentation of and timeout for that undo are frontend-local, but replay uses the same runtime metadata patch.
+An applied deletion transfers its session, now holding the next-revision binding, into the undo receipt.
+Presentation and timeout remain frontend-local, but replay submits the reverse patch through that same guarded session.
+Any intervening effective commit makes undo stale instead of overwriting newer work.
 
 ### Tags
 
-`TagEditWorkflow` sends selected ids plus additions/removals to `LibraryWriter::editTags`.
-It reports whether any target changed, whether the request was rejected, and one status string summarizing added/removed counts and mutated track count.
+`TagEditWorkflow` verifies that the event's selected ids exactly equal its session targets, then submits additions/removals through that session.
+It reports whether any target changed, whether the request was rejected or stale, and one status string summarizing added/removed counts and mutated track count.
 Suggested tags are a presentation aid; only the final add/remove request is authoritative.
 
 ## Failure and cancellation
@@ -83,7 +99,11 @@ Suggested tags are a presentation aid; only the final add/remove request is auth
 Runtime mutation failure rejects the edit and exposes the recoverable diagnostic to the frontend workflow.
 No partial frontend state is treated as committed merely because an editor closed.
 The current synchronous mutation boundary has no cancellation token; cancellation before submission discards the local draft, while a returned successful mutation is committed.
-The current command carries no observed field baseline or library generation and silently skips missing target ids; [RFC 0023](../../rfc/0023-revision-bound-metadata-authoring.md) proposes guarded atomic authoring and compare-and-restore undo.
+
+Stale and unavailable outcomes tell the frontend to reload rather than retry the same session.
+Missing targets reject the session and report the missing-target condition.
+After durable commit, a publication failure faults the runtime; UIModel cannot treat it as an ordinary uncommitted rejection.
+It preserves an applied outcome when available while making the session stale, so the frontend can show committed state but cannot submit through that runtime again.
 
 ## Persistence and versioning
 
@@ -105,6 +125,7 @@ Custom keys are queryable through the custom-variable syntax in the predicate la
 - [`TrackFieldGridSchema.cpp`](../../../app/uimodel/library/detail/TrackFieldGridSchema.cpp) and [`TrackFieldGridPolicy.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGridPolicy.h) own field selection and visibility.
 - [`TrackCustomMetadataWorkflow.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadataWorkflow.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEditWorkflow.cpp`](../../../app/uimodel/library/property/TagEditWorkflow.cpp) owns tag mutation requests and status.
+- [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns stable targets, binding lifetime, submit states, and outcome mapping.
 - [`LibraryWriter.cpp`](../../../app/runtime/library/LibraryWriter.cpp) owns mutation commit.
 
 ## Test map
@@ -113,6 +134,7 @@ Custom keys are queryable through the custom-variable syntax in the predicate la
 - [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridPolicyTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp) protect field/visibility policy.
 - [`TrackCustomMetadataWorkflowTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataWorkflowTest.cpp) protects validation, patches, mixed values, and undo eligibility.
 - [`TagEditWorkflowTest.cpp`](../../../test/unit/uimodel/library/property/TagEditWorkflowTest.cpp) protects tag mutations and outcomes.
+- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, stale transitions, and post-commit faults with both propagating and exception-containing executors.
 - [`LibraryWriterTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTest.cpp) protects committed multi-target behavior.
 
 ## Related documents

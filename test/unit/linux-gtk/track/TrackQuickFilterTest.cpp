@@ -97,8 +97,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    library::test::addTrack(
-      runtime.musicLibrary(), library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
+    addRuntimeTrack(runtime, {.title = "Completion Track", .artist = "Aimer"});
 
     auto window = Gtk::Window{};
     auto filter = TrackQuickFilter{runtime};

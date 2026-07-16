@@ -4,13 +4,20 @@
 #pragma once
 
 #include "track/TrackRowObject.h"
+#include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/signallistitemfactory.h>
 
 #include <functional>
+#include <memory>
 #include <string>
+
+namespace ao::uimodel
+{
+  class TrackAuthoringSession;
+}
 
 namespace ao::gtk
 {
@@ -19,8 +26,12 @@ namespace ao::gtk
   /**
    * Callback for committing inline metadata edits from the UI.
    */
-  using MetadataCommitFn =
-    std::function<void(Glib::RefPtr<TrackRowObject> const& rowPtr, rt::TrackField field, std::string newValue)>;
+  using MetadataEditSessionFn =
+    std::function<Result<std::unique_ptr<uimodel::TrackAuthoringSession>>(Glib::RefPtr<TrackRowObject> const& rowPtr)>;
+  using MetadataCommitFn = std::function<void(Glib::RefPtr<TrackRowObject> const& rowPtr,
+                                              rt::TrackField field,
+                                              std::string newValue,
+                                              uimodel::TrackAuthoringSession& session)>;
 
   /**
    * Builds a SignalListItemFactory for the given track field.
@@ -36,6 +47,7 @@ namespace ao::gtk
    *        subscribes once to its playing-changed signal and styles from playingTrackId().
    */
   Glib::RefPtr<Gtk::SignalListItemFactory> buildColumnFactory(rt::TrackField field,
+                                                              MetadataEditSessionFn const& beginEditSession,
                                                               MetadataCommitFn const& commitFn,
                                                               TrackListModel& playingModel);
 } // namespace ao::gtk

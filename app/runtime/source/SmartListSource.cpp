@@ -3,7 +3,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
@@ -21,10 +20,8 @@
 
 namespace ao::rt
 {
-  SmartListSource::SmartListSource(TrackSourceLease sourceLease,
-                                   library::MusicLibrary& ml,
-                                   SmartListEvaluator& evaluator)
-    : _sourceLease{std::move(sourceLease)}, _ml{ml}, _evaluator{&evaluator}
+  SmartListSource::SmartListSource(TrackSourceLease sourceLease, SmartListEvaluator& evaluator)
+    : _sourceLease{std::move(sourceLease)}, _evaluator{&evaluator}
   {
     stageExpression("");
     _evaluator->registerList(*this);

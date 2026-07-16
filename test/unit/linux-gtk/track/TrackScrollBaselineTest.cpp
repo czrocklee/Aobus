@@ -11,6 +11,7 @@
 // app-owned bind cost we can actually optimize, not the toolkit's.
 
 #include "../../TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
@@ -56,7 +57,7 @@ namespace ao::gtk::test
       auto ids = std::vector<TrackId>{};
       ids.reserve(count);
 
-      auto transaction = library.writeTransaction();
+      auto transaction = library::test::writeTransaction(library);
       auto writer = library.tracks().writer(transaction);
 
       for (std::size_t i = 0; i < count; ++i)
@@ -101,13 +102,11 @@ namespace ao::gtk::test
   TEST_CASE("TrackScrollBaseline - track scroll bind path stays within baseline latency", "[gtk][unit][regression]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& library = fixture.runtime().musicLibrary();
-
     constexpr std::size_t kRowCount = 5000;
     constexpr std::size_t kReScrollPasses = 20;
-
-    auto const ids = seedLibrary(library, kRowCount);
+    auto ids = std::vector<TrackId>{};
+    auto fixture =
+      GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary) { ids = seedLibrary(musicLibrary, kRowCount); }};
     CHECK(ids.size() == kRowCount);
 
     auto cache = TrackRowCache{fixture.runtime().library()};

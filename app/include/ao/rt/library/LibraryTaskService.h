@@ -6,10 +6,12 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <stop_token>
 
@@ -26,26 +28,41 @@ namespace ao::async
 namespace ao::rt
 {
   class LibraryChanges;
+  class LibraryMutationService;
   enum class ExportMode : std::uint8_t;
 
   class LibraryTaskService final
   {
   public:
-    LibraryTaskService(async::Runtime& asyncRuntime, library::MusicLibrary& library, LibraryChanges& changes);
     ~LibraryTaskService();
 
     // Returning a Result, including an error Result, resumes the caller on the callback executor.
     // Unexpected exceptions may still propagate from the executor where they occur; UI callers should
     // present them through a boundary that returns to the callback executor first.
-    async::Task<Result<>> importLibraryAsync(std::filesystem::path path, std::stop_token stopToken = {});
+    using ScanProgressCallback = std::move_only_function<void(ScanApplyProgress const& progress)>;
+    using ScanFailureCallback = std::move_only_function<void(ScanFailure const& failure)>;
+
+    async::Task<Result<ImportReport>> importLibraryAsync(std::filesystem::path path,
+                                                         ImportMode mode,
+                                                         std::stop_token stopToken = {});
+    async::Task<Result<ImportReport>> previewLibraryImportAsync(std::filesystem::path path,
+                                                                ImportMode mode,
+                                                                std::stop_token stopToken = {});
     async::Task<Result<>> exportLibraryAsync(std::filesystem::path path,
                                              ExportMode mode,
                                              std::stop_token stopToken = {});
     async::Task<Result<ScanPlan>> buildScanPlanAsync(std::stop_token stopToken = {});
+    // Cooperative cancellation propagates OperationCancelled; a returned
+    // ScanApplyResult always represents a non-cancelled terminal outcome.
     async::Task<Result<ScanApplyResult>> applyScanPlanAsync(ScanPlan plan,
                                                             ScanApplyOptions options = {},
-                                                            std::stop_token stopToken = {});
-    async::Task<Result<AudioIdentityIndexResult>> backfillAudioIdentityAsync(std::stop_token stopToken = {});
+                                                            std::stop_token stopToken = {},
+                                                            ScanProgressCallback progressCallback = {},
+                                                            ScanFailureCallback failureCallback = {});
+    async::Task<Result<AudioIdentityIndexResult>> backfillAudioIdentityAsync(
+      std::stop_token stopToken = {},
+      AudioIdentityIndexer::ProgressCallback progressCallback = {},
+      AudioIdentityIndexer::ItemFailureCallback failureCallback = {});
 
     LibraryTaskService(LibraryTaskService const&) = delete;
     LibraryTaskService& operator=(LibraryTaskService const&) = delete;
@@ -53,7 +70,14 @@ namespace ao::rt
     LibraryTaskService& operator=(LibraryTaskService&&) = delete;
 
   private:
+    LibraryTaskService(async::Runtime& asyncRuntime,
+                       library::MusicLibrary& library,
+                       LibraryChanges& changes,
+                       LibraryMutationService& mutationService);
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    friend class Library;
   };
 } // namespace ao::rt

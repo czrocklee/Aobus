@@ -26,12 +26,14 @@ namespace ao::library
          lmdb::WriteTransaction transactionValue,
          DictionaryStore& dictionary,
          detail::LibraryIdentity const& libraryIdentity,
-         Options options)
+         Options options,
+         std::shared_ptr<void const> writerSessionAnchorPtr)
       : writerGate{std::move(writerLock)}
       , transaction{std::move(transactionValue)}
       , dictionaryWriter{dictionary, transaction}
       , identity{&libraryIdentity}
       , optInjectedCommitFailure{std::move(options.optInjectedCommitFailure)}
+      , writerSessionAnchorPtr{std::move(writerSessionAnchorPtr)}
     {
     }
 
@@ -44,6 +46,8 @@ namespace ao::library
       {
         writerGate.unlock();
       }
+
+      writerSessionAnchorPtr.reset();
     }
 
     std::unique_lock<std::mutex> writerGate;
@@ -51,12 +55,14 @@ namespace ao::library
     DictionaryStore::Writer dictionaryWriter;
     detail::LibraryIdentity const* identity;
     std::optional<Error> optInjectedCommitFailure;
+    std::shared_ptr<void const> writerSessionAnchorPtr;
   };
 
   Result<WriteTransaction> WriteTransaction::begin(lmdb::Environment& environment,
                                                    DictionaryStore& dictionary,
                                                    detail::LibraryIdentity const& identity,
-                                                   Options options)
+                                                   Options options,
+                                                   std::shared_ptr<void const> writerSessionAnchorPtr)
   {
     if (dictionary._identity != &identity)
     {
@@ -73,8 +79,12 @@ namespace ao::library
       return std::unexpected{transaction.error()};
     }
 
-    auto implPtr =
-      std::make_unique<Impl>(std::move(writerGate), std::move(*transaction), dictionary, identity, std::move(options));
+    auto implPtr = std::make_unique<Impl>(std::move(writerGate),
+                                          std::move(*transaction),
+                                          dictionary,
+                                          identity,
+                                          std::move(options),
+                                          std::move(writerSessionAnchorPtr));
     return WriteTransaction{std::move(implPtr)};
   }
 
@@ -83,9 +93,21 @@ namespace ao::library
   {
   }
 
-  WriteTransaction::~WriteTransaction() = default;
+  WriteTransaction::~WriteTransaction()
+  {
+    abort();
+  }
   WriteTransaction::WriteTransaction(WriteTransaction&&) noexcept = default;
-  WriteTransaction& WriteTransaction::operator=(WriteTransaction&&) noexcept = default;
+  WriteTransaction& WriteTransaction::operator=(WriteTransaction&& other) noexcept
+  {
+    if (this != &other)
+    {
+      abort();
+      _implPtr = std::move(other._implPtr);
+    }
+
+    return *this;
+  }
 
   DictionaryStore::Writer& WriteTransaction::dictionary()
   {
@@ -135,7 +157,16 @@ namespace ao::library
 
     _implPtr->dictionaryWriter.publish();
     _implPtr->writerGate.unlock();
+    _implPtr->writerSessionAnchorPtr.reset();
     return {};
+  }
+
+  void WriteTransaction::abort() noexcept
+  {
+    if (_implPtr != nullptr && _implPtr->transaction.isActive())
+    {
+      _implPtr->finishFailure();
+    }
   }
 
   lmdb::WriteTransaction& WriteTransaction::native(detail::LibraryIdentity const& identity)

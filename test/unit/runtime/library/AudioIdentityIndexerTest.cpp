@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/AudioIdentityBatchWriter.h"
+#include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -22,12 +26,14 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <ios>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -71,7 +77,8 @@ namespace ao::rt::test
       auto plan = scanService.buildPlan().value();
       REQUIRE(plan.count(ScanClassification::New) == expectedNewCount);
 
-      auto runResult = scanService.applyPlan(std::move(plan), ScanApplyOptions{.audioIdentityPolicy = policy});
+      auto runResult =
+        ScanApplyOperation{ml, std::move(plan), {}, {}, ScanApplyOptions{.audioIdentityPolicy = policy}}.run();
       REQUIRE(runResult);
       REQUIRE(runResult->insertedIds.size() == expectedNewCount);
       REQUIRE(runResult->failureCount == 0);
@@ -79,7 +86,7 @@ namespace ao::rt::test
 
     void writeManifestIdentity(library::MusicLibrary& ml, std::string_view uri)
     {
-      auto transaction = ml.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml);
       auto writer = ml.manifest().writer(transaction);
       auto currentResult = writer.get(uri);
       REQUIRE(currentResult);
@@ -99,6 +106,43 @@ namespace ao::rt::test
       std::filesystem::last_write_time(path, oldMtimePoint + std::chrono::seconds{10});
     }
 
+    AudioIdentityIndexer::CommitBatchCallback makeOfflineBatchCommit(library::MusicLibrary& library,
+                                                                     std::mutex* optCommitMutex = nullptr)
+    {
+      return [&library, optCommitMutex](
+               std::span<AudioIdentityWriteCandidate const> candidates) -> Result<AudioIdentityBatchCommitResult>
+      {
+        auto commitLock = std::unique_lock<std::mutex>{};
+
+        if (optCommitMutex != nullptr)
+        {
+          commitLock = std::unique_lock{*optCommitMutex};
+        }
+
+        auto writableResult = library::WritableMusicLibrary::acquire(library);
+
+        if (!writableResult)
+        {
+          return std::unexpected{writableResult.error()};
+        }
+
+        auto transaction = writableResult->writeTransaction();
+        auto result = applyAudioIdentityBatch(library, transaction, candidates);
+
+        if (!result || result->completedCount == 0)
+        {
+          return result;
+        }
+
+        if (auto commitResult = transaction.commit(); !commitResult)
+        {
+          return std::unexpected{commitResult.error()};
+        }
+
+        return result;
+      };
+    }
+
     // Drives the indexer coroutine to completion on a private runtime. The
     // future blocks the test thread, never a pool thread.
     Result<AudioIdentityIndexResult> runIndexPending(library::MusicLibrary& ml,
@@ -106,15 +150,16 @@ namespace ao::rt::test
                                                      AudioIdentityIndexer::ProgressCallback progressCallback = {},
                                                      AudioIdentityIndexer::ItemFailureCallback failureCallback = {},
                                                      std::stop_token stopToken = {},
-                                                     std::mutex* optMutationMutex = nullptr)
+                                                     std::mutex* optCommitMutex = nullptr)
     {
       auto executor = InlineExecutor{};
       auto runtime = async::Runtime{executor, 4};
-      auto fallbackMutationMutex = std::mutex{};
-      auto& mutationMutex = optMutationMutex == nullptr ? fallbackMutationMutex : *optMutationMutex;
-      auto indexer = AudioIdentityIndexer{runtime, ml, mutationMutex};
-      auto future = runtime.spawn(indexer.indexPending(
-        std::move(options), std::move(progressCallback), std::move(failureCallback), std::move(stopToken)));
+      auto indexer = AudioIdentityIndexer{runtime, ml};
+      auto future = runtime.spawn(indexer.indexPending(makeOfflineBatchCommit(ml, optCommitMutex),
+                                                       std::move(options),
+                                                       std::move(progressCallback),
+                                                       std::move(failureCallback),
+                                                       std::move(stopToken)));
       return future.get();
     }
 
@@ -201,9 +246,8 @@ namespace ao::rt::test
 
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor, 4};
-    auto mutationMutex = std::mutex{};
-    auto indexer = AudioIdentityIndexer{runtime, ml, mutationMutex};
-    auto future = runtime.spawn(indexer.indexPending(std::move(options)));
+    auto indexer = AudioIdentityIndexer{runtime, ml};
+    auto future = runtime.spawn(indexer.indexPending(makeOfflineBatchCommit(ml), std::move(options)));
     auto const bothStarted = started.waitUntil(2);
     release.release();
     auto result = future.get();

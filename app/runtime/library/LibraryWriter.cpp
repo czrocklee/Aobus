@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "LibraryMutationService.h"
 #include "MediaTrack.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -14,7 +15,9 @@
 #include <ao/library/TrackWrite.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -698,17 +701,157 @@ namespace ao::rt
       return PreviewCreateTrackReply{
         .uri = std::move(reply.uri), .title = std::move(reply.title), .artist = std::move(reply.artist)};
     }
+
+    Result<UpdateTrackMetadataReply> applyMetadataPatchInTransaction(library::MusicLibrary& library,
+                                                                     library::WriteTransaction& transaction,
+                                                                     std::span<TrackId const> trackIds,
+                                                                     MetadataPatch const& patch)
+    {
+      auto writer = library.tracks().writer(transaction);
+      auto mutated = std::vector<TrackId>{};
+      auto changes = std::vector<TrackChangeRecord>{};
+
+      for (auto const trackId : trackIds)
+      {
+        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+
+        if (!optView)
+        {
+          continue;
+        }
+
+        auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
+        auto fieldChanges = std::vector<TrackFieldChange>{};
+        auto const patchResult = applyMetadataPatch(builder, patch, fieldChanges);
+
+        if (!patchResult.changedHot && !patchResult.changedCold)
+        {
+          continue;
+        }
+
+        if (patchResult.changedHot)
+        {
+          auto hotDataResult = builder.serializeHot(transaction);
+
+          if (!hotDataResult)
+          {
+            return storageError("Failed to serialize hot track data", hotDataResult.error());
+          }
+
+          if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
+          {
+            return storageError("Failed to update hot track data", result.error());
+          }
+        }
+
+        if (patchResult.changedCold)
+        {
+          auto coldDataResult = builder.serializeCold(transaction, library.resources());
+
+          if (!coldDataResult)
+          {
+            return storageError("Failed to serialize cold track data", coldDataResult.error());
+          }
+
+          if (auto result = writer.updateCold(trackId,
+                                              coldDataResult->size(),
+                                              [&](std::span<std::byte> buffer)
+                                              { std::ranges::copy(*coldDataResult, buffer.begin()); });
+              !result)
+          {
+            return storageError("Failed to update cold track data", result.error());
+          }
+        }
+
+        mutated.push_back(trackId);
+        changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
+      }
+
+      return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated), .changes = std::move(changes)};
+    }
+
+    Result<EditTrackTagsReply> applyTagPatchInTransaction(library::MusicLibrary& library,
+                                                          library::WriteTransaction& transaction,
+                                                          std::span<TrackId const> trackIds,
+                                                          std::span<std::string const> tagsToAdd,
+                                                          std::span<std::string const> tagsToRemove)
+    {
+      auto writer = library.tracks().writer(transaction);
+      auto mutated = std::vector<TrackId>{};
+      auto changes = std::vector<TrackTagsChange>{};
+
+      for (auto const trackId : trackIds)
+      {
+        auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+
+        if (!optView)
+        {
+          continue;
+        }
+
+        auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
+        auto& tags = builder.tags();
+        bool changed = false;
+        auto addedTags = std::vector<std::string>{};
+        auto removedTags = std::vector<std::string>{};
+
+        for (auto const& tag : tagsToAdd)
+        {
+          if (!std::ranges::contains(tags.names(), tag))
+          {
+            tags.add(tag);
+            addedTags.push_back(tag);
+            changed = true;
+          }
+        }
+
+        for (auto const& tag : tagsToRemove)
+        {
+          if (std::ranges::contains(tags.names(), tag))
+          {
+            tags.remove(tag);
+            removedTags.push_back(tag);
+            changed = true;
+          }
+        }
+
+        if (!changed)
+        {
+          continue;
+        }
+
+        auto hotDataResult = builder.serializeHot(transaction);
+
+        if (!hotDataResult)
+        {
+          return storageError("Failed to serialize hot track data", hotDataResult.error());
+        }
+
+        if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
+        {
+          return storageError("Failed to update hot track data", result.error());
+        }
+
+        mutated.push_back(trackId);
+        changes.push_back(TrackTagsChange{
+          .trackId = trackId, .addedTags = std::move(addedTags), .removedTags = std::move(removedTags)});
+      }
+
+      return EditTrackTagsReply{.mutatedIds = std::move(mutated), .changes = std::move(changes)};
+    }
   } // namespace
 
   struct LibraryWriter::Impl final
   {
-    Result<UpdateTrackMetadataReply> applyUpdateMetadata(std::span<TrackId const> trackIds,
-                                                         MetadataPatch const& patch,
-                                                         MutationMode mode);
-    Result<EditTrackTagsReply> applyEditTags(std::span<TrackId const> trackIds,
-                                             std::span<std::string const> tagsToAdd,
-                                             std::span<std::string const> tagsToRemove,
-                                             MutationMode mode);
+    Result<UpdateTrackMetadataReply> previewUpdateMetadata(std::span<TrackId const> trackIds,
+                                                           MetadataPatch const& patch);
+    Result<MetadataAuthoringOutcome> applyUpdateMetadata(BoundTrackTargets const& targets, MetadataPatch const& patch);
+    Result<EditTrackTagsReply> previewEditTags(std::span<TrackId const> trackIds,
+                                               std::span<std::string const> tagsToAdd,
+                                               std::span<std::string const> tagsToRemove);
+    Result<TagAuthoringOutcome> applyEditTags(BoundTrackTargets const& targets,
+                                              std::span<std::string const> tagsToAdd,
+                                              std::span<std::string const> tagsToRemove);
     Result<ListId> applyCreateList(ListDraft const& draft, MutationMode mode);
     Result<UpdateListReply> applyUpdateList(ListDraft const& draft, MutationMode mode);
     Result<InsertManualListTracksReply> applyInsertManualListTracks(ListId listId,
@@ -727,40 +870,40 @@ namespace ao::rt
     Result<CreateTrackReply> applyCreateTrackFromFile(std::filesystem::path const& path, MutationMode mode);
 
     library::MusicLibrary& library;
-    LibraryChanges& libraryChanges;
+    LibraryMutationService& mutationService;
   };
 
-  LibraryWriter::LibraryWriter(library::MusicLibrary& library, LibraryChanges& changes)
-    : _implPtr{std::make_unique<Impl>(library, changes)}
+  LibraryWriter::LibraryWriter(library::MusicLibrary& library, LibraryMutationService& mutationService)
+    : _implPtr{std::make_unique<Impl>(library, mutationService)}
   {
   }
 
   LibraryWriter::~LibraryWriter() = default;
 
-  Result<UpdateTrackMetadataReply> LibraryWriter::updateMetadata(std::span<TrackId const> trackIds,
-                                                                 MetadataPatch const& patch)
+  Result<LibraryWriter::MetadataAuthoringOutcome> LibraryWriter::updateMetadata(BoundTrackTargets const& targets,
+                                                                                MetadataPatch const& patch)
   {
-    return _implPtr->applyUpdateMetadata(trackIds, patch, MutationMode::Commit);
+    return _implPtr->applyUpdateMetadata(targets, patch);
   }
 
   Result<UpdateTrackMetadataReply> LibraryWriter::previewUpdateMetadata(std::span<TrackId const> trackIds,
                                                                         MetadataPatch const& patch)
   {
-    return _implPtr->applyUpdateMetadata(trackIds, patch, MutationMode::Preview);
+    return _implPtr->previewUpdateMetadata(trackIds, patch);
   }
 
-  Result<EditTrackTagsReply> LibraryWriter::editTags(std::span<TrackId const> trackIds,
-                                                     std::span<std::string const> tagsToAdd,
-                                                     std::span<std::string const> tagsToRemove)
+  Result<LibraryWriter::TagAuthoringOutcome> LibraryWriter::editTags(BoundTrackTargets const& targets,
+                                                                     std::span<std::string const> tagsToAdd,
+                                                                     std::span<std::string const> tagsToRemove)
   {
-    return _implPtr->applyEditTags(trackIds, tagsToAdd, tagsToRemove, MutationMode::Commit);
+    return _implPtr->applyEditTags(targets, tagsToAdd, tagsToRemove);
   }
 
   Result<EditTrackTagsReply> LibraryWriter::previewEditTags(std::span<TrackId const> trackIds,
                                                             std::span<std::string const> tagsToAdd,
                                                             std::span<std::string const> tagsToRemove)
   {
-    return _implPtr->applyEditTags(trackIds, tagsToAdd, tagsToRemove, MutationMode::Preview);
+    return _implPtr->previewEditTags(trackIds, tagsToAdd, tagsToRemove);
   }
 
   Result<ListId> LibraryWriter::createList(ListDraft const& draft)
@@ -867,179 +1010,149 @@ namespace ao::rt
     return previewReply(std::move(*result));
   }
 
-  Result<UpdateTrackMetadataReply> LibraryWriter::Impl::applyUpdateMetadata(std::span<TrackId const> trackIds,
-                                                                            MetadataPatch const& patch,
-                                                                            MutationMode mode)
+  Result<UpdateTrackMetadataReply> LibraryWriter::Impl::previewUpdateMetadata(std::span<TrackId const> trackIds,
+                                                                              MetadataPatch const& patch)
   {
-    auto transaction = library.writeTransaction();
-    auto writer = library.tracks().writer(transaction);
-    auto mutated = std::vector<TrackId>{};
-    auto changes = std::vector<TrackChangeRecord>{};
+    auto mutationResult = mutationService.beginInteractiveMutation();
 
-    for (auto const trackId : trackIds)
+    if (!mutationResult)
     {
-      auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        continue;
-      }
-
-      auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
-      auto fieldChanges = std::vector<TrackFieldChange>{};
-      auto const patchResult = applyMetadataPatch(builder, patch, fieldChanges);
-
-      if (!patchResult.changedHot && !patchResult.changedCold)
-      {
-        continue;
-      }
-
-      if (patchResult.changedHot)
-      {
-        auto hotDataResult = builder.serializeHot(transaction);
-
-        if (!hotDataResult)
-        {
-          return storageError("Failed to serialize hot track data", hotDataResult.error());
-        }
-
-        if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
-        {
-          return storageError("Failed to update hot track data", result.error());
-        }
-      }
-
-      if (patchResult.changedCold)
-      {
-        auto coldDataResult = builder.serializeCold(transaction, library.resources());
-
-        if (!coldDataResult)
-        {
-          return storageError("Failed to serialize cold track data", coldDataResult.error());
-        }
-
-        if (auto result =
-              writer.updateCold(trackId,
-                                coldDataResult->size(),
-                                [&](std::span<std::byte> buf) { std::ranges::copy(*coldDataResult, buf.begin()); });
-            !result)
-        {
-          return storageError("Failed to update cold track data", result.error());
-        }
-      }
-
-      mutated.push_back(trackId);
-      changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
+      return std::unexpected{mutationResult.error()};
     }
 
-    auto reply = UpdateTrackMetadataReply{.mutatedIds = std::move(mutated), .changes = std::move(changes)};
+    auto mutation = std::move(*mutationResult);
+    auto replyResult = applyMetadataPatchInTransaction(library, mutation.transaction(), trackIds, patch);
 
-    if (mode == MutationMode::Preview)
+    if (!replyResult)
     {
-      return reply;
+      return std::unexpected{replyResult.error()};
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
-    {
-      return storageError("Failed to commit metadata update", result.error());
-    }
-
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .tracksMutated = reply.mutatedIds});
-
-    return reply;
+    return std::move(*replyResult);
   }
 
-  Result<EditTrackTagsReply> LibraryWriter::Impl::applyEditTags(std::span<TrackId const> trackIds,
-                                                                std::span<std::string const> tagsToAdd,
-                                                                std::span<std::string const> tagsToRemove,
-                                                                MutationMode mode)
+  Result<LibraryWriter::MetadataAuthoringOutcome> LibraryWriter::Impl::applyUpdateMetadata(
+    BoundTrackTargets const& targets,
+    MetadataPatch const& patch)
   {
-    auto transaction = library.writeTransaction();
-    auto writer = library.tracks().writer(transaction);
-    auto mutated = std::vector<TrackId>{};
-    auto changes = std::vector<TrackTagsChange>{};
+    auto start = mutationService.beginAuthoringMutation(targets);
+    auto outcome = MetadataAuthoringOutcome{
+      .status = start.status,
+      .missingTargetIds = std::move(start.missingTargetIds),
+    };
 
-    for (auto const trackId : trackIds)
+    if (!start.optMutation)
     {
-      auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-
-      if (!optView)
-      {
-        continue;
-      }
-
-      auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
-      auto& tags = builder.tags();
-      bool changed = false;
-      auto addedTags = std::vector<std::string>{};
-      auto removedTags = std::vector<std::string>{};
-
-      for (auto const& tag : tagsToAdd)
-      {
-        if (!std::ranges::contains(tags.names(), tag))
-        {
-          tags.add(tag);
-          addedTags.push_back(tag);
-          changed = true;
-        }
-      }
-
-      for (auto const& tag : tagsToRemove)
-      {
-        if (std::ranges::contains(tags.names(), tag))
-        {
-          tags.remove(tag);
-          removedTags.push_back(tag);
-          changed = true;
-        }
-      }
-
-      if (!changed)
-      {
-        continue;
-      }
-
-      auto hotDataResult = builder.serializeHot(transaction);
-
-      if (!hotDataResult)
-      {
-        return storageError("Failed to serialize hot track data", hotDataResult.error());
-      }
-
-      if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
-      {
-        return storageError("Failed to update hot track data", result.error());
-      }
-
-      mutated.push_back(trackId);
-      changes.push_back(
-        TrackTagsChange{.trackId = trackId, .addedTags = std::move(addedTags), .removedTags = std::move(removedTags)});
+      return outcome;
     }
 
-    auto reply = EditTrackTagsReply{.mutatedIds = std::move(mutated), .changes = std::move(changes)};
+    auto replyResult =
+      applyMetadataPatchInTransaction(library, start.optMutation->transaction(), targets.trackIds(), patch);
 
-    if (mode == MutationMode::Preview)
+    if (!replyResult)
     {
-      return reply;
+      return std::unexpected{replyResult.error()};
     }
 
-    auto const revision = library.libraryRevision(transaction);
+    outcome.reply = std::move(*replyResult);
 
-    if (auto result = transaction.commit(); !result)
+    if (outcome.reply.mutatedIds.empty())
     {
-      return storageError("Failed to commit tag update", result.error());
+      outcome.status = TrackAuthoringStatus::NoOp;
+      return outcome;
     }
 
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .tracksMutated = reply.mutatedIds});
+    auto commitResult = start.optMutation->commit(LibraryChangeSet{.tracksMutated = outcome.reply.mutatedIds});
 
-    return reply;
+    if (!commitResult)
+    {
+      return storageError("Failed to commit metadata update", commitResult.error());
+    }
+
+    outcome.status = TrackAuthoringStatus::Applied;
+    outcome.libraryRevision = commitResult->libraryRevision;
+    outcome.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitResult->libraryRevision));
+    return outcome;
+  }
+
+  Result<EditTrackTagsReply> LibraryWriter::Impl::previewEditTags(std::span<TrackId const> trackIds,
+                                                                  std::span<std::string const> tagsToAdd,
+                                                                  std::span<std::string const> tagsToRemove)
+  {
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto replyResult = applyTagPatchInTransaction(library, mutation.transaction(), trackIds, tagsToAdd, tagsToRemove);
+
+    if (!replyResult)
+    {
+      return std::unexpected{replyResult.error()};
+    }
+
+    return std::move(*replyResult);
+  }
+
+  Result<LibraryWriter::TagAuthoringOutcome> LibraryWriter::Impl::applyEditTags(
+    BoundTrackTargets const& targets,
+    std::span<std::string const> tagsToAdd,
+    std::span<std::string const> tagsToRemove)
+  {
+    auto start = mutationService.beginAuthoringMutation(targets);
+    auto outcome = TagAuthoringOutcome{
+      .status = start.status,
+      .missingTargetIds = std::move(start.missingTargetIds),
+    };
+
+    if (!start.optMutation)
+    {
+      return outcome;
+    }
+
+    auto replyResult = applyTagPatchInTransaction(
+      library, start.optMutation->transaction(), targets.trackIds(), tagsToAdd, tagsToRemove);
+
+    if (!replyResult)
+    {
+      return std::unexpected{replyResult.error()};
+    }
+
+    outcome.reply = std::move(*replyResult);
+
+    if (outcome.reply.mutatedIds.empty())
+    {
+      outcome.status = TrackAuthoringStatus::NoOp;
+      return outcome;
+    }
+
+    auto commitResult = start.optMutation->commit(LibraryChangeSet{.tracksMutated = outcome.reply.mutatedIds});
+
+    if (!commitResult)
+    {
+      return storageError("Failed to commit tag update", commitResult.error());
+    }
+
+    outcome.status = TrackAuthoringStatus::Applied;
+    outcome.libraryRevision = commitResult->libraryRevision;
+    outcome.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitResult->libraryRevision));
+    return outcome;
   }
 
   Result<ListId> LibraryWriter::Impl::applyCreateList(ListDraft const& draft, MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto listWriter = library.lists().writer(transaction);
     auto trackWriter = library.tracks().writer(transaction);
     auto prepared = payloadForDraft(draft);
@@ -1063,21 +1176,25 @@ namespace ao::rt
       return listId;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result = mutation.commit(LibraryChangeSet{.listsUpserted = {listId}}); !result)
     {
       return storageError("Failed to commit list creation", result.error());
     }
-
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .listsUpserted = {listId}});
 
     return listId;
   }
 
   Result<UpdateListReply> LibraryWriter::Impl::applyUpdateList(ListDraft const& draft, MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto listWriter = library.lists().writer(transaction);
     auto trackWriter = library.tracks().writer(transaction);
     auto optExisting = listWriter.get(draft.listId);
@@ -1114,13 +1231,6 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
-    {
-      return storageError("Failed to commit list update", result.error());
-    }
-
     auto manualContentChanges = std::vector<ManualListContentChange>{};
 
     if (existingWasManual && draft.kind == ListKind::Manual && reply.trackOrderChanged)
@@ -1128,9 +1238,13 @@ namespace ao::rt
       manualContentChanges.push_back(ManualListContentChange{.listId = draft.listId, .operation = ManualTracksReset{}});
     }
 
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision,
-                                            .listsUpserted = {draft.listId},
-                                            .manualContentChanges = std::move(manualContentChanges)});
+    if (auto result = mutation.commit(
+          LibraryChangeSet{.listsUpserted = {draft.listId}, .manualContentChanges = std::move(manualContentChanges)});
+        !result)
+    {
+      return storageError("Failed to commit list update", result.error());
+    }
+
     return reply;
   }
 
@@ -1140,7 +1254,15 @@ namespace ao::rt
     std::span<TrackId const> trackIds,
     MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto listWriter = library.lists().writer(transaction);
     auto viewResult = requireManualList(listWriter, listId);
 
@@ -1205,27 +1327,32 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result = mutation.commit(LibraryChangeSet{
+          .listsUpserted = {listId},
+          .manualContentChanges = {ManualListContentChange{
+            .listId = listId,
+            .operation = ManualTracksInsert{.storedIndex = insertionIndex, .trackIds = reply.insertedTrackIds},
+          }}});
+        !result)
     {
       return storageError("Failed to commit manual list track insertion", result.error());
     }
 
-    libraryChanges.publish(LibraryChangeSet{
-      .libraryRevision = revision,
-      .listsUpserted = {listId},
-      .manualContentChanges = {ManualListContentChange{
-        .listId = listId,
-        .operation = ManualTracksInsert{.storedIndex = insertionIndex, .trackIds = reply.insertedTrackIds},
-      }}});
     return reply;
   }
 
   Result<RemoveManualListTracksReply>
   LibraryWriter::Impl::applyRemoveManualListTracks(ListId listId, std::span<TrackId const> trackIds, MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto listWriter = library.lists().writer(transaction);
     auto viewResult = requireManualList(listWriter, listId);
 
@@ -1285,19 +1412,17 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result =
+          mutation.commit(LibraryChangeSet{.listsUpserted = {listId},
+                                           .manualContentChanges = {ManualListContentChange{
+                                             .listId = listId,
+                                             .operation = ManualTracksRemove{.removals = std::move(removals)},
+                                           }}});
+        !result)
     {
       return storageError("Failed to commit manual list track removal", result.error());
     }
 
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision,
-                                            .listsUpserted = {listId},
-                                            .manualContentChanges = {ManualListContentChange{
-                                              .listId = listId,
-                                              .operation = ManualTracksRemove{.removals = std::move(removals)},
-                                            }}});
     return reply;
   }
 
@@ -1307,7 +1432,15 @@ namespace ao::rt
     std::size_t insertionIndexAfterRemoval,
     MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto listWriter = library.lists().writer(transaction);
     auto viewResult = requireManualList(listWriter, listId);
 
@@ -1386,28 +1519,33 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result = mutation.commit(
+          LibraryChangeSet{.listsUpserted = {listId},
+                           .manualContentChanges = {ManualListContentChange{
+                             .listId = listId,
+                             .operation = ManualTracksMove{.removals = std::move(removals),
+                                                           .insertionIndexAfterRemoval = insertionIndexAfterRemoval,
+                                                           .insertedTrackIds = reply.selectedTrackIds},
+                           }}});
+        !result)
     {
       return storageError("Failed to commit manual list track move", result.error());
     }
 
-    libraryChanges.publish(
-      LibraryChangeSet{.libraryRevision = revision,
-                       .listsUpserted = {listId},
-                       .manualContentChanges = {ManualListContentChange{
-                         .listId = listId,
-                         .operation = ManualTracksMove{.removals = std::move(removals),
-                                                       .insertionIndexAfterRemoval = insertionIndexAfterRemoval,
-                                                       .insertedTrackIds = reply.selectedTrackIds},
-                       }}});
     return reply;
   }
 
   Result<DeleteListReply> LibraryWriter::Impl::applyDeleteList(ListId listId, MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto listWriter = library.lists().writer(transaction);
     auto optView = listWriter.get(listId);
 
@@ -1431,20 +1569,25 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result = mutation.commit(LibraryChangeSet{.listsDeleted = {listId}}); !result)
     {
       return storageError("Failed to commit list delete", result.error());
     }
 
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .listsDeleted = {listId}});
     return reply;
   }
 
   Result<DeleteTrackReply> LibraryWriter::Impl::applyDeleteTrack(TrackId trackId, MutationMode mode)
   {
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
 
     auto writer = library.tracks().writer(transaction);
     auto optView = writer.get(trackId, library::TrackStore::Reader::LoadMode::Both);
@@ -1489,17 +1632,14 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result = mutation.commit(LibraryChangeSet{.tracksDeleted = {trackId},
+                                                       .listsUpserted = reply.removedFromListIds,
+                                                       .manualContentChanges = std::move(changedLists.contentChanges)});
+        !result)
     {
       return storageError("Failed to commit track delete", result.error());
     }
 
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision,
-                                            .tracksDeleted = {trackId},
-                                            .listsUpserted = reply.removedFromListIds,
-                                            .manualContentChanges = std::move(changedLists.contentChanges)});
     return reply;
   }
 
@@ -1521,7 +1661,15 @@ namespace ao::rt
       return std::unexpected{mediaTrackResult.error()};
     }
 
-    auto transaction = library.writeTransaction();
+    auto mutationResult = mutationService.beginInteractiveMutation();
+
+    if (!mutationResult)
+    {
+      return std::unexpected{mutationResult.error()};
+    }
+
+    auto mutation = std::move(*mutationResult);
+    auto& transaction = mutation.transaction();
     auto writer = library.tracks().writer(transaction);
     auto manifestWriter = library.manifest().writer(transaction);
 
@@ -1596,14 +1744,11 @@ namespace ao::rt
       return reply;
     }
 
-    auto const revision = library.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
+    if (auto result = mutation.commit(LibraryChangeSet{.tracksInserted = {id}}); !result)
     {
       return storageError("Failed to commit track creation", result.error());
     }
 
-    libraryChanges.publish(LibraryChangeSet{.libraryRevision = revision, .tracksInserted = {id}});
     return reply;
   }
 } // namespace ao::rt

@@ -300,6 +300,7 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir, std::move(executorPtr));
     auto const firstListId =
       ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First observed"}));
+    executor->drain();
     auto const secondListId = ao::test::requireValue(
       runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second observed"}));
     executor->drain();

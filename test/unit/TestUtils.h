@@ -29,8 +29,7 @@ namespace ao::test
   T requireValue(Result<T>&& result)
   {
     REQUIRE(result);
-    auto value = *std::move(result);
-    return value;
+    return *std::move(result);
   }
 
   template<typename T>

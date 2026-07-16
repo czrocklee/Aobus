@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
@@ -69,7 +70,7 @@ namespace ao::rt::test
 
     // 1. Setup initial library with shared cover art
     {
-      auto transaction = ml1.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml1);
       auto resIdResult = ml1.resources().writer(transaction).create(coverData);
       REQUIRE(resIdResult);
       resId = *resIdResult;
@@ -117,7 +118,7 @@ namespace ao::rt::test
     auto const temp2 = ao::test::TempDir{};
     auto ml2 = library::test::makeTestMusicLibrary(temp2.path(), temp2.path());
     auto importer = LibraryYamlImporter{ml2};
-    REQUIRE(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYamlOffline(yamlPath));
 
     // 5. Verify deduplication and content
     {
@@ -163,7 +164,7 @@ namespace ao::rt::test
     auto const uri = std::string{"song.flac"};
 
     {
-      auto transaction = ml.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml);
       auto resWriter = ml.resources().writer(transaction);
       auto frontIdResult = resWriter.create(lmdb::test::createTestData(8));
       REQUIRE(frontIdResult);
@@ -202,7 +203,7 @@ library:
     }
 
     auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
     {
       auto transaction = ml.readTransaction();
@@ -234,7 +235,7 @@ library:
 )";
     }
 
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
     {
       auto transaction = ml.readTransaction();

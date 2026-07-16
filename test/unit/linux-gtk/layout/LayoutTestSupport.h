@@ -22,6 +22,7 @@
 #include <gtkmm/window.h>
 #include <sigc++/signal.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -59,9 +60,10 @@ namespace ao::gtk::layout::test
   class LayoutRuntimeFixture final
   {
   public:
-    explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test")
+    explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test",
+                                  std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {})
       : _appPtr{Gtk::Application::create(std::string{applicationId})}
-      , _runtime{gtk::test::makeRuntime(_tempDir)}
+      , _runtime{gtk::test::makeRuntime(_tempDir, std::move(initializeLibrary))}
       , _playbackCommandSurface{_runtime.playback(),
                                 _runtime.playbackSequence(),
                                 [this] { std::ignore = _runtime.playSelectionInFocusedView(); }}

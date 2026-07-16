@@ -7,6 +7,8 @@
 #include <ao/rt/Subscription.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <string>
@@ -80,7 +82,7 @@ namespace ao::rt
   };
 
   class LibraryTaskService;
-  class LibraryWriter;
+  class LibraryMutationService;
 
   class [[nodiscard]] LibraryChanges final
   {
@@ -89,6 +91,20 @@ namespace ao::rt
     {
       double fraction = 0.0;
       std::string message{};
+    };
+
+    enum class LibraryTaskCompletionStatus : std::uint8_t
+    {
+      Succeeded,
+      CompletedWithIssues,
+      Failed,
+      Cancelled,
+    };
+
+    struct LibraryTaskCompleted final
+    {
+      LibraryTaskCompletionStatus status = LibraryTaskCompletionStatus::Succeeded;
+      std::size_t affectedCount = 0;
     };
 
     LibraryChanges();
@@ -101,16 +117,16 @@ namespace ao::rt
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
     Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
-    Subscription onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler) const;
+    Subscription onLibraryTaskCompleted(std::move_only_function<void(LibraryTaskCompleted const&)> handler) const;
     Subscription onLibraryTaskProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
 
-    void publish(LibraryChangeSet changeSet);
-
   private:
+    friend class LibraryMutationService;
     friend class LibraryTaskService;
-    friend class LibraryWriter;
 
-    void notifyLibraryTaskCompleted(std::size_t count);
+    void publishFromCoordinator(LibraryChangeSet changeSet,
+                                std::move_only_function<void(std::exception_ptr)> completion);
+    void notifyLibraryTaskCompleted(LibraryTaskCompletionStatus status, std::size_t affectedCount = 0);
     void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);
 
     struct Impl;

@@ -10,7 +10,6 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 

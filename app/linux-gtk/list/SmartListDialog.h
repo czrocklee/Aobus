@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include "list/QueryExpressionBox.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/ListMutation.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
@@ -60,7 +60,7 @@ namespace ao::gtk
     ListId editListId() const;
 
     // Returns a ListDraft populated from the dialog fields
-    rt::LibraryWriter::ListDraft draft() const;
+    rt::LibraryListDraft draft() const;
 
     // Returns the selected presentation ID. Auto is resolved to a concrete ID.
     std::string presentationId() const;

@@ -8,6 +8,7 @@
 #include "image/ThumbnailLoader.h"
 #include "layout/LayoutConstants.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
@@ -55,7 +56,7 @@ namespace ao::gtk::test
 
     std::vector<TrackId> seedLargeProjection(library::MusicLibrary& library, std::size_t count)
     {
-      auto transaction = library.writeTransaction();
+      auto transaction = library::test::writeTransaction(library);
       auto writer = library.tracks().writer(transaction);
       auto trackIds = std::vector<TrackId>{};
       trackIds.reserve(count);
@@ -86,7 +87,9 @@ namespace ao::gtk::test
   TEST_CASE("TrackViewPage - initializes list controls and geometry", "[gtk][unit][geometry]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
+    auto albumTrackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     { albumTrackId = addAlbumTrack(musicLibrary, "Album"); }};
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
@@ -119,7 +122,7 @@ namespace ao::gtk::test
     SECTION("album grouped section header reserves a fixed cover slot")
     {
       auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
-      sourcePtr->addInitial(addAlbumTrack(runtime.musicLibrary(), "Album"));
+      sourcePtr->addInitial(albumTrackId);
 
       auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
         rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
@@ -154,11 +157,12 @@ namespace ao::gtk::test
             "[gtk][regression][track-view]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& runtime = fixture.runtime();
     constexpr std::size_t kTrackCount = 10000;
     constexpr std::size_t kMaximumPrefetchedRows = kTrackCount / 10;
-    auto const trackIds = seedLargeProjection(runtime.musicLibrary(), kTrackCount);
+    auto trackIds = std::vector<TrackId>{};
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     { trackIds = seedLargeProjection(musicLibrary, kTrackCount); }};
+    auto& runtime = fixture.runtime();
     REQUIRE(trackIds.size() == kTrackCount);
 
     auto sourcePtr = rt::test::makeMutableTrackSource(trackIds);

@@ -10,7 +10,6 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
@@ -39,10 +38,10 @@ namespace ao::gtk::test
       }
     };
 
-    void startPlayback(rt::PlaybackService& playback, library::MusicLibrary& library)
+    void startPlayback(rt::AppRuntime& runtime)
     {
-      auto const trackId = library::test::addTrack(
-        library, library::test::TrackSpec{.title = "Tick Test", .duration = std::chrono::seconds{5}});
+      auto const trackId =
+        addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Tick Test", .duration = std::chrono::seconds{5}});
 
       auto const request = rt::PlaybackService::PlaybackRequest{
         .item = rt::NowPlayingInfo{.trackId = trackId, .title = "Tick Test", .artist = "Artist"},
@@ -50,7 +49,7 @@ namespace ao::gtk::test
                                       .duration = std::chrono::seconds{5}},
       };
 
-      REQUIRE(playback.play(request, kInvalidListId));
+      REQUIRE(runtime.playback().play(request, kInvalidListId));
       drainGtkEvents();
     }
   } // namespace
@@ -91,7 +90,7 @@ namespace ao::gtk::test
       auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
       CHECK_FALSE(timeLabel.isTickActive());
 
-      startPlayback(playback, env.runtime.musicLibrary());
+      startPlayback(env.runtime);
       CHECK_FALSE(timeLabel.isTickActive());
 
       auto windowFixture = GtkWindowFixture{};
@@ -109,7 +108,7 @@ namespace ao::gtk::test
       auto seekControl = SeekControlWidget{playback};
       CHECK_FALSE(seekControl.isTickActive());
 
-      startPlayback(playback, env.runtime.musicLibrary());
+      startPlayback(env.runtime);
       CHECK_FALSE(seekControl.isTickActive());
 
       auto windowFixture = GtkWindowFixture{};

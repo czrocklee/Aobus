@@ -21,12 +21,17 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  class TrackAuthoringSession;
+
   enum class TrackInlineEditOutcome : std::uint8_t
   {
     NoChange,
     NotEditable,
     ParseRejected,
     MutationRejected,
+    Stale,
+    Missing,
+    Unavailable,
     Applied,
   };
 
@@ -49,7 +54,7 @@ namespace ao::uimodel
     std::function<TrackFieldEditValue()> readCurrentValue;
     std::function<void(TrackFieldEditValue const&)> applyValue;
     std::function<void(rt::MetadataPatch&, TrackFieldEditValue const&)> writePatch;
-    std::function<Result<rt::UpdateTrackMetadataReply>(rt::MetadataPatch const&)> commitPatch;
+    TrackAuthoringSession* session = nullptr;
   };
 
   TrackInlineEditResult applyTrackInlineEdit(TrackInlineEditRequest const& request, TrackInlineEditHooks const& hooks);

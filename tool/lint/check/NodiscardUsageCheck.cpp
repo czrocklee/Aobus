@@ -118,12 +118,13 @@ namespace clang::tidy::modernize
 
     auto isWhitelistedNodiscard = cxxRecordDecl(hasName("::ao::Result"));
 
-    // Match anything else that HAS [[nodiscard]] but is NOT in our RAII whitelist
-    finder->addMatcher(cxxRecordDecl(isDefinition(),
-                                     hasAttr(attr::WarnUnusedResult),
-                                     unless(anyOf(allOf(isRAII, isWhitelistedRaii), isWhitelistedNodiscard)))
-                         .bind("non_raii_nodiscard"),
-                       this);
+    // A structurally RAII class may opt into [[nodiscard]] even when its domain
+    // name is outside the suffix whitelist. The whitelist controls which RAII
+    // classes must carry the attribute; it is not the set of allowed owners.
+    finder->addMatcher(
+      cxxRecordDecl(isDefinition(), hasAttr(attr::WarnUnusedResult), unless(anyOf(isRAII, isWhitelistedNodiscard)))
+        .bind("non_raii_nodiscard"),
+      this);
   }
 
   void NodiscardUsageCheck::check(MatchFinder::MatchResult const& result)

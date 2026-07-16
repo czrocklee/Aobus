@@ -25,6 +25,7 @@
 #include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/yaml/Reflect.h>
@@ -97,7 +98,7 @@ namespace ao::cli
       return true;
     }
 
-    std::vector<TrackId> resolveUpdateTargets(library::MusicLibrary& ml,
+    std::vector<TrackId> resolveUpdateTargets(library::MusicLibrary const& ml,
                                               rt::LibraryReader& reader,
                                               std::vector<std::uint32_t> const& rawIds,
                                               std::string const& filter)
@@ -120,7 +121,7 @@ namespace ao::cli
       return requireTrackIds(reader, rawIds);
     }
 
-    std::vector<TrackId> resolveShowTargets(library::MusicLibrary& ml,
+    std::vector<TrackId> resolveShowTargets(library::MusicLibrary const& ml,
                                             rt::LibraryReader& reader,
                                             std::vector<std::uint32_t> const& rawIds,
                                             std::string const& filter)
@@ -264,7 +265,7 @@ namespace ao::cli
                       rt::MetadataPatch const& patch,
                       bool dryRun)
     {
-      auto& ml = cli.musicLibrary();
+      auto const& ml = cli.musicLibrary();
       auto reader = cli.library().reader();
       auto const targetIds = resolveUpdateTargets(ml, reader, rawIds, filter);
 
@@ -282,15 +283,34 @@ namespace ao::cli
         return;
       }
 
-      auto const replyResult = cli.library().writer().updateMetadata(targetIds, patch);
+      auto const bindingResult = cli.library().bindTrackTargets(targetIds);
+
+      if (!bindingResult)
+      {
+        throwCommandError(bindingResult.error());
+      }
+
+      auto const replyResult = cli.library().writer().updateMetadata(*bindingResult, patch);
 
       if (!replyResult)
       {
         throwCommandError(replyResult.error());
       }
 
+      switch (replyResult->status)
+      {
+        case rt::TrackAuthoringStatus::Applied:
+        case rt::TrackAuthoringStatus::NoOp: break;
+        case rt::TrackAuthoringStatus::Missing:
+          throwCommandError(Error::Code::NotFound, "one or more track update targets no longer exist");
+        case rt::TrackAuthoringStatus::Stale:
+          throwCommandError(Error::Code::Conflict, "library changed while preparing the track update");
+        case rt::TrackAuthoringStatus::Unavailable:
+          throwCommandError(Error::Code::Conflict, "library authoring is unavailable");
+      }
+
       formatUpdateReply(
-        *replyResult, false, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
+        replyResult->reply, false, static_cast<std::uint64_t>(targetIds.size()), cli.options().format, cli.io().out);
     }
   } // namespace
 
@@ -582,7 +602,7 @@ namespace ao::cli
     void formatStructuredTracks(std::vector<TrackId> const& trackIds,
                                 std::size_t offset,
                                 std::size_t limit,
-                                library::MusicLibrary& ml,
+                                library::MusicLibrary const& ml,
                                 OutputFormat format,
                                 std::ostream& os)
     {
@@ -634,7 +654,7 @@ namespace ao::cli
       }
     }
 
-    void formatPlain(library::MusicLibrary& ml,
+    void formatPlain(library::MusicLibrary const& ml,
                      std::vector<TrackId> const& trackIds,
                      std::size_t offset,
                      std::size_t limit,
@@ -667,7 +687,7 @@ namespace ao::cli
       }
     }
 
-    void show(library::MusicLibrary& ml,
+    void show(library::MusicLibrary const& ml,
               std::vector<TrackId> const& trackIds,
               OutputFormat format,
               std::string const& formatExpression,
@@ -892,7 +912,7 @@ namespace ao::cli
       dumpPlainTrack(id, view, dictionary, os);
     }
 
-    void dumpTracks(library::MusicLibrary& ml, std::uint32_t targetId, bool raw, std::ostream& os)
+    void dumpTracks(library::MusicLibrary const& ml, std::uint32_t targetId, bool raw, std::ostream& os)
     {
       auto const transaction = ml.readTransaction();
       auto const reader = ml.tracks().reader(transaction);

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/MusicLibrary.h>
@@ -23,7 +24,7 @@ namespace ao::library::test
   {
   public:
     TrackSerializationFixture()
-      : _library{_temp.path(), _temp.path() / "db"}, _transaction{_library.writeTransaction()}
+      : _library{_temp.path(), _temp.path() / "db"}, _transaction{writeTransaction(_library)}
     {
     }
 
@@ -76,7 +77,7 @@ namespace ao::library::test
     void commitAndRenew()
     {
       REQUIRE(_transaction.commit());
-      _transaction = _library.writeTransaction();
+      _transaction = writeTransaction(_library);
     }
 
     ao::test::TempDir _temp;

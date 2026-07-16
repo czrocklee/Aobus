@@ -57,7 +57,7 @@ namespace ao::cli
     CliRuntime& operator=(CliRuntime&&) = delete;
 
     rt::CoreRuntime& core();
-    library::MusicLibrary& musicLibrary();
+    library::MusicLibrary const& musicLibrary();
     rt::Library& library();
 
     void runTask(async::Task<void> task);

@@ -47,7 +47,7 @@ namespace ao::rt
   class TrackSourceCache final
   {
   public:
-    TrackSourceCache(library::MusicLibrary& library, LibraryChanges const& changes);
+    TrackSourceCache(library::MusicLibrary const& library, LibraryChanges const& changes);
     ~TrackSourceCache() = default;
 
     TrackSourceCache(TrackSourceCache const&) = delete;
@@ -79,7 +79,7 @@ namespace ao::rt
     void unlinkGraph(ListId listId);
     void collectDescendantsPostorder(ListId listId, std::vector<ListId>& listIds) const;
 
-    library::MusicLibrary& _library;
+    library::MusicLibrary const& _library;
     std::shared_ptr<AllTracksSource> _allTracksPtr;
     SmartListEvaluator _smartEvaluator;
 

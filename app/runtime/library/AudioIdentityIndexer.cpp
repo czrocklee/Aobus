@@ -6,13 +6,11 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
-#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
-#include <ao/rt/library/LibraryChanges.h>
 
 #include <algorithm>
 #include <atomic>
@@ -138,13 +136,6 @@ namespace ao::rt
       }
 
       return count;
-    }
-
-    bool matchesPendingIdentityRow(library::FileManifestView const& view, PendingIdentityRow const& row)
-    {
-      return view.status() == library::FileStatus::Available &&
-             !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()) &&
-             view.fileSize() == row.fileSize && view.mtime() == row.mtime;
     }
 
     std::size_t effectiveConcurrency(std::size_t requested)
@@ -318,26 +309,11 @@ namespace ao::rt
       co_return;
     }
 
-    // Writes a batch of hashed identities in a single transaction so the
-    // commit (and its fsync) is amortized across the batch instead of paid per
-    // row. Each row is re-validated inside the transaction; a row that changed
-    // since it was hashed is skipped without aborting the rest of the batch.
-    // Counts are folded into the result only after the commit succeeds.
-    Result<> writeHashedBatch(library::MusicLibrary& ml,
-                              std::vector<PendingIdentityRow> const& rows,
-                              std::vector<RowSlot> const& slots,
-                              AudioIdentityIndexResult& result,
-                              LibraryChanges* changes)
+    std::vector<AudioIdentityWriteCandidate> makeWriteCandidates(std::vector<PendingIdentityRow> const& rows,
+                                                                 std::vector<RowSlot> const& slots)
     {
-      if (std::ranges::none_of(slots, [](RowSlot const& slot) { return slot.outcome == RowOutcome::Hashed; }))
-      {
-        return {};
-      }
-
-      auto transaction = ml.writeTransaction();
-      auto writer = ml.manifest().writer(transaction);
-      std::int32_t batchCompletedCount = 0;
-      std::int32_t batchSkippedCount = 0;
+      auto candidates = std::vector<AudioIdentityWriteCandidate>{};
+      candidates.reserve(slots.size());
 
       for (std::size_t index = 0; index < slots.size(); ++index)
       {
@@ -346,75 +322,33 @@ namespace ao::rt
           continue;
         }
 
-        auto const& row = rows[index];
-        auto currentResult = writer.get(row.uri);
-
-        if (!currentResult)
-        {
-          if (currentResult.error().code == Error::Code::NotFound)
-          {
-            ++batchSkippedCount;
-            continue;
-          }
-
-          return std::unexpected{currentResult.error()};
-        }
-
-        if (!matchesPendingIdentityRow(*currentResult, row))
-        {
-          ++batchSkippedCount;
-          continue;
-        }
-
-        auto builder = library::FileManifestBuilder::fromView(*currentResult);
-        builder.audioPayloadLength(slots[index].identity.payloadLength).audioSignature(slots[index].identity.signature);
-
-        if (auto putResult = writer.put(row.uri, builder.serialize()); !putResult)
-        {
-          return std::unexpected{putResult.error()};
-        }
-
-        ++batchCompletedCount;
+        candidates.push_back(AudioIdentityWriteCandidate{.uri = rows[index].uri,
+                                                         .fileSize = rows[index].fileSize,
+                                                         .mtime = rows[index].mtime,
+                                                         .identity = slots[index].identity});
       }
 
-      auto const revision = ml.libraryRevision(transaction);
-
-      if (auto commitResult = transaction.commit(); !commitResult)
-      {
-        return std::unexpected{commitResult.error()};
-      }
-
-      if (changes != nullptr)
-      {
-        changes->publish(LibraryChangeSet{.libraryRevision = revision});
-      }
-
-      result.completedCount += batchCompletedCount;
-      result.skippedCount += batchSkippedCount;
-      return {};
+      return candidates;
     }
   } // namespace
 
-  AudioIdentityIndexer::AudioIdentityIndexer(async::Runtime& asyncRuntime,
-                                             library::MusicLibrary& library,
-                                             std::mutex& mutationMutex)
-    : _asyncRuntime{asyncRuntime}, _library{library}, _mutationMutex{mutationMutex}
+  AudioIdentityIndexer::AudioIdentityIndexer(async::Runtime& asyncRuntime, library::MusicLibrary& library)
+    : _asyncRuntime{asyncRuntime}, _library{library}
   {
   }
 
-  AudioIdentityIndexer::AudioIdentityIndexer(async::Runtime& asyncRuntime,
-                                             library::MusicLibrary& library,
-                                             std::mutex& mutationMutex,
-                                             LibraryChanges& changes)
-    : _asyncRuntime{asyncRuntime}, _library{library}, _mutationMutex{mutationMutex}, _changes{&changes}
+  async::Task<Result<AudioIdentityIndexResult>> AudioIdentityIndexer::indexPending(
+    CommitBatchCallback commitBatchCallback,
+    Options options,
+    ProgressCallback progressCallback,
+    ItemFailureCallback failureCallback,
+    std::stop_token stopToken)
   {
-  }
+    if (!commitBatchCallback)
+    {
+      co_return makeError(Error::Code::InvalidInput, "Audio identity indexer requires batch commit authority");
+    }
 
-  async::Task<Result<AudioIdentityIndexResult>> AudioIdentityIndexer::indexPending(Options options,
-                                                                                   ProgressCallback progressCallback,
-                                                                                   ItemFailureCallback failureCallback,
-                                                                                   std::stop_token stopToken)
-  {
     auto result = AudioIdentityIndexResult{};
     auto const fingerprint =
       options.fingerprint
@@ -505,16 +439,31 @@ namespace ao::rt
         }
       }
 
-      // Phase 3: serial write-back under the mutation lock. Flush even on
-      // cancellation so already-computed hashes are not lost.
-      {
-        auto mutationLock = std::scoped_lock{_mutationMutex};
+      // Phase 3: serial write-back. Flush even on cancellation so already-computed
+      // hashes are not lost. Runtime maintenance supplies the coordinator-owned
+      // commit callback; explicitly offline composition uses its writer mutex.
+      auto const candidates = makeWriteCandidates(rows, slots);
 
-        if (auto writeResult = writeHashedBatch(_library, rows, slots, result, _changes); !writeResult)
+      if (candidates.empty())
+      {
+        if (stopToken.stop_requested())
         {
-          co_return std::unexpected{writeResult.error()};
+          result.cancelled = true;
+          co_return result;
         }
+
+        continue;
       }
+
+      auto commitResult = commitBatchCallback(candidates);
+
+      if (!commitResult)
+      {
+        co_return std::unexpected{commitResult.error()};
+      }
+
+      result.completedCount += commitResult->completedCount;
+      result.skippedCount += commitResult->skippedCount;
 
       if (stopToken.stop_requested())
       {

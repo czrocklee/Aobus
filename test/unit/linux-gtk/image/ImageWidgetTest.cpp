@@ -9,6 +9,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 
@@ -277,9 +278,10 @@ namespace ao::gtk::test
             "[gtk][unit][image][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
+    auto thumbnailResourceId = kInvalidResourceId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     { thumbnailResourceId = writeCoverResource(musicLibrary, makePixbuf(256, 256)); }};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
     auto thumbnailCache = ImageCache{200};
     auto loader = ThumbnailLoader{runtime.library(), thumbnailCache, runtime.async()};
 
@@ -288,7 +290,7 @@ namespace ao::gtk::test
     SECTION("cache miss decodes off-thread at scale and populates the cache")
     {
       // A large square source so we can prove the cached result is downscaled.
-      auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
+      auto const resourceId = thumbnailResourceId;
 
       auto widget = ImageWidget{};
       auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
@@ -343,7 +345,7 @@ namespace ao::gtk::test
 
     SECTION("destroying a widget mid-decode is safe")
     {
-      auto const resourceId = writeCoverResource(library, makePixbuf(256, 256));
+      auto const resourceId = thumbnailResourceId;
 
       {
         auto widget = ImageWidget{};

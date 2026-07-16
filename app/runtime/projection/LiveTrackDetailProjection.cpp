@@ -130,7 +130,7 @@ namespace ao::rt
   {
     DetailTarget target;
     ViewService& views;
-    library::MusicLibrary& library;
+    library::MusicLibrary const& library;
     WorkspaceService& workspace;
     LibraryChanges const& changes;
 
@@ -144,7 +144,7 @@ namespace ao::rt
 
     Impl(DetailTarget target,
          ViewService& views,
-         library::MusicLibrary& library,
+         library::MusicLibrary const& library,
          WorkspaceService& workspace,
          LibraryChanges const& changes)
       : target{std::move(target)}, views{views}, library{library}, workspace{workspace}, changes{changes}
@@ -154,7 +154,7 @@ namespace ao::rt
 
   LiveTrackDetailProjection::LiveTrackDetailProjection(DetailTarget target,
                                                        ViewService& views,
-                                                       library::MusicLibrary& library,
+                                                       library::MusicLibrary const& library,
                                                        WorkspaceService& workspace,
                                                        LibraryChanges const& changes)
     : _implPtr{std::make_unique<Impl>(std::move(target), views, library, workspace, changes)}

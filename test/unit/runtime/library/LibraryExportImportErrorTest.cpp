@@ -39,7 +39,7 @@ namespace ao::rt::test
         auto yaml = std::ofstream{yamlPath};
         yaml << yamlContent;
       }
-      auto const result = importer.importFromYaml(yamlPath);
+      auto const result = importer.importFromYamlOffline(yamlPath);
       REQUIRE(!result);
       CHECK(result.error().code == expectedCode);
       CHECK_THAT(result.error().message, Catch::Matchers::ContainsSubstring(std::string{expectedErrorFragment}));
@@ -48,7 +48,7 @@ namespace ao::rt::test
     SECTION("IO Error: File not found")
     {
       auto const nonExistentPath = std::filesystem::path{temp.path()} / "ghost.yaml";
-      auto const result = importer.importFromYaml(nonExistentPath);
+      auto const result = importer.importFromYamlOffline(nonExistentPath);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::IoError);
     }
@@ -258,7 +258,7 @@ library:
   lists: []
 )";
       }
-      auto const result = importer.importFromYaml(yamlPath);
+      auto const result = importer.importFromYamlOffline(yamlPath);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message.contains("library.tracks must be a sequence"));
@@ -276,7 +276,7 @@ library:
     - name: "No ID"
 )";
       }
-      auto const result = importer.importFromYaml(yamlPath);
+      auto const result = importer.importFromYamlOffline(yamlPath);
       REQUIRE(!result);
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message.contains("missing required 'id'"));
@@ -298,7 +298,7 @@ library:
 )";
       }
       // Import should succeed but the list will be empty (or the ghost track ignored)
-      auto const result = importer.importFromYaml(yamlPath);
+      auto const result = importer.importFromYamlOffline(yamlPath);
       REQUIRE(result);
 
       auto transaction = ml.readTransaction();
@@ -347,7 +347,7 @@ library:
     }
 
     auto importer = LibraryYamlImporter{library};
-    auto const result = importer.importFromYaml(yamlPath, ImportMode::Restore);
+    auto const result = importer.importFromYamlOffline(yamlPath, ImportMode::Restore);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::ValueTooLarge);

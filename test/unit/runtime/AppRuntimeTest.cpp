@@ -200,12 +200,14 @@ namespace ao::rt::test
     executor->drain();
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const firstTrackId = library::test::addTrack(
-      appPtr->musicLibrary(),
-      library::test::TrackSpec{.title = "First", .uri = fixturePath, .codec = AudioCodec::Flac});
-    auto const secondTrackId = library::test::addTrack(
-      appPtr->musicLibrary(),
-      library::test::TrackSpec{.title = "Second", .uri = fixturePath, .codec = AudioCodec::Flac});
+    auto const firstTrackId =
+      addRuntimeTrack(*appPtr,
+                      library::test::TrackSpec{.title = "First", .uri = fixturePath, .codec = AudioCodec::Flac},
+                      [executor] { executor->drain(); });
+    auto const secondTrackId =
+      addRuntimeTrack(*appPtr,
+                      library::test::TrackSpec{.title = "Second", .uri = fixturePath, .codec = AudioCodec::Flac},
+                      [executor] { executor->drain(); });
     appPtr->sources().reloadAllTracks();
     auto const listId = ao::test::requireValue(appPtr->library().writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,

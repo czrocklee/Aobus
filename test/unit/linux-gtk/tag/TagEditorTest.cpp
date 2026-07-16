@@ -3,16 +3,15 @@
 
 #include "tag/TagEditor.h"
 
-#include "gtkmm/button.h"
-#include "gtkmm/entry.h"
-#include "gtkmm/enums.h"
-#include "gtkmm/label.h"
-#include "gtkmm/widget.h"
-#include "gtkmm/window.h"
-#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/button.h>
+#include <gtkmm/entry.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
+#include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <string>
@@ -85,17 +84,17 @@ namespace ao::gtk::test
     constexpr auto kLongTag = "AnExtremelyLongTagNameForNarrowLayouts";
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto& library = fixture.runtime().musicLibrary();
+    auto& runtime = fixture.runtime();
 
-    auto const trackId = library::test::addTrack(library, {.tags = {"Rock", "90s", std::string{kLongTag}}});
-    library::test::addTrack(library, {.tags = {"Jazz"}});
-    auto const emptyTrackId = library::test::addTrack(library, {});
+    auto const trackId = addRuntimeTrack(runtime, {.tags = {"Rock", "90s", std::string{kLongTag}}});
+    addRuntimeTrack(runtime, {.tags = {"Jazz"}});
+    auto const emptyTrackId = addRuntimeTrack(runtime, {});
 
     auto editor = TagEditor{};
     auto window = Gtk::Window{};
     window.set_child(editor);
 
-    editor.setup(fixture.runtime().library(), {trackId});
+    editor.setup(runtime.library(), {trackId});
     drainGtkEvents();
 
     SECTION("Minimum width stays compressible for detail pane resize")
@@ -270,7 +269,7 @@ namespace ao::gtk::test
       // Reproduces the all-suggestions layout (a track with no current tags). Under GtkFlowBox a
       // narrow chip that shared a grid column with a wide chip in another row inherited the wide
       // width; the custom flow sizes every child independently, regardless of row.
-      editor.setup(fixture.runtime().library(), {emptyTrackId});
+      editor.setup(runtime.library(), {emptyTrackId});
       drainGtkEvents();
 
       CHECK(countChipsByClass(editor, "ao-tag-chip-current") == 0);

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Executor.h>
@@ -22,6 +23,10 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
@@ -39,6 +44,8 @@
 #include <cstddef>
 #include <deque>
 #include <exception>
+#include <filesystem>
+#include <format>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -568,6 +575,127 @@ namespace ao::rt::test
     playback.addProvider(makeReadyAudioProvider(std::move(status)));
   }
 
+  inline MetadataPatch metadataPatch(library::test::TrackSpec const& spec)
+  {
+    auto patch = MetadataPatch{
+      .optTitle = spec.title,
+      .optArtist = spec.artist,
+      .optAlbum = spec.album,
+      .optAlbumArtist = spec.albumArtist,
+      .optGenre = spec.genre,
+      .optComposer = spec.composer,
+      .optConductor = spec.conductor,
+      .optEnsemble = spec.ensemble,
+      .optWork = spec.work,
+      .optMovement = spec.movement,
+      .optSoloist = spec.soloist,
+      .optYear = spec.year,
+      .optTrackNumber = spec.trackNumber,
+      .optTrackTotal = spec.trackTotal,
+      .optDiscNumber = spec.discNumber,
+      .optDiscTotal = spec.discTotal,
+      .optMovementNumber = spec.movementNumber,
+      .optMovementTotal = spec.movementTotal,
+    };
+
+    for (auto const& [key, value] : spec.customMetadata)
+    {
+      patch.customUpdates.emplace(key, value);
+    }
+
+    return patch;
+  }
+
+  inline TrackId addRuntimeTrack(AppRuntime& runtime,
+                                 library::test::TrackSpec const& spec,
+                                 std::move_only_function<void()> settlePublication = {})
+  {
+    static auto nextFixtureTrack = std::atomic<std::uint64_t>{0};
+    auto sourcePath = std::filesystem::path{spec.uri};
+
+    if (sourcePath.is_relative())
+    {
+      sourcePath = runtime.musicRoot() / sourcePath;
+    }
+
+    if (!std::filesystem::is_regular_file(sourcePath))
+    {
+      sourcePath = audio::test::requireAudioFixture("basic_metadata.flac");
+    }
+
+    auto const sequence = nextFixtureTrack.fetch_add(1, std::memory_order_relaxed);
+    auto const relativePath =
+      std::filesystem::path{".aobus-test"} / std::format("track-{}{}", sequence, sourcePath.extension().string());
+    auto const destinationPath = runtime.musicRoot() / relativePath;
+    std::filesystem::create_directories(destinationPath.parent_path());
+    std::filesystem::copy_file(sourcePath, destinationPath, std::filesystem::copy_options::overwrite_existing);
+
+    auto& writer = runtime.library().writer();
+    auto createResult = writer.createTrackFromFile(destinationPath);
+    REQUIRE(createResult);
+    auto const trackId = createResult->trackId;
+
+    if (settlePublication)
+    {
+      settlePublication();
+    }
+
+    auto bindingResult = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
+    REQUIRE(bindingResult);
+    auto targets = std::move(*bindingResult);
+    auto patchResult = writer.updateMetadata(targets, metadataPatch(spec));
+    REQUIRE(patchResult);
+    REQUIRE(
+      (patchResult->status == TrackAuthoringStatus::Applied || patchResult->status == TrackAuthoringStatus::NoOp));
+
+    if (settlePublication)
+    {
+      settlePublication();
+    }
+
+    if (!spec.tags.empty())
+    {
+      if (patchResult->optNextTargets)
+      {
+        targets = *patchResult->optNextTargets;
+      }
+
+      auto tagResult = writer.editTags(targets, spec.tags, std::span<std::string const>{});
+      REQUIRE(tagResult);
+      REQUIRE((tagResult->status == TrackAuthoringStatus::Applied || tagResult->status == TrackAuthoringStatus::NoOp));
+
+      if (settlePublication)
+      {
+        settlePublication();
+      }
+    }
+
+    REQUIRE(spec.coverArtId == kInvalidResourceId);
+    return trackId;
+  }
+
+  inline void updateRuntimeTrack(AppRuntime& runtime,
+                                 TrackId const trackId,
+                                 std::move_only_function<void(library::test::TrackSpec&)> updater)
+  {
+    auto spec = library::test::TrackSpec{};
+    {
+      auto transaction = runtime.musicLibrary().readTransaction();
+      auto optView =
+        runtime.musicLibrary().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      REQUIRE(optView);
+      spec = library::test::trackSpecFromView(runtime.musicLibrary(), *optView);
+    }
+
+    updater(spec);
+    REQUIRE(spec.coverArtId == kInvalidResourceId);
+    auto bindingResult = runtime.library().bindTrackTargets(std::span{&trackId, std::size_t{1}});
+    REQUIRE(bindingResult);
+    auto result = runtime.library().writer().updateMetadata(*bindingResult, metadataPatch(spec));
+    REQUIRE(result);
+    REQUIRE((result->status == TrackAuthoringStatus::Applied || result->status == TrackAuthoringStatus::NoOp));
+  }
+
   class MusicLibraryFixture final
   {
   public:
@@ -759,6 +887,113 @@ namespace ao::rt::test
     bool isCurrent() const noexcept override { return true; }
     void dispatch(std::move_only_function<void()> task) override { task(); }
     void defer(std::move_only_function<void()> task) override { task(); }
+  };
+
+  class LibraryWriterFixture final
+  {
+  public:
+    LibraryWriterFixture(library::MusicLibrary& storage, LibraryChanges& changes)
+      : _asyncRuntime{_executor}, _storage{storage}, _changes{changes}
+    {
+    }
+
+    ~LibraryWriterFixture()
+    {
+      _libraryPtr.reset();
+      _asyncRuntime.requestStop();
+      _asyncRuntime.join();
+    }
+
+    LibraryWriterFixture(LibraryWriterFixture const&) = delete;
+    LibraryWriterFixture& operator=(LibraryWriterFixture const&) = delete;
+    LibraryWriterFixture(LibraryWriterFixture&&) = delete;
+    LibraryWriterFixture& operator=(LibraryWriterFixture&&) = delete;
+
+    Library& library() { return ensureLibrary(); }
+    auto& writer() { return ensureLibrary().writer(); }
+    BoundTrackTargets bind(std::span<TrackId const> trackIds)
+    {
+      return ao::test::requireValue(ensureLibrary().bindTrackTargets(trackIds));
+    }
+
+    Result<UpdateTrackMetadataReply> updateMetadata(std::span<TrackId const> trackIds, MetadataPatch const& patch)
+    {
+      auto bindingResult = ensureLibrary().bindTrackTargets(trackIds);
+
+      if (!bindingResult)
+      {
+        return std::unexpected{bindingResult.error()};
+      }
+
+      auto outcomeResult = ensureLibrary().writer().updateMetadata(*bindingResult, patch);
+
+      if (!outcomeResult)
+      {
+        return std::unexpected{outcomeResult.error()};
+      }
+
+      switch (outcomeResult->status)
+      {
+        case TrackAuthoringStatus::Applied:
+        case TrackAuthoringStatus::NoOp: return std::move(outcomeResult->reply);
+        case TrackAuthoringStatus::Missing:
+          return makeError(Error::Code::NotFound, "Track authoring target is missing");
+        case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
+        case TrackAuthoringStatus::Unavailable:
+          return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
+      }
+
+      return makeError(Error::Code::InvalidState, "Unknown track authoring status");
+    }
+
+    Result<EditTrackTagsReply> editTags(std::span<TrackId const> trackIds,
+                                        std::span<std::string const> tagsToAdd,
+                                        std::span<std::string const> tagsToRemove)
+    {
+      auto bindingResult = ensureLibrary().bindTrackTargets(trackIds);
+
+      if (!bindingResult)
+      {
+        return std::unexpected{bindingResult.error()};
+      }
+
+      auto outcomeResult = ensureLibrary().writer().editTags(*bindingResult, tagsToAdd, tagsToRemove);
+
+      if (!outcomeResult)
+      {
+        return std::unexpected{outcomeResult.error()};
+      }
+
+      switch (outcomeResult->status)
+      {
+        case TrackAuthoringStatus::Applied:
+        case TrackAuthoringStatus::NoOp: return std::move(outcomeResult->reply);
+        case TrackAuthoringStatus::Missing:
+          return makeError(Error::Code::NotFound, "Track authoring target is missing");
+        case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
+        case TrackAuthoringStatus::Unavailable:
+          return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
+      }
+
+      return makeError(Error::Code::InvalidState, "Unknown track authoring status");
+    }
+
+  private:
+    Library& ensureLibrary()
+    {
+      if (!_libraryPtr)
+      {
+        _libraryPtr = std::make_unique<Library>(_asyncRuntime, _storage, _changes);
+      }
+
+      return *_libraryPtr;
+    }
+
+    InlineExecutor _executor;
+    async::Runtime _asyncRuntime;
+    library::MusicLibrary& _storage;
+    LibraryChanges& _changes;
+    std::unique_ptr<Library> _libraryPtr;
   };
 
   // Deterministic test adapter over the production loop executor. Dispatch is

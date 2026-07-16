@@ -76,7 +76,7 @@ namespace ao::rt::test
     auto view = ListViewOwner{{second, hidden, third, first}};
     auto manualPtr = std::make_shared<ManualListSource>(view.view(), TrackSourceLease{parentPtr});
     auto evaluator = SmartListEvaluator{libraryFixture.library()};
-    auto quickFilter = SmartListSource{TrackSourceLease{manualPtr}, libraryFixture.library(), evaluator};
+    auto quickFilter = SmartListSource{TrackSourceLease{manualPtr}, evaluator};
     quickFilter.setExpression("$year >= 2020");
     quickFilter.reload();
 

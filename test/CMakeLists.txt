@@ -190,6 +190,7 @@ add_executable(ao_core_test
     unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp
     unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp
     unit/uimodel/library/property/TagEditWorkflowTest.cpp
+    unit/uimodel/library/property/TrackAuthoringSessionTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
     unit/uimodel/library/track/TrackFilterCompleterTest.cpp
@@ -274,6 +275,7 @@ add_executable(ao_core_test
     unit/runtime/library/ScanApplyOperationTest.cpp
     unit/runtime/library/LibraryTaskServiceTest.cpp
     unit/runtime/library/LibraryWriterTest.cpp
+    unit/runtime/library/LibraryAuthoringTest.cpp
     unit/runtime/completion/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
     unit/runtime/completion/QueryExpressionCompleterTest.cpp

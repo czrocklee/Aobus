@@ -8,7 +8,6 @@
 #include "tag/TagEditController.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/rt/PlaybackSequenceService.h>
@@ -33,7 +32,6 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
     auto cache = TrackRowCache{runtime.library()};
     auto window = Gtk::Window{};
 
@@ -68,8 +66,8 @@ namespace ao::gtk::test
     SECTION("track activation starts from the owning view identity")
     {
       rt::test::addReadyAudioProvider(runtime.playback());
-      auto const trackId = library::test::addTrack(
-        library, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
+      auto const trackId = addRuntimeTrack(
+        runtime, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       runtime.reloadAllTracks();
       REQUIRE(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
       auto const viewId = runtime.workspace().snapshot().activeViewId;
@@ -89,7 +87,7 @@ namespace ao::gtk::test
 
     SECTION("reveal synchronizes a missing workspace page before selecting the track")
     {
-      auto const trackId = library::test::addTrack(library, {.title = "Reveal Target"});
+      auto const trackId = addRuntimeTrack(runtime, {.title = "Reveal Target"});
       runtime.reloadAllTracks();
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);

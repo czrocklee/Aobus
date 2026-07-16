@@ -30,8 +30,8 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({first, second});
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
-    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 4m");
@@ -63,8 +63,8 @@ namespace ao::rt::test
     auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
-    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto hotList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    auto coldList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     hotList.setExpression("$year >= 2021");
     hotList.reload();
     coldList.setExpression("@duration >= 4m");
@@ -102,7 +102,7 @@ namespace ao::rt::test
     auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     filtered.setExpression("$year >= 2021");
     filtered.reload();
 
@@ -149,12 +149,12 @@ namespace ao::rt::test
     auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto parentPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), engine);
+    auto parentPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, engine);
     auto& parent = *parentPtr;
     parent.setExpression("$year >= 2021");
     parent.reload();
 
-    auto child = SmartListSource{TrackSourceLease{parentPtr}, libraryFixture.library(), engine};
+    auto child = SmartListSource{TrackSourceLease{parentPtr}, engine};
     child.setExpression("@duration >= 4m");
     child.reload();
 
@@ -196,7 +196,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -228,7 +228,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.setExpression("$year >= 2020");
     list.reload();
 

@@ -2,8 +2,10 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/FilesystemTestSupport.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -11,7 +13,9 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/utility/Uuid.h>
@@ -42,6 +46,17 @@ namespace ao::rt::test
       tree.callbacks(yaml::callbacks());
       return tree;
     }
+
+    Result<ImportReport> importThroughRuntime(library::MusicLibrary& library,
+                                              LibraryChanges& changes,
+                                              std::filesystem::path const& path,
+                                              ImportMode mode)
+    {
+      auto executor = InlineExecutor{};
+      auto runtime = async::Runtime{executor};
+      auto runtimeLibrary = Library{runtime, library, changes};
+      return runtime.spawn(runtimeLibrary.taskService().importLibraryAsync(path, mode)).get();
+    }
   } // namespace
 
   TEST_CASE("LibraryYaml - delta export writes changed and unreadable tracks",
@@ -52,7 +67,7 @@ namespace ao::rt::test
 
     auto coverResourceId = kInvalidResourceId;
     {
-      auto transaction = ml.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml);
       auto result = ml.resources().writer(transaction).create(std::vector{std::byte{1}, std::byte{2}, std::byte{3}});
       REQUIRE(result);
       coverResourceId = *result;
@@ -211,7 +226,7 @@ namespace ao::rt::test
       SKIP("the current process bypasses directory read restrictions");
     }
 
-    auto const result = importer.importFromYaml(yamlPath);
+    auto const result = importer.importFromYamlOffline(yamlPath);
 
     REQUIRE(!result);
     CHECK(result.error().code == Error::Code::IoError);
@@ -225,7 +240,7 @@ namespace ao::rt::test
     auto const existingId = library::test::addTrack(
       ml, library::test::TrackSpec{.title = "Before", .artist = "", .album = "", .uri = "existing.flac"});
     {
-      auto transaction = ml.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml);
       auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(existingId);
       REQUIRE(ml.manifest().writer(transaction).put("existing.flac", builder.serialize()));
@@ -250,8 +265,7 @@ library:
     auto changes = LibraryChanges{};
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
-    auto importer = LibraryYamlImporter{ml, changes};
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+    REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Merge));
 
     REQUIRE(observed.size() == 1);
     REQUIRE(observed.front().tracksInserted.size() == 1);
@@ -275,8 +289,7 @@ library:
     auto changes = LibraryChanges{};
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
-    auto importer = LibraryYamlImporter{ml, changes};
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Restore));
+    REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Restore));
 
     REQUIRE(observed.size() == 1);
     CHECK(observed.front().libraryReset);
@@ -302,9 +315,7 @@ library:
     auto changes = LibraryChanges{};
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
-    auto importer = LibraryYamlImporter{ml, changes};
-
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Restore));
+    REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Restore));
 
     CHECK(utility::formatUuid(ml.metadataHeader().libraryId) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(observed.size() == 1);
@@ -329,14 +340,14 @@ library:
            << "  lists: []\n";
     }
 
-    auto changes = LibraryChanges{};
-    auto observed = std::vector<LibraryChangeSet>{};
-    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
-    auto importer = LibraryYamlImporter{ml, changes};
+    auto revisionTransaction = ml.readTransaction();
+    auto const originalRevision = ml.libraryRevision(revisionTransaction);
+    auto importer = LibraryYamlImporter{ml};
 
-    REQUIRE(importer.previewImportFromYaml(yamlPath, ImportMode::Restore));
+    REQUIRE(importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore));
 
     CHECK(ml.metadataHeader().libraryId == originalLibraryId);
-    CHECK(observed.empty());
+    auto afterTransaction = ml.readTransaction();
+    CHECK(ml.libraryRevision(afterTransaction) == originalRevision);
   }
 } // namespace ao::rt::test

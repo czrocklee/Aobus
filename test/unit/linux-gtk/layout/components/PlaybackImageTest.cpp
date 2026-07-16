@@ -4,6 +4,8 @@
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
+#include "portal/ImportExportCallbacks.h"
+#include "portal/LibraryImportExportWorkflow.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -15,11 +17,12 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/utility/Base64.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <gdkmm/pixbuf.h>
 #include <gtkmm/application.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -30,9 +33,15 @@
 #include <gtkmm/widget.h>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk::layout::test
@@ -56,11 +65,65 @@ namespace ao::gtk::layout::test
     private:
       Gtk::Widget& _widget;
     };
+
+    std::string encodedPng(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+    {
+      gchar* rawBuffer = nullptr;
+      gsize bufferSize = 0;
+      pixbufPtr->save_to_buffer(rawBuffer, bufferSize, "png");
+      auto bufferPtr = std::unique_ptr<gchar, decltype(&::g_free)>{rawBuffer, &::g_free};
+      auto const bytes = std::span<std::byte const>{
+        reinterpret_cast<std::byte const*>(bufferPtr.get()), static_cast<std::size_t>(bufferSize)};
+      return utility::base64Encode(bytes);
+    }
+
+    void writeCoverImport(std::filesystem::path const& path, std::optional<std::string_view> optEncodedCover)
+    {
+      auto output = std::ofstream{path};
+      REQUIRE(output);
+      output << "version: 1\n"
+                "export_mode: full\n"
+                "library:\n"
+                "  tracks:\n"
+                "    - uri: mutable-cover.flac\n";
+
+      if (optEncodedCover)
+      {
+        output << "      covers:\n"
+                  "        - type: 3\n"
+                  "          data: "
+               << *optEncodedCover << '\n';
+      }
+
+      output << "  lists: []\n";
+      REQUIRE(output.good());
+    }
   } // namespace
 
   TEST_CASE("PlaybackImage - applies declarative image properties", "[gtk][unit][image]")
   {
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test"};
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto mutableCoverTrackId = kInvalidTrackId;
+    auto coverTrackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test",
+                                        [&](library::MusicLibrary& musicLibrary)
+                                        {
+                                          mutableCoverTrackId =
+                                            library::test::addTrack(musicLibrary,
+                                                                    library::test::TrackSpec{
+                                                                      .title = "Mutable Cover Track",
+                                                                      .uri = fixturePath,
+                                                                      .coverArtId = ResourceId{42},
+                                                                      .duration = std::chrono::seconds{1},
+                                                                    });
+                                          coverTrackId = library::test::addTrack(musicLibrary,
+                                                                                 library::test::TrackSpec{
+                                                                                   .title = "Cover Track",
+                                                                                   .uri = fixturePath,
+                                                                                   .coverArtId = ResourceId{42},
+                                                                                   .duration = std::chrono::seconds{1},
+                                                                                 });
+                                        }};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto& ctx = fixture.context();
     fixture.dependencies().imageCache = imageCachePtr.get();
@@ -161,22 +224,7 @@ namespace ao::gtk::layout::test
       auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
       REQUIRE(picture != nullptr);
 
-      auto const trackId =
-        library::test::addTrack(fixture.runtime().musicLibrary(),
-                                library::test::TrackSpec{
-                                  .title = "Cover Track",
-                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
-                                  .coverArtId = coverArtId,
-                                  .duration = std::chrono::seconds{1},
-                                });
-      {
-        auto transaction = fixture.runtime().musicLibrary().readTransaction();
-        fixture.runtime().library().changes().publish(
-          rt::LibraryChangeSet{.libraryRevision = fixture.runtime().musicLibrary().libraryRevision(transaction),
-                               .tracksInserted = {trackId}});
-      }
-
-      REQUIRE(fixture.runtime().playback().playTrack(trackId, rt::kAllTracksListId));
+      REQUIRE(fixture.runtime().playback().playTrack(coverTrackId, rt::kAllTracksListId));
       ao::gtk::test::drainGtkEvents();
 
       auto const paintablePtr = picture->get_paintable();
@@ -211,49 +259,30 @@ namespace ao::gtk::layout::test
       REQUIRE(picture != nullptr);
       CHECK_FALSE(button->get_visible());
 
-      auto const trackId =
-        library::test::addTrack(fixture.runtime().musicLibrary(),
-                                library::test::TrackSpec{
-                                  .title = "Mutable Cover Track",
-                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
-                                  .coverArtId = firstCoverArtId,
-                                  .duration = std::chrono::seconds{1},
-                                });
-
-      REQUIRE(fixture.runtime().playback().playTrack(trackId, rt::kAllTracksListId));
+      REQUIRE(fixture.runtime().playback().playTrack(mutableCoverTrackId, rt::kAllTracksListId));
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(button->get_visible());
       auto const firstPaintablePtr = picture->get_paintable();
       REQUIRE(firstPaintablePtr);
 
-      library::test::updateTrackSpec(fixture.runtime().musicLibrary(),
-                                     trackId,
-                                     [secondCoverArtId](library::test::TrackSpec& spec)
-                                     { spec.coverArtId = secondCoverArtId; });
-      {
-        auto transaction = fixture.runtime().musicLibrary().readTransaction();
-        fixture.runtime().library().changes().publish(
-          rt::LibraryChangeSet{.libraryRevision = fixture.runtime().musicLibrary().libraryRevision(transaction),
-                               .tracksMutated = {trackId}});
-      }
-      ao::gtk::test::drainGtkEvents();
+      std::int32_t importCount = 0;
+      auto callbacks = portal::ImportExportCallbacks{.onLibraryDataMutated = [&importCount] { ++importCount; }};
+      auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
+      auto const importPath = fixture.runtime().musicRoot() / "cover-import.yaml";
+      auto const secondCover = encodedPng(ao::gtk::test::makePixbuf(96, 96));
+      writeCoverImport(importPath, secondCover);
+      workflow.importFrom(importPath);
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&importCount] { return importCount == 1; }));
 
       REQUIRE(button->get_visible());
       auto const secondPaintablePtr = picture->get_paintable();
       REQUIRE(secondPaintablePtr);
       CHECK(secondPaintablePtr != firstPaintablePtr);
 
-      library::test::updateTrackSpec(fixture.runtime().musicLibrary(),
-                                     trackId,
-                                     [](library::test::TrackSpec& spec) { spec.coverArtId = kInvalidResourceId; });
-      {
-        auto transaction = fixture.runtime().musicLibrary().readTransaction();
-        fixture.runtime().library().changes().publish(
-          rt::LibraryChangeSet{.libraryRevision = fixture.runtime().musicLibrary().libraryRevision(transaction),
-                               .tracksMutated = {trackId}});
-      }
-      ao::gtk::test::drainGtkEvents();
+      writeCoverImport(importPath, std::nullopt);
+      workflow.importFrom(importPath);
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&importCount] { return importCount == 2; }));
 
       CHECK_FALSE(button->get_visible());
       CHECK_FALSE(picture->get_paintable());

@@ -88,7 +88,7 @@ namespace ao::rt
     // PlaybackService takes exclusive ownership of its direct audio collaborator.
     // The composition root configures Player before transferring ownership.
     PlaybackService(async::Executor& executor,
-                    library::MusicLibrary& library,
+                    library::MusicLibrary const& library,
                     NotificationService& notifications,
                     std::unique_ptr<audio::Player> playerPtr);
     ~PlaybackService();

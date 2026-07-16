@@ -4,6 +4,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
 #include "test/unit/library/TrackViewTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -96,7 +97,7 @@ namespace ao::library::test
 
     auto temp = ao::test::TempDir{};
     auto library = MusicLibrary{temp.path(), temp.path() / "db"};
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto coldDataResult = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldDataResult);
     auto const& coldData = *coldDataResult;
@@ -121,7 +122,7 @@ namespace ao::library::test
 
     auto temp = ao::test::TempDir{};
     auto library = MusicLibrary{temp.path(), temp.path() / "db"};
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto coldDataResult = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldDataResult);
     auto const& coldData = *coldDataResult;

@@ -406,7 +406,8 @@ namespace ao::gtk::test
     REQUIRE(taskProgress != nullptr);
     CHECK(taskProgress->get_fraction() == 0.625);
 
-    status.activityStatusViewModel().handleLibraryTaskCompleted(4);
+    status.activityStatusViewModel().handleLibraryTaskCompleted(
+      rt::LibraryChanges::LibraryTaskCompleted{.affectedCount = 4});
 
     CHECK(status.widget().get_visible());
     CHECK(status.label().get_text() == "Scan complete: 4 tracks added");

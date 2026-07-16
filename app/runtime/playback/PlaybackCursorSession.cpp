@@ -15,7 +15,6 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -40,7 +39,7 @@ namespace ao::rt
       std::optional<std::size_t> const optRequiredCurrentIndex,
       std::size_t const fallbackAnchorIndex,
       TrackSourceCache& sources,
-      library::MusicLibrary& library,
+      library::MusicLibrary const& library,
       RepeatMode const repeatMode,
       ShuffleMode const shuffleMode,
       ShuffleHistory::CandidateChooser candidateChooser)
@@ -118,7 +117,7 @@ namespace ao::rt
     PlaybackLaunchSpec launchSpec,
     TrackId const startTrackId,
     TrackSourceCache& sources,
-    library::MusicLibrary& library,
+    library::MusicLibrary const& library,
     RepeatMode const repeatMode,
     ShuffleMode const shuffleMode,
     ShuffleHistory::CandidateChooser candidateChooser)
@@ -139,7 +138,7 @@ namespace ao::rt
     TrackId const currentTrackId,
     std::size_t const anchorIndex,
     TrackSourceCache& sources,
-    library::MusicLibrary& library,
+    library::MusicLibrary const& library,
     RepeatMode const repeatMode,
     ShuffleMode const shuffleMode,
     ShuffleHistory::CandidateChooser candidateChooser)

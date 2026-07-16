@@ -23,7 +23,9 @@
 #include <ao/media/file/File.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryScan.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -43,10 +45,10 @@
 #include <fstream>
 #include <iostream>
 #include <map>
-#include <mutex>
 #include <optional>
 #include <print>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -104,7 +106,7 @@ namespace ao::cli
       return std::format("{:%Y-%m-%d %H:%M:%S}", tp);
     }
 
-    LibraryMetadataDto toLibraryMetadataDto(library::MusicLibrary& ml)
+    LibraryMetadataDto toLibraryMetadataDto(library::MusicLibrary const& ml)
     {
       auto const header = ml.metadataHeader();
       return LibraryMetadataDto{.libraryId = utility::formatUuid(header.libraryId),
@@ -113,7 +115,7 @@ namespace ao::cli
                                 .createdTime = formatTimestamp(header.createdTime)};
     }
 
-    void printMetadataPlain(library::MusicLibrary& ml, std::ostream& os)
+    void printMetadataPlain(library::MusicLibrary const& ml, std::ostream& os)
     {
       auto const header = ml.metadataHeader();
 
@@ -123,7 +125,7 @@ namespace ao::cli
       std::println(os, "Created:      {}", formatTimestamp(header.createdTime));
     }
 
-    void printMetadata(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    void printMetadata(library::MusicLibrary const& ml, OutputFormat format, std::ostream& os)
     {
       if (format == OutputFormat::Plain)
       {
@@ -182,7 +184,7 @@ namespace ao::cli
       std::println(os, "Library imported from '{}' using mode '{}'.{}", path, modeStr, dryRun ? " (dry-run)" : "");
     }
 
-    void exportLib(library::MusicLibrary& ml,
+    void exportLib(library::MusicLibrary const& ml,
                    std::string const& path,
                    std::string const& modeStr,
                    OutputFormat format,
@@ -224,7 +226,7 @@ namespace ao::cli
       printLibraryTransfer(os, format, "export", path, modeStr);
     }
 
-    void importLib(library::MusicLibrary& ml,
+    void importLib(CliRuntime& cli,
                    std::string const& path,
                    std::string const& modeStr,
                    bool dryRun,
@@ -247,11 +249,9 @@ namespace ao::cli
           Error::Code::InvalidInput, "invalid import mode '{}'. Valid modes are: restore, merge.", modeStr);
       }
 
-      auto importer = rt::LibraryYamlImporter{ml};
-
       if (dryRun)
       {
-        auto const result = importer.previewImportFromYaml(path, mode);
+        auto const result = cli.runTask(cli.library().taskService().previewLibraryImportAsync(path, mode));
 
         if (!result)
         {
@@ -263,7 +263,7 @@ namespace ao::cli
         return;
       }
 
-      auto const result = importer.importFromYaml(path, mode);
+      auto const result = cli.runTask(cli.library().taskService().importLibraryAsync(path, mode));
 
       if (!result)
       {
@@ -322,7 +322,7 @@ namespace ao::cli
       return total;
     }
 
-    LibraryStats collectStats(library::MusicLibrary& ml, std::filesystem::path const& databasePath)
+    LibraryStats collectStats(library::MusicLibrary const& ml, std::filesystem::path const& databasePath)
     {
       auto stats = LibraryStats{};
       {
@@ -371,7 +371,7 @@ namespace ao::cli
       return stats;
     }
 
-    void printStats(library::MusicLibrary& ml,
+    void printStats(library::MusicLibrary const& ml,
                     std::filesystem::path const& databasePath,
                     OutputFormat format,
                     std::ostream& os)
@@ -538,7 +538,7 @@ namespace ao::cli
       }
     }
 
-    void verifyLibrary(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    void verifyLibrary(library::MusicLibrary const& ml, OutputFormat format, std::ostream& os)
     {
       auto scanService = rt::LibraryScan{ml};
       auto planResult = scanService.buildPlan();
@@ -552,7 +552,7 @@ namespace ao::cli
       auto issues = std::vector<rt::ScanItem>{};
       bool failed = false;
 
-      for (auto const& item : planResult->items)
+      for (auto const& item : planResult->items())
       {
         if (!isVerifyIssue(item.classification))
         {
@@ -616,7 +616,7 @@ namespace ao::cli
       return left.payloadLength == right.payloadLength && left.signature == right.signature;
     }
 
-    std::string normalizeRelinkUri(library::MusicLibrary& ml, std::string const& input)
+    std::string normalizeRelinkUri(library::MusicLibrary const& ml, std::string const& input)
     {
       auto path = std::filesystem::path{input};
 
@@ -654,19 +654,20 @@ namespace ao::cli
     {
       auto missingIndices = std::vector<std::size_t>{};
       auto newIdentities = std::vector<std::pair<std::size_t, RelinkIdentity>>{};
+      auto const items = plan.items();
 
-      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      for (std::size_t index = 0; index < items.size(); ++index)
       {
-        if (auto const& item = plan.items[index];
+        if (auto const& item = items[index];
             item.classification == rt::ScanClassification::Missing && rt::hasAudioIdentity(item))
         {
           missingIndices.push_back(index);
         }
       }
 
-      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      for (std::size_t index = 0; index < items.size(); ++index)
       {
-        auto const& item = plan.items[index];
+        auto const& item = items[index];
 
         if (item.classification != rt::ScanClassification::New)
         {
@@ -683,7 +684,7 @@ namespace ao::cli
 
       for (auto const missingIndex : missingIndices)
       {
-        auto const& missingItem = plan.items[missingIndex];
+        auto const& missingItem = items[missingIndex];
         auto const missingIdentity = relinkIdentityFromItem(missingItem);
 
         for (auto const& [newIndex, newIdentity] : newIdentities)
@@ -693,7 +694,7 @@ namespace ao::cli
             continue;
           }
 
-          auto const& newItem = plan.items[newIndex];
+          auto const& newItem = items[newIndex];
           candidates.push_back(RelinkCandidateDto{.oldUri = missingItem.uri,
                                                   .newUri = newItem.uri,
                                                   .trackId = missingItem.trackId,
@@ -708,7 +709,7 @@ namespace ao::cli
     {
       auto dto = RelinkListDto{.candidates = relinkCandidates(plan)};
 
-      for (auto const& item : plan.items)
+      for (auto const& item : plan.items())
       {
         if (item.classification == rt::ScanClassification::Missing)
         {
@@ -759,7 +760,7 @@ namespace ao::cli
                                      rt::ScanClassification classification,
                                      std::string_view uri)
     {
-      for (auto const& item : plan.items)
+      for (auto const& item : plan.items())
       {
         if (item.classification == classification && item.uri == uri)
         {
@@ -823,24 +824,8 @@ namespace ao::cli
       std::println(os, "relinked {} -> {}{}", candidate.oldUri, candidate.newUri, dryRun ? " (dry-run)" : "");
     }
 
-    rt::ScanItem makeMovedRelinkItem(rt::ScanPlan const& plan, RelinkCandidateDto const& candidate)
-    {
-      auto const* const newItem = findPlanItem(plan, rt::ScanClassification::New, candidate.newUri);
-
-      if (newItem == nullptr)
-      {
-        throwCommandError(Error::Code::InvalidInput, "new file is not unresolved: {}", candidate.newUri);
-      }
-
-      auto item = *newItem;
-      item.classification = rt::ScanClassification::Moved;
-      item.oldUri = candidate.oldUri;
-      item.trackId = candidate.trackId;
-      return item;
-    }
-
-    void applyRelink(library::MusicLibrary& ml,
-                     rt::ScanPlan const& plan,
+    void applyRelink(CliRuntime& cli,
+                     rt::ScanPlan relinkPlan,
                      RelinkCandidateDto const& candidate,
                      bool dryRun,
                      OutputFormat format,
@@ -852,24 +837,23 @@ namespace ao::cli
         return;
       }
 
-      auto relinkPlan = rt::ScanPlan{};
-      relinkPlan.items.push_back(makeMovedRelinkItem(plan, candidate));
-
       auto failures = std::vector<std::string>{};
-      auto scanService = rt::LibraryScan{ml};
-      auto result = scanService.applyPlan(
+      auto const stopToken = std::stop_token{};
+      auto progressCallback = rt::LibraryTaskService::ScanProgressCallback{};
+      auto result = cli.runTask(cli.library().taskService().applyScanPlanAsync(
         std::move(relinkPlan),
         // Default (eager) options on purpose: Moved items are fingerprinted
         // during apply regardless of policy, so a relink must never leave the
         // rebound row with a pending identity.
         rt::ScanApplyOptions{},
-        rt::LibraryScan::ApplyProgressCallback{},
+        stopToken,
+        std::move(progressCallback),
         [&failures](rt::ScanFailure const& failure)
         {
           failures.push_back(failure.uri.empty()
                                ? std::format("failed to {}: {}", failure.stage, failure.message)
                                : std::format("failed to {} {}: {}", failure.stage, failure.uri, failure.message));
-        });
+        }));
 
       if (!result)
       {
@@ -877,7 +861,7 @@ namespace ao::cli
         throwCommandError(error, "relink failed: {}", error.message);
       }
 
-      if (result->failureCount != 0 || result->relinkedCount != 1)
+      if (result->failureCount != 0 || result->relinkedIds.size() != 1)
       {
         auto const message = failures.empty() ? "relink did not update the library" : failures.front();
         throwCommandError(Error::Code::IoError, "relink failed: {}", message);
@@ -886,13 +870,14 @@ namespace ao::cli
       printRelinkApply(candidate, false, format, os);
     }
 
-    void relinkLibrary(library::MusicLibrary& ml,
+    void relinkLibrary(CliRuntime& cli,
                        std::optional<std::string> const& optOldUri,
                        std::optional<std::string> const& optNewUri,
                        bool dryRun,
                        OutputFormat format,
                        std::ostream& os)
     {
+      auto const& ml = cli.musicLibrary();
       auto scanService = rt::LibraryScan{ml};
       auto planResult = scanService.buildPlan();
 
@@ -902,7 +887,7 @@ namespace ao::cli
         throwCommandError(error, "relink scan failed: {}", error.message);
       }
 
-      auto const& plan = *planResult;
+      auto plan = std::move(*planResult);
 
       if (!optOldUri && !optNewUri)
       {
@@ -918,7 +903,15 @@ namespace ao::cli
       auto const oldUri = normalizeRelinkUri(ml, *optOldUri);
       auto const newUri = normalizeRelinkUri(ml, *optNewUri);
       auto const candidate = validateRelink(plan, oldUri, newUri);
-      applyRelink(ml, plan, candidate, dryRun, format, os);
+      auto relinkPlanResult = std::move(plan).makeRelinkPlan(candidate.oldUri, candidate.newUri);
+
+      if (!relinkPlanResult)
+      {
+        auto const& error = relinkPlanResult.error();
+        throwCommandError(error, "relink plan rejected: {}", error.message);
+      }
+
+      applyRelink(cli, std::move(*relinkPlanResult), candidate, dryRun, format, os);
     }
 
     void printBackfillFailure(rt::AudioIdentityIndexFailure const& failure, std::ostream& err)
@@ -961,16 +954,10 @@ namespace ao::cli
         throwCommandError(Error::Code::InvalidInput, "lib fingerprint requires --pending");
       }
 
-      auto& runtime = cli.core();
-      auto& ml = cli.musicLibrary();
-
-      // indexPending fingerprints concurrently on the runtime worker pool. The
-      // CLI drives its callback loop until the operation reaches a terminal
-      // result, so future callback hops retain owner-thread affinity. Progress
-      // and item-failure callbacks remain worker-produced and indexer-serialized.
-      auto mutationMutex = std::mutex{};
-      auto indexer = rt::AudioIdentityIndexer{runtime.async(), ml, mutationMutex};
-      auto result = cli.runTask(indexer.indexPending(
+      // The CLI drives its callback loop until the coordinated maintenance
+      // operation reaches a terminal result. Diagnostic callbacks remain
+      // worker-produced and indexer-serialized.
+      auto result = cli.runTask(cli.library().taskService().backfillAudioIdentityAsync(
         {},
         verbose ? rt::AudioIdentityIndexer::ProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
                                                              {
@@ -993,7 +980,7 @@ namespace ao::cli
       printFingerprintReport(*result, format, os);
     }
 
-    std::vector<ResourceRecordDto> resourceRecords(library::MusicLibrary& ml)
+    std::vector<ResourceRecordDto> resourceRecords(library::MusicLibrary const& ml)
     {
       auto const transaction = ml.readTransaction();
       auto const reader = ml.resources().reader(transaction);
@@ -1007,7 +994,7 @@ namespace ao::cli
       return records;
     }
 
-    void listResources(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    void listResources(library::MusicLibrary const& ml, OutputFormat format, std::ostream& os)
     {
       if (format != OutputFormat::Plain)
       {
@@ -1040,7 +1027,7 @@ namespace ao::cli
       std::println(os, "exported resource: {} {}", id, path.string());
     }
 
-    void exportResource(library::MusicLibrary& ml,
+    void exportResource(library::MusicLibrary const& ml,
                         ResourceId id,
                         std::filesystem::path const& path,
                         OutputFormat format,
@@ -1124,7 +1111,7 @@ namespace ao::cli
 {
   namespace
   {
-    std::map<std::string, std::string> dictionaryEntries(library::MusicLibrary& ml)
+    std::map<std::string, std::string> dictionaryEntries(library::MusicLibrary const& ml)
     {
       auto entries = std::map<std::string, std::string>{};
       auto const& dictionary = ml.dictionary();
@@ -1137,7 +1124,7 @@ namespace ao::cli
       return entries;
     }
 
-    std::vector<ManifestRecordDto> manifestRecords(library::MusicLibrary& ml)
+    std::vector<ManifestRecordDto> manifestRecords(library::MusicLibrary const& ml)
     {
       auto records = std::vector<ManifestRecordDto>{};
       auto const transaction = ml.readTransaction();
@@ -1155,7 +1142,7 @@ namespace ao::cli
       return records;
     }
 
-    LibraryDumpDto toLibraryDumpDto(library::MusicLibrary& ml,
+    LibraryDumpDto toLibraryDumpDto(library::MusicLibrary const& ml,
                                     bool all,
                                     bool dictionaryFlag,
                                     bool manifestFlag,
@@ -1187,7 +1174,7 @@ namespace ao::cli
       return dto;
     }
 
-    void dumpMetadata(library::MusicLibrary& ml, bool raw, std::ostream& os)
+    void dumpMetadata(library::MusicLibrary const& ml, bool raw, std::ostream& os)
     {
       std::println(os, "--- Meta ---");
 
@@ -1201,7 +1188,7 @@ namespace ao::cli
       printMetadataPlain(ml, os);
     }
 
-    void dumpDictionary(library::MusicLibrary& ml, std::ostream& os)
+    void dumpDictionary(library::MusicLibrary const& ml, std::ostream& os)
     {
       auto const& dictionary = ml.dictionary();
       std::println(os, "--- Dictionary ({} entries) ---", dictionary.size());
@@ -1212,7 +1199,7 @@ namespace ao::cli
       }
     }
 
-    void dumpManifest(library::MusicLibrary& ml, bool raw, std::ostream& os)
+    void dumpManifest(library::MusicLibrary const& ml, bool raw, std::ostream& os)
     {
       auto const transaction = ml.readTransaction();
       auto const reader = ml.manifest().reader(transaction);
@@ -1239,7 +1226,7 @@ namespace ao::cli
       }
     }
 
-    void dumpResources(library::MusicLibrary& ml, bool raw, std::ostream& os)
+    void dumpResources(library::MusicLibrary const& ml, bool raw, std::ostream& os)
     {
       auto const transaction = ml.readTransaction();
       auto const reader = ml.resources().reader(transaction);
@@ -1277,7 +1264,7 @@ namespace ao::cli
       }
     }
 
-    void dumpLibSections(library::MusicLibrary& ml,
+    void dumpLibSections(library::MusicLibrary const& ml,
                          bool all,
                          bool dictionaryFlag,
                          bool manifestFlag,
@@ -1307,7 +1294,7 @@ namespace ao::cli
       }
     }
 
-    void dumpLib(library::MusicLibrary& ml,
+    void dumpLib(library::MusicLibrary const& ml,
                  bool dictionaryFlag,
                  bool manifestFlag,
                  bool metadataFlag,
@@ -1368,7 +1355,7 @@ namespace ao::cli
           optTo = relinkTo->as<std::string>();
         }
 
-        relinkLibrary(cli.musicLibrary(), optFrom, optTo, isDryRun(relinkDryRun), cli.options().format, cli.io().out);
+        relinkLibrary(cli, optFrom, optTo, isDryRun(relinkDryRun), cli.options().format, cli.io().out);
       });
 
     auto* fingerprintCmd = lib->add_subcommand("fingerprint", "Fingerprint pending manifest audio identities");
@@ -1407,7 +1394,7 @@ namespace ao::cli
     importCmd->callback(
       [&cli, importPath, importMode, importDryRun]
       {
-        importLib(cli.musicLibrary(),
+        importLib(cli,
                   importPath->as<std::string>(),
                   importMode->as<std::string>(),
                   isDryRun(importDryRun),

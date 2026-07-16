@@ -91,7 +91,7 @@ namespace ao::cli
     return *_runtimePtr;
   }
 
-  library::MusicLibrary& CliRuntime::musicLibrary()
+  library::MusicLibrary const& CliRuntime::musicLibrary()
   {
     return core().musicLibrary();
   }

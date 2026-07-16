@@ -13,6 +13,7 @@
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/yaml/Reflect.h>
@@ -205,15 +206,35 @@ namespace ao::cli
         return;
       }
 
-      auto const replyResult = add ? cli.library().writer().editTags(trackIds, tags, std::span<std::string const>{})
-                                   : cli.library().writer().editTags(trackIds, std::span<std::string const>{}, tags);
+      auto const bindingResult = cli.library().bindTrackTargets(trackIds);
+
+      if (!bindingResult)
+      {
+        throwCommandError(bindingResult.error());
+      }
+
+      auto const replyResult =
+        add ? cli.library().writer().editTags(*bindingResult, tags, std::span<std::string const>{})
+            : cli.library().writer().editTags(*bindingResult, std::span<std::string const>{}, tags);
 
       if (!replyResult)
       {
         throwCommandError(replyResult.error());
       }
 
-      formatMutation(add ? "add" : "remove", tagName, *replyResult, false, cli.options().format, cli.io().out);
+      switch (replyResult->status)
+      {
+        case rt::TrackAuthoringStatus::Applied:
+        case rt::TrackAuthoringStatus::NoOp: break;
+        case rt::TrackAuthoringStatus::Missing:
+          throwCommandError(Error::Code::NotFound, "one or more tag edit targets no longer exist");
+        case rt::TrackAuthoringStatus::Stale:
+          throwCommandError(Error::Code::Conflict, "library changed while preparing the tag edit");
+        case rt::TrackAuthoringStatus::Unavailable:
+          throwCommandError(Error::Code::Conflict, "library authoring is unavailable");
+      }
+
+      formatMutation(add ? "add" : "remove", tagName, replyResult->reply, false, cli.options().format, cli.io().out);
     }
 
     void listTags(CliRuntime& cli)

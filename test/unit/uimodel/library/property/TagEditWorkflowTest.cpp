@@ -1,138 +1,143 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/property/TagEditWorkflow.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
+#include <array>
+#include <memory>
+#include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::uimodel::test
 {
-  using namespace ao::rt::test;
-
   namespace
   {
-    bool trackHasTag(MusicLibraryFixture& libraryFixture, TrackId trackId, std::string const& expectedTag)
+    std::unique_ptr<TrackAuthoringSession> beginSession(TrackAuthoringFixture& fixture,
+                                                        std::span<TrackId const> trackIds)
     {
-      auto transaction = libraryFixture.library().readTransaction();
-      auto reader = libraryFixture.library().tracks().reader(transaction);
-      auto const optView = reader.get(trackId);
-
-      if (!optView)
-      {
-        return false;
-      }
-
-      auto const& dictionary = libraryFixture.library().dictionary();
-
-      return std::ranges::any_of(
-        optView->tags(), [&](auto const tagId) { return dictionary.getOrDefault(tagId) == expectedTag; });
-    }
-
-    std::vector<std::string> trackTagNames(MusicLibraryFixture& libraryFixture, TrackId trackId)
-    {
-      auto transaction = libraryFixture.library().readTransaction();
-      auto reader = libraryFixture.library().tracks().reader(transaction);
-      auto const optView = reader.get(trackId);
-      REQUIRE(optView);
-
-      auto result = std::vector<std::string>{};
-      auto const& dictionary = libraryFixture.library().dictionary();
-
-      for (auto const tagId : optView->tags())
-      {
-        result.emplace_back(dictionary.getOrDefault(tagId));
-      }
-
-      std::ranges::sort(result);
-      return result;
+      auto result = TrackAuthoringSession::begin(fixture.library(), trackIds);
+      REQUIRE(result);
+      return std::move(*result);
     }
   } // namespace
 
   TEST_CASE("TagEditWorkflow - mutations report messages and final tag state", "[uimodel][unit][workflow][tag]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto changes = rt::LibraryChanges{};
-    auto writer = rt::LibraryWriter{libraryFixture.library(), changes};
-    auto workflow = TagEditWorkflow{writer};
-
-    auto trackId = libraryFixture.addTrack("Target 1");
-    auto trackId2 = libraryFixture.addTrack("Target 2");
+    auto fixture = TrackAuthoringFixture{2};
+    auto const trackId = fixture.trackIds()[0];
+    auto const trackId2 = fixture.trackIds()[1];
 
     SECTION("no selected tracks does not mutate the library")
     {
-      auto const req = TagEditRequest{.tagsToAdd = {"Tag1"}};
-      auto result = workflow.apply(req);
+      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result = workflow.apply(TagEditRequest{.tagsToAdd = {"Tag1"}});
+
       CHECK_FALSE(result.applied);
       CHECK(result.notificationText.empty());
-      CHECK(trackTagNames(libraryFixture, trackId).empty());
-      CHECK(trackTagNames(libraryFixture, trackId2).empty());
+      CHECK(fixture.tags(trackId).empty());
+      CHECK(fixture.tags(trackId2).empty());
     }
 
     SECTION("empty tag changes do not mutate selected tracks")
     {
-      auto const req = TagEditRequest{.selectedIds = {trackId}};
-      auto result = workflow.apply(req);
+      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result = workflow.apply(TagEditRequest{.selectedIds = {trackId}});
+
       CHECK_FALSE(result.applied);
       CHECK(result.notificationText.empty());
-      CHECK(trackTagNames(libraryFixture, trackId).empty());
+      CHECK(fixture.tags(trackId).empty());
+    }
+
+    SECTION("changed targets reject the edit instead of retargeting it")
+    {
+      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result = workflow.apply(TagEditRequest{.selectedIds = {trackId2}, .tagsToAdd = {"Tag1"}});
+
+      CHECK_FALSE(result.applied);
+      CHECK(result.rejected);
+      CHECK_FALSE(result.stale);
+      CHECK(result.notificationText == "Tag edit targets changed while the editor was open.");
+      CHECK(fixture.tags(trackId).empty());
+      CHECK(fixture.tags(trackId2).empty());
+    }
+
+    SECTION("an intervening commit reports the edit as stale")
+    {
+      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      REQUIRE(fixture.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+
+      auto const result = workflow.apply(TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"Tag1"}});
+
+      CHECK_FALSE(result.applied);
+      CHECK_FALSE(result.rejected);
+      CHECK(result.stale);
+      CHECK(result.notificationText == "Library changed while the tag editor was open. Reload and try again.");
+      CHECK(fixture.tags(trackId).empty());
     }
 
     SECTION("adding a single tag mutates the selected track and reports the count")
     {
-      auto const req = TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"Tag1"}};
-      auto result = workflow.apply(req);
+      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result = workflow.apply(TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"Tag1"}});
+
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 1 for 1 track");
-      CHECK(trackTagNames(libraryFixture, trackId) == std::vector<std::string>{"Tag1"});
-      CHECK(trackTagNames(libraryFixture, trackId2).empty());
+      CHECK(fixture.tags(trackId) == std::vector<std::string>{"Tag1"});
+      CHECK(fixture.tags(trackId2).empty());
     }
 
     SECTION("removing a single tag mutates every selected track and reports the count")
     {
-      auto const initialTags = std::vector<std::string>{"Tag1"};
-      REQUIRE(writer.editTags(std::vector{trackId, trackId2}, initialTags, {}));
-      REQUIRE(trackTagNames(libraryFixture, trackId) == std::vector<std::string>{"Tag1"});
-      REQUIRE(trackTagNames(libraryFixture, trackId2) == std::vector<std::string>{"Tag1"});
+      auto const targetIds = std::array{trackId, trackId2};
+      auto sessionPtr = beginSession(fixture, targetIds);
+      REQUIRE(sessionPtr->submitTags(std::array{std::string{"Tag1"}}, {}));
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result = workflow.apply(TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToRemove = {"Tag1"}});
 
-      auto const req = TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToRemove = {"Tag1"}};
-      auto result = workflow.apply(req);
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags removed 1 for 2 tracks");
-      CHECK(trackTagNames(libraryFixture, trackId).empty());
-      CHECK(trackTagNames(libraryFixture, trackId2).empty());
+      CHECK(fixture.tags(trackId).empty());
+      CHECK(fixture.tags(trackId2).empty());
     }
 
     SECTION("adding and removing tags reports requested counts and final tag sets")
     {
-      auto const req =
-        TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToAdd = {"Tag1", "Tag2"}, .tagsToRemove = {"Tag3"}};
-      auto result = workflow.apply(req);
+      auto const targetIds = std::array{trackId, trackId2};
+      auto sessionPtr = beginSession(fixture, targetIds);
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result = workflow.apply(
+        TagEditRequest{.selectedIds = {trackId, trackId2}, .tagsToAdd = {"Tag1", "Tag2"}, .tagsToRemove = {"Tag3"}});
+
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 2 and removed 1 for 2 tracks");
-      CHECK(trackTagNames(libraryFixture, trackId) == std::vector<std::string>{"Tag1", "Tag2"});
-      CHECK(trackTagNames(libraryFixture, trackId2) == std::vector<std::string>{"Tag1", "Tag2"});
+      CHECK(fixture.tags(trackId) == std::vector<std::string>{"Tag1", "Tag2"});
+      CHECK(fixture.tags(trackId2) == std::vector<std::string>{"Tag1", "Tag2"});
     }
 
     SECTION("adding and removing tags mutates the library in one request")
     {
-      REQUIRE(writer.editTags(std::vector{trackId}, std::vector<std::string>{"OldTag"}, {}));
-
-      auto const req = TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"NewTag"}, .tagsToRemove = {"OldTag"}};
-
-      auto result = workflow.apply(req);
+      auto sessionPtr = beginSession(fixture, std::array{trackId});
+      REQUIRE(sessionPtr->submitTags(std::array{std::string{"OldTag"}}, {}));
+      auto workflow = TagEditWorkflow{*sessionPtr};
+      auto const result =
+        workflow.apply(TagEditRequest{.selectedIds = {trackId}, .tagsToAdd = {"NewTag"}, .tagsToRemove = {"OldTag"}});
 
       CHECK(result.applied);
       CHECK(result.notificationText == "Tags added 1 and removed 1 for 1 track");
-      CHECK(trackHasTag(libraryFixture, trackId, "NewTag"));
-      CHECK_FALSE(trackHasTag(libraryFixture, trackId, "OldTag"));
+      CHECK(fixture.tags(trackId) == std::vector<std::string>{"NewTag"});
     }
   }
 } // namespace ao::uimodel::test

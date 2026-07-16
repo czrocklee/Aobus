@@ -6,6 +6,7 @@
 #include "app/AppDialog.h"
 #include "track/TrackFieldUi.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -13,6 +14,7 @@
 #include <gtkmm/box.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/notebook.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/widget.h>
@@ -29,9 +31,13 @@ namespace Gtk
 namespace ao::rt
 {
   class CompletionService;
-  class LibraryWriter;
   class Library;
   class LibraryReader;
+}
+
+namespace ao::uimodel
+{
+  class TrackAuthoringSession;
 }
 
 namespace ao::gtk
@@ -43,8 +49,7 @@ namespace ao::gtk
   {
   public:
     TrackPropertiesDialog(Gtk::Window& parent,
-                          rt::Library const& reads,
-                          rt::LibraryWriter& writer,
+                          rt::Library& library,
                           rt::CompletionService& completion,
                           TrackRowCache& rowCache,
                           std::vector<TrackId> trackIds);
@@ -84,15 +89,18 @@ namespace ao::gtk
     void setWidgetValue(Gtk::Widget* widget, std::string_view value);
     void setEditorMixed(Gtk::Widget* widget);
 
-    rt::Library const& _reads;
-    rt::LibraryWriter& _writer;
+    rt::Library& _library;
     rt::CompletionService& _completion;
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
+    std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
+    rt::Subscription _editSessionStateSubscription;
     bool _multipleTracks = false;
     uimodel::TrackPropertiesFormModel _formModel;
     Gtk::Button* _saveButton = nullptr;
 
+    Gtk::Box _contentBox{Gtk::Orientation::VERTICAL};
+    Gtk::Label _sessionErrorLabel;
     Gtk::Notebook _notebook;
 
     Gtk::ScrolledWindow _metadataScroll;

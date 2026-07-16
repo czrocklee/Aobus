@@ -10,7 +10,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleactiongroup.h>
@@ -25,18 +24,17 @@
 
 namespace ao::gtk::test
 {
-  namespace
-  {
-    TrackId createTrack(library::MusicLibrary& library, std::string const& title)
-    {
-      return library::test::addTrack(library, {.title = title});
-    }
-  } // namespace
-
   TEST_CASE("TagEditController - binds tag actions and routes submitted tag mutations", "[gtk][unit][tag]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
+    auto firstTrackId = kInvalidTrackId;
+    auto secondTrackId = kInvalidTrackId;
+    auto fixture =
+      GtkRuntimeFixture{[&](library::MusicLibrary& library)
+                        {
+                          firstTrackId = library::test::addTrack(library, {.title = "Controller Target 1"});
+                          secondTrackId = library::test::addTrack(library, {.title = "Controller Target 2"});
+                        }};
     auto window = Gtk::Window{};
 
     auto themeCoordinator = ThemeCoordinator{};
@@ -60,9 +58,6 @@ namespace ao::gtk::test
 
     SECTION("submitTagChanges reports the mutation to the controller callback")
     {
-      auto& library = fixture.runtime().musicLibrary();
-      auto const firstTrackId = createTrack(library, "Controller Target 1");
-      auto const secondTrackId = createTrack(library, "Controller Target 2");
       auto const selection =
         TrackSelection{.listId = rt::kAllTracksListId, .selectedIds = {firstTrackId, secondTrackId}};
       auto const tagsToAdd = std::array<std::string, 1>{"ControllerTag"};

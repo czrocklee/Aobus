@@ -4,9 +4,9 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/library/LibraryWriter.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -59,7 +59,7 @@ namespace ao::gtk
     void rebuildTree(TrackRowCache& dataProvider);
     void select(ListId listId);
     void createSmartListFromExpression(ListId parentListId, std::string expression);
-    ListId submitListDraft(rt::LibraryWriter::ListDraft const& draft, std::string presentationId);
+    ListId submitListDraft(rt::LibraryListDraft const& draft, std::string presentationId);
 
     void addActionsTo(Gio::ActionMap& actionMap);
 
@@ -72,8 +72,8 @@ namespace ao::gtk
     void openNewSmartListDialog();
     void openEditListDialog(ListId listId);
 
-    ListId createList(rt::LibraryWriter::ListDraft const& draft);
-    bool updateList(rt::LibraryWriter::ListDraft const& draft);
+    ListId createList(rt::LibraryListDraft const& draft);
+    bool updateList(rt::LibraryListDraft const& draft);
     void handleDeleteListActivated();
     void handleEditListActivated();
 

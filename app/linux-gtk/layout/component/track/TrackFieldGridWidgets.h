@@ -18,6 +18,7 @@
 #include <sigc++/signal.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 
 namespace Gtk
@@ -129,8 +130,9 @@ namespace ao::gtk::layout::track_field_grid
     DetailEditCoordinator(DetailEditCoordinator&&) = delete;
     DetailEditCoordinator& operator=(DetailEditCoordinator&&) = delete;
 
-    void registerEditor(DetailFieldEditor& editor);
+    void registerEditor(DetailFieldEditor& editor, std::function<void()> onActivated);
     void forgetEditor(DetailFieldEditor& editor);
+    void cancelActive();
 
   private:
     static bool isDescendantOf(Gtk::Widget const* widget, Gtk::Widget const& ancestor);

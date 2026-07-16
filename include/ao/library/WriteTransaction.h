@@ -51,17 +51,21 @@ namespace ao::library
     WriteTransaction(WriteTransaction const&) = delete;
     WriteTransaction& operator=(WriteTransaction const&) = delete;
     WriteTransaction(WriteTransaction&&) noexcept;
-    WriteTransaction& operator=(WriteTransaction&&) noexcept;
+    WriteTransaction& operator=(WriteTransaction&& other) noexcept;
 
     DictionaryStore::Writer& dictionary();
     Result<> commit();
+    // Explicitly terminates an active transaction while retaining the wrapper
+    // that transaction-derived store objects borrow until their destruction.
+    void abort() noexcept;
 
   private:
     struct Impl;
     static Result<WriteTransaction> begin(lmdb::Environment& environment,
                                           DictionaryStore& dictionary,
                                           detail::LibraryIdentity const& identity,
-                                          Options options);
+                                          Options options,
+                                          std::shared_ptr<void const> writerSessionAnchorPtr = {});
     explicit WriteTransaction(std::unique_ptr<Impl> implPtr);
 
     lmdb::WriteTransaction& native(detail::LibraryIdentity const& identity);

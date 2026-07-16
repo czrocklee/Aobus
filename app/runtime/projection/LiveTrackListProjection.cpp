@@ -597,7 +597,7 @@ namespace ao::rt
   {
     ViewId viewId;
     TrackSourceLease sourceLease;
-    library::MusicLibrary& library;
+    library::MusicLibrary const& library;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy;
     std::string presentationId = std::string{kDefaultTrackPresentationId};
@@ -645,7 +645,7 @@ namespace ao::rt
 
     Impl(ViewId vid,
          TrackSourceLease trackSourceLease,
-         library::MusicLibrary& lib,
+         library::MusicLibrary const& lib,
          std::vector<TrackSortTerm> initialSort = {})
       : viewId{vid}
       , sourceLease{std::move(trackSourceLease)}
@@ -1278,7 +1278,7 @@ namespace ao::rt
 
   LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
                                                    TrackSourceLease sourceLease,
-                                                   library::MusicLibrary& library)
+                                                   library::MusicLibrary const& library)
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library)}
   {
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
@@ -1287,7 +1287,7 @@ namespace ao::rt
 
   LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
                                                    TrackSourceLease sourceLease,
-                                                   library::MusicLibrary& library,
+                                                   library::MusicLibrary const& library,
                                                    TrackOrderSpec const& order)
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy)}
   {

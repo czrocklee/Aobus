@@ -124,7 +124,7 @@ The table tracks capability families with architecture-bearing boundaries, not e
 | Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | Current GTK and TUI lifecycle asymmetry is explicit; RFC 0018 proposes a shared owner. |
 | Application shell, layout document, actions, component state, and widget construction | [Application shell](application-shell.md) | Current | Current declarative construction is GTK-specific; TUI retains an independent terminal shell. |
 | Shared presentation policy and frontend adaptation | [Presentation](presentation.md) | Current | Exact UI behavior remains delegated to the presentation, shell, and frontend specification and reference owners. |
-| Metadata ingestion and editing from frontend intent through library publication | [Library](library.md) and [presentation](presentation.md) own the endpoints | Partial | [RFC 0023](../rfc/0023-revision-bound-metadata-authoring.md) proposes a revision-bound authoring command while keeping the endpoint owners; implementation must finish the behavior and exact-surface coverage. |
+| Metadata ingestion and editing from frontend intent through library publication | [Presentation](presentation.md) | Current | Presentation owns edit-session and frontend adaptation structure and delegates revision-bound admission, commit, and publication to the library architecture. |
 | Platform services such as portals and MPRIS | [Presentation](presentation.md) owns the adapter edge | Partial | Native file-dialog completions now have a coordinator-scoped lifetime boundary; remaining portal and MPRIS contracts still require focused migration. |
 
 ## Coverage workflow
@@ -137,7 +137,7 @@ Use this order when extending the architecture set:
 4. Create a focused architecture only when the threshold in the [documentation system](../README.md#architecture-portfolio) is met.
 5. Update this landscape's role, relationship, and coverage tables in the same change.
 
-The current follow-up order is metadata authoring, then the remaining exact platform-service contracts.
+The current follow-up order is the remaining exact platform-service contracts.
 An audit may conclude that specifications and reference under an existing architecture are sufficient.
 
 Architecture coverage is complete for a capability when:

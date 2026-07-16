@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/property/TagEditWorkflow.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <format>
 #include <string>
@@ -43,8 +44,8 @@ namespace ao::uimodel
     }
   } // namespace
 
-  TagEditWorkflow::TagEditWorkflow(rt::LibraryWriter& writer)
-    : _writer{writer}
+  TagEditWorkflow::TagEditWorkflow(TrackAuthoringSession& session)
+    : _session{session}
   {
   }
 
@@ -57,7 +58,14 @@ namespace ao::uimodel
       return result;
     }
 
-    auto const replyResult = _writer.editTags(request.selectedIds, request.tagsToAdd, request.tagsToRemove);
+    if (!std::ranges::equal(request.selectedIds, _session.targetIds()))
+    {
+      result.rejected = true;
+      result.notificationText = "Tag edit targets changed while the editor was open.";
+      return result;
+    }
+
+    auto const replyResult = _session.submitTags(request.tagsToAdd, request.tagsToRemove);
 
     if (!replyResult)
     {
@@ -66,9 +74,24 @@ namespace ao::uimodel
       return result;
     }
 
-    result.applied = !replyResult->mutatedIds.empty();
-    result.notificationText =
-      tagChangeStatusMessage(replyResult->mutatedIds.size(), request.tagsToAdd.size(), request.tagsToRemove.size());
+    if (replyResult->status == TrackAuthoringSubmitStatus::Stale ||
+        replyResult->status == TrackAuthoringSubmitStatus::Unavailable)
+    {
+      result.stale = true;
+      result.notificationText = "Library changed while the tag editor was open. Reload and try again.";
+      return result;
+    }
+
+    if (replyResult->status == TrackAuthoringSubmitStatus::Missing)
+    {
+      result.rejected = true;
+      result.notificationText = "One or more selected tracks no longer exist.";
+      return result;
+    }
+
+    result.applied = replyResult->status == TrackAuthoringSubmitStatus::Applied;
+    result.notificationText = tagChangeStatusMessage(
+      replyResult->reply.mutatedIds.size(), request.tagsToAdd.size(), request.tagsToRemove.size());
     return result;
   }
 } // namespace ao::uimodel

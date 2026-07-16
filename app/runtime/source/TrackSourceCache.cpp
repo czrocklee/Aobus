@@ -68,7 +68,7 @@ namespace ao::rt
 
   // Subscription lambdas form separate event reducers but share one mutation-depth gate.
   // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-  TrackSourceCache::TrackSourceCache(library::MusicLibrary& library, LibraryChanges const& changes)
+  TrackSourceCache::TrackSourceCache(library::MusicLibrary const& library, LibraryChanges const& changes)
     : _library{library}, _allTracksPtr{std::make_shared<AllTracksSource>(_library.tracks())}, _smartEvaluator{_library}
   {
     _changesSubscription = changes.onChanged(
@@ -215,7 +215,7 @@ namespace ao::rt
       return std::unexpected{baseResult.error()};
     }
 
-    auto sourcePtr = std::make_shared<SmartListSource>(*baseResult, _library, _smartEvaluator);
+    auto sourcePtr = std::make_shared<SmartListSource>(*baseResult, _smartEvaluator);
     sourcePtr->setExpression(spec.filterExpression);
     sourcePtr->reload();
     auto basePtr = std::static_pointer_cast<TrackSource>(std::move(sourcePtr));
@@ -507,7 +507,7 @@ namespace ao::rt
   {
     if (view.isSmart())
     {
-      auto sourcePtr = std::make_unique<SmartListSource>(parentLease, _library, _smartEvaluator);
+      auto sourcePtr = std::make_unique<SmartListSource>(parentLease, _smartEvaluator);
       sourcePtr->setExpression(std::string{view.filter()});
       sourcePtr->reload();
       return sourcePtr;

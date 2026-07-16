@@ -206,6 +206,13 @@ namespace clang::tidy::readability
     /// unique_lock (explicit lock/unlock/try_lock, or passed to condvar::wait).
     bool needsUniqueLock(VarDecl const* lockVar, ASTContext& /*context*/)
     {
+      // A unique_lock parameter represents an established lock lifetime or an
+      // ownership transfer. It cannot be replaced locally with scoped_lock.
+      if (isa<ParmVarDecl>(lockVar))
+      {
+        return true;
+      }
+
       auto const* dc = lockVar->getParentFunctionOrMethod();
 
       if (dc == nullptr)

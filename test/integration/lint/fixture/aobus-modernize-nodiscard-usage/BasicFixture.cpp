@@ -46,6 +46,26 @@ public:
 };
 
 // NEGATIVE
+class [[nodiscard]] ExplicitlyDefaultedOwner
+{
+public:
+  ~ExplicitlyDefaultedOwner();
+  ExplicitlyDefaultedOwner(ExplicitlyDefaultedOwner const&) = delete;
+};
+
+inline ExplicitlyDefaultedOwner::~ExplicitlyDefaultedOwner() = default;
+
+// POSITIVE: FIX-TO: class [[nodiscard]] ExplicitlyDefaultedTransaction
+class ExplicitlyDefaultedTransaction
+{
+public:
+  ~ExplicitlyDefaultedTransaction();
+  ExplicitlyDefaultedTransaction(ExplicitlyDefaultedTransaction const&) = delete;
+};
+
+inline ExplicitlyDefaultedTransaction::~ExplicitlyDefaultedTransaction() = default;
+
+// NEGATIVE
 class NotActuallyRaii
 {
 public:

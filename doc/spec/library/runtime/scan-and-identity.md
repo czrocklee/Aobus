@@ -18,21 +18,27 @@ Manifest keys and fields belong to the [library database reference](../../../ref
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
-The frontend-shared surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `AudioIdentityIndexer.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
+The frontend-shared surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryTaskService.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
+`LibraryScan` is read-only plan construction.
+Committing application is a runtime-private coordinator operation; focused storage tests may use its explicitly offline composition.
 
 ## Terminology
 
 - **Manifest URI** is the normalized music-root-relative key bound to one track.
 - **Audio identity** is encoded-audio payload length plus its XXH3-128 signature.
 - **Pending identity** is zero payload length plus an all-zero signature.
-- **Plan** is a point-in-time classification of supported files and manifest rows.
+- **Plan** is a move-only point-in-time classification bound to one persisted library id and committed library revision.
 - **Relink** rebinds an existing track and manifest row from an old URI to a new URI.
 
 ## Invariants
 
 - Edited library metadata is authoritative after initial import; a changed-file scan refreshes technical properties without replacing curated metadata.
 - A scan never admits an unsupported file into its plan.
+- Only the runtime planner can construct an applicable plan; consumers may inspect its immutable items but cannot insert or rewrite them.
+- Plan application accepts only the library id and revision captured by the planner, so a foreign, superseded, or already-consumed snapshot cannot mutate storage.
 - One applied plan commits all successful content changes and the revision atomically.
+- Runtime scan apply closes interactive admission before slow preparation and keeps it closed through publication and completion.
+- Filesystem reads, media parsing, and fingerprinting hold no coordinator writer ownership or LMDB write transaction.
 - Cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
@@ -53,6 +59,7 @@ The planner recursively walks the configured music root, skips unsupported and n
 
 A missing root or root-level walk failure is a plan-building error.
 Per-entry problems may appear as error items without erasing other classifications.
+The planner reads the persisted library id, committed revision, and manifest from the same LMDB snapshot and stores that binding in the returned plan.
 
 The planner performs URI matching before identity matching.
 It groups missing rows with stored identities by payload length and signature.
@@ -61,7 +68,13 @@ Ambiguous duplicate groups remain `Missing` plus `New` for explicit resolution.
 
 ## Plan application
 
-Application processes plan items under one write transaction and reports updating and fingerprinting progress.
+Runtime application enters `ScanApply` maintenance, prepares plan items on a worker without writer ownership, then opens one bounded coordinator mutation to revalidate prepared state and apply every successful content change atomically.
+It reports updating and fingerprinting progress during preparation.
+The runtime-private operation enforces `Created → Prepared → Revalidated → Applied/Terminal`; callers cannot skip final file revalidation or apply the same operation twice.
+
+After maintenance closes interactive admission, application validates the plan binding before reporting item progress, opening media, or fingerprinting.
+The bounded write transaction validates the same library id again and requires its newly allocated revision to immediately follow the plan revision before it touches track or manifest rows.
+A foreign binding returns `InvalidInput`; a superseded or replayed binding returns `Conflict`; both paths abort without a durable revision or content change.
 
 - `New` parses metadata and technical properties, creates a track, and writes an available manifest row.
 - `Changed` preserves curated metadata, refreshes technical properties, and refreshes file and identity facts.
@@ -70,10 +83,14 @@ Application processes plan items under one write transaction and reports updatin
 - `Unchanged` performs no write.
 - Item-level parse/open failures are counted and reported without claiming that item succeeded.
 
-Before committing a moved item, application fingerprints the live destination again and compares it with the planned identity.
+After preparation and immediately before opening the coordinator mutation, application fingerprints every moved destination again and compares it with both the prepared and planned identities.
 A mismatch or a failure after relink processing begins aborts the complete transaction.
 
-The result carries the committed revision, inserted/mutated/relinked ids, relinked and missing counts, item-failure count, and cancellation state.
+Successful explicit relink derivation consumes an unresolved plan and produces one `Moved` item only when the selected `Missing` and `New` items carry the same non-pending planned identity.
+The derived plan preserves the source library and revision binding, and live destination fingerprinting remains mandatory during apply.
+
+The result carries the committed revision, inserted/mutated/relinked ids, missing count, and item-failure count; the relink count is `relinkedIds.size()` rather than independent state.
+Coordinated and offline application report cancellation through `OperationCancelled`, so a successful result never also claims cancellation.
 Only a successful commit makes those content counts observable.
 
 ## Deferred identity
@@ -89,15 +106,15 @@ Aobus never writes a guessed identity.
 
 `AudioIdentityIndexer` processes bounded batches in three phases:
 
-1. Snapshot available pending rows and their URI, size, and modification time in a read transaction without the mutation mutex.
+1. Under one outer `AudioIdentityBackfill` maintenance interval, snapshot available pending rows and their URI, size, and modification time in a read transaction without writer ownership.
 2. Fingerprint files concurrently outside LMDB transactions; the default concurrency is `clamp(hardware_concurrency / 2, 2, 4)`.
-3. Lock the shared mutation mutex only for serial write-back, re-read every row, and commit identities for rows still available, pending, and stat-equal.
+3. Acquire one bounded coordinator mutation per serial write-back batch, re-read every row, and commit identities for rows still available, pending, and stat-equal.
 
 Per-file failures are reported and counted without aborting the run; database failures fail the operation.
 Progress callbacks are serialized but may run on worker-pool threads.
 
 Cancellation stops hashing at chunk boundaries, commits valid rows already completed in the current batch, leaves unfinished rows pending, and returns `cancelled = true`.
-Backfill changes only manifest identity and does not publish track metadata mutations.
+Backfill changes only manifest identity; each effective batch publishes its committed revision with no track/list category rather than claiming a metadata mutation.
 
 ## Signature behavior
 
@@ -115,13 +132,14 @@ Cancellation is cooperative during payload hashing and before commit.
 - [`LibraryScan.h`](../../../../app/include/ao/rt/library/LibraryScan.h) and [`ScanPlan.h`](../../../../app/include/ao/rt/library/ScanPlan.h) define the shared scan surface.
 - [`ScanPlanBuilder.cpp`](../../../../app/runtime/library/ScanPlanBuilder.cpp) owns planning and move matching.
 - [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns transactional application.
+- [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns maintenance lifetime and prepare/apply worker composition.
 - [`AudioIdentity.h`](../../../../include/ao/library/AudioIdentity.h) owns identity calculation.
 - [`AudioIdentityIndexer.cpp`](../../../../app/runtime/library/AudioIdentityIndexer.cpp) owns concurrent backfill.
 
 ## Test map
 
-- [`ScanPlanBuilderTest.cpp`](../../../../test/unit/runtime/library/ScanPlanBuilderTest.cpp) proves classifications, URI normalization, move identity, ambiguity, and errors.
-- [`ScanApplyOperationTest.cpp`](../../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves atomic application, curated-metadata preservation, relinking, failures, progress, and cancellation.
+- [`ScanPlanBuilderTest.cpp`](../../../../test/unit/runtime/library/ScanPlanBuilderTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
+- [`ScanApplyOperationTest.cpp`](../../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves binding rejection, replay protection, prepared-file revalidation, atomic application, curated-metadata preservation, relinking, failures, progress, and cancellation.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
 - [`AudioIdentityTest.cpp`](../../../../test/unit/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.
 

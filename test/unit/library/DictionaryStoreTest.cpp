@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
@@ -50,7 +51,7 @@ namespace ao::library::test
     auto library = openTestLibrary(temp);
     auto const& dictionary = library.dictionary();
     auto const initialGeneration = dictionary.generation();
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto trackWriter = library.tracks().writer(transaction);
     auto listWriter = library.lists().writer(transaction);
     auto resourceWriter = library.resources().writer(transaction);
@@ -89,7 +90,7 @@ namespace ao::library::test
     auto const& dictionary = library.dictionary();
 
     {
-      auto preview = library.writeTransaction();
+      auto preview = writeTransaction(library);
       CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
       CHECK(requireIntern(preview, "preview-only") == DictionaryId{1});
     }
@@ -97,7 +98,7 @@ namespace ao::library::test
     CHECK_FALSE(dictionary.contains("preview-only"));
     CHECK(dictionary.size() == 0);
 
-    auto committed = library.writeTransaction();
+    auto committed = writeTransaction(library);
     auto const id = requireIntern(committed, "committed");
     CHECK(id == DictionaryId{1});
     REQUIRE(committed.commit());
@@ -110,9 +111,11 @@ namespace ao::library::test
     auto library = openTestLibrary(temp);
     auto const& dictionary = library.dictionary();
     auto const initialGeneration = dictionary.generation();
-    auto transaction = library.writeTransaction(WriteTransaction::Options{
-      .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected commit failure"},
-    });
+    auto transaction = writeTransaction(
+      library,
+      WriteTransaction::Options{
+        .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected commit failure"},
+      });
     auto trackWriter = library.tracks().writer(transaction);
     auto listWriter = library.lists().writer(transaction);
     auto resourceWriter = library.resources().writer(transaction);
@@ -136,7 +139,7 @@ namespace ao::library::test
     CHECK(lateIntern.error().code == Error::Code::InvalidState);
     CHECK_THROWS_AS(transaction.dictionary(), Exception);
 
-    auto retry = library.writeTransaction();
+    auto retry = writeTransaction(library);
     CHECK(requireIntern(retry, "retry") == failedId);
     REQUIRE(retry.commit());
     CHECK(dictionary.get(failedId) == "retry");
@@ -147,7 +150,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto const first = requireIntern(transaction, "first");
     auto const duplicate = requireIntern(transaction, "first");
     auto const second = requireIntern(transaction, "second");
@@ -167,7 +170,7 @@ namespace ao::library::test
 
     {
       auto library = MusicLibrary{temp.path(), databasePath};
-      auto transaction = library.writeTransaction();
+      auto transaction = writeTransaction(library);
       id = requireIntern(transaction, "persistent");
       REQUIRE(transaction.commit());
     }
@@ -181,7 +184,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto const id = requireIntern(transaction, "value");
     REQUIRE(transaction.commit());
 
@@ -199,12 +202,12 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
 
-    auto seed = library.writeTransaction();
+    auto seed = writeTransaction(library);
     auto const stableId = requireIntern(seed, "stable");
     REQUIRE(seed.commit());
     auto const stableView = library.dictionary().get(stableId);
 
-    auto growth = library.writeTransaction();
+    auto growth = writeTransaction(library);
 
     for (std::int32_t index = 0; index < 10000; ++index)
     {
@@ -220,7 +223,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     constexpr std::int32_t kValueCount = 5000;
     auto ids = std::vector<DictionaryId>{};
     ids.reserve(kValueCount);
@@ -243,7 +246,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto const firstId = requireIntern(transaction, "first");
     REQUIRE(transaction.commit());
 
@@ -261,7 +264,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = openTestLibrary(temp);
-    auto seed = library.writeTransaction();
+    auto seed = writeTransaction(library);
     auto const stableId = requireIntern(seed, "stable");
     REQUIRE(seed.commit());
 
@@ -275,7 +278,7 @@ namespace ao::library::test
 
                                  for (std::int32_t batch = 0; batch < 128; ++batch)
                                  {
-                                   auto transaction = library.writeTransaction();
+                                   auto transaction = writeTransaction(library);
 
                                    for (std::int32_t index = 0; index < 8; ++index)
                                    {

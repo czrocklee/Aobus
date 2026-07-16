@@ -128,7 +128,8 @@ namespace ao::rt::test
     }
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const manualListId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Oracle manual",
@@ -183,9 +184,10 @@ namespace ao::rt::test
         case 0:
         {
           auto const target = liveTrackIds[step % liveTrackIds.size()];
-          REQUIRE(writer.updateMetadata(std::span{&target, 1},
-                                        MetadataPatch{.optTitle = std::format("Mutation {:03}", step),
-                                                      .optYear = static_cast<std::uint16_t>(2015U + (step % 15U))}));
+          REQUIRE(
+            writerFixture.updateMetadata(std::span{&target, 1},
+                                         MetadataPatch{.optTitle = std::format("Mutation {:03}", step),
+                                                       .optYear = static_cast<std::uint16_t>(2015U + (step % 15U))}));
           break;
         }
         case 1:

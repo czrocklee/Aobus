@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/MetadataLayout.h>
@@ -64,7 +65,7 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto library = MusicLibrary{temp.path(), temp.path() / "db"};
     auto header = library.metadataHeader();
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     header.flags = 42;
 
     REQUIRE(library.metadata().update(transaction, header));

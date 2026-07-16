@@ -104,7 +104,7 @@ The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatus
 | `dismissCompact()` | `void` |
 | `dismissDetailNotificationFromActivity(NotificationId)` | `void` |
 | `handleLibraryTaskProgress(std::string, double)` | `void` |
-| `handleLibraryTaskCompleted(std::size_t)` | `void` |
+| `handleLibraryTaskCompleted(LibraryTaskCompleted const&)` | `void` |
 
 `expireTransientIfDue()` returns `true` only when it performs an expiry transition.
 
@@ -117,10 +117,11 @@ The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatus
 | Multiple selected errors | `<N> errors` |
 | Library progress beginning `Scanning:` | `Scanning library` |
 | Library progress beginning `Updating:` | `Updating library` |
-| Completion with zero added tracks | `Library is up to date` |
-| Completion with nonzero added tracks | `Scan complete: <N> tracks added` |
+| Successful completion with zero affected tracks | `Library is up to date` |
+| Successful completion with nonzero affected tracks | `Scan complete: <N> tracks added` |
 
 These strings are current UIModel output and are not localization keys.
+`CompletedWithIssues`, `Failed`, and `Cancelled` clear task progress without synthesizing a success message; notification projection may then surface an owning warning or error.
 
 ## Validation rules
 

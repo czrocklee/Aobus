@@ -26,7 +26,6 @@
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -80,7 +79,7 @@ namespace ao::rt
       return preset->spec;
     }
 
-    bool isManualList(library::MusicLibrary& library, ListId const listId)
+    bool isManualList(library::MusicLibrary const& library, ListId const listId)
     {
       if (listId == kAllTracksListId)
       {
@@ -92,7 +91,7 @@ namespace ao::rt
       return optView && !optView->isSmart();
     }
 
-    TrackPresentationSpec initialPresentation(TrackListViewConfig const& initial, library::MusicLibrary& library)
+    TrackPresentationSpec initialPresentation(TrackListViewConfig const& initial, library::MusicLibrary const& library)
     {
       if (initial.optPresentation)
       {
@@ -143,7 +142,7 @@ namespace ao::rt
                                                        TrackSourceLease baseSourceLease,
                                                        std::string const& filterExpression,
                                                        TrackPresentationSpec const& presentation,
-                                                       library::MusicLibrary& library,
+                                                       library::MusicLibrary const& library,
                                                        TrackSourceCache& sources)
     {
       auto activeSourceLease = baseSourceLease;
@@ -211,10 +210,10 @@ namespace ao::rt
     std::unordered_map<ViewId, ViewEntry> views;
 
     async::Executor& executor;
-    library::MusicLibrary& library;
+    library::MusicLibrary const& library;
     TrackSourceCache& sources;
 
-    Impl(async::Executor& exec, library::MusicLibrary& lib, TrackSourceCache& sourceCache)
+    Impl(async::Executor& exec, library::MusicLibrary const& lib, TrackSourceCache& sourceCache)
       : executor{exec}, library{lib}, sources{sourceCache}
     {
     }
@@ -228,7 +227,7 @@ namespace ao::rt
     Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
-  ViewService::ViewService(async::Executor& executor, library::MusicLibrary& library, TrackSourceCache& sources)
+  ViewService::ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources)
     : _implPtr{std::make_unique<Impl>(executor, library, sources)}
   {
   }

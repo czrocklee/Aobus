@@ -58,21 +58,27 @@ namespace ao::gtk::test
   TEST_CASE("TrackSelectionController - synchronizes GTK selection with runtime views", "[gtk][unit][track][selection]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
-    auto& library = fixture.runtime().musicLibrary();
+    auto trackId1 = kInvalidTrackId;
+    auto trackId2 = kInvalidTrackId;
+    auto trackId3 = kInvalidTrackId;
+    auto trackId4 = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      {
+        trackId1 = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "Track 1", .duration = std::chrono::minutes{2}});
+        trackId2 = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "Track 2", .duration = std::chrono::minutes{3}});
+        trackId3 = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "Track 3", .duration = std::chrono::minutes{5}});
+        trackId4 = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "Track 4", .duration = std::chrono::minutes{4}});
+      }};
+    auto const& library = fixture.runtime().musicLibrary();
     auto cache = TrackRowCache{fixture.runtime().library()};
 
     auto modelPtr = TrackListModel::create(cache);
     auto selectionModelPtr = Gtk::MultiSelection::create(modelPtr);
-
-    auto const trackId1 = library::test::addTrack(
-      library, library::test::TrackSpec{.title = "Track 1", .duration = std::chrono::minutes{2}});
-    auto const trackId2 = library::test::addTrack(
-      library, library::test::TrackSpec{.title = "Track 2", .duration = std::chrono::minutes{3}});
-    auto const trackId3 = library::test::addTrack(
-      library, library::test::TrackSpec{.title = "Track 3", .duration = std::chrono::minutes{5}});
-    auto const trackId4 = library::test::addTrack(
-      library, library::test::TrackSpec{.title = "Track 4", .duration = std::chrono::minutes{4}});
 
     auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(trackId1);

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/library/MusicLibrary.h>
 
 namespace ao::library::test

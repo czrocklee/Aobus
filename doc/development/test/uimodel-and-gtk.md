@@ -3,7 +3,7 @@ id: development.test.uimodel-and-gtk
 type: development
 status: current
 domain: development
-summary: Defines UIModel and GTK test placement, harness, lifecycle, and assertion practices.
+summary: Defines UIModel and GTK test placement, fixture, lifecycle, and assertion practices.
 ---
 # UIModel and GTK testing
 
@@ -235,7 +235,7 @@ guidelines depend on keeping logic out of widgets:
 - Expose narrow semantic accessors instead of forcing tests to crawl widget
   trees. A `entry()` accessor is useful; a query for current completion
   candidates is better.
-- Apply the testability seam order from `fixtures-and-helpers.md` before adding
+- Apply the testability seam order from [fixtures and helpers](fixture-and-helper.md) before adding
   any new GTK observation surface.
 - Use callbacks or interfaces as seams. Injecting a callback struct, firing it,
   and asserting observable state is the preferred adapter-test shape.
@@ -250,5 +250,5 @@ guidelines depend on keeping logic out of widgets:
 - Reflection/gesture-poking, if used, asserts the final effect.
 - Reused helpers come from `GtkTestSupport.h`; new shared helpers are promoted
   there.
-- Testability seams follow `fixtures-and-helpers.md`.
+- Testability seams follow [fixtures and helpers](fixture-and-helper.md).
 - Full-window coverage is a single smoke section, not a coverage farm.

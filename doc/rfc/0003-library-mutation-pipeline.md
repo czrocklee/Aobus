@@ -1,24 +1,40 @@
 ---
 id: rfc.0003.library-mutation-pipeline
 type: rfc
-status: draft
+status: implemented
 domain: library
-summary: Proposes one runtime mutation gateway that couples write scheduling, commit revision, and change publication.
+summary: Introduced one runtime mutation coordinator that couples write admission, durable commit, and ordered change publication.
 depends-on: none
 ---
 # RFC 0003: Unified library mutation pipeline
 
+## Disposition
+
+Implemented on 2026-07-16.
+
+`WritableMusicLibrary` now holds the non-blocking per-database writer lease and is the only core capability that can begin a committing library transaction.
+`MusicLibrary` and `CoreRuntime::musicLibrary()` remain read-oriented, while each transaction retains the lease anchor until commit, failure, or destruction.
+
+One runtime-private `LibraryMutationService` owns that capability, interactive and exclusive-maintenance admission, contiguous revision validation, durable commit, and completion of ordered `LibraryChanges` publication.
+Import, scan apply, and audio-identity backfill close interactive admission before slow worker preparation and take bounded write sessions only for apply/commit.
+Failure before commit remains an ordinary typed operation error; enqueue or observer failure after commit moves the runtime to terminal `Faulted` state.
+
+Public runtime headers, UIModel, GTK, and TUI cannot name committing storage authority.
+CLI mutations use semantic runtime commands, while focused storage tests and explicitly offline scan/YAML operations construct the core capability directly.
+
+The [library architecture](../architecture/library.md), [runtime execution architecture](../architecture/runtime-execution.md), [mutation specification](../spec/library/runtime/mutation.md), [task-execution specification](../spec/library/runtime/task-execution.md), and [change-publication specification](../spec/library/runtime/change-publication.md) now own current behavior and supersede the proposal wording below.
+
 ## Problem
 
-The runtime library facade currently has two partially independent mutation paths.
-`LibraryTaskService` serializes import, scan application, and identity write-back with a private mutex, while synchronous `LibraryWriter` commands open LMDB write transactions without participating in that coordination.
-LMDB still enforces one physical writer, but application-level scheduling, callback-thread blocking, cancellation priority, and operation ordering do not have one owner.
+The runtime library facade has two independent mutation paths.
+`LibraryTaskService` serializes import, scan application, and identity write-back with a private mutex, while synchronous `LibraryWriter` commands open LMDB write transactions outside that coordination.
+LMDB preserves physical single-writer consistency, but application admission, maintenance exclusion, revision ownership, and observer publication have no single owner.
 
-Every public `MusicLibrary::writeTransaction()` call increments the library revision inside the transaction.
-After commit, each runtime caller constructs and publishes its own `LibraryChangeSet`.
-A committed low-level transaction that omits publication creates a revision gap, and production `LibraryChanges` retains later revisions while waiting for the missing event.
-The low-level `CoreRuntime::musicLibrary()` escape hatch makes this invariant possible to violate outside the normal writer.
+Every public `MusicLibrary::writeTransaction()` allocates the next library revision inside the transaction.
+After commit, each caller independently constructs and publishes a `LibraryChangeSet`.
+A committed transaction that omits publication creates a revision gap, while a caller that reports an ordinary failure after commit tells the frontend that nothing changed even though durable state already did.
 
+The low-level mutable `CoreRuntime::musicLibrary()` escape hatch and frontend migration seams make both failures expressible outside the intended runtime path.
 The current boundaries are described by the [library architecture](../architecture/library.md), [mutation specification](../spec/library/runtime/mutation.md), and [change-publication specification](../spec/library/runtime/change-publication.md).
 
 ## Dependencies
@@ -29,137 +45,156 @@ The current boundaries are described by the [library architecture](../architectu
 
 ## Goals
 
-- Give every application mutation one scheduling and commit owner.
-- Make revision allocation, durable commit, and semantic change construction one protocol that normal callers cannot partially perform.
-- Prevent synchronous frontend commands from blocking behind unbounded worker transactions.
-- Preserve ordered callback-executor publication when mutations prepare or finish out of order.
-- Keep read snapshots independent from write scheduling.
-- Retain a narrow core administration surface for migrations, fixtures, and offline tools without exposing it as a normal runtime extension point.
+- Give every live-runtime mutation one admission, transaction, commit, and publication owner.
+- Make a committing transaction unavailable to normal runtime, UIModel, and frontend callers.
+- Serialize interactive writes with exclusive maintenance without holding writer ownership during slow preparation.
+- Treat the persisted library revision as the single commit epoch.
+- Publish every committed revision in order before authoring is advertised as available at that revision.
+- Distinguish pre-commit failure from a committed mutation whose publication path faults.
+- Prevent a second writable process from opening the same library concurrently.
+- Retain an explicit offline core capability for storage tests and deliberately isolated administration.
 
 ## Non-goals
 
-- Replace LMDB transaction semantics.
-- Turn all synchronous commands into public asynchronous APIs immediately.
-- Define scan batching, YAML schema, or database migration policy.
-- Guarantee that in-memory observers receive an event after process termination.
-- Let frontend code construct physical store writers.
+- Replace LMDB transaction semantics or add nested application transactions.
+- Add a durable publication journal that survives process termination.
+- Make long-lived read-only processes coherent with another process that commits new dictionary entries.
+- Define metadata editor staleness or undo policy; [RFC 0023](0023-revision-bound-metadata-authoring.md) owns that policy.
+- Add priority scheduling before a measured starvation problem exists.
 
 ## Proposed design
 
+### Core writable capability
+
+Core library code distinguishes the read-oriented `MusicLibrary` facade from an explicit writable capability.
+The capability can begin a committing `WriteTransaction`; ordinary runtime public headers expose neither it nor the transaction.
+
+`CoreRuntime` owns the capability privately and exposes only read-oriented library inspection.
+Focused storage fixtures and explicitly offline administration may construct the capability directly, but live runtime services cannot manufacture independent copies.
+The core capability knows nothing about runtime epochs, maintenance, UI sessions, or change publication.
+
+### Writable-process lease
+
+Opening a writable runtime acquires one non-blocking OS file lease associated with the database path and holds it for the runtime lifetime.
+A second process may open the database read-only, but it cannot acquire a writable runtime until the first lease is released.
+
+The lease prevents an external writer from advancing storage behind the runtime coordinator.
+Cross-process refresh of the process-local dictionary index remains separate work; this RFC does not block all read-only processes merely to hide that existing limitation.
+
 ### Runtime mutation coordinator
 
-`ao::rt::Library` owns one `LibraryMutationCoordinator` beside its reader, writer, task, and changes roles.
-The coordinator is the only normal runtime component allowed to begin a committing `MusicLibrary` write transaction.
+`ao::rt::Library` owns one `LibraryMutationService` beside its reader, writer, task service, and changes roles.
+The coordinator is the only live-runtime component allowed to consume the core writable capability.
 
-Mutations have two conceptual phases:
+Mutations use three admission classes:
+
+| Class | Examples | Admission |
+|---|---|---|
+| Read-only | export, scan-plan construction, projections | Independent LMDB read snapshots |
+| Interactive | metadata, tags, lists, track create/delete | Accepted only while authoring is available |
+| Exclusive maintenance | scan apply, import, relink, identity backfill | Closes interactive admission for the whole operation |
+
+Slow file walking, parsing, hashing, and media interpretation happen without a mutation session.
+Maintenance may use several bounded commits, but each commit separately consumes one revision and publishes one matching change set.
+
+### Commit and publication terminal states
+
+One coordinator mutation follows this order:
 
 ```text
-prepare without writer ownership
-  -> enqueue commit intent
-  -> begin write transaction
+admit and acquire coordinator writer ownership
+  -> begin core write transaction
   -> revalidate affected state
-  -> apply writes and build semantic change set
-  -> obtain revision and commit
-  -> publish committed change set on callback executor
+  -> apply writes and finalize semantic LibraryChangeSet
+  -> read the transaction's nonzero library revision
+  -> commit durable state
+  -> release writer ownership
+  -> publish that exact revision on the callback executor
+  -> synchronously update every subscribed source/projection
+  -> publish authoring availability at the committed revision
 ```
 
-Small `LibraryWriter` commands may perform preparation and commit together when their work is bounded and does not perform slow filesystem I/O.
-Long tasks prepare on worker executors and hold coordinator writer ownership only for revalidation and bounded database writes.
+Abort, preview, validation rejection, and semantic no-op do not commit, publish, or advance the persisted revision.
+The coordinator verifies that a commit revision immediately follows the last coordinator-owned revision; a gap indicates a bypassing writer and faults the live runtime.
 
-### Commit envelope
+Failure before commit returns the operation's ordinary typed error and leaves the previous availability intact.
+Once commit succeeds, the mutation is irrevocably committed.
+If enqueueing or observer delivery fails afterward, the coordinator reports a committed-publication fault, enters a terminal `Faulted` authoring state, and rejects further live-runtime writes.
+It never returns an ordinary pre-commit `Failed` result and never attempts an in-place reset whose ordering cannot be proven.
+Reopening the runtime rebuilds projections from durable storage and establishes a fresh runtime instance.
 
-The coordinator creates an internal `LibraryMutation` envelope containing the write transaction, mutation kind, affected identities, and a semantic change accumulator.
-Callers add typed inserted, deleted, mutated, relinked, list, or reset facts through the envelope rather than constructing an arbitrary post-commit changeset.
+### Ordered projection barrier
 
-The only successful terminal operation is `commitAndPublish`:
+`LibraryChanges` remains the revision-ordering boundary for producers that finish on different threads.
+For a callback-thread producer, dispatch and observer delivery complete synchronously.
+For a worker producer, FIFO callback dispatch places the change delivery before the coroutine's callback continuation.
 
-1. Validate that the semantic change is consistent with the writes and reset mode.
-2. Read the revision allocated inside the transaction.
-3. Finalize a nonzero `LibraryChangeSet` before commit.
-4. Commit the transaction.
-5. Enqueue the finalized change for ordered callback delivery through a no-loss runtime queue.
+Publication completion runs only after every still-connected `LibraryChanges` observer has been invoked.
+`TrackSourceCache`, `LiveTrackDetailProjection`, completion, workspace, and other authoring-relevant reducers therefore apply the change before the runtime advertises the new available revision.
+If a future reducer becomes asynchronous, it must join an explicit acknowledgement barrier before availability can advance.
 
-Abort and preview never publish and never consume a durable revision.
-A committed change that cannot be enqueued triggers a coordinator fault state and a callback-side library reset from current storage rather than allowing an unbounded revision gap.
+### Low-level and public access
 
-### Scheduling and affinity
+`MusicLibrary` continues to expose read transactions and physical stores to core code.
+`CoreRuntime::musicLibrary()` becomes read-only, and normal runtime consumers use `ao::rt::Library` roles and values.
 
-The coordinator owns a FIFO commit queue with explicit operation categories for interactive commands, background batches, and exclusive maintenance.
-It does not hold an application mutex during file parsing, hashing, YAML parsing, or callback execution.
-Background operations yield between bounded commits so interactive mutations can make progress.
+Runtime implementation files that prepare mutations receive a narrow coordinator-owned session rather than constructing a transaction independently.
+CLI behavior-bearing mutations use the runtime writer; deliberately offline inspection and repair use a separately named composition path with no live observers.
 
-Callback-thread commands that cannot begin immediately are adapted to task or command-completion results rather than blocking the callback executor on LMDB writer acquisition.
-The public facade may retain synchronous methods only where the coordinator can prove their commit path is bounded and immediately available.
-
-### Publication recovery
-
-`LibraryChanges` retains revision ordering for producers that finish preparation out of order.
-Its holdback is bounded and observable.
-A gap that cannot be produced by the coordinator is treated as an invariant failure and recovers by publishing one library reset at the latest committed revision after rebuilding dependent caches from storage.
-
-Duplicate and stale revisions remain errors.
-Tests and production use the same initial-revision and callback-executor ordering mode.
-
-### Low-level access
-
-`MusicLibrary` continues to expose read transactions and physical stores to core library code.
-Committing write-transaction construction becomes private to a core mutation token or another capability supplied only to the runtime coordinator, migration machinery, and focused test fixtures.
-
-`CoreRuntime::musicLibrary()` remains available for read-only inspection during migration of existing callers.
-Administration that performs writes uses an explicit offline or exclusive mutation capability and cannot share a live runtime change bus accidentally.
+Build guardrails reject direct `WriteTransaction`, writable capability, and low-level store access from UIModel and normal frontend code.
+Exceptions are narrow file/type allowlists rather than whole-directory or whole-coordinator exclusions.
 
 ## Alternatives
 
-### Share the existing mutex with `LibraryWriter`
+### Share the existing task mutex with `LibraryWriter`
 
-This serializes more callers but still couples neither revision nor publication to commit and may block the callback thread for an unbounded task transaction.
-It is an interim containment measure rather than a complete application boundary.
+This serializes callers but still allows commit and publication to be performed independently and leaves writable authority broadly constructible.
+It is insufficient as the final boundary.
 
 ### Rely only on LMDB's single-writer lock
 
-LMDB protects physical consistency but does not own application affinity, semantic changes, fairness, or observer recovery.
+LMDB protects physical consistency but does not own application admission, maintenance state, semantic changes, projection ordering, or post-commit fault classification.
 
-### Publish a generic reset after every commit
+### Recover publication failures with an inferred reset
 
-This eliminates semantic revision gaps but discards incremental source and projection behavior and increases callback work for ordinary edits.
+A reset after an unknown observer failure requires proving which projections already applied which revision and how the reset itself is ordered.
+Stopping further authoring and rebuilding on runtime reopen is smaller and mechanically safe.
 
-### Infer changes by diffing database snapshots
+### Lock every process that opens the library
 
-Snapshot diffing can recover from an exceptional gap but is too expensive and imprecise to replace typed mutation intent on every command.
+An all-open exclusive lease would also hide stale read-only dictionary caches, but it would prevent useful read-only CLI access while an interactive application is running.
+Writer exclusion and read-side cross-process coherence are separate contracts.
 
 ## Compatibility and migration
 
-The physical database layout and revision record do not need to change.
-Existing `LibraryWriter`, `LibraryTaskService`, importer, scanner, and indexer implementations migrate one mutation family at a time behind the unchanged `ao::rt::Library` facade where practical.
+The database layout does not change.
+The implementation migrates live write families to the coordinator and removes mutable storage access from public runtime/frontend seams.
+No compatibility overload preserves an uncoordinated live-runtime write path.
 
-During migration, a guard records whether a live runtime commit bypasses the coordinator and fails focused tests.
-Direct-write CLI administration either adopts the coordinator or opens the database in an explicitly offline mode with no live observers.
-Test fixtures receive a dedicated low-level mutation helper instead of treating the production write escape hatch as normal API.
+Storage fixtures receive an explicit offline writable capability.
+CLI commands either use the runtime facade or declare an offline administration composition before opening storage.
 
 ## Validation
 
-- Tests prove every successful runtime commit publishes exactly one matching nonzero revision or one documented coalesced envelope.
-- Production-mode change-bus tests cover missing, duplicate, stale, and out-of-order revisions with a real callback executor.
-- Failure injection covers apply failure, commit failure, enqueue failure, observer exception, cancellation before commit, and shutdown after commit.
-- Concurrency tests run interactive Writer commands against scan, import, and identity batches and assert bounded callback-executor latency.
-- Tests prove slow preparation never owns the mutation lock or an LMDB write transaction.
-- Source and projection oracle tests prove semantic deltas and reset recovery converge to fresh storage snapshots.
-- Boundary checks reject new frontend or runtime code that begins a raw committing transaction outside approved implementation areas.
-- ThreadSanitizer and concurrency suites cover coordinator lifetime, queue shutdown, and callback publication.
+- Every successful runtime commit publishes exactly one `LibraryChangeSet` with the same nonzero revision.
+- Abort, preview, rejected admission, and no-op paths neither publish nor advance the revision.
+- A post-commit enqueue or observer failure produces a committed-publication fault and permanently closes authoring for that runtime.
+- Availability for revision `R` is observed only after all synchronous authoring-relevant projections have applied change `R`.
+- Interactive writes are rejected throughout scan apply, import, relink, and identity backfill maintenance.
+- Slow preparation runs without coordinator writer ownership or an LMDB write transaction.
+- A second writable process fails to acquire the same database while the first writable runtime is alive.
+- Boundary checks reject new runtime/frontend raw transaction construction outside explicit offline/test locations.
+- Deterministic concurrency tests cover interactive/maintenance admission, multiple worker commits, observer failure, cancellation, and shutdown.
+- Linux ThreadSanitizer and the full `./ao check` gate pass.
 
 ## Open questions
 
-- Which existing `LibraryWriter` commands can remain synchronously callable without violating the callback latency budget?
-- Should the coordinator use strict FIFO scheduling or a bounded interactive-priority policy?
-- Is a committed in-memory publication queue sufficient, or should pending semantic changes have a small durable journal?
-- Which exceptional failures recover with a library reset and which should stop the runtime entirely?
-- Can one changeset describe a bounded batch from multiple compatible command intents, or must every command retain a distinct revision?
+None.
 
 ## Promotion plan
 
-- Update [library architecture](../architecture/library.md) with coordinator ownership and the reduced low-level escape hatch.
-- Update [runtime execution architecture](../architecture/runtime-execution.md) with commit scheduling and callback affinity.
+- Update [library architecture](../architecture/library.md) with coordinator and writable-capability ownership.
+- Update [runtime execution architecture](../architecture/runtime-execution.md) with maintenance admission and callback publication ordering.
 - Update the [mutation specification](../spec/library/runtime/mutation.md), [task-execution specification](../spec/library/runtime/task-execution.md), and [change-publication specification](../spec/library/runtime/change-publication.md).
-- Update the [library database reference](../reference/library/storage/database.md) only if revision storage or an optional publication journal changes.
-- Add a decision record for scheduling policy or durable publication if the rejected alternatives remain important.
-- Update development boundary checks and concurrency validation guidance.
+- Update the [library database reference](../reference/library/storage/database.md) only if the writer-lease path becomes a governed on-disk surface.
+- Update development boundary checks and concurrency validation evidence.

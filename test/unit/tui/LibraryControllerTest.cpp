@@ -29,13 +29,10 @@ namespace ao::tui::test
 
       TrackId addTrack(std::string_view title)
       {
-        return library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = std::string{title}});
+        return rt::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = std::string{title}});
       }
 
-      TrackId addTrack(library::test::TrackSpec const& spec)
-      {
-        return library::test::addTrack(runtime.musicLibrary(), spec);
-      }
+      TrackId addTrack(library::test::TrackSpec const& spec) { return rt::test::addRuntimeTrack(runtime, spec); }
     };
   } // namespace
 

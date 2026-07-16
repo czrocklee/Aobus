@@ -4,8 +4,8 @@
 #pragma once
 
 #include "linux-gtk/app/GtkMainContextExecutor.h"
+#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackSequenceService.h>
@@ -428,6 +428,19 @@ namespace ao::gtk::test
     }
   }
 
+  inline TrackId addRuntimeTrack(rt::AppRuntime& runtime, library::test::TrackSpec const& spec)
+  {
+    return rt::test::addRuntimeTrack(runtime, spec, [] { drainGtkEvents(); });
+  }
+
+  inline void updateRuntimeTrack(rt::AppRuntime& runtime,
+                                 TrackId const trackId,
+                                 std::move_only_function<void(library::test::TrackSpec&)> updater)
+  {
+    rt::test::updateRuntimeTrack(runtime, trackId, std::move(updater));
+    drainGtkEvents();
+  }
+
   /**
    * GtkWindowFixture - Owns GTK application/window plumbing for widget tests.
    */
@@ -569,7 +582,7 @@ namespace ao::gtk::test
   class GtkRuntimeFixture
   {
   public:
-    GtkRuntimeFixture()
+    explicit GtkRuntimeFixture(std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {})
     {
       auto const musicRoot = _tempDir.path() / "music";
       auto const databasePath = _tempDir.path() / "db";
@@ -577,6 +590,12 @@ namespace ao::gtk::test
 
       std::filesystem::create_directories(musicRoot);
       std::filesystem::create_directories(databasePath);
+
+      if (initializeLibrary)
+      {
+        auto musicLibrary = library::test::makeTestMusicLibrary(musicRoot, databasePath);
+        initializeLibrary(musicLibrary);
+      }
 
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
 
@@ -601,13 +620,22 @@ namespace ao::gtk::test
   /**
    * @brief Creates an AppRuntime backed by a temporary directory with a GtkMainContextExecutor.
    */
-  inline auto makeRuntime(ao::test::TempDir const& tempDir)
+  inline auto makeRuntime(ao::test::TempDir const& tempDir,
+                          std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {})
   {
+    auto const databasePath = tempDir.path() / ".aobus" / "library";
+
+    if (initializeLibrary)
+    {
+      auto musicLibrary = library::test::makeTestMusicLibrary(tempDir.path(), databasePath);
+      initializeLibrary(musicLibrary);
+    }
+
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
     return rt::AppRuntime{rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
-      .databasePath = tempDir.path() / ".aobus" / "library",
+      .databasePath = databasePath,
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
     }};

@@ -38,7 +38,7 @@ namespace ao::rt
   class CompletionService final
   {
   public:
-    CompletionService(library::MusicLibrary& library, LibraryChanges const& changes);
+    CompletionService(library::MusicLibrary const& library, LibraryChanges const& changes);
     ~CompletionService();
 
     CompletionService(CompletionService const&) = delete;
@@ -72,7 +72,7 @@ namespace ao::rt
     void materializeValues(TrackField field);
     void materializeAggregateValues();
 
-    library::MusicLibrary& _library;
+    library::MusicLibrary const& _library;
     std::thread::id _ownerThread;
     Subscription _libraryChangeSubscription;
 

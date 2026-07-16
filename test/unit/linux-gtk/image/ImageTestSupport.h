@@ -33,7 +33,7 @@ namespace ao::gtk::test
 
   inline ResourceId writeRawResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
   {
-    auto transaction = library.writeTransaction();
+    auto transaction = library::test::writeTransaction(library);
     auto idResult = library.resources().writer(transaction).create(bytes);
     REQUIRE(idResult);
     auto const id = *idResult;

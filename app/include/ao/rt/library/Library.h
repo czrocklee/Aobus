@@ -3,7 +3,13 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/rt/Subscription.h>
+#include <ao/rt/library/LibraryAuthoring.h>
+
+#include <functional>
 #include <memory>
+#include <span>
 
 namespace ao::library
 {
@@ -41,9 +47,13 @@ namespace ao::rt
 
     LibraryReader reader() const;
     LibraryChanges const& changes() const noexcept;
-    LibraryChanges& changes() noexcept;
     LibraryWriter& writer() noexcept;
     LibraryTaskService& taskService() noexcept;
+
+    LibraryAuthoringAvailability authoringAvailability() const;
+    Subscription onAuthoringAvailabilityChanged(
+      std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
+    Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
 
   private:
     struct Impl;

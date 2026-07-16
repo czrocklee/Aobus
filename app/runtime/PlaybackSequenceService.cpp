@@ -57,7 +57,7 @@ namespace ao::rt
   {
     constexpr std::size_t kMaxConsecutivePlaybackFailures = 3;
 
-    Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary& library,
+    Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
                                                                      TrackId const trackId)
     {
       auto const transaction = library.readTransaction();
@@ -308,7 +308,7 @@ namespace ao::rt
     Impl(async::Executor& executor,
          ViewService& views,
          TrackSourceCache& sources,
-         library::MusicLibrary& library,
+         library::MusicLibrary const& library,
          PlaybackService& playback,
          NotificationService& notifications,
          async::Runtime& asyncRuntime)
@@ -1076,7 +1076,7 @@ namespace ao::rt
     async::Executor& executor;
     ViewService& views;
     TrackSourceCache& sources;
-    library::MusicLibrary& library;
+    library::MusicLibrary const& library;
     PlaybackService& playback;
     NotificationService& notifications;
     PlaybackSequenceState state{};
@@ -1109,7 +1109,7 @@ namespace ao::rt
   PlaybackSequenceService::PlaybackSequenceService(async::Executor& executor,
                                                    ViewService& views,
                                                    TrackSourceCache& sources,
-                                                   library::MusicLibrary& library,
+                                                   library::MusicLibrary const& library,
                                                    PlaybackService& playback,
                                                    NotificationService& notifications,
                                                    async::Runtime& asyncRuntime)

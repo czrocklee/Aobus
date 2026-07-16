@@ -23,7 +23,7 @@ namespace ao::rt::test
     auto service = env.makeService();
     auto const trackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "List Track"});
     env.cachePtr->reloadAllTracks();
-    auto const listId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
+    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual",
       .trackIds = {trackId},
@@ -167,7 +167,7 @@ namespace ao::rt::test
     auto const newTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.cachePtr->reloadAllTracks();
 
-    auto const oldListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
+    auto const oldListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Old only",
       .trackIds = {oldTrackId},

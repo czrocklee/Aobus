@@ -235,10 +235,10 @@ namespace ao::gtk::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.list_model_test");
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto& musicLibrary = runtime.musicLibrary();
+    auto const& musicLibrary = runtime.musicLibrary();
 
-    auto const id1 = library::test::addTrack(musicLibrary, makeTrackSpec("Song A", "Artist A", "Album A", 2020));
-    auto const id2 = library::test::addTrack(musicLibrary, makeTrackSpec("Song B", "Artist B", "Album B", 2021));
+    auto const id1 = addRuntimeTrack(runtime, makeTrackSpec("Song A", "Artist A", "Album A", 2020));
+    auto const id2 = addRuntimeTrack(runtime, makeTrackSpec("Song B", "Artist B", "Album B", 2021));
 
     auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(id1);
@@ -351,7 +351,7 @@ namespace ao::gtk::test
 
     SECTION("Delta batch notifications - Insert")
     {
-      auto const id3 = library::test::addTrack(musicLibrary, makeTrackSpec("Song C", "Artist C", "Album C", 2022));
+      auto const id3 = addRuntimeTrack(runtime, makeTrackSpec("Song C", "Artist C", "Album C", 2022));
       sourcePtr->insert(id3, 0);
 
       REQUIRE(spy.events.size() == 1);
@@ -412,11 +412,11 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto& library = runtime.musicLibrary();
+    auto const& library = runtime.musicLibrary();
 
-    auto const albumA1 = library::test::addTrack(library, makeTrackSpec("A1", "Artist", "Album A"));
-    auto const albumA2 = library::test::addTrack(library, makeTrackSpec("A2", "Artist", "Album A"));
-    auto const albumB = library::test::addTrack(library, makeTrackSpec("B1", "Artist", "Album B"));
+    auto const albumA1 = addRuntimeTrack(runtime, makeTrackSpec("A1", "Artist", "Album A"));
+    auto const albumA2 = addRuntimeTrack(runtime, makeTrackSpec("A2", "Artist", "Album A"));
+    auto const albumB = addRuntimeTrack(runtime, makeTrackSpec("B1", "Artist", "Album B"));
     auto sourcePtr = rt::test::makeMutableTrackSource({albumA1, albumA2, albumB});
     auto projectionPtr =
       std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
@@ -441,7 +441,7 @@ namespace ao::gtk::test
     CHECK(sectionRangeAt(sectionModel, 1) == std::make_pair(::guint{0}, ::guint{2}));
     CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
 
-    auto const albumA3 = library::test::addTrack(library, makeTrackSpec("A3", "Artist", "Album A"));
+    auto const albumA3 = addRuntimeTrack(runtime, makeTrackSpec("A3", "Artist", "Album A"));
     sourcePtr->append(albumA3);
     CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{3}));
     CHECK(sectionRangeAt(sectionModel, 3) == std::make_pair(::guint{3}, ::guint{4}));
@@ -453,7 +453,7 @@ namespace ao::gtk::test
     CHECK(sectionRangeAt(sectionModel, 0) == std::make_pair(::guint{0}, ::guint{2}));
     CHECK(sectionRangeAt(sectionModel, 2) == std::make_pair(::guint{2}, ::guint{3}));
 
-    auto const albumC = library::test::addTrack(library, makeTrackSpec("C1", "Artist", "Album C"));
+    auto const albumC = addRuntimeTrack(runtime, makeTrackSpec("C1", "Artist", "Album C"));
     sourcePtr->append(albumC);
     CHECK(sectionRangeAt(sectionModel, 3) == std::make_pair(::guint{3}, ::guint{4}));
 

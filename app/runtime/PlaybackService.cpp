@@ -316,7 +316,8 @@ namespace ao::rt
       }
     }
 
-    Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary& library, TrackId trackId)
+    Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     TrackId trackId)
     {
       auto const transaction = library.readTransaction();
       auto reader = library.tracks().reader(transaction);
@@ -527,7 +528,7 @@ namespace ao::rt
     async::Executor& executor;
     PlaybackState state;
     std::unique_ptr<audio::Player> playerPtr;
-    library::MusicLibrary& library;
+    library::MusicLibrary const& library;
     NotificationService& notifications;
     PlaybackService::PlaybackRequest currentRequest;
     audio::Engine::PlaybackItemId currentPlaybackItemId;
@@ -1226,7 +1227,7 @@ namespace ao::rt
     }
 
     explicit Impl(async::Executor& callbackExecutor,
-                  library::MusicLibrary& musicLibrary,
+                  library::MusicLibrary const& musicLibrary,
                   NotificationService& notificationService,
                   std::unique_ptr<audio::Player> playerPtr)
       : executor{callbackExecutor}
@@ -1378,7 +1379,7 @@ namespace ao::rt
   };
 
   PlaybackService::PlaybackService(async::Executor& executor,
-                                   library::MusicLibrary& library,
+                                   library::MusicLibrary const& library,
                                    NotificationService& notifications,
                                    std::unique_ptr<audio::Player> playerPtr)
     : _implPtr{std::make_unique<Impl>(executor, library, notifications, requireOwnedPlayer(std::move(playerPtr)))}

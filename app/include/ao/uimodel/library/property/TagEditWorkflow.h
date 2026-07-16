@@ -8,13 +8,10 @@
 #include <string>
 #include <vector>
 
-namespace ao::rt
-{
-  class LibraryWriter;
-}
-
 namespace ao::uimodel
 {
+  class TrackAuthoringSession;
+
   struct TagEditRequest final
   {
     std::vector<TrackId> selectedIds = {};
@@ -26,17 +23,18 @@ namespace ao::uimodel
   {
     bool applied = false;
     bool rejected = false;
+    bool stale = false;
     std::string notificationText;
   };
 
   class TagEditWorkflow final
   {
   public:
-    explicit TagEditWorkflow(rt::LibraryWriter& writer);
+    explicit TagEditWorkflow(TrackAuthoringSession& session);
 
     TagEditResult apply(TagEditRequest const& request);
 
   private:
-    rt::LibraryWriter& _writer;
+    TrackAuthoringSession& _session;
   };
 } // namespace ao::uimodel

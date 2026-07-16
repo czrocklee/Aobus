@@ -44,7 +44,7 @@ namespace ao::rt
   class SmartListEvaluator final
   {
   public:
-    explicit SmartListEvaluator(library::MusicLibrary& ml);
+    explicit SmartListEvaluator(library::MusicLibrary const& ml);
     ~SmartListEvaluator();
 
     SmartListEvaluator(SmartListEvaluator const&) = delete;
@@ -98,7 +98,7 @@ namespace ao::rt
 
     static TrackLoadMode unionMode(std::span<SmartListSource* const> lists);
 
-    library::MusicLibrary& _ml;
+    library::MusicLibrary const& _ml;
     boost::unordered_flat_map<TrackSource*, std::unique_ptr<SourceBucket>> _buckets;
     bool _alive = true;
     SmartListEvaluatorOperationCounts _operationCounts;

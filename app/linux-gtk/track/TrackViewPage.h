@@ -41,6 +41,11 @@ namespace ao::rt
   class AppRuntime;
 }
 
+namespace ao::uimodel
+{
+  class TrackAuthoringSession;
+}
+
 namespace ao::gtk
 {
   class ThumbnailLoader;
@@ -103,7 +108,10 @@ namespace ao::gtk
 
     void rebuildColumnView(std::span<rt::TrackField const> visibleFields);
 
-    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& rowPtr, rt::TrackField field, std::string newValue);
+    void commitMetadataChange(Glib::RefPtr<TrackRowObject> const& rowPtr,
+                              rt::TrackField field,
+                              std::string newValue,
+                              uimodel::TrackAuthoringSession& session);
 
     // Child widgets
     Gtk::Label _statusLabel;

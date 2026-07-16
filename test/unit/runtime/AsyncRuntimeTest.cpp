@@ -31,6 +31,7 @@
 #include <string_view>
 #include <thread>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -57,6 +58,60 @@ namespace ao::rt::test
     {
       co_await runtime->resumeOnWorker();
       throwException<Exception>("Test failure");
+    }
+
+    class NonDefaultTaskResult final
+    {
+    public:
+      explicit NonDefaultTaskResult(std::int32_t value)
+        : _value{value}
+      {
+      }
+
+      std::int32_t value() const noexcept { return _value; }
+
+    private:
+      std::int32_t _value;
+    };
+
+    class ThrowingDefaultTaskResult final
+    {
+    public:
+      ThrowingDefaultTaskResult() { throwException<Exception>("Transport attempted default construction"); }
+
+      explicit ThrowingDefaultTaskResult(std::int32_t value) noexcept
+        : _value{value}
+      {
+      }
+
+      std::int32_t value() const noexcept { return _value; }
+
+    private:
+      std::int32_t _value = 0;
+    };
+
+    Task<NonDefaultTaskResult> nonDefaultResultTask(Runtime* runtime)
+    {
+      co_await runtime->resumeOnWorker();
+      co_return NonDefaultTaskResult{42};
+    }
+
+    Task<NonDefaultTaskResult> failingNonDefaultResultTask(Runtime* runtime)
+    {
+      co_await runtime->resumeOnWorker();
+      throwException<Exception>("Non-default result failure");
+    }
+
+    Task<ThrowingDefaultTaskResult> throwingDefaultResultTask(Runtime* runtime, bool fail)
+    {
+      co_await runtime->resumeOnWorker();
+
+      if (fail)
+      {
+        throwException<Exception>("Original task failure");
+      }
+
+      co_return ThrowingDefaultTaskResult{84};
     }
 
     Task<void> failingCancellableTask(Runtime* runtime, std::stop_token const stopToken)
@@ -277,6 +332,31 @@ namespace ao::rt::test
     runtime.join();
 
     requireSingleRecordedException<Exception>(exceptionRecorder, "root coroutine");
+  }
+
+  TEST_CASE("AsyncRuntime - spawn transports non-default-constructible results", "[runtime][unit][async]")
+  {
+    STATIC_REQUIRE_FALSE(std::is_default_constructible_v<NonDefaultTaskResult>);
+
+    auto executor = InlineExecutor{};
+    auto runtime = Runtime{executor};
+
+    CHECK(runtime.spawn(nonDefaultResultTask(&runtime)).get().value() == 42);
+    CHECK_THROWS_AS(runtime.spawn(failingNonDefaultResultTask(&runtime)).get(), Exception);
+    CHECK(runtime.spawn(throwingDefaultResultTask(&runtime, false)).get().value() == 84);
+
+    try
+    {
+      std::ignore = runtime.spawn(throwingDefaultResultTask(&runtime, true)).get();
+      FAIL("Expected the original task exception");
+    }
+    catch (Exception const& error)
+    {
+      CHECK(std::string_view{error.what()} == "Original task failure");
+    }
+
+    runtime.requestStop();
+    runtime.join();
   }
 
   TEST_CASE("AsyncRuntime - missing exception handler uses the stderr fallback", "[runtime][unit][async]")

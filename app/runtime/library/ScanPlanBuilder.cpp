@@ -6,6 +6,8 @@
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -15,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -59,7 +62,7 @@ namespace ao::rt
                    std::filesystem::path const& root,
                    library::FileManifestStore::Reader const& manifestReader,
                    std::unordered_set<std::string>& seenUris,
-                   ScanPlan& plan)
+                   std::vector<ScanItem>& items)
     {
       auto entryEc = std::error_code{};
       bool isFile = false;
@@ -81,7 +84,7 @@ namespace ao::rt
                              .fullPath = entry.path(),
                              .classification = ScanClassification::Error,
                              .errorMessage = entryEc.message()};
-        plan.items.push_back(std::move(item));
+        items.push_back(std::move(item));
         return;
       }
 
@@ -152,9 +155,9 @@ namespace ao::rt
         item.errorMessage = e.what();
       }
 
-      plan.items.push_back(std::move(item));
+      items.push_back(std::move(item));
     }
-    void addMissingEntries(ScanPlan& plan,
+    void addMissingEntries(std::vector<ScanItem>& items,
                            library::FileManifestStore::Reader const& manifestReader,
                            std::unordered_set<std::string> const& seenUris)
     {
@@ -169,19 +172,19 @@ namespace ao::rt
                                .audioPayloadLength = view.audioPayloadLength(),
                                .audioSignature = view.audioSignature(),
                                .trackId = view.trackId()};
-          plan.items.push_back(std::move(item));
+          items.push_back(std::move(item));
         }
       }
     }
 
-    void classifyMovedEntries(ScanPlan& plan)
+    void classifyMovedEntries(std::vector<ScanItem>& items)
     {
       auto missingByLength = std::unordered_map<std::uint64_t, std::vector<std::size_t>>{};
       auto missingByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
 
-      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      for (std::size_t index = 0; index < items.size(); ++index)
       {
-        auto const& item = plan.items[index];
+        auto const& item = items[index];
 
         if (item.classification != ScanClassification::Missing || !hasAudioIdentity(item))
         {
@@ -200,9 +203,9 @@ namespace ao::rt
 
       auto newByIdentity = std::unordered_map<AudioIdentityKey, std::vector<std::size_t>, AudioIdentityKeyHasher>{};
 
-      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      for (std::size_t index = 0; index < items.size(); ++index)
       {
-        auto& item = plan.items[index];
+        auto& item = items[index];
 
         if (item.classification != ScanClassification::New)
         {
@@ -261,8 +264,8 @@ namespace ao::rt
           continue;
         }
 
-        auto& newItem = plan.items[newIndices.front()];
-        auto const& missingItem = plan.items[missingIndices.front()];
+        auto& newItem = items[newIndices.front()];
+        auto const& missingItem = items[missingIndices.front()];
         newItem.classification = ScanClassification::Moved;
         newItem.oldUri = missingItem.uri;
         newItem.trackId = missingItem.trackId;
@@ -274,29 +277,28 @@ namespace ao::rt
         return;
       }
 
-      auto items = std::vector<ScanItem>{};
-      items.reserve(plan.items.size() - matchedMissingIndices.size());
+      auto filteredItems = std::vector<ScanItem>{};
+      filteredItems.reserve(items.size() - matchedMissingIndices.size());
 
-      for (std::size_t index = 0; index < plan.items.size(); ++index)
+      for (std::size_t index = 0; index < items.size(); ++index)
       {
         if (!matchedMissingIndices.contains(index))
         {
-          items.push_back(std::move(plan.items[index]));
+          filteredItems.push_back(std::move(items[index]));
         }
       }
 
-      plan.items = std::move(items);
+      items = std::move(filteredItems);
     }
   } // namespace
 
-  ScanPlanBuilder::ScanPlanBuilder(library::MusicLibrary& ml)
+  ScanPlanBuilder::ScanPlanBuilder(library::MusicLibrary const& ml)
     : _ml{ml}
   {
   }
 
   Result<ScanPlan> ScanPlanBuilder::buildPlan(ProgressCallback progress)
   {
-    auto plan = ScanPlan{};
     auto const root = _ml.rootPath();
 
     if (auto rootEc = std::error_code{}; !std::filesystem::exists(root, rootEc))
@@ -311,7 +313,16 @@ namespace ao::rt
     }
 
     auto transaction = _ml.readTransaction();
+    auto const headerResult = _ml.metadata().load(transaction);
+
+    if (!headerResult)
+    {
+      return std::unexpected{headerResult.error()};
+    }
+
+    auto const libraryRevision = _ml.libraryRevision(transaction);
     auto const manifestReader = _ml.manifest().reader(transaction);
+    auto items = std::vector<ScanItem>{};
 
     // Track which URIs we've seen on disk to identify MISSING tracks later
     auto seenUris = std::unordered_set<std::string>{};
@@ -352,7 +363,7 @@ namespace ao::rt
                                .fullPath = entry.path(),
                                .classification = ScanClassification::Error,
                                .errorMessage = testEc.message()};
-          plan.items.push_back(std::move(item));
+          items.push_back(std::move(item));
 
           it.disable_recursion_pending();
           it.increment(ec);
@@ -366,7 +377,7 @@ namespace ao::rt
         }
       }
 
-      scanEntry(entry, root, manifestReader, seenUris, plan);
+      scanEntry(entry, root, manifestReader, seenUris, items);
 
       it.increment(ec);
 
@@ -377,9 +388,9 @@ namespace ao::rt
     }
 
     // 2. Identify MISSING (In manifest but not on disk)
-    addMissingEntries(plan, manifestReader, seenUris);
-    classifyMovedEntries(plan);
+    addMissingEntries(items, manifestReader, seenUris);
+    classifyMovedEntries(items);
 
-    return plan;
+    return ScanPlan{headerResult->libraryId, libraryRevision, std::move(items)};
   }
 } // namespace ao::rt

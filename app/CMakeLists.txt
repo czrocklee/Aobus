@@ -3,9 +3,11 @@ add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
     runtime/CoreRuntime.cpp
     runtime/library/Library.cpp
+    runtime/library/LibraryMutationService.cpp
     runtime/library/LibraryReader.cpp
     runtime/library/LibraryChanges.cpp
     runtime/library/MediaTrack.cpp
+    runtime/library/TrackBuilderSnapshot.cpp
     runtime/library/LibraryYamlImporter.cpp
     runtime/library/LibraryYamlExporter.cpp
     runtime/completion/CompletionService.cpp
@@ -25,9 +27,11 @@ add_library(ao_app_runtime STATIC
     runtime/playback/ProjectionAnchor.cpp
     runtime/playback/ShuffleHistory.cpp
     runtime/library/LibraryWriter.cpp
+    runtime/library/AudioIdentityBatchWriter.cpp
     runtime/library/AudioIdentityIndexer.cpp
     runtime/library/LibraryScan.cpp
     runtime/library/ScanPlanBuilder.cpp
+    runtime/library/ScanPlan.cpp
     runtime/library/ScanApplyOperation.cpp
     runtime/library/LibraryTaskService.cpp
     runtime/source/TrackSourceCache.cpp
@@ -79,6 +83,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/detail/TrackCustomMetadataWorkflow.cpp
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
+    uimodel/library/list/ListEditWorkflow.cpp
     uimodel/library/list/ListTreeProjection.cpp
     uimodel/library/list/SmartListDraft.cpp
     uimodel/library/list/SmartListEditorViewState.cpp
@@ -95,6 +100,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/presentation/TrackPresentationRecommender.cpp
     uimodel/library/presentation/TrackPresentationPickerViewModel.cpp
     uimodel/library/property/TagEditWorkflow.cpp
+    uimodel/library/property/TrackAuthoringSession.cpp
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
@@ -153,15 +159,14 @@ add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 # Cleared boundaries run in enforce mode and are attached to the owning target.
 # ao_layering_boundary_report remains as an aggregate entry point.
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
-set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)))")
-set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX})")
-set(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX "#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView))")
-set(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX [=[/platform/|/MainWindowCoordinator\.cpp|/AudioBackendBootstrap\.]=])
+set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
+set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
+set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
+set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
 
 ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
-ao_write_guardrail_regex(AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX_FILE "gtk-core" "${AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX}")
-ao_write_guardrail_regex(AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX_FILE "linux-gtk-exclude" "${AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX}")
+ao_write_guardrail_regex(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE "frontend-core" "${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX}")
 
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
@@ -209,11 +214,22 @@ if(AOBUS_BUILD_GTK)
   add_custom_target(ao_linux_gtk_core_boundary_report
     COMMAND ${CMAKE_COMMAND}
             "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk"
-            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_GTK_CORE_INCLUDE_REGEX_FILE}"
-            "-DEXCLUDE_REGEX_FILE=${AO_LINUX_GTK_BOUNDARY_REPORT_EXCLUDE_REGEX_FILE}"
+            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
             -DMODE=enforce
             -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
     COMMENT "Checking direct storage/library includes in linux-gtk"
+    VERBATIM
+  )
+endif()
+
+if(AOBUS_BUILD_TUI)
+  add_custom_target(ao_tui_core_boundary_report
+    COMMAND ${CMAKE_COMMAND}
+            "-DROOTS=${CMAKE_SOURCE_DIR}/app/tui"
+            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+            -DMODE=enforce
+            -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+    COMMENT "Checking direct storage/library dependencies in the TUI"
     VERBATIM
   )
 endif()
@@ -226,6 +242,9 @@ add_custom_target(ao_layering_boundary_report
 )
 if(AOBUS_BUILD_GTK)
   add_dependencies(ao_layering_boundary_report ao_linux_gtk_core_boundary_report)
+endif()
+if(AOBUS_BUILD_TUI)
+  add_dependencies(ao_layering_boundary_report ao_tui_core_boundary_report)
 endif()
 
 # Configure-time check: ao_app_uimodel must not link platform UI targets

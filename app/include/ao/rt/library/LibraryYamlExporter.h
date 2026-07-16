@@ -33,7 +33,7 @@ namespace ao::rt
   class LibraryYamlExporter final
   {
   public:
-    explicit LibraryYamlExporter(library::MusicLibrary& ml);
+    explicit LibraryYamlExporter(library::MusicLibrary const& ml);
     ~LibraryYamlExporter();
 
     LibraryYamlExporter(LibraryYamlExporter const&) = delete;

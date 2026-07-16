@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/LibraryStoreTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/utility/ByteView.h>
@@ -26,7 +27,7 @@ namespace ao::library::test
     // Create a resource
     auto const buffer = utility::bytes::view(std::string_view{"hello"});
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto idResult = store.writer(wtxn2).create(buffer);
     REQUIRE(idResult);
     auto const id = *idResult;
@@ -58,14 +59,14 @@ namespace ao::library::test
     // Create a resource
     auto const buffer = utility::bytes::view(std::string_view{"test"});
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto idResult = store.writer(wtxn2).create(buffer);
     REQUIRE(idResult);
     auto const id = *idResult;
     REQUIRE(wtxn2.commit());
 
     // Delete it
-    auto wtxn3 = library.writeTransaction();
+    auto wtxn3 = writeTransaction(library);
     REQUIRE(store.writer(wtxn3).remove(id));
     REQUIRE(wtxn3.commit());
 
@@ -85,14 +86,14 @@ namespace ao::library::test
     // Create first resource
     auto const buffer = utility::bytes::view(std::string_view{"samedata"});
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto id1Result = store.writer(wtxn2).create(buffer);
     REQUIRE(id1Result);
     auto const id1 = *id1Result;
     REQUIRE(wtxn2.commit());
 
     // Create same content again - should return same ID (deduplication)
-    auto wtxn3 = library.writeTransaction();
+    auto wtxn3 = writeTransaction(library);
     auto id2Result = store.writer(wtxn3).create(buffer);
     REQUIRE(id2Result);
     auto const id2 = *id2Result;
@@ -122,7 +123,7 @@ namespace ao::library::test
     // as the resource key are zero, which is reserved as the invalid ID.
     constexpr auto kData = std::array{std::byte{0xee}, std::byte{0xdc}, std::byte{0xc8}, std::byte{0xbf}};
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto writer = store.writer(wtxn2);
     auto idResult = writer.create(kData);
     REQUIRE(idResult);

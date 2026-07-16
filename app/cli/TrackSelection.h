@@ -21,6 +21,6 @@ namespace ao::rt
 
 namespace ao::cli
 {
-  std::vector<TrackId> queryMatchingTrackIds(library::MusicLibrary& library, std::string const& filter);
+  std::vector<TrackId> queryMatchingTrackIds(library::MusicLibrary const& library, std::string const& filter);
   std::vector<TrackId> requireTrackIds(rt::LibraryReader& reader, std::vector<std::uint32_t> const& rawIds);
 } // namespace ao::cli

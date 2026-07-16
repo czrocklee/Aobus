@@ -317,10 +317,11 @@ namespace ao::library
     return ReadTransaction{std::move(*transaction), _implPtr->identity};
   }
 
-  WriteTransaction MusicLibrary::writeTransaction(WriteTransaction::Options options)
+  WriteTransaction MusicLibrary::beginWriteTransaction(WriteTransaction::Options options,
+                                                       std::shared_ptr<void const> writerSessionAnchorPtr)
   {
-    auto transaction =
-      WriteTransaction::begin(_implPtr->env, _implPtr->dictionary, _implPtr->identity, std::move(options));
+    auto transaction = WriteTransaction::begin(
+      _implPtr->env, _implPtr->dictionary, _implPtr->identity, std::move(options), std::move(writerSessionAnchorPtr));
 
     if (!transaction)
     {
@@ -387,5 +388,10 @@ namespace ao::library
   std::filesystem::path const& MusicLibrary::rootPath() const
   {
     return _implPtr->musicRoot;
+  }
+
+  std::filesystem::path const& MusicLibrary::databasePath() const
+  {
+    return _implPtr->databasePath;
   }
 } // namespace ao::library

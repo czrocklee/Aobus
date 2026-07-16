@@ -4,6 +4,7 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -69,12 +70,13 @@ namespace ao::rt::test
                          library::test::kTestMusicLibraryMapSize};
     }
 
-    SeededReadModelLibrary seedLibrary(CoreRuntime& runtime)
+    SeededReadModelLibrary seedLibrary(ao::test::TempDir const& tempDir)
     {
-      auto& library = runtime.musicLibrary();
-      auto transaction = library.writeTransaction();
+      auto musicLibrary = library::test::makeTestMusicLibrary(
+        tempDir.path(), std::filesystem::path{tempDir.path()} / ".aobus" / "library");
+      auto transaction = library::test::writeTransaction(musicLibrary);
 
-      auto resourceWriter = library.resources().writer(transaction);
+      auto resourceWriter = musicLibrary.resources().writer(transaction);
       auto resourceIdResult = resourceWriter.create(kCoverBytes);
       REQUIRE(resourceIdResult);
       auto const resourceId = *resourceIdResult;
@@ -112,16 +114,16 @@ namespace ao::rt::test
 
       auto hotData = trackBuilder.serializeHot(transaction);
       REQUIRE(hotData);
-      auto coldData = trackBuilder.serializeCold(transaction, library.resources());
+      auto coldData = trackBuilder.serializeCold(transaction, musicLibrary.resources());
       REQUIRE(coldData);
-      auto trackWriter = library.tracks().writer(transaction);
+      auto trackWriter = musicLibrary.tracks().writer(transaction);
       [[maybe_unused]] auto [trackId, trackView] =
         ao::test::requireValue(trackWriter.createHotCold(*hotData, *coldData));
 
       auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto otherSerializeResult = otherTrackBuilder.serialize(transaction, library.resources());
+      auto otherSerializeResult = otherTrackBuilder.serialize(transaction, musicLibrary.resources());
       REQUIRE(otherSerializeResult);
       auto const [otherHot, otherCold] = *otherSerializeResult;
       [[maybe_unused]] auto [otherTrackId, otherTrackView] =
@@ -133,21 +135,21 @@ namespace ao::rt::test
                                .mtime(987654321)
                                .status(library::FileStatus::Missing)
                                .serialize();
-      CHECK(library.manifest().writer(transaction).put(kTrackUri, manifestPayload));
+      CHECK(musicLibrary.manifest().writer(transaction).put(kTrackUri, manifestPayload));
 
       auto manualListBuilder = library::ListBuilder::makeEmpty();
       manualListBuilder.name("Manual List").description("Pinned songs").tracks().add(trackId);
       [[maybe_unused]] auto [manualListId, manualListView] =
-        ao::test::requireValue(library.lists().writer(transaction).create(manualListBuilder.serialize()));
+        ao::test::requireValue(musicLibrary.lists().writer(transaction).create(manualListBuilder.serialize()));
 
       auto smartListBuilder = library::ListBuilder::makeEmpty();
       smartListBuilder.name("Smart List").parentId(manualListId).filter("@artist = \"An Artist\"");
       [[maybe_unused]] auto [smartListId, smartListView] =
-        ao::test::requireValue(library.lists().writer(transaction).create(smartListBuilder.serialize()));
+        ao::test::requireValue(musicLibrary.lists().writer(transaction).create(smartListBuilder.serialize()));
 
       REQUIRE(transaction.commit());
-      auto const artistId = library.dictionary().lookupId("An Artist");
-      auto const albumId = library.dictionary().lookupId("The Album");
+      auto const artistId = musicLibrary.dictionary().lookupId("An Artist");
+      auto const albumId = musicLibrary.dictionary().lookupId("The Album");
 
       return SeededReadModelLibrary{.trackId = trackId,
                                     .otherTrackId = otherTrackId,
@@ -162,8 +164,8 @@ namespace ao::rt::test
   TEST_CASE("LibraryReader - reads track, dictionary, and resource DTOs", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
+    auto const seeded = seedLibrary(tempDir);
     auto runtime = makeCoreRuntime(tempDir);
-    auto const seeded = seedLibrary(runtime);
     auto const& reads = runtime.library();
 
     auto scope = reads.reader();
@@ -243,8 +245,8 @@ namespace ao::rt::test
   TEST_CASE("LibraryReader - snapshots list tree DTOs", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
+    auto const seeded = seedLibrary(tempDir);
     auto runtime = makeCoreRuntime(tempDir);
-    auto const seeded = seedLibrary(runtime);
 
     auto scope = runtime.library().reader();
     auto const nodes = scope.lists();
@@ -279,8 +281,8 @@ namespace ao::rt::test
   TEST_CASE("LibraryReader - reads stored list membership", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
+    auto const seeded = seedLibrary(tempDir);
     auto runtime = makeCoreRuntime(tempDir);
-    auto const seeded = seedLibrary(runtime);
 
     auto scope = runtime.library().reader();
 
@@ -292,8 +294,8 @@ namespace ao::rt::test
   TEST_CASE("LibraryReader - snapshots tag DTOs", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
+    auto const seeded = seedLibrary(tempDir);
     auto runtime = makeCoreRuntime(tempDir);
-    auto const seeded = seedLibrary(runtime);
     auto const& reads = runtime.library();
 
     auto scope = reads.reader();

@@ -68,6 +68,11 @@ The [outcome channel specification](../spec/failure/outcome-channel.md) owns the
 The worker pool is not a second application-state owner.
 Worker tasks operate on thread-safe/core facilities or isolated values and publish results back through the callback boundary.
 
+Mutating library tasks enter coordinator maintenance on the callback executor before slow preparation begins.
+The maintenance guard may accompany worker preparation, but it carries no LMDB transaction and no writer mutex.
+Worker code acquires a coordinator-owned mutation only for a bounded apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before maintenance exit can advertise authoring availability.
+Read-only export and scan-plan construction need no maintenance admission.
+
 ### Dedicated subsystem threads
 
 The audio subsystem owns threads whose lifetime and scheduling requirements do not fit the general worker pool.
@@ -82,6 +87,7 @@ The logging backend may also own its own asynchronous worker, but it is infrastr
 - `CoreRuntime` owns `async::Runtime`; runtime services borrow it or its callback executor and cannot outlive it.
 - Interactive composition injects an async exception handler from the application logging boundary; `ao_async` does not depend on application logging types.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
+- Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
 - Frontend code does not post directly into audio engine internals, and audio callbacks do not mutate runtime snapshots from backend threads.
 - UIModel and frontend adapters call executor-affine runtime services only from the owning event-loop thread.
@@ -98,6 +104,19 @@ callback executor
   -> resume on callback executor
   -> update runtime state and notify observers
 ```
+
+A mutating library task refines the round trip:
+
+```text
+callback executor: enter Maintenance(operationKind)
+  -> worker pool: parse, walk, hash, or otherwise prepare without writer ownership
+  -> bounded coordinator mutation: revalidate, apply, commit revision R
+  -> callback executor: publish LibraryChangeSet R and run synchronous reducers
+  -> exit maintenance and publish Available(runtimeInstanceId, R)
+```
+
+Cancellation before commit releases maintenance without advancing the library revision.
+After a transaction may have committed, the coroutine returns to the callback executor without a cancellable hop so publication and maintenance cleanup cannot be skipped.
 
 For CLI, the callback executor is the invocation thread's `LoopExecutor` and the synchronous command boundary pumps it through `CliRuntime::runTask()` until terminal completion.
 If a callback throws while pumping, CLI retains the first exception and continues to the terminal marker before consuming the spawned future; command-owned task inputs therefore cannot unwind while worker work still uses them.
@@ -121,6 +140,7 @@ The current Engine non-realtime queue and Player-to-executor task stream do not 
 
 - An executor-affine service owns one serialized mutable state domain; adding a mutex is not a substitute for respecting that domain.
 - Background work carries values, stop tokens, and narrow thread-safe collaborators across the boundary, not references to frontend widgets or executor-affine view state.
+- A maintenance guard closes interactive admission across slow preparation but never grants storage write access by itself.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - Synchronous observer delivery cannot destroy the emitting owner on the same callback stack; teardown is deferred to a later executor turn.
 - A dedicated audio or device thread cannot become a general application worker.

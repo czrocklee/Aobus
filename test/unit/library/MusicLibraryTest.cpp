@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
@@ -13,6 +14,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
@@ -23,6 +25,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -130,17 +133,117 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto ml = makeTestMusicLibrary(temp.path(), temp.path());
 
-    auto wtxn = ml.writeTransaction();
+    auto wtxn = writeTransaction(ml);
     CHECK_NOTHROW(wtxn.commit());
 
     auto rtxn = ml.readTransaction(); // validates read access to the database
+  }
+
+  TEST_CASE("WritableMusicLibrary - excludes another writer session until release",
+            "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto firstLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+
+    {
+      auto firstWriterResult = WritableMusicLibrary::acquire(firstLibrary);
+      REQUIRE(firstWriterResult);
+
+      auto secondWriterResult = WritableMusicLibrary::acquire(secondLibrary);
+      REQUIRE_FALSE(secondWriterResult);
+      CHECK(secondWriterResult.error().code == Error::Code::Conflict);
+
+      auto transaction = firstWriterResult->writeTransaction();
+      REQUIRE(transaction.commit());
+    }
+
+    auto releasedWriterResult = WritableMusicLibrary::acquire(secondLibrary);
+    REQUIRE(releasedWriterResult);
+  }
+
+  TEST_CASE("WritableMusicLibrary - active transaction retains the writer session",
+            "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto firstLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto optTransaction = std::optional<WriteTransaction>{};
+
+    {
+      auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
+      REQUIRE(writerResult);
+      optTransaction.emplace(writerResult->writeTransaction());
+    }
+
+    auto activeTransactionWriterResult = WritableMusicLibrary::acquire(secondLibrary);
+    REQUIRE_FALSE(activeTransactionWriterResult);
+    CHECK(activeTransactionWriterResult.error().code == Error::Code::Conflict);
+
+    REQUIRE(optTransaction->commit());
+    auto committedTransactionWriterResult = WritableMusicLibrary::acquire(secondLibrary);
+    REQUIRE(committedTransactionWriterResult);
+  }
+
+  TEST_CASE("WritableMusicLibrary - terminal transaction paths release the retained writer session",
+            "[library][unit][music-library][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto firstLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto secondLibrary = makeTestMusicLibrary(temp.path(), temp.path() / "db");
+
+    SECTION("abort by destruction")
+    {
+      {
+        auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
+        REQUIRE(writerResult);
+        auto transaction = writerResult->writeTransaction();
+      }
+
+      REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
+    }
+
+    SECTION("explicit abort")
+    {
+      auto optTransaction = std::optional<WriteTransaction>{};
+
+      {
+        auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
+        REQUIRE(writerResult);
+        optTransaction.emplace(writerResult->writeTransaction());
+      }
+
+      optTransaction->abort();
+      REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
+      auto commitResult = optTransaction->commit();
+      REQUIRE_FALSE(commitResult);
+      CHECK(commitResult.error().code == Error::Code::InvalidState);
+    }
+
+    SECTION("commit failure")
+    {
+      auto optTransaction = std::optional<WriteTransaction>{};
+
+      {
+        auto writerResult = WritableMusicLibrary::acquire(firstLibrary);
+        REQUIRE(writerResult);
+        optTransaction.emplace(writerResult->writeTransaction(WriteTransaction::Options{
+          .optInjectedCommitFailure = Error{.code = Error::Code::IoError, .message = "injected failure"},
+        }));
+      }
+
+      auto commitResult = optTransaction->commit();
+      REQUIRE_FALSE(commitResult);
+      CHECK(commitResult.error().code == Error::Code::IoError);
+      REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
+    }
   }
 
   TEST_CASE("MusicLibrary - moved-from write transactions are inactive", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path());
-    auto source = library.writeTransaction();
+    auto source = writeTransaction(library);
     auto destination = std::move(source);
 
     // The wrapper specifies an inactive moved-from state that is safe to query.
@@ -157,7 +260,7 @@ namespace ao::library::test
   {
     auto const temp = ao::test::TempDir{};
     auto library = makeTestMusicLibrary(temp.path(), temp.path());
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
 
     REQUIRE(transaction.commit());
     auto const repeatedCommit = transaction.commit();
@@ -197,7 +300,7 @@ namespace ao::library::test
     }
 
     {
-      auto transaction = libraryA.writeTransaction();
+      auto transaction = writeTransaction(libraryA);
       CHECK_THROWS_AS(libraryB.tracks().reader(transaction), Exception);
       CHECK_THROWS_AS(libraryB.tracks().writer(transaction), Exception);
       CHECK_THROWS_AS(libraryB.lists().reader(transaction), Exception);

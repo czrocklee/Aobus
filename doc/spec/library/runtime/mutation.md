@@ -9,8 +9,8 @@ summary: Defines coherent runtime reads and one-operation track and list mutatio
 
 ## Scope
 
-This specification defines `ao::rt::LibraryReader` snapshot reads and `ao::rt::LibraryWriter` synchronous commands.
-It owns transaction scope, previews, no-op behavior, validation, atomicity, and the semantics of track and list mutations.
+This specification defines `ao::rt::LibraryReader` snapshot reads, coordinator admission, and `ao::rt::LibraryWriter` synchronous commands.
+It owns transaction scope, previews, no-op behavior, authoring bindings, validation, atomicity, and the semantics of track and list mutations.
 
 `ao::library::MusicLibrary` is the physical storage facade: it opens transactions and exposes specialized stores.
 It does not own application commands such as metadata edits, list operations, file import, scanning, or relinking.
@@ -21,7 +21,8 @@ Change delivery belongs to [library change publication](change-publication.md), 
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
-Its public boundary is `app/include/ao/rt/library/LibraryReader.h` and `LibraryWriter.h`, its implementation is `app/runtime/library/`, and it coordinates the core `ao::library::MusicLibrary` without exposing LMDB transactions or transaction-bound views to normal application consumers.
+Its public boundary is `app/include/ao/rt/library/LibraryReader.h`, `LibraryWriter.h`, and `LibraryAuthoring.h`; its implementation is `app/runtime/library/`.
+The private `LibraryMutationService` owns the one core writable capability and exposes no LMDB transaction or transaction-bound view to normal application consumers.
 
 ## Terminology
 
@@ -29,6 +30,8 @@ Its public boundary is `app/include/ao/rt/library/LibraryReader.h` and `LibraryW
 - **Command** is one public `LibraryWriter` mutator invocation.
 - **Effective change** means serialized library state differs after applying a valid command.
 - **Preview** executes the command path but leaves its write transaction uncommitted and publishes nothing.
+- **Target binding** is runtime-created evidence containing one runtime instance id, committed library revision, and exact ordered track-id set.
+- **Interactive admission** accepts a command only while authoring is `Available` and no earlier commit is awaiting publication completion.
 - **Dictionary overlay** is the write-transaction-local text/id delta used while serializing records; it is not visible through committed dictionary reads.
 - **Stored order** is the complete explicit membership order of a manual list, including ids hidden by an upstream source.
 
@@ -36,9 +39,12 @@ Its public boundary is `app/include/ao/rt/library/LibraryReader.h` and `LibraryW
 
 - One reader observes one coherent committed snapshot for its complete lifetime.
 - Read and write capabilities are accepted only by stores from the same `MusicLibrary`; cross-library use fails before native database access.
+- One `LibraryMutationService` exclusively owns live-runtime write authority; public runtime consumers cannot create a committing transaction.
 - One writer command owns at most one write transaction and is independently atomic.
 - A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
-- A command publishes only after commit and only when it makes an effective change.
+- An effective command commits one revision and publishes exactly one matching changeset through the coordinator before authoring becomes available at that revision.
+- Interactive commands are rejected throughout import, scan-apply, and audio-identity maintenance.
+- Metadata and tag commits require a current target binding and revalidate runtime identity, availability, revision, and every target while holding coordinator writer ownership.
 - A preview returns the same classifications and report values as its committing counterpart from the same starting state, except it returns no allocated durable id.
 - Dictionary rows and every record that references them commit in the same native transaction; committed dictionary publication completes before application change delivery.
 - A preview, abort, serialization failure, or commit failure leaves committed dictionary lookup, size, and generation unchanged.
@@ -60,13 +66,21 @@ The all-tags query returns distinct tag text and usage counts ordered by descend
 
 ### Metadata and tags
 
-Metadata updates apply one patch to every existing requested track.
-Missing ids and fields whose current value already equals the patch are skipped.
-The reply contains only ids whose serialized metadata changed.
+`Library::bindTrackTargets` accepts a non-empty target sequence only while authoring is available, verifies every track in one read snapshot, and returns a `BoundTrackTargets` for that runtime instance and committed revision.
+Binding from inside the matching `Available` notification is valid, but committing another mutation reentrantly from any publication or availability observer is rejected.
+
+Metadata updates apply one patch to the complete bound target sequence.
+Validation uses this precedence: a foreign runtime binding is `Stale`; maintenance or fault is `Unavailable`; a superseded revision is `Stale`; and any missing target returns `Missing` with the missing ids.
+None of these outcomes commits a subset.
+Fields whose current value already equals the patch produce a semantic `NoOp`; no-op preserves the current binding and publishes nothing.
+An effective update returns `Applied`, the mutation reply, the committed revision, and a next binding for the same target order at that revision.
 
 Tag edit adds absent requested tags and removes present requested tags.
-Duplicate, already-present, missing, and stale-track cases do not create an effective change.
-One command updates all affected tracks atomically.
+Duplicate and already-present/absent tag requests do not create an effective change.
+Target binding and all-or-none outcomes are identical to metadata update, and one command updates all affected tracks atomically.
+
+Raw-id metadata/tag previews remain non-committing administrative inspection.
+They may report the mutation that would affect currently existing ids, but they create no authoring binding and cannot be turned into a commit without a fresh binding.
 
 ### Create from file
 
@@ -132,9 +146,14 @@ No command publishes a change for a failed, previewed, or no-op transaction.
 When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
 The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks while writer and dictionary locks are held.
 
+`Stale`, `Missing`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata/tag authoring outcomes.
+Input, validation, serialization, and pre-commit storage failures remain `Result` errors.
+After durable commit, publication enqueue or observer failure faults the coordinator and propagates as a committed-publication failure; it is never reported as an ordinary pre-commit error, and the runtime rejects every later mutation.
+
 ## Persistence and versioning
 
 Every effective command commits its records and one bumped library revision in the same LMDB transaction.
+The next interactive command is admitted only after callback-executor publication of that revision completes.
 Exact records and identifier allocation belong to the [library database reference](../../../reference/library/storage/database.md).
 
 ## Implementation map
@@ -143,6 +162,8 @@ Exact records and identifier allocation belong to the [library database referenc
 - [`LibraryReader.h`](../../../../app/include/ao/rt/library/LibraryReader.h) defines the scoped read surface.
 - [`LibraryWriter.h`](../../../../app/include/ao/rt/library/LibraryWriter.h) defines commands and reply values.
 - [`LibraryWriter.cpp`](../../../../app/runtime/library/LibraryWriter.cpp) owns command validation and transaction orchestration.
+- [`LibraryAuthoring.h`](../../../../app/include/ao/rt/library/LibraryAuthoring.h) defines availability, target bindings, and typed outcomes.
+- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns live-runtime admission, commit, and publication completion.
 - [`MusicLibrary.h`](../../../../include/ao/library/MusicLibrary.h) defines the lower physical facade.
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) defines read-snapshot ownership and the store-read capability.
 - [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) defines coherent native-write and dictionary-overlay ownership.
@@ -151,6 +172,7 @@ Exact records and identifier allocation belong to the [library database referenc
 
 - [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
 - `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, lists, manual ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
+- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, no-op binding retention, and post-commit fault closure.
 
 ## Related documents
 

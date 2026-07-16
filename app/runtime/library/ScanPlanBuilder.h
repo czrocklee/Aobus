@@ -21,7 +21,7 @@ namespace ao::rt
   public:
     using ProgressCallback = std::move_only_function<void(std::filesystem::path const& currentPath)>;
 
-    explicit ScanPlanBuilder(library::MusicLibrary& ml);
+    explicit ScanPlanBuilder(library::MusicLibrary const& ml);
 
     /**
      * Scans the music root recursively and compares with the manifest.
@@ -36,6 +36,6 @@ namespace ao::rt
     Result<ScanPlan> buildPlan(ProgressCallback progress = nullptr);
 
   private:
-    library::MusicLibrary& _ml;
+    library::MusicLibrary const& _ml;
   };
 } // namespace ao::rt

@@ -72,8 +72,8 @@ Its completion handler receives `std::exception_ptr`; runtime handling then foll
 `spawnLogged`, `spawnCancellable`, and `spawnWithLifetime` retain their original call shapes.
 They use fixed contexts for root, cancellable, and lifetime-bound completion, so callers do not acquire a new task-registration API.
 
-`Runtime::spawn(Task<T>)` continues to use `boost::asio::use_future`.
-Its explicit caller owns the returned future and no diagnostic handler also reports the same exception.
+`Runtime::spawn(Task<T>)` returns a future owned by its explicit caller, so no diagnostic handler also reports the same exception.
+Void tasks use `boost::asio::use_future` directly; value tasks cross the Asio completion boundary as `std::optional<T>` so Asio never has to default-construct a domain result on the exception path.
 
 ### Injection and application logging
 

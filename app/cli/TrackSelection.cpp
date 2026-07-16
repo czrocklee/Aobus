@@ -21,7 +21,7 @@
 
 namespace ao::cli
 {
-  std::vector<TrackId> queryMatchingTrackIds(library::MusicLibrary& library, std::string const& filter)
+  std::vector<TrackId> queryMatchingTrackIds(library::MusicLibrary const& library, std::string const& filter)
   {
     auto const transaction = library.readTransaction();
     auto const reader = library.tracks().reader(transaction);

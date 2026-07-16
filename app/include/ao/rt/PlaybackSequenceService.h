@@ -80,7 +80,7 @@ namespace ao::rt
     PlaybackSequenceService(async::Executor& executor,
                             ViewService& views,
                             TrackSourceCache& sources,
-                            library::MusicLibrary& library,
+                            library::MusicLibrary const& library,
                             PlaybackService& playback,
                             NotificationService& notifications,
                             async::Runtime& asyncRuntime);

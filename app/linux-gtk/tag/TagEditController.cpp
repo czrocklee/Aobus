@@ -8,11 +8,12 @@
 #include "tag/TrackPropertiesDialog.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
+#include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/Library.h>
 #include <ao/uimodel/library/property/TagEditWorkflow.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <giomm/actionmap.h>
 #include <giomm/menu.h>
@@ -25,6 +26,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -136,6 +138,7 @@ namespace ao::gtk
     }
 
     _optActiveSelection = selection;
+    _tagEditSessionPtr.reset();
     _contextPage = &page;
     _contextXPosition = xPosition;
     _contextYPosition = yPosition;
@@ -164,7 +167,14 @@ namespace ao::gtk
       return;
     }
 
-    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), _optActiveSelection->selectedIds);
+    auto const selectedIds = _optActiveSelection->selectedIds;
+
+    if (!beginTagEditSession(selectedIds))
+    {
+      return;
+    }
+
+    _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), selectedIds);
 
     _tagPopoverPtr->signalTagsChanged().connect(
       [this](std::span<std::string const> tagsToAdd, std::span<std::string const> tagsToRemove)
@@ -180,12 +190,8 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
-                                                                  _runtime.library(),
-                                                                  _runtime.library().writer(),
-                                                                  _runtime.completion(),
-                                                                  *_dataProvider,
-                                                                  _optActiveSelection->selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      _parent, _runtime.library(), _runtime.completion(), *_dataProvider, _optActiveSelection->selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -198,12 +204,8 @@ namespace ao::gtk
       return;
     }
 
-    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(_parent,
-                                                                  _runtime.library(),
-                                                                  _runtime.library().writer(),
-                                                                  _runtime.completion(),
-                                                                  *_dataProvider,
-                                                                  selection.selectedIds);
+    auto* const dialog = Gtk::make_managed<TrackPropertiesDialog>(
+      _parent, _runtime.library(), _runtime.completion(), *_dataProvider, selection.selectedIds);
     auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
     dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
     dialog->present();
@@ -217,6 +219,11 @@ namespace ao::gtk
     }
 
     _optActiveSelection = selection;
+
+    if (!beginTagEditSession(selection.selectedIds))
+    {
+      return;
+    }
 
     _tagPopoverPtr = std::make_unique<TagPopover>(_runtime.library(), selection.selectedIds);
 
@@ -255,17 +262,31 @@ namespace ao::gtk
                                            std::span<std::string const> tagsToAdd,
                                            std::span<std::string const> tagsToRemove)
   {
+    if (_tagEditSessionPtr == nullptr || !std::ranges::equal(_tagEditSessionPtr->targetIds(), selection.selectedIds))
+    {
+      if (!beginTagEditSession(selection.selectedIds))
+      {
+        return;
+      }
+    }
+
     auto request = ao::uimodel::TagEditRequest{};
     request.selectedIds = selection.selectedIds;
     request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());
     request.tagsToRemove.assign(tagsToRemove.begin(), tagsToRemove.end());
 
-    auto workflow = ao::uimodel::TagEditWorkflow{_runtime.library().writer()};
+    auto workflow = ao::uimodel::TagEditWorkflow{*_tagEditSessionPtr};
     auto const result = workflow.apply(request);
 
-    if (result.rejected)
+    if (result.rejected || result.stale)
     {
       _runtime.notifications().post(rt::NotificationSeverity::Error, result.notificationText);
+
+      if (result.stale)
+      {
+        _tagEditSessionPtr.reset();
+      }
+
       return;
     }
 
@@ -280,5 +301,20 @@ namespace ao::gtk
     }
 
     _runtime.notifications().post(rt::NotificationSeverity::Info, result.notificationText);
+  }
+
+  bool TagEditController::beginTagEditSession(std::span<TrackId const> trackIds)
+  {
+    auto sessionResult = uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+
+    if (!sessionResult)
+    {
+      _tagEditSessionPtr.reset();
+      _runtime.notifications().post(rt::NotificationSeverity::Error, sessionResult.error().message);
+      return false;
+    }
+
+    _tagEditSessionPtr = std::move(*sessionResult);
+    return true;
   }
 } // namespace ao::gtk

@@ -4,17 +4,16 @@
 #pragma once
 
 #include <ao/rt/NotificationIds.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
-#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
 
 namespace ao::rt
 {
-  class LibraryChanges;
   class NotificationService;
 }
 
@@ -50,7 +49,7 @@ namespace ao::uimodel
     void dismissCompact();
     void dismissDetailNotificationFromActivity(rt::NotificationId id);
     void handleLibraryTaskProgress(std::string message, double fraction);
-    void handleLibraryTaskCompleted(std::size_t count);
+    void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event);
 
   private:
     struct Impl;

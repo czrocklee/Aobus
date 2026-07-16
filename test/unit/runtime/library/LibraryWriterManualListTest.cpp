@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ListBuilder.h>
@@ -28,10 +29,12 @@ namespace ao::rt::test
     struct ManualListWriterFixture final
     {
       ManualListWriterFixture()
-        : writer{libraryFixture.library(), changes}
+        : writerFixture{libraryFixture.library(), changes}
         , listSub{changes.onChanged([this](LibraryChangeSet const& event) { listEvents.push_back(event); })}
       {
       }
+
+      LibraryWriter& writer() { return writerFixture.writer(); }
 
       TrackId addTrack(std::string_view title) { return libraryFixture.addTrack(title); }
 
@@ -42,7 +45,7 @@ namespace ao::rt::test
         draft.parentId = parentId;
         draft.name = "Manual";
         draft.trackIds.assign(trackIds.begin(), trackIds.end());
-        auto const listId = ao::test::requireValue(writer.createList(draft));
+        auto const listId = ao::test::requireValue(writer().createList(draft));
         listEvents.clear();
         return listId;
       }
@@ -53,14 +56,14 @@ namespace ao::rt::test
         draft.kind = LibraryWriter::ListKind::Smart;
         draft.name = "Smart";
         draft.expression = "true";
-        auto const listId = ao::test::requireValue(writer.createList(draft));
+        auto const listId = ao::test::requireValue(writer().createList(draft));
         listEvents.clear();
         return listId;
       }
 
       ListId createStoredManualUnchecked(std::span<TrackId const> trackIds)
       {
-        auto transaction = libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = library::ListBuilder::makeEmpty().name("Legacy manual");
 
         for (auto const trackId : trackIds)
@@ -98,7 +101,7 @@ namespace ao::rt::test
 
       MusicLibraryFixture libraryFixture;
       LibraryChanges changes;
-      LibraryWriter writer;
+      LibraryWriterFixture writerFixture;
       std::vector<LibraryChangeSet> listEvents;
       Subscription listSub;
     };
@@ -122,7 +125,7 @@ namespace ao::rt::test
     draft.name = "Manual";
     draft.trackIds = {third, second, third, first};
 
-    auto const result = fixture.writer.updateList(draft);
+    auto const result = fixture.writer().updateList(draft);
 
     REQUIRE(result);
     CHECK(result->changed);
@@ -146,7 +149,7 @@ namespace ao::rt::test
     draft.name = "Invalid";
     draft.trackIds = {existing, kInvalidTrackId, TrackId{9999}};
 
-    auto const result = fixture.writer.createList(draft);
+    auto const result = fixture.writer().createList(draft);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);
@@ -166,7 +169,7 @@ namespace ao::rt::test
     draft.name = "Rejected";
     draft.trackIds = {existing, TrackId{9999}};
 
-    auto const result = fixture.writer.updateList(draft);
+    auto const result = fixture.writer().updateList(draft);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);
@@ -186,7 +189,7 @@ namespace ao::rt::test
     draft.name = "Renamed";
     draft.trackIds = {trackId};
 
-    auto const result = fixture.writer.updateList(draft);
+    auto const result = fixture.writer().updateList(draft);
 
     REQUIRE(result);
     CHECK(result->changed);
@@ -206,17 +209,17 @@ namespace ao::rt::test
     auto const end = fixture.addTrack("End");
     auto const listId = fixture.createManual(std::array{first, second});
 
-    auto result = fixture.writer.insertManualListTracks(listId, 0, std::array{front});
+    auto result = fixture.writer().insertManualListTracks(listId, 0, std::array{front});
     REQUIRE(result);
     CHECK(result->insertedTrackIds == std::vector<TrackId>{front});
     CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{front, first, second});
 
-    result = fixture.writer.insertManualListTracks(listId, 2, std::array{middle});
+    result = fixture.writer().insertManualListTracks(listId, 2, std::array{middle});
     REQUIRE(result);
     CHECK(result->insertionIndex == 2);
     CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{front, first, middle, second});
 
-    result = fixture.writer.insertManualListTracks(listId, 4, std::array{end});
+    result = fixture.writer().insertManualListTracks(listId, 4, std::array{end});
     REQUIRE(result);
     CHECK(result->insertionIndex == 4);
     CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{front, first, middle, second, end});
@@ -233,7 +236,7 @@ namespace ao::rt::test
     auto const missing = TrackId{9999};
     auto const request = std::array{existing, existing, missing, missing, kInvalidTrackId, hidden};
 
-    auto const result = fixture.writer.insertManualListTracks(listId, 1, request);
+    auto const result = fixture.writer().insertManualListTracks(listId, 1, request);
 
     REQUIRE(result);
     CHECK(result->changed);
@@ -257,7 +260,7 @@ namespace ao::rt::test
     auto const existing = fixture.addTrack("Existing");
     auto const listId = fixture.createManual(std::array{existing});
 
-    auto const result = fixture.writer.insertManualListTracks(listId, 1, std::array{existing});
+    auto const result = fixture.writer().insertManualListTracks(listId, 1, std::array{existing});
 
     REQUIRE(result);
     CHECK_FALSE(result->changed);
@@ -266,7 +269,7 @@ namespace ao::rt::test
     CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{existing});
     CHECK(fixture.listEvents.empty());
 
-    auto const invalid = fixture.writer.insertManualListTracks(listId, 2, std::array{existing});
+    auto const invalid = fixture.writer().insertManualListTracks(listId, 2, std::array{existing});
     REQUIRE_FALSE(invalid);
     CHECK(invalid.error().code == Error::Code::InvalidInput);
     CHECK(fixture.listEvents.empty());
@@ -285,7 +288,7 @@ namespace ao::rt::test
     auto const missing = TrackId{9999};
     auto const request = std::array{fourth, second, fourth, missing, second};
 
-    auto const result = fixture.writer.removeManualListTracks(listId, request);
+    auto const result = fixture.writer().removeManualListTracks(listId, request);
 
     REQUIRE(result);
     CHECK(result->changed);
@@ -334,7 +337,7 @@ namespace ao::rt::test
       expected = {first, third, fifth, second, fourth};
     }
 
-    auto const result = fixture.writer.moveManualListTracks(listId, request, insertionIndex);
+    auto const result = fixture.writer().moveManualListTracks(listId, request, insertionIndex);
 
     REQUIRE(result);
     CHECK(result->changed);
@@ -363,20 +366,20 @@ namespace ao::rt::test
     auto const fourth = fixture.addTrack("Fourth");
     auto const listId = fixture.createManual(std::array{first, second, third, fourth});
 
-    auto result = fixture.writer.moveManualListTracks(listId, std::array{second, third}, 1);
+    auto result = fixture.writer().moveManualListTracks(listId, std::array{second, third}, 1);
     REQUIRE(result);
     CHECK_FALSE(result->changed);
     CHECK(result->selectedTrackIds == std::vector<TrackId>{second, third});
     CHECK(fixture.listEvents.empty());
 
-    result = fixture.writer.moveManualListTracks(listId, std::array{TrackId{9999}}, 4);
+    result = fixture.writer().moveManualListTracks(listId, std::array{TrackId{9999}}, 4);
     REQUIRE(result);
     CHECK_FALSE(result->changed);
     CHECK(result->insertionIndexAfterRemoval == 4);
     CHECK(result->notPresent == std::vector<TrackId>{TrackId{9999}});
     CHECK(fixture.listEvents.empty());
 
-    auto const invalid = fixture.writer.moveManualListTracks(listId, std::array{TrackId{9999}}, 5);
+    auto const invalid = fixture.writer().moveManualListTracks(listId, std::array{TrackId{9999}}, 5);
     REQUIRE_FALSE(invalid);
     CHECK(invalid.error().code == Error::Code::InvalidInput);
   }
@@ -393,12 +396,12 @@ namespace ao::rt::test
     SECTION("insert")
     {
       auto const listId = fixture.createManual(std::array{first, second});
-      auto const preview = fixture.writer.previewInsertManualListTracks(listId, 1, std::array{third});
+      auto const preview = fixture.writer().previewInsertManualListTracks(listId, 1, std::array{third});
       REQUIRE(preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, second});
       CHECK(fixture.listEvents.empty());
 
-      auto const commit = fixture.writer.insertManualListTracks(listId, 1, std::array{third});
+      auto const commit = fixture.writer().insertManualListTracks(listId, 1, std::array{third});
       REQUIRE(commit);
       CHECK(*commit == *preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, third, second});
@@ -408,12 +411,12 @@ namespace ao::rt::test
     SECTION("remove")
     {
       auto const listId = fixture.createManual(std::array{first, second, third});
-      auto const preview = fixture.writer.previewRemoveManualListTracks(listId, std::array{second});
+      auto const preview = fixture.writer().previewRemoveManualListTracks(listId, std::array{second});
       REQUIRE(preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, second, third});
       CHECK(fixture.listEvents.empty());
 
-      auto const commit = fixture.writer.removeManualListTracks(listId, std::array{second});
+      auto const commit = fixture.writer().removeManualListTracks(listId, std::array{second});
       REQUIRE(commit);
       CHECK(*commit == *preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, third});
@@ -423,12 +426,12 @@ namespace ao::rt::test
     SECTION("move")
     {
       auto const listId = fixture.createManual(std::array{first, second, third, fourth});
-      auto const preview = fixture.writer.previewMoveManualListTracks(listId, std::array{second, fourth}, 0);
+      auto const preview = fixture.writer().previewMoveManualListTracks(listId, std::array{second, fourth}, 0);
       REQUIRE(preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, second, third, fourth});
       CHECK(fixture.listEvents.empty());
 
-      auto const commit = fixture.writer.moveManualListTracks(listId, std::array{second, fourth}, 0);
+      auto const commit = fixture.writer().moveManualListTracks(listId, std::array{second, fourth}, 0);
       REQUIRE(commit);
       CHECK(*commit == *preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{second, fourth, first, third});
@@ -444,7 +447,7 @@ namespace ao::rt::test
 
     SECTION("missing list")
     {
-      auto const result = fixture.writer.insertManualListTracks(ListId{9999}, 0, std::array{trackId});
+      auto const result = fixture.writer().insertManualListTracks(ListId{9999}, 0, std::array{trackId});
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotFound);
     }
@@ -452,7 +455,7 @@ namespace ao::rt::test
     SECTION("smart list")
     {
       auto const listId = fixture.createSmart();
-      auto const result = fixture.writer.removeManualListTracks(listId, std::array{trackId});
+      auto const result = fixture.writer().removeManualListTracks(listId, std::array{trackId});
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::InvalidInput);
     }
@@ -460,7 +463,7 @@ namespace ao::rt::test
     SECTION("post-removal move gap")
     {
       auto const listId = fixture.createManual(std::array{trackId});
-      auto const result = fixture.writer.moveManualListTracks(listId, std::array{trackId}, 1);
+      auto const result = fixture.writer().moveManualListTracks(listId, std::array{trackId}, 1);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::InvalidInput);
     }
@@ -476,7 +479,7 @@ namespace ao::rt::test
     SECTION("remove")
     {
       auto const listId = fixture.createStoredManualUnchecked(std::array{missing, existing});
-      auto const result = fixture.writer.removeManualListTracks(listId, std::array{missing});
+      auto const result = fixture.writer().removeManualListTracks(listId, std::array{missing});
       REQUIRE(result);
       CHECK(result->removedTrackIds == std::vector<TrackId>{missing});
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{existing});
@@ -485,7 +488,7 @@ namespace ao::rt::test
     SECTION("move")
     {
       auto const listId = fixture.createStoredManualUnchecked(std::array{missing, existing});
-      auto const result = fixture.writer.moveManualListTracks(listId, std::array{missing}, 1);
+      auto const result = fixture.writer().moveManualListTracks(listId, std::array{missing}, 1);
       REQUIRE(result);
       CHECK(result->selectedTrackIds == std::vector<TrackId>{missing});
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{existing, missing});
@@ -504,7 +507,7 @@ namespace ao::rt::test
     auto const secondList = fixture.createManual(std::array{first, third, target, fourth});
     [[maybe_unused]] auto const smartList = fixture.createSmart();
 
-    auto const result = fixture.writer.deleteTrack(target);
+    auto const result = fixture.writer().deleteTrack(target);
 
     REQUIRE(result);
     CHECK(result->removedFromListIds == std::vector<ListId>{firstList, secondList});

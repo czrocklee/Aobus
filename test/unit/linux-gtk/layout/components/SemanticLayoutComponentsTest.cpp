@@ -9,8 +9,10 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/component/track/TrackDetailUndo.h"
+#include "layout/component/track/TrackFieldGridWidgets.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
+#include "tag/TagEditor.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
@@ -19,13 +21,18 @@
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -43,9 +50,14 @@
 #include <gtkmm/window.h>
 #include <sigc++/functors/slot.h>
 
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,7 +75,9 @@ namespace ao::gtk::layout::test
 
   namespace
   {
-    library::test::TrackSpec trackSpecFor(library::MusicLibrary& musicLibrary, TrackId const trackId)
+    constexpr std::size_t kOversizedMetadataLength = std::size_t{1024} * 1024;
+
+    library::test::TrackSpec trackSpecFor(library::MusicLibrary const& musicLibrary, TrackId const trackId)
     {
       auto const transaction = musicLibrary.readTransaction();
       auto const optView =
@@ -134,7 +148,11 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("SemanticLayoutComponents - render configured GTK widgets", "[gtk][unit][layout-component][semantic]")
   {
-    auto fixture = LayoutRuntimeFixture{};
+    auto undoTrackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.layout_test",
+      [&undoTrackId](library::MusicLibrary& musicLibrary)
+      { undoTrackId = library::test::addTrack(musicLibrary, {.title = "Undo notification target"}); }};
     auto& ctx = fixture.context();
 
     int const cacheSize = 10;
@@ -300,7 +318,7 @@ namespace ao::gtk::layout::test
 
     SECTION("track.detailUndoBar reflects pending custom metadata undo")
     {
-      auto undoController = TrackDetailUndoController{fixture.runtime().library().writer()};
+      auto undoController = TrackDetailUndoController{};
       ctx.detailUndo = &undoController;
 
       auto const node = LayoutNode{.type = "track.detailUndoBar"};
@@ -310,7 +328,9 @@ namespace ao::gtk::layout::test
       auto& bar = compPtr->widget();
       CHECK_FALSE(bar.get_visible());
 
-      undoController.presentCustomMetadataDeletedUndo("Mood", {TrackId{1}}, "Energetic");
+      auto sessionPtr =
+        ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
+      undoController.presentCustomMetadataDeletedUndo("Mood", "Energetic", std::move(sessionPtr));
       drainGtkEvents();
 
       CHECK(bar.get_visible());
@@ -361,14 +381,58 @@ namespace ao::gtk::layout::test
     CHECK(componentPtr->widget().get_visible());
   }
 
+  TEST_CASE("TrackTagEditorComponent - fallback reports a stale tag submission",
+            "[gtk][regression][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.tag_editor_stale_fallback_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        { trackId = library::test::addTrack(musicLibrary, {.title = "Tag Target"}); }};
+    auto& runtime = fixture.runtime();
+    auto& scope = fixture.attachTrackDetailScope();
+    auto snapshot = rt::TrackDetailSnapshot{};
+    snapshot.selectionKind = rt::SelectionKind::Single;
+    snapshot.trackIds = {trackId};
+    scope.setSnapshot(std::move(snapshot));
+
+    auto const componentPtr = fixture.create(LayoutNode{.type = "track.tagEditor"});
+    REQUIRE(componentPtr != nullptr);
+    auto* const editor = dynamic_cast<TagEditor*>(&componentPtr->widget());
+    REQUIRE(editor != nullptr);
+
+    auto const firstAddition = std::array{std::string{"First"}};
+    editor->signalTagsChanged().emit(std::span<std::string const>{firstAddition}, std::span<std::string const>{});
+
+    auto const expectedTags = std::vector<std::string>{"First"};
+    CHECK(trackSpecFor(runtime.musicLibrary(), trackId).tags == expectedTags);
+    auto feed = runtime.notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
+    CHECK(feed.entries.back().message == "Tags added 1 for 1 track");
+
+    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    auto const secondAddition = std::array{std::string{"Second"}};
+    editor->signalTagsChanged().emit(std::span<std::string const>{secondAddition}, std::span<std::string const>{});
+
+    CHECK(trackSpecFor(runtime.musicLibrary(), trackId).tags == expectedTags);
+    feed = runtime.notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
+    CHECK(feed.entries.back().message == "Library changed while the tag editor was open. Reload and try again.");
+  }
+
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
   {
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_test"};
-    auto& musicLibrary = fixture.runtime().musicLibrary();
-    auto const trackId = library::test::addTrack(musicLibrary, {.title = "Undo Target"});
-    auto undoController = TrackDetailUndoController{fixture.runtime().library().writer()};
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        { trackId = library::test::addTrack(musicLibrary, {.title = "Undo Target"}); }};
+    auto const& musicLibrary = fixture.runtime().musicLibrary();
+    auto undoController = TrackDetailUndoController{};
+    auto sessionPtr =
+      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
 
-    undoController.presentCustomMetadataDeletedUndo("Mood", {trackId}, "Bright");
+    undoController.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
     undoController.undo();
 
     auto const transaction = musicLibrary.readTransaction();
@@ -384,17 +448,22 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("TrackDetailUndoController - clears pending undo after timeout", "[gtk][unit][layout-component][semantic]")
   {
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_timeout_test"};
+    auto trackId = kInvalidTrackId;
+    auto fixture =
+      LayoutRuntimeFixture{"io.github.aobus.detail_undo_timeout_test",
+                           [&trackId](library::MusicLibrary& musicLibrary)
+                           { trackId = library::test::addTrack(musicLibrary, {.title = "Undo timeout target"}); }};
     auto timeoutCallback = sigc::slot<bool()>{};
-    auto controller = TrackDetailUndoController{fixture.runtime().library().writer(),
-                                                [&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
+    auto controller = TrackDetailUndoController{[&](std::chrono::milliseconds interval, sigc::slot<bool()> callback)
                                                 {
                                                   CHECK(interval == std::chrono::milliseconds{5000});
                                                   timeoutCallback = std::move(callback);
                                                   return sigc::connection{};
                                                 }};
+    auto sessionPtr =
+      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
 
-    controller.presentCustomMetadataDeletedUndo("Mood", {TrackId{1}}, "Bright");
+    controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
     REQUIRE(controller.pendingCustomMetadataUndo());
     REQUIRE(!timeoutCallback.empty());
 
@@ -403,15 +472,148 @@ namespace ao::gtk::layout::test
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
   }
 
+  TEST_CASE("TrackDetailUndoController - an intervening commit makes undo stale",
+            "[gtk][unit][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_stale_undo_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrack(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}}); }};
+    auto& runtime = fixture.runtime();
+    auto sessionPtr = ao::test::requireValue(TrackAuthoringSession::begin(runtime.library(), std::array{trackId}));
+    auto deletePatch = rt::MetadataPatch{};
+    deletePatch.customUpdates["Mood"] = std::nullopt;
+    auto deleteResult = sessionPtr->submitMetadata(deletePatch);
+    REQUIRE(deleteResult);
+    REQUIRE(deleteResult->status == TrackAuthoringSubmitStatus::Applied);
+    auto controller = TrackDetailUndoController{};
+    controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
+
+    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    REQUIRE(controller.pendingCustomMetadataUndo());
+    CHECK(controller.pendingCustomMetadataUndo()->sessionPtr->state() == TrackAuthoringSessionState::Stale);
+
+    controller.undo();
+
+    CHECK_FALSE(controller.pendingCustomMetadataUndo());
+    CHECK(trackSpecFor(runtime.musicLibrary(), trackId).customMetadata.empty());
+  }
+
+  TEST_CASE("TrackDetailUndoController - rejected undo clears the terminal action",
+            "[gtk][regression][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture =
+      LayoutRuntimeFixture{"io.github.aobus.detail_rejected_undo_test",
+                           [&trackId](library::MusicLibrary& musicLibrary)
+                           { trackId = library::test::addTrack(musicLibrary, {.title = "Rejected undo target"}); }};
+    auto sessionPtr =
+      ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
+    auto controller = TrackDetailUndoController{};
+    std::size_t changedCount = 0;
+    auto changedConnection = controller.signalChanged().connect([&changedCount] { ++changedCount; });
+
+    controller.presentCustomMetadataDeletedUndo(
+      "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(sessionPtr));
+    REQUIRE(controller.pendingCustomMetadataUndo());
+
+    controller.undo();
+
+    CHECK_FALSE(controller.pendingCustomMetadataUndo());
+    CHECK(changedCount == 2);
+    CHECK(trackSpecFor(fixture.runtime().musicLibrary(), trackId).customMetadata.empty());
+  }
+
+  TEST_CASE("TrackFieldGrid - a stale authoring session cancels the active editor",
+            "[gtk][unit][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_stale_editor_test",
+                                        [&trackId](library::MusicLibrary& musicLibrary)
+                                        { trackId = library::test::addTrack(musicLibrary, {.title = "Before"}); }};
+    auto& runtime = fixture.runtime();
+    auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    REQUIRE(runtime.views().setSelection(navigation.activeViewId, {trackId}));
+    drainGtkEvents();
+
+    auto const componentPtr =
+      fixture.create(LayoutNode{.type = "track.detailScope", .children = {LayoutNode{.type = "track.fieldGrid"}}});
+    REQUIRE(componentPtr != nullptr);
+    auto& root = componentPtr->widget();
+    fixture.window().set_child(root);
+    auto const editors = collectAll<track_field_grid::DetailFieldEditor>(root);
+    auto const titleEditorIter =
+      std::ranges::find_if(editors, [](auto const* editor) { return editor->text().raw() == "Before"; });
+    REQUIRE(titleEditorIter != editors.end());
+    auto* const titleEditor = *titleEditorIter;
+
+    emitClicked(titleEditor->editButton());
+    REQUIRE(titleEditor->isEditing());
+    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    drainGtkEvents();
+
+    CHECK_FALSE(titleEditor->isEditing());
+    CHECK(titleEditor->text().raw() == "Before");
+    fixture.window().unset_child();
+  }
+
+  TEST_CASE("TrackFieldGrid - stale custom metadata commit is reported without changing storage",
+            "[gtk][regression][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.detail_stale_custom_metadata_test",
+      [&trackId](library::MusicLibrary& musicLibrary)
+      { trackId = library::test::addTrack(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}}); }};
+    auto& runtime = fixture.runtime();
+    auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    REQUIRE(runtime.views().setSelection(navigation.activeViewId, {trackId}));
+    drainGtkEvents();
+
+    auto const componentPtr =
+      fixture.create(LayoutNode{.type = "track.detailScope", .children = {LayoutNode{.type = "track.fieldGrid"}}});
+    REQUIRE(componentPtr != nullptr);
+    auto& root = componentPtr->widget();
+    fixture.window().set_child(root);
+    auto const editors = collectAll<track_field_grid::DetailFieldEditor>(root);
+    auto const moodEditorIter =
+      std::ranges::find_if(editors, [](auto const* editor) { return editor->text().raw() == "Bright"; });
+    REQUIRE(moodEditorIter != editors.end());
+    auto* const moodEditor = *moodEditorIter;
+
+    moodEditor->startEditing();
+    REQUIRE(moodEditor->isEditing());
+    moodEditor->entry().set_text("Dark");
+    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    moodEditor->stopEditing(true);
+
+    auto const spec = trackSpecFor(runtime.musicLibrary(), trackId);
+    REQUIRE(spec.customMetadata.size() == 1);
+    auto const expectedMetadata = std::pair{std::string{"Mood"}, std::string{"Bright"}};
+    CHECK(spec.customMetadata.front() == expectedMetadata);
+    auto const feed = runtime.notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
+    CHECK(feed.entries.back().message == "Library changed while this edit was open. Reload the value and try again.");
+
+    drainGtkEvents();
+    fixture.window().unset_child();
+  }
+
   TEST_CASE("TrackDetailScope - clears pending detail undo when selection changes",
             "[gtk][unit][layout-component][semantic]")
   {
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_scope_test"};
+    auto firstTrackId = kInvalidTrackId;
+    auto secondTrackId = kInvalidTrackId;
+    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_scope_test",
+                                        [&](library::MusicLibrary& musicLibrary)
+                                        {
+                                          firstTrackId = library::test::addTrack(
+                                            musicLibrary, {.title = "First", .customMetadata = {{"Mood", "Bright"}}});
+                                          secondTrackId = library::test::addTrack(musicLibrary, {.title = "Second"});
+                                        }};
     auto& runtime = fixture.runtime();
-    auto& musicLibrary = runtime.musicLibrary();
-    auto const firstTrackId =
-      library::test::addTrack(musicLibrary, {.title = "First", .customMetadata = {{"Mood", "Bright"}}});
-    auto const secondTrackId = library::test::addTrack(musicLibrary, {.title = "Second"});
 
     auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
     REQUIRE(runtime.views().setSelection(viewId, {firstTrackId}));
@@ -444,11 +646,16 @@ namespace ao::gtk::layout::test
   TEST_CASE("TrackDetailUndoBar - restores deleted custom metadata from button",
             "[gtk][unit][layout-component][semantic]")
   {
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_undo_button_test"};
+    auto trackId = kInvalidTrackId;
+    auto fixture =
+      LayoutRuntimeFixture{"io.github.aobus.detail_undo_button_test",
+                           [&trackId](library::MusicLibrary& musicLibrary)
+                           {
+                             trackId = library::test::addTrack(
+                               musicLibrary, {.title = "Undo Button Target", .customMetadata = {{"Mood", "Bright"}}});
+                           }};
     auto& runtime = fixture.runtime();
-    auto& musicLibrary = runtime.musicLibrary();
-    auto const trackId =
-      library::test::addTrack(musicLibrary, {.title = "Undo Button Target", .customMetadata = {{"Mood", "Bright"}}});
+    auto const& musicLibrary = runtime.musicLibrary();
 
     auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
@@ -487,11 +694,16 @@ namespace ao::gtk::layout::test
   TEST_CASE("TrackFieldGrid - add custom metadata writes metadata and clears stale delete undo",
             "[gtk][unit][layout-component][semantic]")
   {
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.detail_add_custom_test"};
+    auto trackId = kInvalidTrackId;
+    auto fixture =
+      LayoutRuntimeFixture{"io.github.aobus.detail_add_custom_test",
+                           [&trackId](library::MusicLibrary& musicLibrary)
+                           {
+                             trackId = library::test::addTrack(
+                               musicLibrary, {.title = "Add Target", .customMetadata = {{"Mood", "Bright"}}});
+                           }};
     auto& runtime = fixture.runtime();
-    auto& musicLibrary = runtime.musicLibrary();
-    auto const trackId =
-      library::test::addTrack(musicLibrary, {.title = "Add Target", .customMetadata = {{"Mood", "Bright"}}});
+    auto const& musicLibrary = runtime.musicLibrary();
 
     auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));

@@ -37,6 +37,41 @@ namespace ao::council::test
           std::vector<std::string>{"anthropic-opus", "openai-gpt", "google-gemini-pro", "deepseek-pro"});
   }
 
+  TEST_CASE("Registry - production Codex agents select explicit reasoning effort", "[council][unit][yaml]")
+  {
+    auto registry = loadRegistry(productionRegistry());
+    REQUIRE(registry);
+
+    auto const& primary = registry->agents.at("openai-gpt");
+    CHECK(primary.model == "gpt-5.6-sol");
+    CHECK(primary.effort == "ultra");
+    CHECK(primary.argvTemplate == std::vector<std::string>{"codex",
+                                                           "exec",
+                                                           "--ephemeral",
+                                                           "--ignore-rules",
+                                                           "-s",
+                                                           "danger-full-access",
+                                                           "--skip-git-repo-check",
+                                                           "-c",
+                                                           "model_reasoning_effort=\"ultra\"",
+                                                           "-m",
+                                                           "gpt-5.6-sol"});
+
+    auto const& mini = registry->agents.at("openai-gpt-mini");
+    CHECK(mini.effort == "medium");
+    CHECK(mini.argvTemplate == std::vector<std::string>{"codex",
+                                                        "exec",
+                                                        "--ephemeral",
+                                                        "--ignore-rules",
+                                                        "-s",
+                                                        "danger-full-access",
+                                                        "--skip-git-repo-check",
+                                                        "-c",
+                                                        "model_reasoning_effort=\"medium\"",
+                                                        "-m",
+                                                        "gpt-5.4-mini"});
+  }
+
   TEST_CASE("Registry - resolves intent overrides", "[council][unit][yaml]")
   {
     auto registry = loadRegistry(productionRegistry());

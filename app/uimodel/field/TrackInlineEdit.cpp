@@ -7,6 +7,7 @@
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/field/TrackInlineEdit.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <string_view>
 
@@ -19,7 +20,7 @@ namespace ao::uimodel
       return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::NoChange, .statusMessage = ""};
     }
 
-    if (!hooks.parse || !hooks.readCurrentValue || !hooks.applyValue || !hooks.writePatch || !hooks.commitPatch)
+    if (!hooks.parse || !hooks.readCurrentValue || !hooks.applyValue || !hooks.writePatch || hooks.session == nullptr)
     {
       return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::NotEditable, .statusMessage = ""};
     }
@@ -38,7 +39,7 @@ namespace ao::uimodel
     auto const oldEditValue = hooks.readCurrentValue();
     hooks.applyValue(*editValueResult);
 
-    auto const replyResult = hooks.commitPatch(patch);
+    auto const replyResult = hooks.session->submitMetadata(patch);
 
     if (!replyResult)
     {
@@ -47,16 +48,31 @@ namespace ao::uimodel
         .outcome = TrackInlineEditOutcome::MutationRejected, .statusMessage = replyResult.error().message};
     }
 
-    // Reaching here with no mutated tracks means the edit did not land (e.g. the
-    // row was removed concurrently), so revert the optimistic UI change.
-    if (replyResult->mutatedIds.empty())
+    switch (replyResult->status)
     {
-      hooks.applyValue(oldEditValue);
-      return TrackInlineEditResult{
-        .outcome = TrackInlineEditOutcome::MutationRejected, .statusMessage = "Change could not be applied."};
+      case TrackAuthoringSubmitStatus::Applied:
+        return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::Applied, .statusMessage = ""};
+      case TrackAuthoringSubmitStatus::NoOp:
+        hooks.applyValue(oldEditValue);
+        return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::NoChange, .statusMessage = ""};
+      case TrackAuthoringSubmitStatus::Stale:
+        hooks.applyValue(oldEditValue);
+        return TrackInlineEditResult{
+          .outcome = TrackInlineEditOutcome::Stale,
+          .statusMessage = "Library changed while this edit was open. Reload the value and try again."};
+      case TrackAuthoringSubmitStatus::Missing:
+        hooks.applyValue(oldEditValue);
+        return TrackInlineEditResult{
+          .outcome = TrackInlineEditOutcome::Missing, .statusMessage = "The edited track no longer exists."};
+      case TrackAuthoringSubmitStatus::Unavailable:
+        hooks.applyValue(oldEditValue);
+        return TrackInlineEditResult{
+          .outcome = TrackInlineEditOutcome::Unavailable, .statusMessage = "Library editing is currently unavailable."};
     }
 
-    return TrackInlineEditResult{.outcome = TrackInlineEditOutcome::Applied, .statusMessage = ""};
+    hooks.applyValue(oldEditValue);
+    return TrackInlineEditResult{
+      .outcome = TrackInlineEditOutcome::MutationRejected, .statusMessage = "Change could not be applied."};
   }
 
   bool isProtectedInlineEditText(rt::TrackField field,

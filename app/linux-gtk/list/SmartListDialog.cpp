@@ -10,6 +10,7 @@
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
@@ -316,8 +317,7 @@ namespace ao::gtk
           return false;
         }
 
-        _previewFilteredListPtr =
-          std::make_shared<rt::SmartListSource>(*parentResult, _runtime.musicLibrary(), *_previewEnginePtr);
+        _previewFilteredListPtr = std::make_shared<rt::SmartListSource>(*parentResult, *_previewEnginePtr);
 
         auto projPtr = std::make_shared<rt::LiveTrackListProjection>(rt::kInvalidViewId,
                                                                      rt::TrackSourceLease{_previewFilteredListPtr},
@@ -433,7 +433,7 @@ namespace ao::gtk
     updateDialogState();
   }
 
-  rt::LibraryWriter::ListDraft SmartListDialog::draft() const
+  rt::LibraryListDraft SmartListDialog::draft() const
   {
     return ao::uimodel::makeSmartListDraft(
       _parentListId, _editListId, _nameEntry.get_text(), _descEntry.get_text(), _exprBox.entry().get_text());

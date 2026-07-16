@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/uimodel/library/list/SmartListPreview.h>
 
 #include <string>
@@ -14,9 +14,9 @@ namespace ao::uimodel
 {
   bool canSubmitSmartListDraft(std::string_view name, SmartListPreviewStatus status);
 
-  rt::LibraryWriter::ListDraft makeSmartListDraft(ListId parentListId,
-                                                  ListId editListId,
-                                                  std::string const& name,
-                                                  std::string const& description,
-                                                  std::string const& expression);
+  rt::LibraryListDraft makeSmartListDraft(ListId parentListId,
+                                          ListId editListId,
+                                          std::string const& name,
+                                          std::string const& description,
+                                          std::string const& expression);
 } // namespace ao::uimodel

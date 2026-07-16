@@ -37,10 +37,10 @@ namespace ao::rt
   class LiveTrackListProjection final : public TrackListProjection
   {
   public:
-    LiveTrackListProjection(ViewId viewId, TrackSourceLease sourceLease, library::MusicLibrary& library);
+    LiveTrackListProjection(ViewId viewId, TrackSourceLease sourceLease, library::MusicLibrary const& library);
     LiveTrackListProjection(ViewId viewId,
                             TrackSourceLease sourceLease,
-                            library::MusicLibrary& library,
+                            library::MusicLibrary const& library,
                             TrackOrderSpec const& order);
     ~LiveTrackListProjection() override;
 

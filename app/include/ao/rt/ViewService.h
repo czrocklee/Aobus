@@ -83,7 +83,7 @@ namespace ao::rt
       TrackPresentationSpec presentation{};
     };
 
-    ViewService(async::Executor& executor, library::MusicLibrary& library, TrackSourceCache& sources);
+    ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources);
     ~ViewService();
 
     ViewService(ViewService const&) = delete;

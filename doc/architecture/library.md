@@ -56,7 +56,11 @@ UIModel and frontends begin above these stages and consume runtime values rather
 ### Physical storage
 
 `ao::library::MusicLibrary` owns the LMDB environment and coordinates specialized track, list, resource, dictionary, and file-manifest stores.
-It creates read and write transactions and owns the physical library metadata header and revision source.
+It creates public read transactions and owns the physical library metadata header and revision source.
+Committing writes require a separately acquired `WritableMusicLibrary`; `MusicLibrary` keeps transaction construction private to that capability.
+Acquisition takes a non-blocking OS file lease for the database path, so a second writable process receives `Conflict` while the first capability or any transaction anchored to it remains active.
+The capability borrows its `MusicLibrary`; storage composition keeps that library alive until the capability and all transactions anchored to its lease are destroyed.
+Read-only processes do not take that lease.
 The core [LMDB operation specification](../spec/storage/lmdb-operation.md) owns environment, transaction, cursor, and raw read/write behavior below these library-specific stores.
 
 Every `MusicLibrary` read uses one move-only `ReadTransaction` that directly owns a native LMDB read transaction.
@@ -64,7 +68,7 @@ The wrapper is the library-level snapshot capability: store readers accept it, w
 The wrapper and every store carry the same stable implementation-owned library identity, so a snapshot from one `MusicLibrary` is rejected before it can be mixed with another library's DBI.
 This adds no allocation, locking, or another transaction layer to each operation.
 
-Every `MusicLibrary` write uses one move-only `WriteTransaction` that owns the native LMDB transaction, the process writer gate, and a transaction-local dictionary writer.
+Every writable-capability write uses one move-only `WriteTransaction` that owns the native LMDB transaction, the process writer gate, a shared writer-lease anchor, and a transaction-local dictionary writer.
 Interning first consults committed mappings and then the transaction overlay; new id/text rows are written into the same native transaction as the track or other record that references them.
 Dropping or failing the wrapper aborts both authorities.
 Commit or abort consumes the native handle but retains the native transaction object and dictionary writer until the outer wrapper is destroyed.
@@ -96,15 +100,20 @@ an ID merge join: only IDs present in both stores produce a combined view.
 ### Runtime library facade
 
 `ao::rt::Library` is the application access boundary over `MusicLibrary`.
-It exposes four cooperating roles:
+It exposes four cooperating roles and owns one private mutation coordinator:
 
 - `LibraryReader` owns one read transaction for a coherent point-in-time read batch.
-- `LibraryWriter` owns synchronous application mutations and their change publication.
+- `LibraryWriter` owns synchronous semantic commands; every effective command commits and publishes through the coordinator.
 - `LibraryTaskService` owns long-running asynchronous operations such as scan, import/export, and identity backfill.
-- `LibraryChanges` is the revisioned mutation and task-progress event boundary.
+- `LibraryChanges` is the read-only revisioned mutation and task-progress observation boundary.
+- `LibraryMutationService` exclusively owns the writable core capability, interactive/maintenance admission, commit revision checks, and publication completion.
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
-It groups roles and lifetime; it does not introduce another database or transaction system.
+It groups roles and lifetime; the coordinator is an application control plane over the existing LMDB transaction system rather than another database or nested transaction layer.
+
+The coordinator publishes `LibraryAuthoringAvailability` as `Available`, `Maintenance`, or terminal `Faulted` state.
+Maintenance identifies import, scan apply, or audio-identity backfill and rejects every interactive command for the whole operation, including slow preparation between bounded write transactions.
+Metadata and tag authoring additionally requires runtime-created `BoundTrackTargets` containing the runtime instance id, committed library revision, and exact target order.
 
 ### Sources
 
@@ -133,17 +142,17 @@ UIModel and frontends consume runtime snapshots and commands rather than opening
 ## Boundaries and dependency direction
 
 - Physical stores depend only on lower library/LMDB facilities and do not depend on runtime.
-- Runtime library roles may depend on `MusicLibrary`, but public application consumers prefer `ao::rt::Library` roles and value types.
+- Runtime library implementations may depend on `MusicLibrary`, but public application consumers use `ao::rt::Library` roles and value types.
 - Sources consume committed library state and change events; storage does not know that sources exist.
 - Smart and ad-hoc sources consume the core expression system, but the expression system does not own source identity, ordering, leases, or deltas.
 - Projections consume source leases and library reads; sources do not depend on projections or frontends.
 - A projection combines source membership with presentation structure without allowing either concern to redefine the other.
 - View, workspace, completion, and playback services consume sources/projections through runtime-owned boundaries.
-- UIModel and normal frontend adapters do not include LMDB or concrete library store/view headers.
+- UIModel and normal frontend adapters do not include LMDB or concrete library store/view headers and cannot name committing write authority.
 
-`CoreRuntime::musicLibrary()` remains a low-level escape hatch for runtime composition, CLI inspection/administration, transitional adapters, and focused tooling.
-The GTK boundary guardrail currently excludes its platform composition area and `MainWindowCoordinator`, while the smart-list preview dialog also constructs runtime evaluators against the low-level library.
-Those exclusions are migration seams, not a general frontend extension point.
+`CoreRuntime::musicLibrary()` is const and supports read-only CLI inspection and narrow runtime evaluator composition.
+It cannot create a library write transaction.
+Build guardrails reject write-transaction, writable-capability, and direct `LibraryWriter` dependencies from UIModel, GTK, and TUI; normal frontend mutation must cross UIModel or another semantic runtime command.
 
 ## Data and control flow
 
@@ -152,22 +161,30 @@ A synchronous mutation follows this path:
 ```text
 runtime command
   -> LibraryWriter
+  -> LibraryMutationService admission
   -> WriteTransaction + transaction-local dictionary overlay
   -> one LMDB commit with records, dictionary rows, and new library revision
   -> complete dictionary-index publication
-  -> LibraryChanges publication
+  -> ordered LibraryChanges publication on the callback executor
   -> TrackSourceCache refresh/delta
   -> live projections
   -> view/playback/UI observers
+  -> Available(runtimeInstanceId, committedRevision)
 ```
 
-An asynchronous library operation follows the same commit and publication boundary but performs preparatory work through `LibraryTaskService` on the async worker pool.
+An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a bounded coordinator mutation only for apply/commit.
+Export and scan-plan construction remain independent read snapshots.
 Progress and completion return through `LibraryChanges`, while committed content changes use `LibraryChangeSet`.
+
+A scan plan is an opaque move-only runtime value whose immutable items are bound to the persisted library id and committed revision from the planner's read snapshot.
+Scan apply validates that evidence after maintenance admission and again at its bounded write boundary, so callers cannot fabricate items, cross libraries, or replay an already superseded snapshot.
+Explicit relink is a constrained plan derivation that preserves the same binding rather than a separate caller-authored mutation description.
 
 A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
 
-Metadata and tag authoring currently supplies target ids and a patch/delta to `LibraryWriter`; missing targets are skipped, and the command carries no observed field baseline or library generation.
-[RFC 0023](../rfc/0023-revision-bound-metadata-authoring.md) proposes guarded all-or-none authoring outcomes while retaining the library/presentation endpoint ownership.
+Metadata and tag authoring first binds the exact targets to one runtime instance and one available committed revision.
+Commit rechecks runtime identity, availability, revision, and every target under coordinator writer ownership.
+A foreign or superseded binding is `Stale`, a missing target rejects the whole command as `Missing`, maintenance is `Unavailable`, and an effective commit returns a binding advanced to the published revision.
 
 A filtered runtime view follows a separate composition path:
 
@@ -185,11 +202,15 @@ Changing presentation reshapes the projection without changing base-list or filt
 ## Structural constraints
 
 - One `MusicLibrary` instance and its runtime facade belong to one `CoreRuntime` and one music root.
+- A scan plan can mutate only the library id and immediate successor revision captured by its construction snapshot.
 - A library transaction is accepted only by stores carrying the same stable `MusicLibrary` identity.
 - Library write transactions are process-serialized and non-nested; dictionary mappings are append-only within one open library.
+- One OS lease excludes another writable process, and an active transaction retains that lease even if its originating capability is destroyed.
+- Live-runtime commits can begin only through the one coordinator-owned writable capability.
 - A mutation becomes observable through the revisioned change bus only after its write transaction commits.
+- The coordinator admits the next mutation only after publication completion, and callback-thread reentrant mutation during publication is rejected.
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
-- `LibraryChanges` serializes revision delivery onto the callback executor even when producers finish out of order.
+- `LibraryChanges` accepts publication only from the coordinator and serializes contiguous revision delivery onto the callback executor even when worker producers finish out of order.
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
 - A source lease pins source lifetime for its consumer, while the cache may otherwise evict unused implementations.
 - Dictionary read caches never extend a store view beyond the owning `MusicLibrary`, and they do not provide transaction isolation or a dictionary snapshot.
@@ -203,6 +224,9 @@ Synchronous readers and writers finish their transaction scope before returning 
 Executor hops honor cancellation, while only operations with explicit synchronous checkpoints can stop during their core work; [library task execution](../spec/library/runtime/task-execution.md#cancellation) owns the operation matrix.
 Cancellation never reinterprets an already committed transaction as uncommitted.
 
+Failure before commit returns through the operation's typed error channel and leaves the prior availability intact.
+Once durable commit succeeds, enqueue or observer failure is a committed-publication fault: the coordinator enters terminal `Faulted`, rejects further live-runtime writes, and requires runtime reopen to rebuild derived state.
+
 `CoreRuntime` destroys source, completion, facade, change-bus, and storage collaborators only after worker tasks are stopped and joined.
 Subscriptions held by sources and projections release before the `LibraryChanges` owner they observe.
 Batch and projection dictionary caches are destroyed before the `MusicLibrary` that owns their borrowed raw views.
@@ -215,11 +239,13 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Implementation map
 
-- [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns the physical library environment and creates coherent library write transactions.
+- [`MusicLibrary`](../../include/ao/library/MusicLibrary.h) owns the physical library environment and public read snapshots.
+- [`WritableMusicLibrary`](../../include/ao/library/WritableMusicLibrary.h) owns explicit offline/live composition write authority and the process writer lease.
 - [`WriteTransaction`](../../include/ao/library/WriteTransaction.h) owns native write lifetime, transaction-local dictionary interning, commit, rollback, and publication ordering.
 - [`DictionaryStore`](../../include/ao/library/DictionaryStore.h) owns committed synchronized dictionary access, stable published values, generation, and bounded read contexts/caches.
 - [`TrackStore`](../../include/ao/library/TrackStore.h) owns transaction-scoped point and ordered batch access to hot/cold track records.
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
+- [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns live-runtime write admission, revision validation, commit, and publication completion.
 - [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
 - [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations.
 - [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned changes and task status.
@@ -229,12 +255,13 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 
 ## Test map
 
-- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects physical environment, store composition, and cross-library transaction rejection.
+- [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects physical environment, store composition, cross-library transaction rejection, writer exclusion, and transaction-anchored lease lifetime.
 - [`TrackStoreTest.cpp`](../../test/unit/library/TrackStoreTest.cpp) and [`TrackStoreRawLayoutTest.cpp`](../../test/unit/library/TrackStoreRawLayoutTest.cpp) protect batch order, missing-row behavior, and coordinated hot/cold traversal.
 - [`DictionaryStoreTest.cpp`](../../test/unit/library/DictionaryStoreTest.cpp) protects overlay rollback, terminal commit-failure recovery, writer lifetime across transaction completion, stable borrowed views, bounded-cache behavior, batch binding, and all-or-none concurrent publication.
 - [`PlanEvaluatorDictionaryTest.cpp`](../../test/unit/query/PlanEvaluatorDictionaryTest.cpp) protects bound dictionary predicates and explicit unresolved-symbol semantics.
 - [`LibraryReaderTest.cpp`](../../test/unit/runtime/library/LibraryReaderTest.cpp) and [`LibraryWriterTest.cpp`](../../test/unit/runtime/library/LibraryWriterTest.cpp) protect runtime access roles.
 - [`LibraryChangesTest.cpp`](../../test/unit/runtime/library/LibraryChangesTest.cpp) protects revision ordering and callback publication.
+- [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, all-or-none authoring, publication barriers, and terminal post-commit faults.
 - [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects worker/callback task boundaries.
 - [`TrackSourceCacheTest.cpp`](../../test/unit/runtime/source/TrackSourceCacheTest.cpp) protects source lifetime, reuse, and refresh composition.
 - [`TrackListProjectionLifecycleTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionLifecycleTest.cpp) and [`TrackListProjectionDeltaContractTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp) protect the source-to-projection boundary.

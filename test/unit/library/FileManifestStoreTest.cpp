@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/LibraryStoreTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
@@ -24,7 +25,7 @@ namespace ao::library::test
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.manifest();
-    auto wtxn = library.writeTransaction();
+    auto wtxn = writeTransaction(library);
     auto writer = store.writer(wtxn);
 
     auto const longUri = std::string(501, 'a');
@@ -39,7 +40,7 @@ namespace ao::library::test
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.manifest();
-    auto wtxn = library.writeTransaction();
+    auto wtxn = writeTransaction(library);
 
     auto const signature = utility::xxh3Hash128("stored payload");
     auto builder = FileManifestBuilder::makeEmpty();
@@ -74,7 +75,7 @@ namespace ao::library::test
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.manifest();
-    auto wtxn = library.writeTransaction();
+    auto wtxn = writeTransaction(library);
 
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
@@ -109,7 +110,7 @@ namespace ao::library::test
     }
 
     {
-      auto removeTxn = library.writeTransaction();
+      auto removeTxn = writeTransaction(library);
       auto writer = store.writer(removeTxn);
 
       for (auto const uriLength : kUriLengths)
@@ -153,7 +154,7 @@ namespace ao::library::test
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.manifest();
-    auto wtxn = library.writeTransaction();
+    auto wtxn = writeTransaction(library);
 
     auto builder = FileManifestBuilder::makeEmpty();
     builder.trackId(TrackId{42}).fileSize(12345).mtime(67890).status(FileStatus::Available);
@@ -175,7 +176,7 @@ namespace ao::library::test
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
     auto const& store = library.manifest();
-    auto wtxn = library.writeTransaction();
+    auto wtxn = writeTransaction(library);
     auto invalidPayload = std::vector{std::byte{0x42}};
 
     REQUIRE(store.writer(wtxn).put("song.flac", invalidPayload));

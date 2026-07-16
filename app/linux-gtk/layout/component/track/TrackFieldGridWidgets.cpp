@@ -5,7 +5,6 @@
 
 #include "common/WidgetMeasure.h"
 #include "completion/EntryCompletionController.h"
-#include "sigc++/signal.h"
 #include <ao/rt/completion/CompletionResult.h>
 
 #include <gdk/gdkkeysyms.h>
@@ -19,9 +18,12 @@
 #include <gtkmm/grid.h>
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
+#include <sigc++/adaptors/track_obj.h>
+#include <sigc++/signal.h>
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <utility>
 
@@ -150,7 +152,7 @@ namespace ao::gtk::layout::track_field_grid
     _entry.add_css_class("ao-detail-field-entry");
     _stack.add(_entry, "edit");
     _stack.set_visible_child("display");
-    _entry.signal_activate().connect([this] { stopEditing(true); });
+    _entry.signal_activate().connect(sigc::track_object([this] { stopEditing(true); }, *this));
 
     _editButton.set_icon_name("document-edit-symbolic");
     _editButton.set_has_frame(false);
@@ -159,28 +161,29 @@ namespace ao::gtk::layout::track_field_grid
     _editButton.add_css_class("ao-detail-field-edit-hint");
     _editButton.set_tooltip_text("Edit Value");
     _editButton.set_visible(false);
-    _editButton.signal_clicked().connect([this] { startEditing(); });
+    _editButton.signal_clicked().connect(sigc::track_object([this] { startEditing(); }, *this));
 
     append(_stack);
     append(_editButton);
 
     auto const keyPtr = Gtk::EventControllerKey::create();
-    keyPtr->signal_key_pressed().connect(
-      [this](guint keyval, guint, Gdk::ModifierType) -> bool
-      {
-        if (keyval == GDK_KEY_Escape)
-        {
-          stopEditing(false);
-          return true;
-        }
+    keyPtr->signal_key_pressed().connect(sigc::track_object(
+                                           [this](guint keyval, guint, Gdk::ModifierType) -> bool
+                                           {
+                                             if (keyval == GDK_KEY_Escape)
+                                             {
+                                               stopEditing(false);
+                                               return true;
+                                             }
 
-        return false;
-      },
-      false);
+                                             return false;
+                                           },
+                                           *this),
+                                         false);
     _entry.add_controller(keyPtr);
 
     auto const focusPtr = Gtk::EventControllerFocus::create();
-    focusPtr->signal_leave().connect([this] { stopEditing(true); });
+    focusPtr->signal_leave().connect(sigc::track_object([this] { stopEditing(true); }, *this));
     _entry.add_controller(focusPtr);
   }
 
@@ -332,10 +335,10 @@ namespace ao::gtk::layout::track_field_grid
     _parentWindow.remove_controller(_outsideClickPtr);
   }
 
-  void DetailEditCoordinator::registerEditor(DetailFieldEditor& editor)
+  void DetailEditCoordinator::registerEditor(DetailFieldEditor& editor, std::function<void()> onActivated)
   {
     editor.signalEditStarted().connect(
-      [this, &editor]
+      [this, &editor, onActivated = std::move(onActivated)]
       {
         if (_activeEditor != nullptr && _activeEditor != &editor)
         {
@@ -343,6 +346,11 @@ namespace ao::gtk::layout::track_field_grid
         }
 
         _activeEditor = &editor;
+
+        if (onActivated)
+        {
+          onActivated();
+        }
       });
 
     auto clearActive = [this, &editor]
@@ -361,6 +369,14 @@ namespace ao::gtk::layout::track_field_grid
     if (_activeEditor == &editor)
     {
       _activeEditor = nullptr;
+    }
+  }
+
+  void DetailEditCoordinator::cancelActive()
+  {
+    if (_activeEditor != nullptr)
+    {
+      _activeEditor->stopEditing(false);
     }
   }
 

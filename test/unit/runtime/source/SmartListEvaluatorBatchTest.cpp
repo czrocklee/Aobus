@@ -25,7 +25,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -65,7 +65,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({});
     auto& source = *sourcePtr;
 
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.setExpression("$year >= 2020");
     list.reload();
 
@@ -106,7 +106,7 @@ namespace ao::rt::test
     auto const third = libraryFixture.addTrack(makeSmartListSpec("third", 2024));
     auto sourcePtr = makeMutableTrackSource({first, hidden, second, third});
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.setExpression("$year >= 2020");
     list.reload();
 

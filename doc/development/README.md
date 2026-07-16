@@ -34,7 +34,7 @@ Use the [development guide template](../template/development.md) for a new contr
 - [Fixtures and helpers](test/fixture-and-helper.md) defines fixtures, fakes, test data, testability seams, and filesystem setup.
 - [Runtime and asynchronous testing](test/runtime-and-async.md) defines deterministic executors, callbacks, coroutines, and lifetime checks.
 - [Concurrency and sanitizer validation](test/concurrency-and-sanitizer.md) defines race matrices and sanitizer gates.
-- [UIModel and GTK testing](test/uimodel-and-gtk.md) defines policy-versus-adapter placement, harnesses, lifecycle, and geometry checks.
+- [UIModel and GTK testing](test/uimodel-and-gtk.md) defines policy-versus-adapter placement, fixtures, lifecycle, and geometry checks.
 - [Coverage workflow](test/coverage-workflow.md) defines measurement, analysis, test selection, and verification.
 - [Validation and review](test/validation-and-review.md) defines file integration, regression expectations, gates, smells, and review checks.
 - [Test suites](test/test-suite.md) enumerates the `./ao test` suites and suite groups.

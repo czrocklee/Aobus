@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
@@ -103,7 +104,7 @@ namespace ao::rt::test
 
     // 1. Setup initial library
     {
-      auto transaction = ml1.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml1);
 
       auto resWriter = ml1.resources().writer(transaction);
       auto resIdResult = resWriter.create(lmdb::test::createTestData(100));
@@ -128,7 +129,7 @@ namespace ao::rt::test
                                                                             .channels = Channels{},
                                                                             .bitDepth = BitDepth{24},
                                                                             .codec = AudioCodec::Flac});
-      auto listTransaction = ml1.writeTransaction();
+      auto listTransaction = library::test::writeTransaction(ml1);
 
       auto smartListBuilder = ListBuilder::makeEmpty().name(smartListName).filter(smartFilter);
       createList(ml1.lists().writer(listTransaction), smartListBuilder.serialize());
@@ -163,14 +164,14 @@ namespace ao::rt::test
     }
 
     auto importer = LibraryYamlImporter{ml2};
-    REQUIRE(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYamlOffline(yamlPath));
 
     // 4. Verify
     {
       auto transaction = ml2.readTransaction();
       auto reader = ml2.tracks().reader(transaction);
       auto const listReader = ml2.lists().reader(transaction);
-      auto& dictionary = ml2.dictionary();
+      auto const& dictionary = ml2.dictionary();
 
       // Check tracks
       auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
@@ -270,7 +271,7 @@ namespace ao::rt::test
                                                                             .sampleRate = SampleRate{},
                                                                             .channels = Channels{},
                                                                             .bitDepth = BitDepth{}});
-      auto transaction = ml1.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml1);
       auto manifestWriter = ml1.manifest().writer(transaction);
       auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(trackId).mtime(123456789);
@@ -290,14 +291,14 @@ namespace ao::rt::test
     auto importer = LibraryYamlImporter{ml2};
 
     // Use Restore mode (default) - should not try to read physical file "full-fields.flac"
-    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, rt::ImportMode::Restore));
 
     // 4. Verify in ml2
     {
       auto transaction = ml2.readTransaction();
 
       auto reader = ml2.tracks().reader(transaction);
-      auto& dictionary = ml2.dictionary();
+      auto const& dictionary = ml2.dictionary();
 
       auto tracks = std::vector<std::pair<TrackId, TrackView>>{};
 
@@ -350,7 +351,7 @@ namespace ao::rt::test
                                                                         .sampleRate = SampleRate{},
                                                                         .channels = Channels{},
                                                                         .bitDepth = BitDepth{}});
-      auto transaction = ml.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml);
       auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(tid);
       REQUIRE(ml.manifest().writer(transaction).put(uri1, builder.serialize()));
@@ -375,7 +376,7 @@ library:
 
     // 3. Perform Merge Import
     auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Merge));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, rt::ImportMode::Merge));
 
     // 4. Verify results
     {
@@ -412,7 +413,7 @@ library:
       library::test::TrackSpec{
         .title = "Original", .uri = uri, .tags = {"favorite"}, .customMetadata = {{"mood", "focused"}}});
     {
-      auto transaction = ml.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml);
       auto builder = FileManifestBuilder::makeEmpty();
       builder.trackId(trackId);
       REQUIRE(ml.manifest().writer(transaction).put(uri, builder.serialize()));
@@ -435,7 +436,7 @@ library:
 )";
       yaml.close();
 
-      REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+      REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
       auto transaction = ml.readTransaction();
       auto const optView = ml.tracks().reader(transaction).get(trackId, TrackStore::Reader::LoadMode::Both);
@@ -458,7 +459,7 @@ library:
 )";
       yaml.close();
 
-      REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Merge));
+      REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Merge));
 
       auto transaction = ml.readTransaction();
       auto const optView = ml.tracks().reader(transaction).get(trackId, TrackStore::Reader::LoadMode::Both);
@@ -478,7 +479,7 @@ library:
       auto const trackId =
         library::test::addTrack(source, library::test::TrackSpec{.title = "Source", .uri = "source.flac"});
 
-      auto listTransaction = source.writeTransaction();
+      auto listTransaction = library::test::writeTransaction(source);
       auto listBuilder = ListBuilder::makeEmpty().name("Source List");
       listBuilder.tracks().add(trackId);
       createList(source.lists().writer(listTransaction), listBuilder.serialize());
@@ -490,7 +491,7 @@ library:
       auto const targetTemp = ao::test::TempDir{};
       auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
       auto importer = LibraryYamlImporter{target};
-      auto const report = importer.previewImportFromYaml(yamlPath, ImportMode::Restore);
+      auto const report = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Restore);
 
       REQUIRE(report);
       CHECK(report->tracksCreated == 1);
@@ -510,7 +511,7 @@ library:
         library::test::addTrack(ml, library::test::TrackSpec{.title = "Original", .uri = "track1.flac"});
 
       {
-        auto transaction = ml.writeTransaction();
+        auto transaction = library::test::writeTransaction(ml);
         auto builder = FileManifestBuilder::makeEmpty();
         builder.trackId(existingTrackId);
         REQUIRE(ml.manifest().writer(transaction).put("track1.flac", builder.serialize()));
@@ -538,7 +539,7 @@ library:
       }
 
       auto importer = LibraryYamlImporter{ml};
-      auto const dryRunReport = importer.previewImportFromYaml(yamlPath, ImportMode::Merge);
+      auto const dryRunReport = importer.previewImportFromYamlOffline(yamlPath, ImportMode::Merge);
 
       REQUIRE(dryRunReport);
       CHECK(dryRunReport->tracksCreated == 1);
@@ -550,7 +551,7 @@ library:
       CHECK(listCount(ml) == 0);
       CHECK(trackTitleForUri(ml, "track1.flac") == "Original");
 
-      auto const commitReport = importer.importFromYaml(yamlPath, ImportMode::Merge);
+      auto const commitReport = importer.importFromYamlOffline(yamlPath, ImportMode::Merge);
       REQUIRE(commitReport);
       CHECK(*commitReport == *dryRunReport);
       CHECK(trackCount(ml) == 2);
@@ -596,7 +597,7 @@ library:
 )";
     }
 
-    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, rt::ImportMode::Restore));
 
     auto transaction = ml.readTransaction();
     auto const trackReader = ml.tracks().reader(transaction);
@@ -670,7 +671,7 @@ library:
       yaml << "        - 2\n";
     }
 
-    auto result = importer.importFromYaml(yamlPath);
+    auto result = importer.importFromYamlOffline(yamlPath);
 
     if (!result)
     {
@@ -700,7 +701,7 @@ library:
       yaml << "        - id: 1\n";
     }
 
-    auto resultDelta = importer.importFromYaml(yamlPathDelta, ImportMode::Merge);
+    auto resultDelta = importer.importFromYamlOffline(yamlPathDelta, ImportMode::Merge);
     REQUIRE(resultDelta);
   }
 
@@ -727,7 +728,7 @@ library:
     }
 
     auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYaml(yamlPath, ImportMode::Restore));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, ImportMode::Restore));
 
     auto transaction = ml.readTransaction();
     auto const optView = ml.tracks().reader(transaction).get(TrackId{1}, TrackStore::Reader::LoadMode::Both);
@@ -758,7 +759,7 @@ library:
     }
 
     auto importer = LibraryYamlImporter{ml};
-    auto result = importer.importFromYaml(yamlPath);
+    auto result = importer.importFromYamlOffline(yamlPath);
     REQUIRE(result);
 
     auto transaction = ml.readTransaction();

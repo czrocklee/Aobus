@@ -73,12 +73,16 @@ namespace ao::tui::test
       EventControllerFixture()
       {
         auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-        library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First", .uri = fixturePath});
-        library::test::addTrack(
-          runtime.musicLibrary(), library::test::TrackSpec{.title = "Second", .uri = fixturePath});
+        addTrack(library::test::TrackSpec{.title = "First", .uri = fixturePath});
+        addTrack(library::test::TrackSpec{.title = "Second", .uri = fixturePath});
       }
 
       LibraryController makeLibrary() { return LibraryController{runtime}; }
+
+      TrackId addTrack(library::test::TrackSpec const& spec)
+      {
+        return rt::test::addRuntimeTrack(runtime, spec, [this] { executor->drain(); });
+      }
 
       void addReadyAudioProvider()
       {
@@ -960,10 +964,8 @@ namespace ao::tui::test
   TEST_CASE("EventController - section shortcuts jump between grouped sections", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    library::test::addTrack(
-      fixture.runtime.musicLibrary(),
-      library::test::TrackSpec{
-        .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
     REQUIRE(library.setPresentation("albums") == "View: albums");
     REQUIRE(library.sections().size() >= 2);
@@ -980,10 +982,8 @@ namespace ao::tui::test
   TEST_CASE("EventController - section shortcuts do not pass through overlays", "[tui][regression][event]")
   {
     auto fixture = EventControllerFixture{};
-    library::test::addTrack(
-      fixture.runtime.musicLibrary(),
-      library::test::TrackSpec{
-        .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
     REQUIRE(library.setPresentation("albums") == "View: albums");
     REQUIRE(library.sections().size() >= 2);
@@ -997,10 +997,8 @@ namespace ao::tui::test
   TEST_CASE("EventController - mouse clicks section headers jump to grouped sections", "[tui][unit][event]")
   {
     auto fixture = EventControllerFixture{};
-    library::test::addTrack(
-      fixture.runtime.musicLibrary(),
-      library::test::TrackSpec{
-        .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
     REQUIRE(library.setPresentation("albums") == "View: albums");
     REQUIRE(library.sections().size() >= 2);
@@ -1195,10 +1193,8 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     fixture.addReadyAudioProvider();
-    library::test::addTrack(
-      fixture.runtime.musicLibrary(),
-      library::test::TrackSpec{
-        .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
+    fixture.addTrack(library::test::TrackSpec{
+      .title = "Grouped", .artist = "Artist", .album = "Grouped Album", .albumArtist = "Artist"});
     auto library = fixture.makeLibrary();
     REQUIRE(library.setPresentation("albums") == "View: albums");
     REQUIRE(library.sections().size() >= 2);

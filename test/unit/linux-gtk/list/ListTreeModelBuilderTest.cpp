@@ -5,11 +5,8 @@
 
 #include "../../TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/CoreIds.h>
-#include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/liststore.h>
@@ -21,31 +18,21 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto& library = fixture.runtime().musicLibrary();
 
     // 1. Add some lists to the library
-    auto idA = ListId{kInvalidListId};
-    auto idB = ListId{kInvalidListId};
-
-    {
-      auto transaction = library.writeTransaction();
-      auto writer = library.lists().writer(transaction);
-
-      // List A (Manual)
-      auto builderA = library::ListBuilder::makeEmpty();
-      builderA.name("Manual List A");
-      auto [id, _] = ao::test::requireValue(writer.create(builderA.serialize()));
-      idA = id;
-
-      // List B (Smart, child of A)
-      auto builderB = library::ListBuilder::makeEmpty();
-      builderB.name("Smart Child B").parentId(idA).filter("genre:rock");
-      builderB.tracks().smart(true);
-      auto [id2, _] = ao::test::requireValue(writer.create(builderB.serialize()));
-      idB = id2;
-
-      REQUIRE(transaction.commit());
-    }
+    auto& writer = fixture.runtime().library().writer();
+    auto const idA = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{
+      .kind = rt::LibraryWriter::ListKind::Manual,
+      .name = "Manual List A",
+    }));
+    drainGtkEvents();
+    auto const idB = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{
+      .kind = rt::LibraryWriter::ListKind::Smart,
+      .parentId = idA,
+      .name = "Smart Child B",
+      .expression = "$genre = Rock",
+    }));
+    drainGtkEvents();
 
     // 2. Build the model
     auto const result = ListTreeModelBuilder::build(fixture.runtime().library());

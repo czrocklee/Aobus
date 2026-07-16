@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -23,7 +24,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
@@ -51,7 +53,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
@@ -67,13 +70,14 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter - editTags ignores tag additions for missing tracks", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryWriter - editTags rejects missing tag-add targets", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
@@ -81,8 +85,8 @@ namespace ao::rt::test
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const reply = writer.editTags(std::array{TrackId{99999}}, favorite, {});
-    REQUIRE(reply);
-    CHECK(reply->mutatedIds.empty());
+    REQUIRE_FALSE(reply);
+    CHECK(reply.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("LibraryWriter - editTags removes an existing tag and publishes a mutation",
@@ -92,7 +96,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
@@ -115,7 +120,8 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
@@ -127,13 +133,14 @@ namespace ao::rt::test
     CHECK(mutated.empty());
   }
 
-  TEST_CASE("LibraryWriter - editTags ignores tag removals for missing tracks", "[runtime][unit][library][tag]")
+  TEST_CASE("LibraryWriter - editTags rejects missing tag-remove targets", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
@@ -141,7 +148,7 @@ namespace ao::rt::test
     auto const favorite = std::array{std::string{"Favorite"}};
 
     auto const reply = writer.editTags(std::array{TrackId{99999}}, {}, favorite);
-    REQUIRE(reply);
-    CHECK(reply->mutatedIds.empty());
+    REQUIRE_FALSE(reply);
+    CHECK(reply.error().code == Error::Code::NotFound);
   }
 } // namespace ao::rt::test

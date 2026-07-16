@@ -58,7 +58,7 @@ namespace ao::rt::test
   }
 
   // Canonical single-backend, single-device provider status shared by every
-  // harness instance below: "mock_backend" exposes one default "mock_device"
+  // fixture instance below: "mock_backend" exposes one default "mock_device"
   // and the shared profile.
   inline audio::BackendProvider::Status makeMockProviderStatus()
   {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackLayout.h>
@@ -80,7 +81,7 @@ namespace ao::library::test
                                       std::span<std::byte const> hotData,
                                       std::span<std::byte const> coldData)
   {
-    auto wtxn = library.writeTransaction();
+    auto wtxn = writeTransaction(library);
     auto created = requireCreate(store.writer(wtxn), hotData, coldData);
     REQUIRE(wtxn.commit());
     return created.first;

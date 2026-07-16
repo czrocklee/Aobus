@@ -95,7 +95,7 @@ namespace ao::rt
 
   CoreRuntime::~CoreRuntime() = default;
 
-  library::MusicLibrary& CoreRuntime::musicLibrary() noexcept
+  library::MusicLibrary const& CoreRuntime::musicLibrary() const noexcept
   {
     return _implPtr->musicLibrary;
   }

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -197,7 +198,7 @@ namespace ao::library::test
 
   inline TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
   {
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto writer = library.tracks().writer(transaction);
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, spec);
@@ -213,7 +214,7 @@ namespace ao::library::test
 
   inline void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate)
   {
-    auto transaction = library.writeTransaction();
+    auto transaction = writeTransaction(library);
     auto reader = library.tracks().reader(transaction);
     auto writer = library.tracks().writer(transaction);
     auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);

@@ -130,8 +130,10 @@ namespace ao::gtk::layout::test
     first.setText("first");
     second.setEditable(true);
     second.setText("second");
-    coordinator.registerEditor(first);
-    coordinator.registerEditor(second);
+    auto events = std::vector<std::string>{};
+    coordinator.registerEditor(first, [&events] { events.emplace_back("begin first"); });
+    coordinator.registerEditor(second, [&events] { events.emplace_back("begin second"); });
+    first.signalCommitted().connect([&events] { events.emplace_back("commit first"); });
 
     auto& firstButton = first.editButton();
     auto& secondButton = second.editButton();
@@ -150,6 +152,7 @@ namespace ao::gtk::layout::test
     CHECK(second.isEditing());
     CHECK_FALSE(firstEntry.get_child_visible());
     CHECK(secondEntry.get_child_visible());
+    CHECK(events == std::vector<std::string>{"begin first", "commit first", "begin second"});
 
     REQUIRE(emitGesturePressed(window, 1, 1.0, 1.0));
     CHECK_FALSE(second.isEditing());

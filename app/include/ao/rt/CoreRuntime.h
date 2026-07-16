@@ -48,7 +48,7 @@ namespace ao::rt
     CoreRuntime(CoreRuntime&&) = delete;
     CoreRuntime& operator=(CoreRuntime&&) = delete;
 
-    library::MusicLibrary& musicLibrary() noexcept;
+    library::MusicLibrary const& musicLibrary() const noexcept;
     Library const& library() const noexcept;
     Library& library() noexcept;
 

@@ -5,7 +5,6 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -35,8 +34,7 @@ namespace ao::gtk::test
     CHECK(gtkLabel->get_tooltip_text() == "Click to show playing list");
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = library::test::addTrack(
-      fixture.runtime().musicLibrary(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
+    auto const trackId = addRuntimeTrack(fixture.runtime(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
     REQUIRE(playback.playTrack(trackId, rt::kAllTracksListId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());

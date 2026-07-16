@@ -4,18 +4,24 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/utility/Hash128.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace ao::rt
 {
+  class ScanApplyOperation;
+  class ScanPlanBuilder;
+
   enum class ScanClassification : std::uint8_t
   {
     New,
@@ -45,15 +51,25 @@ namespace ao::rt
     return library::hasAudioIdentity(item.audioPayloadLength, item.audioSignature);
   }
 
-  struct ScanPlan final
+  class ScanPlan final
   {
-    std::vector<ScanItem> items;
+  public:
+    ~ScanPlan() = default;
 
-    std::size_t count(ScanClassification classification) const
+    ScanPlan(ScanPlan const&) = delete;
+    ScanPlan& operator=(ScanPlan const&) = delete;
+    ScanPlan(ScanPlan&& other) noexcept;
+    ScanPlan& operator=(ScanPlan&& other) noexcept;
+
+    std::span<ScanItem const> items() const noexcept { return _items; }
+    std::size_t size() const noexcept { return _items.size(); }
+    bool empty() const noexcept { return _items.empty(); }
+
+    std::size_t count(ScanClassification classification) const noexcept
     {
       std::size_t count = 0;
 
-      for (auto const& item : items)
+      for (auto const& item : _items)
       {
         if (item.classification == classification)
         {
@@ -63,6 +79,27 @@ namespace ao::rt
 
       return count;
     }
+
+    /**
+     * Builds a single-item explicit relink plan from two unresolved items.
+     *
+     * A successful derivation consumes the source plan so its library and
+     * revision binding cannot be separated from the derived operation. The
+     * destination must be New, the source must be Missing, and both planned
+     * audio identities must match.
+     */
+    Result<ScanPlan> makeRelinkPlan(std::string_view oldUri, std::string_view newUri) &&;
+
+  private:
+    ScanPlan(std::array<std::byte, 16> libraryId, std::uint64_t libraryRevision, std::vector<ScanItem> items) noexcept;
+
+    std::array<std::byte, 16> _libraryId{};
+    std::uint64_t _libraryRevision = 0;
+    std::vector<ScanItem> _items;
+    bool _executable = true;
+
+    friend class ScanApplyOperation;
+    friend class ScanPlanBuilder;
   };
 
   enum class AudioIdentityPolicy : std::uint8_t
@@ -106,7 +143,7 @@ namespace ao::rt
   };
 
   /**
-   * Result of applying a scan plan after the batch transaction commits.
+   * Result of applying a scan plan after its terminal no-op or commit decision.
    *
    * Per-item failures are counted here and streamed live through the apply
    * failure callback; transaction-level failures use the Result error channel
@@ -118,9 +155,7 @@ namespace ao::rt
     std::vector<TrackId> insertedIds;
     std::vector<TrackId> mutatedIds;
     std::vector<TrackId> relinkedIds;
-    std::int32_t relinkedCount = 0;
     std::int32_t missingCount = 0;
     std::int32_t failureCount = 0;
-    bool cancelled = false;
   };
 } // namespace ao::rt

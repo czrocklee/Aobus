@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2024-2026 Aobus Contributors
 #
-# Guards against forbidden includes creeping into shared library directories.
+# Guards against forbidden dependencies creeping into shared library directories.
 #
 # Usage:
 #   cmake
@@ -58,9 +58,9 @@ foreach(root IN LISTS ROOTS)
     file(READ "${source}" content)
 
     if(content MATCHES "${_regex}")
-      # Extract the matched line for a helpful message
+      # Extract the matched text for a helpful message.
       string(REGEX MATCH "${_regex}" matched_line "${content}")
-      set(_finding "Forbidden include in ${source}: '${matched_line}'")
+      set(_finding "Forbidden dependency in ${source}: '${matched_line}'")
       list(APPEND _findings "${_finding}")
       math(EXPR _finding_count "${_finding_count} + 1")
 
@@ -74,9 +74,9 @@ endforeach()
 if(_finding_count GREATER 0 AND _mode STREQUAL "enforce")
   list(JOIN _findings "\n  " _finding_text)
   message(FATAL_ERROR
-    "AssertNoForbiddenIncludes: found ${_finding_count} forbidden include(s):\n  ${_finding_text}")
+    "AssertNoForbiddenIncludes: found ${_finding_count} forbidden dependency match(es):\n  ${_finding_text}")
 endif()
 
 if(_finding_count GREATER 0 AND _mode STREQUAL "report")
-  message(WARNING "AssertNoForbiddenIncludes: report mode found ${_finding_count} forbidden include(s)")
+  message(WARNING "AssertNoForbiddenIncludes: report mode found ${_finding_count} forbidden dependency match(es)")
 endif()

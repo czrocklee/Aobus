@@ -25,12 +25,12 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackInlineEdit.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -265,7 +265,17 @@ namespace ao::gtk
     // 1. Configure columns and layout first (Off-tree)
     _viewHostPtr->configureColumns(
       [this](rt::TrackField field)
-      { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this), *_modelPtr); });
+      {
+        return buildColumnFactory(
+          field,
+          [this](Glib::RefPtr<TrackRowObject> const& rowPtr)
+          {
+            auto const trackIds = std::array{rowPtr->trackId()};
+            return uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+          },
+          std::bind_front(&TrackViewPage::commitMetadataChange, this),
+          *_modelPtr);
+      });
 
     if (_viewId != rt::kInvalidViewId)
     {
@@ -422,7 +432,17 @@ namespace ao::gtk
   void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)
   {
     auto const factoryProvider = [this](rt::TrackField field)
-    { return buildColumnFactory(field, std::bind_front(&TrackViewPage::commitMetadataChange, this), *_modelPtr); };
+    {
+      return buildColumnFactory(
+        field,
+        [this](Glib::RefPtr<TrackRowObject> const& rowPtr)
+        {
+          auto const trackIds = std::array{rowPtr->trackId()};
+          return uimodel::TrackAuthoringSession::begin(_runtime.library(), trackIds);
+        },
+        std::bind_front(&TrackViewPage::commitMetadataChange, this),
+        *_modelPtr);
+    };
 
     // 1. Detach UI from Model and Tree immediately.
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
@@ -505,7 +525,8 @@ namespace ao::gtk
 
   void TrackViewPage::commitMetadataChange(Glib::RefPtr<TrackRowObject> const& rowPtr,
                                            rt::TrackField field,
-                                           std::string newValue)
+                                           std::string newValue,
+                                           uimodel::TrackAuthoringSession& session)
   {
     auto const* uiDef = trackFieldUiDefinition(field);
 
@@ -526,11 +547,7 @@ namespace ao::gtk
         { uiDef->applyRowEditValue(*rowPtr, value, field); },
         .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
         { uimodel::writeTrackFieldPatch(patch, field, value); },
-        .commitPatch = [this, rowPtr](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
-        {
-          auto const trackIds = std::array{rowPtr->trackId()};
-          return _runtime.library().writer().updateMetadata(trackIds, patch);
-        },
+        .session = &session,
       });
 
     switch (result.outcome)
@@ -541,6 +558,9 @@ namespace ao::gtk
       case uimodel::TrackInlineEditOutcome::MutationRejected:
         APP_LOG_ERROR("Metadata update failed: {}", result.statusMessage);
         return;
+      case uimodel::TrackInlineEditOutcome::Stale:
+      case uimodel::TrackInlineEditOutcome::Missing:
+      case uimodel::TrackInlineEditOutcome::Unavailable: setStatusMessage(result.statusMessage); return;
       case uimodel::TrackInlineEditOutcome::Applied: break;
     }
 

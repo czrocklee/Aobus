@@ -11,7 +11,8 @@
 namespace clang::tidy::modernize
 {
   /// Enforces Aobus nodiscard usage policy: [[nodiscard]] is forbidden on
-  /// functions and non-RAII classes, but required on RAII classes.
+  /// functions and non-RAII classes, allowed on structural RAII owners, and
+  /// required on RAII classes whose names identify scoped resource roles.
   class NodiscardUsageCheck : public ClangTidyCheck
   {
   public:

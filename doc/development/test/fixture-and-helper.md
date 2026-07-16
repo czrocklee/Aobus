@@ -94,7 +94,7 @@ Consider adding or improving a helper when:
 - The first third of the test is repeated setup.
 - A future reader must understand LMDB/GTK/coroutine plumbing before understanding the behavior under test.
 - Several tests construct the same runtime graph manually.
-- Multiple files define slightly different versions of the same fake executor or widget harness.
+- Multiple files define slightly different versions of the same fake executor or widget fixture.
 
 Do not add a fixture that hides the action or assertion. The behavior under test should still be visible in the test body.
 

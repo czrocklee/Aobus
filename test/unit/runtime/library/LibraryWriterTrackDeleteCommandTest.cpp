@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -25,8 +26,6 @@ namespace ao::rt::test
     auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
-
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
     auto deletedTracks = std::vector<TrackId>{};
@@ -36,7 +35,7 @@ namespace ao::rt::test
 
     auto listIds = std::vector<ListId>{};
     {
-      auto transaction = libraryFixture.library().writeTransaction();
+      auto transaction = library::test::writeTransaction(libraryFixture.library());
       auto manifest = library::FileManifestBuilder::makeEmpty().trackId(trackId).fileSize(10).mtime(20).serialize();
       CHECK(libraryFixture.library().manifest().writer(transaction).put("/tmp/test.flac", manifest));
 
@@ -52,6 +51,8 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
     auto const deleted = writer.deleteTrack(trackId);
     REQUIRE(deleted);
     CHECK(deleted->trackId == trackId);
@@ -83,7 +84,8 @@ namespace ao::rt::test
     [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });

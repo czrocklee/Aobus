@@ -5,6 +5,7 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <cstddef>
@@ -21,7 +22,8 @@ namespace ao::uimodel
     void handleFeedChanged(rt::NotificationFeedState const& feed);
     void handleNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
     void handleLibraryTaskProgress(std::string message, double fraction);
-    void handleLibraryTaskCompleted(std::size_t count, rt::NotificationFeedState const& feed);
+    void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
+                                    rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
     void dismissDetailNotificationFromActivity(rt::NotificationId id, rt::NotificationFeedState const& feed);
     void handleTransientExpired(rt::NotificationFeedState const& feed);

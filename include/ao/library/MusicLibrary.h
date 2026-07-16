@@ -21,6 +21,7 @@ namespace ao::library
   class ResourceStore;
   class DictionaryStore;
   class FileManifestStore;
+  class WritableMusicLibrary;
 
   /**
    * @brief High-level facade for the music library database.
@@ -50,7 +51,6 @@ namespace ao::library
     MusicLibrary& operator=(MusicLibrary&&) noexcept;
 
     ReadTransaction readTransaction() const;
-    WriteTransaction writeTransaction(WriteTransaction::Options options = {});
     std::uint64_t libraryRevision(ReadTransaction const& transaction) const;
     std::uint64_t libraryRevision(WriteTransaction const& transaction) const;
 
@@ -68,13 +68,18 @@ namespace ao::library
     MetadataHeader metadataHeader() const;
 
     std::filesystem::path const& rootPath() const;
+    std::filesystem::path const& databasePath() const;
 
   private:
     MusicLibrary() = default;
 
     Result<> initialize(std::filesystem::path musicRoot, std::filesystem::path databasePath, Options options);
+    WriteTransaction beginWriteTransaction(WriteTransaction::Options options,
+                                           std::shared_ptr<void const> writerSessionAnchorPtr);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    friend class WritableMusicLibrary;
   };
 } // namespace ao::library

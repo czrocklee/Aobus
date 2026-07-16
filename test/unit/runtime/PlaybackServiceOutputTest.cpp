@@ -95,7 +95,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService output device - device notification auto-configures output device before first play",
             "[runtime][unit][playback][output]")
   {
-    // A harness receives its first device notification just before the play
+    // A fixture receives its first device notification just before the play
     // request; the notification auto-selects the first available output device.
     auto fixture = PlaybackFixture<InlineExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);

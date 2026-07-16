@@ -51,7 +51,7 @@ namespace ao::rt
     }
   } // namespace
 
-  SmartListEvaluator::SmartListEvaluator(library::MusicLibrary& ml)
+  SmartListEvaluator::SmartListEvaluator(library::MusicLibrary const& ml)
     : _ml{ml}
   {
   }

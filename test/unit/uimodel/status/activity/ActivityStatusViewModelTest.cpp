@@ -2,12 +2,13 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
-#include <ao/async/Task.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
@@ -17,6 +18,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <utility>
 #include <vector>
 
@@ -88,7 +90,7 @@ namespace ao::uimodel::test
       REQUIRE(latest.detail.optLibraryTask);
       CHECK(latest.detail.optLibraryTask->message == "Updating: status-progress.flac");
 
-      viewModel.handleLibraryTaskCompleted(4);
+      viewModel.handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted{.affectedCount = 4});
 
       CHECK(latest.compact.kind == ActivityStatusKind::Success);
       CHECK(latest.compact.text == "Scan complete: 4 tracks added");
@@ -118,17 +120,15 @@ namespace ao::uimodel::test
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto executor = rt::test::InlineExecutor{};
     auto runtime = async::Runtime{executor};
-    auto taskService = rt::LibraryTaskService{runtime, libraryFixture.library(), changes};
-    auto applyTask = [](rt::LibraryTaskService* service) -> async::Task<Result<rt::ScanApplyResult>>
-    {
-      auto plan = rt::ScanPlan{};
-      plan.items.push_back(rt::ScanItem{.uri = "file:///fake/first.flac",
-                                        .fullPath = "/fake/first.flac",
-                                        .classification = rt::ScanClassification::New});
-      co_return co_await service->applyScanPlanAsync(std::move(plan));
-    };
+    auto runtimeLibrary = rt::Library{runtime, libraryFixture.library(), changes};
+    auto& taskService = runtimeLibrary.taskService();
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const targetFile = libraryFixture.root() / "first.flac";
+    std::filesystem::copy_file(sourceFile, targetFile);
+    auto plan = rt::LibraryScan{libraryFixture.library()}.buildPlan().value();
+    std::filesystem::remove(targetFile);
 
-    auto const result = runtime.spawn(applyTask(&taskService)).get();
+    auto const result = runtime.spawn(taskService.applyScanPlanAsync(std::move(plan))).get();
 
     REQUIRE(result);
     CHECK(result->failureCount == 1);
@@ -148,7 +148,7 @@ namespace ao::uimodel::test
     CHECK(progressView->compact.text == "Updating library");
     REQUIRE(progressView->detail.optLibraryTask);
     CHECK(progressView->detail.optLibraryTask->message == "Updating: first.flac");
-    CHECK(latest.compact.kind == ActivityStatusKind::Success);
-    CHECK(latest.compact.text == "Library is up to date");
+    CHECK(latest.compact.kind == ActivityStatusKind::Idle);
+    CHECK(latest.compact.text.empty());
   }
 } // namespace ao::uimodel::test

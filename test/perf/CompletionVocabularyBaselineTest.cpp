@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/LibraryMutationService.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/library/DictionaryStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
@@ -70,9 +72,7 @@ namespace ao::rt::test
       };
     }
 
-    VocabularyTiming measureVocabularyRebuilds(CompletionService& service,
-                                               LibraryChanges& changes,
-                                               std::uint64_t& libraryRevision)
+    VocabularyTiming measureVocabularyRebuilds(CompletionService& service, LibraryMutationService& mutationService)
     {
       auto aggregateSamples = std::vector<std::int64_t>{};
       auto tagSamples = std::vector<std::int64_t>{};
@@ -101,7 +101,8 @@ namespace ao::rt::test
 
       for (std::size_t run = 0; run <= kMeasuredRuns; ++run)
       {
-        changes.publish(LibraryChangeSet{.libraryRevision = ++libraryRevision, .libraryReset = true});
+        auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+        REQUIRE(mutation.commit(LibraryChangeSet{.libraryReset = true}));
         auto const [currentAggregateSize, aggregateElapsed] = timedSize(
           [&]
           {
@@ -225,9 +226,11 @@ namespace ao::rt::test
     }
 
     auto changes = LibraryChanges{};
+    auto executor = InlineExecutor{};
+    auto mutationService =
+      LibraryMutationService{executor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto service = CompletionService{libraryFixture.library(), changes};
-    std::uint64_t libraryRevision = 0;
-    auto const vocabulary = measureVocabularyRebuilds(service, changes, libraryRevision);
+    auto const vocabulary = measureVocabularyRebuilds(service, mutationService);
 
     APP_LOG_INFO("=== Shared completion vocabulary snapshot: {} tracks ===", kTrackCount);
     APP_LOG_INFO("  rebuild + aggregate: median/p95 {} / {} us, {} values from {} dictionary entries",

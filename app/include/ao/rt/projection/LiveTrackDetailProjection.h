@@ -30,7 +30,7 @@ namespace ao::rt
   public:
     LiveTrackDetailProjection(DetailTarget target,
                               ViewService& views,
-                              library::MusicLibrary& library,
+                              library::MusicLibrary const& library,
                               WorkspaceService& workspace,
                               LibraryChanges const& changes);
     ~LiveTrackDetailProjection() override;

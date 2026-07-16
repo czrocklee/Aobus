@@ -6,7 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <glibmm/main.h>
 #include <sigc++/functors/slot.h>
@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -27,9 +28,8 @@ namespace ao::gtk::layout
     constexpr auto kUndoTimeout = std::chrono::milliseconds{5000};
   }
 
-  TrackDetailUndoController::TrackDetailUndoController(rt::LibraryWriter& writer,
-                                                       TrackDetailUndoTimeoutScheduler timeoutScheduler)
-    : _writer{writer}, _timeoutScheduler{std::move(timeoutScheduler)}
+  TrackDetailUndoController::TrackDetailUndoController(TrackDetailUndoTimeoutScheduler timeoutScheduler)
+    : _timeoutScheduler{std::move(timeoutScheduler)}
   {
   }
 
@@ -43,12 +43,13 @@ namespace ao::gtk::layout
     return _optPendingCustomMetadataUndo;
   }
 
-  void TrackDetailUndoController::presentCustomMetadataDeletedUndo(std::string key,
-                                                                   std::vector<TrackId> trackIds,
-                                                                   std::string value)
+  void TrackDetailUndoController::presentCustomMetadataDeletedUndo(
+    std::string key,
+    std::string value,
+    std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr)
   {
-    _optPendingCustomMetadataUndo =
-      TrackDetailCustomMetadataUndo{.key = std::move(key), .trackIds = std::move(trackIds), .value = std::move(value)};
+    _optPendingCustomMetadataUndo = TrackDetailCustomMetadataUndo{
+      .key = std::move(key), .value = std::move(value), .sessionPtr = std::move(sessionPtr)};
     resetTimer();
     _changed.emit();
   }
@@ -61,10 +62,10 @@ namespace ao::gtk::layout
       return;
     }
 
-    auto const overlaps =
-      std::ranges::any_of(trackIds,
-                          [this](TrackId const trackId)
-                          { return std::ranges::contains(_optPendingCustomMetadataUndo->trackIds, trackId); });
+    auto const overlaps = std::ranges::any_of(
+      trackIds,
+      [this](TrackId const trackId)
+      { return std::ranges::contains(_optPendingCustomMetadataUndo->sessionPtr->targetIds(), trackId); });
 
     if (overlaps)
     {
@@ -91,14 +92,25 @@ namespace ao::gtk::layout
       return;
     }
 
-    auto const pendingUndo = *_optPendingCustomMetadataUndo;
+    auto& pendingUndo = *_optPendingCustomMetadataUndo;
 
     auto patch = rt::MetadataPatch{};
     patch.customUpdates[pendingUndo.key] = pendingUndo.value;
 
-    if (auto const replyResult = _writer.updateMetadata(pendingUndo.trackIds, patch); !replyResult)
+    auto const replyResult = pendingUndo.sessionPtr->submitMetadata(patch);
+
+    if (!replyResult)
     {
       APP_LOG_ERROR("Metadata undo failed: {}", replyResult.error().message);
+      clear();
+      return;
+    }
+
+    if (replyResult->status != uimodel::TrackAuthoringSubmitStatus::Applied &&
+        replyResult->status != uimodel::TrackAuthoringSubmitStatus::NoOp)
+    {
+      APP_LOG_ERROR("Metadata undo is stale or unavailable");
+      clear();
       return;
     }
 

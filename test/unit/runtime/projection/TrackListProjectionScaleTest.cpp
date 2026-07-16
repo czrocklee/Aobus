@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
@@ -45,7 +46,7 @@ namespace ao::rt::test
     int const kTrackCount = 10000;
     auto addTracks = [&lib](std::int32_t count, auto&& makeSpec)
     {
-      auto transaction = lib.writeTransaction();
+      auto transaction = library::test::writeTransaction(lib);
       auto writer = lib.tracks().writer(transaction);
       auto result = std::vector<TrackId>{};
       result.reserve(static_cast<std::size_t>(count));

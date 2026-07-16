@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/uimodel/library/list/SmartListDraft.h>
 #include <ao/uimodel/library/list/SmartListPreview.h>
 
@@ -16,14 +16,14 @@ namespace ao::uimodel
     return !name.empty() && (status != SmartListPreviewStatus::InvalidExpression);
   }
 
-  rt::LibraryWriter::ListDraft makeSmartListDraft(ListId parentListId,
-                                                  ListId editListId,
-                                                  std::string const& name,
-                                                  std::string const& description,
-                                                  std::string const& expression)
+  rt::LibraryListDraft makeSmartListDraft(ListId parentListId,
+                                          ListId editListId,
+                                          std::string const& name,
+                                          std::string const& description,
+                                          std::string const& expression)
   {
-    auto draft = rt::LibraryWriter::ListDraft{};
-    draft.kind = rt::LibraryWriter::ListKind::Smart;
+    auto draft = rt::LibraryListDraft{};
+    draft.kind = rt::LibraryListKind::Smart;
     draft.parentId = parentListId;
     draft.listId = editListId;
     draft.name = name;

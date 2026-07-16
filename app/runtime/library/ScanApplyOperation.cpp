@@ -4,16 +4,21 @@
 #include "ScanApplyOperation.h"
 
 #include "MediaTrack.h"
+#include "TrackBuilderSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/MetadataLayout.h>
+#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
+#include <ao/library/WritableMusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 
@@ -21,8 +26,8 @@
 #include <cstdint>
 #include <expected>
 #include <functional>
+#include <memory>
 #include <optional>
-#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -31,6 +36,17 @@
 
 namespace ao::rt
 {
+  struct ScanApplyOperation::PreparedScanItem final
+  {
+    explicit PreparedScanItem(library::TrackBuilder const& source, std::optional<AudioFingerprint> optFingerprintValue)
+      : builder{source}, optFingerprint{std::move(optFingerprintValue)}
+    {
+    }
+
+    TrackBuilderSnapshot builder;
+    std::optional<AudioFingerprint> optFingerprint;
+  };
+
   ScanApplyOperation::ScanApplyOperation(library::MusicLibrary& ml,
                                          ScanPlan plan,
                                          std::move_only_function<void(ScanApplyProgress const& progress)> progress,
@@ -44,6 +60,8 @@ namespace ao::rt
   {
   }
 
+  ScanApplyOperation::~ScanApplyOperation() = default;
+
   void ScanApplyOperation::reportFailure(std::string_view uri, std::string_view stage, std::string_view message)
   {
     ++_result.failureCount;
@@ -56,20 +74,339 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::run(std::stop_token stopToken)
   {
-    auto transaction = _ml.writeTransaction();
+    auto writableResult = library::WritableMusicLibrary::acquire(_ml);
+
+    if (!writableResult)
+    {
+      return std::unexpected{writableResult.error()};
+    }
+
+    return runOffline(*writableResult, stopToken);
+  }
+
+  Result<ScanApplyResult> ScanApplyOperation::runOffline(library::WritableMusicLibrary& writableLibrary,
+                                                         std::stop_token stopToken)
+  {
+    if (&writableLibrary.library() != &_ml)
+    {
+      return makeError(Error::Code::InvalidInput, "Writable library does not match the scan apply operation");
+    }
+
+    if (_state == State::Created)
+    {
+      if (auto prepareResult = prepare(stopToken); !prepareResult)
+      {
+        return prepareResult;
+      }
+    }
+
+    if (_cancelled)
+    {
+      async::throwOperationCancelled();
+    }
+
+    if (_state == State::Prepared)
+    {
+      if (auto revalidationResult = revalidatePreparedFiles(stopToken); !revalidationResult)
+      {
+        return revalidationResult;
+      }
+    }
+
+    if (_cancelled)
+    {
+      async::throwOperationCancelled();
+    }
+
+    if (_state == State::Terminal)
+    {
+      return _result;
+    }
+
+    if (_state != State::Revalidated)
+    {
+      return makeError(Error::Code::InvalidState, "Scan apply operation is not ready for database mutation");
+    }
+
+    auto transaction = writableLibrary.writeTransaction();
+    auto result = apply(transaction, stopToken);
+
+    if (!result)
+    {
+      return result;
+    }
+
+    if (_cancelled)
+    {
+      async::throwOperationCancelled();
+    }
+
+    if (!transactionShouldCommit())
+    {
+      return result;
+    }
+
+    result->libraryRevision = _ml.libraryRevision(transaction);
+
+    if (auto commitResult = transaction.commit(); !commitResult)
+    {
+      result->libraryRevision = 0;
+      result->insertedIds.clear();
+      result->mutatedIds.clear();
+      result->relinkedIds.clear();
+      result->missingCount = 0;
+      return std::unexpected{commitResult.error()};
+    }
+
+    return result;
+  }
+
+  Result<ScanApplyResult> ScanApplyOperation::prepare(std::stop_token stopToken)
+  {
+    if (_state != State::Created)
+    {
+      return makeError(Error::Code::InvalidState, "Scan apply operation is already prepared");
+    }
+
+    if (auto const bindingResult = validatePlan(); !bindingResult)
+    {
+      return std::unexpected{bindingResult.error()};
+    }
+
+    _preparedItems.resize(_plan.size());
+
+    for (std::size_t i = 0; i < _plan.size(); ++i)
+    {
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
+        break;
+      }
+
+      auto const& item = _plan.items()[i];
+      reportProgress(item, i, ScanApplyProgressStage::Updating, 0.0);
+
+      if (item.classification == ScanClassification::Error)
+      {
+        reportFailure(item.uri, "scan", item.errorMessage);
+        continue;
+      }
+
+      if (item.classification == ScanClassification::Missing || item.classification == ScanClassification::Unchanged)
+      {
+        continue;
+      }
+
+      auto optMediaTrack = loadTrackBuilder(item);
+
+      if (!optMediaTrack)
+      {
+        continue;
+      }
+
+      auto optFingerprint = cachedAudioFingerprint(item);
+
+      if (!optFingerprint && shouldFingerprintDuringPreparation(item))
+      {
+        optFingerprint = fingerprintAudioPayload(item, optMediaTrack->file(), i, true, stopToken);
+      }
+
+      if (_cancelled || stopToken.stop_requested())
+      {
+        _cancelled = true;
+        break;
+      }
+
+      if (!optFingerprint && isFingerprintRequiredForApply(item))
+      {
+        continue;
+      }
+
+      _preparedItems[i] = std::make_unique<PreparedScanItem>(optMediaTrack->builder(), std::move(optFingerprint));
+    }
+
+    if (_cancelled)
+    {
+      _result.failureCount = 0;
+      _state = State::Terminal;
+    }
+    else
+    {
+      _state = State::Prepared;
+    }
+
+    return _result;
+  }
+
+  Result<> ScanApplyOperation::validatePlan() const
+  {
+    if (!_plan._executable)
+    {
+      return makeError(Error::Code::InvalidState, "Scan plan has already been consumed");
+    }
+
+    auto const transaction = _ml.readTransaction();
+    auto const headerResult = _ml.metadata().load(transaction);
+
+    if (!headerResult)
+    {
+      return std::unexpected{headerResult.error()};
+    }
+
+    if (headerResult->libraryId != _plan._libraryId)
+    {
+      return makeError(Error::Code::InvalidInput, "Scan plan belongs to another library");
+    }
+
+    if (_ml.libraryRevision(transaction) != _plan._libraryRevision)
+    {
+      return makeError(Error::Code::Conflict, "Library changed since the scan plan was built");
+    }
+
+    return {};
+  }
+
+  Result<ScanApplyResult> ScanApplyOperation::revalidatePreparedFiles(std::stop_token stopToken)
+  {
+    if (_state != State::Prepared)
+    {
+      return makeError(Error::Code::InvalidState, "Scan apply operation must be prepared before file revalidation");
+    }
+
+    for (std::size_t i = 0; i < _plan.size(); ++i)
+    {
+      auto const& item = _plan.items()[i];
+
+      if (item.classification != ScanClassification::Moved)
+      {
+        continue;
+      }
+
+      if (stopToken.stop_requested())
+      {
+        _cancelled = true;
+        break;
+      }
+
+      auto const* const preparedItem = _preparedItems[i].get();
+
+      if (preparedItem == nullptr || !preparedItem->optFingerprint)
+      {
+        _abortTransaction = true;
+        break;
+      }
+
+      auto fileResult = media::file::File::open(item.fullPath);
+
+      if (!fileResult)
+      {
+        reportFailure(item.uri, "open moved destination for", fileResult.error().message);
+        _abortTransaction = true;
+        break;
+      }
+
+      auto const optLiveFingerprint = fingerprintAudioPayload(item, *fileResult, i, false, stopToken);
+
+      if (_cancelled)
+      {
+        break;
+      }
+
+      auto const& preparedFingerprint = *preparedItem->optFingerprint;
+
+      if (!optLiveFingerprint || optLiveFingerprint->payloadLength != preparedFingerprint.payloadLength ||
+          optLiveFingerprint->signature != preparedFingerprint.signature ||
+          optLiveFingerprint->payloadLength != item.audioPayloadLength ||
+          optLiveFingerprint->signature != item.audioSignature)
+      {
+        if (optLiveFingerprint)
+        {
+          reportFailure(item.uri, "relink", "audio identity changed after preparation");
+        }
+
+        _abortTransaction = true;
+        break;
+      }
+    }
+
+    if (_cancelled)
+    {
+      _result.insertedIds.clear();
+      _result.mutatedIds.clear();
+      _result.relinkedIds.clear();
+      _result.missingCount = 0;
+      _result.failureCount = 0;
+      _state = State::Terminal;
+    }
+    else if (_abortTransaction)
+    {
+      _state = State::Terminal;
+    }
+    else
+    {
+      _state = State::Revalidated;
+    }
+
+    return _result;
+  }
+
+  Result<ScanApplyResult> ScanApplyOperation::apply(library::WriteTransaction& transaction, std::stop_token stopToken)
+  {
+    if (_state != State::Revalidated)
+    {
+      return makeError(
+        Error::Code::InvalidState, "Scan apply operation must be revalidated exactly once before database mutation");
+    }
+
+    _state = State::Applied;
+
+    if (_cancelled)
+    {
+      return _result;
+    }
+
+    if (_abortTransaction)
+    {
+      return _result;
+    }
+
+    if (!_plan._executable)
+    {
+      return makeError(Error::Code::InvalidState, "Scan plan has already been consumed");
+    }
+
+    auto const headerResult = _ml.metadata().load(transaction);
+
+    if (!headerResult)
+    {
+      return std::unexpected{headerResult.error()};
+    }
+
+    if (headerResult->libraryId != _plan._libraryId)
+    {
+      return makeError(Error::Code::InvalidInput, "Scan plan belongs to another library");
+    }
+
+    auto const transactionRevision = _ml.libraryRevision(transaction);
+
+    if (transactionRevision == 0 || transactionRevision - 1U != _plan._libraryRevision)
+    {
+      return makeError(Error::Code::Conflict, "Library changed since the scan plan was built");
+    }
+
     auto trackWriter = _ml.tracks().writer(transaction);
     auto manifestWriter = _ml.manifest().writer(transaction);
     auto const& dictionary = _ml.dictionary();
 
-    for (std::size_t i = 0; i < _plan.items.size(); ++i)
+    for (std::size_t i = 0; i < _plan.size(); ++i)
     {
       if (stopToken.stop_requested())
       {
-        _result.cancelled = true;
+        _cancelled = true;
         break;
       }
 
-      applyScanItem(i, transaction, trackWriter, manifestWriter, dictionary, stopToken);
+      applyScanItem(i, _preparedItems[i].get(), transaction, trackWriter, manifestWriter, dictionary);
 
       if (_abortTransaction)
       {
@@ -77,13 +414,12 @@ namespace ao::rt
       }
     }
 
-    if (_result.cancelled || stopToken.stop_requested())
+    if (_cancelled || stopToken.stop_requested())
     {
-      _result.cancelled = true;
+      _cancelled = true;
       _result.insertedIds.clear();
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
-      _result.relinkedCount = 0;
       _result.missingCount = 0;
       _result.failureCount = 0;
       return _result;
@@ -94,38 +430,38 @@ namespace ao::rt
       _result.insertedIds.clear();
       _result.mutatedIds.clear();
       _result.relinkedIds.clear();
-      _result.relinkedCount = 0;
       _result.missingCount = 0;
       return _result;
-    }
-
-    _result.libraryRevision = _ml.libraryRevision(transaction);
-
-    if (auto result = transaction.commit(); !result)
-    {
-      // The transaction did not persist, so nothing was actually processed.
-      _result.libraryRevision = 0;
-      _result.insertedIds.clear();
-      _result.mutatedIds.clear();
-      _result.relinkedIds.clear();
-      _result.relinkedCount = 0;
-      _result.missingCount = 0;
-      return std::unexpected{result.error()};
     }
 
     return _result;
   }
 
+  bool ScanApplyOperation::cancelled() const noexcept
+  {
+    return _cancelled;
+  }
+
+  bool ScanApplyOperation::readyForMutation() const noexcept
+  {
+    return _state == State::Revalidated && !_abortTransaction && !_cancelled;
+  }
+
+  bool ScanApplyOperation::transactionShouldCommit() const noexcept
+  {
+    return _state == State::Applied && !_abortTransaction && !_cancelled &&
+           (!_result.insertedIds.empty() || !_result.mutatedIds.empty() || !_result.relinkedIds.empty() ||
+            _result.missingCount != 0);
+  }
+
   void ScanApplyOperation::applyScanItem(std::size_t itemIndex,
+                                         PreparedScanItem const* preparedItem,
                                          library::WriteTransaction& transaction,
                                          library::TrackStore::Writer& trackWriter,
                                          library::FileManifestStore::Writer& manifestWriter,
-                                         library::DictionaryStore const& dictionary,
-                                         std::stop_token stopToken)
+                                         library::DictionaryStore const& dictionary)
   {
-    auto const& item = _plan.items[itemIndex];
-
-    reportProgress(item, itemIndex, ScanApplyProgressStage::Updating, 0.0);
+    auto const& item = _plan.items()[itemIndex];
 
     if (skipNonActionableItem(item))
     {
@@ -138,27 +474,13 @@ namespace ao::rt
       return;
     }
 
-    auto optLoad = loadTrackBuilder(item);
-
-    if (!optLoad)
+    if (preparedItem == nullptr)
     {
       return;
     }
 
-    auto& mediaTrack = *optLoad;
-    auto& builder = mediaTrack.builder();
-    auto optFingerprint = cachedAudioFingerprint(item);
-
-    if (!optFingerprint && shouldFingerprintDuringApply(item))
-    {
-      optFingerprint = fingerprintAudioPayload(item, mediaTrack.file(), itemIndex, stopToken);
-    }
-
-    if (!optFingerprint && isFingerprintRequiredForApply(item))
-    {
-      return;
-    }
-
+    auto builder = preparedItem->builder.makeBuilder();
+    auto const& optFingerprint = preparedItem->optFingerprint;
     builder.property().uri(item.uri);
 
     if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
@@ -200,7 +522,6 @@ namespace ao::rt
 
     if (item.classification == ScanClassification::Error)
     {
-      reportFailure(item.uri, "scan", item.errorMessage);
       return true;
     }
 
@@ -273,7 +594,7 @@ namespace ao::rt
     return AudioFingerprint{.signature = item.audioSignature, .payloadLength = item.audioPayloadLength};
   }
 
-  bool ScanApplyOperation::shouldFingerprintDuringApply(ScanItem const& item) const noexcept
+  bool ScanApplyOperation::shouldFingerprintDuringPreparation(ScanItem const& item) const noexcept
   {
     switch (item.classification)
     {
@@ -307,6 +628,7 @@ namespace ao::rt
     ScanItem const& item,
     media::file::File const& file,
     std::size_t itemIndex,
+    bool const publishProgress,
     std::stop_token stopToken)
   {
     auto payloadResult = file.audioPayload();
@@ -317,15 +639,19 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    auto optIdentity = library::readAudioIdentity(
-      payloadResult->bytes,
-      [this, &item, itemIndex](double fraction)
-      { reportProgress(item, itemIndex, ScanApplyProgressStage::Fingerprinting, fraction); },
-      stopToken);
+    auto progress = library::AudioIdentityProgressCallback{};
+
+    if (publishProgress)
+    {
+      progress = [this, &item, itemIndex](double fraction)
+      { reportProgress(item, itemIndex, ScanApplyProgressStage::Fingerprinting, fraction); };
+    }
+
+    auto optIdentity = library::readAudioIdentity(payloadResult->bytes, std::move(progress), stopToken);
 
     if (!optIdentity)
     {
-      _result.cancelled = true;
+      _cancelled = true;
       return std::nullopt;
     }
 
@@ -454,7 +780,6 @@ namespace ao::rt
     }
 
     _result.relinkedIds.push_back(item.trackId);
-    ++_result.relinkedCount;
     return true;
   }
 
@@ -578,10 +903,5 @@ namespace ao::rt
     }
 
     return true;
-  }
-
-  std::size_t ScanApplyOperation::fileCount() const
-  {
-    return _plan.items.size();
   }
 } // namespace ao::rt

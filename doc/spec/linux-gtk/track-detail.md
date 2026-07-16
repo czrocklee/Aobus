@@ -18,7 +18,8 @@ Declarative shell types place `track.detailScope`, `track.fieldGrid`, `track.det
 GTK implementations under `app/linux-gtk/layout/component/track/`, `app/linux-gtk/tag/`, and `app/linux-gtk/track/` adapt one runtime `TrackDetailProjection` and UIModel policies.
 
 The detail scope owns a projection subscription and one undo controller for its descendant components.
-The field grid and tag editor borrow that scope; they do not construct storage or a competing detail snapshot.
+The field grid and tag editor borrow that scope and create UIModel authoring sessions from its exact selected ids when an edit begins.
+They do not construct storage, call `LibraryWriter`, or create a competing detail snapshot.
 
 ## Terminology
 
@@ -37,15 +38,16 @@ The field grid and tag editor borrow that scope; they do not construct storage o
 - Only an explicit edit button begins built-in/custom inline editing; value text is not a hidden activation target.
 - One detail editor is active at a time; opening another commits the previous editor first.
 - Enter and outside click commit; Escape cancels; literal `<Multiple Values>` is not saved.
+- A session binds targets when editing begins; selection/revision change, maintenance, or runtime fault makes it stale and prevents commit.
 - Custom deletion undo is offered only when the prior value is unambiguous across the complete selection.
-- Detail selection change, timeout, successful undo, or overlapping rewrite clears pending undo.
+- Detail selection change, timeout, successful undo, stale undo, or overlapping rewrite clears pending undo.
 - The field grid, tag flow, and cover slot report compressible horizontal minima and cannot widen the collapsible detail pane from content.
 - Invalid UTF-8 is replaced for GTK/Pango display without rewriting stored bytes until the user commits an edit.
 
 ## State model
 
 The field grid retains expanded/collapsed section state, show-empty state, generated row/editor objects, current snapshot, custom-add popover state, and one active-editor coordinator.
-The undo controller retains one key, selected id vector, unambiguous prior value, and five-second timer.
+The undo controller retains one key, unambiguous prior value, the applied edit's next-revision `TrackAuthoringSession`, and a five-second timer.
 
 The tag editor retains current and suggested chip models, open add/search state, filter text, top-level outside-click watch, and theme-derived inter-chip gap.
 Its child order is current tags, suggested tags, then the persistent add trigger/entry.
@@ -63,8 +65,13 @@ Editable rows reveal edit controls on hover or keyboard focus.
 Custom rows additionally reveal a delete action and show a warning icon when the key is missing from part of the selection.
 The add action opens a key/value popover and rejects duplicate or reserved keys through UIModel validation.
 
+Opening a built-in or custom editor captures the current detail snapshot and starts a session for that snapshot's exact target order.
+Commit submits only through that retained session.
+If the authoritative library revision changes while the editor is open, GTK restores authoritative display state and requires a new edit rather than rebinding the existing text.
+
 Deleting an undo-eligible custom key publishes pending undo in sibling `track.detailUndoBar` for five seconds.
-Undo restores the key/value to the captured target ids through `LibraryWriter`.
+Undo restores the key/value through the session returned by the delete commit.
+An intervening effective commit makes that session stale, so undo cannot overwrite newer library state.
 
 ### Sections and layout
 
@@ -88,9 +95,12 @@ While the entry is open, current chips are hidden and suggestions are filtered b
 Each visible child receives its own natural width clamped to the line, so a wide entry does not stretch adjacent chips.
 Classic uses a dense inter-chip gap and Modern a wider gap; intra-chip spacing is independent.
 
+The tag controller starts one authoring session for the exact selection it displays.
+Every add/remove event must still match those session targets; selection change or stale availability closes the edit path rather than applying to a new selection.
+
 ## Failure and cancellation
 
-Rejected runtime edits leave the authoritative snapshot unchanged and surface their workflow error through the frontend's reporting path.
+Rejected, missing, stale, and unavailable runtime edits leave the authoritative snapshot unchanged and surface their workflow state through the frontend's reporting path.
 Closing/canceling an entry before submission discards its draft.
 Outside-click watches exist only while an editor/add entry is active and are removed on close/destruction.
 Undo failure clears no committed library mutation and remains subject to runtime writer reporting.
@@ -114,6 +124,7 @@ The detail cover slot is a deterministic responsive square capped by its target 
 - [`TrackDetailScope.cpp`](../../../app/linux-gtk/layout/component/track/TrackDetailScope.cpp) owns snapshot and undo scope.
 - [`TrackFieldGridComponent.cpp`](../../../app/linux-gtk/layout/component/track/TrackFieldGridComponent.cpp) owns field-grid composition and commands.
 - [`TrackDetailUndo.cpp`](../../../app/linux-gtk/layout/component/track/TrackDetailUndo.cpp) owns pending undo and timeout.
+- [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns the target/revision binding used by GTK editors and undo.
 - [`TagEditor.cpp`](../../../app/linux-gtk/tag/TagEditor.cpp) owns chip flow and add/search interaction.
 - [`TrackTagEditorComponent.cpp`](../../../app/linux-gtk/layout/component/track/TrackTagEditorComponent.cpp) binds tag editor to detail scope.
 - [`TrackCoverArtComponent.cpp`](../../../app/linux-gtk/layout/component/track/TrackCoverArtComponent.cpp) owns cover-slot adaptation.

@@ -4,6 +4,7 @@
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -38,7 +39,7 @@ namespace ao::uimodel::test
     SECTION("library completion is a transient success")
     {
       feedProjection.handleLibraryTaskProgress("Updating: track.flac", 0.8);
-      feedProjection.handleLibraryTaskCompleted(17, feed({}));
+      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(17), feed({}));
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Success);
@@ -55,7 +56,7 @@ namespace ao::uimodel::test
       feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{4});
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
 
-      feedProjection.handleLibraryTaskCompleted(9, currentFeed);
+      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), currentFeed);
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
@@ -71,11 +72,26 @@ namespace ao::uimodel::test
       auto const error = entry(rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", true);
       feedProjection.handleNotificationPosted(feed({error}), rt::NotificationId{15});
 
-      feedProjection.handleLibraryTaskCompleted(9, feed({}));
+      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), feed({}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Success);
       CHECK(feedProjection.viewState().compact.text == "Scan complete: 9 tracks added");
       CHECK(feedProjection.viewState().detail.items.empty());
+    }
+
+    SECTION("cancelled and failed tasks clear progress without projecting success")
+    {
+      for (auto const status : {rt::LibraryChanges::LibraryTaskCompletionStatus::CompletedWithIssues,
+                                rt::LibraryChanges::LibraryTaskCompletionStatus::Cancelled,
+                                rt::LibraryChanges::LibraryTaskCompletionStatus::Failed})
+      {
+        feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
+        feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(0, status), feed({}));
+
+        CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
+        CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
+        CHECK_FALSE(feedProjection.viewState().detail.hasActiveProgress);
+      }
     }
 
     SECTION("success and info do not override persistent warnings")

@@ -60,8 +60,11 @@ It does not own storage transactions, playback succession, audio control, runtim
 UIModel may resolve and complete quick-search text through runtime vocabulary ports, and may inspect a valid Smart List expression to recommend a presentation.
 Those are authoring and recommendation policies: UIModel does not evaluate membership or redefine query grammar.
 
-Metadata editors currently derive patches from a detail snapshot but submit only target ids and patch values; the runtime command does not carry the snapshot baseline or library generation.
-[RFC 0023](../rfc/0023-revision-bound-metadata-authoring.md) proposes the guarded authoring contract without moving storage transactions into UIModel.
+Metadata and tag editors use a platform-neutral `TrackAuthoringSession`.
+Session creation asks runtime to bind one exact target order to the current runtime instance and committed library revision.
+The session owns that evidence, draft submission state, and stale policy; it never owns a storage transaction and never silently rebinds a draft after a library change.
+Maintenance, runtime replacement, any intervening effective commit, or a rejected/missing target makes the corresponding edit non-committable.
+An applied submission receives evidence for the new committed revision, enabling a guarded follow-up edit or undo without weakening the original target set.
 
 The public namespace remains `ao::uimodel`; feature ownership is expressed by singular folders mirrored across public headers, sources, and tests.
 
@@ -74,8 +77,8 @@ The application shell architecture refines the layout document, action/component
 Presentation owns the semantic state that those shell components adapt and render.
 
 `MainWindow` owns the visible window composition.
-`MainWindowCoordinator` binds runtime/UIModel collaborators to that composition and remains an explicitly isolated migration seam for direct-library integration.
-The smart-list preview dialog is another current seam because it constructs runtime evaluator/source objects against `MusicLibrary`; this is localized behavior, not the normal widget boundary.
+`MainWindowCoordinator` binds runtime/UIModel collaborators to that composition.
+The smart-list preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryWriter` directly.
 
 ### TUI
 
@@ -98,6 +101,7 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 - UIModel depends on runtime interfaces and stable core value types, never platform UI libraries.
 - GTK and TUI may depend on runtime and UIModel and own all platform resources.
 - UIModel cannot include direct LMDB stores or audio player/engine/backend control headers.
+- GTK and TUI cannot call `LibraryWriter` directly; mutation events cross a UIModel workflow or another narrow semantic runtime surface.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
 - Interactive track-filter field selection, expression classification, live-value ranking, and safe insertion are one UIModel policy shared by GTK and TUI; runtime owns only vocabulary storage mechanics.
@@ -124,6 +128,16 @@ GTK/TUI input event
   -> runtime command or typed mutation request
 ```
 
+Metadata/tag authoring adds an explicit revision boundary:
+
+```text
+runtime projection target ids
+  -> UIModel TrackAuthoringSession binds (runtime instance, revision, exact ids)
+  -> GTK/TUI edits a local value
+  -> session submits a metadata/tag command with the retained binding
+  -> Applied + next binding | NoOp | Stale | Missing | Unavailable
+```
+
 Purely platform concerns, such as CSS application, popover dismissal, terminal hit regions, and native file selection, stay within the frontend.
 Purely structural layout concerns can travel through UIModel values, while GTK widget creation remains platform-owned.
 
@@ -145,13 +159,18 @@ A quick filter narrows the active membership while retaining the active presenta
 - Runtime snapshots remain the source of truth after a frontend rebuilds its widget tree or terminal frame.
 - UI-local persisted preferences influence presentation but do not replace canonical runtime state.
 - Layout component factories receive an explicit dependency bundle and runtime-state carrier rather than reaching through global frontend singletons.
-- Direct core-library access in current GTK migration seams is contained and cannot spread into ordinary widgets or UIModel.
+- Narrow GTK evaluator composition may borrow the const core-library view; committing authority remains inaccessible to GTK and UIModel.
+- An open authoring session never retargets when GTK recycles a row, selection changes, or a detail projection refreshes.
+- UIModel owns stale/submit/undo policy; frontend code owns only editor lifetime and rendering of those states.
 
 ## Failure, cancellation, and lifetime boundaries
 
 Runtime failures arrive as typed results, snapshots, or observational events.
 UIModel converts semantic state into platform-neutral display or action state but does not choose runtime recovery behavior.
 Frontends decide how and where to render an error and own cancellation tied to widget/dialog/terminal lifetime.
+
+`TrackAuthoringSession` observes authoring availability and becomes stale when its runtime instance/revision is no longer current.
+Runtime revalidates the same facts under writer ownership at submission, so delayed availability delivery cannot permit a stale commit.
 
 GTK main-window teardown releases controllers, widgets, view models, and subscriptions before the window-owned `AppRuntime` is destroyed.
 TUI releases its event/render collaborators before leaving the runtime scope.
@@ -165,6 +184,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
+- [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
 - [`MainWindow`](../../app/linux-gtk/app/MainWindow.h), [`MainWindowCoordinator`](../../app/linux-gtk/app/MainWindowCoordinator.h), and [`GtkUiDependencies`](../../app/linux-gtk/app/GtkUiDependencies.h) define GTK composition boundaries.
 - [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
@@ -175,6 +195,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 ## Test map
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
+- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding, stale-state, all-or-none outcomes, and guarded follow-up submissions.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.

@@ -15,12 +15,14 @@
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
+#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
@@ -31,7 +33,9 @@
 #include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
 #include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
 #include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
+#include <glibmm/main.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/grid.h>
@@ -39,11 +43,13 @@
 #include <gtkmm/sizegroup.h>
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
+#include <sigc++/adaptors/track_obj.h>
 
 #include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -128,8 +134,9 @@ namespace ao::gtk::layout
     public:
       TrackFieldGridComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _editCoordinator{ctx.parentWindow}
-        , _writer{ctx.runtime.library().writer()}
+        , _library{ctx.runtime.library()}
         , _completion{ctx.runtime.completion()}
+        , _notifications{ctx.runtime.notifications()}
         , _scope{ctx.detailScope}
         , _detailUndo{ctx.detailUndo}
         , _compositePrimarySizeGroupPtr{Gtk::SizeGroup::create(Gtk::SizeGroup::Mode::HORIZONTAL)}
@@ -468,7 +475,6 @@ namespace ao::gtk::layout
         configureValueBox(row.valueBox);
         configureValueEditor(row.valueEditor);
         row.valueEditor.add_css_class("ao-property-value");
-        _editCoordinator.registerEditor(row.valueEditor);
 
         if (isTechnical)
         {
@@ -478,16 +484,25 @@ namespace ao::gtk::layout
 
         if (row.editable)
         {
+          _editCoordinator.registerEditor(row.valueEditor, [this] { beginEditSession(); });
+
           if (rt::supportsTrackFieldValueCompletion(row.field))
           {
             row.valueEditor.setCompletionProvider(rt::MetadataValueCompleter{_completion, row.field}.asProvider());
           }
 
           row.valueEditor.add_css_class("ao-property-editable");
-          row.valueEditor.signalCommitted().connect([this, field = row.field] { handleBuiltInEdited(field); });
+          row.valueEditor.signalCommitted().connect(
+            [this, field = row.field]
+            {
+              handleBuiltInEdited(field);
+              clearEditSession();
+            });
           row.valueEditor.signalCanceled().connect(
             [this, field = row.field]
             {
+              clearEditSession();
+
               if (auto* row = findBuiltInRow(field); row != nullptr)
               {
                 if (_scope != nullptr)
@@ -527,20 +542,27 @@ namespace ao::gtk::layout
 
         auto bindEditor = [this](DetailFieldEditor& editor, bool isEditable, rt::TrackField field)
         {
-          _editCoordinator.registerEditor(editor);
-
           if (isEditable)
           {
+            _editCoordinator.registerEditor(editor, [this] { beginEditSession(); });
+
             if (rt::supportsTrackFieldValueCompletion(field))
             {
               editor.setCompletionProvider(rt::MetadataValueCompleter{_completion, field}.asProvider());
             }
 
             editor.add_css_class("ao-property-editable");
-            editor.signalCommitted().connect([this, field] { handleCompositeEdited(field); });
+            editor.signalCommitted().connect(
+              [this, field]
+              {
+                handleCompositeEdited(field);
+                clearEditSession();
+              });
             editor.signalCanceled().connect(
               [this, field]
               {
+                clearEditSession();
+
                 if (auto* row = findCompositeBuiltInRow(field); row != nullptr)
                 {
                   if (_scope != nullptr)
@@ -619,8 +641,7 @@ namespace ao::gtk::layout
             },
             .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
             { std::ignore = uimodel::writeTrackFieldPatch(patch, field, value); },
-            .commitPatch = [this, &snap](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
-            { return _writer.updateMetadata(snap.trackIds, patch); },
+            .session = _editSessionPtr.get(),
           });
 
         switch (result.outcome)
@@ -634,6 +655,11 @@ namespace ao::gtk::layout
           case uimodel::TrackInlineEditOutcome::MutationRejected:
             APP_LOG_ERROR("Metadata update failed: {}", result.statusMessage);
             return false;
+          case uimodel::TrackInlineEditOutcome::Stale:
+          case uimodel::TrackInlineEditOutcome::Missing:
+          case uimodel::TrackInlineEditOutcome::Unavailable:
+            APP_LOG_ERROR("Metadata update unavailable: {}", result.statusMessage);
+            return false;
         }
 
         return false;
@@ -643,12 +669,13 @@ namespace ao::gtk::layout
       {
         auto* row = findBuiltInRow(field);
 
-        if (row == nullptr || !row->editable || row->valueEditor.isEditing() || _scope == nullptr)
+        if (row == nullptr || !row->editable || row->valueEditor.isEditing() || !_optEditSnapshot ||
+            _editSessionPtr == nullptr)
         {
           return;
         }
 
-        auto const snap = _scope->snapshot();
+        auto const& snap = *_optEditSnapshot;
 
         if (snap.trackIds.empty())
         {
@@ -672,7 +699,7 @@ namespace ao::gtk::layout
       {
         auto* row = findCompositeBuiltInRow(field);
 
-        if (row == nullptr || _scope == nullptr)
+        if (row == nullptr || !_optEditSnapshot || _editSessionPtr == nullptr)
         {
           return;
         }
@@ -686,7 +713,7 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const& snap = _scope->snapshot();
+        auto const& snap = *_optEditSnapshot;
         auto const newValue = editor.text().raw();
 
         if (isProtectedFieldEditValue(field, snap, newValue, true))
@@ -755,11 +782,18 @@ namespace ao::gtk::layout
         configureValueEditor(row.editor);
         row.editor.add_css_class("ao-property-value");
         row.editor.add_css_class("ao-property-editable");
-        _editCoordinator.registerEditor(row.editor);
-        row.editor.signalCommitted().connect([this, key = row.key] { handleCustomEdited(key); });
+        _editCoordinator.registerEditor(row.editor, [this] { beginEditSession(); });
+        row.editor.signalCommitted().connect(
+          [this, key = row.key]
+          {
+            handleCustomEdited(key);
+            clearEditSession();
+          });
         row.editor.signalCanceled().connect(
           [this, key = row.key]
           {
+            clearEditSession();
+
             if (auto* row = findCustomRow(key); row != nullptr)
             {
               if (_scope != nullptr)
@@ -808,12 +842,12 @@ namespace ao::gtk::layout
       {
         auto* row = findCustomRow(key);
 
-        if (row == nullptr || row->editor.isEditing() || _scope == nullptr)
+        if (row == nullptr || row->editor.isEditing() || !_optEditSnapshot || _editSessionPtr == nullptr)
         {
           return;
         }
 
-        auto const snap = _scope->snapshot();
+        auto const& snap = *_optEditSnapshot;
         auto const newValue = row->editor.text().raw();
 
         if (uimodel::isProtectedTrackCustomMetadataEditText(newValue))
@@ -821,16 +855,14 @@ namespace ao::gtk::layout
           return;
         }
 
-        auto const replyResult =
-          _writer.updateMetadata(snap.trackIds, uimodel::makeCustomMetadataUpdatePatch(key, newValue));
+        auto const replyResult = _editSessionPtr->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, newValue));
 
-        if (!replyResult)
+        if (reportMetadataSubmissionFailure(replyResult, "Custom metadata update"))
         {
-          APP_LOG_ERROR("Custom metadata update failed: {}", replyResult.error().message);
           return;
         }
 
-        if (!replyResult->mutatedIds.empty() && _detailUndo != nullptr)
+        if (replyResult->status == uimodel::TrackAuthoringSubmitStatus::Applied && _detailUndo != nullptr)
         {
           _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
         }
@@ -846,17 +878,26 @@ namespace ao::gtk::layout
         auto const snap = _scope->snapshot();
 
         auto const optPrevValue = uimodel::undoValueForDeletedTrackCustomMetadata(snap, key);
-        auto const replyResult = _writer.updateMetadata(snap.trackIds, uimodel::makeCustomMetadataDeletePatch(key));
+        auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
 
-        if (!replyResult)
+        if (!sessionResult)
         {
-          APP_LOG_ERROR("Custom metadata delete failed: {}", replyResult.error().message);
+          APP_LOG_ERROR("Custom metadata delete could not start: {}", sessionResult.error().message);
+          _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
           return;
         }
 
-        if (!replyResult->mutatedIds.empty() && optPrevValue && _detailUndo != nullptr)
+        auto const replyResult = (*sessionResult)->submitMetadata(uimodel::makeCustomMetadataDeletePatch(key));
+
+        if (reportMetadataSubmissionFailure(replyResult, "Custom metadata delete"))
         {
-          _detailUndo->presentCustomMetadataDeletedUndo(std::move(key), snap.trackIds, *optPrevValue);
+          return;
+        }
+
+        if (replyResult->status == uimodel::TrackAuthoringSubmitStatus::Applied && optPrevValue &&
+            _detailUndo != nullptr)
+        {
+          _detailUndo->presentCustomMetadataDeletedUndo(std::move(key), *optPrevValue, std::move(*sessionResult));
         }
       }
 
@@ -877,21 +918,60 @@ namespace ao::gtk::layout
 
         _addMetadataButton.popdown();
 
-        auto const replyResult =
-          _writer.updateMetadata(snap.trackIds, uimodel::makeCustomMetadataUpdatePatch(key, value));
+        auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, snap.trackIds);
 
-        if (!replyResult)
+        if (!sessionResult)
         {
-          APP_LOG_ERROR("Custom metadata add failed: {}", replyResult.error().message);
+          APP_LOG_ERROR("Custom metadata add could not start: {}", sessionResult.error().message);
+          _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
           return;
         }
 
-        if (!replyResult->mutatedIds.empty() && _detailUndo != nullptr)
+        auto const replyResult = (*sessionResult)->submitMetadata(uimodel::makeCustomMetadataUpdatePatch(key, value));
+
+        if (reportMetadataSubmissionFailure(replyResult, "Custom metadata add"))
+        {
+          return;
+        }
+
+        if (replyResult->status == uimodel::TrackAuthoringSubmitStatus::Applied && _detailUndo != nullptr)
         {
           _detailUndo->clearIfAffectsCustomMetadata(key, snap.trackIds);
         }
 
         _addMetadataButton.clearInputs();
+      }
+
+      bool reportMetadataSubmissionFailure(Result<uimodel::TrackMetadataSubmitResult> const& result,
+                                           std::string_view operation)
+      {
+        auto message = std::string{};
+
+        if (!result)
+        {
+          message = result.error().message;
+        }
+        else
+        {
+          switch (result->status)
+          {
+            case uimodel::TrackAuthoringSubmitStatus::Applied:
+            case uimodel::TrackAuthoringSubmitStatus::NoOp: return false;
+            case uimodel::TrackAuthoringSubmitStatus::Stale:
+              message = "Library changed while this edit was open. Reload the value and try again.";
+              break;
+            case uimodel::TrackAuthoringSubmitStatus::Missing:
+              message = "One or more selected tracks no longer exist.";
+              break;
+            case uimodel::TrackAuthoringSubmitStatus::Unavailable:
+              message = "Library editing is currently unavailable.";
+              break;
+          }
+        }
+
+        APP_LOG_ERROR("{} failed: {}", operation, message);
+        _notifications.post(rt::NotificationSeverity::Error, message);
+        return true;
       }
 
       void buildGrid()
@@ -1043,6 +1123,61 @@ namespace ao::gtk::layout
         editor.set_size_request(0, -1);
       }
 
+      void beginEditSession()
+      {
+        clearEditSession();
+
+        if (_scope == nullptr)
+        {
+          return;
+        }
+
+        auto snapshot = _scope->snapshot();
+
+        if (snapshot.trackIds.empty())
+        {
+          return;
+        }
+
+        auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, snapshot.trackIds);
+
+        if (!sessionResult)
+        {
+          APP_LOG_ERROR("Metadata edit could not start: {}", sessionResult.error().message);
+          _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
+          return;
+        }
+
+        _optEditSnapshot.emplace(std::move(snapshot));
+        _editSessionPtr = std::move(*sessionResult);
+        _editSessionStateSubscription = _editSessionPtr->onStateChanged(
+          [this](uimodel::TrackAuthoringSessionState state)
+          {
+            if (state == uimodel::TrackAuthoringSessionState::Stale ||
+                state == uimodel::TrackAuthoringSessionState::Rejected)
+            {
+              Glib::signal_idle().connect_once(sigc::track_object(
+                [this]
+                {
+                  if (_editSessionPtr != nullptr &&
+                      (_editSessionPtr->state() == uimodel::TrackAuthoringSessionState::Stale ||
+                       _editSessionPtr->state() == uimodel::TrackAuthoringSessionState::Rejected))
+                  {
+                    _editCoordinator.cancelActive();
+                  }
+                },
+                _wrapper));
+            }
+          });
+      }
+
+      void clearEditSession()
+      {
+        _editSessionStateSubscription = {};
+        _editSessionPtr.reset();
+        _optEditSnapshot.reset();
+      }
+
       void buildAddMetadataUi()
       {
         _addMetadataButton.signalAddRequested().connect([this](std::string key, std::string value)
@@ -1098,10 +1233,14 @@ namespace ao::gtk::layout
 
       Gtk::Grid _grid;
       DetailEditCoordinator _editCoordinator;
-      rt::LibraryWriter& _writer;
+      rt::Library& _library;
       rt::CompletionService& _completion;
+      rt::NotificationService& _notifications;
       TrackDetailScope* _scope;
       TrackDetailUndoController* _detailUndo;
+      std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
+      rt::Subscription _editSessionStateSubscription;
+      std::optional<rt::TrackDetailSnapshot> _optEditSnapshot;
       std::deque<BuiltInRow> _metadataRows;
       std::deque<CompositeBuiltInRow> _compositeRows;
       std::deque<BuiltInRow> _technicalRows;

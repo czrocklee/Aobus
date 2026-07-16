@@ -16,11 +16,6 @@
 #include <string>
 #include <vector>
 
-namespace ao::library
-{
-  class MusicLibrary;
-}
-
 namespace ao::query
 {
   struct ExecutionPlan;
@@ -39,7 +34,7 @@ namespace ao::rt
   class SmartListSource final : public TrackSource
   {
   public:
-    SmartListSource(TrackSourceLease sourceLease, library::MusicLibrary& ml, SmartListEvaluator& evaluator);
+    SmartListSource(TrackSourceLease sourceLease, SmartListEvaluator& evaluator);
     ~SmartListSource() override;
 
     using TrackSource::notifyUpdated;
@@ -79,7 +74,6 @@ namespace ao::rt
     void replaceMembers(std::vector<TrackId> members);
 
     TrackSourceLease _sourceLease;
-    library::MusicLibrary& _ml;
     SmartListEvaluator* _evaluator = nullptr;
 
     IndexedTrackSequence _members;

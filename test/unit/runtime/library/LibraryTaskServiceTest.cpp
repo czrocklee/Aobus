@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
@@ -12,14 +13,18 @@
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <deque>
@@ -52,7 +57,9 @@ namespace ao::rt::test
 
       void dispatch(std::move_only_function<void()> task) override
       {
-        if (_dispatchCount.fetch_add(1) == 0)
+        // Resume admission, maintenance-state notification, and the injected
+        // progress fault run inline. Cleanup and maintenance exit stay queued.
+        if (_dispatchCount.fetch_add(1) < 3)
         {
           task();
           return;
@@ -120,18 +127,19 @@ namespace ao::rt::test
     void requireFaultCleanupOrdering(Future& future,
                                      std::stop_source& stopSource,
                                      FaultOrderingExecutor& executor,
-                                     std::vector<std::size_t>& completionCounts)
+                                     std::vector<LibraryChanges::LibraryTaskCompletionStatus>& completionStatuses)
     {
       requireInjectedFailure(future);
 
-      CHECK(completionCounts.empty());
-      CHECK(executor.dispatchCount() == 2);
-      REQUIRE(executor.queuedCount() == 1);
+      CHECK(completionStatuses.empty());
+      CHECK(executor.dispatchCount() == 5);
+      REQUIRE(executor.queuedCount() == 2);
 
       CHECK(stopSource.request_stop());
       REQUIRE(executor.runOne());
 
-      CHECK(completionCounts == std::vector<std::size_t>{0});
+      CHECK(completionStatuses == std::vector{LibraryChanges::LibraryTaskCompletionStatus::Failed});
+      REQUIRE(executor.runOne());
       CHECK(executor.queuedCount() == 0);
     }
 
@@ -159,9 +167,10 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
-    auto future = runtime.spawn(service.importLibraryAsync("/nonexistent_path_123.yaml"));
+    auto future = runtime.spawn(service.importLibraryAsync("/nonexistent_path_123.yaml", ImportMode::Restore));
     auto const result = future.get();
 
     REQUIRE_FALSE(result);
@@ -177,7 +186,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
     auto future = runtime.spawn(service.exportLibraryAsync("/root/nonexistent_path_123.yaml", ExportMode::Full));
     auto const result = future.get();
@@ -192,7 +202,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
     auto future = runtime.spawn(service.buildScanPlanAsync());
     auto const result = future.get();
@@ -206,9 +217,10 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
-    auto plan = ScanPlan{};
+    auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
     auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan)));
     auto const result = future.get();
 
@@ -228,7 +240,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
@@ -246,6 +259,64 @@ namespace ao::rt::test
     CHECK_FALSE(library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature()));
   }
 
+  TEST_CASE("LibraryTaskService - scan preparation keeps interactive authoring closed",
+            "[runtime][unit][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const authoringTarget = libraryFixture.addTrack("Before");
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
+    auto scanService = LibraryScan{libraryFixture.library()};
+    auto planResult = scanService.buildPlan();
+    REQUIRE(planResult);
+
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto bindingResult = runtimeLibrary.bindTrackTargets(std::array{authoringTarget});
+    REQUIRE(bindingResult);
+    auto preparationStarted = AsyncTestState<bool>::create(false);
+    auto releasePreparation = AsyncBarrier{};
+    auto future = runtime.spawn(runtimeLibrary.taskService().applyScanPlanAsync(
+      std::move(*planResult),
+      {},
+      {},
+      [&preparationStarted, &releasePreparation](ScanApplyProgress const&)
+      {
+        if (!preparationStarted.load())
+        {
+          preparationStarted.set(true);
+          releasePreparation.wait();
+        }
+      }));
+
+    auto const startedInTime = preparationStarted.waitUntil(true);
+
+    if (startedInTime)
+    {
+      auto const availability = runtimeLibrary.authoringAvailability();
+      CHECK(availability.state == LibraryAuthoringState::Maintenance);
+      CHECK(availability.maintenanceKind == LibraryMaintenanceKind::ScanApply);
+
+      auto authoringResult =
+        runtimeLibrary.writer().updateMetadata(*bindingResult, MetadataPatch{.optTitle = "Must not apply"});
+      REQUIRE(authoringResult);
+      CHECK(authoringResult->status == TrackAuthoringStatus::Unavailable);
+
+      auto listResult = runtimeLibrary.writer().createList(LibraryWriter::ListDraft{.name = "Blocked"});
+      REQUIRE_FALSE(listResult);
+      CHECK(listResult.error().code == Error::Code::InvalidState);
+    }
+
+    releasePreparation.release();
+    REQUIRE(startedInTime);
+    REQUIRE(future.get());
+    CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
+    runtime.requestStop();
+    runtime.join();
+  }
+
   TEST_CASE("LibraryTaskService - backfillAudioIdentityAsync fills pending rows", "[runtime][unit][library][task]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -255,7 +326,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
@@ -282,32 +354,31 @@ namespace ao::rt::test
             "[runtime][unit][library-task][scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const firstFile = libraryFixture.root() / "first.flac";
+    auto const secondFile = libraryFixture.root() / "second.flac";
+    std::filesystem::copy_file(sourceFile, firstFile);
+    std::filesystem::copy_file(sourceFile, secondFile);
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
     auto progressEvents = std::vector<LibraryChanges::LibraryTaskProgressUpdated>{};
     auto sub = changes.onLibraryTaskProgress([&](auto const& ev) { progressEvents.push_back(ev); });
+    auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
+    auto expectedNames = std::vector<std::string>{};
 
-    auto wrapperTask = [](LibraryTaskService* s) -> async::Task<Result<ScanApplyResult>>
+    for (auto const& item : plan.items())
     {
-      auto plan = ScanPlan{};
-      auto firstItem = ScanItem{};
-      firstItem.uri = "file:///fake/first.flac";
-      firstItem.fullPath = "/fake/first.flac";
-      firstItem.classification = ScanClassification::New;
-      plan.items.push_back(firstItem);
+      expectedNames.push_back(item.fullPath.filename().string());
+    }
 
-      auto secondItem = ScanItem{};
-      secondItem.uri = "file:///fake/second.flac";
-      secondItem.fullPath = "/fake/second.flac";
-      secondItem.classification = ScanClassification::New;
-      plan.items.push_back(secondItem);
-      co_return co_await s->applyScanPlanAsync(std::move(plan));
-    };
+    std::filesystem::remove(firstFile);
+    std::filesystem::remove(secondFile);
 
-    auto future = runtime.spawn(wrapperTask(&service));
+    auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan)));
     auto const result = future.get();
 
     REQUIRE(result);
@@ -317,9 +388,9 @@ namespace ao::rt::test
     CHECK(result->failureCount == 2);
 
     REQUIRE(progressEvents.size() == 2);
-    CHECK(progressEvents[0].message == "Updating: first.flac");
+    CHECK(progressEvents[0].message == "Updating: " + expectedNames[0]);
     CHECK(progressEvents[0].fraction == 0.0);
-    CHECK(progressEvents[1].message == "Updating: second.flac");
+    CHECK(progressEvents[1].message == "Updating: " + expectedNames[1]);
     CHECK(progressEvents[1].fraction == 0.5);
 
     for (auto const& event : progressEvents)
@@ -340,7 +411,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
 
     auto scanService = LibraryScan{libraryFixture.library()};
     auto plan = scanService.buildPlan().value();
@@ -348,6 +420,8 @@ namespace ao::rt::test
 
     auto sawFingerprinting = AsyncTestState<bool>::create(false);
     auto sawCancellation = AsyncTestState<bool>::create(false);
+    auto completionStatus = AsyncTestState<LibraryChanges::LibraryTaskCompletionStatus>::create(
+      LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
     auto sub = changes.onLibraryTaskProgress(
       [&](LibraryChanges::LibraryTaskProgressUpdated const& event)
       {
@@ -356,6 +430,8 @@ namespace ao::rt::test
           sawFingerprinting.set(true);
         }
       });
+    auto completionSub = changes.onLibraryTaskCompleted(
+      [completionStatus](LibraryChanges::LibraryTaskCompleted const& event) { completionStatus.set(event.status); });
 
     auto taskHandle = runtime.spawnCancellable(
       [service = &service, plan = std::move(plan), sawCancellation](std::stop_token const stopToken) mutable
@@ -365,12 +441,14 @@ namespace ao::rt::test
     taskHandle.reset();
     REQUIRE(sawCancellation.waitUntil(true));
     CHECK(sawFingerprinting.load());
+    CHECK(completionStatus.load() == LibraryChanges::LibraryTaskCompletionStatus::Cancelled);
 
     auto transaction = libraryFixture.library().readTransaction();
     auto trackReader = libraryFixture.library().tracks().reader(transaction);
     auto manifestReader = libraryFixture.library().manifest().reader(transaction);
     CHECK(trackReader.begin() == trackReader.end());
     CHECK(manifestReader.begin() == manifestReader.end());
+    CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
 
     runtime.requestStop();
     runtime.join();
@@ -383,21 +461,24 @@ namespace ao::rt::test
     auto executor = FaultOrderingExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
-    auto completionCounts = std::vector<std::size_t>{};
-    auto completionSubscription =
-      changes.onLibraryTaskCompleted([&](std::size_t const count) { completionCounts.push_back(count); });
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto completionStatuses = std::vector<LibraryChanges::LibraryTaskCompletionStatus>{};
+    auto completionSubscription = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event)
+                                                                 { completionStatuses.push_back(event.status); });
     auto progressSubscription =
       changes.onLibraryTaskProgress([](LibraryChanges::LibraryTaskProgressUpdated const&)
                                     { throwException<InjectedLibraryTaskFailure>("injected library task failure"); });
     auto stopSource = std::stop_source{};
-    auto plan = ScanPlan{};
-    plan.items.push_back(
-      ScanItem{.uri = "file:///missing.flac", .fullPath = "/missing.flac", .classification = ScanClassification::New});
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const targetFile = libraryFixture.root() / "missing.flac";
+    std::filesystem::copy_file(sourceFile, targetFile);
+    auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
+    std::filesystem::remove(targetFile);
 
     auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan), {}, stopSource.get_token()));
 
-    requireFaultCleanupOrdering(future, stopSource, executor, completionCounts);
+    requireFaultCleanupOrdering(future, stopSource, executor, completionStatuses);
     runtime.requestStop();
     runtime.join();
   }
@@ -411,18 +492,23 @@ namespace ao::rt::test
     auto scanService = LibraryScan{libraryFixture.library()};
     auto planResult = scanService.buildPlan();
     REQUIRE(planResult);
-    auto applyResult = scanService.applyPlan(
-      std::move(*planResult), ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew});
+    auto applyResult = ScanApplyOperation{libraryFixture.library(),
+                                          std::move(*planResult),
+                                          {},
+                                          {},
+                                          ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+                         .run();
     REQUIRE(applyResult);
     REQUIRE(applyResult->insertedIds.size() == 1);
 
     auto executor = FaultOrderingExecutor{};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
-    auto service = LibraryTaskService{runtime, libraryFixture.library(), changes};
-    auto completionCounts = std::vector<std::size_t>{};
-    auto completionSubscription =
-      changes.onLibraryTaskCompleted([&](std::size_t const count) { completionCounts.push_back(count); });
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto completionStatuses = std::vector<LibraryChanges::LibraryTaskCompletionStatus>{};
+    auto completionSubscription = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event)
+                                                                 { completionStatuses.push_back(event.status); });
     auto progressSubscription =
       changes.onLibraryTaskProgress([](LibraryChanges::LibraryTaskProgressUpdated const&)
                                     { throwException<InjectedLibraryTaskFailure>("injected library task failure"); });
@@ -430,7 +516,7 @@ namespace ao::rt::test
 
     auto future = runtime.spawn(service.backfillAudioIdentityAsync(stopSource.get_token()));
 
-    requireFaultCleanupOrdering(future, stopSource, executor, completionCounts);
+    requireFaultCleanupOrdering(future, stopSource, executor, completionStatuses);
     runtime.requestStop();
     runtime.join();
   }

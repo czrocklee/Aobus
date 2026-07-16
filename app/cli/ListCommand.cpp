@@ -15,6 +15,7 @@
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/CoreRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
@@ -42,7 +43,7 @@ namespace ao::cli
 {
   namespace
   {
-    void printListsPlain(library::MusicLibrary& ml, std::ostream& os)
+    void printListsPlain(library::MusicLibrary const& ml, std::ostream& os)
     {
       auto const transaction = ml.readTransaction();
       auto const reader = ml.lists().reader(transaction);
@@ -190,7 +191,7 @@ namespace ao::cli
       return dto;
     }
 
-    void emitListCollectionDocument(library::MusicLibrary& ml, OutputFormat format, std::ostream& os)
+    void emitListCollectionDocument(library::MusicLibrary const& ml, OutputFormat format, std::ostream& os)
     {
       auto const transaction = ml.readTransaction();
       auto const reader = ml.lists().reader(transaction);
@@ -719,7 +720,7 @@ namespace ao::cli
       printManualListRemoveMutation(cli, listId, *removeResult, dryRun);
     }
 
-    void dumpLists(library::MusicLibrary& ml, bool raw, OutputFormat format, std::ostream& os)
+    void dumpLists(library::MusicLibrary const& ml, bool raw, OutputFormat format, std::ostream& os)
     {
       if (raw && format != OutputFormat::Plain)
       {

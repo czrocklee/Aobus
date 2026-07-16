@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/LibraryStoreTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
@@ -167,7 +168,7 @@ namespace ao::library::test
     builder.tracks().add(TrackId{99});
     auto const payload = builder.serialize();
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
     REQUIRE(wtxn2.commit());
 
@@ -195,7 +196,7 @@ namespace ao::library::test
                            .filter("@year > 2020")
                            .serialize();
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto const [id, createdView] = requireCreate(store.writer(wtxn2), payload);
     REQUIRE(wtxn2.commit());
 

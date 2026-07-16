@@ -5,6 +5,7 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <algorithm>
@@ -307,7 +308,7 @@ namespace ao::uimodel
     _state.detail.hasActiveProgress = true;
   }
 
-  void ActivityStatusFeedProjection::handleLibraryTaskCompleted(std::size_t const count,
+  void ActivityStatusFeedProjection::handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
                                                                 rt::NotificationFeedState const& feed)
   {
     _taskActive = false;
@@ -317,9 +318,10 @@ namespace ao::uimodel
     _optDeferredNotification.reset();
     projectPersistentCompact(feed);
 
-    if (_state.compact.kind == ActivityStatusKind::Idle)
+    if (_state.compact.kind == ActivityStatusKind::Idle &&
+        event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded)
     {
-      projectCompletionCompact(count);
+      projectCompletionCompact(event.affectedCount);
     }
   }
 

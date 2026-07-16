@@ -10,7 +10,6 @@
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
-#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -70,8 +69,8 @@ namespace ao::uimodel
         libraryProgressSub = options.libraryChanges->onLibraryTaskProgress(
           [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
           { handleLibraryTaskProgress(event.message, event.fraction); });
-        libraryCompletedSub = options.libraryChanges->onLibraryTaskCompleted([this](std::size_t const count)
-                                                                             { handleLibraryTaskCompleted(count); });
+        libraryCompletedSub = options.libraryChanges->onLibraryTaskCompleted(
+          [this](rt::LibraryChanges::LibraryTaskCompleted const& event) { handleLibraryTaskCompleted(event); });
       }
 
       syncAutoDismissDeadline();
@@ -132,9 +131,9 @@ namespace ao::uimodel
       publish();
     }
 
-    void handleLibraryTaskCompleted(std::size_t const count)
+    void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event)
     {
-      feedProjection.handleLibraryTaskCompleted(count, notifications.feed());
+      feedProjection.handleLibraryTaskCompleted(event, notifications.feed());
       publish();
     }
   };
@@ -189,8 +188,8 @@ namespace ao::uimodel
     _implPtr->handleLibraryTaskProgress(std::move(message), fraction);
   }
 
-  void ActivityStatusViewModel::handleLibraryTaskCompleted(std::size_t const count)
+  void ActivityStatusViewModel::handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event)
   {
-    _implPtr->handleLibraryTaskCompleted(count);
+    _implPtr->handleLibraryTaskCompleted(event);
   }
 } // namespace ao::uimodel

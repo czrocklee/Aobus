@@ -48,8 +48,7 @@ namespace ao::rt::test
 
     for (auto& smartSourcePtr : smartSources)
     {
-      smartSourcePtr =
-        std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), evaluator);
+      smartSourcePtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, evaluator);
       smartSourcePtr->reload();
       projections.push_back(std::make_unique<LiveTrackListProjection>(
         kInvalidViewId,

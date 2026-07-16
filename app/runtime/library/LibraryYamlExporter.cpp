@@ -445,7 +445,7 @@ namespace ao::rt
 
   struct LibraryYamlExporter::Impl final
   {
-    explicit Impl(library::MusicLibrary& ml)
+    explicit Impl(library::MusicLibrary const& ml)
       : ml{ml}
     {
     }
@@ -463,10 +463,10 @@ namespace ao::rt
                          library::FileManifestStore::Reader const& manifestReader) const;
     Result<> exportLists(ryml::NodeRef& node, library::ReadTransaction const& transaction, ExportMode mode) const;
 
-    library::MusicLibrary& ml;
+    library::MusicLibrary const& ml;
   };
 
-  LibraryYamlExporter::LibraryYamlExporter(library::MusicLibrary& ml)
+  LibraryYamlExporter::LibraryYamlExporter(library::MusicLibrary const& ml)
     : _implPtr{std::make_unique<Impl>(ml)}
   {
   }

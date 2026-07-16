@@ -23,15 +23,27 @@ This contract belongs to the **application runtime** layer in the [system archit
 - Returned `Task<Result<T>>` values resume their caller on the callback executor.
 - Recoverable lower-layer failures remain `Result` errors across executor hops.
 - Unexpected invariant exceptions propagate to the callback boundary rather than being converted into external-data errors.
-- YAML import and scan application serialize through the service mutation mutex.
-- YAML export and scan planning rely on one LMDB read snapshot and do not take the mutation mutex.
-- Identity fingerprinting runs without the mutation mutex and takes it only for each bounded write-back transaction.
+- Import, import preview, scan apply, and identity backfill enter one exclusive coordinator maintenance interval on the callback executor before slow preparation begins.
+- Maintenance closes interactive admission for the whole interval but does not itself hold coordinator writer ownership or an LMDB write transaction.
+- YAML export and scan-plan construction rely on one LMDB read snapshot and do not enter maintenance.
+- Parsing, filesystem walking, media interpretation, and identity fingerprinting run without writer ownership.
+- Import and scan apply acquire one bounded maintenance mutation for prepared apply; identity backfill acquires one per write-back batch.
+- Every effective maintenance mutation commits and completes ordered change publication through the same coordinator as an interactive command.
+
+## Maintenance states
+
+`LibraryAuthoringAvailability` identifies active maintenance as `Import`, `ScanApply`, or `AudioIdentityBackfill`.
+Beginning another maintenance operation or any interactive command while maintenance is active returns `InvalidState`/`Unavailable` through its owning API.
+
+The maintenance guard survives worker hops and releases availability on every pre-commit success, error, exception, or cancellation path.
+Once a maintenance transaction may have committed, the coroutine returns to the callback executor without a cancellable hop so publication and cleanup cannot be skipped.
 
 ## Progress and completion
 
 Task progress and completion use the operational channels in `LibraryChanges`.
 Progress is best effort and does not constitute a committed state transition.
-Completion count describes the operation-specific completed item count and is zero when the task cannot begin or fails before useful completion.
+The terminal event distinguishes `Succeeded`, `CompletedWithIssues`, `Failed`, and `Cancelled`; every status clears active progress, while presentation may announce success only for `Succeeded`.
+Its affected count describes the operation-specific completed item count and is zero when no useful item completed.
 
 Committed content or manifest changes publish through the revisioned changeset channel separately from task completion.
 
@@ -48,22 +60,26 @@ Every task uses its stop token at worker/callback executor hops, but only operat
 
 Lifetime cancellation unwinds the coroutine and prevents post-cancellation access to destroyed borrowed owners.
 Business code does not reinterpret cancellation as a generic recoverable error.
+After progress has been published, task plumbing emits a `Cancelled` terminal event before propagating `OperationCancelled`.
 
 ## Failure behavior
 
 Worker-side `Result` failures resume as `Result` failures on the callback executor.
 If an unexpected exception escapes worker execution, task plumbing carries and rethrows it on the callback side after required task notification cleanup.
+Failure before commit releases maintenance without advancing the library revision.
+Failure while enqueueing or delivering a committed revision leaves the coordinator terminally `Faulted`; task code does not reinterpret that durable mutation as an uncommitted `Result` failure.
 
 ## Implementation map
 
 - [`LibraryTaskService.h`](../../../../app/include/ao/rt/library/LibraryTaskService.h) defines the async task surface.
-- [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns executor hops, mutation serialization, and notification adaptation.
+- [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns executor hops, coordinator composition, and notification adaptation.
+- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns maintenance admission and bounded write sessions.
 - [`LibraryChanges.h`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines progress and completion channels.
 
 ## Test map
 
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, errors, progress, completion, and cancellation adaptation.
-- [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves that fingerprinting does not hold the mutation mutex.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, maintenance admission, errors, progress, completion, and cancellation adaptation.
+- [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
 
 ## Related documents
 

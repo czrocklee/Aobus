@@ -8,14 +8,14 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
-#include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/LibraryWriter.h>
+#include <ao/uimodel/library/list/ListEditWorkflow.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
@@ -31,15 +31,10 @@ namespace ao::gtk::test
 {
   namespace
   {
-    ListId createList(library::MusicLibrary& library, std::string const& name, ListId parentId = kInvalidListId)
+    ListId createList(rt::Library& library, std::string const& name, ListId parentId = kInvalidListId)
     {
-      auto transaction = library.writeTransaction();
-      auto writer = library.lists().writer(transaction);
-      auto builder = library::ListBuilder::makeEmpty();
-      builder.name(name).parentId(parentId);
-      auto const listId = ao::test::requireValue(writer.create(builder.serialize())).first;
-      REQUIRE(transaction.commit());
-      return listId;
+      return ao::test::requireValue(
+        uimodel::ListEditWorkflow{library}.create(rt::LibraryListDraft{.parentId = parentId, .name = name}));
     }
 
     Glib::RefPtr<Gio::SimpleAction> simpleAction(Gio::ActionMap& actionMap, std::string const& name)
@@ -47,7 +42,7 @@ namespace ao::gtk::test
       return std::dynamic_pointer_cast<Gio::SimpleAction>(actionMap.lookup_action(name));
     }
 
-    std::optional<library::ListView> findList(library::MusicLibrary& library, ListId listId)
+    std::optional<library::ListView> findList(library::MusicLibrary const& library, ListId listId)
     {
       auto transaction = library.readTransaction();
       auto reader = library.lists().reader(transaction);
@@ -79,7 +74,7 @@ namespace ao::gtk::test
 
     SECTION("rebuildTree populates the navigation panel")
     {
-      auto const testListId = createList(fixture.runtime().musicLibrary(), "Test List");
+      auto const testListId = createList(fixture.runtime().library(), "Test List");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -91,7 +86,7 @@ namespace ao::gtk::test
 
     SECTION("select triggers callback")
     {
-      auto const testListId = createList(fixture.runtime().musicLibrary(), "Select Target");
+      auto const testListId = createList(fixture.runtime().library(), "Select Target");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -118,7 +113,7 @@ namespace ao::gtk::test
       CHECK_FALSE(editActionPtr->get_enabled());
       CHECK_FALSE(deleteActionPtr->get_enabled());
 
-      auto const leafListId = createList(fixture.runtime().musicLibrary(), "Leaf List");
+      auto const leafListId = createList(fixture.runtime().library(), "Leaf List");
 
       controller.rebuildTree(cache);
       drainGtkEvents();
@@ -132,8 +127,8 @@ namespace ao::gtk::test
 
     SECTION("presentation changes do not re-drive list selection")
     {
-      auto const activeListId = createList(fixture.runtime().musicLibrary(), "Active List");
-      auto const browsedListId = createList(fixture.runtime().musicLibrary(), "Browsed List");
+      auto const activeListId = createList(fixture.runtime().library(), "Active List");
+      auto const browsedListId = createList(fixture.runtime().library(), "Browsed List");
       controller.rebuildTree(cache);
       REQUIRE(fixture.runtime().workspace().navigateTo(activeListId));
       drainGtkEvents();
@@ -153,7 +148,7 @@ namespace ao::gtk::test
 
     SECTION("submitListDraft creates a list and selects it on rebuild")
     {
-      auto draft = rt::LibraryWriter::ListDraft{};
+      auto draft = rt::LibraryListDraft{};
       draft.name = "Recently Played";
       draft.description = "Tracks touched this week";
       draft.expression = "$title ~ \"Recent\"";
@@ -174,9 +169,9 @@ namespace ao::gtk::test
 
     SECTION("submitListDraft updates an existing list and preserves the presentation callback")
     {
-      auto const listId = createList(fixture.runtime().musicLibrary(), "Old Name");
+      auto const listId = createList(fixture.runtime().library(), "Old Name");
 
-      auto draft = rt::LibraryWriter::ListDraft{};
+      auto draft = rt::LibraryListDraft{};
       draft.listId = listId;
       draft.name = "High Energy";
       draft.description = "Updated description";
@@ -199,7 +194,7 @@ namespace ao::gtk::test
 
     SECTION("submitListDraft rejects invalid drafts without saving presentation")
     {
-      auto draft = rt::LibraryWriter::ListDraft{};
+      auto draft = rt::LibraryListDraft{};
       draft.name = "Invalid";
       draft.expression = "(";
 
@@ -218,8 +213,8 @@ namespace ao::gtk::test
       auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
       REQUIRE(deleteActionPtr);
 
-      auto& library = fixture.runtime().musicLibrary();
-      auto const listId = createList(library, "Delete Target");
+      auto const& library = fixture.runtime().musicLibrary();
+      auto const listId = createList(fixture.runtime().library(), "Delete Target");
 
       controller.rebuildTree(cache);
       drainGtkEvents();

@@ -26,16 +26,24 @@ The library is one LMDB environment at the database path passed to `MusicLibrary
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
 
 The database is a host-local rebuildable index rather than an interchange format.
+Its path must reside on a filesystem local to the host. Network filesystems and
+shares are unsupported because neither the writer lease nor LMDB's mapped-file
+locking provides cross-host safety for this database.
 Integer keys use LMDB native word order and record structs are host-endian; [library YAML](../format/yaml.md) is the portable interchange surface.
 
 ## Transaction access
 
 `MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot.
-`MusicLibrary::writeTransaction()` returns a move-only `WriteTransaction` that owns one native write transaction and its transaction-local dictionary writer.
+`WritableMusicLibrary::acquire(MusicLibrary&)` returns the explicit move-only capability that can create a `WriteTransaction`; `MusicLibrary` exposes no public write-transaction factory.
+The write wrapper owns one native transaction, its transaction-local dictionary writer, the process writer gate, and a shared anchor to the writable capability's lease.
 
 The specialized stores are const service handles.
 Their readers accept either library transaction type, while their writers require a mutable `WriteTransaction`.
 Native LMDB transaction handles remain private implementation details of `MusicLibrary` and the stores; the wrappers add semantic capability boundaries but no additional storage transaction or heap allocation on the read path.
+
+Writable-capability acquisition non-blockingly locks `<database-path>/.aobus-writer.lock` for the capability lifetime.
+An active write transaction retains the lock after its originating capability is destroyed and releases it on commit, failure, abort-by-destruction, or transaction destruction.
+The lock file has no governed payload and is not part of format version `4`, but it must not be removed while a writable process is active.
 
 ## Named databases
 

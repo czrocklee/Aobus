@@ -18,11 +18,9 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -36,6 +34,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -59,7 +58,7 @@ namespace ao::gtk
   struct MainWindowCoordinator::Impl final
   {
     Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
-      : layoutStateStore{runtime.musicLibrary().rootPath() / ".aobus"}
+      : layoutStateStore{runtime.musicRoot() / ".aobus"}
       , trackRowCache{runtime.library()}
       , imageCache{100}
       , playbackCommandSurface{runtime.playback(),
@@ -119,10 +118,9 @@ namespace ao::gtk
         });
       }
 
-      auto const readTransaction = runtime.musicLibrary().readTransaction();
-      auto const optView = runtime.musicLibrary().lists().reader(readTransaction).get(listId);
+      auto const optNode = runtime.library().reader().listNode(listId);
 
-      if (!optView)
+      if (!optNode)
       {
         return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
           .listId = listId,
@@ -132,9 +130,10 @@ namespace ao::gtk
 
       return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
         .listId = listId,
-        .sourceKind =
-          optView->isSmart() ? uimodel::ListPresentationSourceKind::Smart : uimodel::ListPresentationSourceKind::Manual,
-        .smartListFilter = optView->isSmart() ? optView->filter() : std::string_view{},
+        .sourceKind = optNode->kind == rt::ListNodeKind::Smart ? uimodel::ListPresentationSourceKind::Smart
+                                                               : uimodel::ListPresentationSourceKind::Manual,
+        .smartListFilter =
+          optNode->kind == rt::ListNodeKind::Smart ? std::string_view{optNode->smartExpression} : std::string_view{},
       });
     }
 
@@ -218,8 +217,14 @@ namespace ao::gtk
     _runtime.reloadAllTracks();
 
     _libraryTaskCompletedSubscription = _runtime.library().changes().onLibraryTaskCompleted(
-      [this](auto)
+      [this](rt::LibraryChanges::LibraryTaskCompleted const& event)
       {
+        if (event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Failed ||
+            event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Cancelled)
+        {
+          return;
+        }
+
         _implPtr->trackRowCache.clearCache();
         _runtime.reloadAllTracks();
       });
@@ -308,7 +313,7 @@ namespace ao::gtk
     auto session = rt::AppSessionState{};
     _configStorePtr->loadAppSession(session);
 
-    session.lastLibraryPath = _runtime.musicLibrary().rootPath().string();
+    session.lastLibraryPath = _runtime.musicRoot().string();
     auto const& pb = _runtime.playback().state();
     session.lastOutputBackendId = pb.output.selectedDevice.backendId.raw();
     session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();

@@ -18,8 +18,8 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/uimodel/library/list/ListEditWorkflow.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -256,8 +256,7 @@ namespace ao::gtk
     }
   }
 
-  ListId ListNavigationController::submitListDraft(rt::LibraryWriter::ListDraft const& draft,
-                                                   std::string presentationId)
+  ListId ListNavigationController::submitListDraft(rt::LibraryListDraft const& draft, std::string presentationId)
   {
     if (draft.listId != kInvalidListId)
     {
@@ -284,9 +283,9 @@ namespace ao::gtk
     return newListId;
   }
 
-  ListId ListNavigationController::createList(rt::LibraryWriter::ListDraft const& draft)
+  ListId ListNavigationController::createList(rt::LibraryListDraft const& draft)
   {
-    auto const listResult = _runtime.library().writer().createList(draft);
+    auto const listResult = uimodel::ListEditWorkflow{_runtime.library()}.create(draft);
 
     if (!listResult)
     {
@@ -299,9 +298,9 @@ namespace ao::gtk
     return listId;
   }
 
-  bool ListNavigationController::updateList(rt::LibraryWriter::ListDraft const& draft)
+  bool ListNavigationController::updateList(rt::LibraryListDraft const& draft)
   {
-    auto const updateResult = _runtime.library().writer().updateList(draft);
+    auto const updateResult = uimodel::ListEditWorkflow{_runtime.library()}.update(draft);
 
     if (!updateResult)
     {
@@ -350,7 +349,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto const deleteResult = _runtime.library().writer().deleteList(listId); !deleteResult)
+    if (auto const deleteResult = uimodel::ListEditWorkflow{_runtime.library()}.remove(listId); !deleteResult)
     {
       APP_LOG_ERROR("Failed to delete list {}: {}", listId, deleteResult.error().message);
       return;

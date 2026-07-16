@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include "test/unit/library/LibraryStoreTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
@@ -39,7 +40,7 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     REQUIRE(wtxn2.commit());
 
@@ -64,7 +65,7 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader) + trackIdsSize);
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     REQUIRE(wtxn2.commit());
 
@@ -87,12 +88,12 @@ namespace ao::library::test
     auto data = std::vector<std::byte>(sizeof(ListHeader));
     std::memcpy(data.data(), &header, sizeof(ListHeader));
 
-    auto wtxn2 = library.writeTransaction();
+    auto wtxn2 = writeTransaction(library);
     auto const [id, view] = requireCreate(store.writer(wtxn2), data);
     REQUIRE(wtxn2.commit());
 
     // Delete it
-    auto wtxn3 = library.writeTransaction();
+    auto wtxn3 = writeTransaction(library);
     REQUIRE(store.writer(wtxn3).remove(id));
     REQUIRE(wtxn3.commit());
 

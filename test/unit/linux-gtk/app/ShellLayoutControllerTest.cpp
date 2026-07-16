@@ -232,8 +232,7 @@ namespace ao::gtk::test
     {
       rt::test::addReadyAudioProvider(runtime.playback());
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      auto const trackId = library::test::addTrack(
-        runtime.musicLibrary(), library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
+      auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
       runtime.reloadAllTracks();
       auto const view = runtime.workspace().navigateTo(rt::kAllTracksListId);
       REQUIRE(view);

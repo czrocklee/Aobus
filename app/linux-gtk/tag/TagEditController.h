@@ -24,6 +24,10 @@ namespace ao::rt
 {
   class AppRuntime;
 }
+namespace ao::uimodel
+{
+  class TrackAuthoringSession;
+}
 namespace ao::gtk
 {
   class TrackRowCache;
@@ -86,6 +90,7 @@ namespace ao::gtk
     void removeTagFromCurrentSelection(std::string tag);
     void applyTagChangeToCurrentSelection(std::span<std::string const> tagsToAdd,
                                           std::span<std::string const> tagsToRemove);
+    bool beginTagEditSession(std::span<TrackId const> trackIds);
 
     Callbacks _callbacks;
     rt::AppRuntime& _runtime;
@@ -102,6 +107,7 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _trackTagToggleActionPtr;
 
     std::unique_ptr<TagPopover> _tagPopoverPtr;
+    std::unique_ptr<uimodel::TrackAuthoringSession> _tagEditSessionPtr;
     std::unique_ptr<Gtk::PopoverMenu> _contextPopoverPtr;
     Glib::RefPtr<Gio::SimpleActionGroup> _contextActionGroupPtr;
 

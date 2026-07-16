@@ -81,7 +81,7 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
-    auto const manualListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
+    auto const manualListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual order",
     }));
@@ -99,7 +99,7 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
-    auto const manualListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
+    auto const manualListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Explicit order",
     }));
@@ -119,7 +119,7 @@ namespace ao::rt::test
   {
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
-    auto const smartListId = ao::test::requireValue(env.writer.createList(LibraryWriter::ListDraft{
+    auto const smartListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Smart,
       .name = "Smart order",
       .expression = "true",

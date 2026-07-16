@@ -5,6 +5,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -1106,7 +1107,7 @@ namespace ao::rt::test
 
       // 2. SmartListEvaluator evaluateMembers (simulates expression filter via SmartListSource)
       auto evaluator = SmartListEvaluator{lib};
-      auto filtered = SmartListSource{sourceLease, lib, evaluator};
+      auto filtered = SmartListSource{sourceLease, evaluator};
 
       auto const t3 = std::chrono::steady_clock::now();
 
@@ -1120,7 +1121,7 @@ namespace ao::rt::test
       // 2b. Filter evaluation with a comparison-heavy predicate. A dedicated
       // evaluator keeps this measurement independent of the match-all list above.
       auto filterEvaluator = SmartListEvaluator{lib};
-      auto filteredExpr = SmartListSource{sourceLease, lib, filterEvaluator};
+      auto filteredExpr = SmartListSource{sourceLease, filterEvaluator};
       filteredExpr.setExpression(kHeavyFilter);
 
       auto const filterStart = std::chrono::steady_clock::now();
@@ -1131,7 +1132,7 @@ namespace ao::rt::test
 
       // 2c. Large IN-list filter.
       auto inEvaluator = SmartListEvaluator{lib};
-      auto filteredIn = SmartListSource{sourceLease, lib, inEvaluator};
+      auto filteredIn = SmartListSource{sourceLease, inEvaluator};
       filteredIn.setExpression(makeLargeInFilter());
 
       auto const inStart = std::chrono::steady_clock::now();
@@ -1357,7 +1358,7 @@ namespace ao::rt::test
                                               std::size_t count,
                                               std::chrono::microseconds* commitDuration = nullptr)
     {
-      auto transaction = library.writeTransaction();
+      auto transaction = library::test::writeTransaction(library);
       auto writer = library.tracks().writer(transaction);
       auto ids = std::vector<TrackId>{};
       ids.reserve(count);
@@ -1403,8 +1404,7 @@ namespace ao::rt::test
 
         for (std::size_t index = 0; index < kSmartListCount; ++index)
         {
-          auto sourcePtr =
-            std::make_shared<SmartListSource>(TrackSourceLease{_rootPtr}, _libraryFixture.library(), _evaluator);
+          auto sourcePtr = std::make_shared<SmartListSource>(TrackSourceLease{_rootPtr}, _evaluator);
           sourcePtr->setExpression(std::format("$year >= {}", 1990 + (index * 5)));
           sourcePtr->reload();
           _projections.push_back(std::make_unique<LiveTrackListProjection>(
@@ -1421,7 +1421,7 @@ namespace ao::rt::test
           _libraryFixture.library(),
           TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}}));
 
-        auto transaction = _libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
         auto builder = library::ListBuilder::makeEmpty().name("Performance manual list");
 
         for (auto const trackId : _ids)
@@ -1481,7 +1481,7 @@ namespace ao::rt::test
 
       std::chrono::microseconds removeTracksDuration(std::span<TrackId const> trackIds)
       {
-        auto transaction = _libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
         auto writer = _libraryFixture.library().tracks().writer(transaction);
 
         for (auto const trackId : trackIds)
@@ -1498,7 +1498,7 @@ namespace ao::rt::test
       {
         REQUIRE(startIndex <= _ids.size());
         REQUIRE(count <= _ids.size() - startIndex);
-        auto transaction = _libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
         auto writer = _libraryFixture.library().tracks().writer(transaction);
 
         for (std::size_t offset = 0; offset < count; ++offset)
@@ -1523,7 +1523,7 @@ namespace ao::rt::test
         _ids.erase(_ids.begin(), _ids.begin() + static_cast<std::ptrdiff_t>(kManualMoveCount));
         _ids.append_range(movedIds);
 
-        auto transaction = _libraryFixture.library().writeTransaction();
+        auto transaction = library::test::writeTransaction(_libraryFixture.library());
         auto builder = library::ListBuilder::makeEmpty().name("Performance manual list");
 
         for (auto const trackId : _ids)

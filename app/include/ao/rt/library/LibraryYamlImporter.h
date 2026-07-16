@@ -16,7 +16,7 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class LibraryChanges;
+  class LibraryYamlImportOperation;
   /**
    * ImportMode - Controls how the library is imported from YAML.
    */
@@ -44,7 +44,6 @@ namespace ao::rt
   {
   public:
     explicit LibraryYamlImporter(library::MusicLibrary& ml);
-    LibraryYamlImporter(library::MusicLibrary& ml, LibraryChanges& changes);
     ~LibraryYamlImporter();
 
     LibraryYamlImporter(LibraryYamlImporter const&) = delete;
@@ -58,14 +57,17 @@ namespace ao::rt
      * @param mode Import mode. Defaults to Restore.
      * @return Result of the operation.
      */
-    Result<ImportReport> importFromYaml(std::filesystem::path const& path, ImportMode mode = ImportMode::Restore);
+    Result<ImportReport> importFromYamlOffline(std::filesystem::path const& path,
+                                               ImportMode mode = ImportMode::Restore);
     // Runs the same import path, but returns before commit and skips metadata
     // header updates.
-    Result<ImportReport> previewImportFromYaml(std::filesystem::path const& path,
-                                               ImportMode mode = ImportMode::Restore);
+    Result<ImportReport> previewImportFromYamlOffline(std::filesystem::path const& path,
+                                                      ImportMode mode = ImportMode::Restore);
 
   private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    friend class LibraryYamlImportOperation;
   };
 } // namespace ao::rt

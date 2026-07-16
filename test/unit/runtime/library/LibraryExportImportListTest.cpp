@@ -3,6 +3,7 @@
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
@@ -97,7 +98,7 @@ namespace ao::rt::test
     // 1. Setup initial library
     {
       trackId = library::test::addTrack(ml1, library::test::makeEmptyTrackSpec(uri));
-      auto transaction = ml1.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml1);
 
       auto manifestWriter = ml1.manifest().writer(transaction);
       auto builder = FileManifestBuilder::makeEmpty();
@@ -131,7 +132,7 @@ namespace ao::rt::test
 
     auto targetTrackId = kInvalidTrackId;
     {
-      auto transaction = ml2.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml2);
 
       // Create junk track first to ensure IDs don't match
       REQUIRE(ml2.tracks().writer(transaction).createHotCold(0, 0, [](auto, auto, auto) {}));
@@ -140,7 +141,7 @@ namespace ao::rt::test
 
     {
       targetTrackId = library::test::addTrack(ml2, library::test::makeEmptyTrackSpec(uri));
-      auto transaction = ml2.writeTransaction();
+      auto transaction = library::test::writeTransaction(ml2);
 
       auto manifestWriter = ml2.manifest().writer(transaction);
       auto builder = FileManifestBuilder::makeEmpty();
@@ -151,7 +152,7 @@ namespace ao::rt::test
     }
 
     auto importer = LibraryYamlImporter{ml2};
-    REQUIRE(importer.importFromYaml(yamlPath, rt::ImportMode::Restore));
+    REQUIRE(importer.importFromYamlOffline(yamlPath, rt::ImportMode::Restore));
 
     // 5. Verify list was restored and track remapped
     {
@@ -207,7 +208,7 @@ library:
     }
 
     auto importer = LibraryYamlImporter{ml};
-    REQUIRE(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYamlOffline(yamlPath));
 
     {
       auto transaction = ml.readTransaction();
@@ -271,7 +272,7 @@ library:
 )";
     }
 
-    REQUIRE(importer.importFromYaml(yamlPath));
+    REQUIRE(importer.importFromYamlOffline(yamlPath));
 
     auto transaction = ml.readTransaction();
     auto const listReader = ml.lists().reader(transaction);
@@ -328,7 +329,7 @@ library:
     }
 
     auto sourceImporter = LibraryYamlImporter{sourceLibrary};
-    REQUIRE(sourceImporter.importFromYaml(inputPath));
+    REQUIRE(sourceImporter.importFromYamlOffline(inputPath));
 
     auto const expectedUris = std::vector<std::string>{"second.flac", "first.flac", "third.flac"};
     auto const optSourceUris = listTrackUris(sourceLibrary, "Mixed References");
@@ -342,7 +343,7 @@ library:
     auto const targetTemp = ao::test::TempDir{};
     auto targetLibrary = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
     auto targetImporter = LibraryYamlImporter{targetLibrary};
-    REQUIRE(targetImporter.importFromYaml(exportedPath));
+    REQUIRE(targetImporter.importFromYamlOffline(exportedPath));
 
     auto const optTargetUris = listTrackUris(targetLibrary, "Mixed References");
     REQUIRE(optTargetUris);

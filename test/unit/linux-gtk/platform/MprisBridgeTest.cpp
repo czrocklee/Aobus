@@ -10,6 +10,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
@@ -49,7 +50,7 @@ namespace ao::gtk::platform::test
   {
     ResourceId addResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
-      auto transaction = library.writeTransaction();
+      auto transaction = library::test::writeTransaction(library);
       auto writer = library.resources().writer(transaction);
       auto resourceId = writer.create(bytes);
       REQUIRE(resourceId);
@@ -161,14 +162,18 @@ namespace ao::gtk::platform::test
     CHECK(MprisArtUrlCache::extensionForBytes(kUnknownBytes) == ".img");
 
     [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
-    auto fixture = ao::gtk::test::GtkRuntimeFixture{};
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto resourceId = kInvalidResourceId;
+    auto trackId = kInvalidTrackId;
+    auto fixture = ao::gtk::test::GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      {
+        resourceId = addResource(musicLibrary, kPngBytes);
+        trackId = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "Cover Track", .uri = fixturePath, .coverArtId = resourceId});
+      }};
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime.playback());
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const resourceId = addResource(runtime.musicLibrary(), kPngBytes);
-    auto const trackId = library::test::addTrack(
-      runtime.musicLibrary(),
-      library::test::TrackSpec{.title = "Cover Track", .uri = fixturePath, .coverArtId = resourceId});
     auto const cacheDir = fixture.tempDir().path() / "mpris-art";
     std::filesystem::create_directories(cacheDir);
     auto const stalePath = cacheDir / (std::to_string(resourceId.raw()) + ".img");
@@ -261,9 +266,9 @@ namespace ao::gtk::platform::test
     rt::test::addReadyAudioProvider(playback);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack =
-      library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First", .uri = fixturePath});
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack =
-      library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Second", .uri = fixturePath});
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
     auto& sequence = runtime.playbackSequence();
     std::int32_t playSelectionCount = 0;
@@ -338,9 +343,9 @@ namespace ao::gtk::platform::test
     rt::test::addReadyAudioProvider(playback);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack =
-      library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "First", .uri = fixturePath});
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack =
-      library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Second", .uri = fixturePath});
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
     auto& sequence = runtime.playbackSequence();
     auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
@@ -400,8 +405,8 @@ namespace ao::gtk::platform::test
     auto& playback = runtime.playback();
     rt::test::addReadyAudioProvider(playback);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = library::test::addTrack(
-      runtime.musicLibrary(), library::test::TrackSpec{.title = "Rate Track", .uri = fixturePath});
+    auto const trackId =
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Rate Track", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
     auto& sequence = runtime.playbackSequence();
     auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
@@ -461,9 +466,9 @@ namespace ao::gtk::platform::test
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const track1 =
-      library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Queue 1", .uri = fixturePath});
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Queue 1", .uri = fixturePath});
     auto const track2 =
-      library::test::addTrack(runtime.musicLibrary(), library::test::TrackSpec{.title = "Queue 2", .uri = fixturePath});
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Queue 2", .uri = fixturePath});
 
     auto const viewId = prepareAllTracksView(runtime);
     auto& sequence = runtime.playbackSequence();
@@ -495,14 +500,14 @@ namespace ao::gtk::platform::test
     auto& playback = runtime.playback();
     rt::test::addReadyAudioProvider(playback);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = library::test::addTrack(runtime.musicLibrary(),
-                                                 library::test::TrackSpec{.title = "MPRIS Seek",
-                                                                          .artist = "Desktop Artist",
-                                                                          .album = "Desktop Album",
-                                                                          .uri = fixturePath,
-                                                                          .duration = std::chrono::seconds{10}});
-    auto const nextTrackId = library::test::addTrack(
-      runtime.musicLibrary(), library::test::TrackSpec{.title = "MPRIS Next", .uri = fixturePath});
+    auto const trackId = ao::gtk::test::addRuntimeTrack(runtime,
+                                                        library::test::TrackSpec{.title = "MPRIS Seek",
+                                                                                 .artist = "Desktop Artist",
+                                                                                 .album = "Desktop Album",
+                                                                                 .uri = fixturePath,
+                                                                                 .duration = std::chrono::seconds{10}});
+    auto const nextTrackId =
+      ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "MPRIS Next", .uri = fixturePath});
 
     auto const viewId = prepareAllTracksView(runtime);
     auto& sequence = runtime.playbackSequence();

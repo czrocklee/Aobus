@@ -23,6 +23,12 @@ namespace ao::rt
 {
   struct LibraryChanges::Impl final
   {
+    struct PendingPublication final
+    {
+      LibraryChangeSet changeSet{};
+      std::move_only_function<void(std::exception_ptr)> completion{};
+    };
+
     explicit Impl(async::Executor* executor = nullptr, std::uint64_t lastPublishedRevision = 0)
       : callbackExecutor{executor}
     {
@@ -32,13 +38,14 @@ namespace ao::rt
       }
     }
 
-    void publish(LibraryChangeSet changeSet)
+    void publish(LibraryChangeSet changeSet, std::move_only_function<void(std::exception_ptr)> completion = {})
     {
       if (changeSet.libraryRevision == 0)
       {
         throwException<Exception>("Library changeset must carry a non-zero revision");
       }
 
+      auto const revision = changeSet.libraryRevision;
       bool schedule = false;
       {
         auto const lock = std::scoped_lock{mutex};
@@ -55,7 +62,8 @@ namespace ao::rt
           throwException<Exception>("Duplicate or stale library changeset revision {}", changeSet.libraryRevision);
         }
 
-        holdback.emplace(changeSet.libraryRevision, std::move(changeSet));
+        holdback.emplace(
+          revision, PendingPublication{.changeSet = std::move(changeSet), .completion = std::move(completion)});
 
         if (!drainScheduled)
         {
@@ -69,19 +77,55 @@ namespace ao::rt
         return;
       }
 
-      if (callbackExecutor != nullptr)
+      try
       {
-        callbackExecutor->dispatch([this] { drain(); });
+        if (callbackExecutor != nullptr)
+        {
+          callbackExecutor->dispatch([this] { drain(); });
+        }
+        else
+        {
+          drain();
+        }
       }
-      else
+      catch (...)
       {
-        drain();
+        auto failedCompletion = std::move_only_function<void(std::exception_ptr)>{};
+
+        {
+          auto const lock = std::scoped_lock{mutex};
+
+          if (auto const it = holdback.find(revision); it != holdback.end())
+          {
+            failedCompletion = std::move(it->second.completion);
+            holdback.erase(it);
+          }
+
+          drainScheduled = false;
+        }
+
+        auto const failure = std::current_exception();
+
+        if (failedCompletion)
+        {
+          try
+          {
+            failedCompletion(failure);
+          }
+          catch (...)
+          {
+            // Preserve the publication failure; completion is fault cleanup.
+            std::rethrow_exception(failure);
+          }
+        }
+
+        std::rethrow_exception(failure);
       }
     }
 
     void drain()
     {
-      auto failure = std::exception_ptr{};
+      auto firstFailure = std::exception_ptr{};
 
       while (true)
       {
@@ -95,9 +139,9 @@ namespace ao::rt
           {
             drainScheduled = false;
 
-            if (failure)
+            if (firstFailure)
             {
-              std::rethrow_exception(failure);
+              std::rethrow_exception(firstFailure);
             }
 
             return;
@@ -107,26 +151,45 @@ namespace ao::rt
           ++*optNextRevision;
         }
 
+        auto publicationFailure = std::exception_ptr{};
+
         try
         {
-          changedSignal.emit(changeSetNode.mapped());
+          changedSignal.emit(changeSetNode.mapped().changeSet);
         }
         catch (...)
         {
-          if (!failure)
+          publicationFailure = std::current_exception();
+        }
+
+        if (changeSetNode.mapped().completion)
+        {
+          try
           {
-            failure = std::current_exception();
+            changeSetNode.mapped().completion(publicationFailure);
           }
+          catch (...)
+          {
+            if (!publicationFailure)
+            {
+              publicationFailure = std::current_exception();
+            }
+          }
+        }
+
+        if (publicationFailure && !firstFailure)
+        {
+          firstFailure = std::move(publicationFailure);
         }
       }
     }
 
     async::Executor* callbackExecutor = nullptr;
     Signal<LibraryChangeSet const&> changedSignal;
-    Signal<std::size_t> libraryTaskCompletedSignal;
+    Signal<LibraryChanges::LibraryTaskCompleted const&> libraryTaskCompletedSignal;
     Signal<LibraryChanges::LibraryTaskProgressUpdated const&> libraryTaskProgressSignal;
     std::mutex mutex;
-    std::map<std::uint64_t, LibraryChangeSet> holdback;
+    std::map<std::uint64_t, PendingPublication> holdback;
     std::optional<std::uint64_t> optNextRevision;
     bool drainScheduled = false;
   };
@@ -148,7 +211,8 @@ namespace ao::rt
     return _implPtr->changedSignal.connect(std::move(handler));
   }
 
-  Subscription LibraryChanges::onLibraryTaskCompleted(std::move_only_function<void(std::size_t)> handler) const
+  Subscription LibraryChanges::onLibraryTaskCompleted(
+    std::move_only_function<void(LibraryTaskCompleted const&)> handler) const
   {
     return _implPtr->libraryTaskCompletedSignal.connect(std::move(handler));
   }
@@ -159,9 +223,10 @@ namespace ao::rt
     return _implPtr->libraryTaskProgressSignal.connect(std::move(handler));
   }
 
-  void LibraryChanges::publish(LibraryChangeSet changeSet)
+  void LibraryChanges::publishFromCoordinator(LibraryChangeSet changeSet,
+                                              std::move_only_function<void(std::exception_ptr)> completion)
   {
-    _implPtr->publish(std::move(changeSet));
+    _implPtr->publish(std::move(changeSet), std::move(completion));
   }
 
   void LibraryChanges::notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress)
@@ -169,8 +234,10 @@ namespace ao::rt
     _implPtr->libraryTaskProgressSignal.emit(progress);
   }
 
-  void LibraryChanges::notifyLibraryTaskCompleted(std::size_t count)
+  void LibraryChanges::notifyLibraryTaskCompleted(LibraryTaskCompletionStatus const status,
+                                                  std::size_t const affectedCount)
   {
-    _implPtr->libraryTaskCompletedSignal.emit(count);
+    auto const event = LibraryTaskCompleted{.status = status, .affectedCount = affectedCount};
+    _implPtr->libraryTaskCompletedSignal.emit(event);
   }
 } // namespace ao::rt

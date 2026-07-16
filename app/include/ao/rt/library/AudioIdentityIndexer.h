@@ -11,8 +11,8 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
-#include <mutex>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 
@@ -28,8 +28,6 @@ namespace ao::library
 
 namespace ao::rt
 {
-  class LibraryChanges;
-
   struct AudioIdentityIndexProgress final
   {
     /// File currently being fingerprinted.
@@ -60,6 +58,20 @@ namespace ao::rt
     std::string message{};
   };
 
+  struct AudioIdentityWriteCandidate final
+  {
+    std::string uri{};
+    std::uint64_t fileSize = 0;
+    std::uint64_t mtime = 0;
+    library::AudioIdentity identity{};
+  };
+
+  struct AudioIdentityBatchCommitResult final
+  {
+    std::int32_t completedCount = 0;
+    std::int32_t skippedCount = 0;
+  };
+
   /// Composes path opening and payload parsing with library::readAudioIdentity.
   /// Invoked concurrently from multiple worker threads, so a replacement must
   /// be thread-safe. Its Result reports the composition failures; an empty
@@ -87,14 +99,12 @@ namespace ao::rt
     /// invoked from any worker-pool thread, never concurrently.
     using ProgressCallback = std::move_only_function<void(AudioIdentityIndexProgress const& progress)>;
     using ItemFailureCallback = std::move_only_function<void(AudioIdentityIndexFailure const& failure)>;
+    using CommitBatchCallback = std::move_only_function<Result<AudioIdentityBatchCommitResult>(
+      std::span<AudioIdentityWriteCandidate const> candidates)>;
     using FingerprintFunction = AudioIdentityFingerprintFunction;
     using Options = AudioIdentityIndexOptions;
 
-    AudioIdentityIndexer(async::Runtime& asyncRuntime, library::MusicLibrary& library, std::mutex& mutationMutex);
-    AudioIdentityIndexer(async::Runtime& asyncRuntime,
-                         library::MusicLibrary& library,
-                         std::mutex& mutationMutex,
-                         LibraryChanges& changes);
+    AudioIdentityIndexer(async::Runtime& asyncRuntime, library::MusicLibrary& library);
     ~AudioIdentityIndexer() = default;
 
     /// Fill pending audio identities for available manifest rows. Rows are
@@ -103,7 +113,8 @@ namespace ao::rt
     /// every row is revalidated against the live manifest before its identity
     /// is committed. Cancellation flushes rows already hashed in the current
     /// batch and returns a cancelled result.
-    async::Task<Result<AudioIdentityIndexResult>> indexPending(Options options = {},
+    async::Task<Result<AudioIdentityIndexResult>> indexPending(CommitBatchCallback commitBatchCallback,
+                                                               Options options = {},
                                                                ProgressCallback progressCallback = {},
                                                                ItemFailureCallback failureCallback = {},
                                                                std::stop_token stopToken = {});
@@ -116,7 +127,5 @@ namespace ao::rt
   private:
     async::Runtime& _asyncRuntime;
     library::MusicLibrary& _library;
-    std::mutex& _mutationMutex;
-    LibraryChanges* _changes = nullptr;
   };
 } // namespace ao::rt

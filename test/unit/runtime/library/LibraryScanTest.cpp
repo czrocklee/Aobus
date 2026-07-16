@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackStore.h>
@@ -40,9 +42,9 @@ namespace ao::rt::test
       service.buildPlan([&progressPaths](std::filesystem::path const& path) { progressPaths.push_back(path); });
 
     REQUIRE(result);
-    REQUIRE(result->items.size() == 1);
-    CHECK(result->items[0].uri == "song.flac");
-    CHECK(result->items[0].classification == ScanClassification::New);
+    REQUIRE(result->size() == 1);
+    CHECK(result->items()[0].uri == "song.flac");
+    CHECK(result->items()[0].classification == ScanClassification::New);
     CHECK(std::ranges::any_of(
       progressPaths, [](std::filesystem::path const& path) { return path.filename() == "song.flac"; }));
   }
@@ -56,12 +58,13 @@ namespace ao::rt::test
     auto plan = service.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
-    auto result = service.applyPlan(std::move(plan));
+    auto operation = ScanApplyOperation{libraryFixture.library(), std::move(plan), {}, {}};
+    auto result = operation.run();
 
     REQUIRE(result);
     REQUIRE(result->insertedIds.size() == 1);
     CHECK(result->failureCount == 0);
-    CHECK_FALSE(result->cancelled);
+    CHECK_FALSE(operation.cancelled());
 
     auto transaction = libraryFixture.library().readTransaction();
     auto trackReader = libraryFixture.library().tracks().reader(transaction);
@@ -84,8 +87,12 @@ namespace ao::rt::test
     auto plan = service.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
-    auto result =
-      service.applyPlan(std::move(plan), ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew});
+    auto result = ScanApplyOperation{libraryFixture.library(),
+                                     std::move(plan),
+                                     {},
+                                     {},
+                                     ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+                    .run();
 
     REQUIRE(result);
     REQUIRE(result->insertedIds.size() == 1);
@@ -108,14 +115,9 @@ namespace ao::rt::test
 
     auto stopSource = std::stop_source{};
     stopSource.request_stop();
-    auto result = service.applyPlan(std::move(plan), ScanApplyOptions{}, {}, {}, stopSource.get_token());
-
-    REQUIRE(result);
-    CHECK(result->cancelled);
-    CHECK(result->insertedIds.empty());
-    CHECK(result->mutatedIds.empty());
-    CHECK(result->relinkedIds.empty());
-    CHECK(result->failureCount == 0);
+    auto operation = ScanApplyOperation{libraryFixture.library(), std::move(plan), {}, {}, {}};
+    REQUIRE_THROWS_AS(operation.run(stopSource.get_token()), async::OperationCancelled);
+    CHECK(operation.cancelled());
 
     auto transaction = libraryFixture.library().readTransaction();
     auto trackReader = libraryFixture.library().tracks().reader(transaction);

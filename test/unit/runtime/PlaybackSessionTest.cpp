@@ -38,6 +38,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <ios>
 #include <limits>
 #include <memory>
@@ -52,15 +53,19 @@ namespace ao::rt::test
 {
   namespace
   {
-    TrackId addPlayableTrack(AppRuntime& runtime, std::string title, std::uint16_t const year = 2020)
+    TrackId addPlayableTrack(AppRuntime& runtime,
+                             std::string title,
+                             std::uint16_t const year = 2020,
+                             std::move_only_function<void()> settlePublication = {})
     {
-      return library::test::addTrack(runtime.musicLibrary(),
-                                     library::test::TrackSpec{
-                                       .title = std::move(title),
-                                       .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
-                                       .year = year,
-                                       .duration = std::chrono::seconds{10},
-                                     });
+      return addRuntimeTrack(runtime,
+                             library::test::TrackSpec{
+                               .title = std::move(title),
+                               .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
+                               .year = year,
+                               .duration = std::chrono::seconds{10},
+                             },
+                             std::move(settlePublication));
     }
 
     ViewId createView(AppRuntime& runtime, std::string filterExpression = {}, std::vector<TrackSortTerm> sortBy = {})
@@ -290,7 +295,7 @@ namespace ao::rt::test
 
     addReadyAudioProvider(runtime.playback());
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(runtime, "Debounced Track");
+    auto const trackId = addPlayableTrack(runtime, "Debounced Track", 2020, [executor] { executor->runUntilIdle(); });
     auto const viewId = createView(runtime);
     REQUIRE(runtime.playbackSequence().playFromView(viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
@@ -326,7 +331,7 @@ namespace ao::rt::test
 
     addReadyAudioProvider(runtime.playback());
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(runtime, "Retry Track");
+    auto const trackId = addPlayableTrack(runtime, "Retry Track", 2020, [executor] { executor->runUntilIdle(); });
     auto const viewId = createView(runtime);
     REQUIRE(runtime.playbackSequence().playFromView(viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
@@ -461,7 +466,7 @@ namespace ao::rt::test
     REQUIRE(runtime.savePlaybackSession());
     auto normalizedPayload = storedSession(runtime.playbackSessionConfigStore());
     normalizedPayload.anchorIndex = 999;
-    normalizedPayload.positionMs = 4000;
+    normalizedPayload.positionMs = 400;
     storeSession(runtime, normalizedPayload);
     runtime.playback().stop();
 
@@ -552,8 +557,8 @@ namespace ao::rt::test
     CHECK(runtime.playbackSequence().state().currentTrackId == firstTrackId);
     CHECK(runtime.playback().state().nowPlaying.trackId == firstTrackId);
     CHECK(runtime.playbackSequence().state().optResolvedSuccessor == secondTrackId);
-    CHECK(runtime.playbackSequence().state().hasPrevious);
-    CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{4000});
+    CHECK_FALSE(runtime.playbackSequence().state().hasPrevious);
+    CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{400});
     CHECK(runtime.playback().state().transport == audio::Transport::Idle);
 
     sequenceSubscription.reset();

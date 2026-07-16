@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
@@ -11,15 +12,11 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
-
-namespace ao::rt
-{
-  class LibraryWriter;
-}
 
 namespace ao::gtk::layout
 {
@@ -29,15 +26,14 @@ namespace ao::gtk::layout
   struct TrackDetailCustomMetadataUndo final
   {
     std::string key;
-    std::vector<TrackId> trackIds;
     std::string value;
+    std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr;
   };
 
   class TrackDetailUndoController final
   {
   public:
-    explicit TrackDetailUndoController(rt::LibraryWriter& writer,
-                                       TrackDetailUndoTimeoutScheduler timeoutScheduler = {});
+    explicit TrackDetailUndoController(TrackDetailUndoTimeoutScheduler timeoutScheduler = {});
     ~TrackDetailUndoController();
 
     TrackDetailUndoController(TrackDetailUndoController const&) = delete;
@@ -47,7 +43,9 @@ namespace ao::gtk::layout
 
     std::optional<TrackDetailCustomMetadataUndo> const& pendingCustomMetadataUndo() const;
 
-    void presentCustomMetadataDeletedUndo(std::string key, std::vector<TrackId> trackIds, std::string value);
+    void presentCustomMetadataDeletedUndo(std::string key,
+                                          std::string value,
+                                          std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr);
     void clearIfAffectsCustomMetadata(std::string_view key, std::vector<TrackId> const& trackIds);
     void clear();
     void undo();
@@ -58,7 +56,6 @@ namespace ao::gtk::layout
     void resetTimer();
     void disconnectTimer();
 
-    rt::LibraryWriter& _writer;
     TrackDetailUndoTimeoutScheduler _timeoutScheduler;
     std::optional<TrackDetailCustomMetadataUndo> _optPendingCustomMetadataUndo;
     sigc::signal<void()> _changed;

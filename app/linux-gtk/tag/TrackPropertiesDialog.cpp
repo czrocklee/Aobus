@@ -15,9 +15,9 @@
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
 
@@ -61,14 +61,12 @@ namespace ao::gtk
   } // namespace
 
   TrackPropertiesDialog::TrackPropertiesDialog(Gtk::Window& parent,
-                                               rt::Library const& reads,
-                                               rt::LibraryWriter& writer,
+                                               rt::Library& library,
                                                rt::CompletionService& completion,
                                                TrackRowCache& rowCache,
                                                std::vector<TrackId> trackIds)
     : AppDialog{}
-    , _reads{reads}
-    , _writer{writer}
+    , _library{library}
     , _completion{completion}
     , _rowCache{rowCache}
     , _trackIds{std::move(trackIds)}
@@ -83,6 +81,27 @@ namespace ao::gtk
 
     buildUi();
     loadSelectedTrackFields();
+
+    auto sessionResult = uimodel::TrackAuthoringSession::begin(_library, _trackIds);
+
+    if (sessionResult)
+    {
+      _editSessionPtr = std::move(*sessionResult);
+      _editSessionStateSubscription =
+        _editSessionPtr->onStateChanged([this](uimodel::TrackAuthoringSessionState) { updateSaveEnabled(); });
+    }
+    else
+    {
+      _sessionErrorLabel.set_text(std::format("Editing unavailable: {}", sessionResult.error().message));
+      _sessionErrorLabel.set_visible(true);
+
+      for (auto const& editor : _editors)
+      {
+        editor.widget->set_sensitive(false);
+      }
+    }
+
+    updateSaveEnabled();
 
     signal_response().connect([this](std::int32_t) { close(); });
   }
@@ -99,10 +118,21 @@ namespace ao::gtk
     _notebook.add_css_class("ao-properties-notebook");
     _notebook.set_vexpand(true);
 
+    _sessionErrorLabel.set_halign(Gtk::Align::START);
+    _sessionErrorLabel.set_xalign(0.0F);
+    _sessionErrorLabel.set_wrap(true);
+    _sessionErrorLabel.set_visible(false);
+    _sessionErrorLabel.add_css_class("ao-status-error");
+    _sessionErrorLabel.add_css_class("ao-properties-session-error");
+
+    _contentBox.set_spacing(kSectionSpacing);
+    _contentBox.append(_sessionErrorLabel);
+    _contentBox.append(_notebook);
+
     buildMetadataTab();
     buildPropertiesTab();
 
-    setContentWidget(_notebook);
+    setContentWidget(_contentBox);
   }
 
   void TrackPropertiesDialog::buildMetadataTab()
@@ -218,7 +248,7 @@ namespace ao::gtk
       return;
     }
 
-    auto scope = _reads.reader();
+    auto scope = _library.reader();
 
     bool first = true;
 
@@ -295,7 +325,13 @@ namespace ao::gtk
     }
 
     auto const patch = _formModel.buildPatch();
-    auto const replyResult = _writer.updateMetadata(_trackIds, patch);
+
+    if (_editSessionPtr == nullptr)
+    {
+      return;
+    }
+
+    auto const replyResult = _editSessionPtr->submitMetadata(patch);
 
     if (!replyResult)
     {
@@ -309,7 +345,22 @@ namespace ao::gtk
       return;
     }
 
-    for (auto const trackId : replyResult->mutatedIds)
+    if (replyResult->status != uimodel::TrackAuthoringSubmitStatus::Applied &&
+        replyResult->status != uimodel::TrackAuthoringSubmitStatus::NoOp)
+    {
+      AppDialog::presentMessage(
+        *this,
+        "Save could not be applied",
+        replyResult->status == uimodel::TrackAuthoringSubmitStatus::Missing
+          ? "One or more selected tracks no longer exist."
+          : "The library changed while this dialog was open. Reload the properties and try again.",
+        {AppDialogAction{
+          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+        Gtk::ResponseType::CLOSE);
+      return;
+    }
+
+    for (auto const trackId : replyResult->reply.mutatedIds)
     {
       _rowCache.invalidate(trackId);
     }
@@ -319,7 +370,10 @@ namespace ao::gtk
   {
     if (_saveButton != nullptr)
     {
-      _saveButton->set_sensitive(_formModel.canSave());
+      auto const sessionCanSave =
+        _editSessionPtr != nullptr && (_editSessionPtr->state() == uimodel::TrackAuthoringSessionState::Editing ||
+                                       _editSessionPtr->state() == uimodel::TrackAuthoringSessionState::Applied);
+      _saveButton->set_sensitive(sessionCanSave && _formModel.canSave());
     }
   }
 

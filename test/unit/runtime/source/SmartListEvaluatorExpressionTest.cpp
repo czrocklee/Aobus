@@ -28,7 +28,7 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({second, first});
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     auto spy = TrackSourceBatchSpy{filtered};
 
     filtered.reload();
@@ -52,8 +52,8 @@ namespace ao::rt::test
     auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto validList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
-    auto invalidList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto validList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    auto invalidList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     validList.setExpression("$year >= 2021");
     validList.reload();
     invalidList.setExpression("   ");
@@ -93,8 +93,8 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({first});
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto validList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
-    auto invalidList = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto validList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
+    auto invalidList = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     validList.setExpression("$year >= 2021");
     validList.reload();
     invalidList.setExpression("   ");
@@ -125,7 +125,7 @@ namespace ao::rt::test
     auto& source = *sourcePtr;
 
     auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, libraryFixture.library(), engine};
+    auto filtered = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     filtered.setExpression("#future and %rating = '5'");
     filtered.reload();
 

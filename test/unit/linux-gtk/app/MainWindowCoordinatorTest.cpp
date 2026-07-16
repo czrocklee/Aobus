@@ -46,13 +46,12 @@ namespace ao::gtk::test
   {
     TrackId addTrackWithTitle(rt::AppRuntime& runtime, std::string_view title)
     {
-      return library::test::addTrack(runtime.musicLibrary(), {.title = std::string{title}});
+      return addRuntimeTrack(runtime, {.title = std::string{title}});
     }
 
     void updateTrackTitle(rt::AppRuntime& runtime, TrackId trackId, std::string_view title)
     {
-      library::test::updateTrackSpec(
-        runtime.musicLibrary(), trackId, [&](library::test::TrackSpec& spec) { spec.title = std::string{title}; });
+      updateRuntimeTrack(runtime, trackId, [&](library::test::TrackSpec& spec) { spec.title = std::string{title}; });
     }
   } // namespace
 
@@ -152,12 +151,13 @@ namespace ao::gtk::test
             "[gtk][unit][main-window-playback][session]")
   {
     auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{
+      [&](library::MusicLibrary& library)
+      { trackId = library::test::addTrack(library, {.title = "Restored Track", .uri = fixturePath}); }};
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime.playback());
-    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId =
-      library::test::addTrack(runtime.musicLibrary(), {.title = "Restored Track", .uri = fixturePath});
     auto const sourceListId = ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
       .kind = rt::LibraryWriter::ListKind::Manual,
       .name = "Temporary sequence source",
@@ -204,9 +204,8 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     rt::test::addReadyAudioProvider(runtime.playback());
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const track1 =
-      library::test::addTrack(runtime.musicLibrary(), {.title = "Restored Track", .uri = fixturePath});
-    auto const track2 = library::test::addTrack(runtime.musicLibrary(), {.title = "Changed Track", .uri = fixturePath});
+    auto const track1 = addRuntimeTrack(runtime, {.title = "Restored Track", .uri = fixturePath});
+    auto const track2 = addRuntimeTrack(runtime, {.title = "Changed Track", .uri = fixturePath});
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);

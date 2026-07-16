@@ -18,16 +18,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::library
 {
   class MusicLibrary;
   class DictionaryStore;
+  class WritableMusicLibrary;
 }
 
 namespace ao::rt
@@ -47,18 +50,25 @@ namespace ao::rt
                        std::move_only_function<void(ScanFailure const& failure)> itemFailureCallback,
                        ScanApplyOptions options = {});
 
-    ~ScanApplyOperation() = default;
+    ~ScanApplyOperation();
 
     ScanApplyOperation(ScanApplyOperation const&) = delete;
     ScanApplyOperation& operator=(ScanApplyOperation const&) = delete;
     ScanApplyOperation(ScanApplyOperation&&) = delete;
     ScanApplyOperation& operator=(ScanApplyOperation&&) = delete;
 
-    // Run execution in the current thread - must be called from background thread.
-    // Respects cancellation via stop_token.
+    // Offline composition: prepares media outside the write transaction, then
+    // acquires and commits an isolated writable-library session.
     Result<ScanApplyResult> run(std::stop_token stopToken = {});
-
-    std::size_t fileCount() const;
+    Result<ScanApplyResult> runOffline(library::WritableMusicLibrary& writableLibrary, std::stop_token stopToken = {});
+    // Runtime composition must call prepare before acquiring its coordinator
+    // mutation. apply performs no filesystem reads or audio hashing.
+    Result<ScanApplyResult> prepare(std::stop_token stopToken = {});
+    Result<ScanApplyResult> revalidatePreparedFiles(std::stop_token stopToken = {});
+    Result<ScanApplyResult> apply(library::WriteTransaction& transaction, std::stop_token stopToken = {});
+    bool cancelled() const noexcept;
+    bool readyForMutation() const noexcept;
+    bool transactionShouldCommit() const noexcept;
 
   private:
     struct AudioFingerprint final
@@ -67,12 +77,25 @@ namespace ao::rt
       std::uint64_t payloadLength = 0;
     };
 
+    struct PreparedScanItem;
+
+    enum class State : std::uint8_t
+    {
+      Created,
+      Prepared,
+      Revalidated,
+      Applied,
+      Terminal,
+    };
+
+    Result<> validatePlan() const;
+
     void applyScanItem(std::size_t itemIndex,
+                       PreparedScanItem const* preparedItem,
                        library::WriteTransaction& transaction,
                        library::TrackStore::Writer& trackWriter,
                        library::FileManifestStore::Writer& manifestWriter,
-                       library::DictionaryStore const& dictionary,
-                       std::stop_token stopToken);
+                       library::DictionaryStore const& dictionary);
 
     bool skipNonActionableItem(ScanItem const& item);
 
@@ -111,13 +134,14 @@ namespace ao::rt
 
     std::optional<AudioFingerprint> cachedAudioFingerprint(ScanItem const& item) const noexcept;
 
-    bool shouldFingerprintDuringApply(ScanItem const& item) const noexcept;
+    bool shouldFingerprintDuringPreparation(ScanItem const& item) const noexcept;
 
     bool isFingerprintRequiredForApply(ScanItem const& item) const noexcept;
 
     std::optional<AudioFingerprint> fingerprintAudioPayload(ScanItem const& item,
                                                             media::file::File const& file,
                                                             std::size_t itemIndex,
+                                                            bool publishProgress,
                                                             std::stop_token stopToken);
 
     std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
@@ -149,6 +173,9 @@ namespace ao::rt
     std::move_only_function<void(ScanFailure const& failure)> _itemFailureCallback;
 
     ScanApplyResult _result;
+    std::vector<std::unique_ptr<PreparedScanItem>> _preparedItems;
+    State _state = State::Created;
+    bool _cancelled = false;
     bool _abortTransaction = false;
   };
 } // namespace ao::rt

@@ -108,7 +108,7 @@ namespace ao::rt
     }
   } // namespace
 
-  CompletionService::CompletionService(library::MusicLibrary& library, LibraryChanges const& changes)
+  CompletionService::CompletionService(library::MusicLibrary const& library, LibraryChanges const& changes)
     : _library{library}
     , _ownerThread{std::this_thread::get_id()}
     , _libraryChangeSubscription{changes.onChanged(

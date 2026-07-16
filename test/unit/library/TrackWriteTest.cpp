@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/library/TrackStoreTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -31,7 +32,7 @@ namespace ao::library::test
   TEST_CASE("createPreparedTrackRecord writes prepared hot and cold track records", "[library][unit][track]")
   {
     auto fixture = TrackStoreFixture{};
-    auto transaction = fixture.library.writeTransaction();
+    auto transaction = writeTransaction(fixture.library);
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Created Track").artist("Artist");
     builder.property().uri("/tmp/created.flac");
@@ -52,7 +53,7 @@ namespace ao::library::test
   TEST_CASE("updatePreparedTrackRecord replaces existing hot and cold track records", "[library][unit][track]")
   {
     auto fixture = TrackStoreFixture{};
-    auto transaction = fixture.library.writeTransaction();
+    auto transaction = writeTransaction(fixture.library);
     auto originalBuilder = TrackBuilder::makeEmpty();
     originalBuilder.metadata().title("Original Track");
     originalBuilder.property().uri("/tmp/original.flac");
@@ -81,7 +82,7 @@ namespace ao::library::test
   TEST_CASE("prepared track data is a snapshot unaffected by later builder mutation", "[library][unit][track]")
   {
     auto fixture = TrackStoreFixture{};
-    auto transaction = fixture.library.writeTransaction();
+    auto transaction = writeTransaction(fixture.library);
     auto builder = TrackBuilder::makeEmpty();
 
     {

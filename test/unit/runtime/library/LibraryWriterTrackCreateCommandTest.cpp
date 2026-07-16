@@ -49,7 +49,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
@@ -89,7 +90,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
 
     auto const absValidFile = copyFixtureAudio(libraryFixture, "relative.flac");
 
@@ -116,7 +118,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
 
     auto mutated = std::vector<TrackId>{};
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
@@ -134,7 +137,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto changes = LibraryChanges{};
-    auto writer = LibraryWriter{libraryFixture.library(), changes};
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
 
     SECTION("missing file")
     {

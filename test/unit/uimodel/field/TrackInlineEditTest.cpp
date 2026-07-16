@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/field/TrackInlineEdit.h>
+#include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -20,6 +24,8 @@ namespace ao::uimodel::test
 {
   namespace
   {
+    constexpr std::size_t kOversizedMetadataLength = std::size_t{1024} * 1024;
+
     TrackFieldEditValue textValue(std::string_view value)
     {
       return TrackFieldEditValue{std::in_place_type<std::string>, std::string{value}};
@@ -38,9 +44,12 @@ namespace ao::uimodel::test
 
   TEST_CASE("TrackInlineEdit - applies inline metadata edits", "[uimodel][unit][workflow]")
   {
+    auto fixture = TrackAuthoringFixture{1};
+    auto sessionResult = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
+    REQUIRE(sessionResult);
+    auto sessionPtr = std::move(*sessionResult);
     auto currentValue = textValue("Old Title");
     auto appliedValue = std::string{};
-    auto committedPatch = rt::MetadataPatch{};
 
     auto hooks = TrackInlineEditHooks{
       .parse = [](std::string_view text) -> Result<TrackFieldEditValue> { return textValue(text); },
@@ -59,13 +68,7 @@ namespace ao::uimodel::test
           patch.optTitle = *text;
         }
       },
-      .commitPatch = [&](rt::MetadataPatch const& patch) -> Result<rt::UpdateTrackMetadataReply>
-      {
-        committedPatch = patch;
-        auto reply = rt::UpdateTrackMetadataReply{};
-        reply.mutatedIds = {TrackId{1}};
-        return reply;
-      },
+      .session = sessionPtr.get(),
     };
 
     SECTION("no-op edits are ignored")
@@ -74,7 +77,7 @@ namespace ao::uimodel::test
         TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Old Title"}, hooks);
 
       CHECK(result.outcome == TrackInlineEditOutcome::NoChange);
-      CHECK_FALSE(committedPatch.optTitle);
+      CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
     }
 
     SECTION("missing hooks report not editable")
@@ -107,36 +110,56 @@ namespace ao::uimodel::test
       CHECK(result.outcome == TrackInlineEditOutcome::Applied);
       CHECK(textFrom(currentValue) == "New Title");
       CHECK(appliedValue == "New Title");
-      REQUIRE(committedPatch.optTitle);
-      CHECK(*committedPatch.optTitle == "New Title");
+      CHECK(fixture.title(fixture.trackIds().front()) == "New Title");
     }
 
     SECTION("a write that mutates nothing rolls back the optimistic edit")
     {
-      hooks.commitPatch = [](rt::MetadataPatch const&) -> Result<rt::UpdateTrackMetadataReply>
-      { return rt::UpdateTrackMetadataReply{}; };
+      hooks.writePatch = [](rt::MetadataPatch& patch, TrackFieldEditValue const&) { patch.optTitle = "Old Title"; };
 
       auto const result = applyTrackInlineEdit(
         TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Temporary Title"},
         hooks);
 
-      CHECK(result.outcome == TrackInlineEditOutcome::MutationRejected);
-      CHECK(result.statusMessage == "Change could not be applied.");
+      CHECK(result.outcome == TrackInlineEditOutcome::NoChange);
       CHECK(textFrom(currentValue) == "Old Title");
     }
 
     SECTION("a rejected write rolls back the optimistic edit and surfaces the error")
     {
-      hooks.commitPatch = [](rt::MetadataPatch const&) -> Result<rt::UpdateTrackMetadataReply>
-      { return makeError(Error::Code::ValueTooLarge, "Metadata value is too large."); };
+      hooks.writePatch = [](rt::MetadataPatch& patch, TrackFieldEditValue const&)
+      { patch.optTitle = std::string(kOversizedMetadataLength, 'x'); };
 
       auto const result = applyTrackInlineEdit(
         TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Temporary Title"},
         hooks);
 
       CHECK(result.outcome == TrackInlineEditOutcome::MutationRejected);
-      CHECK(result.statusMessage == "Metadata value is too large.");
+      CHECK_FALSE(result.statusMessage.empty());
       CHECK(textFrom(currentValue) == "Old Title");
+
+      auto const terminalResult = applyTrackInlineEdit(
+        TrackInlineEditRequest{
+          .field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Another temporary title"},
+        hooks);
+
+      CHECK(terminalResult.outcome == TrackInlineEditOutcome::Unavailable);
+      CHECK(terminalResult.statusMessage == "Library editing is currently unavailable.");
+      CHECK(textFrom(currentValue) == "Old Title");
+    }
+
+    SECTION("an intervening commit makes the edit stale without retargeting it")
+    {
+      auto draft = rt::LibraryWriter::ListDraft{.name = "Unrelated"};
+      REQUIRE(fixture.library().writer().createList(draft));
+
+      auto const result = applyTrackInlineEdit(
+        TrackInlineEditRequest{.field = rt::TrackField::Title, .oldText = "Old Title", .newText = "Temporary Title"},
+        hooks);
+
+      CHECK(result.outcome == TrackInlineEditOutcome::Stale);
+      CHECK(textFrom(currentValue) == "Old Title");
+      CHECK(fixture.title(fixture.trackIds().front()) == "Old Title");
     }
   }
 

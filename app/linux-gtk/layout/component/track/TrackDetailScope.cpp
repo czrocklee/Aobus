@@ -61,7 +61,7 @@ namespace ao::gtk::layout
     public:
       TrackDetailScopeComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
-        , _undoController{ctx.runtime.library().writer(), ctx.timeoutScheduler}
+        , _undoController{ctx.timeoutScheduler}
         , _projectionPtr{ctx.runtime.views().detailProjection(rt::FocusedViewTarget{},
                                                               ctx.runtime.workspace(),
                                                               ctx.runtime.library().changes())}

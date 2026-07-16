@@ -45,7 +45,7 @@ Each row records the outgoing direct edges of one RFC; sequence numbers alone im
 | [0020](0020-decoupled-media-interpretation.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0004](0004-scalable-library-tasks.md) |
 | [0021](0021-bounded-resource-delivery.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0004](0004-scalable-library-tasks.md), [0012](0012-structured-async-fault-diagnostics.md) |
 | [0022](0022-transaction-coherent-library-dictionary.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0009](0009-pure-expression-binding.md) |
-| [0023](0023-revision-bound-metadata-authoring.md) | [0022](0022-transaction-coherent-library-dictionary.md) | None | [0003](0003-library-mutation-pipeline.md), [0013](0013-coherent-application-reporting-policy.md), [0016](0016-coherent-workspace-transactions.md) |
+| [0023](0023-revision-bound-metadata-authoring.md) | [0003](0003-library-mutation-pipeline.md), [0022](0022-transaction-coherent-library-dictionary.md) | None | [0013](0013-coherent-application-reporting-policy.md), [0016](0016-coherent-workspace-transactions.md) |
 | [0024](0024-versioned-predicate-dialect.md) | None | None | [0006](0006-coherent-derived-track-views.md), [0008](0008-declarative-track-capability-bridge.md), [0009](0009-pure-expression-binding.md) |
 | [0025](0025-bounded-shell-layout-documents.md) | None | None | [0010](0010-versioned-presentation-state.md) |
 | [0026](0026-lifetime-safe-file-dialog-callbacks.md) | None | None | None |
@@ -60,7 +60,7 @@ The front-matter lifecycle state is authoritative; `in-review` identifies active
 
 - [RFC 0001: Safe library transfer](0001-safe-library-transfer.md) proposes fail-closed import validation, root-contained URIs, and preview-bound destructive authorization.
 - [RFC 0002: Durable library storage lifecycle](0002-durable-library-storage.md) proposes explicit durability classes, stepwise migration, checkpoints, recovery, and storage maintenance.
-- [RFC 0003: Unified library mutation pipeline](0003-library-mutation-pipeline.md) proposes one runtime owner for write scheduling, commit revision, and semantic change publication.
+- [RFC 0003: Unified library mutation pipeline](0003-library-mutation-pipeline.md) is implemented with one coordinator-owned writable capability, maintenance admission, commit revision, and semantic change publication barrier.
 - [RFC 0004: Scalable library task execution](0004-scalable-library-tasks.md) proposes phased preparation, stable-file revalidation, bounded commits, cancellation, and production scale budgets.
 - [RFC 0005: Coherent playback application boundary](0005-coherent-playback-boundary.md) proposes one compositional facade, coherent application transactions, and non-blocking preparation and persistence.
 - [RFC 0006: Coherent derived track views](0006-coherent-derived-track-views.md) proposes explicit request outcomes, transactional view state, safe quick-filter construction, and asynchronous revision-checked rebuilds.
@@ -80,7 +80,7 @@ The front-matter lifecycle state is authoritative; `in-review` identifies active
 - [RFC 0020: Decoupled media interpretation](0020-decoupled-media-interpretation.md) is rejected: a narrower zero-copy `File`/`Visitor` boundary and private runtime adapter removed the cycle without its owned aggregate or capability registry.
 - [RFC 0021: Bounded asynchronous resource delivery](0021-bounded-resource-delivery.md) proposes shared asynchronous byte reads, bounded transforms, typed request lifetimes, and non-blocking GTK, TUI, and MPRIS delivery.
 - [RFC 0022: Transaction-coherent library dictionary](0022-transaction-coherent-library-dictionary.md) is implemented with transaction-local interning, atomic committed-index publication, dense dictionary ids, and pure query/format binding.
-- [RFC 0023: Revision-bound metadata authoring](0023-revision-bound-metadata-authoring.md) proposes generation- and baseline-bound metadata/tag commands, typed conflicts, atomic multi-target edits, and compare-and-restore undo.
+- [RFC 0023: Revision-bound metadata authoring](0023-revision-bound-metadata-authoring.md) is implemented with runtime/revision-bound metadata and tag sessions, atomic multi-target outcomes, and guarded undo.
 - [RFC 0024: Versioned predicate dialect](0024-versioned-predicate-dialect.md) rejects per-expression language identity in favor of the existing compatibility version or policy owned by each containing format and protocol.
 - [RFC 0025: Bounded shell layout documents](0025-bounded-shell-layout-documents.md) proposes strict layout version gates, bounded candidate decoding and template expansion, and preservation on rejection.
 - [RFC 0026: Lifetime-safe GTK file-dialog callbacks](0026-lifetime-safe-file-dialog-callbacks.md) is implemented as a coordinator-scoped guard that makes export-mode and native chooser callbacks harmless after teardown and requests native cancellation.

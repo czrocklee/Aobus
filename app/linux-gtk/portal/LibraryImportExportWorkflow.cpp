@@ -15,8 +15,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -45,7 +47,7 @@ namespace ao::gtk::portal
                     error.location.line());
     }
 
-    std::string relinkedScanMessage(std::int32_t relinkedCount)
+    std::string relinkedScanMessage(std::size_t relinkedCount)
     {
       return std::format("Relinked {} moved file{}", relinkedCount, relinkedCount == 1 ? "" : "s");
     }
@@ -58,15 +60,15 @@ namespace ao::gtk::portal
 
     std::string scanCompletionSummary(rt::ScanApplyResult const& result)
     {
-      if (result.relinkedCount > 0 && result.missingCount > 0)
+      if (!result.relinkedIds.empty() && result.missingCount > 0)
       {
         return std::format(
-          "{}; {}", relinkedScanMessage(result.relinkedCount), missingScanMessage(result.missingCount));
+          "{}; {}", relinkedScanMessage(result.relinkedIds.size()), missingScanMessage(result.missingCount));
       }
 
-      if (result.relinkedCount > 0)
+      if (!result.relinkedIds.empty())
       {
-        return relinkedScanMessage(result.relinkedCount);
+        return relinkedScanMessage(result.relinkedIds.size());
       }
 
       if (result.missingCount > 0)
@@ -198,7 +200,8 @@ namespace ao::gtk::portal
                                                                 std::filesystem::path importPath,
                                                                 std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().importLibraryAsync(std::move(importPath), stopToken);
+    auto result = co_await _runtime.library().taskService().importLibraryAsync(
+      std::move(importPath), rt::ImportMode::Restore, stopToken);
 
     if (!result)
     {
@@ -242,7 +245,7 @@ namespace ao::gtk::portal
       return true;
     }
 
-    for (auto const& item : plan.items)
+    for (auto const& item : plan.items())
     {
       if (item.classification == rt::ScanClassification::Error)
       {
@@ -273,22 +276,17 @@ namespace ao::gtk::portal
     }
     else
     {
-      if (!result->cancelled &&
-          (!result->insertedIds.empty() || !result->mutatedIds.empty() || !result->relinkedIds.empty()) &&
+      if ((!result->insertedIds.empty() || !result->mutatedIds.empty() || !result->relinkedIds.empty()) &&
           _callbacks.onLibraryDataMutated)
       {
         _callbacks.onLibraryDataMutated();
       }
 
-      if (result->cancelled)
-      {
-        _runtime.notifications().post(rt::NotificationSeverity::Info, "Scan cancelled");
-      }
-      else if (result->failureCount > 0)
+      if (result->failureCount > 0)
       {
         auto message = std::string{"Scan completed with errors"};
 
-        if (result->missingCount > 0 || result->relinkedCount > 0)
+        if (result->missingCount > 0 || !result->relinkedIds.empty())
         {
           message += std::format("; {}", scanCompletionSummary(*result));
         }
@@ -304,7 +302,7 @@ namespace ao::gtk::portal
         _runtime.notifications().post(rt::NotificationSeverity::Info, scanCompletionSummary(*result));
       }
 
-      if (mode == ScanRequestMode::FastBootstrap && !result->cancelled)
+      if (mode == ScanRequestMode::FastBootstrap)
       {
         startAudioIdentityIndexing();
       }

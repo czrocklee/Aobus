@@ -43,7 +43,7 @@ namespace ao::rt::test
     void setupFiltered(std::span<TrackId const> ids)
     {
       source.setInitial(ids);
-      filteredPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, libraryFixture.library(), engine);
+      filteredPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, engine);
       filteredPtr->reload();
     }
   };

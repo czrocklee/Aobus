@@ -18,19 +18,18 @@ namespace ao::rt::test
   {
     MusicLibraryFixture libraryFixture;
     InlineExecutor executor;
-    async::Runtime runtime;
     LibraryChanges changes;
-    LibraryWriter writer;
+    LibraryWriterFixture writerFixture;
     std::unique_ptr<TrackSourceCache> cachePtr;
 
     ViewServiceFixture()
-      : runtime{executor}
-      , changes{}
-      , writer{libraryFixture.library(), changes}
+      : changes{}
+      , writerFixture{libraryFixture.library(), changes}
       , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
     {
     }
 
+    LibraryWriter& writer() { return writerFixture.writer(); }
     ViewService makeService() { return ViewService{executor, libraryFixture.library(), *cachePtr}; }
 
     CreateTrackListViewReply requireView(ViewService& service,

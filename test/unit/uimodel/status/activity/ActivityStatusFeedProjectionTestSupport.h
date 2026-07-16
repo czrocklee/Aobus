@@ -5,8 +5,10 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/LibraryChanges.h>
 
 #include <chrono>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <utility>
@@ -43,5 +45,12 @@ namespace ao::uimodel::test
   inline rt::NotificationFeedState feed(std::vector<rt::NotificationEntry> entries)
   {
     return rt::NotificationFeedState{.entries = std::move(entries), .revision = 9};
+  }
+
+  inline rt::LibraryChanges::LibraryTaskCompleted libraryTaskCompletion(
+    std::size_t affectedCount,
+    rt::LibraryChanges::LibraryTaskCompletionStatus status = rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded)
+  {
+    return {.status = status, .affectedCount = affectedCount};
   }
 } // namespace ao::uimodel::test

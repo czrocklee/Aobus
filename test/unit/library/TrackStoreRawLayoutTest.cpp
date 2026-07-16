@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/library/TrackStoreTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/library/TrackLayout.h>
 
@@ -63,7 +64,7 @@ namespace ao::library::test
     auto coldData =
       makeColdData(TrackColdHeader{.duration = std::chrono::minutes{3}, .trackNumber = 1, .trackTotal = 10});
 
-    auto wtxn = fixture.library.writeTransaction();
+    auto wtxn = writeTransaction(fixture.library);
     auto id = requireCreate(fixture.store.writer(wtxn), hotData, coldData).first;
     REQUIRE(wtxn.commit());
 
@@ -84,7 +85,7 @@ namespace ao::library::test
     auto hotBacking = std::vector<std::byte>(hotData.size() + 1, std::byte{0});
     std::ranges::copy(hotData, hotBacking.begin() + 1);
 
-    auto wtxn = fixture.library.writeTransaction();
+    auto wtxn = writeTransaction(fixture.library);
     auto writer = fixture.store.writer(wtxn);
 
     SECTION("createHotCold rejects unaligned input spans")
@@ -113,12 +114,12 @@ namespace ao::library::test
     auto id = createCommittedTrack(fixture.store, fixture.library, hotData, coldData);
 
     auto hotData2 = makeHotData(TrackHotHeader{.artistId = DictionaryId{99}});
-    auto wtxn1 = fixture.library.writeTransaction();
+    auto wtxn1 = writeTransaction(fixture.library);
     REQUIRE(fixture.store.writer(wtxn1).updateHot(id, hotData2));
     REQUIRE(wtxn1.commit());
 
     auto coldData2 = makeColdData(TrackColdHeader{.duration = std::chrono::seconds{200}, .trackNumber = 2});
-    auto wtxn2 = fixture.library.writeTransaction();
+    auto wtxn2 = writeTransaction(fixture.library);
     REQUIRE(fixture.store.writer(wtxn2).updateCold(
       id, coldData2.size(), [&](std::span<std::byte> buf) { std::ranges::copy(coldData2, buf.begin()); }));
     REQUIRE(wtxn2.commit());
@@ -136,7 +137,7 @@ namespace ao::library::test
     auto fixture = TrackStoreFixture{};
     auto id = createCommittedTrack(fixture.store, fixture.library, makeHotData(), makeColdData());
 
-    auto wtxn = fixture.library.writeTransaction();
+    auto wtxn = writeTransaction(fixture.library);
     REQUIRE(fixture.store.writer(wtxn).remove(id));
     REQUIRE(wtxn.commit());
 
@@ -152,7 +153,7 @@ namespace ao::library::test
                                    makeHotData(),
                                    makeColdData(TrackColdHeader{.duration = std::chrono::minutes{4}}));
 
-    auto wtxn = fixture.library.writeTransaction();
+    auto wtxn = writeTransaction(fixture.library);
     auto writer = fixture.store.writer(wtxn);
     auto optHot = writer.get(id, TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optHot);

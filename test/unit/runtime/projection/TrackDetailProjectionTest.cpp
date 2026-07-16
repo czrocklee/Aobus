@@ -50,7 +50,7 @@ namespace ao::rt::test
       InlineExecutor executor;
       async::Runtime runtime;
       LibraryChanges changes;
-      LibraryWriter writer;
+      LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
       WorkspaceService workspace;
@@ -59,12 +59,14 @@ namespace ao::rt::test
         : libraryFixture{}
         , runtime{executor}
         , changes{}
-        , writer{libraryFixture.library(), changes}
+        , writerFixture{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
         , workspace{executor, views, changes}
       {
       }
+
+      LibraryWriter& writer() { return writerFixture.writer(); }
     };
   } // namespace
 
@@ -91,7 +93,7 @@ namespace ao::rt::test
     {
       auto const patch = MetadataPatch{.optTitle = "After"};
       auto const targetIds = std::array{id1};
-      REQUIRE(env.writer.updateMetadata(targetIds, patch));
+      REQUIRE(env.writerFixture.updateMetadata(targetIds, patch));
     }
 
     // Mutation service already published the signal
@@ -116,7 +118,7 @@ namespace ao::rt::test
 
     // Mutate a track not in the selection
     auto const otherIds = std::array{id2};
-    REQUIRE(env.writer.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"}));
+    REQUIRE(env.writerFixture.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"}));
 
     // Revision should NOT change because the mutated track is not selected
     CHECK(projPtr->snapshot().revision == revBefore);
@@ -240,7 +242,7 @@ namespace ao::rt::test
     // Add tag
     auto const targetIds = std::vector{id1};
     auto const tagsToAdd = std::vector<std::string>{"MyTag"};
-    REQUIRE(env.writer.editTags(targetIds, tagsToAdd, {}));
+    REQUIRE(env.writerFixture.editTags(targetIds, tagsToAdd, {}));
 
     auto const projPtr =
       env.views.detailProjection(ExplicitSelectionTarget{std::vector{id1}}, env.workspace, env.changes);
@@ -263,7 +265,7 @@ namespace ao::rt::test
       patch.customUpdates["Key1"] = "Value1";
       patch.customUpdates["Shared"] = "Same";
       patch.customUpdates["Mixed"] = "One";
-      REQUIRE(env.writer.updateMetadata(std::vector{id1}, patch));
+      REQUIRE(env.writerFixture.updateMetadata(std::vector{id1}, patch));
     }
 
     // Add custom metadata to id2
@@ -272,7 +274,7 @@ namespace ao::rt::test
       patch.customUpdates["Key2"] = "Value2";
       patch.customUpdates["Shared"] = "Same";
       patch.customUpdates["Mixed"] = "Two";
-      REQUIRE(env.writer.updateMetadata(std::vector{id2}, patch));
+      REQUIRE(env.writerFixture.updateMetadata(std::vector{id2}, patch));
     }
 
     auto const projPtr =

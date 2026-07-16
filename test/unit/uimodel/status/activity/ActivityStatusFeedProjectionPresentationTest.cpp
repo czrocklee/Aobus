@@ -66,7 +66,7 @@ namespace ao::uimodel::test
       REQUIRE(feedProjection.viewState().detail.items.size() == 1);
       CHECK(feedProjection.viewState().detail.items[0].message == "Index diagnostic");
 
-      feedProjection.handleLibraryTaskCompleted(3, currentFeed);
+      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(3), currentFeed);
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Success);
       CHECK(feedProjection.viewState().compact.text == "Scan complete: 3 tracks added");
