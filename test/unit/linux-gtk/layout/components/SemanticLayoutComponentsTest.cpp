@@ -20,7 +20,6 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -414,10 +413,8 @@ namespace ao::gtk::layout::test
       library::test::addTrack(musicLibrary, {.title = "First", .customMetadata = {{"Mood", "Bright"}}});
     auto const secondTrackId = library::test::addTrack(musicLibrary, {.title = "Second"});
 
-    auto const reply =
-      ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
-    runtime.workspace().setFocusedView(reply.viewId);
-    REQUIRE(runtime.views().setSelection(reply.viewId, {firstTrackId}));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
+    REQUIRE(runtime.views().setSelection(viewId, {firstTrackId}));
     drainGtkEvents();
 
     auto const node =
@@ -438,7 +435,7 @@ namespace ao::gtk::layout::test
 
     CHECK(undoBar->get_visible());
 
-    REQUIRE(runtime.views().setSelection(reply.viewId, {secondTrackId}));
+    REQUIRE(runtime.views().setSelection(viewId, {secondTrackId}));
     drainGtkEvents();
 
     CHECK_FALSE(undoBar->get_visible());
@@ -453,10 +450,8 @@ namespace ao::gtk::layout::test
     auto const trackId =
       library::test::addTrack(musicLibrary, {.title = "Undo Button Target", .customMetadata = {{"Mood", "Bright"}}});
 
-    auto const reply =
-      ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
-    runtime.workspace().setFocusedView(reply.viewId);
-    REQUIRE(runtime.views().setSelection(reply.viewId, {trackId}));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
+    REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
 
     auto const node =
@@ -498,10 +493,8 @@ namespace ao::gtk::layout::test
     auto const trackId =
       library::test::addTrack(musicLibrary, {.title = "Add Target", .customMetadata = {{"Mood", "Bright"}}});
 
-    auto const reply =
-      ao::test::requireValue(runtime.views().createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
-    runtime.workspace().setFocusedView(reply.viewId);
-    REQUIRE(runtime.views().setSelection(reply.viewId, {trackId}));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
+    REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
 
     auto const node =

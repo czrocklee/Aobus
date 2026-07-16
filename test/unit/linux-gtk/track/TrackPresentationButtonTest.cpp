@@ -75,7 +75,7 @@ namespace ao::gtk::test
 
     REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
     drainGtkEvents();
-    auto const activeViewId = runtime.workspace().layoutState().activeViewId;
+    auto const activeViewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(activeViewId != rt::kInvalidViewId);
     REQUIRE(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
 

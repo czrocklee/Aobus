@@ -140,7 +140,7 @@ namespace ao::gtk
 
     void applyPresentationPreferencesToOpenViews(rt::AppRuntime& runtime) const
     {
-      for (auto const viewId : runtime.workspace().layoutState().openViews)
+      for (auto const viewId : runtime.workspace().snapshot().openViews)
       {
         auto const state = runtime.views().trackListState(viewId);
 
@@ -266,8 +266,6 @@ namespace ao::gtk
       .activityPresentation = rt::NotificationActivityPresentation::Hidden,
     });
 
-    rebuildListPages();
-
     if (auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore()); !restored)
     {
       APP_LOG_WARN("MainWindowCoordinator: Failed to restore workspace session - {}", restored.error().message);
@@ -275,13 +273,14 @@ namespace ao::gtk
 
     _implPtr->applyPresentationPreferencesToOpenViews(_runtime);
 
-    if (_runtime.workspace().layoutState().openViews.empty())
+    if (_runtime.workspace().snapshot().openViews.empty())
     {
       auto const spec = _implPtr->presentationForList(rt::kAllTracksListId, _runtime);
       std::ignore = _runtime.workspace().navigateTo(rt::kAllTracksListId, {.optPresentation = spec});
       _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
     }
 
+    rebuildListPages();
     _implPtr->restorePlaybackSession(_runtime);
   }
 

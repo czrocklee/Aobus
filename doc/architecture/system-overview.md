@@ -54,6 +54,7 @@ It owns storage, asynchronous execution, the library facade and change bus, sour
 
 `AppRuntime` extends that composition for interactive applications.
 It adds view and workspace services, playback transport and succession, audio-player ownership, and playback-session persistence.
+It also owns narrow cross-service application commands, such as album reveal, that compose a workspace receipt with playback intent without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns construction, restoration order, active-library replacement, and teardown coordination.
 

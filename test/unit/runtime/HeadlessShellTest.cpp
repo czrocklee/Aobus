@@ -33,7 +33,7 @@ namespace ao::rt::test
     SECTION("Initial layout is empty")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const layout = runtime.workspace().layoutState();
+      auto const layout = runtime.workspace().snapshot();
       CHECK(layout.openViews.empty());
       CHECK(layout.activeViewId == kInvalidViewId);
     }
@@ -45,7 +45,7 @@ namespace ao::rt::test
         ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Headless"}));
       REQUIRE(runtime.workspace().navigateTo(listId));
 
-      auto const layout = runtime.workspace().layoutState();
+      auto const layout = runtime.workspace().snapshot();
       REQUIRE(layout.openViews.size() == 1);
       CHECK(layout.activeViewId == layout.openViews.front());
 
@@ -57,16 +57,15 @@ namespace ao::rt::test
     SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const filteredView = ao::test::requireValue(runtime.views().createView(
-        TrackListViewConfig{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""}));
-
-      runtime.workspace().addView(filteredView.viewId);
-      runtime.workspace().setFocusedView(filteredView.viewId);
+      auto const filteredViewId =
+        ao::test::requireValue(runtime.workspace().navigateTo(
+                                 FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""}))
+          .activeViewId;
       REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
 
-      auto const layout = runtime.workspace().layoutState();
+      auto const layout = runtime.workspace().snapshot();
       CHECK(layout.openViews.size() == 2);
-      CHECK(layout.activeViewId != filteredView.viewId);
+      CHECK(layout.activeViewId != filteredViewId);
 
       auto const activeState = runtime.views().trackListState(layout.activeViewId);
       CHECK(activeState.listId == kAllTracksListId);
@@ -83,14 +82,14 @@ namespace ao::rt::test
       REQUIRE(runtime.workspace().navigateTo(firstListId));
       REQUIRE(runtime.workspace().navigateTo(secondListId));
 
-      auto layout1 = runtime.workspace().layoutState();
+      auto layout1 = runtime.workspace().snapshot();
       REQUIRE(layout1.openViews.size() == 2);
       auto const viewToClose = layout1.openViews.front();
       auto const remainingView = layout1.openViews.back();
 
-      runtime.workspace().closeView(viewToClose);
+      REQUIRE(runtime.workspace().closeView(viewToClose));
 
-      auto const layout2 = runtime.workspace().layoutState();
+      auto const layout2 = runtime.workspace().snapshot();
       CHECK(layout2.openViews.size() == 1);
       CHECK(layout2.openViews.front() == remainingView);
       CHECK(layout2.activeViewId == remainingView);
@@ -119,7 +118,7 @@ namespace ao::rt::test
 
       REQUIRE(session2.workspace().restoreSession(session2.workspaceConfigStore()));
 
-      auto const layout = session2.workspace().layoutState();
+      auto const layout = session2.workspace().snapshot();
       CHECK(layout.openViews.size() == 2);
       CHECK(layout.activeViewId != kInvalidViewId);
     }
@@ -131,7 +130,7 @@ namespace ao::rt::test
         auto const listId = ao::test::requireValue(
           runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Grouped saved"}));
         REQUIRE(runtime.workspace().navigateTo(listId));
-        auto const viewId = runtime.workspace().layoutState().activeViewId;
+        auto const viewId = runtime.workspace().snapshot().activeViewId;
         auto const* artistPreset = builtinTrackPresentationPreset("artists");
         REQUIRE(artistPreset != nullptr);
         REQUIRE(runtime.views().setPresentation(viewId, artistPreset->spec));
@@ -154,7 +153,7 @@ namespace ao::rt::test
 
       REQUIRE(session2.workspace().restoreSession(session2.workspaceConfigStore()));
 
-      auto const layout2 = session2.workspace().layoutState();
+      auto const layout2 = session2.workspace().snapshot();
       REQUIRE(layout2.openViews.size() == 1);
       auto const restoredState = session2.views().trackListState(layout2.openViews[0]);
       CHECK(restoredState.groupBy == TrackGroupKey::AlbumArtist);
@@ -175,7 +174,7 @@ namespace ao::rt::test
 
       REQUIRE(session2.workspace().restoreSession(session2.workspaceConfigStore()));
 
-      auto const layout2 = session2.workspace().layoutState();
+      auto const layout2 = session2.workspace().snapshot();
       REQUIRE(layout2.openViews.size() == 1);
       auto const restoredState = session2.views().trackListState(layout2.openViews[0]);
       CHECK(restoredState.groupBy == TrackGroupKey::None);

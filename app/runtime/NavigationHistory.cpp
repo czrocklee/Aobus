@@ -15,11 +15,11 @@ namespace ao::rt
   {
   }
 
-  void NavigationHistory::commit(NavigationPoint point)
+  bool NavigationHistory::commit(NavigationPoint point)
   {
     if (_optCurrentIndex && _points[*_optCurrentIndex] == point)
     {
-      return;
+      return false;
     }
 
     if (_optCurrentIndex)
@@ -35,6 +35,8 @@ namespace ao::rt
       _points.pop_front();
       *_optCurrentIndex -= 1;
     }
+
+    return true;
   }
 
   std::optional<NavigationPoint> NavigationHistory::back()

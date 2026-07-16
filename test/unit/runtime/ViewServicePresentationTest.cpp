@@ -190,6 +190,26 @@ namespace ao::rt::test
     CHECK(snapAfter.groupBy == TrackGroupKey::Year);
   }
 
+  TEST_CASE("ViewService - setPresentation applies field changes under the same id and order",
+            "[runtime][unit][view][presentation]")
+  {
+    auto env = ViewServiceFixture{};
+    auto service = env.makeService();
+    auto const result = env.requireView(service);
+    auto presentation = defaultTrackPresentationSpec();
+    presentation.id = "custom";
+    presentation.visibleFields = {TrackField::Title};
+    REQUIRE(service.setPresentation(result.viewId, presentation));
+    auto const beforeRevision = service.trackListState(result.viewId).revision;
+
+    presentation.visibleFields = {TrackField::Title, TrackField::Artist};
+    REQUIRE(service.setPresentation(result.viewId, presentation));
+
+    auto const state = service.trackListState(result.viewId);
+    CHECK(state.revision == beforeRevision + 1);
+    CHECK(state.presentation.visibleFields == presentation.visibleFields);
+  }
+
   TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};

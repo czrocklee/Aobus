@@ -5,6 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/Subscription.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <gdkmm/rectangle.h>
@@ -14,6 +15,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -88,6 +90,9 @@ namespace ao::gtk
     Glib::RefPtr<Gio::SimpleAction> _editListActionPtr;
 
     ListId _pendingSelectId{0};
-    rt::Subscription _focusSub;
+    rt::ViewId _observedViewId = rt::kInvalidViewId;
+    std::uint64_t _observedWorkspaceRevision = 0;
+    bool _syncingWorkspaceSelection = false;
+    rt::Subscription _workspaceSub;
   };
 } // namespace ao::gtk

@@ -14,9 +14,12 @@
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/Subscription.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -53,7 +56,7 @@ namespace ao::rt
                                 playbackService,
                                 runtime.notifications(),
                                 runtime.async()}
-      , workspaceService{viewService, playbackService, runtime.library().changes(), runtime.musicLibrary()}
+      , workspaceService{runtime.async().callbackExecutor(), viewService, runtime.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
       , playbackSessionConfigStore{playbackSessionConfigStoreValue != nullptr ? playbackSessionConfigStoreValue
                                                                               : workspaceConfigStorePtr.get()}
@@ -162,7 +165,7 @@ namespace ao::rt
 
   Result<TrackId> AppRuntime::playSelectionInFocusedView()
   {
-    auto const focus = _implPtr->workspaceService.layoutState();
+    auto const focus = _implPtr->workspaceService.snapshot();
 
     if (focus.activeViewId == kInvalidViewId)
     {
@@ -191,6 +194,32 @@ namespace ao::rt
     {
       return makeError(Error::Code::Generic, error.what());
     }
+  }
+
+  Result<WorkspaceCommitReceipt> AppRuntime::jumpToAlbum(TrackId const trackId)
+  {
+    if (trackId == kInvalidTrackId)
+    {
+      return makeError(Error::Code::InvalidInput, "Cannot reveal an invalid track id");
+    }
+
+    auto const* albums = builtinTrackPresentationPreset("albums");
+
+    if (albums == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, "The albums presentation is unavailable");
+    }
+
+    auto navigation = _implPtr->workspaceService.navigateTo(
+      GlobalViewKind::AllTracks, {.recordHistory = true, .optPresentation = albums->spec});
+
+    if (!navigation)
+    {
+      return std::unexpected{navigation.error()};
+    }
+
+    _implPtr->playbackService.revealTrack(trackId, navigation->activeViewId);
+    return *navigation;
   }
 
   void AppRuntime::addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr)

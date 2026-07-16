@@ -22,7 +22,7 @@ namespace ao::rt::test
   public:
     PlaybackSequenceUiFixture()
       : runtime{makeRuntime(tempDir)}
-      , viewId{ao::test::requireValue(runtime.workspace().navigateTo(GlobalViewKind::AllTracks))}
+      , viewId{ao::test::requireValue(runtime.workspace().navigateTo(GlobalViewKind::AllTracks)).activeViewId}
     {
     }
 

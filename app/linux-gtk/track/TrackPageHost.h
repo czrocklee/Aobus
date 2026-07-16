@@ -81,6 +81,7 @@ namespace ao::gtk
   private:
     void ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider);
     void bindTrackPage(TrackPageEntry& entry);
+    void handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId viewId);
     void syncLayout();
     void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);

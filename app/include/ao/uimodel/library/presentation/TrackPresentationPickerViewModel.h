@@ -70,6 +70,7 @@ namespace ao::uimodel
     rt::Subscription _focusSub;
     rt::Subscription _presentationSub;
     rt::Subscription _catalogSub;
+    rt::ViewId _observedViewId = rt::kInvalidViewId;
     rt::ViewId _optimisticViewId = rt::kInvalidViewId;
     std::string _optimisticPresentationId;
   };

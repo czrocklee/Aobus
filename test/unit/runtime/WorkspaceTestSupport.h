@@ -51,20 +51,20 @@ namespace ao::rt::test
   {
     auto result = runtime.workspace().navigateTo(target, options);
     REQUIRE(result);
-    return *result;
+    return result->activeViewId;
   }
 
   inline ViewId requireBackNavigation(AppRuntime& runtime)
   {
     auto result = runtime.workspace().goBack();
     REQUIRE(result);
-    return *result;
+    return result->activeViewId;
   }
 
   inline ViewId requireForwardNavigation(AppRuntime& runtime)
   {
     auto result = runtime.workspace().goForward();
     REQUIRE(result);
-    return *result;
+    return result->activeViewId;
   }
 } // namespace ao::rt::test

@@ -12,7 +12,9 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -126,6 +128,27 @@ namespace ao::gtk::test
       CHECK(newActionPtr->get_enabled());
       CHECK(editActionPtr->get_enabled());
       CHECK(deleteActionPtr->get_enabled());
+    }
+
+    SECTION("presentation changes do not re-drive list selection")
+    {
+      auto const activeListId = createList(fixture.runtime().musicLibrary(), "Active List");
+      auto const browsedListId = createList(fixture.runtime().musicLibrary(), "Browsed List");
+      controller.rebuildTree(cache);
+      REQUIRE(fixture.runtime().workspace().navigateTo(activeListId));
+      drainGtkEvents();
+
+      controller.select(browsedListId);
+      drainGtkEvents();
+      REQUIRE(selectedId == browsedListId);
+      selectedId = kInvalidListId;
+      auto const* const albums = rt::builtinTrackPresentationPreset("albums");
+      REQUIRE(albums != nullptr);
+
+      REQUIRE(fixture.runtime().workspace().setActivePresentation(albums->spec));
+      drainGtkEvents();
+
+      CHECK(selectedId == kInvalidListId);
     }
 
     SECTION("submitListDraft creates a list and selects it on rebuild")

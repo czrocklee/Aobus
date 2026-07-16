@@ -3,178 +3,186 @@ id: workspace.navigation
 type: spec
 status: current
 domain: workspace
-summary: Defines workspace view navigation, semantic history points, traversal, focus, closure, and observable updates.
+summary: Defines validated workspace commands, revisioned snapshots, semantic history, and coherent observation.
 ---
 # Workspace navigation
 
 ## Scope
 
 This specification defines current frontend-neutral workspace navigation behavior.
-It owns target resolution, open and focused view transitions, navigation-point commit and replay, back/forward traversal, view closure caused by user intent or list deletion, and the resulting workspace observations.
+It owns the open and focused view aggregate, semantic target resolution, history commit and replay, custom-preset membership, command receipts, and workspace observations.
 
-It does not define source membership, projection row behavior, presentation grouping and sorting, session serialization, or frontend input bindings.
-Those facts belong to the library, presentation, workspace-session, and frontend owners linked below.
+It does not define source membership, projection rows, presentation rendering, persisted session fields, or frontend input bindings.
+Those facts belong to the linked library, presentation, workspace-session, reference, and frontend owners.
 
 ## Code boundary
 
-This contract belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the ownership graph defined by the [workspace architecture](../../architecture/workspace.md).
-Its public boundary is `app/include/ao/rt/WorkspaceService.h`, `NavigationHistory.h`, `WorkspaceViewState.h`, and the view values consumed from `ViewService`; its implementation is `app/runtime/WorkspaceService.cpp` and `NavigationHistory.cpp`.
+This contract belongs to the **application runtime** layer under the [workspace architecture](../../architecture/workspace.md).
+Its public boundary is `WorkspaceService.h`, `WorkspaceSnapshot.h`, `NavigationHistory.h`, and the view values consumed from `ViewService`; its implementation is `WorkspaceService.cpp` and `NavigationHistory.cpp`.
 
-Workspace may use runtime library sources, presentation values, and a narrow playback reveal command without depending on UIModel or frontends.
-The [library architecture](../../architecture/library.md) owns source and projection construction, while the [presentation architecture](../../architecture/presentation.md) owns outward display adaptation.
+`WorkspaceService` depends on `ViewService`, committed `LibraryChanges`, presentation values, and the runtime callback executor.
+It does not depend on playback.
+`AppRuntime::jumpToAlbum()` owns the one current command that composes workspace navigation with playback reveal.
 
 ## Terminology
 
-- **Workspace** is the canonical aggregate of open runtime views and one focused view.
-- **View** is a runtime-local state and projection owner identified by `ViewId`.
+- **Workspace snapshot** is the complete revisioned value containing open views, focus, history availability, and custom presets.
 - **Navigation target** is a base list, a base list plus filter expression, or a supported global-view kind.
-- **Navigation point** is the semantic snapshot `{listId, filterExpression, presentation}` stored in history.
-- **Commit** appends or deduplicates the final active navigation point.
-- **Replay** restores a history point during backward or forward traversal without committing another point.
+- **Navigation point** is `{listId, filterExpression, presentation}` stored in transient history.
+- **Commit receipt** identifies `Applied` or `NoChange`, the before and after revisions, and the resulting active view.
+- **Workspace change** is one post-commit observation containing a complete snapshot and a typed cause.
 
 ## Invariants
 
-- A navigation point never stores `ViewId`, selection, scroll position, widget layout, sidebar state, or a source/projection handle.
-- A navigation point contains enough semantic state to recreate the track-list view visible at commit time: base `ListId`, filter expression, and exact `TrackPresentationSpec`.
-- Navigation commits the final result of a composite command once, after its view, filter, presentation, focus, and reveal steps have completed.
-- Replay never grows history or changes the meaning of an existing history point.
-- Committing a point equal to the current point is a no-op.
-- Committing after backward traversal removes all forward points before appending the new point.
-- History contains at most 256 points in normal workspace composition; capacity eviction removes the oldest point.
-- Navigation history is not persisted as workspace session state.
-- A failed target resolution or failed replay leaves the workspace aggregate and history cursor unchanged.
-- Presentation changes recorded by workspace navigation do not change list membership.
-- Quick-filter text editing does not commit history by itself; a command that wants a filtered navigation point must perform or request a commit explicitly.
+- Every id in `openViews` is nonzero, unique, live, and owned by the bound `ViewService`.
+- `activeViewId` is invalid when no view is focused; otherwise it occurs exactly once in `openViews`.
+- One accepted semantic transition advances the workspace revision exactly once and publishes one `WorkspaceChanged` value.
+- A `NoChange` receipt preserves the revision and publishes nothing.
+- Recoverable command failure preserves the workspace snapshot and live history cursor.
+- A navigation point stores semantic reconstruction input, never `ViewId`, selection, scroll position, widget state, or a projection handle.
+- Committing a point equal to the current point is a no-op; committing after backward traversal removes forward points.
+- History contains at most 256 points and is not persisted.
+- Quick-filter editing remains view-owned and does not enter history unless a workspace navigation command explicitly commits the resulting semantic point.
 
 ## State model
 
-`WorkspaceViewState` contains:
+`WorkspaceSnapshot` contains:
 
-- `openViews`, in workspace ordering;
-- `activeViewId`, or the invalid view id when no view is focused;
-- a monotonically increasing workspace-local `revision` for aggregate updates.
+- ordered `openViews`;
+- `activeViewId`;
+- the complete custom-preset collection;
+- `{canGoBack, canGoForward}` navigation availability; and
+- a monotonically increasing workspace-local `revision`.
 
-`NavigationHistory` contains a bounded sequence of navigation points and an optional current index.
-An empty history has no current point and supports neither direction.
+Each view separately owns `TrackListViewState`, including list, filter, presentation, selection, lifecycle, and view-local revision.
+The workspace snapshot identifies those owners without duplicating their complete state.
 
-Each view separately owns its `TrackListViewState`, including list, filter, presentation, selection, lifecycle, and view-local revision.
-Workspace state refers to those views but does not duplicate their complete state.
+`WorkspaceCommitReceipt` contains `disposition`, `beforeRevision`, `afterRevision`, and the resulting `activeViewId`.
+Invalid input and preparation failure use `Result` errors rather than a rejected disposition.
 
 ## Commands and transitions
 
 ### Navigate to a target
 
-`navigateTo(target, options)` resolves the target before changing workspace focus.
+`navigateTo(target, options)` resolves and prepares the target before changing the aggregate.
 
-- A plain `ListId` reuses an existing non-destroyed, unfiltered track-list view for that list when one exists.
-- When a reused plain-list view receives `optPresentation`, that presentation is installed before the view is focused.
+- A plain `ListId` reuses an existing live, unfiltered view for that list when one exists.
+- A supplied presentation is normalized and applied to a reused view before workspace commit.
 - A plain list without a reusable view creates an attached view with an empty filter.
-- A filtered-list target creates a new attached view from its explicit base list and filter expression; current behavior does not search for an equivalent filtered view.
-- `GlobalViewKind::AllTracks` resolves to the All Tracks virtual list.
-- Any other global-view enum value is rejected as invalid input.
+- A filtered-list target creates a distinct attached view from its explicit list and filter.
+- `GlobalViewKind::AllTracks` resolves to the All Tracks virtual list; unsupported global values return `InvalidInput`.
 
-After resolution succeeds, workspace adds the view to `openViews` when necessary, makes it active, increments the workspace revision, emits focus change, and commits the resulting point unless `recordHistory` is false or replay is active.
+The command then prepares the next open set, focus, and history candidate and commits them once.
+Repeating navigation to the already-active equivalent point returns `NoChange`.
+A missing list, source, or failed presentation update returns the lower recoverable error without changing snapshot or history.
 
-### Focus and open-set helpers
+### Focus an open view
 
-`addView(viewId)` adds an absent id and increments the workspace revision; adding a duplicate is a no-op.
-`setFocusedView(viewId)` installs the supplied id, increments the revision, and emits focus change.
-These low-level helpers rely on the caller to supply a view owned by the same live `ViewService`; they do not validate membership themselves.
-[RFC 0016](../../rfc/0016-coherent-workspace-transactions.md) proposes replacing them with validated result-bearing semantic commands and one atomic aggregate commit.
+`focusView(viewId)` accepts only a live view already present in `openViews`.
+Invalid, unknown, destroyed, and live-but-unopened ids are rejected.
+Focusing the active view returns `NoChange`; a different open view produces one `Focus` commit and does not implicitly append history.
+
+There is no public raw add-view operation.
+Opening and adopting a view is part of semantic navigation or session restoration.
 
 ### Change active presentation
 
-Changing the active presentation updates the focused view through `ViewService` and then commits the final navigation point unless history recording is disabled.
-With no focused view, the command has no effect.
+`setActivePresentation(spec, options)` requires an active live view, normalizes the complete specification, applies it through `ViewService`, and optionally commits the resulting navigation point.
+The complete presentation value participates in equality, including visible and redundant fields.
 
-The id-based command resolves built-in presets first and custom workspace presets second.
-An unknown id or failed runtime update produces an empty returned spec or no state change on the current void overload.
-Presentation resolution and display semantics belong to the [track-list presentation specification](../presentation/track-presentation.md).
-
-### Jump to album
-
-`jumpToAlbum(trackId)` is one composite navigation command.
-For a valid track id it resolves or creates an unfiltered All Tracks view, focuses it, installs the `albums` presentation when that preset exists, requests playback reveal for the track, and commits the final point once.
-An invalid track id is a no-op.
+The id overload resolves built-in presets and then workspace custom presets.
+It returns the resolved presentation together with the workspace commit receipt.
+An unknown id returns `NotFound`; a missing active view returns `InvalidState`.
+Reapplying an identical presentation and history point returns `NoChange`.
 
 ### Traverse history
 
-`goBack()` and `goForward()` first move a tentative history cursor and then restore the selected point.
-Replay searches for a non-destroyed view matching both list and filter.
-It creates an attached replacement view when no match exists, otherwise installs the point's exact presentation on the matching view.
+`goBack()` and `goForward()` copy the history candidate and move only that candidate cursor.
+Replay finds a live view matching list and filter or creates a replacement, restores the exact presentation, prepares the next open/focused snapshot, and commits snapshot plus cursor once.
+Replay never appends a history point.
 
-Successful replay opens and focuses the resolved view, increments the workspace revision, emits focus change, and emits current back/forward availability.
-Replay does not commit a new point.
+Traversal past an end returns `NotFound`.
+Failed target recreation or presentation restoration leaves the live cursor, snapshot, revision, and directional availability unchanged.
 
-If restoration fails, traversal restores the previous history container before returning the error.
-The prior open-view set, focus, workspace revision, and directional availability remain unchanged.
+### Close views and delete lists
 
-### Close a view
+`closeView(viewId)` removes an open view, selects the last remaining open view as fallback when necessary, commits once, and releases the view through `ViewService`.
+Closing an id not present in the workspace returns `NoChange` and does not call view destruction.
 
-Closing removes the id from `openViews`.
-If it was active, the last remaining open view becomes active; an empty workspace uses the invalid view id.
-Workspace increments its revision, emits the resulting focused id, and asks `ViewService` to destroy the view.
+A committed library-list deletion closes every matching open view in one `ListDeletion` commit, even when several filtered views use the same base list.
+History points remain semantic snapshots; replaying a point for a deleted list fails during reconstruction.
 
-Committed deletion of a library list closes every open workspace view whose base list is that list.
-History points remain semantic snapshots; attempting to replay a point for a deleted list fails rather than silently changing its target.
+### Edit custom presets
 
-## Failure and cancellation
+Adding a new preset or changing the preset with the same label produces one `Presets` commit.
+Adding an identical value or removing an absent id returns `NoChange`.
+Removing an existing preset likewise commits one complete preset collection.
+Stable preset identity and versioned persistence remain owned by the presentation and workspace-session proposals.
 
-Navigation and replay return recoverable `Result<ViewId>` values.
-An unsupported target returns `InvalidInput`; an absent list or source returns the lower `NotFound`-class failure; traversal past either end returns `NotFound`.
+### Reveal an album
 
-Target preparation completes before focus and history mutation.
-Replay copies the history container before moving its cursor so a failed view recreation can roll the cursor back.
+Album reveal is not a `WorkspaceService` command.
+`AppRuntime::jumpToAlbum(trackId)` rejects the invalid track id, navigates to All Tracks with the built-in albums presentation in one workspace command, and then submits playback reveal using the resulting active view.
 
-The workspace logs failures from current void presentation and destroy paths rather than returning them to those callers.
-Cross-application reporting policy is owned by the [failure and reporting architecture](../../architecture/failure-and-reporting.md), and proposed result-bearing convergence is tracked outside this current specification.
-[RFC 0016](../../rfc/0016-coherent-workspace-transactions.md) proposes the workspace-specific command, receipt, observation, and reentrancy boundary.
+Its result is the navigation receipt.
+Success proves that reveal was submitted; the navigation receipt may be `NoChange` when the intended view and history point were already current.
+Workspace navigation remains committed if a future reveal boundary gains a separate asynchronous failure after submission.
 
-Workspace commands are synchronous on the runtime callback executor and expose no cancellation point.
+## Preparation and commit
 
-## Persistence and versioning
+Commands copy the small workspace snapshot and bounded history before installing either value.
+View creation and presentation updates complete before the no-fail aggregate swap.
+`ViewService::createView()` itself publishes no creation signal, so a synchronously prepared view is not exposed as a partial workspace aggregate.
 
-Navigation history is intentionally transient.
-Workspace session restore may recreate open and focused views, then commits only the restored active view as the initial history point.
-Back remains unavailable until a later navigation commits a second distinct point.
+Session restore creates every view first and destroys all created candidates if a later creation fails.
+Successful restore installs all ids, focus, presets, history availability, and one revision together.
+The implementation deliberately does not add a generic transaction object, detached candidate lease, command generation, or asynchronous command state machine.
 
-The [workspace session specification](session.md) owns save and restore behavior, and the [workspace session state reference](../../reference/workspace/session-state.md) owns exact serialized fields.
+## Executor, observation, and lifetime
 
-## Frontend observations
+Workspace reads, subscriptions, and commands are confined to the runtime callback executor.
+An off-executor call is a programming error and fails fast rather than racing mutable state.
+Commands are bounded and synchronous and expose no cancellation point.
 
-`layoutState()` returns the current workspace aggregate by value.
-`onFocusedViewChanged` emits the resulting active id after focus, replay, or closure transitions.
+`snapshot()` returns the current value by copy.
+`onChanged()` delivers `WorkspaceChanged{snapshot, cause}` on a later callback-executor turn.
+The event owns its snapshot, so a command called by an observer cannot mutate the event currently being delivered; its own observation is queued separately.
 
-`onNavigationHistoryChanged` publishes only `{canGoBack, canGoForward}`.
-A normal commit emits it when either availability value changes; a successful backward or forward replay emits the current values after traversal.
-A deduplicated commit that does not change availability emits nothing.
+One throwing observer does not starve later observers and cannot change the already-returned command receipt.
+The failure is contained and logged at the workspace publication boundary.
+Queued delivery holds only a weak signal owner, so destruction makes undelivered events harmless.
 
-GTK maps mouse back/forward buttons to traversal.
-TUI currently uses workspace navigation when opening lists but owns its terminal-specific input and overlay behavior separately.
+A newly constructed consumer reads `snapshot()` before subscribing or records that revision and ignores any queued event that is not newer.
+Test-only `InlineExecutor` deliberately collapses turns when deferred-turn behavior is outside a test; observation-order tests use the queued executor.
+
+## Persistence
+
+Navigation history is transient.
+Workspace session restore commits the restored active view as the initial navigation point, so Back remains unavailable until a later distinct navigation.
+The [workspace session specification](session.md) owns capture and restore, and the [workspace session state reference](../../reference/workspace/session-state.md) owns serialized fields.
 
 ## Implementation map
 
-- [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) defines navigation targets, options, commands, and observations.
-- [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) owns target resolution, focus, composite navigation, replay, and list-deletion handling.
-- [`NavigationHistory`](../../../app/include/ao/rt/NavigationHistory.h) and [`NavigationHistory.cpp`](../../../app/runtime/NavigationHistory.cpp) own bounded commit and cursor mechanics.
-- [`WorkspaceViewState`](../../../app/include/ao/rt/WorkspaceViewState.h) defines the aggregate snapshot.
-- [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns the views and projections that workspace coordinates.
+- [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) defines semantic commands and observations.
+- [`WorkspaceSnapshot`](../../../app/include/ao/rt/WorkspaceSnapshot.h) defines snapshots, causes, dispositions, and receipts.
+- [`NavigationHistory`](../../../app/include/ao/rt/NavigationHistory.h) owns bounded semantic history.
+- [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns view-local state, projections, and resources.
+- [`AppRuntime`](../../../app/include/ao/rt/AppRuntime.h) owns album reveal composition above workspace and playback.
 
 ## Test map
 
-- [`NavigationHistoryTest.cpp`](../../../test/unit/runtime/NavigationHistoryTest.cpp) proves empty state, commit, deduplication, traversal, forward truncation, and capacity eviction.
-- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves target resolution, focus, global and filtered targets, album jump, list deletion, and failure atomicity.
-- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves semantic replay, presentation restoration, destroyed-view recreation, observations, and traversal rollback.
-- [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) proves active-presentation commits, suppression, resolution, and custom preset use.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves open/focused aggregate behavior without a frontend.
+- [`NavigationHistoryTest.cpp`](../../../test/unit/runtime/NavigationHistoryTest.cpp) proves cursor and capacity mechanics.
+- [`WorkspaceNavigationTest.cpp`](../../../test/unit/runtime/WorkspaceNavigationTest.cpp) proves validation, receipts, complete observations, reentrancy, observer containment, deletion batching, and album reveal.
+- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) proves atomic replay and navigation availability.
+- [`WorkspacePresentationTest.cpp`](../../../test/unit/runtime/WorkspacePresentationTest.cpp) proves presentation and preset commands.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves atomic multi-view restore and failure cleanup.
+- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves frontend-neutral reconstruction.
 
 ## Related documents
 
 - [Workspace architecture](../../architecture/workspace.md)
-- [Library architecture](../../architecture/library.md)
-- [Presentation architecture](../../architecture/presentation.md)
+- [Runtime execution architecture](../../architecture/runtime-execution.md)
 - [Workspace session](session.md)
 - [Workspace session state](../../reference/workspace/session-state.md)
 - [Track filtering](../presentation/track-filter.md)
 - [Track-list presentation](../presentation/track-presentation.md)
-- [List presentation preference](../presentation/list-preference.md)

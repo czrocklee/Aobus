@@ -4,6 +4,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
@@ -20,11 +21,18 @@ namespace ao::uimodel
                                              std::function<void(TrackFilterViewState const&)> onRender)
     : _viewService{viewService}, _workspaceService{workspaceService}, _onRender{std::move(onRender)}
   {
-    _focusSub = _workspaceService.onFocusedViewChanged([this](rt::ViewId viewId) { handleFocusedViewChanged(viewId); });
+    _focusSub = _workspaceService.onChanged(
+      [this](rt::WorkspaceChanged const& changed)
+      {
+        if (changed.snapshot.activeViewId != _viewId)
+        {
+          handleFocusedViewChanged(changed.snapshot.activeViewId);
+        }
+      });
     _filterStatusSub =
       _viewService.onFilterStatusChanged([this](auto const& status) { handleFilterStatusChanged(status); });
 
-    handleFocusedViewChanged(_workspaceService.layoutState().activeViewId);
+    handleFocusedViewChanged(_workspaceService.snapshot().activeViewId);
   }
 
   void TrackFilterViewModel::updateFilter(std::string const& rawText)

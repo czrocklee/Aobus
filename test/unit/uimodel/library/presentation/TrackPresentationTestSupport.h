@@ -4,8 +4,6 @@
 #pragma once
 
 #include "test/unit/RuntimeTestSupport.h"
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -22,10 +20,7 @@ namespace ao::uimodel::test
     rt::LibraryChanges changes{};
     rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
     rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
-    rt::NotificationService notifications;
-    rt::PlaybackService playbackService{
-      rt::test::makePlaybackService(executor, libraryFixture.library(), notifications)};
-    rt::WorkspaceService workspace{viewService, playbackService, changes, libraryFixture.library()};
+    rt::WorkspaceService workspace{executor, viewService, changes};
     TrackPresentationCatalog catalog{workspace};
     ListPresentationPreferenceStore preferences{catalog};
   };

@@ -3,160 +3,152 @@ id: workspace.session
 type: spec
 status: current
 domain: workspace
-summary: Defines workspace snapshot capture, best-effort checkpointing, candidate restoration, fallback, and initial-history behavior.
+summary: Defines workspace snapshot capture, candidate restoration, one-commit installation, fallback, and initial history.
 ---
 # Workspace session
 
 ## Scope
 
 This specification defines current save and restore behavior for the runtime workspace session.
-It owns snapshot capture from open views, use of the `workspace` configuration group, candidate-view preparation, restore commit, active-view fallback, custom-preset restoration, and initial navigation history.
+It owns capture from live views, use of the `workspace` configuration group, candidate-view preparation, atomic aggregate installation, active-view fallback, custom-preset restoration, and initial history.
 
-It does not define exact serialized fields, generic `ConfigStore` behavior, managed file paths, playback-session restoration, GTK window preferences, or presentation semantics.
-Those facts belong to the linked reference, persistence, playback, and presentation owners.
+It does not define serialized fields, generic `ConfigStore` mechanics, managed paths, playback-session restoration, GTK preferences, or presentation semantics.
 
 ## Code boundary
 
-Workspace session behavior belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [workspace architecture](../../architecture/workspace.md).
-The public owner is `WorkspaceService::saveSession` and `restoreSession` in `app/include/ao/rt/WorkspaceService.h`; the candidate model is `WorkspaceSessionState`; the implementation is `app/runtime/WorkspaceService.cpp`.
+Workspace session behavior belongs to the **application runtime** layer under the [workspace architecture](../../architecture/workspace.md).
+`WorkspaceService::saveSession()` and `restoreSession()` are the public owner, `WorkspaceSessionState` is the decoded persistence candidate, and `WorkspaceSnapshot` is the live committed aggregate.
 
-The runtime owns session meaning and validation while `ConfigStore` supplies grouped-file mechanics under the [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
-Frontends inject and schedule the store but do not decode workspace fields.
+`ConfigStore` supplies candidate group decoding and atomic whole-document saves.
+Frontends choose lifecycle points and inject the store but do not decode workspace fields.
 
 ## Terminology
 
-- **Live workspace** is the current open/focused view aggregate plus custom presentation presets.
-- **Session snapshot** is one `WorkspaceSessionState` captured from the live workspace.
-- **Candidate view** is a view created during restore before the restored aggregate is installed.
-- **Active-list hint** is the persisted `ListId` used to choose a focused restored view without persisting `ViewId`.
-- **Checkpoint** is the current one-shot group-save attempt at an explicit frontend lifecycle point.
+- **Live workspace** is the current revisioned workspace snapshot plus the view-local state identified by its open ids.
+- **Session snapshot** is one `WorkspaceSessionState` captured from that live state.
+- **Candidate view** is a view created during restore before its id is installed in the workspace snapshot.
+- **Active-list hint** is the persisted `ListId` used to choose a focused candidate without persisting `ViewId`.
+- **Checkpoint** is one synchronous save attempt at a frontend lifecycle point.
 
 ## Invariants
 
-- Workspace session state is associated with one selected library and is not global application preference state.
-- A session never persists `ViewId`, source leases, projection rows, selection, navigation history, scroll position, widget state, or playback state.
-- Every persisted open view is reconstructed against the active runtime's library and source cache.
-- Restore does not install candidate view ids into the workspace until every candidate view has been created successfully.
-- If candidate creation fails, all candidates created by that restore attempt are destroyed before the error returns.
-- A missing `workspace` group is a successful empty restore.
-- The active-list hint is advisory; restore falls back to the first restored view when no candidate matches it.
-- Successful restore commits the focused restored view as one initial navigation point and does not restore an old back/forward stack.
-- Workspace custom presentation presets are captured and restored with the workspace session, independently from GTK per-list presentation preferences.
-- Playback-session state remains a separate payload and semantic owner even when it shares a physical `ConfigStore` with workspace state.
+- Workspace session state belongs to one selected library and is not global preference state.
+- A session never persists `ViewId`, source leases, projection rows, selection, history, scroll, widget, or playback state.
+- Every persisted view is reconstructed against the active runtime's library and source cache.
+- Restore publishes no workspace aggregate until every candidate view has been created.
+- A failed candidate creation destroys every view created by that restore and preserves snapshot, revision, focus, presets, and history.
+- A missing `workspace` group is a successful `NoChange` restore.
+- One successful nonempty restore advances one workspace revision and publishes one complete `Restore` observation.
+- The active-list hint is advisory; unmatched state falls back to the first open view.
+- The restored active view becomes one initial navigation point; old history is never persisted.
+- Custom presentation presets are captured and installed in the same workspace commit as restored views and focus.
+- Playback-session state remains a separate semantic owner even when it shares a physical store.
 
 ## State model
 
-The live workspace contains ordered open `ViewId` values, one active `ViewId`, a workspace revision, navigation history, and custom presets.
+The live `WorkspaceSnapshot` contains ordered open ids, active id, custom presets, navigation availability, and workspace revision.
+Each open id identifies `TrackListViewState` owned by `ViewService`.
 
-The persisted candidate contains ordered semantic `TrackListViewConfig` values, one active-list hint, and custom presets.
-Each view config carries its base list, filter, legacy group/sort fields, and optional exact presentation.
-The [workspace session state reference](../../reference/workspace/session-state.md) owns that exact shape and current unversioned encoding.
+The persistence candidate contains ordered semantic `TrackListViewConfig` values, one active-list hint, and custom presets.
+Each config carries base list, filter, legacy group/sort fields, and an optional exact presentation.
+The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact current encoding.
 
 ## Commands and transitions
 
 ### Capture and save
 
-`saveSession(store)` snapshots open views in workspace order.
-For each live view it records the base list, filter expression, group and sort state, and exact presentation.
-When the view is active, its base `ListId` becomes the active-list hint.
-The snapshot also copies all custom presets.
+`saveSession(store)` copies the current workspace snapshot and walks its open views in order.
+For each live view it records list, filter, group, sort, and exact presentation.
+The active view contributes its base list as the active-list hint.
+The session also copies the snapshot's complete custom-preset collection.
 
-The current implementation calls the result-bearing `ConfigStore::save("workspace", snapshot)` operation synchronously.
-A load, encode, emission, or replacement failure leaves the prior document unchanged; recoverable failure is logged and the void command returns normally.
-There is no dirty revision, retry schedule, or durable acknowledgement for workspace state.
+The command calls `ConfigStore::save("workspace", state)` once.
+A load, encode, emission, or atomic-replacement failure leaves the previous document unchanged; the workspace wrapper logs that recoverable failure and returns normally.
+There is no workspace dirty revision, retry scheduler, or durable acknowledgement.
 
 ### Load and prepare
 
-`restoreSession(store)` default-constructs a candidate and performs ordinary group decoding.
+`restoreSession(store)` default-constructs a persistence candidate and asks the store to decode the `workspace` group.
 
-- A missing group returns success without creating a view or changing workspace state.
-- A file, parse, node-shape, or aggregate-decode failure returns the store's recoverable error.
-- Successful decode attempts to create every listed view as attached through `ViewService`.
-- A view creation failure destroys all views created earlier in the same attempt and returns that failure.
+- A missing group returns a `NoChange` receipt without creating a view or publishing an event.
+- File, parse, node-shape, or aggregate-decode failure returns the store error.
+- Successful decode attempts to create every configured view through `ViewService`.
+- If a later creation fails, all earlier candidate ids are destroyed and the error returns.
 
-Candidate creation may allocate runtime `ViewId` values that are later destroyed on failure.
-Those ids are not exposed through the workspace aggregate before commit.
+View creation is synchronous and emits no creation observation.
+Candidate ids may exist briefly inside `ViewService`, but they do not enter `WorkspaceSnapshot` or any workspace event before commit.
 
-### Commit and focus
+### Prepare focus and history
 
-After every candidate view exists, restore adds them to the workspace in serialized order and replaces the custom-preset collection with the restored values.
+After all candidate views exist, restore prepares one copy of the current workspace snapshot and history.
+Candidate ids are appended in serialized order and the custom-preset collection is replaced by the restored collection.
 
-Focus resolution scans restored views for the active-list hint.
-A matching unfiltered view is a candidate, but a later matching filtered view wins immediately; this lets a filtered view for the active list take precedence over an unfiltered view.
-If no match exists and at least one view was restored, the first open view becomes active.
-An empty candidate leaves the workspace without an active view.
+Focus resolution scans the restored candidates for the active-list hint.
+A matching unfiltered view remains a fallback while a later matching filtered view wins immediately.
+If no restored candidate matches and any view is open, the first open view is focused.
+This preserves the current append behavior when restore is called on a nonempty workspace; [RFC 0017](../../rfc/0017-versioned-workspace-session.md) proposes explicit replacement and exact active-view identity.
 
-Restore then commits the active semantic view as the initial navigation point.
-This initial point is deduplicated normally and has no previous entry.
+The final active semantic view is committed into the history candidate.
+That initial point is deduplicated normally and has no previous entry in the ordinary empty-runtime restore path.
 
-### Frontend lifecycle integration
+### Commit
 
-GTK restores workspace state after reconstructing library-backed pages and before restoring playback state.
+Restore installs open ids, focus, complete custom presets, navigation availability, history cursor, and revision through one workspace commit.
+The returned `WorkspaceCommitReceipt` identifies the before and after revisions and resulting active view.
+An effectively identical decoded candidate returns `NoChange`.
+
+One `WorkspaceChanged` event with cause `Restore` is queued after acceptance.
+Consumers never receive a sequence of partially added views or a separate preset/focus event.
+
+## Frontend lifecycle integration
+
+GTK restores workspace state after constructing the library-bound runtime and before restoring playback state.
 It applies GTK per-list presentation preferences after workspace restore.
-If no view is open, GTK navigates to All Tracks with the resolved default presentation and immediately requests a workspace checkpoint.
+If the restored snapshot has no open view, GTK navigates to All Tracks with the resolved default presentation and immediately requests a workspace checkpoint.
 
-GTK requests workspace save together with its global window/session, presentation, and playback checkpoints during explicit save, hide, ordinary shutdown, and active-library preparation.
-Exact active-library transitions belong to the [GTK active-library lifecycle specification](../linux-gtk/active-library-lifecycle.md).
+GTK saves workspace state with its other explicit save, hide, shutdown, and active-library preparation checkpoints.
+The [GTK active-library lifecycle specification](../linux-gtk/active-library-lifecycle.md) owns those transitions.
 
-TUI currently injects a workspace `ConfigStore` into `AppRuntime` but does not call workspace restore or save around its event loop.
-Its `LibraryController` constructs an initial All Tracks workspace view instead.
-[RFC 0018](../../rfc/0018-interactive-session-lifecycle.md) proposes one startup, checkpoint, and shutdown state machine for both interactive frontends.
+TUI currently injects a workspace store but does not restore or save it around the event loop.
+Its `LibraryController` constructs an initial All Tracks view instead.
+[RFC 0018](../../rfc/0018-interactive-session-lifecycle.md) proposes a shared interactive lifecycle owner.
 
-## Failure and cancellation
+## Failure, execution, and lifetime
 
-Restore returns `Result<>` and preserves the pre-commit workspace aggregate when store decoding or candidate view creation fails.
-Candidate cleanup releases their projections and source leases through `ViewService::destroyView`.
+Save and restore are synchronous callback-executor commands with no cancellation point.
+Restore errors before commit preserve the live workspace aggregate and history.
+Candidate cleanup releases projections and source leases through `ViewService::destroyView()`.
 
-Ordinary decoding is permissive: missing aggregate fields retain defaults and invalid elements inside decoded vectors may be skipped by the shared codec.
-The exact consequences belong to the [workspace session state reference](../../reference/workspace/session-state.md) and [grouped configuration store specification](../persistence/config-store.md).
+Ordinary aggregate decoding remains permissive: missing fields retain defaults and shared container codecs may skip invalid elements.
+Strict versioning, limits, library binding, and recovery belong to [RFC 0017](../../rfc/0017-versioned-workspace-session.md), not this transaction boundary.
 
-Save is currently best effort.
-The workspace wrapper does not return the store failure, so a failed checkpoint cannot block a library switch or shutdown transition.
-The grouped store nevertheless keeps the previous live document and backing bytes unchanged when its candidate save fails.
-[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why a larger transaction, recovery, and commit-receipt system was rejected after that narrower store boundary was implemented.
-
-Save and restore are synchronous and expose no cancellation point.
-They run under the runtime/frontend serialized application-control boundary.
+Save remains best effort at the workspace wrapper.
+Its lower `ConfigStore` operation is fail closed, but a failed checkpoint does not currently block shutdown or library replacement.
 
 ## Persistence and versioning
 
-The session uses the literal `workspace` group in the `ConfigStore` owned by `AppRuntime`.
-GTK places that store at its per-library workspace location; TUI uses its selected configuration path.
-Exact paths belong to the [managed file locations reference](../../reference/persistence/location.md).
+The session uses the literal `workspace` group in the store owned by `AppRuntime`.
+GTK uses a per-library workspace location; TUI uses its selected configuration path.
+Exact locations belong to the [managed file locations reference](../../reference/persistence/location.md).
 
-The current payload has no schema version, migration, aliases, or stable field-name layer separate from reflected C++ member names.
-Enum values use current numeric encodings.
-Compatibility details and the exact field inventory belong to the [workspace session state reference](../../reference/workspace/session-state.md); proposed versioning is tracked by [RFC 0010](../../rfc/0010-versioned-presentation-state.md).
-[RFC 0017](../../rfc/0017-versioned-workspace-session.md) proposes the workspace root envelope, library binding, exact active-view reference, limits, and transactional restore that complement RFC 0010's nested presentation codec.
-
-## Frontend observations
-
-Workspace restore publishes ordinary focus and custom-preset observations during commit.
-It does not publish a distinct session-restored event or progress state.
-
-A successful empty restore is distinguished from a restored non-empty workspace only by the resulting workspace snapshot.
-GTK uses that snapshot to decide whether to create the default All Tracks view.
-
-Workspace save publishes no success or failure event.
-Current recoverable save failure is diagnostic logging only.
+The payload currently has no root schema version, library identity, migration aliases, or stable field-name layer separate from reflected C++ names.
+The [workspace session state reference](../../reference/workspace/session-state.md) owns that inventory.
 
 ## Implementation map
 
-- [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) exposes the session commands.
-- [`WorkspaceSessionState`](../../../app/include/ao/rt/WorkspaceSessionState.h) defines the candidate aggregate.
-- [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) captures, prepares, commits, falls back, and seeds history.
+- [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) captures, prepares, commits, and reports session operations.
+- [`WorkspaceSnapshot`](../../../app/include/ao/rt/WorkspaceSnapshot.h) is the one live aggregate installed by restore.
+- [`WorkspaceSessionState`](../../../app/include/ao/rt/WorkspaceSessionState.h) is the persistence candidate.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) creates and destroys candidate views.
-- [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) provides candidate group decoding and one-shot atomic group save.
+- [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) supplies candidate decoding and one-shot save.
 - [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns current GTK restore/default/checkpoint sequencing.
-- [`app/tui/App.cpp`](../../../app/tui/App.cpp) owns the current TUI store injection without session lifecycle calls.
 
 ## Test map
 
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group success, restored initial history, fallback, malformed rejection, candidate cleanup, and current save-failure tolerance.
-- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime open-view, active-view, grouping, sorting, and presentation reconstruction.
-- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history behavior seeded by restore.
-- [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK workspace/playback restore composition and checkpoint interactions.
-- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects lifecycle save triggers and switch preparation.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group `NoChange`, one-event multi-view restore, initial history, fallback, malformed rejection, and candidate cleanup.
+- [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
+- [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
+- [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK workspace/playback restore composition.
 
 ## Related documents
 
@@ -165,6 +157,4 @@ Current recoverable save failure is diagnostic logging only.
 - [Workspace session state](../../reference/workspace/session-state.md)
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Grouped configuration store](../persistence/config-store.md)
-- [Application managed-state surface](../../reference/persistence/application-config.md)
-- [List presentation preference](../presentation/list-preference.md)
-- [Playback architecture](../../architecture/playback.md)
+- [GTK active-library lifecycle](../linux-gtk/active-library-lifecycle.md)

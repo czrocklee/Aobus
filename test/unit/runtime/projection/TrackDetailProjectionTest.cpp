@@ -6,9 +6,6 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
-#include <ao/rt/ConfigStore.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackMutation.h>
@@ -56,9 +53,6 @@ namespace ao::rt::test
       LibraryWriter writer;
       TrackSourceCache sources;
       ViewService views;
-      ConfigStore config;
-      NotificationService notifications;
-      PlaybackService playback;
       WorkspaceService workspace;
 
       TrackDetailProjectionFixture()
@@ -68,9 +62,7 @@ namespace ao::rt::test
         , writer{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
-        , config{libraryFixture.library().rootPath() / "config.json"}
-        , playback{makePlaybackService(executor, libraryFixture.library(), notifications)}
-        , workspace{views, playback, changes, libraryFixture.library()}
+        , workspace{executor, views, changes}
       {
       }
     };
@@ -189,7 +181,7 @@ namespace ao::rt::test
 
     auto const reply1 = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     REQUIRE(env.views.setSelection(reply1.viewId, {id1}));
-    REQUIRE(env.workspace.navigateTo(GlobalViewKind::AllTracks)); // Should trigger onFocusedViewChanged
+    REQUIRE(env.workspace.navigateTo(GlobalViewKind::AllTracks));
 
     CHECK(callCount >= 2);
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
@@ -199,7 +191,7 @@ namespace ao::rt::test
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
     // Change focus away
-    env.workspace.closeView(reply1.viewId);
+    REQUIRE(env.workspace.closeView(reply1.viewId));
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
 
     // Unsubscribe
@@ -218,9 +210,8 @@ namespace ao::rt::test
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Already Selected"});
 
-    auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    env.workspace.setFocusedView(reply.viewId);
-    REQUIRE(env.views.setSelection(reply.viewId, {id1}));
+    auto const viewId = ao::test::requireValue(env.workspace.navigateTo(GlobalViewKind::AllTracks)).activeViewId;
+    REQUIRE(env.views.setSelection(viewId, {id1}));
 
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();

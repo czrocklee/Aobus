@@ -18,6 +18,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -53,7 +54,15 @@ namespace ao::gtk
 
     _nowPlayingSub = _runtime.playback().onNowPlayingChanged([this](auto const& ev) { setPlayingTrack(ev.trackId); });
 
-    _focusSub = _runtime.workspace().onFocusedViewChanged([this](auto) { syncLayout(); });
+    _focusSub = _runtime.workspace().onChanged(
+      [this](rt::WorkspaceChanged const& changed)
+      {
+        if (changed.cause != rt::WorkspaceChangeCause::Presentation &&
+            changed.cause != rt::WorkspaceChangeCause::Presets)
+        {
+          syncLayout();
+        }
+      });
 
     _viewDestroyedSub = _runtime.views().onDestroyed([this](auto) { syncLayout(); });
 
@@ -109,21 +118,25 @@ namespace ao::gtk
 
   void TrackPageHost::tryRevealTrackInView(rt::ViewId viewId, TrackId trackId)
   {
-    APP_LOG_DEBUG("TrackPageHost: Revealing in viewId: {}", viewId.raw());
-    _runtime.workspace().setFocusedView(viewId);
-
-    if (trackId != kInvalidTrackId)
+    if (auto const focused = _runtime.workspace().focusView(viewId); !focused)
     {
-      if (auto* entry = find(viewId); entry != nullptr)
-      {
-        APP_LOG_DEBUG("TrackPageHost: Calling selectTrack on page for trackId: {}", trackId.raw());
-        entry->pagePtr->selectionController().selectTrack(trackId);
-      }
-      else
-      {
-        APP_LOG_DEBUG("TrackPageHost: Could not find page entry for viewId: {}", viewId.raw());
-      }
+      APP_LOG_DEBUG("TrackPageHost: Could not focus view {} for reveal: {}", viewId.raw(), focused.error().message);
+      return;
     }
+
+    if (trackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    auto* const entry = find(viewId);
+
+    if (entry == nullptr)
+    {
+      return;
+    }
+
+    entry->pagePtr->selectionController().selectTrack(trackId);
   }
 
   void TrackPageHost::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
@@ -137,6 +150,11 @@ namespace ao::gtk
 
     if (viewId != rt::kInvalidViewId)
     {
+      if (find(viewId) == nullptr)
+      {
+        syncLayout();
+      }
+
       tryRevealTrackInView(viewId, ev.trackId);
     }
   }
@@ -148,7 +166,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const state = _runtime.workspace().layoutState();
+    auto const state = _runtime.workspace().snapshot();
 
     // Remove closed views
     for (auto it = _trackPages.begin(); it != _trackPages.end();)
@@ -208,7 +226,7 @@ namespace ao::gtk
     _activeDataProvider = &dataProvider;
 
     // Force layout state re-evaluation now that dataProvider is ready
-    auto const layout = _runtime.workspace().layoutState();
+    auto const layout = _runtime.workspace().snapshot();
 
     for (auto const viewId : layout.openViews)
     {
@@ -344,21 +362,7 @@ namespace ao::gtk
     auto* const page = entry.pagePtr.get();
     auto const viewId = rt::ViewId{entry.viewId};
 
-    page->signalSelectionChanged().connect(
-      [this, page, viewId]
-      {
-        auto const route = ao::uimodel::describeSelectionRoute(viewId, page->selectionController().selectedTrackIds());
-
-        if (route.shouldUpdateRuntimeSelection)
-        {
-          if (auto result = _runtime.views().setSelection(route.focusedViewId, route.selectedIds); !result)
-          {
-            APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
-          }
-
-          _runtime.workspace().setFocusedView(route.focusedViewId);
-        }
-      });
+    page->signalSelectionChanged().connect([this, page, viewId] { handleTrackSelectionChanged(*page, viewId); });
 
     page->signalContextMenuRequested().connect(
       [this, page](double xPosition, double yPosition)
@@ -394,6 +398,26 @@ namespace ao::gtk
     if (_playingTrackId != kInvalidTrackId)
     {
       page->setPlayingTrackId(_playingTrackId);
+    }
+  }
+
+  void TrackPageHost::handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId const viewId)
+  {
+    auto const route = ao::uimodel::describeSelectionRoute(viewId, page.selectionController().selectedTrackIds());
+
+    if (!route.shouldUpdateRuntimeSelection)
+    {
+      return;
+    }
+
+    if (auto result = _runtime.views().setSelection(route.focusedViewId, route.selectedIds); !result)
+    {
+      APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
+    }
+
+    if (auto const focused = _runtime.workspace().focusView(route.focusedViewId); !focused)
+    {
+      APP_LOG_ERROR("Failed to focus selected track view: {}", focused.error().message);
     }
   }
 

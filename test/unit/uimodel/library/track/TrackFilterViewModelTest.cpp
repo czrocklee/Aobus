@@ -3,9 +3,6 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -33,9 +30,7 @@ namespace ao::uimodel::test
       LibraryChanges changes;
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
       ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
-      NotificationService notifications;
-      PlaybackService playback{makePlaybackService(executor, libraryFixture.library(), notifications)};
-      WorkspaceService workspaceService{viewService, playback, changes, libraryFixture.library()};
+      WorkspaceService workspaceService{executor, viewService, changes};
       ao::test::RenderLog<TrackFilterViewState> renderLog;
       TrackFilterViewModel viewModel{viewService,
                                      workspaceService,
@@ -43,10 +38,7 @@ namespace ao::uimodel::test
 
       rt::ViewId focusAllTracksView()
       {
-        auto reply =
-          ao::test::requireValue(viewService.createView(rt::TrackListViewConfig{.listId = rt::kAllTracksListId}));
-        workspaceService.setFocusedView(reply.viewId);
-        return reply.viewId;
+        return ao::test::requireValue(workspaceService.navigateTo(rt::GlobalViewKind::AllTracks)).activeViewId;
       }
     };
   } // namespace
@@ -116,10 +108,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
-    auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId, .groupBy = rt::TrackGroupKey::None};
-
-    auto reply = ao::test::requireValue(fixture.viewService.createView(config));
-    fixture.workspaceService.setFocusedView(reply.viewId);
+    REQUIRE(fixture.workspaceService.navigateTo(rt::GlobalViewKind::AllTracks));
 
     REQUIRE(!fixture.renderLog.empty());
     CHECK(fixture.renderLog.last().enabled == true);
@@ -145,12 +134,12 @@ namespace ao::uimodel::test
     auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
     config.optPresentation = rt::defaultTrackPresentationSpec();
     config.optPresentation->id = "custom";
-    auto reply = ao::test::requireValue(fixture.viewService.createView(config));
-    fixture.workspaceService.setFocusedView(reply.viewId);
+    auto const reply = ao::test::requireValue(
+      fixture.workspaceService.navigateTo(rt::GlobalViewKind::AllTracks, {.optPresentation = config.optPresentation}));
 
     fixture.viewModel.updateFilter("$artist = \"Muse\"");
 
-    auto const state = fixture.viewService.trackListState(reply.viewId);
+    auto const state = fixture.viewService.trackListState(reply.activeViewId);
     CHECK(state.filterExpression == "$artist = \"Muse\"");
     CHECK(state.presentation.id == "custom");
     CHECK(fixture.renderLog.last().entryText == "$artist = \"Muse\"");
@@ -175,7 +164,7 @@ namespace ao::uimodel::test
     fixture.focusAllTracksView();
     fixture.viewModel.updateFilter("Beatles");
 
-    fixture.workspaceService.setFocusedView(rt::kInvalidViewId);
+    REQUIRE(fixture.workspaceService.closeView(fixture.workspaceService.snapshot().activeViewId));
     CHECK(fixture.renderLog.last().enabled == false);
     CHECK(fixture.renderLog.last().entryText.empty());
   }

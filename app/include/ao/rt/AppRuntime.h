@@ -5,6 +5,7 @@
 
 #include "CoreRuntime.h"
 #include "Subscription.h"
+#include "WorkspaceSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/AsyncExceptionHandler.h>
@@ -77,6 +78,7 @@ namespace ao::rt
     void reloadAllTracks();
 
     Result<TrackId> playSelectionInFocusedView();
+    Result<WorkspaceCommitReceipt> jumpToAlbum(TrackId trackId);
     void addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
 
   private:

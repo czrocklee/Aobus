@@ -9,6 +9,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -43,7 +44,7 @@ namespace ao::rt::test
 
     CHECK(runtime.workspace().canGoBack() == true);
     requireBackNavigation(runtime);
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
   }
 
@@ -55,7 +56,7 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId, {.recordHistory = false});
 
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
     CHECK(runtime.workspace().canGoBack() == false);
   }
@@ -69,12 +70,12 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "genre == \"Rock\""});
 
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.filterExpression == "genre == \"Rock\"");
     CHECK(runtime.workspace().canGoBack() == true);
 
     requireBackNavigation(runtime);
-    auto const backState = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const backState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(backState.listId == fixture.firstListId);
     CHECK(backState.filterExpression.empty());
   }
@@ -89,7 +90,7 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.thirdListId);
 
     CHECK(runtime.workspace().goBack());
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
     CHECK(runtime.workspace().canGoBack() == true);
     CHECK(runtime.workspace().canGoForward() == true);
@@ -107,7 +108,7 @@ namespace ao::rt::test
     requireBackNavigation(runtime);
     requireBackNavigation(runtime);
 
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
     CHECK(runtime.workspace().canGoBack() == false);
     CHECK(runtime.workspace().canGoForward() == true);
@@ -124,7 +125,7 @@ namespace ao::rt::test
     requireBackNavigation(runtime);
 
     CHECK(runtime.workspace().goForward());
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.thirdListId);
     CHECK(runtime.workspace().canGoForward() == false);
   }
@@ -161,10 +162,10 @@ namespace ao::rt::test
 
     CHECK(runtime.workspace().canGoForward() == false);
     requireBackNavigation(runtime);
-    auto const midState = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const midState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(midState.listId == fixture.secondListId);
     requireBackNavigation(runtime);
-    auto const firstState = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const firstState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(firstState.listId == fixture.firstListId);
   }
 
@@ -176,10 +177,10 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
-    runtime.workspace().setActivePresentation(albumsPreset->spec);
+    REQUIRE(runtime.workspace().setActivePresentation(albumsPreset->spec));
 
     requireBackNavigation(runtime);
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.presentation.id == "list-order");
   }
 
@@ -190,21 +191,23 @@ namespace ao::rt::test
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
-    auto const viewB = runtime.workspace().layoutState().activeViewId;
-    runtime.workspace().closeView(viewB);
+    auto const viewB = runtime.workspace().snapshot().activeViewId;
+    REQUIRE(runtime.workspace().closeView(viewB));
 
     CHECK(runtime.workspace().goBack());
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - navigation history signal emits on navigate", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - changed snapshot includes navigation availability after navigate",
+            "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    auto received = WorkspaceService::NavigationHistoryChanged{};
-    auto const sub = runtime.workspace().onNavigationHistoryChanged([&](auto const& ev) { received = ev; });
+    auto received = NavigationAvailability{};
+    auto const sub =
+      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received = changed.snapshot.navigation; });
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -213,7 +216,8 @@ namespace ao::rt::test
     CHECK(received.canGoForward == false);
   }
 
-  TEST_CASE("WorkspaceService - navigation history signal emits on back", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - changed snapshot includes navigation availability after back",
+            "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
@@ -221,8 +225,9 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
 
-    auto received = WorkspaceService::NavigationHistoryChanged{};
-    auto const sub = runtime.workspace().onNavigationHistoryChanged([&](auto const& ev) { received = ev; });
+    auto received = NavigationAvailability{};
+    auto const sub =
+      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received = changed.snapshot.navigation; });
 
     requireBackNavigation(runtime);
 
@@ -239,7 +244,7 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
 
     std::int32_t callCount = 0;
-    auto const sub = runtime.workspace().onNavigationHistoryChanged([&](auto const&) { ++callCount; });
+    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const&) { ++callCount; });
 
     requireNavigation(runtime, fixture.firstListId);
     CHECK(callCount == 0);
@@ -258,7 +263,7 @@ namespace ao::rt::test
     requireBackNavigation(runtime);
 
     requireForwardNavigation(runtime);
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
   }
 
@@ -274,7 +279,7 @@ namespace ao::rt::test
     requireBackNavigation(runtime);
     requireBackNavigation(runtime);
 
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
     CHECK(runtime.workspace().canGoBack() == false);
     CHECK(runtime.workspace().canGoForward() == true);
@@ -291,18 +296,18 @@ namespace ao::rt::test
       ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"}));
 
     requireNavigation(runtime, listA, {.recordHistory = true});
-    auto const viewA = runtime.workspace().layoutState().activeViewId;
+    auto const viewA = runtime.workspace().snapshot().activeViewId;
 
     requireNavigation(runtime, listB, {.recordHistory = true});
-    auto const viewB = runtime.workspace().layoutState().activeViewId;
+    auto const viewB = runtime.workspace().snapshot().activeViewId;
 
     CHECK(viewA != viewB);
 
-    runtime.workspace().closeView(viewA);
+    REQUIRE(runtime.workspace().closeView(viewA));
 
     CHECK(runtime.workspace().goBack());
 
-    auto const newViewA = runtime.workspace().layoutState().activeViewId;
+    auto const newViewA = runtime.workspace().snapshot().activeViewId;
     CHECK(newViewA != kInvalidViewId);
     CHECK(newViewA != viewA);
   }
@@ -314,15 +319,15 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime;
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
-    runtime.workspace().closeView(viewA);
+    REQUIRE(runtime.workspace().closeView(viewA));
     REQUIRE(runtime.library().writer().deleteList(fixture.firstListId));
-    auto const before = runtime.workspace().layoutState();
+    auto const before = runtime.workspace().snapshot();
 
     auto const result = runtime.workspace().goBack();
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
-    auto const after = runtime.workspace().layoutState();
+    auto const after = runtime.workspace().snapshot();
     CHECK(after.activeViewId == viewB);
     CHECK(after.activeViewId == before.activeViewId);
     CHECK(after.openViews == before.openViews);
@@ -339,15 +344,15 @@ namespace ao::rt::test
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     requireBackNavigation(runtime);
-    runtime.workspace().closeView(viewB);
+    REQUIRE(runtime.workspace().closeView(viewB));
     REQUIRE(runtime.library().writer().deleteList(fixture.secondListId));
-    auto const before = runtime.workspace().layoutState();
+    auto const before = runtime.workspace().snapshot();
 
     auto const result = runtime.workspace().goForward();
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
-    auto const after = runtime.workspace().layoutState();
+    auto const after = runtime.workspace().snapshot();
     CHECK(after.activeViewId == viewA);
     CHECK(after.activeViewId == before.activeViewId);
     CHECK(after.openViews == before.openViews);

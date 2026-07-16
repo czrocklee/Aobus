@@ -25,7 +25,9 @@ Library sources and projections
   -> ViewService
        ViewId + source lease + projection + selection + presentation state
   -> WorkspaceService
-       open views + focused view + semantic navigation + history + session candidate
+       revisioned snapshot + validated commands + semantic history + session candidate
+  -> AppRuntime application command
+       workspace navigation + playback reveal
   -> UIModel and frontend observers
 ```
 
@@ -47,9 +49,16 @@ History and sessions therefore retain semantic reconstruction inputs instead of 
 `WorkspaceService` is the canonical aggregate for open views and focus within one `AppRuntime`.
 It owns semantic target resolution, browser-like navigation history, custom presentation presets associated with the workspace, and the workspace snapshot and restore boundary.
 
-The service borrows `ViewService` to create, focus, replay, and destroy views.
+The service borrows `ViewService` to create, focus, replay, and destroy views and borrows the callback executor to enforce serialized ownership and queue observations.
 It observes committed list deletion through `LibraryChanges` and closes views whose base list no longer exists.
-Its narrow playback dependency is limited to workspace-originated reveal intent; transport and succession remain playback authorities.
+
+Every public mutation is a validated semantic command returning a commit receipt.
+One accepted command installs one complete `WorkspaceSnapshot`, advances its revision once, and queues one self-contained `WorkspaceChanged` observation.
+No-change commands preserve revision and publish nothing.
+
+Workspace has no playback dependency.
+`AppRuntime::jumpToAlbum()` is the narrow application-level composition that first obtains a workspace navigation receipt and then submits playback reveal.
+Transport and succession remain playback authorities.
 
 ### Presentation consumers
 
@@ -58,7 +67,8 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 
 ## Boundaries and dependency direction
 
-- `WorkspaceService` may coordinate `ViewService`, library-change observations, presentation values, and narrow playback reveal commands.
+- `WorkspaceService` may coordinate `ViewService`, library-change observations, presentation values, and the callback executor; it cannot invoke playback.
+- `AppRuntime` may compose one accepted workspace command with a playback reveal request without becoming another workspace state owner.
 - `ViewService` may acquire library sources and construct projections, but it does not own focus, navigation history, frontend layout, or managed paths.
 - The [library architecture](library.md) owns `ListId`, source membership, leases, and projection mechanics below the view boundary.
 - The [track expression architecture](track-expression.md) owns expression compilation and membership semantics used by filtered and Smart List views.
@@ -75,9 +85,9 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 frontend or UIModel intent
   -> WorkspaceService resolves a semantic target
   -> ViewService reuses or creates a view and projection
-  -> WorkspaceService commits the open/focused aggregate
-  -> final semantic snapshot enters navigation history
-  -> workspace and view observations reach presentation consumers
+  -> WorkspaceService prepares snapshot and history candidates
+  -> one commit installs open views, focus, availability, presets, and revision
+  -> one complete workspace observation reaches presentation consumers
 ```
 
 History stores list identity, filter text, and presentation state rather than `ViewId`.
@@ -106,23 +116,31 @@ The [workspace session specification](../spec/workspace/session.md) owns current
 - Navigation history is runtime aid state and is not itself persisted workspace session state.
 - Workspace restoration reconstructs semantic views instead of resurrecting runtime objects.
 - Frontend observers cannot become a second source of workspace truth.
+- Workspace commands, reads, subscriptions, and commits remain on the callback executor.
+- Observer callbacks receive owned snapshot values and cannot turn their own failure into a command failure.
 
 ## Failure, cancellation, and lifetime boundaries
 
-Workspace commands run on the callback executor selected by the frontend and expose no independent cancellation surface.
-View construction prepares source and projection resources before publication; a failed navigation leaves the committed aggregate and history position unchanged according to the current navigation specification.
+Workspace commands run synchronously on the callback executor selected by the frontend and expose no independent cancellation surface.
+Off-executor access fails fast rather than racing the aggregate.
+View construction and presentation updates complete before the workspace commit; a failed navigation leaves the committed aggregate and history position unchanged.
+
+Observations are deferred through the same executor and hold only a weak signal owner.
+Each event carries the complete committed snapshot.
+Observer exceptions are contained and logged after all still-connected observers have run, and queued events become harmless when the service is destroyed.
 
 Restore treats a missing group as an empty first-run state.
 Malformed data or an unresolvable view returns a recoverable error, and candidate views created before a later failure are destroyed before the error returns.
 
-[RFC 0016](../rfc/0016-coherent-workspace-transactions.md) proposes validated semantic commands and one revisioned candidate commit.
+[RFC 0016](../rfc/0016-coherent-workspace-transactions.md) records the implemented command, snapshot, history, observation, and application-navigation boundary.
 [RFC 0017](../rfc/0017-versioned-workspace-session.md) proposes library binding, bounded validation, stable session-local identities, and a versioned candidate.
-Neither proposal is current behavior.
+RFC 0017 is not current behavior.
 
 ## Implementation map
 
 - [`ViewService`](../../app/include/ao/rt/ViewService.h), [`ViewState`](../../app/include/ao/rt/ViewState.h), and [`ViewService.cpp`](../../app/runtime/ViewService.cpp) own runtime views and their resources.
-- [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h), [`WorkspaceViewState`](../../app/include/ao/rt/WorkspaceViewState.h), and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own the aggregate.
+- [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h), [`WorkspaceSnapshot`](../../app/include/ao/rt/WorkspaceSnapshot.h), and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own commands, the aggregate, receipts, and observations.
+- [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) owns album-reveal composition above workspace and playback.
 - [`NavigationHistory`](../../app/include/ao/rt/NavigationHistory.h) owns bounded semantic navigation history.
 - [`WorkspaceSessionState`](../../app/include/ao/rt/WorkspaceSessionState.h) defines the current persistence candidate model.
 

@@ -93,7 +93,7 @@ namespace ao::uimodel::test
                                                      fixture.catalog,
                                                      fixture.preferences,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
-    auto const activeViewId = fixture.workspace.layoutState().activeViewId;
+    auto const activeViewId = fixture.workspace.snapshot().activeViewId;
     auto const* const albums = rt::builtinTrackPresentationPreset("albums");
     REQUIRE(albums != nullptr);
 

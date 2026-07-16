@@ -6,6 +6,7 @@
 #include "app/ThemeCoordinator.h"
 #include "track/TrackCustomViewDialog.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -145,7 +146,11 @@ namespace ao::gtk
     _applyPresentationConn = Glib::signal_idle().connect(
       [this, spec = std::move(spec)]
       {
-        _runtime.workspace().setActivePresentation(spec);
+        if (auto const result = _runtime.workspace().setActivePresentation(spec); !result)
+        {
+          APP_LOG_ERROR("Failed to apply track presentation: {}", result.error().message);
+        }
+
         return false;
       });
   }

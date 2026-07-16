@@ -66,7 +66,7 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
-    h.commit(point);
+    CHECK(h.commit(point));
 
     CHECK(h.size() == 1);
     CHECK(h.currentIndex() == 0);
@@ -108,8 +108,8 @@ namespace ao::rt::test
   {
     auto h = NavigationHistory{};
     auto const point = makePoint(ListId{10});
-    h.commit(point);
-    h.commit(point);
+    CHECK(h.commit(point));
+    CHECK_FALSE(h.commit(point));
 
     CHECK(h.size() == 1);
     CHECK(h.currentIndex() == 0);

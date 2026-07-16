@@ -15,6 +15,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -51,15 +52,35 @@ namespace ao::gtk
 
     _panelPtr = std::make_unique<ListNavigationPanel>(std::move(panelCallbacks));
     createActions();
+    auto const initialWorkspace = _runtime.workspace().snapshot();
+    _observedViewId = initialWorkspace.activeViewId;
+    _observedWorkspaceRevision = initialWorkspace.revision;
 
-    _focusSub = _runtime.workspace().onFocusedViewChanged(
-      [this](rt::ViewId viewId)
+    _workspaceSub = _runtime.workspace().onChanged(
+      [this](rt::WorkspaceChanged const& changed)
       {
+        if (changed.snapshot.revision <= _observedWorkspaceRevision)
+        {
+          return;
+        }
+
+        _observedWorkspaceRevision = changed.snapshot.revision;
+        auto const viewId = changed.snapshot.activeViewId;
+
+        if (viewId == _observedViewId)
+        {
+          return;
+        }
+
+        _observedViewId = viewId;
+
         if (viewId != rt::kInvalidViewId)
         {
           if (auto const state = _runtime.views().trackListState(viewId); state.listId != kInvalidListId)
           {
+            _syncingWorkspaceSelection = true;
             select(state.listId);
+            _syncingWorkspaceSelection = false;
           }
         }
       });
@@ -129,7 +150,7 @@ namespace ao::gtk
     _deleteListActionPtr->set_enabled(state.canDelete);
     _editListActionPtr->set_enabled(state.canEdit);
 
-    if (_callbacks.onListSelected)
+    if (!_syncingWorkspaceSelection && _callbacks.onListSelected)
     {
       _callbacks.onListSelected(listId);
     }

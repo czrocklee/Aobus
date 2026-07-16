@@ -6,6 +6,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
@@ -25,9 +26,16 @@ namespace ao::uimodel
     std::function<void(TrackPresentationPickerState const&)> onRender)
     : _views{views}, _workspace{workspace}, _catalog{catalog}, _preferences{preferences}, _onRender{std::move(onRender)}
   {
-    _focusSub = _workspace.onFocusedViewChanged(
-      [this](rt::ViewId)
+    _observedViewId = _workspace.snapshot().activeViewId;
+    _focusSub = _workspace.onChanged(
+      [this](rt::WorkspaceChanged const& changed)
       {
+        if (changed.snapshot.activeViewId == _observedViewId)
+        {
+          return;
+        }
+
+        _observedViewId = changed.snapshot.activeViewId;
         _optimisticViewId = rt::kInvalidViewId;
         _optimisticPresentationId.clear();
         refresh();
@@ -36,7 +44,7 @@ namespace ao::uimodel
     _presentationSub = _views.onPresentationChanged(
       [this](rt::ViewService::PresentationChanged const& ev)
       {
-        if (ev.viewId != _workspace.layoutState().activeViewId)
+        if (ev.viewId != _workspace.snapshot().activeViewId)
         {
           return;
         }
@@ -58,7 +66,7 @@ namespace ao::uimodel
       .label = "Presentation",
       .menuItems = _catalog.menuItems(),
     };
-    auto const activeViewId = _workspace.layoutState().activeViewId;
+    auto const activeViewId = _workspace.snapshot().activeViewId;
 
     if (activeViewId == rt::kInvalidViewId)
     {
@@ -91,7 +99,7 @@ namespace ao::uimodel
 
   TrackPresentationApplyCommand TrackPresentationPickerViewModel::selectPresentation(std::string_view presentationId)
   {
-    auto const activeViewId = _workspace.layoutState().activeViewId;
+    auto const activeViewId = _workspace.snapshot().activeViewId;
 
     if (activeViewId == rt::kInvalidViewId)
     {

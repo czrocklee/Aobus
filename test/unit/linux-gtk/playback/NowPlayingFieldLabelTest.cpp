@@ -118,7 +118,7 @@ namespace ao::gtk::test
       REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
       drainGtkEvents();
 
-      auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+      auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
       CHECK(state.listId == rt::kAllTracksListId);
       CHECK_FALSE(state.filterExpression.empty());
     }

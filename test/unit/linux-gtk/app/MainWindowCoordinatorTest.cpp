@@ -164,7 +164,7 @@ namespace ao::gtk::test
       .trackIds = {trackId},
     }));
     runtime.reloadAllTracks();
-    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigateTo(sourceListId));
+    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigateTo(sourceListId)).activeViewId;
     REQUIRE(runtime.playbackSequence().playFromView(sourceViewId, trackId));
     runtime.playback().seek(std::chrono::milliseconds{500});
     runtime.playbackSequence().setShuffleMode(rt::ShuffleMode::On);
@@ -191,7 +191,7 @@ namespace ao::gtk::test
     CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
     CHECK(runtime.playback().state().elapsed == std::chrono::milliseconds{500});
 
-    auto const focusedViewId = runtime.workspace().layoutState().activeViewId;
+    auto const focusedViewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(focusedViewId != rt::kInvalidViewId);
     CHECK(runtime.views().trackListState(focusedViewId).selection == std::vector<TrackId>{trackId});
   }
@@ -214,7 +214,7 @@ namespace ao::gtk::test
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
-    auto const viewId = runtime.workspace().layoutState().activeViewId;
+    auto const viewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(viewId != rt::kInvalidViewId);
     auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
     REQUIRE(listOrder != nullptr);

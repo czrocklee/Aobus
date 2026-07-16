@@ -14,6 +14,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/LiveTrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -165,7 +166,7 @@ namespace ao::rt
 
         if constexpr (std::is_same_v<T, FocusedViewTarget>)
         {
-          auto const layout = _implPtr->workspace.layoutState();
+          auto const layout = _implPtr->workspace.snapshot();
           _implPtr->trackedViewId = layout.activeViewId;
 
           if (_implPtr->trackedViewId != rt::kInvalidViewId)
@@ -174,9 +175,16 @@ namespace ao::rt
             _implPtr->cachedSnapshot = buildSnapshot(state.selection);
           }
 
-          _implPtr->focusSub = _implPtr->workspace.onFocusedViewChanged(
-            [this](ViewId viewId)
+          _implPtr->focusSub = _implPtr->workspace.onChanged(
+            [this](WorkspaceChanged const& changed)
             {
+              auto const viewId = changed.snapshot.activeViewId;
+
+              if (viewId == _implPtr->trackedViewId)
+              {
+                return;
+              }
+
               _implPtr->trackedViewId = viewId;
 
               if (viewId == rt::kInvalidViewId)

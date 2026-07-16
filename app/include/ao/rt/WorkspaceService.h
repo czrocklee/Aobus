@@ -7,7 +7,7 @@
 #include "TrackPresentation.h"
 #include "ViewIds.h"
 #include "ViewState.h"
-#include "WorkspaceViewState.h"
+#include "WorkspaceSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 
@@ -18,17 +18,15 @@
 #include <string>
 #include <string_view>
 #include <variant>
-#include <vector>
 
-namespace ao::library
+namespace ao::async
 {
-  class MusicLibrary;
+  class Executor;
 }
 
 namespace ao::rt
 {
   class ViewService;
-  class PlaybackService;
   class LibraryChanges;
   class ConfigStore;
 
@@ -46,19 +44,16 @@ namespace ao::rt
 
   using NavigationTarget = std::variant<ListId, FilteredListTarget, GlobalViewKind>;
 
+  struct WorkspacePresentationReceipt final
+  {
+    TrackPresentationSpec presentation{};
+    WorkspaceCommitReceipt commit{};
+  };
+
   class WorkspaceService final
   {
   public:
-    struct NavigationHistoryChanged final
-    {
-      bool canGoBack = false;
-      bool canGoForward = false;
-    };
-
-    WorkspaceService(ViewService& views,
-                     PlaybackService& playback,
-                     LibraryChanges const& changes,
-                     library::MusicLibrary& library);
+    WorkspaceService(async::Executor& executor, ViewService& views, LibraryChanges const& changes);
     ~WorkspaceService();
 
     WorkspaceService(WorkspaceService const&) = delete;
@@ -66,35 +61,30 @@ namespace ao::rt
     WorkspaceService(WorkspaceService&&) = delete;
     WorkspaceService& operator=(WorkspaceService&&) = delete;
 
-    WorkspaceViewState layoutState() const;
+    WorkspaceSnapshot snapshot() const;
 
-    void setFocusedView(ViewId viewId);
-    void addView(ViewId viewId);
-    Result<ViewId> navigateTo(NavigationTarget const& target, NavigationOptions options = {});
-    void closeView(ViewId viewId);
+    Result<WorkspaceCommitReceipt> focusView(ViewId viewId);
+    Result<WorkspaceCommitReceipt> navigateTo(NavigationTarget const& target, NavigationOptions options = {});
+    Result<WorkspaceCommitReceipt> closeView(ViewId viewId);
 
-    void setActivePresentation(TrackPresentationSpec const& presentation, NavigationOptions options = {});
-    TrackPresentationSpec setActivePresentation(std::string_view presentationId, NavigationOptions options = {});
+    Result<WorkspaceCommitReceipt> setActivePresentation(TrackPresentationSpec const& presentation,
+                                                         NavigationOptions options = {});
+    Result<WorkspacePresentationReceipt> setActivePresentation(std::string_view presentationId,
+                                                               NavigationOptions options = {});
 
-    void jumpToAlbum(TrackId trackId);
+    Result<WorkspaceCommitReceipt> goBack();
+    Result<WorkspaceCommitReceipt> goForward();
+    bool canGoBack() const;
+    bool canGoForward() const;
 
-    Result<ViewId> goBack();
-    Result<ViewId> goForward();
-    bool canGoBack() const noexcept;
-    bool canGoForward() const noexcept;
-
-    Subscription onFocusedViewChanged(std::move_only_function<void(ViewId)> handler);
-    Subscription onNavigationHistoryChanged(std::move_only_function<void(NavigationHistoryChanged const&)> handler);
+    Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
-    void addCustomPreset(CustomTrackPresentationPreset const& preset);
-    void removeCustomPreset(std::string_view presetId);
-    void setCustomPresets(std::vector<CustomTrackPresentationPreset> presets);
-
-    Subscription onCustomPresetsChanged(std::move_only_function<void()> handler);
+    Result<WorkspaceCommitReceipt> addCustomPreset(CustomTrackPresentationPreset const& preset);
+    Result<WorkspaceCommitReceipt> removeCustomPreset(std::string_view presetId);
 
     void saveSession(ConfigStore& store) const;
-    Result<> restoreSession(ConfigStore& store);
+    Result<WorkspaceCommitReceipt> restoreSession(ConfigStore& store);
 
   private:
     struct Impl;

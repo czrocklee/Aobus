@@ -215,7 +215,13 @@ namespace ao::gtk::layout
 
         switch (_action)
         {
-          case Action::JumpToAlbum: _runtime.workspace().jumpToAlbum(_currentTrackId); break;
+          case Action::JumpToAlbum:
+            if (auto const result = _runtime.jumpToAlbum(_currentTrackId); !result)
+            {
+              APP_LOG_ERROR("PlaybackImage: Failed to jump to album: {}", result.error().message);
+            }
+
+            break;
 
           case Action::None:
           default: break;

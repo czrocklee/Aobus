@@ -18,6 +18,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
@@ -47,7 +48,14 @@ namespace ao::tui
     _tracks = std::move(snapshot.tracks);
     _sections = std::move(snapshot.sections);
     syncSelectedPresentation(activePresentationId());
-    _customPresetsSub = _runtime.workspace().onCustomPresetsChanged([this] { refreshPresentationNavigation(); });
+    _customPresetsSub = _runtime.workspace().onChanged(
+      [this](rt::WorkspaceChanged const& changed)
+      {
+        if (changed.cause == rt::WorkspaceChangeCause::Presets || changed.cause == rt::WorkspaceChangeCause::Restore)
+        {
+          refreshPresentationNavigation();
+        }
+      });
     _libraryChangesSub = _runtime.library().changes().onChanged(
       [this](rt::LibraryChangeSet const& changeSet)
       {
@@ -112,7 +120,10 @@ namespace ao::tui
       APP_LOG_ERROR("Failed to publish TUI selection: {}", result.error().message);
     }
 
-    _runtime.workspace().setFocusedView(_activeViewId);
+    if (auto const focused = _runtime.workspace().focusView(_activeViewId); !focused)
+    {
+      APP_LOG_ERROR("Failed to focus TUI track view: {}", focused.error().message);
+    }
   }
 
   void LibraryController::moveFocusedSelection(bool const listChooserFocused, std::int32_t const delta)
@@ -275,12 +286,14 @@ namespace ao::tui
 
     auto const selectedBefore = selectedTrackView();
     auto const previousTrackId = selectedBefore.track == nullptr ? kInvalidTrackId : selectedBefore.track->id;
-    auto const spec = _runtime.workspace().setActivePresentation(presentationId);
+    auto const result = _runtime.workspace().setActivePresentation(presentationId);
 
-    if (spec.id.empty())
+    if (!result)
     {
       return std::format("Unknown view {}", presentationId);
     }
+
+    auto const& spec = result->presentation;
 
     auto snapshot = loadTrackItemsFromView(_activeViewId);
     _tracks = std::move(snapshot.tracks);
@@ -457,7 +470,7 @@ namespace ao::tui
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
   {
     _runtime.reloadAllTracks();
-    auto navigationResult = Result<rt::ViewId>{};
+    auto navigationResult = Result<rt::WorkspaceCommitReceipt>{};
 
     if (listId == rt::kAllTracksListId)
     {
@@ -473,7 +486,7 @@ namespace ao::tui
       return {};
     }
 
-    _activeViewId = *navigationResult;
+    _activeViewId = navigationResult->activeViewId;
     return loadTrackItemsFromView(_activeViewId);
   }
 } // namespace ao::tui

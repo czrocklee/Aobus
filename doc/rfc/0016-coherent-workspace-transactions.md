@@ -1,41 +1,67 @@
 ---
 id: rfc.0016.coherent-workspace-transactions
 type: rfc
-status: draft
+status: implemented
 domain: workspace
-summary: Proposes a validated revisioned workspace aggregate with atomic commands, coherent observation, and explicit application navigation ownership.
+summary: Introduced validated workspace commands, one revisioned snapshot stream, atomic history and restore commits, and AppRuntime-owned album reveal.
 depends-on: none
 ---
 # RFC 0016: Coherent workspace transactions
 
+## Disposition
+
+Implemented on 2026-07-16 with a narrower synchronous transaction boundary.
+
+The verified coherence gaps are closed by:
+
+- one `WorkspaceSnapshot` containing open views, focus, complete custom presets, navigation availability, and revision;
+- `WorkspaceCommitReceipt` results for every workspace mutation, with `Applied` and `NoChange` dispositions;
+- validated `focusView()` and semantic navigation in place of public `addView()` and raw `setFocusedView()`;
+- copy-then-commit workspace and history candidates for navigation, replay, presentation, presets, list deletion, and restore;
+- one deferred `onChanged()` stream carrying a complete owned snapshot and typed cause;
+- callback-executor affinity, observer exception containment, immutable reentrant delivery, and weak lifetime delivery;
+- one aggregate commit for multi-view restore and multi-view list deletion; and
+- `AppRuntime::jumpToAlbum()` composition, which removes playback from `WorkspaceService` and returns the accepted navigation revision before submitting reveal.
+
+The implementation deliberately does not add a generic transaction type, detached `ViewService` lease/release handles, request generations, a posted command port, a shutdown admission state machine, or a separate application-navigation class.
+Current preparation is bounded and synchronous, `ViewService::createView()` publishes no creation event, and restore destroys all created views on preparation failure.
+Those facts make local snapshot/history candidates sufficient without another ownership framework.
+
+Commands remain synchronous so callers receive receipts directly.
+Only observations are deferred.
+An observer may issue another command immediately, but it cannot mutate the owned snapshot currently being delivered and the resulting observation enters a later executor turn.
+
+The [workspace architecture](../architecture/workspace.md), [workspace navigation specification](../spec/workspace/navigation.md), and [workspace session specification](../spec/workspace/session.md) own current behavior.
+They supersede this proposal; the remainder records the original problem and the broader design considered during implementation.
+
 ## Problem
 
-`WorkspaceService` is documented as the canonical aggregate of open and focused views, but its public mutation surface does not enforce that aggregate.
-`addView()` accepts any `ViewId`, including the invalid id, an unknown id, or a destroyed view.
-`setFocusedView()` does not require its target to be open or even owned by the same live `ViewService`.
-`closeView()` advances the workspace revision and emits focus even when the id was not open, then logs and discards a possible view-destruction failure.
+At proposal time, `WorkspaceService` was documented as the canonical aggregate of open and focused views, but its public mutation surface did not enforce that aggregate.
+`addView()` accepted any `ViewId`, including the invalid id, an unknown id, or a destroyed view.
+`setFocusedView()` did not require its target to be open or even owned by the same live `ViewService`.
+`closeView()` advanced the workspace revision and emitted focus even when the id was not open, then logged and discarded a possible view-destruction failure.
 
-These are not merely permissive test helpers.
-TUI production code calls `setFocusedView()` directly, and current tests construct workspace state through `ViewService::createView()`, `addView()`, and `setFocusedView()` as independent steps.
-The type system therefore permits an active view outside `openViews`, an open destroyed view, and a revision that changed without an aggregate state transition.
+These were not merely permissive test helpers.
+TUI production code called `setFocusedView()` directly, and tests constructed workspace state through `ViewService::createView()`, `addView()`, and `setFocusedView()` as independent steps.
+The type system therefore permitted an active view outside `openViews`, an open destroyed view, and a revision that changed without an aggregate state transition.
 
-Composite commands have a second coherence gap.
-`jumpToAlbum()` focuses a view before applying its presentation, swallows target-resolution failure, logs presentation failure, invokes a void playback reveal command, and only then commits history.
-If a later step fails, observers can see a partially applied focus or presentation without a result identifying the accepted subset.
-Session restore prepares all `ViewService` candidates before workspace mutation, but then exposes the candidate through repeated `addView()`, preset replacement, focus, and history operations rather than one aggregate commit.
+Composite commands had a second coherence gap.
+`jumpToAlbum()` focused a view before applying its presentation, swallowed target-resolution failure, logged presentation failure, invoked a void playback reveal command, and only then committed history.
+If a later step failed, observers could see a partially applied focus or presentation without a result identifying the accepted subset.
+Session restore prepared all `ViewService` candidates before workspace mutation, but then exposed the candidate through repeated `addView()`, preset replacement, focus, and history operations rather than one aggregate commit.
 
-Observation is fragmented across `onFocusedViewChanged`, `onNavigationHistoryChanged`, and `onCustomPresetsChanged`.
-Only the focus signal identifies a view, only the history signal identifies directional availability, and none carries the complete `WorkspaceViewState` revision.
-Consumers that need open views, focus, history availability, and preset catalog state must reread mutable services and infer which values belong together.
+Observation was fragmented across `onFocusedViewChanged`, `onNavigationHistoryChanged`, and `onCustomPresetsChanged`.
+Only the focus signal identified a view, only the history signal identified directional availability, and none carried the complete `WorkspaceViewState` revision.
+Consumers that needed open views, focus, history availability, and preset catalog state had to reread mutable services and infer which values belonged together.
 
-Workspace signals emit synchronously.
-The common signal implementation continues notifying later observers after one throws and then rethrows the first exception to the command caller.
-At that point workspace state is already mutated, so an observer failure can turn an applied command into an apparent exceptional failure.
-An observer may also invoke another workspace command recursively while the outer command is still publishing.
+Workspace signals emitted synchronously.
+The common signal implementation continued notifying later observers after one threw and then rethrew the first exception to the command caller.
+At that point workspace state was already mutated, so an observer failure could turn an applied command into an apparent exceptional failure.
+An observer could also invoke another workspace command recursively while the outer command was still publishing.
 
-Finally, `WorkspaceService` depends directly on `PlaybackService` only to implement album reveal.
-That relationship makes the workspace aggregate a cross-domain application coordinator and conflicts with the proposed playback boundary, which moves reveal navigation out of playback transport.
-The missing abstraction is not a larger workspace facade; it is an explicit application-navigation owner above validated workspace transactions.
+Finally, `WorkspaceService` depended directly on `PlaybackService` only to implement album reveal.
+That relationship made the workspace aggregate a cross-domain application coordinator and conflicted with the proposed playback boundary.
+The missing role was not a larger workspace facade; it was explicit application-level navigation ownership above validated workspace transactions.
 
 ## Dependencies
 
@@ -73,7 +99,7 @@ This RFC can be implemented against the current playback, view, and reporting su
 - Guarantee a transaction across the library database, audio engine, and workspace aggregate.
 - Preserve source compatibility for `addView()`, `setFocusedView()`, `closeView()`, or the current signal set.
 
-## Proposed design
+## Proposed design (historical)
 
 ### Canonical aggregate
 
@@ -283,34 +309,26 @@ During migration, compatibility signals are emitted only from the canonical comm
 - One accepted navigation, focus, close, preset edit, restore, or list-deletion command advances one workspace revision and emits one canonical observation.
 - Session restoration with several views is never observable as a sequence of partially open aggregates.
 - Every specialized migration event carries and matches the canonical workspace revision.
-- Observer-triggered commands execute on a later turn and never alter the snapshot being delivered.
+- Observer-triggered commands never alter the owned snapshot being delivered, and their observations execute on a later turn.
 - An observer exception cannot change a command receipt or prevent later valid observers from receiving the committed snapshot.
 - Album reveal exposes navigation acceptance and reveal acceptance as typed evidence, with the selected partial-success policy covered explicitly.
 - `WorkspaceService` no longer includes, stores, or invokes `PlaybackService`.
-- Runtime shutdown rejects new commands and produces no observation after workspace/view teardown.
+- Workspace teardown invalidates queued observation delivery before view and executor teardown.
 - Repository searches and boundary tests reject production use of removed raw mutators.
 - Existing navigation, history, presentation, session, headless, GTK, and TUI behavior tests remain oracles where this RFC does not intentionally change the contract.
 - Completed implementation passes `./ao check`, relevant ThreadSanitizer coverage, and the documentation gate.
 
-## Open questions
+## Resolved questions
 
-- Should `WorkspaceChanged` contain custom preset values directly, an immutable shared catalog, or only a revision plus a snapshot accessor?
-- Should close publish before potentially expensive projection teardown, or should candidate release move all expensive work before commit while retaining responsiveness?
-- Which current commands need synchronous receipts, and which should use a uniform posted completion port to enforce affinity?
-- Should focus history be committed only by semantic navigation commands, or can an explicit focus command request history through options?
-- Does album reveal retain successful navigation when playback reveal is rejected, and which reporting disposition makes that partial success clear?
-- Should list deletion prune now-unresolvable history points eagerly or retain the current replay-time failure behavior?
+- `WorkspaceChanged` carries complete custom-preset values directly; the collections are small and this keeps every event self-contained.
+- Close commits and queues the semantic removal before releasing view resources. Production deferred delivery therefore observes the completed teardown without making teardown failure a command outcome.
+- Bounded commands return synchronous receipts. Executor affinity is asserted at the service boundary; no posted completion port was needed.
+- Explicit focus does not commit history. Semantic navigation and presentation commands decide history through their options.
+- Current playback reveal submission has no recoverable rejection channel. Successful album reveal therefore proves a workspace receipt plus submitted reveal; the navigation remains accepted if a future downstream delivery failure is introduced.
+- List deletion retains semantic history and lets replay fail if its list no longer resolves.
+- A complete preset vector was simpler and more useful than a second preset-catalog revision.
 
-## Promotion plan
+## Implementation record
 
-If accepted and implemented, update the [workspace architecture](../architecture/workspace.md) with candidate ownership, canonical workspace snapshots, the application-navigation coordinator, and executor/lifetime boundaries.
-Update the [workspace navigation specification](../spec/workspace/navigation.md) with validated commands, receipts, aggregate invariants, history transactions, observations, reentrancy, and album-reveal disposition.
-Update the [workspace session specification](../spec/workspace/session.md) when restore installs one candidate aggregate through this boundary.
-
-Update the [system architecture](../architecture/system-overview.md) only if the application-navigation role changes the public application-runtime map.
-Update the [playback architecture](../architecture/playback.md) and applicable playback/navigation specifications when RFC 0005 and this RFC jointly move reveal ownership.
-Update presentation specifications only where presentation-plus-navigation becomes one implemented workspace transaction.
-Update failure/reporting specifications with the operation disposition selected under RFC 0013.
-
-Add exact public command, snapshot, receipt, revision, and observation fields to a workspace runtime-surface reference if the resulting API needs exhaustive documentation.
-Record an ADR if the accepted candidate/adoption boundary, queued observation rule, or application-navigation ownership represents a durable choice among credible alternatives.
+The workspace architecture, navigation specification, session specification, system map, code, and tests were updated together.
+No separate runtime-surface reference or ADR was necessary: the public structs are compact, and the chosen boundary follows the existing callback-executor and candidate-commit architecture rather than introducing a new framework.

@@ -191,11 +191,11 @@ namespace ao::tui::test
     customSpec.id = "custom-songs";
 
     auto const initialCount = controller.presentationEntries().size();
-    fixture.runtime.workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
+    REQUIRE(fixture.runtime.workspace().addCustomPreset(rt::CustomTrackPresentationPreset{
       .label = "Custom Songs",
       .basePresetId = "songs",
       .spec = customSpec,
-    });
+    }));
 
     REQUIRE(controller.presentationEntries().size() == initialCount + 1);
     CHECK(controller.presentationEntries().back().id == "custom-songs");

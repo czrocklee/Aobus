@@ -95,7 +95,7 @@ This table records primary structural relationships rather than every document l
 | [Library](library.md) | Core storage, query, and async mechanisms | Track expressions, workspace views, playback resolution, and presentation projections |
 | [Track expression](track-expression.md) | Query language and library values | Smart membership, filtering, completion, scalar formatting, presentation, and CLI output |
 | [Playback](playback.md) | Library identities and sources, runtime execution, managed state | Audio quality, presentation, and platform output adapters |
-| [Workspace](workspace.md) | Library sources, track expressions, presentation values, and managed-state boundaries | Interactive session lifecycle, playback reveal, and presentation consumers |
+| [Workspace](workspace.md) | Library sources, track expressions, presentation values, runtime execution, and managed-state boundaries | Interactive session lifecycle, application-level reveal composition, and presentation consumers |
 | [Interactive session lifecycle](interactive-session-lifecycle.md) | Runtime execution, persistence, library, workspace, playback, and failure authorities | Presentation and frontend composition roots |
 | [Application shell](application-shell.md) | Presentation boundaries, UIModel layout values, runtime services, managed state, and GTK lifecycle | GTK widget tree, actions, editor, component state, and shortcuts |
 | [Presentation](presentation.md) | Runtime snapshots and commands from domain and application systems | GTK, TUI, and non-interactive CLI adaptation |

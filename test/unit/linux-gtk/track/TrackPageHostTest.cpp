@@ -13,6 +13,7 @@
 #include "track/TrackRowCache.h"
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
@@ -23,6 +24,7 @@
 #include <gtkmm/window.h>
 
 #include <utility>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -70,7 +72,7 @@ namespace ao::gtk::test
         library, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       runtime.reloadAllTracks();
       REQUIRE(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
-      auto const viewId = runtime.workspace().layoutState().activeViewId;
+      auto const viewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
 
       host.rebuild(cache);
@@ -83,6 +85,21 @@ namespace ao::gtk::test
       CHECK(runtime.playbackSequence().state().currentTrackId == trackId);
       CHECK(runtime.playbackSequence().state().sourceListId == rt::kAllTracksListId);
       CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
+    }
+
+    SECTION("reveal synchronizes a missing workspace page before selecting the track")
+    {
+      auto const trackId = library::test::addTrack(library, {.title = "Reveal Target"});
+      runtime.reloadAllTracks();
+      host.rebuild(cache);
+      REQUIRE(host.currentVisible() == nullptr);
+
+      auto const receipt = runtime.jumpToAlbum(trackId);
+
+      REQUIRE(receipt);
+      drainGtkEvents();
+      REQUIRE(host.find(receipt->activeViewId) != nullptr);
+      CHECK(runtime.views().trackListState(receipt->activeViewId).selection == std::vector<TrackId>{trackId});
     }
   }
 } // namespace ao::gtk::test

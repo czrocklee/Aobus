@@ -417,8 +417,7 @@ namespace ao::rt
 
     auto spec = normalizeTrackPresentationSpec(presentation);
 
-    if (it->second.state.presentation.id == spec.id && it->second.state.groupBy == spec.groupBy &&
-        it->second.state.sortBy == spec.sortBy)
+    if (it->second.state.presentation == spec)
     {
       return {};
     }

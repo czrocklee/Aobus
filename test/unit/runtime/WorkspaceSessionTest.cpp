@@ -8,6 +8,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -30,8 +31,8 @@ namespace ao::rt::test
     auto const result = runtime.workspace().restoreSession(runtime.workspaceConfigStore());
 
     REQUIRE(result);
-    CHECK(runtime.workspace().layoutState().openViews.empty());
-    CHECK(runtime.workspace().layoutState().activeViewId == kInvalidViewId);
+    CHECK(runtime.workspace().snapshot().openViews.empty());
+    CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
   }
 
   TEST_CASE("WorkspaceService - session restore recreates the initial navigation point",
@@ -52,7 +53,7 @@ namespace ao::rt::test
       auto runtime = makeRuntime(tempDir);
       REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
 
-      auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+      auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
       CHECK(state.listId == listId);
       CHECK(runtime.workspace().canGoBack() == false);
       CHECK(runtime.workspace().canGoForward() == false);
@@ -82,8 +83,44 @@ namespace ao::rt::test
 
     CHECK(runtime.workspace().canGoBack() == true);
     REQUIRE(runtime.workspace().goBack());
-    auto const state = runtime.views().trackListState(runtime.workspace().layoutState().activeViewId);
+    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == firstListId);
+  }
+
+  TEST_CASE("WorkspaceService - multi-view restore publishes one complete snapshot",
+            "[runtime][unit][workspace][session]")
+  {
+    auto tempDir = TempDir{};
+
+    {
+      auto runtime = makeRuntime(tempDir);
+      auto const firstListId = ao::test::requireValue(
+        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First snapshot"}));
+      auto const secondListId = ao::test::requireValue(
+        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second snapshot"}));
+      REQUIRE(runtime.workspace().navigateTo(firstListId));
+      REQUIRE(runtime.workspace().navigateTo(secondListId));
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
+    }
+
+    auto runtime = makeRuntime(tempDir);
+    std::int32_t changeCount = 0;
+    auto changed = WorkspaceChanged{};
+    auto const sub = runtime.workspace().onChanged(
+      [&](WorkspaceChanged const& value)
+      {
+        ++changeCount;
+        changed = value;
+      });
+
+    auto const receipt = ao::test::requireValue(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+
+    CHECK(changeCount == 1);
+    CHECK(changed.cause == WorkspaceChangeCause::Restore);
+    CHECK(changed.snapshot.openViews.size() == 2);
+    CHECK(changed.snapshot == runtime.workspace().snapshot());
+    CHECK(receipt.beforeRevision == 0);
+    CHECK(receipt.afterRevision == 1);
   }
 
   TEST_CASE("WorkspaceService - saveSession tolerates flush failures", "[runtime][unit][workspace][session]")
@@ -130,7 +167,7 @@ namespace ao::rt::test
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     REQUIRE(runtime.workspace().restoreSession(*storePtr));
 
-    auto layout = runtime.workspace().layoutState();
+    auto layout = runtime.workspace().snapshot();
     CHECK(layout.openViews.size() == 1);
     CHECK(layout.activeViewId == layout.openViews.front());
   }
@@ -158,7 +195,7 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
-    auto const layout = runtime.workspace().layoutState();
+    auto const layout = runtime.workspace().snapshot();
     CHECK(layout.openViews.empty());
     CHECK(layout.activeViewId == kInvalidViewId);
     CHECK(layout.revision == 0);

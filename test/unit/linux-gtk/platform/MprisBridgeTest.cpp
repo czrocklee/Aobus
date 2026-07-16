@@ -94,7 +94,7 @@ namespace ao::gtk::platform::test
       auto const result =
         runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks, {.optPresentation = listOrder->spec});
       REQUIRE(result);
-      return *result;
+      return result->activeViewId;
     }
   } // namespace
 
