@@ -31,6 +31,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 
@@ -124,7 +125,7 @@ namespace ao::gtk::test
     auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    auto const layoutPath = runtime.musicRoot() / ".aobus" / "gtk_layout.yaml";
+    auto const layoutPath = rt::LibraryPaths{runtime.musicRoot()}.managedDataPath() / "gtk_layout.yaml";
     std::filesystem::create_directories(layoutPath.parent_path());
     auto const stored = std::string{"trackView.columnLayouts:\n"
                                     "  version: 2\n"

@@ -18,7 +18,7 @@ namespace ao::gtk::test
             "[gtk][unit][track][presentation]")
   {
     auto const tempDir = ao::test::TempDir{};
-    auto const configDir = std::filesystem::path{tempDir.path()} / ".aobus";
+    auto const& configDir = tempDir.path();
     auto const configPath = configDir / "gtk_layout.yaml";
 
     auto state = uimodel::TrackColumnLayoutState{};

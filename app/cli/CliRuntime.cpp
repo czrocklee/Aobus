@@ -9,6 +9,7 @@
 #include <ao/async/Task.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryPaths.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -82,7 +83,7 @@ namespace ao::cli
       auto executorPtr = std::make_unique<async::LoopExecutor>();
       auto* const loopExecutor = executorPtr.get();
       auto runtimePtr = std::make_unique<rt::CoreRuntime>(
-        std::move(executorPtr), _options.root, _options.root / ".aobus/library", _musicLibraryMapSize);
+        std::move(executorPtr), _options.root, rt::LibraryPaths{_options.root}.databasePath(), _musicLibraryMapSize);
 
       _loopExecutor = loopExecutor;
       _runtimePtr = std::move(runtimePtr);

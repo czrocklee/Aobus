@@ -48,6 +48,7 @@ Core libraries do not own application workspace state, frontend lifecycle, user 
 
 `ao_app_runtime` owns application-level state and coordinates core mechanisms.
 Its public surface under `app/include/ao/rt/` includes the library facade, sources and projections, workspace and view services, playback services, completion, configuration, notifications, and frontend-neutral value types.
+It also owns canonical cross-frontend paths derived from a supplied music-library root, without discovering platform application directories.
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
 It owns storage, asynchronous execution, the library facade and change bus, source caching, completion, and notifications.
@@ -66,7 +67,8 @@ It consumes runtime services and stable value types but does not become a second
 ### Frontends
 
 Each frontend is a composition root and platform adapter.
-It selects paths, constructs the appropriate executor and runtime, registers platform audio providers, binds user events to commands, and owns toolkit or terminal lifecycle.
+It selects the music root, explicit overrides, and platform application directories; constructs the appropriate executor and runtime; registers platform audio providers; binds user events to commands; and owns toolkit or terminal lifecycle.
+Frontends use the runtime path contract for standard per-library locations while retaining frontend-specific filenames and override policy.
 
 GTK additionally owns widgets, CSS, dialogs, portals, GLib integration, and GTK-specific layout construction.
 TUI owns FTXUI rendering, terminal input, overlays, and its event-loop adapter.
@@ -154,12 +156,14 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines runtime, UIModel, frontend targets, and layer guardrails.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
+- [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots.
 - [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) and [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) enforce application-layer boundaries.
 
 ## Test map
 
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive runtime composition and service wiring.
+- [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects canonical per-library path derivation and existing-database detection.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI use of the shared runtime.

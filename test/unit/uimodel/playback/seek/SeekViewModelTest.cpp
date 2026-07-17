@@ -23,10 +23,11 @@ namespace ao::uimodel::test
   TEST_CASE("SeekViewModel - reactive updates", "[uimodel][unit][playback]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
+    auto executor = QueuedExecutor{};
     auto notificationService = NotificationService{};
     auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
     addReadyAudioProvider(playback);
+    REQUIRE(executor.drainUntil([&] { return playback.state().ready; }));
 
     auto log = ao::test::RenderLog<SeekViewState>{};
     auto viewModel = SeekViewModel{playback, [&log](auto const& state) { log.render(state); }};
@@ -54,7 +55,7 @@ namespace ao::uimodel::test
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const desc = PlaybackService::PlaybackRequest{
         .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
-        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{5}},
+        .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{1}},
       };
       REQUIRE(playback.play(desc, kInvalidListId));
       auto const expectedDuration = playback.state().duration;

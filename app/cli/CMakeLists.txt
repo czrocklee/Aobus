@@ -28,6 +28,7 @@ add_library(aobus-cli-lib STATIC
 )
 target_include_directories(aobus-cli-lib PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(aobus-cli-lib PUBLIC ao_app_runtime ao CLI11::CLI11 Boost::headers)
+add_dependencies(aobus-cli-lib ao_frontend_library_path_boundary_check)
 
 add_executable(aobus
     main.cpp

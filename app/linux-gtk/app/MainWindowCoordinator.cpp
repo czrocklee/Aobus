@@ -34,6 +34,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
@@ -59,7 +60,7 @@ namespace ao::gtk
   struct MainWindowCoordinator::Impl final
   {
     Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
-      : layoutStateStore{runtime.musicRoot() / ".aobus"}
+      : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library()}
       , imageCache{100}
       , playbackCommandSurface{runtime.playback(),

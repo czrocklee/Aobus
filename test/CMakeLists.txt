@@ -223,6 +223,7 @@ add_executable(ao_core_test
     unit/runtime/AppPrefsStateTest.cpp
     unit/runtime/AsyncParallelTest.cpp
     unit/runtime/AsyncRuntimeTest.cpp
+    unit/runtime/library/LibraryPathsTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
     unit/runtime/StorageResultTest.cpp

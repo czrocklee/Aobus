@@ -350,10 +350,13 @@ namespace ao::rt::test
     CHECK_THROWS_AS(runtime.spawn(failingNonDefaultResultTask(&runtime)).get(), Exception);
     CHECK(runtime.spawn(throwingDefaultResultTask(&runtime, false)).get().value() == 84);
 
+    auto originalFailureFuture = runtime.spawn(throwingDefaultResultTask(&runtime, true));
+    auto const originalFailure = captureTaskFutureException(originalFailureFuture);
+    REQUIRE(originalFailure);
+
     try
     {
-      std::ignore = runtime.spawn(throwingDefaultResultTask(&runtime, true)).get();
-      FAIL("Expected the original task exception");
+      std::rethrow_exception(originalFailure);
     }
     catch (Exception const& error)
     {

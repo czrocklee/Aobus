@@ -12,6 +12,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_message.hpp>
@@ -246,13 +247,13 @@ namespace ao::cli::test
 
       TrackId addTrack(library::test::TrackSpec const& spec) const
       {
-        auto musicLibrary = library::test::makeTestMusicLibrary(root(), root() / ".aobus/library");
+        auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
         return library::test::addTrack(musicLibrary, spec);
       }
 
       ResourceId addResource(std::span<std::byte const> bytes) const
       {
-        auto musicLibrary = library::test::makeTestMusicLibrary(root(), root() / ".aobus/library");
+        auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
         auto transaction = library::test::writeTransaction(musicLibrary);
         auto idResult = musicLibrary.resources().writer(transaction).create(bytes);
         REQUIRE(idResult);
@@ -286,7 +287,8 @@ namespace ao::cli::test
 
     bool manifestHasAudioIdentity(CliFixture const& fixture, std::string_view uri)
     {
-      auto musicLibrary = library::test::makeTestMusicLibrary(fixture.root(), fixture.root() / ".aobus/library");
+      auto musicLibrary =
+        library::test::makeTestMusicLibrary(fixture.root(), rt::LibraryPaths{fixture.root()}.databasePath());
       auto transaction = musicLibrary.readTransaction();
       auto manifestResult = musicLibrary.manifest().reader(transaction).get(uri);
       REQUIRE(manifestResult);

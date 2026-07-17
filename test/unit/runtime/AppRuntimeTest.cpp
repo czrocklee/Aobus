@@ -26,6 +26,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -115,18 +116,19 @@ namespace ao::rt::test
   TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
+    auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
 
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
-      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .databasePath = databasePath,
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
     });
 
     CHECK(appPtr->musicRoot() == std::filesystem::path{tempDir.path()});
-    CHECK(appPtr->databasePath() == std::filesystem::path{tempDir.path()} / ".aobus" / "library");
+    CHECK(appPtr->databasePath() == databasePath);
 
     // Verify accessors
     [[maybe_unused]] auto& commands = appPtr->library().writer();
@@ -163,7 +165,7 @@ namespace ao::rt::test
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
-      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
@@ -188,7 +190,7 @@ namespace ao::rt::test
     auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
-      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),

@@ -26,6 +26,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <boost/asio/co_spawn.hpp>
@@ -55,6 +56,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -104,6 +106,30 @@ namespace ao::rt::test
     REQUIRE(exceptions.size() == 1);
     CHECK(exceptions.front().context == expectedContext);
     CHECK_THROWS_AS(std::rethrow_exception(exceptions.front().exceptionPtr), ExceptionType);
+  }
+
+  template<typename T>
+  std::exception_ptr captureTaskFutureException(async::TaskFuture<T>& future)
+  {
+    try
+    {
+      if constexpr (std::is_void_v<T>)
+      {
+        future.get();
+      }
+      else
+      {
+        std::ignore = future.get();
+      }
+    }
+    catch (...)
+    {
+      // Keep ownership explicit while tests inspect a cross-thread exception;
+      // GCC ThreadSanitizer cannot model ownership held by an active catch.
+      return std::current_exception();
+    }
+
+    return {};
   }
 
   inline PlaybackService makePlaybackService(async::Executor& executor,
@@ -1157,7 +1183,7 @@ namespace ao::rt::test
     return AppRuntime{AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
-      .databasePath = std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),

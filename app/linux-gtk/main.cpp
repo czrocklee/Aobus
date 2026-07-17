@@ -11,7 +11,6 @@
 #include "app/ShellLayoutStore.h"
 #include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
-#include "portal/ImportExportCoordinatorPolicy.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include "preferences/PreferencesWindow.h"
 #include <ao/AppVersion.h>
@@ -20,6 +19,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preferences/PreferencesEditorModel.h>
 
@@ -54,14 +54,14 @@ using namespace ao::gtk;
 
 namespace
 {
-  struct LibraryPaths final
+  struct ResolvedLibraryPaths final
   {
     std::filesystem::path musicRoot;
     std::filesystem::path databasePath;
     bool scanAfterOpen = false;
   };
 
-  LibraryPaths resolveLibraryPaths(AppConfigStore const& configStore)
+  ResolvedLibraryPaths resolveLibraryPaths(AppConfigStore const& configStore)
   {
     auto snapshot = rt::AppSessionState{};
     configStore.loadAppSession(snapshot);
@@ -72,19 +72,20 @@ namespace
 
       if (std::filesystem::exists(musicRoot))
       {
+        auto const libraryPaths = rt::LibraryPaths{musicRoot};
         return {.musicRoot = musicRoot,
-                .databasePath = portal::defaultLibraryDatabasePath(musicRoot),
-                .scanAfterOpen = portal::shouldScanAfterOpen(musicRoot)};
+                .databasePath = libraryPaths.databasePath(),
+                .scanAfterOpen = !libraryPaths.hasExistingDatabase()};
       }
     }
 
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
-    return {.musicRoot = emptyPath, .databasePath = portal::defaultLibraryDatabasePath(emptyPath)};
+    return {.musicRoot = emptyPath, .databasePath = rt::LibraryPaths{emptyPath}.databasePath()};
   }
 
   Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
-                                        LibraryPaths paths,
+                                        ResolvedLibraryPaths paths,
                                         std::shared_ptr<AppConfigStore> appConfigStorePtr,
                                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
@@ -207,6 +208,7 @@ namespace
     }
 
     auto const requestedPath = std::filesystem::absolute(path).lexically_normal();
+    auto const libraryPaths = rt::LibraryPaths{requestedPath};
 
     if (mainWindowPtr && mainWindowPtr->musicRoot() == requestedPath)
     {
@@ -236,13 +238,12 @@ namespace
     appSession.lastLibraryPath = requestedPath.string();
     appConfigStorePtr->saveAppSession(appSession);
 
-    mainWindowPtr = createWindow(*appPtr,
-                                 {.musicRoot = requestedPath,
-                                  .databasePath = portal::defaultLibraryDatabasePath(requestedPath),
-                                  .scanAfterOpen = scanAfterOpen},
-                                 appConfigStorePtr,
-                                 shellLayoutStorePtr,
-                                 componentStateStorePtr);
+    mainWindowPtr = createWindow(
+      *appPtr,
+      {.musicRoot = requestedPath, .databasePath = libraryPaths.databasePath(), .scanAfterOpen = scanAfterOpen},
+      appConfigStorePtr,
+      shellLayoutStorePtr,
+      componentStateStorePtr);
     configureOpenLibraryCallback(
       mainWindowPtr, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
 

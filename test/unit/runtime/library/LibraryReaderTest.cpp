@@ -25,6 +25,7 @@
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -68,14 +69,14 @@ namespace ao::rt::test
     {
       return CoreRuntime{std::make_unique<InlineExecutor>(),
                          tempDir.path(),
-                         std::filesystem::path{tempDir.path()} / ".aobus" / "library",
+                         LibraryPaths{tempDir.path()}.databasePath(),
                          library::test::kTestMusicLibraryMapSize};
     }
 
     SeededReadModelLibrary seedLibrary(ao::test::TempDir const& tempDir)
     {
-      auto musicLibrary = library::test::makeTestMusicLibrary(
-        tempDir.path(), std::filesystem::path{tempDir.path()} / ".aobus" / "library");
+      auto musicLibrary =
+        library::test::makeTestMusicLibrary(tempDir.path(), LibraryPaths{tempDir.path()}.databasePath());
       auto transaction = library::test::writeTransaction(musicLibrary);
 
       auto resourceWriter = musicLibrary.resources().writer(transaction);

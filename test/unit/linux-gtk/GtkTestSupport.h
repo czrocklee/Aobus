@@ -12,6 +12,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/Subscription.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <glib-object.h>
@@ -623,7 +624,7 @@ namespace ao::gtk::test
   inline auto makeRuntime(ao::test::TempDir const& tempDir,
                           std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {})
   {
-    auto const databasePath = tempDir.path() / ".aobus" / "library";
+    auto const databasePath = rt::LibraryPaths{tempDir.path()}.databasePath();
 
     if (initializeLibrary)
     {

@@ -9,7 +9,7 @@ summary: Enumerates default Linux locations for Aobus managed state, durable dat
 
 ## Scope and version
 
-This reference enumerates the current default Linux paths selected by the GTK, TUI, and CLI composition roots.
+This reference enumerates the current default Linux paths derived by runtime and selected or adapted by the GTK, TUI, and CLI composition roots.
 It owns locations and path overrides, not the schemas or behavior of the files stored there.
 
 The path surface is not independently versioned.
@@ -17,9 +17,10 @@ Serialized compatibility belongs to each payload's format owner, while ownership
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places path selection in frontend composition roots.
-GTK resolves GLib/XDG locations and library-relative paths, TUI resolves command-line and library-relative paths, and CLI resolves only its selected music root and library database.
-Runtime and UIModel receive paths or stores and do not discover platform application directories.
+The [system architecture](../../architecture/system-overview.md) places platform selection and runtime construction in frontend composition roots.
+Runtime `LibraryPaths` derives the canonical per-library managed-data base, database path, log path, and existing-database probe from a supplied music root without discovering platform application directories.
+GTK resolves GLib/XDG locations, its selected music root, and frontend-specific files; TUI resolves its selected root and command-line overrides; and CLI resolves only its selected music root.
+UIModel receives paths or stores and does not resolve storage locations.
 
 ## Surface
 
@@ -78,7 +79,8 @@ Linux defaults and `AOBUS_BUILD_ROOT` are described in the repository [README](.
 - A TUI `--database` override changes the database path without changing the selected music root.
 - A TUI `--config` override changes the workspace/playback-session file without changing its payload ownership.
 - TUI normalizes its selected root and override paths to absolute lexical paths before runtime composition.
-- CLI passes its selected root to runtime and derives the database path from that value without a separate interactive configuration store.
+- CLI passes its selected root to `LibraryPaths` and opens the derived database without a separate interactive configuration store.
+- `LibraryPaths::hasExistingDatabase()` detects a database created at the canonical location without exposing the LMDB marker filename to a frontend.
 - A library YAML export path never becomes an application-managed path merely because its encoding is YAML.
 
 Observable missing-file, parse, fallback, and save behavior belongs to the relevant specifications and semantic owners rather than this location inventory.
@@ -93,16 +95,19 @@ Workspace and presentation state remain physically per-library so those identiti
 
 ## Implementation authority
 
-- [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) resolves global GTK config, layout, component-state, log, database, and workspace locations.
+- [`LibraryPaths.h`](../../../app/include/ao/rt/library/LibraryPaths.h) and [`LibraryPaths.cpp`](../../../app/runtime/library/LibraryPaths.cpp) own the canonical per-library managed-data base, database, log, and existing-database probe.
+- [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) resolves global GTK config, layout, component-state, log, selected-root, and workspace locations.
 - [`GtkStyleRuntime.cpp`](../../../app/linux-gtk/app/GtkStyleRuntime.cpp) resolves `user.css`.
 - [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) resolves the MPRIS artwork cache.
-- [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) supplies the per-library `.aobus` directory to `GtkLayoutStateStore`.
-- [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration defaults and overrides.
-- [`app/tui/App.cpp`](../../../app/tui/App.cpp) resolves the TUI log location and constructs its runtime store.
-- [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) derives the CLI library database from its selected root.
+- [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) appends the GTK presentation filename to the canonical per-library managed-data path.
+- [`app/tui/Main.cpp`](../../../app/tui/Main.cpp) owns TUI root, database, and configuration override selection and appends its frontend-specific configuration filename.
+- [`app/tui/App.cpp`](../../../app/tui/App.cpp) uses the canonical per-library log path and constructs its runtime store.
+- [`CliRuntime.cpp`](../../../app/cli/CliRuntime.cpp) opens the canonical database for its selected root.
+- [`app/CMakeLists.txt`](../../../app/CMakeLists.txt) rejects canonical `.aobus` and LMDB marker literals in frontend C++ source.
 
 ## Test authority
 
+- [`LibraryPathsTest.cpp`](../../../test/unit/runtime/library/LibraryPathsTest.cpp) locks the exact canonical paths and detects a database created through `MusicLibrary` without duplicating its physical marker.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) protects the global GTK file boundary.
 - [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) and [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protect preset file construction and traversal rejection.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects the per-library GTK presentation file.

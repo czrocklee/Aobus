@@ -6,20 +6,9 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <cstdint>
-#include <filesystem>
 
 namespace ao::gtk::portal
 {
-  inline std::filesystem::path defaultLibraryDatabasePath(std::filesystem::path const& libraryPath)
-  {
-    return libraryPath / ".aobus" / "library";
-  }
-
-  inline bool shouldScanAfterOpen(std::filesystem::path const& libraryPath)
-  {
-    return !std::filesystem::exists(defaultLibraryDatabasePath(libraryPath) / "data.mdb");
-  }
-
   inline rt::ExportMode exportModeForSelection(std::uint32_t selectedIndex)
   {
     switch (selectedIndex)

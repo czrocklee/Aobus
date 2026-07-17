@@ -11,6 +11,7 @@
 #include "portal/ImportExportCoordinatorPolicy.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include <ao/rt/Log.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 
@@ -78,8 +79,9 @@ namespace ao::gtk::portal
                                    if (auto const folderPtr = dialogPtr->select_folder_finish(resultPtr); folderPtr)
                                    {
                                      auto const path = std::filesystem::path{folderPtr->get_path()};
+                                     auto const libraryPaths = rt::LibraryPaths{path};
 
-                                     openMusicLibrary(path, shouldScanAfterOpen(path));
+                                     openMusicLibrary(path, !libraryPaths.hasExistingDatabase());
                                    }
                                  }
                                  catch (Gtk::DialogError const& e)

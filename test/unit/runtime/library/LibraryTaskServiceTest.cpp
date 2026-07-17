@@ -30,6 +30,7 @@
 #include <atomic>
 #include <cstddef>
 #include <deque>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -112,11 +113,13 @@ namespace ao::rt::test
     template<typename Future>
     void requireInjectedFailure(Future& future)
     {
+      auto const exceptionPtr = captureTaskFutureException(future);
+      REQUIRE(exceptionPtr);
       bool sawInjectedFailure = false;
 
       try
       {
-        std::ignore = future.get();
+        std::rethrow_exception(exceptionPtr);
       }
       catch (InjectedLibraryTaskFailure const& error)
       {

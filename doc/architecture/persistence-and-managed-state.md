@@ -43,7 +43,7 @@ runtime / UIModel / frontend semantic owner
   -> model codec or application configuration traits
   -> ConfigStore or a specialized file store
   -> ao::yaml parsing/emission + AtomicFile replacement
-  -> path selected by the composition root
+  -> canonical per-library path or platform path selected at composition
 ```
 
 The second diagram shows the save direction.
@@ -56,9 +56,10 @@ The principal code boundaries refine the layer model in the [system architecture
 | Durable library data | Core libraries | `ao::library::MusicLibrary` | `include/ao/library/` and `lib/library/` over LMDB |
 | YAML and atomic-file mechanisms | Core libraries | `include/ao/yaml/` and `include/ao/utility/AtomicFile.h` | Header adapters and `lib/utility/AtomicFile.cpp` |
 | Grouped managed file | Application runtime | `app/include/ao/rt/ConfigStore.h` | `app/runtime/ConfigStore.cpp` and `app/include/ao/yaml/ConfigTraits.h` |
+| Canonical per-library paths | Application runtime | `app/include/ao/rt/library/LibraryPaths.h` | `app/runtime/library/LibraryPaths.cpp` |
 | Runtime session semantics | Application runtime | `WorkspaceService`, `AppRuntime`, and playback-session commands | Runtime workspace and playback-persistence implementations under the [workspace](workspace.md), [interactive session lifecycle](interactive-session-lifecycle.md), and playback owners |
 | Platform-neutral presentation state | UIModel | Input, layout, and library-presentation store/model headers | `app/uimodel/` model codecs and state helpers |
-| Paths and platform stores | GTK and TUI frontends | Frontend-local composition and store adapters | `app/linux-gtk/app/`, `app/linux-gtk/main.cpp`, and `app/tui/` |
+| Platform locations, overrides, and stores | GTK, TUI, and CLI frontends | Frontend-local composition and store adapters | `app/linux-gtk/app/`, `app/linux-gtk/main.cpp`, `app/tui/`, and `app/cli/` |
 
 `ao::yaml` is a reusable mechanism, not a persistence service or schema authority.
 `ConfigStore` is likewise a grouped file mechanism rather than a facade over every persisted domain.
@@ -120,7 +121,10 @@ The semantic owner above the store remains responsible for dirty state, scheduli
 A specialized store may bypass `ConfigStore` when its document boundary, synchronization, or pruning behavior differs from grouped application configuration.
 `ShellLayoutComponentStateStore`, for example, reads and emits one complete component-state document directly, protects its operations with a mutex, and still uses the shared YAML and atomic-file mechanisms.
 
-GTK and TUI resolve platform or command-line paths, construct stores before `AppRuntime`, and keep any borrowed store alive until runtime persistence has shut down.
+`LibraryPaths` derives the canonical managed-data base, database, and log locations from a supplied music root and recognizes whether the canonical database already exists.
+It does not discover XDG, GLib, terminal, or command-line locations.
+
+GTK and TUI select platform directories, a music root, and explicit overrides; use `LibraryPaths` for standard per-library locations; construct stores before `AppRuntime`; and keep any borrowed store alive until runtime persistence has shut down.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
@@ -130,9 +134,10 @@ CLI opens the library database for the selected root but does not load interacti
 ## Boundaries and dependency direction
 
 - Core storage, YAML, and atomic-file mechanisms cannot depend on runtime, UIModel, a frontend, or any application schema.
-- Runtime persistence may depend on Core mechanisms but cannot depend on UIModel or platform paths.
+- Runtime persistence may depend on Core mechanisms and may derive canonical cross-frontend paths from a supplied music root, but it cannot depend on UIModel or discover platform application directories.
 - UIModel may define typed serializable values and codecs and may use the runtime `ConfigStore` along the top-level dependency direction, but it cannot resolve GTK, terminal, or XDG locations.
-- Frontends may own paths and file adapters, but cross-frontend runtime state remains owned and validated by runtime.
+- Frontends own platform locations, explicit overrides, frontend-specific filenames, and file adapters, but they do not duplicate the canonical per-library base, database path, log path, or LMDB existence marker.
+- Cross-frontend runtime state remains owned and validated by runtime.
 - A generic codec or store cannot become the semantic owner of a group merely because it names, serializes, or flushes that group.
 - Library LMDB truth and library YAML interchange cannot be routed through `ConfigStore`; they retain their own storage and format owners.
 - Each durable location has one application-level writer authority.
@@ -146,7 +151,8 @@ CLI opens the library database for the selected root but does not load interacti
 ### Composition and restore
 
 ```text
-frontend resolves platform/root paths
+frontend selects platform directories, music root, and overrides
+  -> LibraryPaths derives canonical per-library locations when no override applies
   -> constructs owned and borrowed stores
   -> constructs CoreRuntime or AppRuntime
   -> store or specialized file adapter establishes its managed document
@@ -201,6 +207,7 @@ The [interactive session lifecycle architecture](interactive-session-lifecycle.m
 - A restore that can invalidate live cross-service state prepares and validates a candidate before changing the live authority.
 - An owner settles the exact captured state only after encoding and file replacement report success; the atomic-replacement specification owns the platform crash-durability limit of that acknowledgement.
 - Path overrides change location, not schema ownership or lifecycle semantics.
+- Canonical per-library paths have one runtime authority; frontend-specific files may extend the managed-data base without redefining that base.
 - Authored configuration, runtime component state, and regenerable caches remain separate persistence classes even when they share YAML as an encoding.
 - Exact schemas, paths, enum encodings, and version gates are delegated to reference rather than duplicated in architecture.
 
@@ -229,6 +236,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`RymlAdapter.h`](../../include/ao/yaml/RymlAdapter.h) contains RapidYAML callbacks, file reading, parsing, scalar conversion, and node helpers.
 - [`AtomicFile.h`](../../include/ao/utility/AtomicFile.h), [`AtomicFileTransaction.h`](../../lib/utility/AtomicFileTransaction.h), [`AtomicFile.cpp`](../../lib/utility/AtomicFile.cpp), and [`AtomicFileWindows.cpp`](../../lib/utility/AtomicFileWindows.cpp) provide the private-file replacement state machine and platform operations.
 - [`ConfigStore`](../../app/include/ao/rt/ConfigStore.h), [`ConfigStore.cpp`](../../app/runtime/ConfigStore.cpp), and [`ConfigTraits.h`](../../app/include/ao/yaml/ConfigTraits.h) implement the grouped runtime mechanism and common application codec.
+- [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) and [`LibraryPaths.cpp`](../../app/runtime/library/LibraryPaths.cpp) own canonical per-library path derivation and existing-database detection.
 - [`AppRuntimeDependencies`](../../app/include/ao/rt/AppRuntime.h) injects workspace and playback-session stores.
 - [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h) and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own workspace snapshot and restore coordination.
 - [`WorkspaceSessionCodec`](../../app/runtime/WorkspaceSessionCodec.h) owns the strict workspace persistence DTO and stable presentation conversion.
@@ -236,12 +244,13 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary.
 - [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation codecs own platform-neutral state and encoding helpers.
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters.
-- [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) and [`app/tui/Main.cpp`](../../app/tui/Main.cpp) select frontend paths and compose stores.
+- [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/Main.cpp`](../../app/tui/Main.cpp), and [`CliRuntime.cpp`](../../app/cli/CliRuntime.cpp) select roots, platform locations, and overrides before composing runtime paths and stores.
 
 ## Test map
 
 - [`MusicLibraryTest.cpp`](../../test/unit/library/MusicLibraryTest.cpp) protects library-database ownership and lifetime.
 - [`ConfigStoreTest.cpp`](../../test/unit/runtime/ConfigStoreTest.cpp) protects lazy load, candidate decoding, multi-group saves, rejected-input preservation, read-only mode, failures, and durable removal.
+- [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects exact canonical derivation and semantic existing-database detection through a real `MusicLibrary`.
 - [`AtomicFileTest.cpp`](../../test/unit/utility/AtomicFileTest.cpp) protects replacement, cross-platform private-file policy, opaque payloads, and deterministic pre-replacement failure and cleanup behavior below the stores.
 - [`RymlAdapterTest.cpp`](../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing, recoverable helpers, and callback diagnostic lifetime.
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) protects workspace absence, restore rollback, and failure propagation.

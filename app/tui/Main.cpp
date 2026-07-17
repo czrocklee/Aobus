@@ -5,6 +5,7 @@
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/library/LibraryPaths.h>
 
 #include <CLI/CLI.hpp>
 
@@ -70,15 +71,16 @@ namespace
     }
 
     options.libraryRoot = std::filesystem::absolute(options.libraryRoot).lexically_normal();
+    auto const libraryPaths = ao::rt::LibraryPaths{options.libraryRoot};
 
     if (options.databasePath.empty())
     {
-      options.databasePath = options.libraryRoot / ".aobus" / "library";
+      options.databasePath = libraryPaths.databasePath();
     }
 
     if (options.configPath.empty())
     {
-      options.configPath = options.libraryRoot / ".aobus" / "tui-workspace.yaml";
+      options.configPath = libraryPaths.managedDataPath() / "tui-workspace.yaml";
     }
 
     options.databasePath = std::filesystem::absolute(options.databasePath).lexically_normal();

@@ -3,6 +3,7 @@ add_library(ao_app_runtime STATIC
     runtime/AppRuntime.cpp
     runtime/CoreRuntime.cpp
     runtime/library/Library.cpp
+    runtime/library/LibraryPaths.cpp
     runtime/library/LibraryMutationService.cpp
     runtime/library/LibraryReader.cpp
     runtime/library/LibraryChanges.cpp
@@ -163,6 +164,7 @@ add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 # ao_layering_boundary_report remains as an aggregate entry point.
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
 set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
+set(AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX "\"([.]aobus|data[.]mdb)")
 set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
@@ -170,6 +172,11 @@ set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lm
 ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE "frontend-core" "${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX}")
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX_FILE
+  "frontend-library-path"
+  "${AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX}"
+)
 
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
@@ -237,8 +244,19 @@ if(AOBUS_BUILD_TUI)
   )
 endif()
 
+add_custom_target(ao_frontend_library_path_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking frontends do not duplicate canonical per-library paths"
+  VERBATIM
+)
+
 add_custom_target(ao_layering_boundary_report
   DEPENDS
+    ao_frontend_library_path_boundary_check
     ao_rt_public_boundary_report
     ao_uimodel_platform_boundary_report
     ao_uimodel_core_boundary_report

@@ -7,7 +7,6 @@
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinatorPolicy.h"
-#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/library/LibraryYamlExporter.h>
 
@@ -17,38 +16,17 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 
 namespace ao::gtk::test
 {
   TEST_CASE("ImportExportCoordinator - policy maps dialog choices", "[gtk][unit][portal][import-export]")
   {
-    SECTION("new library folders request an initial scan")
-    {
-      auto const tempDir = ao::test::TempDir{};
-      auto const libraryPath = tempDir.path() / "library";
-      std::filesystem::create_directories(libraryPath);
-
-      CHECK(portal::shouldScanAfterOpen(libraryPath));
-
-      auto const databasePath = portal::defaultLibraryDatabasePath(libraryPath) / "data.mdb";
-      std::filesystem::create_directories(databasePath.parent_path());
-      auto databaseFile = std::ofstream{databasePath};
-      databaseFile << "existing database marker";
-      databaseFile.close();
-
-      CHECK_FALSE(portal::shouldScanAfterOpen(libraryPath));
-    }
-
-    SECTION("export dropdown indices select runtime export modes")
-    {
-      CHECK(portal::exportModeForSelection(0U) == rt::ExportMode::Delta);
-      CHECK(portal::exportModeForSelection(1U) == rt::ExportMode::Metadata);
-      CHECK(portal::exportModeForSelection(2U) == rt::ExportMode::Full);
-      CHECK(portal::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
-      CHECK(portal::exportModeForSelection(99U) == rt::ExportMode::Metadata);
-    }
+    CHECK(portal::exportModeForSelection(0U) == rt::ExportMode::Delta);
+    CHECK(portal::exportModeForSelection(1U) == rt::ExportMode::Metadata);
+    CHECK(portal::exportModeForSelection(2U) == rt::ExportMode::Full);
+    CHECK(portal::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
+    CHECK(portal::exportModeForSelection(99U) == rt::ExportMode::Metadata);
   }
 
   TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback", "[gtk][unit][portal][import-export]")

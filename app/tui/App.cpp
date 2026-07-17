@@ -39,6 +39,7 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
@@ -597,7 +598,8 @@ namespace ao::tui
     auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
 
     std::filesystem::create_directories(options.configPath.parent_path());
-    rt::Log::initialize(options.logLevel, options.libraryRoot / ".aobus" / "logs", rt::LogConsoleMode::Disabled);
+    rt::Log::initialize(
+      options.logLevel, rt::LibraryPaths{options.libraryRoot}.logsPath(), rt::LogConsoleMode::Disabled);
     auto const logShutdown = gsl_lite::finally([] { rt::Log::shutdown(); });
     auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
     auto screen = ftxui::ScreenInteractive::FullscreenAlternateScreen();
