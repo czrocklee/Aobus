@@ -63,8 +63,17 @@ It does not own storage transactions, playback succession, audio control, runtim
 UIModel may resolve and complete quick-search text through runtime vocabulary ports, and may inspect a valid Smart List expression to recommend a presentation.
 Those are authoring and recommendation policies: UIModel does not evaluate membership or redefine query grammar.
 
+UIModel also owns the shared list-navigation tree projection.
+It derives effective parent relationships, malformed-parent recovery, and stable sibling order once for GTK and TUI adapters.
+
+UIModel owns semantic track-field column roles, including sizing and start/end alignment.
+GTK and TUI translate those roles to native geometry without maintaining independent field classifications.
+
 UIModel owns versioned semantic codecs for its per-library column-layout and list-presentation preference state.
 The codecs produce and validate platform-neutral documents; they do not choose paths or perform GTK lifecycle saves.
+
+UIModel owns the closed application-theme choices and their stable string ids.
+Runtime persists the selected id as opaque application-preference text, while GTK maps the resolved UIModel choice to CSS classes.
 
 Metadata and tag editors use a platform-neutral `TrackAuthoringSession`.
 Session creation asks runtime to bind one exact target order to the current runtime instance and committed library revision.
@@ -92,7 +101,7 @@ TUI owns FTXUI components, terminal geometry, key/mouse routing, overlays, refre
 It constructs the same `AppRuntime`, uses shared runtime services and selected UIModel view models/policies, and builds terminal elements from their state.
 
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
-Its command palette consumes the same UIModel track-filter completer as GTK's Quick-filter entry, while retaining terminal-only command and presentation routing.
+Its list chooser consumes the shared UIModel list-tree projection, and its command palette consumes the same UIModel track-filter completer as GTK's Quick-filter entry, while retaining terminal-only rendering, command, and presentation routing.
 
 ### CLI
 
@@ -109,7 +118,9 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 - UIModel cannot include direct LMDB stores or audio player/engine/backend control headers.
 - GTK and TUI cannot call `LibraryWriter` directly; mutation events cross a UIModel workflow or another narrow semantic runtime surface.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
+- UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
+- List-navigation effective parents and sibling order come from one UIModel projection; GTK and TUI only adapt that tree to their native row models.
 - Interactive track-filter field selection, expression classification, live-value ranking, and safe insertion are one UIModel policy shared by GTK and TUI; runtime owns only vocabulary storage mechanics.
 - Presentation affects ordering, grouping, visible fields, and rendering but never changes source membership.
 - Expression formatting that produces a scalar CLI string is owned by the track expression system and is not a presentation spec or UI column model.
@@ -146,6 +157,14 @@ runtime projection target ids
 
 Purely platform concerns, such as CSS application, popover dismissal, terminal hit regions, and native file selection, stay within the frontend.
 Purely structural layout concerns can travel through UIModel values, while GTK widget creation remains platform-owned.
+
+List navigation follows a shared structural route:
+
+```text
+runtime list snapshot
+  -> UIModel ListTreeProjection
+  -> GTK tree nodes or TUI preorder rows
+```
 
 For a track-list view, the two independent inputs meet in runtime before presentation state flows outward:
 
@@ -195,22 +214,26 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
 - [`TrackColumnLayoutCodec`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutCodec.h) and [`ListPresentationPreferenceCodec`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) own versioned UIModel presentation documents.
+- [`ListTreeProjection`](../../app/include/ao/uimodel/library/list/ListTreeProjection.h) owns shared list-navigation hierarchy and recovery policy.
+- [`ThemePreset`](../../app/include/ao/uimodel/preference/ThemePreset.h) owns semantic application-theme choices and stable-id resolution.
 - [`MainWindow`](../../app/linux-gtk/app/MainWindow.h), [`MainWindowCoordinator`](../../app/linux-gtk/app/MainWindowCoordinator.h), and [`GtkUiDependencies`](../../app/linux-gtk/app/GtkUiDependencies.h) define GTK composition boundaries.
 - [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) bounds GTK-main-context callbacks to their owner lifetime.
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
-- [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization and dependency constraints.
+- [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization, dependency, and platform-vocabulary constraints.
 
 ## Test map
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding, stale-state, all-or-none outcomes, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation codec tests protect stable persistence vocabulary and semantic document validation.
+- [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.
+- [`ThemePresetTest.cpp`](../../test/unit/uimodel/preference/ThemePresetTest.cpp) protects theme-id resolution and fallback.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy, handoff, and export-mode response invalidation.
-- [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preferences/ShortcutEditorWidgetTest.cpp) protects delayed conflict-response invalidation.
+- [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects delayed conflict-response invalidation.
 - [`LayoutRuntimeBuildTest.cpp`](../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp) protects the UIModel-layout to GTK-widget boundary.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) and [`TuiHitRegionsTest.cpp`](../../test/unit/tui/TuiHitRegionsTest.cpp) protect TUI runtime adaptation and terminal-only policy.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects non-interactive runtime adaptation.
@@ -229,6 +252,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Activity-status specification](../spec/presentation/activity-status.md) and [surface reference](../reference/presentation/activity-status.md)
 - [Track-list presentation](../spec/presentation/track-presentation.md)
+- [List-navigation tree](../spec/presentation/list-tree.md)
 - [Track-column layout](../spec/presentation/track-column-layout.md)
 - [Persisted presentation state](../reference/presentation/persisted-state.md)
 - [Selection summary](../spec/presentation/selection-summary.md)

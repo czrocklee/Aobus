@@ -5,9 +5,9 @@
 
 #include "app/ShellLayoutController.h"
 #include <ao/Error.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gtkmm/applicationwindow.h>
 
@@ -63,7 +63,7 @@ namespace ao::gtk
     void resetRuntimeLayoutState();
     void saveCurrentPanelSizesAsLayoutDefaults();
     void applyKeymap(uimodel::KeymapModel const& keymap);
-    void applyTheme(rt::ThemePresetId theme);
+    void applyTheme(uimodel::ThemePreset theme);
     rt::PlaybackService& playbackService();
     uimodel::LayoutActionCatalog const& layoutActionCatalog() const;
 

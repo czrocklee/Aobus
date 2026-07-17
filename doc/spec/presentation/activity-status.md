@@ -14,7 +14,7 @@ It defines eligibility, priority, grouping, ordering, transient lifetime, and pr
 
 It does not own failure classification, recovery, the authoritative notification feed, library-task execution, or GTK/TUI rendering geometry.
 Those facts belong to the [failure and reporting architecture](../../architecture/failure-and-reporting.md), [notification feed specification](../reporting/notification-feed.md), [library task specification](../library/runtime/task-execution.md), and frontend documents.
-The exact projection fields, enum values, constants, and helper mapping belong to the [activity-status reference](../../reference/presentation/activity-status.md).
+The exact projection fields, enum values, constants, and helper surfaces belong to the [activity-status reference](../../reference/presentation/activity-status.md).
 
 ## Code boundary
 

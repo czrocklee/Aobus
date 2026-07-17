@@ -482,11 +482,6 @@ button.ao-quick-filter-action:disabled {
 
 .ao-clickable {}
 
-.ao-volume-bar {
-  min-height: 0;
-  padding: 0;
-}
-
 .ao-time-label {
   font-feature-settings: "tnum";
   margin-top: 6px;

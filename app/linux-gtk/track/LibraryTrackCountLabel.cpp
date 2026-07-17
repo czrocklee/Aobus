@@ -6,9 +6,9 @@
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <algorithm>
-#include <format>
 #include <utility>
 #include <variant>
 
@@ -48,7 +48,6 @@ namespace ao::gtk
 
   void LibraryTrackCountLabel::updateCount()
   {
-    auto const count = _sourceLease->size();
-    _label.set_text(std::format("{} tracks", count));
+    _label.set_text(uimodel::formatTrackCount(_sourceLease->size()));
   }
 } // namespace ao::gtk

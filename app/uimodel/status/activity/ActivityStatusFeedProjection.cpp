@@ -6,6 +6,7 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <algorithm>
@@ -16,7 +17,6 @@
 #include <optional>
 #include <ranges>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -160,21 +160,6 @@ namespace ao::uimodel
       return item;
     }
   } // namespace
-
-  std::string_view activityStatusKindCssClass(ActivityStatusKind const kind)
-  {
-    switch (kind)
-    {
-      case ActivityStatusKind::Idle: return "ao-activity-status-idle";
-      case ActivityStatusKind::Processing: return "ao-activity-status-processing";
-      case ActivityStatusKind::Success: return "ao-activity-status-success";
-      case ActivityStatusKind::Info: return "ao-activity-status-info";
-      case ActivityStatusKind::Warning: return "ao-activity-status-warning";
-      case ActivityStatusKind::Error: return "ao-activity-status-error";
-    }
-
-    return {};
-  }
 
   bool hasDetailContent(ActivityDetailState const& detail) noexcept
   {
@@ -515,7 +500,8 @@ namespace ao::uimodel
   {
     _state.compact = ActivityCompactState{
       .kind = ActivityStatusKind::Success,
-      .text = count == 0 ? std::string{"Library is up to date"} : std::format("Scan complete: {} tracks added", count),
+      .text = count == 0 ? std::string{"Library is up to date"}
+                         : std::format("Scan complete: {} added", formatTrackCount(count)),
       .optAutoDismissTimeout = kActivityStatusDefaultAutoDismissTimeout,
     };
   }

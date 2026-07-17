@@ -47,6 +47,14 @@ namespace ao::uimodel::test
       CHECK(compact.optAutoDismissTimeout == kActivityStatusDefaultAutoDismissTimeout);
     }
 
+    SECTION("single-track library completion uses singular count text")
+    {
+      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(1), feed({}));
+
+      CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Success);
+      CHECK(feedProjection.viewState().compact.text == "Scan complete: 1 track added");
+    }
+
     SECTION("notification during task is deferred and errors beat completion")
     {
       feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);

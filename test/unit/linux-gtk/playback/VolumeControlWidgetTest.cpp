@@ -36,7 +36,23 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(btn->get_visible());
-    CHECK_FALSE(btn->get_tooltip_text().empty());
-    CHECK_FALSE(icon->get_icon_name().empty());
+    CHECK(btn->get_tooltip_text() == "Volume: 50%");
+    CHECK(icon->get_icon_name() == "audio-volume-medium-symbolic");
+
+    playback.setMuted(true);
+    drainGtkEvents();
+
+    CHECK(icon->get_icon_name() == "audio-volume-muted-symbolic");
+
+    playback.setMuted(false);
+    playback.setVolume(0.25F);
+    drainGtkEvents();
+
+    CHECK(icon->get_icon_name() == "audio-volume-low-symbolic");
+
+    playback.setVolume(1.0F);
+    drainGtkEvents();
+
+    CHECK(icon->get_icon_name() == "audio-volume-high-symbolic");
   }
 } // namespace ao::gtk::test

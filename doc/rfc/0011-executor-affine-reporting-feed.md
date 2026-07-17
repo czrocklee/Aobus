@@ -35,14 +35,20 @@ Finally, `DetailOnly` can create detail state without a compact state.
 GTK currently opens detail only through a visible compact readout, making that entry unreachable in an idle-hidden layout, while TUI has a direct notification-center command.
 The shared model exposes the state but does not define a cross-frontend discoverability contract.
 
+The content contract is also internally inconsistent.
+`NotificationContentState` retains a `templateId` that defaults to `notification.message`, but `ActivityStatusFeedProjection` never reads it; the projection copies already-formatted title, message, action labels, progress labels, and icon names instead.
+The projection then infers library activity by testing whether English text starts with `Scanning:` or `Updating:`.
+The template id is therefore inert metadata, while user-visible text has become an undocumented control-flow input.
+
 ## Dependencies
 
 - Hard: None.
 - Conditional: None.
-- Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0012](0012-structured-async-fault-diagnostics.md), [RFC 0013](0013-coherent-application-reporting-policy.md).
+- Integration: [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0012](0012-structured-async-fault-diagnostics.md), [RFC 0013](0013-coherent-application-reporting-policy.md), [RFC 0030](0030-structured-presentation-vocabulary.md).
 
 RFC 0005 reallocates playback notification ownership and must publish through the same feed transaction if both proposals are implemented.
 RFC 0012 can receive observer-fault diagnostics, and RFC 0013 defines which operation owners publish into this feed; neither is required to implement the feed state machine itself.
+RFC 0030 owns UIModel template resolution and shared presentation copy when structured report content is adopted.
 
 ## Goals
 
@@ -55,6 +61,8 @@ RFC 0012 can receive observer-fault diagnostics, and RFC 0013 defines which oper
 - Ensure post, update, expiry, dismissal, and clear operations update compact and detail state from the same snapshot.
 - Define cross-frontend discoverability for detail state that has no compact representation.
 - Validate model-level bounds independently of renderer-specific row and action limits.
+- Ensure every accepted content field is consumed and remove message-prefix parsing from feed projection policy.
+- Preserve structured report identity and typed arguments through the feed when RFCs 0013 and 0030 provide them, without making the feed a text catalog.
 
 ## Non-goals
 
@@ -64,6 +72,7 @@ RFC 0012 can receive observer-fault diagnostics, and RFC 0013 defines which oper
 - Persist notification history across application runs.
 - Require GTK and TUI to use identical widgets, geometry, commands, or visual styling.
 - Turn diagnostic logs into feed entries automatically.
+- Standardize exact shared user-visible copy or select a localization framework; RFC 0030 owns that presentation boundary.
 
 ## Proposed design
 
@@ -134,6 +143,25 @@ Posting with an active matching key uses an explicit create-or-update command ra
 The feed does not choose aggregation policy.
 The operation owner decides that several lower failures describe one report, supplies the key, and updates its semantic summary.
 
+### Structured content without inert fields
+
+The feed stores one accepted content representation, never parallel resolved and unresolved authorities.
+Frontend-local or otherwise deliberately preformatted reports use a bounded resolved-content value.
+Shared operation reports introduced with RFCs 0013 and 0030 use a typed template id plus bounded typed arguments, and UIModel resolves that value for compact and detail presentation.
+A request cannot carry both forms.
+
+The structured variant is added only in the same implementation slice as its UIModel consumer.
+Until then, the unused `templateId` field is removed rather than preserved speculatively.
+After the structured path lands, every template id reaching an interactive composition has either an exhaustive catalog entry or an explicit unknown-template fallback and diagnostic.
+
+Progress and summary semantics remain typed through the snapshot.
+Library activity carries an operation kind such as scan or metadata update instead of requiring prefix tests on a label.
+Counts, completion disposition, and playback skip/stop facts remain arguments rather than preformatted pluralized messages.
+The feed treats these values as opaque accepted state: it does not translate them, select copy, or branch recovery and aggregation policy on rendered text.
+
+Bounds apply to template ids, typed argument payload, and resolved-content strings.
+Toolkit icon names and markup are not semantic feed identity; platform-neutral icon/action kinds remain structured until a frontend adapter selects native presentation.
+
 ### Coherent activity projection
 
 `ActivityStatusViewModel` consumes only canonical `NotificationFeedUpdate` values and tracks the last accepted revision.
@@ -194,7 +222,8 @@ Migration occurs in stages:
 2. Migrate UIModel to one revision stream and add regression tests for post/update/expiry and one-render-per-revision.
 3. Introduce typed lifetime and service-owned expiry, then remove UIModel ownership of authoritative timeout.
 4. Add bounds, keyed update, and producer migration.
-5. Remove compatibility signals and ambiguous fields after all consumers move.
+5. Remove the inert template field and English prefix parsing, then add structured content atomically with its UIModel resolver when RFCs 0013 and 0030 are implemented.
+6. Remove compatibility signals and ambiguous fields after all consumers move.
 
 Playback producer migration coordinates with RFC 0005 if that proposal is active.
 Reporting-owner migration coordinates with RFC 0013 but does not wait for its complete operation audit.
@@ -213,6 +242,9 @@ Reporting-owner migration coordinates with RFC 0013 but does not wait for its co
 - Active/sticky bound exhaustion fails explicitly instead of silently evicting actionable state.
 - GTK and TUI tests prove detail-only state has a reachable interaction path.
 - Existing playback aggregation, local suppression, progress, action-resolution, and dismissal tests migrate without changing their domain ownership.
+- Content tests prove every stored field affects projection or is absent; no compatibility field is retained only for a hypothetical future consumer.
+- Scan/update activity and playback summaries select typed kinds and arguments without matching English title/message prefixes.
+- Structured reports retain template identity and typed arguments through immutable snapshots and resolve exactly once in UIModel.
 - ThreadSanitizer exercises concurrent producer callbacks returning through their runtime owners.
 - The completed implementation passes `./ao check` and the documentation gate.
 

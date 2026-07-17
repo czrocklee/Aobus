@@ -32,13 +32,15 @@ namespace ao::uimodel::test
     CHECK(allTracks.childIds == std::vector{parentId});
 
     auto const& parent = projection.rowsById.at(parentId);
+    CHECK(parent.parentId == rt::kAllTracksListId);
     CHECK(parent.name == "Manual Parent");
+    CHECK(parent.kind == rt::ListNodeKind::Manual);
     CHECK(parent.childIds == std::vector{childId});
 
     auto const& child = projection.rowsById.at(childId);
     CHECK(child.parentId == parentId);
     CHECK(child.name == "Smart Child");
-    CHECK(child.isSmart);
+    CHECK(child.kind == rt::ListNodeKind::Smart);
     CHECK(child.localExpression == "genre:rock");
     CHECK(child.childIds.empty());
   }
@@ -53,8 +55,27 @@ namespace ao::uimodel::test
 
     auto const& allTracks = projection.rowsById.at(rt::kAllTracksListId);
     CHECK(allTracks.childIds == std::vector{orphanId, selfParentId});
-    CHECK(projection.rowsById.at(orphanId).parentId == ListId{999});
-    CHECK(projection.rowsById.at(selfParentId).parentId == selfParentId);
+    CHECK(projection.rowsById.at(orphanId).parentId == rt::kAllTracksListId);
+    CHECK(projection.rowsById.at(selfParentId).parentId == rt::kAllTracksListId);
+  }
+
+  TEST_CASE("buildListTreeProjection breaks parent cycles at the lowest cycle id", "[uimodel][unit][library][list]")
+  {
+    auto const descendantId = ListId{2};
+    auto const lowerCycleId = ListId{4};
+    auto const higherCycleId = ListId{7};
+    auto const projection = buildListTreeProjection(std::vector{
+      rt::ListNode{.id = higherCycleId, .parentId = lowerCycleId, .name = "Higher"},
+      rt::ListNode{.id = descendantId, .parentId = higherCycleId, .name = "Descendant"},
+      rt::ListNode{.id = lowerCycleId, .parentId = higherCycleId, .name = "Lower"},
+    });
+
+    CHECK(projection.rowsById.at(rt::kAllTracksListId).childIds == std::vector{lowerCycleId});
+    CHECK(projection.rowsById.at(lowerCycleId).parentId == rt::kAllTracksListId);
+    CHECK(projection.rowsById.at(lowerCycleId).childIds == std::vector{higherCycleId});
+    CHECK(projection.rowsById.at(higherCycleId).parentId == lowerCycleId);
+    CHECK(projection.rowsById.at(higherCycleId).childIds == std::vector{descendantId});
+    CHECK(projection.rowsById.at(descendantId).parentId == higherCycleId);
   }
 
   TEST_CASE("buildListTreeProjection orders children by list id", "[uimodel][unit][library][list]")

@@ -48,7 +48,7 @@ namespace ao::tui::test
     CHECK(controller.tracks()[0].id == trackId);
 
     controller.setFilterDraft("Needle");
-    CHECK(controller.applyFilter() == "Quick filter matched 1 tracks");
+    CHECK(controller.applyFilter() == "Quick filter matched 1 track");
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks()[0].id == trackId);
   }
@@ -61,7 +61,7 @@ namespace ao::tui::test
 
     auto controller = LibraryController{fixture.runtime};
     controller.setFilterDraft("Needle");
-    CHECK(controller.applyFilter() == "Quick filter matched 1 tracks");
+    CHECK(controller.applyFilter() == "Quick filter matched 1 track");
     REQUIRE(controller.tracks().size() == 1);
 
     CHECK(controller.reloadActiveList() == "Reloaded 2 tracks");
@@ -79,7 +79,7 @@ namespace ao::tui::test
     auto controller = LibraryController{fixture.runtime};
     controller.setFilterDraft("$title ~ \"Needle\"");
 
-    CHECK(controller.applyFilter() == "Expression filter matched 1 tracks");
+    CHECK(controller.applyFilter() == "Expression filter matched 1 track");
     REQUIRE(controller.tracks().size() == 1);
     CHECK(controller.tracks()[0].id == trackId);
   }
@@ -125,7 +125,7 @@ namespace ao::tui::test
     CHECK(controller.revealTrack(kInvalidTrackId) == "No current track");
 
     controller.setFilterDraft("First");
-    CHECK(controller.applyFilter() == "Quick filter matched 1 tracks");
+    CHECK(controller.applyFilter() == "Quick filter matched 1 track");
     CHECK(controller.revealTrack(hiddenId) == "Current track is not in this view");
     CHECK(controller.selectedTrack() == 0);
   }

@@ -33,9 +33,9 @@ Each row records the outgoing direct edges of one RFC; sequence numbers alone im
 | [0008](0008-declarative-track-capability-bridge.md) | None | None | [0007](0007-revisioned-completion-vocabulary.md) |
 | [0009](0009-pure-expression-binding.md) | None | None | None |
 | [0010](0010-versioned-presentation-state.md) | None | None | [0008](0008-declarative-track-capability-bridge.md) |
-| [0011](0011-executor-affine-reporting-feed.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0012](0012-structured-async-fault-diagnostics.md), [0013](0013-coherent-application-reporting-policy.md) |
+| [0011](0011-executor-affine-reporting-feed.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0012](0012-structured-async-fault-diagnostics.md), [0013](0013-coherent-application-reporting-policy.md), [0030](0030-structured-presentation-vocabulary.md) |
 | [0012](0012-structured-async-fault-diagnostics.md) | None | None | [0013](0013-coherent-application-reporting-policy.md) |
-| [0013](0013-coherent-application-reporting-policy.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0004](0004-scalable-library-tasks.md), [0005](0005-coherent-playback-boundary.md), [0011](0011-executor-affine-reporting-feed.md) |
+| [0013](0013-coherent-application-reporting-policy.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0004](0004-scalable-library-tasks.md), [0005](0005-coherent-playback-boundary.md), [0011](0011-executor-affine-reporting-feed.md), [0030](0030-structured-presentation-vocabulary.md) |
 | [0014](0014-observable-atomic-replacement.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0010](0010-versioned-presentation-state.md), [0013](0013-coherent-application-reporting-policy.md), [0015](0015-fail-closed-config-store.md) |
 | [0015](0015-fail-closed-config-store.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0010](0010-versioned-presentation-state.md) |
 | [0016](0016-coherent-workspace-transactions.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0006](0006-coherent-derived-track-views.md), [0013](0013-coherent-application-reporting-policy.md) |
@@ -47,11 +47,14 @@ Each row records the outgoing direct edges of one RFC; sequence numbers alone im
 | [0022](0022-transaction-coherent-library-dictionary.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0009](0009-pure-expression-binding.md) |
 | [0023](0023-revision-bound-metadata-authoring.md) | [0003](0003-library-mutation-pipeline.md), [0022](0022-transaction-coherent-library-dictionary.md) | None | [0013](0013-coherent-application-reporting-policy.md), [0016](0016-coherent-workspace-transactions.md) |
 | [0024](0024-versioned-predicate-dialect.md) | None | None | [0006](0006-coherent-derived-track-views.md), [0008](0008-declarative-track-capability-bridge.md), [0009](0009-pure-expression-binding.md) |
-| [0025](0025-bounded-shell-layout-documents.md) | None | None | [0010](0010-versioned-presentation-state.md) |
+| [0025](0025-bounded-shell-layout-documents.md) | None | None | [0010](0010-versioned-presentation-state.md), [0032](0032-explicit-managed-state-codecs.md) |
 | [0026](0026-lifetime-safe-file-dialog-callbacks.md) | None | None | None |
 | [0027](0027-loop-executor.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0011](0011-executor-affine-reporting-feed.md), [0012](0012-structured-async-fault-diagnostics.md) |
 | [0028](0028-bounded-audio-observation-delivery.md) | None | None | [0005](0005-coherent-playback-boundary.md), [0011](0011-executor-affine-reporting-feed.md), [0012](0012-structured-async-fault-diagnostics.md) |
 | [0029](0029-versioned-cli-automation-protocol.md) | None | None | [0003](0003-library-mutation-pipeline.md), [0013](0013-coherent-application-reporting-policy.md) |
+| [0030](0030-structured-presentation-vocabulary.md) | None | None | [0011](0011-executor-affine-reporting-feed.md), [0013](0013-coherent-application-reporting-policy.md) |
+| [0031](0031-shared-signal-primitives.md) | [0011](0011-executor-affine-reporting-feed.md) | None | None |
+| [0032](0032-explicit-managed-state-codecs.md) | None | None | [0025](0025-bounded-shell-layout-documents.md) |
 
 ## Proposal inventory
 
@@ -87,3 +90,6 @@ The front-matter lifecycle state is authoritative; `in-review` identifies active
 - [RFC 0027: Loop executor for non-toolkit hosts](0027-loop-executor.md) is implemented as a shared-queue owner-thread executor plus a CLI-owned task pump, without a generic host state machine.
 - [RFC 0028: Bounded audio observation delivery](0028-bounded-audio-observation-delivery.md) proposes event classification, bounded/coalescing ingress, one-drain callback delivery, and explicit overload behavior.
 - [RFC 0029: Versioned CLI automation protocol](0029-versioned-cli-automation-protocol.md) proposes a negotiated structured envelope, stable command/result/error kinds, compatibility rules, and mechanically checked schema coverage.
+- [RFC 0030: Structured presentation vocabulary](0030-structured-presentation-vocabulary.md) proposes stable semantic values, typed UIModel text catalogs, structured missing/completion/audio/report presentation, and frontend-owned native rendering.
+- [RFC 0031: Shared signal primitives](0031-shared-signal-primitives.md) proposes moving generic runtime signal and subscription mechanisms into `ao_async` after reporting-feed publication semantics are settled.
+- [RFC 0032: Explicit managed-state codecs](0032-explicit-managed-state-codecs.md) proposes retiring reflected application configuration traits in favor of domain-neutral YAML helpers and explicit owner-local codecs.

@@ -124,6 +124,29 @@ namespace ao::uimodel
     }
   }
 
+  TrackColumnAlignment trackFieldColumnAlignment(rt::TrackField field)
+  {
+    switch (field)
+    {
+      case rt::TrackField::Year:
+      case rt::TrackField::DiscNumber:
+      case rt::TrackField::DiscTotal:
+      case rt::TrackField::TrackNumber:
+      case rt::TrackField::TrackTotal:
+      case rt::TrackField::MovementNumber:
+      case rt::TrackField::MovementTotal:
+      case rt::TrackField::Duration:
+      case rt::TrackField::SampleRate:
+      case rt::TrackField::Channels:
+      case rt::TrackField::BitDepth:
+      case rt::TrackField::Bitrate:
+      case rt::TrackField::FileSize:
+      case rt::TrackField::ModifiedTime:
+      case rt::TrackField::DisplayTrackNumber: return TrackColumnAlignment::End;
+      default: return TrackColumnAlignment::Start;
+    }
+  }
+
   bool isTrackFieldVisibleByDefault(rt::TrackField field)
   {
     return std::ranges::contains(rt::defaultTrackPresentationSpec().visibleFields, field);

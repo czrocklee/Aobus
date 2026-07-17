@@ -6,6 +6,7 @@
 #include "../GtkTestSupport.h"
 #include "app/AppConfigStore.h"
 #include <ao/rt/AppPrefsState.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/window.h>
@@ -24,7 +25,7 @@ namespace ao::gtk::test
     auto const token = coordinator.registerToplevel(window);
     CHECK(window.has_css_class("ao-theme-classic"));
 
-    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.setTheme(uimodel::ThemePreset::Modern);
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
     CHECK(window.has_css_class("ao-theme-modern"));
   }
@@ -39,14 +40,14 @@ namespace ao::gtk::test
       auto token = coordinator.registerToplevel(window);
       CHECK(window.has_css_class("ao-theme-classic"));
 
-      coordinator.setTheme(rt::ThemePresetId::Modern);
+      coordinator.setTheme(uimodel::ThemePreset::Modern);
       CHECK(window.has_css_class("ao-theme-modern"));
     }
 
     // Token destroyed, window should be unregistered AND its active theme class removed
     CHECK_FALSE(window.has_css_class("ao-theme-modern"));
 
-    coordinator.setTheme(rt::ThemePresetId::Classic);
+    coordinator.setTheme(uimodel::ThemePreset::Classic);
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
   }
 
@@ -62,11 +63,11 @@ namespace ao::gtk::test
     auto token2 = std::move(token1);
     token1.reset(); // NOLINT(bugprone-use-after-move) — intentional: verify moved-from token handles reset safely
 
-    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.setTheme(uimodel::ThemePreset::Modern);
     CHECK(window.has_css_class("ao-theme-modern"));
 
     token2.reset();
-    coordinator.setTheme(rt::ThemePresetId::Classic);
+    coordinator.setTheme(uimodel::ThemePreset::Classic);
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
   }
 
@@ -83,7 +84,7 @@ namespace ao::gtk::test
     firstToken.reset();
     CHECK(window.has_css_class("ao-theme-classic"));
 
-    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.setTheme(uimodel::ThemePreset::Modern);
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
     CHECK(window.has_css_class("ao-theme-modern"));
 
@@ -104,7 +105,7 @@ namespace ao::gtk::test
       windowPtr.reset();
     }
 
-    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.setTheme(uimodel::ThemePreset::Modern);
     token.reset();
   }
 
@@ -117,7 +118,7 @@ namespace ao::gtk::test
     coordinator.applyTo(window);
     CHECK(window.has_css_class("ao-theme-classic"));
 
-    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.setTheme(uimodel::ThemePreset::Modern);
     coordinator.applyTo(window);
 
     CHECK_FALSE(window.has_css_class("ao-theme-classic"));
@@ -134,7 +135,7 @@ namespace ao::gtk::test
     auto configStore = AppConfigStore{std::filesystem::path{tempDir.path()} / "config.yaml"};
 
     auto coordinator = ThemeCoordinator{};
-    coordinator.setTheme(rt::ThemePresetId::Modern);
+    coordinator.setTheme(uimodel::ThemePreset::Modern);
     coordinator.save(configStore);
 
     auto loaded = rt::AppPrefsState{};
@@ -143,6 +144,6 @@ namespace ao::gtk::test
 
     auto restored = ThemeCoordinator{};
     restored.load(configStore);
-    CHECK(restored.activeTheme() == rt::ThemePresetId::Modern);
+    CHECK(restored.activeTheme() == uimodel::ThemePreset::Modern);
   }
 } // namespace ao::gtk::test

@@ -138,6 +138,7 @@ namespace ao::gtk::test
       auto* const coverSlot = findWidgetByClass<Gtk::Widget>(page, "ao-track-section-cover");
       REQUIRE(coverSlot != nullptr);
       CHECK(coverSlot->get_visible());
+      CHECK(findLabelByText(page, "• (1 track)") != nullptr);
 
       std::int32_t minSize = {};
       std::int32_t natSizeHoriz = {};

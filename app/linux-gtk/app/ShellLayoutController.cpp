@@ -43,6 +43,7 @@
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gtkmm/dialog.h>
 #include <gtkmm/object.h>
@@ -574,7 +575,7 @@ namespace ao::gtk
 
     auto const initialPresetId =
       uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
-    auto const initialThemeId = std::string{rt::themePresetToString(_themeCoordinator.activeTheme())};
+    auto const initialThemeId = std::string{uimodel::themePresetId(_themeCoordinator.activeTheme())};
 
     auto loader = [storePtr = _layoutStorePtr](std::string_view id) -> uimodel::LayoutDocument
     {
@@ -615,7 +616,7 @@ namespace ao::gtk
     dialogRaw->signalApplyPreview().connect([this](uimodel::LayoutDocument const& doc) { rebuildHost(doc); });
 
     dialogRaw->signalThemePreview().connect([this](std::string_view themeId)
-                                            { _themeCoordinator.setTheme(rt::themePresetFromString(themeId)); });
+                                            { _themeCoordinator.setTheme(uimodel::themePresetFromId(themeId)); });
 
     dialogRaw->signalSaveRequest().connect([this](layout::editor::LayoutSaveResult const& result)
                                            { this->handleEditorSaveRequested(result); });
@@ -691,7 +692,7 @@ namespace ao::gtk
       _configStorePtr->loadAppPrefs(prefsUpdate);
       prefsUpdate.lastLayoutPreset = snapshot.presetId;
       _configStorePtr->saveAppPrefs(prefsUpdate);
-      _themeCoordinator.setTheme(rt::themePresetFromString(prefsUpdate.lastThemePreset));
+      _themeCoordinator.setTheme(uimodel::themePresetFromId(prefsUpdate.lastThemePreset));
     }
 
     rebuildHost(snapshot.layout);

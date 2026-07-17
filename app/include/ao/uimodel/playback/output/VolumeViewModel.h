@@ -6,18 +6,27 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/Subscription.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 
 namespace ao::uimodel
 {
+  enum class VolumeIndicatorKind : std::uint8_t
+  {
+    Muted,
+    Low,
+    Medium,
+    High,
+  };
+
   struct VolumeViewState final
   {
     bool visible = false;
     float volume = 1.0F;
     bool isHardwareAssisted = false;
     bool muted = false;
-    std::string iconName{};
+    VolumeIndicatorKind indicatorKind = VolumeIndicatorKind::High;
     std::string tooltip{};
   };
 
@@ -41,7 +50,7 @@ namespace ao::uimodel
 
     static float resolveVolumeOffset(double widgetWidth, double offsetX, float currentDragStartVolume = 0.0F);
     static float resolveVolumeScroll(float currentVolume, double scrollDy);
-    static std::string resolveIconName(float volume, bool muted);
+    static VolumeIndicatorKind resolveIndicatorKind(float volume, bool muted) noexcept;
     static std::string resolveTooltip(float volume, bool muted, bool isHardwareAssisted);
 
   private:

@@ -101,7 +101,6 @@ namespace ao::uimodel
 
   inline constexpr std::chrono::milliseconds kActivityStatusDefaultAutoDismissTimeout{5000};
 
-  std::string_view activityStatusKindCssClass(ActivityStatusKind kind);
   bool hasDetailContent(ActivityDetailState const& detail) noexcept;
   std::vector<ActivityResolvedActionState> resolveActivityActionStates(
     std::vector<ActivityActionDescriptor> const& actions,

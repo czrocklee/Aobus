@@ -96,7 +96,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 ## Implementation map
 
 - [`AppDialog.cpp`](../../../app/linux-gtk/app/AppDialog.cpp) owns custom-dialog chrome, actions, and parent-bound destruction.
-- [`PreferencesWindow.cpp`](../../../app/linux-gtk/preferences/PreferencesWindow.cpp) owns the non-modal preferences surface.
+- [`PreferencesWindow.cpp`](../../../app/linux-gtk/preference/PreferencesWindow.cpp) owns the non-modal preferences surface.
 - [`ImportExportCoordinator.cpp`](../../../app/linux-gtk/portal/ImportExportCoordinator.cpp) owns native chooser handoff.
 - [`MainContextCallbackScope.h`](../../../app/linux-gtk/common/MainContextCallbackScope.h) owns main-context callback-lifetime validation; `ImportExportCoordinator` supplies native cancellation as its close action.
 - [`main.cpp`](../../../app/linux-gtk/main.cpp) owns active-library replacement.

@@ -22,6 +22,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 
 #include <algorithm>
@@ -354,7 +355,7 @@ namespace ao::tui
     _selectedTrack = moveSelection(_selectedTrack, 0, _tracks.size());
     _filterDraft.clear();
     publishSelection();
-    return std::format("Reloaded {} tracks", _tracks.size());
+    return std::format("Reloaded {}", uimodel::formatTrackCount(_tracks.size()));
   }
 
   std::string LibraryController::applyFilter()
@@ -375,9 +376,10 @@ namespace ao::tui
     switch (resolved.mode)
     {
       case uimodel::TrackFilterMode::None: return "Filter cleared";
-      case uimodel::TrackFilterMode::Quick: return std::format("Quick filter matched {} tracks", _tracks.size());
+      case uimodel::TrackFilterMode::Quick:
+        return std::format("Quick filter matched {}", uimodel::formatTrackCount(_tracks.size()));
       case uimodel::TrackFilterMode::Expression:
-        return std::format("Expression filter matched {} tracks", _tracks.size());
+        return std::format("Expression filter matched {}", uimodel::formatTrackCount(_tracks.size()));
     }
 
     return "Filter applied";

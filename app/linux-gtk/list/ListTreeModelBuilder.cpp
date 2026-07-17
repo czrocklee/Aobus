@@ -6,6 +6,7 @@
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
@@ -32,7 +33,8 @@ namespace ao::gtk
 
     for (auto const& [id, row] : projection.rowsById)
     {
-      auto listRowPtr = ListRowObject::create(id, row.parentId, 0, row.isSmart, row.name, row.localExpression);
+      auto listRowPtr =
+        ListRowObject::create(id, row.parentId, 0, row.kind == rt::ListNodeKind::Smart, row.name, row.localExpression);
       auto treeNodePtr = ListTreeItem::create(listRowPtr);
       result.nodesById[id] = treeNodePtr;
     }

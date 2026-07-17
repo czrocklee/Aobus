@@ -51,7 +51,7 @@ namespace ao::uimodel::test
     CHECK(state.localExpression.empty());
     CHECK(state.matchCount == 4);
     CHECK(state.isAllTracks == false);
-    CHECK(state.previewStatusText == "Showing all 4 source tracks");
+    CHECK(state.previewStatusText == "Showing all 4 tracks from source");
     CHECK(state.expressionValid == true);
     CHECK(state.queryInvalid == false);
     CHECK(state.previewVisible == true);

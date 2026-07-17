@@ -60,11 +60,12 @@ Use the [specification template](../template/spec.md).
 
 - [Activity status](presentation/activity-status.md) defines notification and library-task projection, priority, detail eligibility, timeout, and local suppression.
 - [Track filtering](presentation/track-filter.md) defines quick-search resolution, runtime view filtering, status, and Smart List derivation.
+- [List-navigation tree](presentation/list-tree.md) defines the shared virtual root, effective-parent recovery, stable hierarchy, and frontend adaptation.
 - [Track-list presentation](presentation/track-presentation.md) defines grouping, sorting, classical order, and recommendation.
 - [List presentation preference](presentation/list-preference.md) defines per-list selection, fallback, persistence ownership, and filter independence.
-- [Track-column layout](presentation/track-column-layout.md) defines shared fixed/flexible sizing, weighted solving, resizing, and frontend adaptation.
+- [Track-column layout](presentation/track-column-layout.md) defines shared field alignment, fixed/flexible sizing, weighted solving, resizing, and frontend adaptation.
 - [Selection summary](presentation/selection-summary.md) defines selected-track count, aggregate duration, and shared display text.
-- [Volume control](presentation/volume-control.md) defines shared volume projection, scroll/mute policy, icon mapping, and GTK precision interaction.
+- [Volume control](presentation/volume-control.md) defines shared volume projection, scroll/mute policy, semantic indicator mapping, and GTK precision interaction.
 - [Track-field value completion](presentation/field-completion.md) defines live metadata vocabularies and editor replacement behavior.
 - [Metadata editing](presentation/metadata-editing.md) defines detail aggregation, field policy, custom metadata, tag mutation, validation, and undo eligibility.
 

@@ -3,7 +3,7 @@ id: presentation.activity-status-surface
 type: reference
 status: current
 domain: presentation
-summary: Enumerates activity-status view-state types, defaults, helper mappings, and UIModel command surface.
+summary: Enumerates activity-status view-state types, semantic kinds, defaults, helpers, and UIModel command surface.
 ---
 # Activity-status surface reference
 
@@ -21,18 +21,11 @@ The public authority is `app/include/ao/uimodel/status/activity/`; it may contai
 
 ## Surface
 
-### Kind and CSS mapping
+### Kind
 
 `ActivityStatusKind` is a scoped enum with underlying type `std::uint8_t`.
-
-| `ActivityStatusKind` | `activityStatusKindCssClass` |
-|---|---|
-| `Idle` | `ao-activity-status-idle` |
-| `Processing` | `ao-activity-status-processing` |
-| `Success` | `ao-activity-status-success` |
-| `Info` | `ao-activity-status-info` |
-| `Warning` | `ao-activity-status-warning` |
-| `Error` | `ao-activity-status-error` |
+Its values are `Idle`, `Processing`, `Success`, `Info`, `Warning`, and `Error`.
+Frontend adapters map these semantic values to toolkit-specific styles.
 
 The shared default auto-dismiss timeout is `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
 
@@ -154,7 +147,7 @@ auto options = ao::uimodel::ActivityStatusViewModelOptions{
 ## Test authority
 
 - Projection tests under [`test/unit/uimodel/status/activity/`](../../../test/unit/uimodel/status/activity) lock exact state and helper outputs.
-- [`ActivityStatusWidgetTest.cpp`](../../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects GTK consumption of this surface.
+- [`ActivityStatusWidgetTest.cpp`](../../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects GTK consumption and CSS-class mapping of this surface.
 
 ## Related documents
 

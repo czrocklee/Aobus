@@ -12,7 +12,7 @@
 #include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"
-#include "preferences/PreferencesWindow.h"
+#include "preference/PreferencesWindow.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
 #include <ao/rt/AppPrefsState.h>
@@ -21,7 +21,8 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/preferences/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>
@@ -339,7 +340,7 @@ namespace
     return nullptr;
   }
 
-  void applyThemeToMainWindows(Glib::RefPtr<Gtk::Application> const& appPtr, rt::ThemePresetId const theme)
+  void applyThemeToMainWindows(Glib::RefPtr<Gtk::Application> const& appPtr, uimodel::ThemePreset const theme)
   {
     for (auto* const window : appPtr->get_windows())
     {
@@ -395,7 +396,7 @@ namespace
           appConfigStorePtr->loadAppPrefs(current);
           appConfigStorePtr->saveAppPrefs(uimodel::mergePreferenceChange(std::move(current), prefs, change));
         },
-        .onApplyTheme = [appPtr](rt::ThemePresetId const theme) { applyThemeToMainWindows(appPtr, theme); },
+        .onApplyTheme = [appPtr](uimodel::ThemePreset const theme) { applyThemeToMainWindows(appPtr, theme); },
       });
     }
 

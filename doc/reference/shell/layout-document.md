@@ -64,7 +64,7 @@ Missing `type` currently decodes as an empty string and builds as an unknown com
 Decode classifies scalar text in this order: canonical boolean, complete signed integer parse, complete double parse, then string.
 Maps are not valid `LayoutValue` values.
 
-Typed descriptor kinds are `Bool`, `Int`, `Double`, `String`, `Enum`, `StringList`, `CssClassList`, and `Size`.
+Typed descriptor kinds are `Bool`, `Int`, `Double`, `String`, `Enum`, `StringList`, and `Size`.
 The descriptor kind informs editors and validation; the stored representation remains a `LayoutValue`.
 
 ## Template surface

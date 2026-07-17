@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "preferences/PreferencesWindow.h"
+#include "preference/PreferencesWindow.h"
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
@@ -10,7 +10,8 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/preferences/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/listbox.h>
@@ -114,10 +115,10 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
-    auto optTheme = std::optional<rt::ThemePresetId>{};
+    auto optTheme = std::optional<uimodel::ThemePreset>{};
     auto window = PreferencesWindow{PreferencesWindow::Callbacks{
       .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange) { optPersisted = prefs; },
-      .onApplyTheme = [&](rt::ThemePresetId const theme) { optTheme = theme; },
+      .onApplyTheme = [&](uimodel::ThemePreset const theme) { optTheme = theme; },
     }};
 
     auto prefs = rt::AppPrefsState{};
@@ -133,7 +134,7 @@ namespace ao::gtk::test
     CHECK(optPersisted->lastThemePreset == "modern");
     CHECK(optPersisted->lastOutputBackendId == "existing-backend");
     REQUIRE(optTheme);
-    CHECK(*optTheme == rt::ThemePresetId::Modern);
+    CHECK(*optTheme == uimodel::ThemePreset::Modern);
   }
 
   TEST_CASE("PreferencesWindow - layout page persists default preset for next launch", "[gtk][unit][preferences]")
@@ -143,7 +144,7 @@ namespace ao::gtk::test
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto window = PreferencesWindow{PreferencesWindow::Callbacks{
       .onPersistPreferences = [&](rt::AppPrefsState const& prefs, uimodel::PreferencesChange) { optPersisted = prefs; },
-      .onApplyTheme = [](rt::ThemePresetId) { FAIL("Layout preset changes must not apply theme changes"); },
+      .onApplyTheme = [](uimodel::ThemePreset) { FAIL("Layout preset changes must not apply theme changes"); },
     }};
 
     auto prefs = rt::AppPrefsState{};

@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "preferences/PreferencesWindow.h"
+#include "preference/PreferencesWindow.h"
 
 #include "app/FormBuilder.h"
 #include "playback/OutputDevicePopover.h"
-#include "preferences/ShortcutEditorWidget.h"
+#include "preference/ShortcutEditorWidget.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-#include <ao/uimodel/preferences/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 // Gtk::Window forward-declares Application, but remove_window requires the complete type.
 // NOLINTNEXTLINE(misc-include-cleaner)
@@ -174,8 +175,8 @@ namespace ao::gtk
 
   void PreferencesWindow::buildAppearancePage()
   {
-    _themeCombo.append(std::string{rt::themePresetToString(rt::ThemePresetId::Classic)}, "Classic");
-    _themeCombo.append(std::string{rt::themePresetToString(rt::ThemePresetId::Modern)}, "Modern");
+    _themeCombo.append(std::string{uimodel::themePresetId(uimodel::ThemePreset::Classic)}, "Classic");
+    _themeCombo.append(std::string{uimodel::themePresetId(uimodel::ThemePreset::Modern)}, "Modern");
     _themeComboConn = _themeCombo.signal_changed().connect([this] { handleThemeChanged(); });
 
     auto* const list = Gtk::make_managed<FormBoxedList>();
@@ -267,6 +268,8 @@ namespace ao::gtk
                                              rt::PlaybackService* playback,
                                              Gtk::Window* targetWindow)
   {
+    // The output popover applies through PlaybackService.
+    // This model only persists the confirmed selection.
     _modelPtr =
       std::make_unique<uimodel::PreferencesEditorModel>(std::move(prefs),
                                                         _callbacks.onPersistPreferences,
@@ -277,7 +280,7 @@ namespace ao::gtk
     auto const blockLayout = ConnectionBlocker{_layoutPresetComboConn};
 
     _themeCombo.set_active_id(
-      std::string{rt::themePresetToString(rt::themePresetFromString(_modelPtr->preferences().lastThemePreset))});
+      std::string{uimodel::themePresetId(uimodel::themePresetFromId(_modelPtr->preferences().lastThemePreset))});
     _layoutPresetCombo.set_active_id(normalizedLayoutPresetId(_modelPtr->preferences().lastLayoutPreset));
 
     rebuildOutputSelector(playback, targetWindow);
@@ -354,7 +357,7 @@ namespace ao::gtk
       return;
     }
 
-    _modelPtr->setTheme(rt::themePresetFromString(themeId.raw()));
+    _modelPtr->setTheme(uimodel::themePresetFromId(themeId.raw()));
   }
 
   void PreferencesWindow::refreshOutputSummary(rt::PlaybackService& playback)

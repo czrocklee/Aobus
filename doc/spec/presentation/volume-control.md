@@ -3,7 +3,7 @@ id: presentation.volume-control
 type: spec
 status: current
 domain: presentation
-summary: Defines shared volume projection, scroll and mute policy, icon and tooltip mapping, and GTK precision-control behavior.
+summary: Defines shared volume projection, scroll and mute policy, indicator and tooltip mapping, and GTK precision-control behavior.
 ---
 # Volume-control specification
 
@@ -15,7 +15,7 @@ It does not own backend volume application or persisted output selection; those 
 ## Code boundary
 
 `VolumeViewModel` under `ao::uimodel` subscribes to `rt::PlaybackService`, derives semantic state, and sends volume/mute commands.
-`VolumeControlWidget` owns GTK gestures, icon button, popovers, timeout, and scale widgets.
+`VolumeControlWidget` maps the semantic indicator kind to a GTK symbolic icon and owns GTK gestures, icon button, popovers, timeout, and scale widgets.
 The declarative shell component only constructs the widget and does not duplicate volume policy.
 
 ## Terminology
@@ -32,13 +32,14 @@ The declarative shell component only constructs the widget and does not duplicat
 - One wheel event changes level by two percentage points.
 - Raising volume while explicitly muted clears explicit mute.
 - Lowering volume to zero does not set explicit mute by itself.
-- Muted or non-positive volume uses the muted icon; thresholds at 33% and 66% select low, medium, and high icons.
+- Muted or non-positive volume produces the `Muted` indicator kind; thresholds at 33% and 66% select `Low`, `Medium`, and `High`.
+- GTK maps each indicator kind to its corresponding symbolic volume icon.
 - Tooltip percentage is rounded to the nearest integer and appends `Muted` before `Hardware` context.
 - UI rendering callbacks do not become volume state authority.
 
 ## State model
 
-`VolumeViewState` contains visibility, normalized level, hardware-assisted flag, explicit mute, symbolic icon name, and tooltip.
+`VolumeViewState` contains visibility, normalized level, hardware-assisted flag, explicit mute, semantic `VolumeIndicatorKind`, and tooltip.
 The view model retains runtime subscriptions and one render callback.
 
 GTK retains one icon button, precision popover, vertical scale, mute toggle, scroll bubble, and optional timeout connection.
@@ -74,14 +75,14 @@ Its percentage appears in the tooltip, precision popover, and scroll bubble.
 
 ## Implementation map
 
-- [`VolumeViewModel.cpp`](../../../app/uimodel/playback/output/VolumeViewModel.cpp) owns projection, icon/tooltip, scroll, and mute policy.
-- [`VolumeControlWidget.cpp`](../../../app/linux-gtk/playback/VolumeControlWidget.cpp) owns GTK gestures and popovers.
+- [`VolumeViewModel.cpp`](../../../app/uimodel/playback/output/VolumeViewModel.cpp) owns projection, semantic indicator/tooltip, scroll, and mute policy.
+- [`VolumeControlWidget.cpp`](../../../app/linux-gtk/playback/VolumeControlWidget.cpp) owns GTK icon mapping, gestures, and popovers.
 - [`VolumeControlComponent.cpp`](../../../app/linux-gtk/layout/component/playback/VolumeControlComponent.cpp) registers the shell component.
 
 ## Test map
 
-- [`VolumeViewModelTest.cpp`](../../../test/unit/uimodel/playback/output/VolumeViewModelTest.cpp) protects shared mapping and commands.
-- [`VolumeControlWidgetTest.cpp`](../../../test/unit/linux-gtk/playback/VolumeControlWidgetTest.cpp) protects GTK state rendering.
+- [`VolumeViewModelTest.cpp`](../../../test/unit/uimodel/playback/output/VolumeViewModelTest.cpp) protects shared semantic mapping and commands.
+- [`VolumeControlWidgetTest.cpp`](../../../test/unit/linux-gtk/playback/VolumeControlWidgetTest.cpp) protects GTK state and symbolic-icon rendering.
 
 ## Related documents
 

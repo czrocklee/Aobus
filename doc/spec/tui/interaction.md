@@ -19,6 +19,7 @@ TUI code under `app/tui/` owns FTXUI elements, terminal geometry, hit regions, i
 It consumes `AppRuntime` and shared UIModel policies for presentation, seek gestures, status, output, quality, column widths, and soul animation.
 
 `LibraryController` adapts runtime workspace/views into terminal rows but does not become library storage or playback authority.
+Its list chooser consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
 `EventController` translates terminal events into runtime/UIModel commands.
 
 ## Terminology
@@ -37,6 +38,7 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 - Shared list navigation handles arrows, pages, home, and end before a panel-specific selection callback.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
+- The list chooser preserves the shared list-tree parent recovery and sibling order; TUI code owns only terminal flattening and decoration.
 - Soul/Space transport toggles and ordinary stop requests use `PlaybackCommandSurface`; explicit selected-track activation remains a distinct view-based sequence command.
 - Active seek drag is canceled when command mode or an overlay becomes active.
 - A zero-duration timeline rejects pointer and relative-keyboard seek.
@@ -72,6 +74,10 @@ Track navigation moves selection by row/page/endpoints; group navigation selects
 Mouse wheel moves selection by three tracks.
 Dragging the table scrollbar maps its visual position to a selectable track.
 Clicking a section header selects its first track; dragging a header edge installs a session-local width override.
+
+The list overlay renders All Tracks first and walks the shared list tree in preorder.
+Children of the virtual All Tracks root retain zero terminal indentation, while every additional user-list ancestor adds two spaces.
+Folder, Manual, and Smart rows receive terminal-specific `[+]`, `[#]`, and `[?]` icons, and Smart List expressions appear as detail text.
 
 Overlay toggle keys reopen/close their own panel.
 Return activates the selected list, presentation, or output row.
@@ -128,6 +134,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns command and overlay state.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command, presentation, and shared filter-completion routing.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch.
+- [`LibraryNavigation.cpp`](../../../app/tui/LibraryNavigation.cpp) flattens the shared list-tree projection into terminal rows.
 - [`Render.cpp`](../../../app/tui/Render.cpp), [`Style.cpp`](../../../app/tui/Style.cpp), and [`TrackTable.cpp`](../../../app/tui/TrackTable.cpp) own terminal output.
 - [`PlaybackPanel.cpp`](../../../app/tui/PlaybackPanel.cpp) and [`SoulButton.cpp`](../../../app/tui/SoulButton.cpp) own the dock.
 
@@ -136,6 +143,7 @@ The notification center can be opened explicitly even when compact status is not
 - [`ShellInteractionModelTest.cpp`](../../../test/unit/tui/ShellInteractionModelTest.cpp) protects command/overlay state and parsing.
 - [`EventControllerTest.cpp`](../../../test/unit/tui/EventControllerTest.cpp) protects key/mouse routing, modality, seek, overlays, and resizing.
 - [`TrackTableTest.cpp`](../../../test/unit/tui/TrackTableTest.cpp) protects sections, viewport, widths, and selection.
+- [`LibraryNavigationTest.cpp`](../../../test/unit/tui/LibraryNavigationTest.cpp) protects shared-tree preorder adaptation, indentation, icons, and details.
 - [`RenderTest.cpp`](../../../test/unit/tui/RenderTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), and [`TuiHitRegionsTest.cpp`](../../../test/unit/tui/TuiHitRegionsTest.cpp) protect rendering and hit geometry.
 - Command completion tests under [`test/unit/tui/`](../../../test/unit/tui/) protect prefix, alias, presentation, Quick-filter, and expression completion.
 
@@ -144,5 +152,6 @@ The notification center can be opened explicitly even when compact status is not
 - [Presentation architecture](../../architecture/presentation.md)
 - [Interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md)
 - [Track-column layout](../presentation/track-column-layout.md)
+- [List-navigation tree](../presentation/list-tree.md)
 - [Activity status](../presentation/activity-status.md)
 - [TUI command reference](../../reference/tui/command.md)

@@ -3,12 +3,12 @@
 
 #pragma once
 
-#include <ao/rt/AppPrefsState.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <string_view>
 
 namespace ao::gtk
 {
   // Returns the GTK CSS class name (e.g., "ao-theme-modern") for the given preset.
-  std::string_view themeCssClass(rt::ThemePresetId preset);
+  std::string_view themeCssClass(uimodel::ThemePreset preset);
 } // namespace ao::gtk

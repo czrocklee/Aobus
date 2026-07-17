@@ -49,6 +49,7 @@ namespace ao::gtk::test
       REQUIRE(allTracksPtr->nChildren() == 1);
       auto const itemAPtr = allTracksPtr->child(0);
       CHECK_FALSE(itemAPtr->row()->name().empty());
+      CHECK_FALSE(itemAPtr->row()->isSmart());
       CHECK(itemAPtr->listId() == idA);
       CHECK(itemAPtr->parent() == allTracksPtr.get());
 
@@ -56,6 +57,7 @@ namespace ao::gtk::test
       REQUIRE(itemAPtr->nChildren() == 1);
       auto const itemBPtr = itemAPtr->child(0);
       CHECK_FALSE(itemBPtr->row()->name().empty());
+      CHECK(itemBPtr->row()->isSmart());
       CHECK(itemBPtr->listId() == idB);
       CHECK(itemBPtr->parent() == itemAPtr.get());
     }

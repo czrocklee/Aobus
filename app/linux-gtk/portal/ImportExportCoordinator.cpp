@@ -14,6 +14,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <giomm/asyncresult.h>
 #include <giomm/liststore.h>
@@ -246,21 +247,20 @@ namespace ao::gtk::portal
       report.targetScope == rt::ImportTargetScope::Library ? "library tracks and lists" : "lists";
     auto const* const actionLabel =
       report.targetScope == rt::ImportTargetScope::Library ? "Restore Library" : "Restore Lists";
-    auto const message =
-      std::format("This restore will replace the current {}.\n\n"
-                  "Payload: YAML v{}, mode '{}'.\n"
-                  "Preview: {} tracks created, {} updated, {} deleted; {} lists created, {} deleted; "
-                  "{} dangling references ignored.\n\n"
-                  "Continue only if this matches the selected backup.",
-                  scopeName,
-                  report.payloadVersion,
-                  rt::exportModeName(report.payloadMode),
-                  report.tracksCreated,
-                  report.tracksUpdated,
-                  report.tracksDeleted,
-                  report.listsCreated,
-                  report.listsDeleted,
-                  report.danglingReferencesIgnored);
+    auto const message = std::format("This restore will replace the current {}.\n\n"
+                                     "Payload: YAML v{}, mode '{}'.\n"
+                                     "Preview: {} created, {} updated, {} deleted; {} lists created, {} deleted; "
+                                     "{} dangling references ignored.\n\n"
+                                     "Continue only if this matches the selected backup.",
+                                     scopeName,
+                                     report.payloadVersion,
+                                     rt::exportModeName(report.payloadMode),
+                                     uimodel::formatTrackCount(report.tracksCreated),
+                                     uimodel::formatTrackCount(report.tracksUpdated),
+                                     uimodel::formatTrackCount(report.tracksDeleted),
+                                     report.listsCreated,
+                                     report.listsDeleted,
+                                     report.danglingReferencesIgnored);
 
     auto* const dialog = AppDialog::presentMessage(
       _parent,

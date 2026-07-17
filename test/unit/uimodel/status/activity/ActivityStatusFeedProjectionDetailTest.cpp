@@ -119,16 +119,6 @@ namespace ao::uimodel::test
       CHECK(detail.hasActiveProgress);
     }
 
-    SECTION("kind css mapping remains explicit")
-    {
-      CHECK(activityStatusKindCssClass(ActivityStatusKind::Idle) == "ao-activity-status-idle");
-      CHECK(activityStatusKindCssClass(ActivityStatusKind::Processing) == "ao-activity-status-processing");
-      CHECK(activityStatusKindCssClass(ActivityStatusKind::Success) == "ao-activity-status-success");
-      CHECK(activityStatusKindCssClass(ActivityStatusKind::Info) == "ao-activity-status-info");
-      CHECK(activityStatusKindCssClass(ActivityStatusKind::Warning) == "ao-activity-status-warning");
-      CHECK(activityStatusKindCssClass(ActivityStatusKind::Error) == "ao-activity-status-error");
-    }
-
     SECTION("action render policy filters hidden actions and keeps disabled reasons")
     {
       auto const actions = std::vector<ActivityActionDescriptor>{

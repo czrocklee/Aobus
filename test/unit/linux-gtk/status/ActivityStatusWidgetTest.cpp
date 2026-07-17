@@ -96,6 +96,7 @@ namespace ao::gtk::test
     {
       CHECK_FALSE(status.widget().get_visible());
       CHECK(hasCssClass(status.widget(), "ao-activity-status-ambient"));
+      CHECK(hasCssClass(status.widget(), "ao-activity-status-idle"));
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-classic-inline"));
     }
 
@@ -133,11 +134,14 @@ namespace ao::gtk::test
     runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed", true);
     mounted.drain();
     REQUIRE(status.widget().get_visible());
+    CHECK(hasCssClass(status.widget(), "ao-activity-status-error"));
 
     emitClicked(status.dismissButton());
     mounted.drain();
 
     CHECK_FALSE(status.widget().get_visible());
+    CHECK(hasCssClass(status.widget(), "ao-activity-status-idle"));
+    CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-error"));
     CHECK(runtime.notifications().feed().entries.size() == 1);
     auto* const retainedTitle = findWidgetByClass<Gtk::Label>(status.detailContent(), "ao-activity-detail-title");
     REQUIRE(retainedTitle != nullptr);
@@ -169,6 +173,7 @@ namespace ao::gtk::test
       mounted.drain();
 
       CHECK(status.widget().get_visible());
+      CHECK(hasCssClass(status.widget(), "ao-activity-status-info"));
       CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-openable"));
       CHECK_FALSE(status.detailButton().get_sensitive());
       mounted.drain();
@@ -413,5 +418,6 @@ namespace ao::gtk::test
     CHECK(status.label().get_text() == "Scan complete: 4 tracks added");
     CHECK_FALSE(status.progress().get_visible());
     CHECK(hasCssClass(status.widget(), "ao-activity-status-success"));
+    CHECK_FALSE(hasCssClass(status.widget(), "ao-activity-status-processing"));
   }
 } // namespace ao::gtk::test

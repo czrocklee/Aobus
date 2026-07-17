@@ -17,6 +17,15 @@ namespace ao::uimodel::test
     CHECK(large == "Showing 10 of 14 matches");
   }
 
+  TEST_CASE("SmartListPreview - formats an unfiltered source with track-count grammar", "[uimodel][unit][list]")
+  {
+    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 1, true, true) == "Showing all 1 track");
+    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 1, false, true) ==
+          "Showing all 1 track from source");
+    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 4, false, true) ==
+          "Showing all 4 tracks from source");
+  }
+
   TEST_CASE("SmartListPreview - formats unavailable source status text", "[uimodel][unit][list]")
   {
     CHECK(deriveSmartListPreviewStatus(true, false) == SmartListPreviewStatus::PreviewSourceUnavailable);

@@ -15,7 +15,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("Log - initialization and shutdown", "[utility][unit][log]")
+  TEST_CASE("Log - initialization and shutdown", "[runtime][unit][log]")
   {
     auto const tempDir = std::filesystem::temp_directory_path() / "ao_log_test";
     std::filesystem::remove_all(tempDir);

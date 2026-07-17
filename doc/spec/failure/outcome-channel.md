@@ -140,7 +140,7 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 - [`AppRuntimeTest.cpp`](../../../test/unit/runtime/AppRuntimeTest.cpp) protects composition of the injected handler into the core runtime.
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects callback-affine failure cleanup before exception propagation.
 - [`UiWorkflowTest.cpp`](../../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
-- [`LogTest.cpp`](../../../test/unit/utility/LogTest.cpp) protects the retained application logging adapter.
+- [`LogTest.cpp`](../../../test/unit/runtime/LogTest.cpp) protects the retained application logging adapter.
 - [`StorageResultTest.cpp`](../../../test/unit/runtime/StorageResultTest.cpp) protects the declared `NotFound` collapse and preservation of other failures.
 - Subsystem tests under [`test/unit/audio/`](../../../test/unit/audio), [`test/unit/library/`](../../../test/unit/library), [`test/unit/query/`](../../../test/unit/query), and [`test/unit/runtime/`](../../../test/unit/runtime) protect boundary-specific return and translation behavior.
 

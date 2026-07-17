@@ -17,13 +17,13 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <ftxui/dom/elements.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <limits>
 #include <optional>
 #include <span>
@@ -55,31 +55,6 @@ namespace ao::tui
     std::string blankFallback(std::string_view value)
     {
       return value.empty() ? std::string{"-"} : std::string{value};
-    }
-
-    bool shouldRightAlignField(rt::TrackField const field)
-    {
-      using F = rt::TrackField;
-
-      switch (field)
-      {
-        case F::Year:
-        case F::DiscNumber:
-        case F::DiscTotal:
-        case F::TrackNumber:
-        case F::TrackTotal:
-        case F::MovementNumber:
-        case F::MovementTotal:
-        case F::Duration:
-        case F::SampleRate:
-        case F::Channels:
-        case F::BitDepth:
-        case F::Bitrate:
-        case F::FileSize:
-        case F::ModifiedTime:
-        case F::DisplayTrackNumber: return true;
-        default: return false;
-      }
     }
 
     std::int32_t terminalColumnWidth(rt::TrackField const field)
@@ -261,10 +236,11 @@ namespace ao::tui
       {
         auto const field = normalized.visibleFields[index];
         auto const width = index < widths.size() ? widths[index] : terminalColumnWidth(field);
-        columns.push_back(TrackColumn{.field = field,
-                                      .label = std::string{uimodel::trackFieldColumnTitle(field)},
-                                      .width = width,
-                                      .rightAligned = shouldRightAlignField(field)});
+        columns.push_back(
+          TrackColumn{.field = field,
+                      .label = std::string{uimodel::trackFieldColumnTitle(field)},
+                      .width = width,
+                      .rightAligned = uimodel::trackFieldColumnAlignment(field) == uimodel::TrackColumnAlignment::End});
       }
 
       return columns;
@@ -359,8 +335,7 @@ namespace ao::tui
         details.push_back(section.tertiaryText);
       }
 
-      details.push_back(
-        std::format("{} {}", section.rowCount, section.rowCount == std::size_t{1} ? "track" : "tracks"));
+      details.push_back(uimodel::formatTrackCount(section.rowCount));
 
       auto result = std::string{};
 

@@ -5,7 +5,8 @@
 #include <ao/audio/Device.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/preferences/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,7 +18,7 @@ namespace ao::uimodel::test
   TEST_CASE("PreferencesEditorModel - theme changes persist and apply selected theme", "[uimodel][unit][preferences]")
   {
     auto persisted = std::vector<rt::AppPrefsState>{};
-    auto applied = std::vector<rt::ThemePresetId>{};
+    auto applied = std::vector<ThemePreset>{};
     auto initial = rt::AppPrefsState{};
     initial.lastThemePreset = "classic";
     initial.lastOutputBackendId = "existing-backend";
@@ -28,16 +29,16 @@ namespace ao::uimodel::test
                                           CHECK(change == PreferencesChange::Theme);
                                           persisted.push_back(prefs);
                                         },
-                                        [&](rt::ThemePresetId const theme) { applied.push_back(theme); },
+                                        [&](ThemePreset const theme) { applied.push_back(theme); },
                                         {}};
 
-    model.setTheme(rt::ThemePresetId::Modern);
+    model.setTheme(ThemePreset::Modern);
 
     REQUIRE(persisted.size() == 1U);
     CHECK(persisted.front().lastThemePreset == "modern");
     CHECK(persisted.front().lastOutputBackendId == "existing-backend");
     REQUIRE(applied.size() == 1U);
-    CHECK(applied.front() == rt::ThemePresetId::Modern);
+    CHECK(applied.front() == ThemePreset::Modern);
     CHECK(model.preferences().lastThemePreset == "modern");
   }
 
@@ -83,15 +84,15 @@ namespace ao::uimodel::test
     initial.lastOutputBackendId = "existing-backend";
     initial.lastLayoutPreset = "classic";
 
-    auto model = PreferencesEditorModel{
-      initial,
-      [&](rt::AppPrefsState const& prefs, PreferencesChange const change)
-      {
-        CHECK(change == PreferencesChange::LayoutPreset);
-        optPersisted = prefs;
-      },
-      [](rt::ThemePresetId) { FAIL("Layout preset changes must not apply theme changes"); },
-      [](rt::OutputDeviceSelection const&) { FAIL("Layout preset changes must not apply output changes"); }};
+    auto model = PreferencesEditorModel{initial,
+                                        [&](rt::AppPrefsState const& prefs, PreferencesChange const change)
+                                        {
+                                          CHECK(change == PreferencesChange::LayoutPreset);
+                                          optPersisted = prefs;
+                                        },
+                                        [](ThemePreset) { FAIL("Layout preset changes must not apply theme changes"); },
+                                        [](rt::OutputDeviceSelection const&)
+                                        { FAIL("Layout preset changes must not apply output changes"); }};
 
     model.setLayoutPreset("modern");
 

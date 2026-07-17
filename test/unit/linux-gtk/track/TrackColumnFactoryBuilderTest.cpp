@@ -122,6 +122,23 @@ namespace ao::gtk::test
         drainGtkEvents();
       }
 
+      SECTION("technical scalar column uses shared end alignment")
+      {
+        auto factoryPtr = buildColumnFactory(rt::TrackField::SampleRate, beginEditSession, commitEdit, *modelPtr);
+        auto columnPtr = Gtk::ColumnViewColumn::create("Sample Rate", factoryPtr);
+        columnView.append_column(columnPtr);
+
+        realizeColumnView(window, columnView);
+
+        auto* const label = findLabelByText(columnView, "44100 Hz");
+        REQUIRE(label != nullptr);
+        CHECK(label->get_halign() == Gtk::Align::END);
+        CHECK(label->get_xalign() == 1.0F);
+
+        columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});
+        drainGtkEvents();
+      }
+
       SECTION("tooltip appears only when text is ellipsized")
       {
         auto factoryPtr = buildColumnFactory(rt::TrackField::Title, beginEditSession, commitEdit, *modelPtr);

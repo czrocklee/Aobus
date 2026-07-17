@@ -28,7 +28,6 @@ namespace ao::uimodel
     String,
     Enum,
     StringList,
-    CssClassList,
     Size
   };
 

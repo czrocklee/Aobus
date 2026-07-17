@@ -9,6 +9,7 @@
 #include <ao/library/FileManifestLayout.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <gdk/gdkkeysyms.h>
@@ -98,8 +99,7 @@ namespace ao::gtk
 
     void configureTrackCellLabel(Gtk::Label& label, rt::TrackField field)
     {
-      if (field == rt::TrackField::Duration || field == rt::TrackField::Year || field == rt::TrackField::TrackNumber ||
-          field == rt::TrackField::DiscNumber)
+      if (uimodel::trackFieldColumnAlignment(field) == uimodel::TrackColumnAlignment::End)
       {
         label.set_halign(Gtk::Align::END);
         label.set_xalign(1.0F);

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/AppPrefsState.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
@@ -71,8 +71,8 @@ namespace ao::gtk
     void load(AppConfigStore const& configStore);
     void save(AppConfigStore& configStore) const;
 
-    void setTheme(rt::ThemePresetId preset);
-    rt::ThemePresetId activeTheme() const noexcept;
+    void setTheme(uimodel::ThemePreset preset);
+    uimodel::ThemePreset activeTheme() const noexcept;
 
     void applyTo(Gtk::Widget& root) const;
 
@@ -81,13 +81,13 @@ namespace ao::gtk
   private:
     friend class ThemeRegistrationToken;
 
-    rt::ThemePresetId _activePreset = rt::ThemePresetId::Classic;
+    uimodel::ThemePreset _activePreset = uimodel::ThemePreset::Classic;
     std::vector<std::shared_ptr<ThemeWindowRegistration>> _registeredWindows;
 
     void unregisterToplevel(std::shared_ptr<ThemeWindowRegistration> const& registrationPtr);
     void pruneExpiredRegistrations();
 
-    void applyThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const;
-    void removeThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const;
+    void applyThemeClass(Gtk::Widget& widget, uimodel::ThemePreset preset) const;
+    void removeThemeClass(Gtk::Widget& widget, uimodel::ThemePreset preset) const;
   };
 } // namespace ao::gtk

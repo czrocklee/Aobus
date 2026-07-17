@@ -36,6 +36,40 @@ namespace ao::uimodel::test
     CHECK(trackFieldColumnSizing(rt::TrackField::TechnicalSummary) == TrackColumnSizing::Fixed);
   }
 
+  TEST_CASE("trackFieldColumnAlignment classifies bounded scalar values as end aligned",
+            "[uimodel][unit][library][presentation]")
+  {
+    for (auto const field : {rt::TrackField::Year,
+                             rt::TrackField::DiscNumber,
+                             rt::TrackField::DiscTotal,
+                             rt::TrackField::TrackNumber,
+                             rt::TrackField::TrackTotal,
+                             rt::TrackField::MovementNumber,
+                             rt::TrackField::MovementTotal,
+                             rt::TrackField::Duration,
+                             rt::TrackField::SampleRate,
+                             rt::TrackField::Channels,
+                             rt::TrackField::BitDepth,
+                             rt::TrackField::Bitrate,
+                             rt::TrackField::FileSize,
+                             rt::TrackField::ModifiedTime,
+                             rt::TrackField::DisplayTrackNumber})
+    {
+      CHECK(trackFieldColumnAlignment(field) == TrackColumnAlignment::End);
+    }
+
+    for (auto const field : {rt::TrackField::Title,
+                             rt::TrackField::Artist,
+                             rt::TrackField::Tags,
+                             rt::TrackField::FilePath,
+                             rt::TrackField::Codec,
+                             rt::TrackField::TechnicalSummary,
+                             rt::TrackField::Quality})
+    {
+      CHECK(trackFieldColumnAlignment(field) == TrackColumnAlignment::Start);
+    }
+  }
+
   TEST_CASE("minimumTrackFieldColumnWidth keeps fixed minimums below default widths",
             "[uimodel][unit][library][presentation]")
   {

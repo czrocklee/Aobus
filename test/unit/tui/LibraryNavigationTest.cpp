@@ -27,14 +27,30 @@ namespace ao::tui::test
     REQUIRE(items.size() == 4);
     CHECK(items[0].id == rt::kAllTracksListId);
     CHECK(items[0].label == "All Tracks");
-    CHECK(items[1].label == "[?] Live");
-    CHECK(items[1].detail == "[$title ~ \"Live\"]");
-    CHECK(items[2].label == "[+] Playlists");
-    CHECK(items[3].label == "  [#] Favorites");
-    CHECK(labels[1] == "[?] Live [$title ~ \"Live\"]");
+    CHECK(items[1].label == "[+] Playlists");
+    CHECK(items[2].label == "  [#] Favorites");
+    CHECK(items[3].label == "[?] Live");
+    CHECK(items[3].detail == "[$title ~ \"Live\"]");
+    CHECK(labels[3] == "[?] Live [$title ~ \"Live\"]");
   }
 
-  TEST_CASE("LibraryNavigation - caps cyclic parent depth", "[tui][regression][library-navigation]")
+  TEST_CASE("LibraryNavigation - uses shared fallback for invalid parents", "[tui][unit][library-navigation]")
+  {
+    auto lists = std::vector<rt::ListNode>{
+      {.id = ListId{9}, .parentId = ListId{999}, .name = "Orphan", .kind = rt::ListNodeKind::Manual},
+      {.id = ListId{5}, .name = "Root", .kind = rt::ListNodeKind::Manual},
+      {.id = ListId{7}, .parentId = ListId{7}, .name = "Self", .kind = rt::ListNodeKind::Smart},
+    };
+
+    auto const items = makeLibraryNavigation(lists);
+
+    REQUIRE(items.size() == 4);
+    CHECK(items[1].label == "[#] Root");
+    CHECK(items[2].label == "[?] Self");
+    CHECK(items[3].label == "[#] Orphan");
+  }
+
+  TEST_CASE("LibraryNavigation - renders the shared cyclic-parent recovery", "[tui][regression][library-navigation]")
   {
     auto lists = std::vector<rt::ListNode>{
       {.id = ListId{1}, .parentId = ListId{2}, .name = "One", .kind = rt::ListNodeKind::Folder},
@@ -44,7 +60,9 @@ namespace ao::tui::test
     auto items = makeLibraryNavigation(lists);
 
     REQUIRE(items.size() == 3);
-    CHECK((items[1].id == ListId{1} || items[2].id == ListId{1}));
-    CHECK((items[1].id == ListId{2} || items[2].id == ListId{2}));
+    CHECK(items[1].id == ListId{1});
+    CHECK(items[1].label == "[+] One");
+    CHECK(items[2].id == ListId{2});
+    CHECK(items[2].label == "  [+] Two");
   }
 } // namespace ao::tui::test

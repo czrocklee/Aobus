@@ -28,7 +28,7 @@ app/uimodel/<feature>/
 test/unit/uimodel/<feature>/
 ```
 
-The current top-level capsules are `input`, `field`, `layout`, `library`, `playback`, `preferences`, and `status`, plus deliberately reviewed root utilities.
+The current top-level capsules are `input`, `field`, `layout`, `library`, `playback`, `preference`, and `status`, plus deliberately reviewed root utilities.
 Nested capsules remain singular, such as `library/presentation`, `playback/now-playing`, and `status/activity`.
 Adding a feature path requires updating `cmake/AssertUimodelOrganization.cmake`.
 
@@ -71,7 +71,7 @@ Inputs arrive through stable core/runtime values, narrow runtime services, DTO s
 - `library/presentation` owns track presentation catalogs, preferences, editors, recommendation, and column policy.
 - `library/track`, `library/detail`, and `library/property` own their corresponding list, detail, and properties presentation behavior.
 - `playback` owns published playback presentation and interaction, never succession or session-save coordination.
-- `preferences` maps user choices to persisted deltas and platform-supplied appliers without owning GTK or config storage.
+- `preference` maps user choices to persisted deltas and platform-supplied appliers without owning GTK or config storage.
 - `status/activity` owns the platform-neutral activity projection.
 
 ## Workflow

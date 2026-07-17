@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/uimodel/library/list/SmartListPreview.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <cstddef>
 #include <format>
@@ -37,7 +38,7 @@ namespace ao::uimodel
         return isAllTracks ? "No tracks in library" : "No tracks in source";
       }
 
-      return std::format("Showing all {} {}", count, isAllTracks ? "tracks" : "source tracks");
+      return std::format("Showing all {}{}", formatTrackCount(count), isAllTracks ? "" : " from source");
     }
 
     switch (status)

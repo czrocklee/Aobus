@@ -3,6 +3,7 @@
 
 #include <ao/uimodel/library/property/TagEditWorkflow.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -30,7 +31,7 @@ namespace ao::uimodel
 
       if (parts.empty())
       {
-        return std::format("Tags unchanged for {} track{}", trackCount, trackCount == 1 ? "" : "s");
+        return std::format("Tags unchanged for {}", formatTrackCount(trackCount));
       }
 
       auto message = std::format("Tags {}", parts[0]);
@@ -40,7 +41,7 @@ namespace ao::uimodel
         message += " and " + parts[1];
       }
 
-      return std::format("{} for {} track{}", message, trackCount, trackCount == 1 ? "" : "s");
+      return std::format("{} for {}", message, formatTrackCount(trackCount));
     }
   } // namespace
 

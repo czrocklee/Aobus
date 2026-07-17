@@ -138,7 +138,7 @@ namespace ao::gtk
     {
       if (auto const* const root = widget.get_root(); root != nullptr)
       {
-        // Mirrors themeCssClass(ThemePresetId::Modern); kept as a literal to avoid per-measure churn.
+        // Mirrors themeCssClass(ThemePreset::Modern); kept as a literal to avoid per-measure churn.
         if (auto const* rootWidget = dynamic_cast<Gtk::Widget const*>(root);
             rootWidget != nullptr && rootWidget->has_css_class("ao-theme-modern"))
         {

@@ -20,6 +20,7 @@
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
@@ -72,8 +73,9 @@ namespace ao::gtk
     , _trackIds{std::move(trackIds)}
     , _multipleTracks{_trackIds.size() > 1}
   {
-    auto const title =
-      _multipleTracks ? std::format("Properties — {} tracks selected", _trackIds.size()) : std::string{"Properties"};
+    auto const title = _multipleTracks
+                         ? std::format("Properties — {} selected", uimodel::formatTrackCount(_trackIds.size()))
+                         : std::string{"Properties"};
 
     set_title(title);
     configureForParent(parent);

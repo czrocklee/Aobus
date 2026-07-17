@@ -15,7 +15,7 @@ The [keyboard map reference](../../reference/shell/keymap.md) owns exact chord s
 ## Code boundary
 
 This contract spans the **UIModel** and **GTK frontend** layers in the [system architecture](../../architecture/system-overview.md), under the [application shell architecture](../../architecture/application-shell.md).
-Neutral values and policy live under `app/include/ao/uimodel/input/` and `app/uimodel/input/`; GTK translation, application, and editing live under `app/linux-gtk/app/` and `app/linux-gtk/preferences/`.
+Neutral values and policy live under `app/include/ao/uimodel/input/` and `app/uimodel/input/`; GTK translation, application, and editing live under `app/linux-gtk/app/` and `app/linux-gtk/preference/`.
 
 ## Terminology
 
@@ -93,14 +93,14 @@ They remain GTK-owned until a shared scoped-shortcut contract is defined.
 
 - [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp), [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp), and [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) own neutral policy and encoding.
 - [`KeymapApplicator.cpp`](../../../app/linux-gtk/app/KeymapApplicator.cpp) and [`GtkAccelTranslator.cpp`](../../../app/linux-gtk/app/GtkAccelTranslator.cpp) own GTK projection.
-- [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preferences/ShortcutEditorWidget.cpp) owns live GTK editing and conflict confirmation.
+- [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing and conflict confirmation.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) owns the global group adapter.
 
 ## Test map
 
 - [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp), [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp), and [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect neutral behavior.
 - [`KeymapApplicatorTest.cpp`](../../../test/unit/linux-gtk/app/KeymapApplicatorTest.cpp) protects reconciliation and GTK translation.
-- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preferences/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, and teardown.
+- [`ShortcutEditorWidgetTest.cpp`](../../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protects eligibility, editing, conflict confirmation, and teardown.
 
 ## Related documents
 

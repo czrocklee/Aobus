@@ -6,10 +6,14 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/uimodel/library/list/ListTreeProjection.h>
 
 #include <algorithm>
 #include <cstddef>
 #include <format>
+#include <ranges>
+#include <set>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,27 +22,33 @@ namespace ao::tui
 {
   namespace
   {
-    std::size_t depthOf(rt::ListNode const& node, std::vector<rt::ListNode> const& lists)
+    struct PendingNavigationRow final
     {
+      ListId id = kInvalidListId;
       std::size_t depth = 0;
-      auto parentId = node.parentId;
-      std::size_t visited = 0;
+    };
 
-      while (parentId != kInvalidListId && visited < lists.size())
+    void appendNavigationEntry(std::vector<LibraryNavEntry>& items,
+                               uimodel::ListTreeProjectionRow const& row,
+                               std::size_t const depth)
+    {
+      if (row.id == rt::kAllTracksListId)
       {
-        auto const it = std::ranges::find(lists, parentId, &rt::ListNode::id);
-
-        if (it == lists.end())
-        {
-          break;
-        }
-
-        ++depth;
-        ++visited;
-        parentId = it->parentId;
+        items.push_back(LibraryNavEntry{.id = row.id, .label = row.name, .detail = "library"});
+        return;
       }
 
-      return depth;
+      auto const displayName = row.name.empty() ? std::string{"<Unnamed List>"} : row.name;
+      auto label = std::string(depth * 2, ' ');
+      label.append(listNodeIcon(row.kind));
+      label.push_back(' ');
+      label.append(displayName);
+
+      items.push_back(LibraryNavEntry{
+        .id = row.id,
+        .label = std::move(label),
+        .detail = row.localExpression.empty() ? std::string{} : std::format("[{}]", row.localExpression),
+      });
     }
   } // namespace
 
@@ -60,41 +70,48 @@ namespace ao::tui
     return it == items.end() ? std::string{"All Tracks"} : it->label;
   }
 
-  std::vector<LibraryNavEntry> makeLibraryNavigation(std::vector<rt::ListNode> const& lists)
+  std::vector<LibraryNavEntry> makeLibraryNavigation(std::span<rt::ListNode const> const lists)
   {
+    auto const projection = uimodel::buildListTreeProjection(lists);
     auto items = std::vector<LibraryNavEntry>{};
-    items.reserve(lists.size() + 1);
-    items.push_back(LibraryNavEntry{
-      .id = rt::kAllTracksListId,
-      .label = "All Tracks",
-      .detail = "library",
-    });
+    items.reserve(projection.rowsById.size());
 
-    auto sorted = lists;
-    std::ranges::sort(sorted,
-                      [](rt::ListNode const& lhs, rt::ListNode const& rhs)
-                      {
-                        if (lhs.parentId != rhs.parentId)
-                        {
-                          return lhs.parentId.raw() < rhs.parentId.raw();
-                        }
+    auto pending = std::vector<PendingNavigationRow>{};
+    pending.reserve(projection.rowsById.size());
 
-                        return lhs.name < rhs.name;
-                      });
-
-    for (auto const& node : sorted)
+    for (auto const rootId : std::views::reverse(projection.rootIds))
     {
-      auto const displayName = node.name.empty() ? std::string{"<Unnamed List>"} : node.name;
-      auto label = std::string(depthOf(node, sorted) * 2, ' ');
-      label.append(listNodeIcon(node.kind));
-      label.push_back(' ');
-      label.append(displayName);
+      pending.push_back(PendingNavigationRow{.id = rootId});
+    }
 
-      items.push_back(LibraryNavEntry{
-        .id = node.id,
-        .label = std::move(label),
-        .detail = node.smartExpression.empty() ? std::string{} : std::format("[{}]", node.smartExpression),
-      });
+    auto visited = std::set<ListId>{};
+
+    while (!pending.empty())
+    {
+      auto const current = pending.back();
+      pending.pop_back();
+
+      if (!visited.insert(current.id).second)
+      {
+        continue;
+      }
+
+      auto const rowIt = projection.rowsById.find(current.id);
+
+      if (rowIt == projection.rowsById.end())
+      {
+        continue;
+      }
+
+      auto const& row = rowIt->second;
+      appendNavigationEntry(items, row, current.depth);
+
+      auto const childDepth = row.id == rt::kAllTracksListId ? current.depth : current.depth + 1;
+
+      for (auto const childId : std::views::reverse(row.childIds))
+      {
+        pending.push_back(PendingNavigationRow{.id = childId, .depth = childDepth});
+      }
     }
 
     return items;

@@ -77,7 +77,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/input/KeyChord.cpp
     uimodel/input/KeymapModel.cpp
     uimodel/input/KeymapStore.cpp
-    uimodel/preferences/PreferencesEditorModel.cpp
+    uimodel/preference/PreferencesEditorModel.cpp
     uimodel/field/TrackFieldEditCodec.cpp
     uimodel/field/TrackFieldEditPolicy.cpp
     uimodel/field/TrackFieldFormatter.cpp
@@ -107,6 +107,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/property/TrackAuthoringSession.cpp
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp
+    uimodel/library/track/TrackCountFormatter.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
     uimodel/library/track/TrackFilterPolicy.cpp
     uimodel/library/track/TrackFilterCompleter.cpp
@@ -165,12 +166,23 @@ add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
 set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
 set(AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX "\"([.]aobus|data[.]mdb)")
+set(AO_FORBIDDEN_PLATFORM_UI_INCLUDE_REGEX
+  "#[ \t]*include[ \t]*[<\\\"](gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib)/")
+set(AO_FORBIDDEN_UIMODEL_PLATFORM_VOCABULARY_REGEX
+  "\"(ao-activity-status[A-Za-z0-9_.-]*|[A-Za-z0-9_.-]+-symbolic)\"")
+set(AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX
+  "(${AO_FORBIDDEN_PLATFORM_UI_INCLUDE_REGEX})|(${AO_FORBIDDEN_UIMODEL_PLATFORM_VOCABULARY_REGEX})")
 set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
 
 ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX_FILE
+  "uimodel-platform"
+  "${AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX}"
+)
 ao_write_guardrail_regex(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE "frontend-core" "${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX}")
 ao_write_guardrail_regex(
   AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX_FILE
@@ -193,13 +205,15 @@ add_dependencies(ao_app_runtime ao_rt_public_boundary_report)
 add_custom_target(ao_uimodel_platform_boundary_report
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/uimodel"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app/uimodel"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
-  COMMENT "Checking platform UI includes in ao_app_uimodel"
+  COMMENT "Checking platform UI includes and vocabulary in ao_app_uimodel"
   VERBATIM
 )
 

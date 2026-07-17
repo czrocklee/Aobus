@@ -45,7 +45,7 @@ namespace ao::uimodel::test
       CHECK(log.last().visible == true);
       CHECK(log.last().volume == 0.5F);
       CHECK(log.last().muted == false);
-      CHECK(log.last().iconName == "audio-volume-medium-symbolic");
+      CHECK(log.last().indicatorKind == VolumeIndicatorKind::Medium);
       CHECK(log.last().tooltip == "Volume: 50%");
 
       viewModel.handleMutedChanged(true);
@@ -53,7 +53,7 @@ namespace ao::uimodel::test
       CHECK(log.last().visible == true);
       CHECK(log.last().volume == 0.5F);
       CHECK(log.last().muted == true);
-      CHECK(log.last().iconName == "audio-volume-muted-symbolic");
+      CHECK(log.last().indicatorKind == VolumeIndicatorKind::Muted);
       CHECK(log.last().tooltip == "Volume: 50% (Muted)");
     }
 
@@ -125,14 +125,16 @@ namespace ao::uimodel::test
       CHECK(VolumeViewModel::resolveVolumeScroll(0.99F, -1.0) == Catch::Approx{1.0F}.margin(0.001F));
     }
 
-    SECTION("resolveIconName")
+    SECTION("resolveIndicatorKind")
     {
-      CHECK(VolumeViewModel::resolveIconName(0.5F, true) == "audio-volume-muted-symbolic");
-      CHECK(VolumeViewModel::resolveIconName(0.0F, false) == "audio-volume-muted-symbolic");
-      CHECK(VolumeViewModel::resolveIconName(0.25F, false) == "audio-volume-low-symbolic");
-      CHECK(VolumeViewModel::resolveIconName(0.50F, false) == "audio-volume-medium-symbolic");
-      CHECK(VolumeViewModel::resolveIconName(0.75F, false) == "audio-volume-high-symbolic");
-      CHECK(VolumeViewModel::resolveIconName(1.00F, false) == "audio-volume-high-symbolic");
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.5F, true) == VolumeIndicatorKind::Muted);
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.0F, false) == VolumeIndicatorKind::Muted);
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.25F, false) == VolumeIndicatorKind::Low);
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.33F, false) == VolumeIndicatorKind::Low);
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.50F, false) == VolumeIndicatorKind::Medium);
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.66F, false) == VolumeIndicatorKind::Medium);
+      CHECK(VolumeViewModel::resolveIndicatorKind(0.75F, false) == VolumeIndicatorKind::High);
+      CHECK(VolumeViewModel::resolveIndicatorKind(1.00F, false) == VolumeIndicatorKind::High);
     }
 
     SECTION("resolveTooltip")

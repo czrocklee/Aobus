@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/ListNode.h>
 
+#include <span>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,6 @@ namespace ao::tui
 
   std::string listNodeIcon(rt::ListNodeKind kind);
   std::string listTitle(ListId listId, std::vector<LibraryNavEntry> const& items);
-  std::vector<LibraryNavEntry> makeLibraryNavigation(std::vector<rt::ListNode> const& lists);
+  std::vector<LibraryNavEntry> makeLibraryNavigation(std::span<rt::ListNode const> lists);
   std::vector<std::string> libraryNavigationLabels(std::vector<LibraryNavEntry> const& items);
 } // namespace ao::tui

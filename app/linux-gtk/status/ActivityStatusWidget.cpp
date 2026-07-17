@@ -15,6 +15,7 @@
 #include <gtkmm/widget.h>
 #include <pangomm/layout.h>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -27,6 +28,21 @@ namespace ao::gtk
   {
     constexpr std::size_t kMaxNotificationDetailRows = 4;
     constexpr std::size_t kMaxNotificationDetailActions = 2;
+
+    constexpr char const* activityStatusKindCssClass(uimodel::ActivityStatusKind const kind) noexcept
+    {
+      switch (kind)
+      {
+        case uimodel::ActivityStatusKind::Idle: return "ao-activity-status-idle";
+        case uimodel::ActivityStatusKind::Processing: return "ao-activity-status-processing";
+        case uimodel::ActivityStatusKind::Success: return "ao-activity-status-success";
+        case uimodel::ActivityStatusKind::Info: return "ao-activity-status-info";
+        case uimodel::ActivityStatusKind::Warning: return "ao-activity-status-warning";
+        case uimodel::ActivityStatusKind::Error: return "ao-activity-status-error";
+      }
+
+      return "";
+    }
 
     void setCssClass(Gtk::Widget& widget, std::string const& cssClass, bool const enabled)
     {
@@ -154,7 +170,7 @@ namespace ao::gtk
     bool const reserveIdle = idle && _options.idleBehavior == ActivityStatusWidgetIdleBehavior::Reserve;
 
     clearKindClasses();
-    _box.add_css_class(std::string{uimodel::activityStatusKindCssClass(compact.kind)});
+    _box.add_css_class(activityStatusKindCssClass(compact.kind));
 
     _box.set_visible(!idle || reserveIdle);
 
@@ -368,12 +384,17 @@ namespace ao::gtk
 
   void ActivityStatusWidget::clearKindClasses()
   {
-    _box.remove_css_class("ao-activity-status-idle");
-    _box.remove_css_class("ao-activity-status-processing");
-    _box.remove_css_class("ao-activity-status-success");
-    _box.remove_css_class("ao-activity-status-info");
-    _box.remove_css_class("ao-activity-status-warning");
-    _box.remove_css_class("ao-activity-status-error");
+    constexpr auto kKinds = std::array{uimodel::ActivityStatusKind::Idle,
+                                       uimodel::ActivityStatusKind::Processing,
+                                       uimodel::ActivityStatusKind::Success,
+                                       uimodel::ActivityStatusKind::Info,
+                                       uimodel::ActivityStatusKind::Warning,
+                                       uimodel::ActivityStatusKind::Error};
+
+    for (auto const kind : kKinds)
+    {
+      _box.remove_css_class(activityStatusKindCssClass(kind));
+    }
   }
 
   void ActivityStatusWidget::handleDismissClicked()

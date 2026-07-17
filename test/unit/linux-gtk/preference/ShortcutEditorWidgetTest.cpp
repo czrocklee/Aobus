@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "preferences/ShortcutEditorWidget.h"
+#include "preference/ShortcutEditorWidget.h"
 
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/uimodel/input/KeyChord.h>

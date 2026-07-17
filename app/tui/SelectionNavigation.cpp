@@ -3,6 +3,8 @@
 
 #include "SelectionNavigation.h"
 
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -16,11 +18,11 @@ namespace ao::tui
   {
     if (trackCount == 0)
     {
-      return "0 tracks";
+      return uimodel::formatTrackCount(trackCount);
     }
 
     auto const visibleIndex = clampSelection(static_cast<std::size_t>(std::max(0, selectedIndex)), trackCount) + 1;
-    return std::format("{} / {} tracks", visibleIndex, trackCount);
+    return std::format("{} / {}", visibleIndex, uimodel::formatTrackCount(trackCount));
   }
 
   std::int32_t moveSelection(std::int32_t const selectedIndex, std::int32_t const delta, std::size_t const itemCount)

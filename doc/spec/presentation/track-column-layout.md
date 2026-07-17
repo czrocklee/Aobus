@@ -3,14 +3,14 @@ id: presentation.track-column-layout
 type: spec
 status: current
 domain: presentation
-summary: Defines shared track-table column roles, width solving, resizing, persistence ownership, and GTK and TUI adaptation.
+summary: Defines shared track-table column alignment, sizing, resizing, persistence ownership, and GTK and TUI adaptation.
 ---
 # Track-column layout specification
 
 ## Scope
 
-This specification owns the platform-neutral policy for track-table column sizing and user resize behavior.
-It defines fixed and flexible column roles, minimums, weighted allocation, canonical resize state, per-list GTK persistence, and terminal adaptation.
+This specification owns the platform-neutral policy for track-table column alignment, sizing, and user resize behavior.
+It defines start/end alignment, fixed and flexible column roles, minimums, weighted allocation, canonical resize state, per-list GTK persistence, and terminal adaptation.
 
 It does not choose which fields are visible or their semantic order; those are part of the [track-list presentation specification](track-presentation.md).
 It also does not own the exact serialized GTK layout fields, widget geometry, terminal hit testing, or library data.
@@ -32,6 +32,7 @@ TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units a
 
 - A **fixed column** carries a bounded value and has a concrete width.
 - A **flexible column** carries unbounded text and receives a weighted share of remaining width.
+- **Start alignment** places text at the reading-direction start; **end alignment** places bounded scalar text at the reading-direction end.
 - The **minimum width** is a hard lower bound independent of the preferred/default width.
 - A **solve specification** is one field plus its fixed width or weight, default width, and minimum width.
 - A **canonical state** is the normalized persisted representation of one column.
@@ -39,6 +40,8 @@ TUI adapts the same solver in `app/tui/TrackTable` using terminal-column units a
 ## Invariants
 
 - Every visible column receives at least its normalized minimum width.
+- Field-value alignment is one shared UIModel decision: bounded numeric, duration, technical scalar, timestamp, and display-track-number fields use end alignment; ordinary text and composite fields use start alignment.
+- GTK and TUI translate the shared start/end value without maintaining frontend-specific field sets.
 - Fixed widths are allocated before flexible widths.
 - With at least one flexible column and sufficient space, solved widths sum to the viewport width.
 - When fixed widths plus flexible minimums exceed the viewport, flexible columns remain at minimum and horizontal overflow is preserved.
@@ -107,15 +110,15 @@ Pixel and terminal-column states are not interchangeable persisted representatio
 
 ## Frontend observations
 
-GTK assigns every `Gtk::ColumnViewColumn` a solved `fixed_width` and does not use one expanding column as a substitute for the shared solver.
+GTK maps shared field alignment to its label alignment, assigns every `Gtk::ColumnViewColumn` a solved `fixed_width`, and does not use one expanding column as a substitute for the shared solver.
 It resolves the viewport from the horizontal adjustment page size, with widget width as a pre-mapping fallback.
 
-TUI converts the shared field policy to bounded terminal-column defaults and minimums.
+TUI maps shared start/end alignment to terminal-cell alignment and converts the shared field policy to bounded terminal-column defaults and minimums.
 A manually overridden TUI column is treated as fixed for the current solve while remaining text columns continue to flex.
 
 ## Implementation map
 
-- [`TrackFieldPresentationPolicy.cpp`](../../../app/uimodel/library/presentation/TrackFieldPresentationPolicy.cpp) classifies fields and supplies defaults and minimums.
+- [`TrackFieldPresentationPolicy.cpp`](../../../app/uimodel/library/presentation/TrackFieldPresentationPolicy.cpp) classifies field alignment and sizing and supplies defaults and minimums.
 - [`TrackColumnWidthSolver.cpp`](../../../app/uimodel/library/presentation/TrackColumnWidthSolver.cpp) implements allocation, conversion, resize, and canonicalization.
 - [`TrackColumnLayoutStore.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutStore.cpp) owns per-list UI-local state and change signals.
 - [`TrackColumnLayoutCodec.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutCodec.cpp) owns the versioned persistence conversion and validation.
@@ -124,7 +127,7 @@ A manually overridden TUI column is treated as fixed for the current solve while
 
 ## Test map
 
-- [`TrackFieldPresentationPolicyTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) protects field roles and default/minimum policy.
+- [`TrackFieldPresentationPolicyTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) protects field alignment, sizing roles, and default/minimum policy.
 - [`TrackColumnWidthSolverTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnWidthSolverTest.cpp) protects distribution, overflow, convergence, resize, and canonical state.
 - [`TrackColumnLayoutStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutStoreTest.cpp) protects per-list state and notification behavior.
 - [`TrackColumnLayoutCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutCodecTest.cpp) protects stable ids, canonical dimensions, and whole-object rejection.

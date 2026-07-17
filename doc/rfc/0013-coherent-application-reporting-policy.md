@@ -34,15 +34,21 @@ Message strings are also doing too much work.
 Several callers choose severity, aggregation, or displayed context at the same site that formats a diagnostic log.
 That makes cross-frontend equivalence and localization difficult and encourages policy to follow text rather than typed operation outcomes.
 
+Concrete shared paths already depend on this accidental text protocol.
+Library activity projection recognizes scans and metadata updates by matching the English prefixes `Scanning:` and `Updating:`.
+Playback sequence recovery formats `1 unplayable track` versus `N unplayable tracks` inside runtime, while notification `templateId` survives service state without being consumed by UIModel.
+Scan/task outcomes retain structured counts elsewhere, but presentation paths collapse those facts into prose before the shared reporting boundary.
+
 ## Dependencies
 
 - Hard: None.
 - Conditional: None.
-- Integration: [RFC 0003](0003-library-mutation-pipeline.md), [RFC 0004](0004-scalable-library-tasks.md), [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0011](0011-executor-affine-reporting-feed.md).
+- Integration: [RFC 0003](0003-library-mutation-pipeline.md), [RFC 0004](0004-scalable-library-tasks.md), [RFC 0005](0005-coherent-playback-boundary.md), [RFC 0011](0011-executor-affine-reporting-feed.md), [RFC 0030](0030-structured-presentation-vocabulary.md).
 
 RFCs 0003 and 0004 introduce library mutation/task owners whose outcomes must have one reporting disposition.
 RFC 0005 reallocates playback application ownership.
 RFC 0011 changes the accepted feed command and lifetime surface.
+RFC 0030 owns shared interactive copy, pluralization, and typed template resolution in UIModel.
 This policy can be implemented against current services, but joint implementations align at those owner boundaries.
 
 ## Goals
@@ -55,6 +61,8 @@ This policy can be implemented against current services, but joint implementatio
 - Make cross-frontend reporting behavior equivalent where the underlying operation is shared.
 - Keep platform-specific presentation and command-scoped CLI output at application leaves.
 - Provide a reviewable migration path for existing direct notification and log call sites.
+- Keep progress, partial-success, skip, and completion facts structured until the shared presentation owner formats them.
+- Eliminate message-prefix parsing and require every retained template id to have a real consumer.
 
 ## Non-goals
 
@@ -84,7 +92,7 @@ The matrix identifies one primary user-facing disposition and prevents independe
 ### One semantic reporting owner
 
 The runtime domain service that owns recovery also owns reporting disposition for shared application behavior.
-It may delegate final text/template selection to UIModel, but it publishes a typed operation outcome with enough context to make that mapping deterministic.
+It publishes a typed operation outcome with enough context for UIModel to select final shared text and template expansion deterministically through RFC 0030's catalog.
 
 Frontend workflows own reporting only for platform-local operations such as portal interaction or toolkit resource failure.
 When a GTK or TUI workflow merely adapts a shared runtime operation, it renders or forwards the runtime-owned outcome and does not create an independent semantic report.
@@ -104,7 +112,7 @@ OperationReport
   operation/correlation identity
   severity class
   lifetime class
-  template or message key
+  template id
   typed display arguments
   optional progress
   optional typed actions
@@ -119,6 +127,32 @@ A narrow reporting adapter owned by application runtime accepts an already-class
 It does not accept arbitrary `Error` and cannot infer a disposition from error code or message.
 
 Operations selecting `Inline`, `Observed`, or `DiagnosticOnly` do not construct this value merely for uniformity.
+
+### Structured progress and summaries
+
+Shared operation intent carries facts, not prose that another layer must parse.
+The first migrations define domain-specific values equivalent to:
+
+```text
+LibraryTaskReport
+  operation kind: scan, metadata-update, import, export, ...
+  disposition: active, completed, completed-with-issues, failed
+  added, updated, removed, skipped, failed counts where applicable
+  progress totals where applicable
+
+PlaybackSkipReport
+  skipped count
+  whether the failure threshold stopped traversal
+  typed recovery/failure class when needed for action selection
+```
+
+The values may share common report-intent concepts, but they do not become an untyped bag of string arguments.
+The operation owner chooses aggregation, completion disposition, and actions from typed outcomes.
+UIModel maps the report/template id and arguments to shared interactive text and pluralization through RFC 0030.
+
+The reporting feed retains the accepted structured value under RFC 0011 and never infers operation kind from title or message text.
+GTK and TUI render the same semantic summary through their own surfaces.
+CLI commands continue to map typed results to command-scoped stdout/stderr and exit status rather than depending on UIModel copy.
 
 ### Structured diagnostics without duplication
 
@@ -150,6 +184,9 @@ The first migration targets shared domain operations currently reported in front
 - track/list mutation completion and failure;
 - workspace restore/checkpoint failures;
 - playback recovery and route/device failures.
+
+The inventory separately marks preformatted shared summaries and every read/write of notification `templateId`.
+Library activity prefix matching and runtime playback pluralization migrate with their typed task/skip report families rather than as isolated string edits.
 
 Platform integration paths such as portal cancellation, MPRIS availability, optional CSS, and toolkit resource failures remain frontend-owned but gain explicit `DiagnosticOnly`, `Inline`, or `FatalLeaf` classification.
 
@@ -212,6 +249,9 @@ If not, it adapts to the current `NotificationService` surface without changing 
 - Diagnostic-only fallback produces structured log evidence and no feed entry.
 - Feed dispositions preserve operation identity, severity, lifetime, typed arguments, action ids, and aggregation key through the adapter.
 - Playback skip walks and scalable library tasks aggregate lower failures at the owner-selected granularity.
+- Library activity tests cover active/completed/partial/failure summaries with exact structured counts and no English prefix matching.
+- Playback tests cover singular, plural, threshold-stop, and continued-traversal cases without runtime-authored shared prose.
+- Every retained report template id is consumed by UIModel or rejected through an explicit unknown-template path; no inert compatibility field remains.
 - GTK and TUI tests prove equivalent semantic visibility for shared operations.
 - CLI tests retain command stderr and exit behavior without requiring the runtime feed.
 - Cancellation and stale observation paths remain silent unless explicitly specified.
@@ -220,7 +260,6 @@ If not, it adapts to the current `NotificationService` surface without changing 
 
 ## Open questions
 
-- Which layer owns final message/template selection for each shared report: runtime, UIModel, or a localization-aware presentation adapter?
 - Is one general `OperationReport` value preferable to small domain-specific report intents sharing common concepts?
 - Which current log-only failures are genuinely best-effort and which represent missing user visibility?
 - Should diagnostic correlation ids be generated per command, per async task, or only when both user and diagnostic channels are selected?
@@ -235,5 +274,6 @@ Update the [outcome channel specification](../spec/failure/outcome-channel.md) o
 Add a reporting-disposition specification and update each affected library, playback, presentation, and frontend specification with its operation matrix.
 Update the [workspace navigation](../spec/workspace/navigation.md), [workspace session](../spec/workspace/session.md), and [GTK active-library lifecycle](../spec/linux-gtk/active-library-lifecycle.md) specifications for the operation dispositions they own.
 Update the notification feed specification/reference only for implemented report-intent fields and adapter behavior, coordinating with RFC 0011 when applicable.
+Coordinate shared report templates, typed arguments, and pluralization with RFC 0030's presentation specifications and references.
 Add development guidance and repository checks for reporting-owner review, direct feed posts, structured diagnostics, and cross-frontend behavior tests.
 Record a decision if the accepted typed-intent shape and owner model has durable alternatives worth preserving.

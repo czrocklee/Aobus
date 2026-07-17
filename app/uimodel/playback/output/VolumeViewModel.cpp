@@ -73,7 +73,7 @@ namespace ao::uimodel
       .volume = state.volume.level,
       .isHardwareAssisted = state.volume.hardwareAssisted,
       .muted = state.volume.muted,
-      .iconName = resolveIconName(state.volume.level, state.volume.muted),
+      .indicatorKind = resolveIndicatorKind(state.volume.level, state.volume.muted),
       .tooltip = resolveTooltip(state.volume.level, state.volume.muted, state.volume.hardwareAssisted),
     };
 
@@ -101,11 +101,11 @@ namespace ao::uimodel
     return std::clamp(currentVolume + delta, 0.0F, 1.0F);
   }
 
-  std::string VolumeViewModel::resolveIconName(float volume, bool muted)
+  VolumeIndicatorKind VolumeViewModel::resolveIndicatorKind(float const volume, bool const muted) noexcept
   {
     if (muted || volume <= 0.0F)
     {
-      return "audio-volume-muted-symbolic";
+      return VolumeIndicatorKind::Muted;
     }
 
     constexpr float kLowVolumeThreshold = 0.33F;
@@ -113,15 +113,15 @@ namespace ao::uimodel
 
     if (volume <= kLowVolumeThreshold)
     {
-      return "audio-volume-low-symbolic";
+      return VolumeIndicatorKind::Low;
     }
 
     if (volume <= kMediumVolumeThreshold)
     {
-      return "audio-volume-medium-symbolic";
+      return VolumeIndicatorKind::Medium;
     }
 
-    return "audio-volume-high-symbolic";
+    return VolumeIndicatorKind::High;
   }
 
   std::string VolumeViewModel::resolveTooltip(float volume, bool muted, bool isHardwareAssisted)

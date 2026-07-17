@@ -25,7 +25,7 @@ The GTK `ComponentRegistry` and `ActionRegistry` attach concrete factories and h
 Each component descriptor contains `type`, `displayName`, `category`, `props`, `layoutProps`, `minChildren`, optional `optMaxChildren`, `surfaces`, and `actionPolicy`.
 
 Property descriptors contain `name`, `kind`, `label`, `defaultValue`, `enumValues`, optional action-binding metadata, and an optional default action id.
-Property kinds are `Bool`, `Int`, `Double`, `String`, `Enum`, `StringList`, `CssClassList`, and `Size`.
+Property kinds are `Bool`, `Int`, `Double`, `String`, `Enum`, `StringList`, and `Size`.
 Categories are `Container`, `Decorator`, `Track`, `Playback`, `Status`, `Generic`, `Application`, `Library`, and `Layout`.
 Surface capabilities are `Main` and `Tooltip`.
 

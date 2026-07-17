@@ -255,7 +255,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`ErrorTest.cpp`](../../test/unit/core/ErrorTest.cpp), [`ExceptionTest.cpp`](../../test/unit/core/ExceptionTest.cpp), and subsystem error tests under [`test/unit/`](../../test/unit) protect shared values, source locations, and translation boundaries.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) and [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) protect cancellation, executor return, single-owner exception completion, injected diagnostics, and owner lifetime.
 - [`UiWorkflowTest.cpp`](../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
-- [`LogTest.cpp`](../../test/unit/utility/LogTest.cpp) protects the retained application-log adapter.
+- [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects the retained application-log adapter.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, revision, and observation.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSequenceServiceTest.cpp`](../../test/unit/runtime/PlaybackSequenceServiceTest.cpp) protect typed failure correlation, recovery ownership, and notification aggregation.
 - Activity-status tests under [`test/unit/uimodel/status/activity/`](../../test/unit/uimodel/status/activity) protect the runtime-feed to UIModel boundary and presentation-local suppression.

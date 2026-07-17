@@ -18,7 +18,6 @@ add_executable(ao_core_test
     unit/utility/Base64Test.cpp
     unit/utility/Xxh3Test.cpp
     unit/utility/MappedFileTest.cpp
-    unit/utility/LogTest.cpp
     unit/utility/ByteViewTest.cpp
     unit/utility/StringArenaTest.cpp
     unit/utility/StrongTypeTest.cpp
@@ -161,7 +160,8 @@ add_executable(ao_core_test
     unit/uimodel/input/KeyChordTest.cpp
     unit/uimodel/input/KeymapModelTest.cpp
     unit/uimodel/input/KeymapStoreTest.cpp
-    unit/uimodel/preferences/PreferencesEditorModelTest.cpp
+    unit/uimodel/preference/PreferencesEditorModelTest.cpp
+    unit/uimodel/preference/ThemePresetTest.cpp
     unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
     unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
     unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
@@ -196,6 +196,7 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TrackAuthoringSessionTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/track/TrackCountFormatterTest.cpp
     unit/uimodel/library/track/TrackFilterCompleterTest.cpp
     unit/uimodel/library/track/TrackFilterResolverTest.cpp
     unit/uimodel/library/track/TrackFilterViewModelTest.cpp
@@ -220,7 +221,6 @@ add_executable(ao_core_test
     unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp
 
     # app unit tests (no platform deps)
-    unit/runtime/AppPrefsStateTest.cpp
     unit/runtime/AsyncParallelTest.cpp
     unit/runtime/AsyncRuntimeTest.cpp
     unit/runtime/library/LibraryPathsTest.cpp
@@ -229,6 +229,7 @@ add_executable(ao_core_test
     unit/runtime/StorageResultTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
+    unit/runtime/LogTest.cpp
     unit/runtime/LoopExecutorTest.cpp
     unit/runtime/source/SmartListEvaluatorBatchTest.cpp
     unit/runtime/source/SmartListEvaluatorExpressionTest.cpp
@@ -459,7 +460,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
-    unit/linux-gtk/preferences/ShortcutEditorWidgetTest.cpp
+    unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp
     unit/linux-gtk/app/GtkStyleRuntimeTest.cpp
@@ -470,7 +471,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ShellLayoutStoreTest.cpp
     unit/linux-gtk/app/ShellLayoutControllerTest.cpp
     unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp
-    unit/linux-gtk/preferences/PreferencesWindowTest.cpp
+    unit/linux-gtk/preference/PreferencesWindowTest.cpp
     unit/linux-gtk/track/TrackListModelTest.cpp
     unit/linux-gtk/track/TrackSelectionControllerTest.cpp
     unit/linux-gtk/track/TrackPageHostTest.cpp

@@ -96,6 +96,8 @@ namespace ao::gtk::test
       auto dialog = TrackPropertiesDialog{window, runtime.library(), runtime.completion(), cache, {trackId1, trackId2}};
       drainGtkEvents();
 
+      CHECK(dialog.get_title() == "Properties — 2 tracks selected");
+
       // Title and artist differ across the two tracks. UIModel owns the mixed-state decision; this
       // adapter test only asserts that the dialog reflects that row view in GTK widgets.
       auto const entries = collectAll<Gtk::Entry>(dialog);

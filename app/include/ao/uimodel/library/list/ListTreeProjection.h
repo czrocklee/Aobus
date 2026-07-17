@@ -18,7 +18,7 @@ namespace ao::uimodel
     ListId id = kInvalidListId;
     ListId parentId = kInvalidListId;
     std::string name;
-    bool isSmart = false;
+    rt::ListNodeKind kind = rt::ListNodeKind::Folder;
     std::string localExpression = {};
     std::vector<ListId> childIds = {};
   };

@@ -41,8 +41,8 @@ add_library(aobus-gtk-lib STATIC
     platform/MprisArtUrlCache.cpp
     platform/MprisBridge.cpp
 
-    preferences/ShortcutEditorWidget.cpp
-    preferences/PreferencesWindow.cpp
+    preference/ShortcutEditorWidget.cpp
+    preference/PreferencesWindow.cpp
 
     common/DismissController.cpp
 
@@ -84,7 +84,6 @@ add_library(aobus-gtk-lib STATIC
     playback/OutputDevicePopover.cpp
     playback/VolumeControlWidget.cpp
     playback/SeekControlWidget.cpp
-    playback/VolumeBar.cpp
 
     image/ImageCache.cpp
     image/ResourceImageController.cpp

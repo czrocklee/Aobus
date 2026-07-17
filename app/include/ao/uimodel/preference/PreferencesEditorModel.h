@@ -5,6 +5,7 @@
 
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <cstdint>
 #include <functional>
@@ -27,7 +28,7 @@ namespace ao::uimodel
   {
   public:
     using PersistCallback = std::function<void(rt::AppPrefsState const&, PreferencesChange)>;
-    using ThemeApplyCallback = std::function<void(rt::ThemePresetId)>;
+    using ThemeApplyCallback = std::function<void(ThemePreset)>;
     using OutputApplyCallback = std::function<void(rt::OutputDeviceSelection const&)>;
 
     explicit PreferencesEditorModel(rt::AppPrefsState prefs,
@@ -37,7 +38,7 @@ namespace ao::uimodel
 
     rt::AppPrefsState const& preferences() const noexcept { return _prefs; }
 
-    void setTheme(rt::ThemePresetId theme);
+    void setTheme(ThemePreset theme);
     void setLayoutPreset(std::string_view presetId);
     void setOutputDeviceConfirmed(rt::OutputDeviceSelection const& selection);
 

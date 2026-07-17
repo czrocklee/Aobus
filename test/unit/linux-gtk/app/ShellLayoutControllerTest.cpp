@@ -23,6 +23,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
@@ -160,7 +161,7 @@ namespace ao::gtk::test
 
       dialog->setSelectedThemeId("modern");
       drainGtkEvents();
-      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Modern);
+      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Modern);
 
       auto* const cancelButton = findButtonByLabel(*dialog, "Cancel");
       REQUIRE(cancelButton != nullptr);
@@ -170,7 +171,7 @@ namespace ao::gtk::test
       auto savedPrefs = rt::AppPrefsState{};
       configStorePtr->loadAppPrefs(savedPrefs);
       CHECK(savedPrefs.lastThemePreset == "classic");
-      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Classic);
+      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
     }
 
     SECTION("layout editor save does not persist the previewed theme")
@@ -193,7 +194,7 @@ namespace ao::gtk::test
 
       dialog->setSelectedThemeId("modern");
       drainGtkEvents();
-      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Modern);
+      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Modern);
 
       auto* const saveButton = findButtonByLabel(*dialog, "Save");
       REQUIRE(saveButton != nullptr);
@@ -204,7 +205,7 @@ namespace ao::gtk::test
       configStorePtr->loadAppPrefs(savedPrefs);
       CHECK(savedPrefs.lastLayoutPreset == "classic");
       CHECK(savedPrefs.lastThemePreset == "classic");
-      CHECK(themeCoordinator.activeTheme() == rt::ThemePresetId::Classic);
+      CHECK(themeCoordinator.activeTheme() == uimodel::ThemePreset::Classic);
     }
 
     SECTION("attachToWindow exports actions and refreshExportedActions works")

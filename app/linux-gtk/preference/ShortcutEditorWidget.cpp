@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "preferences/ShortcutEditorWidget.h"
+#include "preference/ShortcutEditorWidget.h"
 
 #include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"

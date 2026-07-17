@@ -3,7 +3,8 @@
 
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/preferences/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <string_view>
 #include <utility>
@@ -39,9 +40,9 @@ namespace ao::uimodel
   {
   }
 
-  void PreferencesEditorModel::setTheme(rt::ThemePresetId const theme)
+  void PreferencesEditorModel::setTheme(ThemePreset const theme)
   {
-    _prefs.lastThemePreset = rt::themePresetToString(theme);
+    _prefs.lastThemePreset = themePresetId(theme);
 
     if (_persist)
     {

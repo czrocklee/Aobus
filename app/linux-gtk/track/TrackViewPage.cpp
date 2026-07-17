@@ -31,6 +31,7 @@
 #include <ao/uimodel/field/TrackInlineEdit.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/library/track/TrackCountFormatter.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -55,7 +56,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -68,11 +68,6 @@ namespace ao::gtk
 {
   namespace
   {
-    std::string trackCountLabel(::guint count)
-    {
-      return std::format("{} {}", count, count == 1 ? "track" : "tracks");
-    }
-
     void configureSectionLabel(Gtk::Label& label)
     {
       label.set_halign(Gtk::Align::START);
@@ -194,7 +189,7 @@ namespace ao::gtk
         _secondaryLabel.set_text(snap.secondaryText);
         _tertiaryLabel.set_text(snap.tertiaryText);
 
-        if (auto const countText = "(" + trackCountLabel(count) + ")";
+        if (auto const countText = "(" + uimodel::formatTrackCount(count) + ")";
             snap.secondaryText.empty() && snap.tertiaryText.empty())
         {
           _countLabel.set_text(countText);

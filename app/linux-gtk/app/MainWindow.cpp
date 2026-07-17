@@ -19,12 +19,12 @@
 #include "portal/ImportExportCoordinator.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
@@ -246,7 +246,7 @@ namespace ao::gtk
     }
   }
 
-  void MainWindow::applyTheme(rt::ThemePresetId const theme)
+  void MainWindow::applyTheme(uimodel::ThemePreset const theme)
   {
     if (auto* const themeCoordinator = _mainWindowCoordinatorPtr->themeCoordinator(); themeCoordinator != nullptr)
     {

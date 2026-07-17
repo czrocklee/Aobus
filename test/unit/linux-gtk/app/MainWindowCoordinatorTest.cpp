@@ -34,6 +34,7 @@
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -79,7 +80,7 @@ namespace ao::gtk::test
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
 
-    coordinator.themeCoordinator()->setTheme(rt::ThemePresetId::Classic);
+    coordinator.themeCoordinator()->setTheme(uimodel::ThemePreset::Classic);
     coordinator.saveSession();
 
     auto loadedPrefs = rt::AppPrefsState{};

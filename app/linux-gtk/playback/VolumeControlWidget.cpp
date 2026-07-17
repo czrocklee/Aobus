@@ -21,6 +21,22 @@
 
 namespace ao::gtk
 {
+  namespace
+  {
+    char const* volumeIndicatorIconName(uimodel::VolumeIndicatorKind const indicatorKind) noexcept
+    {
+      switch (indicatorKind)
+      {
+        case uimodel::VolumeIndicatorKind::Muted: return "audio-volume-muted-symbolic";
+        case uimodel::VolumeIndicatorKind::Low: return "audio-volume-low-symbolic";
+        case uimodel::VolumeIndicatorKind::Medium: return "audio-volume-medium-symbolic";
+        case uimodel::VolumeIndicatorKind::High: return "audio-volume-high-symbolic";
+      }
+
+      return "";
+    }
+  } // namespace
+
   VolumeControlWidget::VolumeControlWidget(rt::PlaybackService& playbackService)
     : _volumeViewModel{playbackService, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
   {
@@ -162,7 +178,7 @@ namespace ao::gtk
     {
       _updating = true;
       _button.set_tooltip_text(view.tooltip);
-      _icon.set_from_icon_name(view.iconName);
+      _icon.set_from_icon_name(volumeIndicatorIconName(view.indicatorKind));
 
       _scale.set_value(view.volume);
       _muteButton.set_active(view.muted);

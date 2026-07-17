@@ -17,6 +17,7 @@ namespace ao::tui::test
   TEST_CASE("SelectionNavigation - summary is one-based and bounded", "[tui][unit][selection]")
   {
     CHECK(selectionSummary(0, 0) == "0 tracks");
+    CHECK(selectionSummary(1, 0) == "1 / 1 track");
     CHECK(selectionSummary(12, 0) == "1 / 12 tracks");
     CHECK(selectionSummary(12, 99) == "12 / 12 tracks");
     CHECK(selectionSummary(12, -4) == "1 / 12 tracks");

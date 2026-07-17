@@ -3,7 +3,7 @@
 
 #include "app/ThemePreset.h"
 
-#include <ao/rt/AppPrefsState.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -11,7 +11,7 @@ namespace ao::gtk::test
 {
   TEST_CASE("ThemePreset - maps GTK CSS classes for each preset", "[gtk][unit][app][theme]")
   {
-    CHECK(themeCssClass(rt::ThemePresetId::Classic) == "ao-theme-classic");
-    CHECK(themeCssClass(rt::ThemePresetId::Modern) == "ao-theme-modern");
+    CHECK(themeCssClass(uimodel::ThemePreset::Classic) == "ao-theme-classic");
+    CHECK(themeCssClass(uimodel::ThemePreset::Modern) == "ao-theme-modern");
   }
 } // namespace ao::gtk::test

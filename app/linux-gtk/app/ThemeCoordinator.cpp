@@ -5,6 +5,7 @@
 #include "app/AppConfigStore.h"
 #include "app/ThemePreset.h"
 #include <ao/rt/AppPrefsState.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <glib-object.h>
 #include <glibmm/objectbase.h>
@@ -102,18 +103,18 @@ namespace ao::gtk
   {
     auto prefs = rt::AppPrefsState{};
     configStore.loadAppPrefs(prefs);
-    _activePreset = rt::themePresetFromString(prefs.lastThemePreset);
+    _activePreset = uimodel::themePresetFromId(prefs.lastThemePreset);
   }
 
   void ThemeCoordinator::save(AppConfigStore& configStore) const
   {
     auto prefs = rt::AppPrefsState{};
     configStore.loadAppPrefs(prefs);
-    prefs.lastThemePreset = std::string{rt::themePresetToString(_activePreset)};
+    prefs.lastThemePreset = std::string{uimodel::themePresetId(_activePreset)};
     configStore.saveAppPrefs(prefs);
   }
 
-  void ThemeCoordinator::setTheme(rt::ThemePresetId preset)
+  void ThemeCoordinator::setTheme(uimodel::ThemePreset preset)
   {
     if (_activePreset == preset)
     {
@@ -135,7 +136,7 @@ namespace ao::gtk
     }
   }
 
-  rt::ThemePresetId ThemeCoordinator::activeTheme() const noexcept
+  uimodel::ThemePreset ThemeCoordinator::activeTheme() const noexcept
   {
     return _activePreset;
   }
@@ -212,14 +213,14 @@ namespace ao::gtk
                   });
   }
 
-  void ThemeCoordinator::applyThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const
+  void ThemeCoordinator::applyThemeClass(Gtk::Widget& widget, uimodel::ThemePreset preset) const
   {
-    removeThemeClass(widget, rt::ThemePresetId::Classic);
-    removeThemeClass(widget, rt::ThemePresetId::Modern);
+    removeThemeClass(widget, uimodel::ThemePreset::Classic);
+    removeThemeClass(widget, uimodel::ThemePreset::Modern);
     widget.add_css_class(std::string{themeCssClass(preset)});
   }
 
-  void ThemeCoordinator::removeThemeClass(Gtk::Widget& widget, rt::ThemePresetId preset) const
+  void ThemeCoordinator::removeThemeClass(Gtk::Widget& widget, uimodel::ThemePreset preset) const
   {
     widget.remove_css_class(std::string{themeCssClass(preset)});
   }

@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "preferences/ShortcutEditorWidget.h"
+#include "preference/ShortcutEditorWidget.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/preferences/PreferencesEditorModel.h>
+#include <ao/uimodel/preference/PreferencesEditorModel.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/comboboxtext.h>
