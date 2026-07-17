@@ -4,6 +4,7 @@
 #include "FilesystemTestSupport.h"
 
 #include <aclapi.h>
+#include <catch2/catch_test_macros.hpp>
 #include <windows.h>
 
 #include <array>
@@ -70,6 +71,18 @@ namespace ao::test
     std::system_error windowsError(DWORD code, char const* operation)
     {
       return std::system_error{static_cast<std::int32_t>(code), std::system_category(), operation};
+    }
+
+    bool symlinkCreationIsUnavailable(std::error_code const& ec) noexcept
+    {
+      if (ec.category() != std::system_category())
+      {
+        return false;
+      }
+
+      auto const error = static_cast<DWORD>(ec.value());
+      return error == ERROR_PRIVILEGE_NOT_HELD || error == ERROR_ACCESS_DENIED || error == ERROR_NOT_SUPPORTED ||
+             error == ERROR_INVALID_FUNCTION;
     }
 
     std::vector<std::byte> currentUserToken()
@@ -224,6 +237,51 @@ namespace ao::test
     }
 
     return userHasFullControl && systemHasFullControl;
+  }
+
+  SymlinkFixture::SymlinkFixture(std::filesystem::path target, std::filesystem::path link, SymlinkType const type)
+    : _link{std::move(link)}
+  {
+    auto ec = std::error_code{};
+
+    if (type == SymlinkType::Directory)
+    {
+      std::filesystem::create_directory_symlink(target, _link, ec);
+    }
+    else
+    {
+      std::filesystem::create_symlink(target, _link, ec);
+    }
+
+    if (!ec)
+    {
+      _created = true;
+      return;
+    }
+
+    if (symlinkCreationIsUnavailable(ec))
+    {
+      SKIP("symlink fixture is unavailable: " << ec.message());
+    }
+
+    throw std::system_error{ec, "failed to create symlink fixture"};
+  }
+
+  SymlinkFixture::~SymlinkFixture() noexcept
+  {
+    if (!_created)
+    {
+      return;
+    }
+
+    auto ec = std::error_code{};
+    std::filesystem::remove(_link, ec);
+
+    if (ec)
+    {
+      // NOLINTNEXTLINE(modernize-use-std-print): C I/O cannot throw from this noexcept cleanup path.
+      std::fprintf(stderr, "Aobus test symlink cleanup failed (error %d)\n", ec.value());
+    }
   }
 
   struct ScopedDirectoryAccessGuard::Impl final

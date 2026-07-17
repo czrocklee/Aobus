@@ -3,6 +3,7 @@
 
 #include "FilesystemTestSupport.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -21,6 +22,11 @@ namespace ao::test
     bool isAccessDenied(std::error_code const& ec)
     {
       return ec == std::errc::permission_denied || ec == std::errc::operation_not_permitted;
+    }
+
+    bool symlinkCreationIsUnavailable(std::error_code const& ec)
+    {
+      return isAccessDenied(ec) || ec == std::errc::function_not_supported || ec == std::errc::read_only_file_system;
     }
 
     bool readRestrictionIsEffective(std::filesystem::path const& path)
@@ -90,6 +96,51 @@ namespace ao::test
     auto const ownerReadWrite = std::filesystem::perms::owner_read | std::filesystem::perms::owner_write;
     auto const broadAccess = permissions & (std::filesystem::perms::group_all | std::filesystem::perms::others_all);
     return ownerAccess == ownerReadWrite && broadAccess == std::filesystem::perms::none;
+  }
+
+  SymlinkFixture::SymlinkFixture(std::filesystem::path target, std::filesystem::path link, SymlinkType const type)
+    : _link{std::move(link)}
+  {
+    auto ec = std::error_code{};
+
+    if (type == SymlinkType::Directory)
+    {
+      std::filesystem::create_directory_symlink(target, _link, ec);
+    }
+    else
+    {
+      std::filesystem::create_symlink(target, _link, ec);
+    }
+
+    if (!ec)
+    {
+      _created = true;
+      return;
+    }
+
+    if (symlinkCreationIsUnavailable(ec))
+    {
+      SKIP("symlink fixture is unavailable: " << ec.message());
+    }
+
+    throw std::system_error{ec, "failed to create symlink fixture"};
+  }
+
+  SymlinkFixture::~SymlinkFixture() noexcept
+  {
+    if (!_created)
+    {
+      return;
+    }
+
+    auto ec = std::error_code{};
+    std::filesystem::remove(_link, ec);
+
+    if (ec)
+    {
+      // NOLINTNEXTLINE(modernize-use-std-print): C I/O cannot throw from this noexcept cleanup path.
+      std::fprintf(stderr, "Aobus test symlink cleanup failed (error %d)\n", ec.value());
+    }
   }
 
   struct ScopedDirectoryAccessGuard::Impl final

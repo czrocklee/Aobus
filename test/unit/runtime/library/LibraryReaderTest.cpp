@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -252,7 +253,7 @@ namespace ao::rt::test
     auto const outsideRoot = temp.path() / "outside";
     std::filesystem::create_directories(musicRoot);
     std::filesystem::create_directories(outsideRoot);
-    std::filesystem::create_directory_symlink(outsideRoot, musicRoot / "alias");
+    auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
     auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     auto const trackId = library::test::addTrack(ml, library::test::makeEmptyTrackSpec("alias/song.flac"));
 

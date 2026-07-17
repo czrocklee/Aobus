@@ -557,7 +557,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(outsideRoot);
     auto const outsideFile = outsideRoot / "outside.flac";
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), outsideFile);
-    std::filesystem::create_symlink(outsideFile, musicRoot / "alias.flac");
+    auto const symlink = ao::test::SymlinkFixture{outsideFile, musicRoot / "alias.flac", ao::test::SymlinkType::File};
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     putManifestEntry(library, "alias.flac", TrackId{42}, AudioIdentity{});
@@ -578,7 +578,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     auto const actualFile = musicRoot / "actual.flac";
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), actualFile);
-    std::filesystem::create_symlink(actualFile, musicRoot / "alias.flac");
+    auto const symlink = ao::test::SymlinkFixture{actualFile, musicRoot / "alias.flac", ao::test::SymlinkType::File};
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     auto const plan = ScanPlanBuilder{library}.buildPlan().value();
@@ -598,7 +598,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     std::filesystem::create_directories(outsideRoot);
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), outsideRoot / "song.flac");
-    std::filesystem::create_directory_symlink(outsideRoot, musicRoot / "alias");
+    auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     putManifestEntry(library, "alias/song.flac", TrackId{42}, AudioIdentity{});

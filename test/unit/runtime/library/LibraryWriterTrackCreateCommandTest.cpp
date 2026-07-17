@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -170,7 +171,7 @@ namespace ao::rt::test
         output << "outside";
       }
       auto const alias = libraryFixture.root() / "alias.flac";
-      std::filesystem::create_symlink(outsideFile, alias);
+      auto const symlink = ao::test::SymlinkFixture{outsideFile, alias, ao::test::SymlinkType::File};
 
       auto const trackIdResult = writer.createTrackFromFile(alias);
       REQUIRE_FALSE(trackIdResult);

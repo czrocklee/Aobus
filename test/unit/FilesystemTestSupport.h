@@ -21,6 +21,32 @@ namespace ao::test
     Write,
   };
 
+  enum class SymlinkType : std::uint8_t
+  {
+    File,
+    Directory,
+  };
+
+  /**
+   * Owns one test symlink and skips the current Catch2 case when the host
+   * explicitly lacks symlink creation support or permission.
+   */
+  class [[nodiscard]] SymlinkFixture final
+  {
+  public:
+    SymlinkFixture(std::filesystem::path target, std::filesystem::path link, SymlinkType type);
+    ~SymlinkFixture() noexcept;
+
+    SymlinkFixture(SymlinkFixture const&) = delete;
+    SymlinkFixture& operator=(SymlinkFixture const&) = delete;
+    SymlinkFixture(SymlinkFixture&&) = delete;
+    SymlinkFixture& operator=(SymlinkFixture&&) = delete;
+
+  private:
+    std::filesystem::path _link;
+    bool _created = false;
+  };
+
   /**
    * Temporarily denies one kind of access to a test directory and restores the
    * original platform permissions on destruction.

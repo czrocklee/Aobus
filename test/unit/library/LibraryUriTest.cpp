@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
@@ -78,7 +79,7 @@ namespace ao::library::test
     }
   }
 
-  TEST_CASE("LibraryUri - resolution accepts missing paths and in-root symlinks", "[library][unit][uri]")
+  TEST_CASE("LibraryUri - resolution accepts missing roots and ordinary missing suffixes", "[library][unit][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const missingRoot = temp.path() / "future-music";
@@ -89,15 +90,21 @@ namespace ao::library::test
     CHECK(*future == missingRoot / "future" / "song.flac");
 
     auto const root = temp.path() / "music";
-    auto const album = root / "album";
-    std::filesystem::create_directories(album);
-    std::filesystem::create_directory_symlink(album, root / "alias");
-
+    std::filesystem::create_directories(root);
     auto const directUri = LibraryUri::parse("upcoming/song.flac");
     REQUIRE(directUri);
     auto const direct = directUri->resolveUnder(root);
     REQUIRE(direct);
     CHECK(*direct == root / "upcoming" / "song.flac");
+  }
+
+  TEST_CASE("LibraryUri - resolution accepts in-root symlinks", "[library][unit][uri]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    auto const album = root / "album";
+    std::filesystem::create_directories(album);
+    auto const symlink = ao::test::SymlinkFixture{album, root / "alias", ao::test::SymlinkType::Directory};
 
     auto const aliasUri = LibraryUri::parse("alias/song.flac");
     REQUIRE(aliasUri);
@@ -113,7 +120,7 @@ namespace ao::library::test
     auto const outside = temp.path() / "outside";
     std::filesystem::create_directories(root);
     std::filesystem::create_directories(outside);
-    std::filesystem::create_directory_symlink(outside, root / "alias");
+    auto const symlink = ao::test::SymlinkFixture{outside, root / "alias", ao::test::SymlinkType::Directory};
     auto const uri = LibraryUri::parse("alias/song.flac");
 
     REQUIRE(uri);
@@ -129,7 +136,8 @@ namespace ao::library::test
     auto const outside = temp.path() / "outside";
     std::filesystem::create_directories(root);
     std::filesystem::create_directories(outside);
-    std::filesystem::create_directory_symlink(outside / "missing", root / "alias");
+    auto const symlink =
+      ao::test::SymlinkFixture{outside / "missing", root / "alias", ao::test::SymlinkType::Directory};
     auto const uri = LibraryUri::parse("alias/song.flac");
 
     REQUIRE(uri);
@@ -144,7 +152,7 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     auto const root = temp.path() / "music";
     std::filesystem::create_directories(root);
-    std::filesystem::create_directory_symlink(root, root / "self");
+    auto const symlink = ao::test::SymlinkFixture{root, root / "self", ao::test::SymlinkType::Directory};
     auto const uri = LibraryUri::parse("self");
 
     REQUIRE(uri);

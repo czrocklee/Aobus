@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -74,7 +75,8 @@ namespace ao::rt::test
     auto const outside = ao::test::TempDir{};
     auto const outsideFile = outside.path() / "song.flac";
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), outsideFile);
-    std::filesystem::create_directory_symlink(outside.path(), fixture.libraryFixture.root() / "alias");
+    auto const symlink = ao::test::SymlinkFixture{
+      outside.path(), fixture.libraryFixture.root() / "alias", ao::test::SymlinkType::Directory};
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Outside", .uri = "alias/song.flac"});
 
     auto const result = fixture.playbackService.playTrack(trackId, ListId{7});

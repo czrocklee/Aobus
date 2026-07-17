@@ -3,6 +3,7 @@
 
 #include "runtime/library/AudioIdentityBatchWriter.h"
 #include "runtime/library/ScanApplyOperation.h"
+#include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -352,7 +353,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(musicRoot);
     std::filesystem::create_directories(outsideRoot);
     copyFixture(outsideRoot, "song.flac");
-    std::filesystem::create_directory_symlink(outsideRoot, musicRoot / "alias");
+    auto const symlink = ao::test::SymlinkFixture{outsideRoot, musicRoot / "alias", ao::test::SymlinkType::Directory};
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     {
