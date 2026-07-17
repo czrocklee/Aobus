@@ -13,6 +13,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <vector>
+
 namespace ao::uimodel::test
 {
   using namespace ao::rt::test;
@@ -46,7 +48,7 @@ namespace ao::uimodel::test
       CHECK(log.last().immediateUpdate == true);
     }
 
-    SECTION("seekPreview/Final")
+    SECTION("seek commands")
     {
       auto const trackId = libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
@@ -77,6 +79,43 @@ namespace ao::uimodel::test
       CHECK(log.last().enabled == true);
       CHECK(log.last().immediateUpdate == true);
       CHECK(playback.state().duration == expectedDuration);
+
+      auto seekEvents = std::vector<PlaybackService::SeekUpdate>{};
+      auto seekSub =
+        playback.onSeekUpdate([&seekEvents](PlaybackService::SeekUpdate const& event) { seekEvents.push_back(event); });
+
+      viewModel.seekBy(std::chrono::milliseconds{200});
+      REQUIRE(seekEvents.size() == 1);
+      CHECK(seekEvents.back().mode == PlaybackService::SeekMode::Final);
+      CHECK(seekEvents.back().elapsed == std::chrono::milliseconds{700});
+
+      viewModel.seekBy(-std::chrono::seconds{1});
+      REQUIRE(seekEvents.size() == 2);
+      CHECK(seekEvents.back().mode == PlaybackService::SeekMode::Final);
+      CHECK(seekEvents.back().elapsed == std::chrono::milliseconds{0});
+
+      viewModel.seekBy(expectedDuration + std::chrono::seconds{1});
+      REQUIRE(seekEvents.size() == 3);
+      CHECK(seekEvents.back().elapsed == expectedDuration);
+
+      viewModel.seekBy(std::chrono::milliseconds::max());
+      REQUIRE(seekEvents.size() == 4);
+      CHECK(seekEvents.back().elapsed == expectedDuration);
+
+      viewModel.seekBy(std::chrono::milliseconds::min());
+      REQUIRE(seekEvents.size() == 5);
+      CHECK(seekEvents.back().elapsed == std::chrono::milliseconds{0});
+    }
+
+    SECTION("relative seek is unavailable without a known duration")
+    {
+      auto seekEvents = std::vector<PlaybackService::SeekUpdate>{};
+      auto seekSub =
+        playback.onSeekUpdate([&seekEvents](PlaybackService::SeekUpdate const& event) { seekEvents.push_back(event); });
+
+      viewModel.seekBy(std::chrono::seconds{5});
+
+      CHECK(seekEvents.empty());
     }
   }
 } // namespace ao::uimodel::test

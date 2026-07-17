@@ -20,9 +20,10 @@ namespace ao::uimodel
 {
   namespace
   {
-    bool hasIdleCurrentTrack(rt::PlaybackState const& state) noexcept
+    bool hasIdleSequenceTrack(rt::PlaybackState const& state, rt::PlaybackSequenceState const& sequenceState) noexcept
     {
-      return state.transport == audio::Transport::Idle && state.nowPlaying.trackId != kInvalidTrackId;
+      return state.transport == audio::Transport::Idle && state.nowPlaying.trackId != kInvalidTrackId &&
+             sequenceState.currentTrackId == state.nowPlaying.trackId;
     }
 
     bool isActivePlayback(audio::Transport const transport) noexcept
@@ -36,16 +37,24 @@ namespace ao::uimodel
       return transport == audio::Transport::Idle || transport == audio::Transport::Error;
     }
 
-    bool canPlay(rt::PlaybackState const& state) noexcept
+    bool canPlay(rt::PlaybackState const& state, rt::PlaybackSequenceState const& sequenceState) noexcept
     {
-      return state.ready && (state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state) ||
-                             shouldStartSelection(state.transport));
+      if (state.transport == audio::Transport::Paused)
+      {
+        return true;
+      }
+
+      return state.ready && (hasIdleSequenceTrack(state, sequenceState) || shouldStartSelection(state.transport));
     }
 
-    bool canPlayPause(rt::PlaybackState const& state) noexcept
+    bool canPlayPause(rt::PlaybackState const& state, rt::PlaybackSequenceState const& sequenceState) noexcept
     {
-      return state.ready && (isActivePlayback(state.transport) || state.transport == audio::Transport::Paused ||
-                             hasIdleCurrentTrack(state) || shouldStartSelection(state.transport));
+      if (isActivePlayback(state.transport) || state.transport == audio::Transport::Paused)
+      {
+        return true;
+      }
+
+      return state.ready && (hasIdleSequenceTrack(state, sequenceState) || shouldStartSelection(state.transport));
     }
 
     bool canStop(rt::PlaybackState const& state) noexcept
@@ -82,19 +91,21 @@ namespace ao::uimodel
     subscribeAvailabilityEvents();
   }
 
-  void PlaybackCommandSurface::execute(PlaybackCommand command)
+  bool PlaybackCommandSurface::execute(PlaybackCommand command)
   {
-    auto const& state = _playback.state();
-
     if (!isEnabled(command))
     {
-      return;
+      return false;
     }
+
+    auto const& state = _playback.state();
+    auto const resumeCurrent =
+      state.transport == audio::Transport::Paused || hasIdleSequenceTrack(state, _sequence.state());
 
     switch (command)
     {
       case PlaybackCommand::Play:
-        if (state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state))
+        if (resumeCurrent)
         {
           _playback.resume();
         }
@@ -112,7 +123,7 @@ namespace ao::uimodel
         {
           _playback.pause();
         }
-        else if (state.transport == audio::Transport::Paused || hasIdleCurrentTrack(state))
+        else if (resumeCurrent)
         {
           _playback.resume();
         }
@@ -136,18 +147,22 @@ namespace ao::uimodel
 
       case PlaybackCommand::CycleRepeat: _sequence.setRepeatMode(nextRepeatMode(_sequence.state().repeat)); break;
     }
+
+    return true;
   }
 
   bool PlaybackCommandSurface::isEnabled(PlaybackCommand command) const
   {
-    switch (auto const& state = _playback.state(); command)
+    auto const& state = _playback.state();
+
+    switch (auto const& sequenceState = _sequence.state(); command)
     {
-      case PlaybackCommand::Play: return canPlay(state);
-      case PlaybackCommand::Pause: return state.ready && isActivePlayback(state.transport);
-      case PlaybackCommand::PlayPause: return canPlayPause(state);
+      case PlaybackCommand::Play: return canPlay(state, sequenceState);
+      case PlaybackCommand::Pause: return isActivePlayback(state.transport);
+      case PlaybackCommand::PlayPause: return canPlayPause(state, sequenceState);
       case PlaybackCommand::Stop: return canStop(state);
-      case PlaybackCommand::Next: return state.ready && _sequence.state().hasNext;
-      case PlaybackCommand::Previous: return state.ready && _sequence.state().hasPrevious;
+      case PlaybackCommand::Next: return state.ready && sequenceState.hasNext;
+      case PlaybackCommand::Previous: return state.ready && sequenceState.hasPrevious;
       case PlaybackCommand::ToggleShuffle:
       case PlaybackCommand::CycleRepeat: return state.ready;
     }

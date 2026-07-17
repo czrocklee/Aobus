@@ -53,9 +53,13 @@ namespace ao::uimodel::test
       .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
       .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
     };
+    log.clear();
     REQUIRE(playback.play(desc, kInvalidListId));
     auto const expectedDuration = playback.state().duration;
     REQUIRE(expectedDuration > std::chrono::milliseconds{0});
+    REQUIRE(log.states.size() >= 2);
+    CHECK_FALSE(log.states.front().isPlaying);
+    CHECK(log.last().isPlaying);
 
     log.clear();
     playback.seek(std::chrono::milliseconds{500}, PlaybackService::SeekMode::Final);

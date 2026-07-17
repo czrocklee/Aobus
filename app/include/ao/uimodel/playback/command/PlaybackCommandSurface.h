@@ -34,7 +34,7 @@ namespace ao::uimodel
     PlaybackCommandSurface(PlaybackCommandSurface&&) = delete;
     PlaybackCommandSurface& operator=(PlaybackCommandSurface&&) = delete;
 
-    void execute(PlaybackCommand command);
+    bool execute(PlaybackCommand command);
     bool isEnabled(PlaybackCommand command) const;
     bool isCapable(PlaybackCommand command) const;
 

@@ -5,6 +5,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <optional>
@@ -57,6 +58,20 @@ namespace ao::uimodel
   void SeekViewModel::seekFinal(std::chrono::milliseconds elapsed)
   {
     _playback.seek(elapsed, rt::PlaybackService::SeekMode::Final);
+  }
+
+  void SeekViewModel::seekBy(std::chrono::milliseconds const delta)
+  {
+    auto const& state = _playback.state();
+
+    if (state.duration <= std::chrono::milliseconds{0})
+    {
+      return;
+    }
+
+    auto const elapsed = std::clamp(state.elapsed, std::chrono::milliseconds{0}, state.duration);
+    auto const clampedDelta = std::clamp(delta, -elapsed, state.duration - elapsed);
+    seekFinal(elapsed + clampedDelta);
   }
 
   void SeekViewModel::refresh(bool immediateUpdate, std::optional<std::chrono::milliseconds> optOverrideElapsed)

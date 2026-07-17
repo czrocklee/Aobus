@@ -3,6 +3,7 @@
 
 #include "test/unit/runtime/PlaybackSequenceUiTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/Device.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackSequenceService.h>
@@ -33,7 +34,7 @@ namespace ao::uimodel::test
 
     SECTION("Play uses selection when idle without a current track")
     {
-      commands.execute(PlaybackCommand::Play);
+      CHECK(commands.execute(PlaybackCommand::Play));
 
       CHECK(playSelectionCount == 1);
       CHECK(playback.state().transport == audio::Transport::Idle);
@@ -43,24 +44,77 @@ namespace ao::uimodel::test
     {
       REQUIRE(playback.playTrack(trackId, ListId{5}));
 
-      commands.execute(PlaybackCommand::PlayPause);
+      CHECK(commands.execute(PlaybackCommand::PlayPause));
 
       CHECK(playback.state().transport == audio::Transport::Paused);
 
-      commands.execute(PlaybackCommand::PlayPause);
+      CHECK(commands.execute(PlaybackCommand::PlayPause));
 
       CHECK(playback.state().transport == audio::Transport::Playing);
+    }
+
+    SECTION("PlayPause pauses while a new output selection is pending")
+    {
+      REQUIRE(fixture.playFromView(trackId));
+      auto const selected = playback.state().output.selectedDevice;
+
+      playback.setOutputDevice(selected.backendId, audio::DeviceId{"pending-device"}, selected.profileId);
+
+      REQUIRE_FALSE(playback.state().ready);
+      REQUIRE(playback.state().transport == audio::Transport::Playing);
+      CHECK(commands.isEnabled(PlaybackCommand::Pause));
+      CHECK(commands.isEnabled(PlaybackCommand::PlayPause));
+      CHECK(commands.execute(PlaybackCommand::PlayPause));
+      CHECK(playback.state().transport == audio::Transport::Paused);
+    }
+
+    SECTION("PlayPause resumes a restored sequence track")
+    {
+      REQUIRE(fixture.playFromView(trackId));
+      REQUIRE(fixture.runtime.savePlaybackSession());
+      playback.stop();
+      auto const restored = fixture.runtime.restorePlaybackSession();
+
+      REQUIRE(restored);
+      REQUIRE(restored->restored);
+      REQUIRE(playback.state().transport == audio::Transport::Idle);
+      REQUIRE(playback.state().nowPlaying.trackId == trackId);
+      REQUIRE(sequence.state().currentTrackId == trackId);
+
+      CHECK(commands.execute(PlaybackCommand::PlayPause));
+      CHECK(playback.state().transport == audio::Transport::Playing);
+      CHECK(playSelectionCount == 0);
+    }
+
+    SECTION("PlayPause starts the selection for an idle track outside the sequence")
+    {
+      REQUIRE(fixture.playFromView(trackId));
+      REQUIRE(fixture.runtime.savePlaybackSession());
+      playback.stop();
+      auto const restored = fixture.runtime.restorePlaybackSession();
+
+      REQUIRE(restored);
+      REQUIRE(restored->restored);
+      sequence.clear();
+      REQUIRE(playback.state().transport == audio::Transport::Idle);
+      REQUIRE(playback.state().nowPlaying.trackId == trackId);
+      REQUIRE(sequence.state().currentTrackId == kInvalidTrackId);
+
+      CHECK(commands.execute(PlaybackCommand::PlayPause));
+      CHECK(playback.state().transport == audio::Transport::Idle);
+      CHECK(playSelectionCount == 1);
     }
 
     SECTION("Stop is enabled only outside idle")
     {
       CHECK_FALSE(commands.isEnabled(PlaybackCommand::Stop));
+      CHECK_FALSE(commands.execute(PlaybackCommand::Stop));
 
       REQUIRE(playback.playTrack(trackId, ListId{5}));
 
       CHECK(commands.isEnabled(PlaybackCommand::Stop));
 
-      commands.execute(PlaybackCommand::Stop);
+      CHECK(commands.execute(PlaybackCommand::Stop));
 
       CHECK(playback.state().transport == audio::Transport::Idle);
       CHECK_FALSE(commands.isEnabled(PlaybackCommand::Stop));
@@ -152,16 +206,21 @@ namespace ao::uimodel::test
     auto fixture = PlaybackSequenceUiFixture{};
     auto& playback = fixture.runtime.playback();
     auto& sequence = fixture.runtime.playbackSequence();
-    auto commands = PlaybackCommandSurface{playback, sequence, [] {}};
+    std::int32_t playSelectionCount = 0;
+    auto commands = PlaybackCommandSurface{playback, sequence, [&playSelectionCount] { ++playSelectionCount; }};
 
     std::int32_t playCount = 0;
     auto sub = commands.onAvailabilityChanged(PlaybackCommand::Play, [&playCount] { ++playCount; });
 
     CHECK_FALSE(commands.isEnabled(PlaybackCommand::Play));
+    CHECK_FALSE(commands.isEnabled(PlaybackCommand::PlayPause));
+    CHECK_FALSE(commands.execute(PlaybackCommand::PlayPause));
+    CHECK(playSelectionCount == 0);
 
     fixture.makePlaybackReady();
 
     CHECK(commands.isEnabled(PlaybackCommand::Play));
+    CHECK(commands.isEnabled(PlaybackCommand::PlayPause));
     CHECK(playCount > 0);
   }
 

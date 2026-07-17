@@ -80,6 +80,23 @@ namespace ao::uimodel::test
       viewModel.handleScroll(1.0); // scroll down
       CHECK(playback.state().volume.level == Catch::Approx{0.50F}.margin(0.001F));
     }
+
+    SECTION("relative adjustment clamps and follows shared mute policy")
+    {
+      viewModel.handleVolumeChanged(0.5F);
+      viewModel.handleMutedChanged(true);
+
+      viewModel.adjustVolume(-1.0F);
+      CHECK(playback.state().volume.level == 0.0F);
+      CHECK(playback.state().volume.muted == true);
+
+      viewModel.adjustVolume(0.05F);
+      CHECK(playback.state().volume.level == Catch::Approx{0.05F}.margin(0.001F));
+      CHECK(playback.state().volume.muted == false);
+
+      viewModel.adjustVolume(2.0F);
+      CHECK(playback.state().volume.level == 1.0F);
+    }
   }
 
   TEST_CASE("VolumeViewModel - math helpers", "[uimodel][unit][playback]")

@@ -6,14 +6,12 @@
 #include "TrackListEntry.h"
 #include <ao/rt/ViewIds.h>
 
-#include <chrono>
 #include <cstdint>
 #include <vector>
 
 namespace ao::rt
 {
   class PlaybackSequenceService;
-  class PlaybackService;
 } // namespace ao::rt
 
 namespace ao::tui
@@ -22,13 +20,4 @@ namespace ao::tui
                     std::vector<TrackListEntry> const& tracks,
                     std::int32_t selected,
                     rt::ViewId sourceViewId);
-
-  bool togglePlayback(rt::PlaybackService& playback,
-                      rt::PlaybackSequenceService& sequence,
-                      std::vector<TrackListEntry> const& tracks,
-                      std::int32_t selected,
-                      rt::ViewId sourceViewId);
-
-  void seekBy(rt::PlaybackService& playback, std::chrono::milliseconds delta);
-  void changeVolume(rt::PlaybackService& playback, float delta);
 } // namespace ao::tui

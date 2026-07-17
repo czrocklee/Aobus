@@ -19,6 +19,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -129,6 +130,9 @@ namespace ao::tui
     , _library{library}
     , _playback{runtime.playback()}
     , _playbackSequence{runtime.playbackSequence()}
+    , _playbackCommands{_playback, _playbackSequence, [this] { playSelectedTrack(); }}
+    , _seekViewModel{_playback, {}}
+    , _volumeViewModel{_playback, {}}
     , _outputDevices{bindings.outputDevices}
     , _hitRegions{bindings.hitRegions}
     , _trackColumnWidthOverrides{bindings.trackColumnWidthOverrides}
@@ -283,13 +287,20 @@ namespace ao::tui
     _library.revealTrack(_playback.state().nowPlaying.trackId);
   }
 
-  void EventController::togglePlaybackFromSelection()
+  void EventController::playSelectedTrack()
   {
-    if (!togglePlayback(
-          _playback, _playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
+    if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
+    }
+  }
+
+  void EventController::executePlaybackCommand(uimodel::PlaybackCommand const command)
+  {
+    if (!_playbackCommands.execute(command) && command != uimodel::PlaybackCommand::Stop)
+    {
+      postActivityNotification(rt::NotificationSeverity::Warning, "Playback control unavailable");
     }
   }
 
@@ -322,16 +333,9 @@ namespace ao::tui
         applyFilter();
         break;
       case CommandAction::Reload: reloadActiveList(); break;
-      case CommandAction::Play:
-        if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
-        {
-          postActivityNotification(
-            rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
-        }
-
-        break;
-      case CommandAction::TogglePlayback: togglePlaybackFromSelection(); break;
-      case CommandAction::Stop: _playback.stop(); break;
+      case CommandAction::Play: playSelectedTrack(); break;
+      case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
+      case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
       case CommandAction::Quit:
         _playback.stop();
         _screen.ExitLoopClosure()();
@@ -398,10 +402,8 @@ namespace ao::tui
     switch (decision.action)
     {
       case uimodel::SeekSliderAction::None: return;
-      case uimodel::SeekSliderAction::Preview:
-        _playback.seek(decision.elapsed, rt::PlaybackService::SeekMode::Preview);
-        return;
-      case uimodel::SeekSliderAction::Commit: _playback.seek(decision.elapsed); return;
+      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(decision.elapsed); return;
+      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(decision.elapsed); return;
     }
   }
 
@@ -414,7 +416,7 @@ namespace ao::tui
 
     if (_seekSlider.hasPendingFinalSeek())
     {
-      _playback.seek(_playback.state().elapsed);
+      _seekViewModel.seekFinal(_playback.state().elapsed);
     }
 
     _optSeekRailDrag.reset();
@@ -628,7 +630,7 @@ namespace ao::tui
 
     if (_hitRegions != nullptr && contains(_hitRegions->soulButtonBox, mouse.x, mouse.y))
     {
-      togglePlaybackFromSelection();
+      executePlaybackCommand(uimodel::PlaybackCommand::PlayPause);
       return true;
     }
 
@@ -1049,36 +1051,31 @@ namespace ao::tui
 
     if (event == ftxui::Event::Return || event == ftxui::Event::Character("p"))
     {
-      if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
-      {
-        postActivityNotification(
-          rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
-      }
-
+      playSelectedTrack();
       return true;
     }
 
     if (event == ftxui::Event::Character(" "))
     {
-      togglePlaybackFromSelection();
+      executePlaybackCommand(uimodel::PlaybackCommand::PlayPause);
       return true;
     }
 
     if (event == ftxui::Event::Character("s"))
     {
-      _playback.stop();
+      executePlaybackCommand(uimodel::PlaybackCommand::Stop);
       return true;
     }
 
     if (event == ftxui::Event::Character("["))
     {
-      seekBy(_playback, -kKeyboardSeekDelta);
+      _seekViewModel.seekBy(-kKeyboardSeekDelta);
       return true;
     }
 
     if (event == ftxui::Event::Character("]"))
     {
-      seekBy(_playback, kKeyboardSeekDelta);
+      _seekViewModel.seekBy(kKeyboardSeekDelta);
       return true;
     }
 
@@ -1096,13 +1093,13 @@ namespace ao::tui
 
     if (event == ftxui::Event::Character("-"))
     {
-      changeVolume(_playback, -kKeyboardVolumeDelta);
+      _volumeViewModel.adjustVolume(-kKeyboardVolumeDelta);
       return true;
     }
 
     if (event == ftxui::Event::Character("+") || event == ftxui::Event::Character("="))
     {
-      changeVolume(_playback, kKeyboardVolumeDelta);
+      _volumeViewModel.adjustVolume(kKeyboardVolumeDelta);
       return true;
     }
 

@@ -12,7 +12,11 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/output/VolumeViewModel.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
+#include <ao/uimodel/playback/seek/SeekViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
 #include <ftxui/component/event.hpp>
@@ -74,7 +78,8 @@ namespace ao::tui
     void selectOutputDevice();
     void selectPresentation();
     void revealCurrentTrack();
-    void togglePlaybackFromSelection();
+    void playSelectedTrack();
+    void executePlaybackCommand(uimodel::PlaybackCommand command);
     void runCommand(Command const& command);
     void postActivityNotification(rt::NotificationSeverity severity, std::string message);
     void refreshCommandCompletion();
@@ -115,6 +120,9 @@ namespace ao::tui
     LibraryController& _library;
     rt::PlaybackService& _playback;
     rt::PlaybackSequenceService& _playbackSequence;
+    uimodel::PlaybackCommandSurface _playbackCommands;
+    uimodel::SeekViewModel _seekViewModel;
+    uimodel::VolumeViewModel _volumeViewModel;
     OutputDeviceController* _outputDevices = nullptr;
     TuiHitRegions* _hitRegions = nullptr;
     std::vector<TrackColumnWidthOverride>* _trackColumnWidthOverrides = nullptr;

@@ -35,6 +35,7 @@ namespace ao::uimodel
 
     void seekPreview(std::chrono::milliseconds elapsed);
     void seekFinal(std::chrono::milliseconds elapsed);
+    void seekBy(std::chrono::milliseconds delta);
 
     void refresh(bool immediateUpdate, std::optional<std::chrono::milliseconds> optOverrideElapsed = std::nullopt);
 

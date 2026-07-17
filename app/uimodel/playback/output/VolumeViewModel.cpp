@@ -42,19 +42,23 @@ namespace ao::uimodel
 
   void VolumeViewModel::handleScroll(double scrollDy)
   {
-    auto const& state = _playback.state();
-    float const newVolume = resolveVolumeScroll(state.volume.level, scrollDy);
+    auto const volume = _playback.state().volume;
+    applyVolumeTarget(volume.level, volume.muted, resolveVolumeScroll(volume.level, scrollDy));
+  }
 
-    // Mute policy on scroll
-    if (state.volume.muted && newVolume > state.volume.level)
+  void VolumeViewModel::adjustVolume(float const delta)
+  {
+    auto const volume = _playback.state().volume;
+    applyVolumeTarget(volume.level, volume.muted, volume.level + delta);
+  }
+
+  void VolumeViewModel::applyVolumeTarget(float const currentVolume, bool const muted, float const targetVolume)
+  {
+    auto const newVolume = std::clamp(targetVolume, 0.0F, 1.0F);
+
+    if (muted && newVolume > currentVolume)
     {
       _playback.setMuted(false);
-    }
-    else if (newVolume <= 0.0F && !state.volume.muted)
-    {
-      // Wait, should scrolling down to 0 explicitly set mute?
-      // The plan says: "If scroll drives volume to 0, set volume to 0; visual state becomes muted. Explicit `muted` can
-      // remain false unless the user invoked mute." So no explicit setMuted(true) here, just setVolume(0.0F).
     }
 
     _playback.setVolume(newVolume);

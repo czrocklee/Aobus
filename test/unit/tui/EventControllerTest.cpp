@@ -658,6 +658,78 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickSoulButton)));
     CHECK(fixture.runtime.playback().state().transport == audio::Transport::Paused);
+
+    CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickSoulButton)));
+    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Playing);
+    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+  }
+
+  TEST_CASE("EventController - unavailable transport command is gated and reported", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      fixture.runtime,
+      EventControllerBindings{.notifications = &fixture.runtime.notifications()},
+    };
+
+    CHECK(controller.handleEvent(ftxui::Event::Character(" ")));
+
+    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Idle);
+    auto const feed = fixture.runtime.notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
+    CHECK(feed.entries.back().message == "Playback control unavailable");
+  }
+
+  TEST_CASE("EventController - idle stop is a silent no-op", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      fixture.runtime,
+      EventControllerBindings{.notifications = &fixture.runtime.notifications()},
+    };
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("s")));
+
+    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Idle);
+    CHECK(fixture.runtime.notifications().feed().entries.empty());
+  }
+
+  TEST_CASE("EventController - space pauses playback while output selection is pending", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    fixture.addReadyAudioProvider();
+    auto library = fixture.makeLibrary();
+    REQUIRE_FALSE(library.tracks().empty());
+    REQUIRE(fixture.runtime.playbackSequence().playFromView(library.activeViewId(), library.tracks()[0].id));
+    auto controller = EventController{
+      fixture.screen,
+      fixture.shell,
+      library,
+      fixture.runtime,
+      EventControllerBindings{.notifications = &fixture.runtime.notifications()},
+    };
+    auto& playback = fixture.runtime.playback();
+    auto const selected = playback.state().output.selectedDevice;
+
+    playback.setOutputDevice(selected.backendId, audio::DeviceId{"pending-device"}, selected.profileId);
+
+    REQUIRE_FALSE(playback.state().ready);
+    REQUIRE(playback.state().transport == audio::Transport::Playing);
+    auto const notificationCount = fixture.runtime.notifications().feed().entries.size();
+
+    CHECK(controller.handleEvent(ftxui::Event::Character(" ")));
+
+    CHECK(playback.state().transport == audio::Transport::Paused);
+    CHECK(fixture.runtime.notifications().feed().entries.size() == notificationCount);
   }
 
   TEST_CASE("EventController - presentation mouse clicks open and select views", "[tui][unit][event]")
@@ -1047,27 +1119,46 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
+    prepareSeekablePlayback(fixture, library);
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
     auto seekEvents = std::vector<std::chrono::milliseconds>{};
     auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
                                                        { seekEvents.push_back(event.elapsed); });
 
     fixture.runtime.playback().setVolume(0.50F);
+    fixture.runtime.playback().setMuted(true);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("[")));
     CHECK(controller.handleEvent(ftxui::Event::Character("]")));
     REQUIRE(seekEvents.size() == 2);
     CHECK(seekEvents[0] == std::chrono::milliseconds{0});
-    CHECK(seekEvents[1] == std::chrono::seconds{5});
+    CHECK(seekEvents[1] == fixture.runtime.playback().state().duration);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("-")));
     CHECK(fixture.runtime.playback().state().volume.level < 0.50F);
+    CHECK(fixture.runtime.playback().state().volume.muted);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("+")));
     CHECK(fixture.runtime.playback().state().volume.level > 0.49F);
+    CHECK_FALSE(fixture.runtime.playback().state().volume.muted);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("s")));
     CHECK(fixture.runtime.playback().state().nowPlaying.trackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("EventController - relative seek is inert without a known duration", "[tui][unit][event]")
+  {
+    auto fixture = EventControllerFixture{};
+    auto library = fixture.makeLibrary();
+    auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
+    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
+    auto sub = fixture.runtime.playback().onSeekUpdate([&seekEvents](rt::PlaybackService::SeekUpdate const& event)
+                                                       { seekEvents.push_back(event); });
+
+    CHECK(controller.handleEvent(ftxui::Event::Character("[")));
+    CHECK(controller.handleEvent(ftxui::Event::Character("]")));
+
+    CHECK(seekEvents.empty());
   }
 
   TEST_CASE("EventController - mouse click on seek rail previews then commits the target position",

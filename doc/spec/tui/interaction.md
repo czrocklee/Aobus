@@ -37,8 +37,9 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 - Shared list navigation handles arrows, pages, home, and end before a panel-specific selection callback.
 - Selection always resolves to a track even when scrollbar geometry counts group headers.
 - Equivalent playback, presentation, filtering, notification, and output actions use shared runtime/UIModel authorities.
+- Soul/Space transport toggles and ordinary stop requests use `PlaybackCommandSurface`; explicit selected-track activation remains a distinct view-based sequence command.
 - Active seek drag is canceled when command mode or an overlay becomes active.
-- A zero-duration rail rejects pointer seek.
+- A zero-duration timeline rejects pointer and relative-keyboard seek.
 - Column drag changes only TUI session-local widths.
 - Ordinary terminal styling inherits the terminal background; semantic roles add accents without painting broad application backgrounds.
 
@@ -81,10 +82,14 @@ Notification `x` locally suppresses the compact activity entry according to the 
 
 The single-row dock contains the Soul transport/quality control, title/artist, output badge, elapsed, bounded responsive seek rail, duration, and volume percentage.
 The Soul control toggles playback on click; hover shows quality detail without opening a modal overlay.
+Space and the Soul control pause active playback and resume paused playback even while an output-device selection is pending.
+From Idle, they resume a restored sequence-owned current track; otherwise they start the selected track.
+Stop is an idempotent silent no-op when playback is already Idle.
 
-Seek press begins a shared `SeekSliderInteractionModel` gesture, pointer motion publishes preview seeks, and release publishes the final seek.
+Seek press begins a shared `SeekSliderInteractionModel` gesture, pointer motion publishes preview seeks, and release publishes the final seek through `SeekViewModel`.
 Release beyond the rail clamps to the rail range.
-Keyboard seek changes elapsed by five seconds; keyboard volume changes by five percentage points.
+Keyboard seek asks the same view model for a clamped five-second relative change and is inert without a known positive duration.
+Keyboard volume asks `VolumeViewModel` for a clamped five-percentage-point relative change, including the shared rule that raising volume clears explicit mute.
 
 ### Rendering
 
@@ -93,11 +98,12 @@ The workspace lower frame edge carries list/view identity on the left and select
 Selected rows and hovered controls use one centralized yellow/black/bold interactive style.
 
 The playback Soul animation consumes shared UIModel aura/color/timing policy while terminal code chooses braille geometry.
+Opening, Buffering, Playing, and Seeking keep periodic animation refresh active; elapsed-time interpolation advances only in the transport states identified as playing by `PlaybackTimeViewModel`.
 Short terminals keep the dock to one row before reducing track-table height further.
 
 ## Failure and cancellation
 
-Unavailable actions post warning notifications rather than inventing terminal-only error state.
+Unavailable actions post warning notifications rather than inventing terminal-only error state; the idempotent Idle Stop exception remains silent.
 Stale section/output rows are rejected and reported.
 Command/overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 

@@ -37,6 +37,7 @@ namespace ao::uimodel
     void handleMutedChanged(bool muted);
     void toggleMuted();
     void handleScroll(double scrollDy);
+    void adjustVolume(float delta);
 
     static float resolveVolumeOffset(double widgetWidth, double offsetX, float currentDragStartVolume = 0.0F);
     static float resolveVolumeScroll(float currentVolume, double scrollDy);
@@ -44,6 +45,7 @@ namespace ao::uimodel
     static std::string resolveTooltip(float volume, bool muted, bool isHardwareAssisted);
 
   private:
+    void applyVolumeTarget(float currentVolume, bool muted, float targetVolume);
     void refresh();
 
     rt::PlaybackService& _playback;
