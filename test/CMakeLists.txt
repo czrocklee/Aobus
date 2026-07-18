@@ -438,6 +438,7 @@ if(AOBUS_BUILD_GTK)
 add_executable(ao_gtk_test
     unit/linux-gtk/common/DismissControllerTest.cpp
     unit/linux-gtk/common/MainContextCallbackScopeTest.cpp
+    unit/linux-gtk/common/PopoverAttachmentTest.cpp
     unit/linux-gtk/common/UiWorkflowTest.cpp
     unit/linux-gtk/completion/EntryCompletionControllerTest.cpp
     unit/linux-gtk/list/ListModelTest.cpp

@@ -29,10 +29,7 @@ namespace ao::gtk::layout
 
   ComponentInteractionController::~ComponentInteractionController()
   {
-    _primaryClickConn.disconnect();
-    _secondaryClickConn.disconnect();
-    _primaryLongPressConn.disconnect();
-    _secondaryLongPressConn.disconnect();
+    detach();
   }
 
   void ComponentInteractionController::attach(LayoutBuildContext& ctx,
@@ -40,12 +37,51 @@ namespace ao::gtk::layout
                                               Gtk::Widget& target,
                                               uimodel::LayoutComponentActionPolicy const policy)
   {
+    detach();
+    _target = &target;
     auto const binder = ActionBinder{ctx.actionRegistry, ctx.runtime, ctx.parentWindow};
 
     attachPrimaryClick(node, target, policy, binder);
     attachSecondaryClick(node, target, policy, binder);
     attachPrimaryLongPress(node, target, policy, binder);
     attachSecondaryLongPress(node, target, policy, binder);
+  }
+
+  void ComponentInteractionController::detach()
+  {
+    _primaryClickConn.disconnect();
+    _secondaryClickConn.disconnect();
+    _primaryLongPressConn.disconnect();
+    _secondaryLongPressConn.disconnect();
+
+    if (_target != nullptr)
+    {
+      if (_secondaryClickGesturePtr)
+      {
+        _target->remove_controller(_secondaryClickGesturePtr);
+      }
+
+      if (_primaryLongPressGesturePtr)
+      {
+        _target->remove_controller(_primaryLongPressGesturePtr);
+      }
+
+      if (_secondaryLongPressGesturePtr)
+      {
+        _target->remove_controller(_secondaryLongPressGesturePtr);
+      }
+    }
+
+    _target = nullptr;
+    _secondaryClickGesturePtr = nullptr;
+    _primaryLongPressGesturePtr = nullptr;
+    _secondaryLongPressGesturePtr = nullptr;
+    _primaryClick = {};
+    _secondaryClick = {};
+    _primaryLongPress = {};
+    _secondaryLongPress = {};
+    _primaryLongPressHandled = false;
+    _secondaryLongPressHandled = false;
   }
 
   void ComponentInteractionController::attachPrimaryClick(uimodel::LayoutNode const& node,
@@ -82,7 +118,8 @@ namespace ao::gtk::layout
 
           if (_primaryClick)
           {
-            _primaryClick();
+            auto action = _primaryClick;
+            action();
           }
         });
     }
@@ -122,7 +159,8 @@ namespace ao::gtk::layout
 
         if (_secondaryClick)
         {
-          _secondaryClick();
+          auto action = _secondaryClick;
+          action();
         }
       });
     target.add_controller(_secondaryClickGesturePtr);
@@ -159,7 +197,8 @@ namespace ao::gtk::layout
 
         if (_primaryLongPress)
         {
-          _primaryLongPress();
+          auto action = _primaryLongPress;
+          action();
         }
       });
     target.add_controller(_primaryLongPressGesturePtr);
@@ -196,7 +235,8 @@ namespace ao::gtk::layout
 
         if (_secondaryLongPress)
         {
-          _secondaryLongPress();
+          auto action = _secondaryLongPress;
+          action();
         }
       });
     target.add_controller(_secondaryLongPressGesturePtr);

@@ -45,6 +45,7 @@ add_library(aobus-gtk-lib STATIC
     preference/PreferencesWindow.cpp
 
     common/DismissController.cpp
+    common/PopoverAttachment.cpp
 
     completion/EntryCompletionController.cpp
 

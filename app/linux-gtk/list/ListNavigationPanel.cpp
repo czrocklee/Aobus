@@ -70,11 +70,12 @@ namespace ao::gtk
   void ListNavigationPanel::rebuildTree(rt::Library const& reads)
   {
     auto result = ListTreeModelBuilder::build(reads);
+    _selectionChangedConnection.disconnect();
     _nodesById = std::move(result.nodesById);
     _listTreeStorePtr = std::move(result.storePtr);
     _treeListModelPtr = std::move(result.treeModelPtr);
     _listSelectionModelPtr = std::move(result.selectionModelPtr);
-    _listSelectionModelPtr->signal_selection_changed().connect(
+    _selectionChangedConnection = _listSelectionModelPtr->signal_selection_changed().connect(
       sigc::mem_fun(*this, &ListNavigationPanel::handleListSelectionChanged));
     _listView.set_model(_listSelectionModelPtr);
   }

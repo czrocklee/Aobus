@@ -42,7 +42,6 @@
 #include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
-#include <sigc++/connection.h>
 #include <sigc++/functors/mem_fun.h>
 
 #include <algorithm>
@@ -50,6 +49,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
@@ -74,7 +74,8 @@ namespace ao::gtk::layout::editor
                                          LayoutDocument initialLayout,
                                          std::string initialPresetId,
                                          std::string initialThemeId,
-                                         LayoutLoaderFn layoutLoader)
+                                         LayoutLoaderFn layoutLoader,
+                                         PreviewSchedulerFn previewScheduler)
     : AppDialog{}
     , _registry{registry}
     , _actionRegistry{actionRegistry}
@@ -83,8 +84,18 @@ namespace ao::gtk::layout::editor
     , _treeStorePtr{Gtk::TreeStore::create(_columns)}
     , _actionGroupPtr{Gio::SimpleActionGroup::create()}
     , _layoutLoader{std::move(layoutLoader)}
+    , _previewScheduler{std::move(previewScheduler)}
     , _currentPresetId{initialPresetId}
   {
+    if (!_previewScheduler)
+    {
+      _previewScheduler = [](std::function<bool()> callback)
+      {
+        constexpr auto kDebounceInterval = std::chrono::milliseconds{500};
+        return Glib::signal_timeout().connect(std::move(callback), kDebounceInterval.count());
+      };
+    }
+
     set_title("Layout Editor");
     configureForParent(parent);
     set_default_size(-1, -1);
@@ -156,6 +167,7 @@ namespace ao::gtk::layout::editor
 
   LayoutEditorDialog::~LayoutEditorDialog()
   {
+    _previewDebounceConn.disconnect();
     headerBar().remove(_comboPresets);
     headerBar().remove(_comboThemePresets);
     headerBar().remove(_btnReset);
@@ -746,15 +758,12 @@ namespace ao::gtk::layout::editor
       _previewDebounceConn.disconnect();
     }
 
-    constexpr auto kDebounceInterval = std::chrono::milliseconds{500};
-
-    _previewDebounceConn = Glib::signal_timeout().connect(
+    _previewDebounceConn = _previewScheduler(
       [this] -> bool
       {
         notifyPreview();
         return false;
-      },
-      kDebounceInterval.count());
+      });
   }
 
   namespace

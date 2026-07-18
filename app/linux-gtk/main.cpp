@@ -9,6 +9,7 @@
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
+#include "common/MainContextCallbackScope.h"
 #include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"
@@ -23,6 +24,7 @@
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <CLI/CLI.hpp>
 #include <giomm/simpleaction.h>
@@ -37,6 +39,7 @@
 #include <gtkmm/dialog.h>
 #include <gtkmm/window.h>
 
+#include <array>
 #include <csignal>
 #include <cstdint>
 #include <cstdlib>
@@ -191,6 +194,8 @@ namespace
   void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
                                     Glib::RefPtr<MainWindow>& mainWindowPtr,
+                                    MainContextCallbackScope const& callbackScope,
+                                    utility::ScopedRegistration& openLibraryIdleRegistration,
                                     std::shared_ptr<AppConfigStore> appConfigStorePtr,
                                     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                                     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr);
@@ -198,6 +203,8 @@ namespace
   void handleOpenNewLibrary(std::filesystem::path const& path,
                             Glib::RefPtr<Gtk::Application> const& appPtr,
                             Glib::RefPtr<MainWindow>& mainWindowPtr,
+                            MainContextCallbackScope const& callbackScope,
+                            utility::ScopedRegistration& openLibraryIdleRegistration,
                             std::shared_ptr<AppConfigStore> appConfigStorePtr,
                             std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                             std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
@@ -245,8 +252,14 @@ namespace
       appConfigStorePtr,
       shellLayoutStorePtr,
       componentStateStorePtr);
-    configureOpenLibraryCallback(
-      mainWindowPtr, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
+    configureOpenLibraryCallback(mainWindowPtr,
+                                 appPtr,
+                                 mainWindowPtr,
+                                 callbackScope,
+                                 openLibraryIdleRegistration,
+                                 appConfigStorePtr,
+                                 shellLayoutStorePtr,
+                                 componentStateStorePtr);
 
     if (scanAfterOpen)
     {
@@ -257,21 +270,52 @@ namespace
   void configureOpenLibraryCallback(Glib::RefPtr<MainWindow> const& windowPtr,
                                     Glib::RefPtr<Gtk::Application> const& appPtr,
                                     Glib::RefPtr<MainWindow>& mainWindowPtr,
+                                    MainContextCallbackScope const& callbackScope,
+                                    utility::ScopedRegistration& openLibraryIdleRegistration,
                                     std::shared_ptr<AppConfigStore> appConfigStorePtr,
                                     std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
                                     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
   {
-    windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary =
-      [appPtr, &mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr](
-        std::filesystem::path const& path, bool const scanAfterOpen)
-    {
-      Glib::signal_idle().connect_once(
-        [path, scanAfterOpen, appPtr, &mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr]
-        {
-          handleOpenNewLibrary(
-            path, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr, scanAfterOpen);
-        });
-    };
+    windowPtr->importExportCoordinator().callbacks().onOpenNewLibrary = callbackScope.guard(
+      [appPtr,
+       &mainWindowPtr,
+       &callbackScope,
+       &openLibraryIdleRegistration,
+       appConfigStorePtr,
+       shellLayoutStorePtr,
+       componentStateStorePtr](std::filesystem::path const& path, bool const scanAfterOpen)
+      {
+        openLibraryIdleRegistration.reset();
+        auto guardedOpen = callbackScope.guard(
+          [path,
+           scanAfterOpen,
+           appPtr,
+           &mainWindowPtr,
+           &callbackScope,
+           &openLibraryIdleRegistration,
+           appConfigStorePtr,
+           shellLayoutStorePtr,
+           componentStateStorePtr]
+          {
+            handleOpenNewLibrary(path,
+                                 appPtr,
+                                 mainWindowPtr,
+                                 callbackScope,
+                                 openLibraryIdleRegistration,
+                                 appConfigStorePtr,
+                                 shellLayoutStorePtr,
+                                 componentStateStorePtr,
+                                 scanAfterOpen);
+          });
+        auto connection = Glib::signal_idle().connect(
+          [guardedOpen = std::move(guardedOpen)] mutable
+          {
+            guardedOpen();
+            return false;
+          });
+        openLibraryIdleRegistration =
+          utility::ScopedRegistration{[connection = std::move(connection)] mutable { connection.disconnect(); }};
+      });
   }
 
   void releaseMainWindow(Gtk::Application& app, Glib::RefPtr<MainWindow>& mainWindowPtr)
@@ -298,18 +342,62 @@ namespace
     mainWindowPtr.reset();
   }
 
-  void installUnixSignalHandlers(Glib::RefPtr<Gtk::Application>& appPtr)
+  class ProcessSignalHandlers final
   {
-    auto const handler = [](void* data) -> ::gboolean
+  public:
+    ProcessSignalHandlers() = default;
+    ~ProcessSignalHandlers() = default;
+
+    ProcessSignalHandlers(ProcessSignalHandlers const&) = delete;
+    ProcessSignalHandlers& operator=(ProcessSignalHandlers const&) = delete;
+    ProcessSignalHandlers(ProcessSignalHandlers&&) = delete;
+    ProcessSignalHandlers& operator=(ProcessSignalHandlers&&) = delete;
+
+    void install(Glib::RefPtr<Gtk::Application> const& appPtr)
     {
-      auto* appCtx = static_cast<Glib::RefPtr<Gtk::Application>*>(data);
+      _appPtr = appPtr;
+      _registrations = {registerSignal(SIGINT, &ProcessSignalHandlers::handleTermination, this),
+                        registerSignal(SIGTERM, &ProcessSignalHandlers::handleTermination, this),
+                        registerSignal(SIGUSR1, &ProcessSignalHandlers::handleStyleReload, nullptr)};
+    }
+
+  private:
+    static ::gboolean handleTermination(void* data)
+    {
+      auto* const handlers = static_cast<ProcessSignalHandlers*>(data);
       APP_LOG_INFO("Received termination signal, shutting down...");
-      (*appCtx)->quit();
-      return FALSE;
-    };
-    ::g_unix_signal_add(SIGINT, handler, &appPtr);
-    ::g_unix_signal_add(SIGTERM, handler, &appPtr);
-  }
+
+      if (auto const appPtr = handlers->_appPtr.lock(); appPtr)
+      {
+        appPtr->quit();
+      }
+
+      return TRUE;
+    }
+
+    static ::gboolean handleStyleReload(void* /*data*/)
+    {
+      APP_LOG_DEBUG("GtkStyleRuntime: Received SIGUSR1, scheduling theme refresh...");
+      GtkStyleRuntime::instance().reload();
+      return TRUE;
+    }
+
+    static utility::ScopedRegistration registerSignal(int const signal, GSourceFunc const handler, void* const data)
+    {
+      auto const sourceId = ::g_unix_signal_add(signal, handler, data);
+      return utility::ScopedRegistration{
+        [sourceId]
+        {
+          if (auto* const source = ::g_main_context_find_source_by_id(nullptr, sourceId); source != nullptr)
+          {
+            ::g_source_destroy(source);
+          }
+        }};
+    }
+
+    std::weak_ptr<Gtk::Application> _appPtr;
+    std::array<utility::ScopedRegistration, 3> _registrations;
+  };
 
   MainWindow* activeMainWindow(Glib::RefPtr<Gtk::Application> const& appPtr)
   {
@@ -470,6 +558,8 @@ namespace
 
   void handleAppActivate(Glib::RefPtr<Gtk::Application>& appPtr,
                          Glib::RefPtr<MainWindow>& mainWindowPtr,
+                         MainContextCallbackScope const& callbackScope,
+                         utility::ScopedRegistration& openLibraryIdleRegistration,
                          std::shared_ptr<AppConfigStore> const& appConfigStorePtr,
                          std::shared_ptr<ShellLayoutStore> const& shellLayoutStorePtr,
                          std::shared_ptr<ShellLayoutComponentStateStore> const& componentStateStorePtr)
@@ -489,8 +579,14 @@ namespace
     auto const scanAfterOpen = paths.scanAfterOpen;
     mainWindowPtr =
       createWindow(*appPtr, std::move(paths), appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
-    configureOpenLibraryCallback(
-      mainWindowPtr, appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
+    configureOpenLibraryCallback(mainWindowPtr,
+                                 appPtr,
+                                 mainWindowPtr,
+                                 callbackScope,
+                                 openLibraryIdleRegistration,
+                                 appConfigStorePtr,
+                                 shellLayoutStorePtr,
+                                 componentStateStorePtr);
 
     if (scanAfterOpen)
     {
@@ -499,8 +595,13 @@ namespace
   }
 
   // CLI11 and GTK both expose the process entry-point's mutable C argv array.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
-  std::vector<char*> buildGtkArgv(std::int32_t argc, char* argv[])
+  struct GtkArguments final
+  {
+    std::vector<std::string> strings;
+    std::vector<char*> pointers;
+  };
+
+  GtkArguments buildGtkArgv(std::int32_t argc, char** argv)
   {
     auto cliApp = CLI::App{};
     cliApp.allow_extras();
@@ -516,15 +617,15 @@ namespace
 
     auto remaining = cliApp.remaining_for_passthrough();
     remaining.insert(remaining.begin(), argv[0]);
-    auto gtkArgv = std::vector<char*>{};
-    gtkArgv.reserve(remaining.size());
+    auto gtkArguments = GtkArguments{.strings = std::move(remaining), .pointers = {}};
+    gtkArguments.pointers.reserve(gtkArguments.strings.size());
 
-    for (auto& argument : remaining)
+    for (auto& argument : gtkArguments.strings)
     {
-      gtkArgv.push_back(argument.data());
+      gtkArguments.pointers.push_back(argument.data());
     }
 
-    return gtkArgv;
+    return gtkArguments;
   }
 
   void handleSignalException(Glib::RefPtr<Gtk::Application> const& appPtr)
@@ -562,7 +663,7 @@ namespace
     }
   }
 
-  std::int32_t runApp(std::span<char*> args)
+  std::int32_t runApp(std::span<char*> args, ProcessSignalHandlers& processSignalHandlers)
   {
     auto const options = parseCommandLine(args);
 
@@ -579,6 +680,7 @@ namespace
     Glib::set_application_name("Aobus");
 
     auto appPtr = Gtk::Application::create("org.aobus.app");
+    processSignalHandlers.install(appPtr);
 
     // Top-level boundary for exceptions that escape a GTK signal/action handler.
     // Such exceptions must not unwind through glib's C frames (UB), so glibmm
@@ -589,8 +691,6 @@ namespace
     // terminate on a transient failure.
     Glib::add_exception_handler([appPtr] { handleSignalException(appPtr); });
 
-    installUnixSignalHandlers(appPtr);
-
     auto mainWindowPtr = Glib::RefPtr<MainWindow>{};
     auto preferencesWindowPtr = std::unique_ptr<PreferencesWindow>{};
 
@@ -600,40 +700,73 @@ namespace
     auto shellLayoutStorePtr = std::make_shared<ShellLayoutStore>(layoutsDir);
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(layoutStateDir());
 
+    auto styleRuntimeRegistration = utility::ScopedRegistration{[] { GtkStyleRuntime::instance().shutdown(); }};
+    auto windowRegistration =
+      utility::ScopedRegistration{[&appPtr, &mainWindowPtr, &preferencesWindowPtr]
+                                  {
+                                    try
+                                    {
+                                      if (preferencesWindowPtr)
+                                      {
+                                        if (preferencesWindowPtr->get_application())
+                                        {
+                                          appPtr->remove_window(*preferencesWindowPtr);
+                                        }
+
+                                        preferencesWindowPtr.reset();
+                                      }
+
+                                      releaseMainWindow(*appPtr, mainWindowPtr);
+                                    }
+                                    catch (std::exception const& e)
+                                    {
+                                      APP_LOG_ERROR("Failed to release GTK windows during shutdown: {}", e.what());
+                                    }
+                                    catch (...)
+                                    {
+                                      APP_LOG_ERROR("Failed to release GTK windows during shutdown: unknown exception");
+                                    }
+                                  }};
+    auto openLibraryIdleRegistration = utility::ScopedRegistration{};
+    auto callbackScope =
+      MainContextCallbackScope{[&openLibraryIdleRegistration] { openLibraryIdleRegistration.reset(); }};
+
     addAppActions(appPtr, preferencesWindowPtr, appConfigStorePtr);
 
     appPtr->signal_activate().connect(
-      [&appPtr, &mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr]
-      { handleAppActivate(appPtr, mainWindowPtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr); });
+      [&appPtr,
+       &mainWindowPtr,
+       &callbackScope,
+       &openLibraryIdleRegistration,
+       appConfigStorePtr,
+       shellLayoutStorePtr,
+       componentStateStorePtr]
+      {
+        handleAppActivate(appPtr,
+                          mainWindowPtr,
+                          callbackScope,
+                          openLibraryIdleRegistration,
+                          appConfigStorePtr,
+                          shellLayoutStorePtr,
+                          componentStateStorePtr);
+      });
 
-    auto gtkArgv = buildGtkArgv(static_cast<std::int32_t>(args.size()), args.data());
-    std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArgv.size());
+    auto gtkArguments = buildGtkArgv(static_cast<std::int32_t>(args.size()), args.data());
+    std::int32_t const gtkArgc = static_cast<std::int32_t>(gtkArguments.pointers.size());
 
     APP_LOG_INFO("Entering GTK main loop");
-    auto exitCode = appPtr->run(gtkArgc, gtkArgv.data());
-
-    if (preferencesWindowPtr)
-    {
-      if (preferencesWindowPtr->get_application())
-      {
-        appPtr->remove_window(*preferencesWindowPtr);
-      }
-
-      preferencesWindowPtr.reset();
-    }
-
-    releaseMainWindow(*appPtr, mainWindowPtr);
-    return exitCode;
+    return appPtr->run(gtkArgc, gtkArguments.pointers.data());
   }
 } // namespace
 
 int main(int argc, char* argv[])
 {
+  auto processSignalHandlers = ProcessSignalHandlers{};
   std::int32_t exitCode = 0;
 
   try
   {
-    exitCode = runApp({argv, static_cast<std::size_t>(argc)});
+    exitCode = runApp({argv, static_cast<std::size_t>(argc)}, processSignalHandlers);
   }
   catch (ao::Exception const& e)
   {

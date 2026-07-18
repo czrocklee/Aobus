@@ -58,6 +58,7 @@ If a transient window misses theme classes, register its top-level lifetime with
 
 ## Related documents
 
+- [GTK lifetime and wiring](gtk-lifetime.md)
 - [Presentation architecture](../architecture/presentation.md)
 - [Application shell architecture](../architecture/application-shell.md)
 - [Shell layout adaptation](../spec/shell/layout-adaptation.md)

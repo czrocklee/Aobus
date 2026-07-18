@@ -10,7 +10,7 @@
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/widget.h>
-#include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 
 #include <functional>
 
@@ -35,11 +35,13 @@ namespace ao::gtk::layout
 
     /**
      * @brief Attaches action controllers to the target widget based on the layout node properties.
+     * @pre target remains valid until this controller is detached or destroyed.
      */
     void attach(LayoutBuildContext& ctx,
                 uimodel::LayoutNode const& node,
                 Gtk::Widget& target,
                 uimodel::LayoutComponentActionPolicy policy);
+    void detach();
 
   private:
     void attachPrimaryClick(uimodel::LayoutNode const& node,
@@ -64,15 +66,15 @@ namespace ao::gtk::layout
     std::function<void()> _primaryLongPress;
     std::function<void()> _secondaryLongPress;
 
-    Glib::RefPtr<Gtk::GestureClick> _primaryClickGesturePtr;
     Glib::RefPtr<Gtk::GestureClick> _secondaryClickGesturePtr;
     Glib::RefPtr<Gtk::GestureLongPress> _primaryLongPressGesturePtr;
     Glib::RefPtr<Gtk::GestureLongPress> _secondaryLongPressGesturePtr;
 
-    sigc::connection _primaryClickConn;
-    sigc::connection _secondaryClickConn;
-    sigc::connection _primaryLongPressConn;
-    sigc::connection _secondaryLongPressConn;
+    Gtk::Widget* _target = nullptr;
+    sigc::scoped_connection _primaryClickConn;
+    sigc::scoped_connection _secondaryClickConn;
+    sigc::scoped_connection _primaryLongPressConn;
+    sigc::scoped_connection _secondaryLongPressConn;
 
     bool _primaryLongPressHandled = false;
     bool _secondaryLongPressHandled = false;

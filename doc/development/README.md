@@ -47,3 +47,4 @@ Use the [development guide template](../template/development.md) for a new contr
 ## Linux GTK
 
 - [GTK style](gtk-style.md) defines theme tokens, structural variants, shared component CSS, motion, and visual-complexity policy.
+- [GTK lifetime and wiring](gtk-lifetime.md) defines signal ownership, replaceable-source rebinding, disposable view generations, transient parenting, and callback-lifetime policy.

@@ -13,7 +13,6 @@
 #include <giomm/settings.h>
 #include <giomm/settingsschema.h>
 #include <giomm/settingsschemasource.h>
-#include <glib-unix.h>
 #include <glib.h>
 #include <glibmm/error.h>
 #include <glibmm/keyfile.h>
@@ -66,11 +65,63 @@ namespace ao::gtk
     loadUserCss();
     startFileMonitors();
     startDBusMonitor();
-    installSignalHandler();
+  }
+
+  void GtkStyleRuntime::shutdown()
+  {
+    _initialized = false;
+
+    _reloadDebounceConnection.disconnect();
+    _gtkConfigMonitorConnection.disconnect();
+    _aobusConfigMonitorConnection.disconnect();
+
+    if (_gtkConfigMonitorPtr)
+    {
+      _gtkConfigMonitorPtr->cancel();
+      _gtkConfigMonitorPtr.reset();
+    }
+
+    if (_aobusConfigMonitorPtr)
+    {
+      _aobusConfigMonitorPtr->cancel();
+      _aobusConfigMonitorPtr.reset();
+    }
+
+    _dbusSubscription.reset();
+    _dbusConnectionPtr.reset();
+
+    auto const displayPtr = Gdk::Display::get_default();
+
+    if (displayPtr)
+    {
+      if (_appProviderPtr)
+      {
+        Gtk::StyleContext::remove_provider_for_display(displayPtr, _appProviderPtr);
+      }
+
+      if (_userProviderPtr)
+      {
+        Gtk::StyleContext::remove_provider_for_display(displayPtr, _userProviderPtr);
+      }
+
+      if (_gtkUserCssProviderPtr)
+      {
+        Gtk::StyleContext::remove_provider_for_display(displayPtr, _gtkUserCssProviderPtr);
+      }
+    }
+
+    _appProviderPtr.reset();
+    _userProviderPtr.reset();
+    _gtkUserCssProviderPtr.reset();
   }
 
   void GtkStyleRuntime::reload()
   {
+    if (!_initialized)
+    {
+      return;
+    }
+
     _reloadDebounceConnection.disconnect();
     _reloadDebounceConnection = Glib::signal_timeout().connect(
       [this] -> bool
@@ -299,7 +350,7 @@ namespace ao::gtk
     auto const configFilePtr = Gio::File::create_for_path(configDir.string());
 
     _gtkConfigMonitorPtr = configFilePtr->monitor_directory();
-    _gtkConfigMonitorPtr->signal_changed().connect(
+    _gtkConfigMonitorConnection = _gtkConfigMonitorPtr->signal_changed().connect(
       [this](Glib::RefPtr<Gio::File> const& filePtr,
              Glib::RefPtr<Gio::File> const& /*otherFile*/,
              Gio::FileMonitor::Event event)
@@ -327,7 +378,7 @@ namespace ao::gtk
     auto const aobusFilePtr = Gio::File::create_for_path(aobusDir.string());
 
     _aobusConfigMonitorPtr = aobusFilePtr->monitor_directory();
-    _aobusConfigMonitorPtr->signal_changed().connect(
+    _aobusConfigMonitorConnection = _aobusConfigMonitorPtr->signal_changed().connect(
       [this](Glib::RefPtr<Gio::File> const& filePtr,
              Glib::RefPtr<Gio::File> const& /*otherFile*/,
              Gio::FileMonitor::Event event)
@@ -358,7 +409,8 @@ namespace ao::gtk
     {
       if (auto busPtr = Gio::DBus::Connection::get_sync(Gio::DBus::BusType::SESSION); busPtr)
       {
-        _dbusSubscriptionId = busPtr->signal_subscribe(
+        _dbusConnectionPtr = busPtr;
+        auto const subscriptionId = _dbusConnectionPtr->signal_subscribe(
           [this](Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/,
                  Glib::ustring const& /*sender*/,
                  Glib::ustring const& /*iface*/,
@@ -373,24 +425,13 @@ namespace ao::gtk
           "org.freedesktop.portal.Settings",
           "SettingChanged",
           "/org/freedesktop/portal/desktop");
+        _dbusSubscription = utility::ScopedRegistration{[connectionPtr = _dbusConnectionPtr, subscriptionId]
+                                                        { connectionPtr->signal_unsubscribe(subscriptionId); }};
       }
     }
     catch (Glib::Error const& ex)
     {
       APP_LOG_WARN("GtkStyleRuntime: Failed to subscribe to DBus theme signals: {}", ex.what());
     }
-  }
-
-  void GtkStyleRuntime::installSignalHandler()
-  {
-    _sigusr1SourceId = ::g_unix_signal_add(
-      SIGUSR1,
-      [](void* data) -> ::gboolean
-      {
-        APP_LOG_DEBUG("GtkStyleRuntime: Received SIGUSR1, scheduling theme refresh...");
-        static_cast<GtkStyleRuntime*>(data)->reload();
-        return TRUE;
-      },
-      this);
   }
 } // namespace ao::gtk

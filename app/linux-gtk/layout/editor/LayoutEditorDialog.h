@@ -26,6 +26,7 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
 #include <cstdint>
@@ -52,6 +53,7 @@ namespace ao::gtk::layout::editor
   };
 
   using LayoutLoaderFn = std::function<uimodel::LayoutDocument(std::string_view presetId)>;
+  using PreviewSchedulerFn = std::function<sigc::connection(std::function<bool()>)>;
 
   class LayoutEditorDialog final : public AppDialog
   {
@@ -62,7 +64,8 @@ namespace ao::gtk::layout::editor
                        uimodel::LayoutDocument initialLayout,
                        std::string initialPresetId,
                        std::string initialThemeId,
-                       LayoutLoaderFn layoutLoader);
+                       LayoutLoaderFn layoutLoader,
+                       PreviewSchedulerFn previewScheduler = {});
     ~LayoutEditorDialog() override;
 
     LayoutEditorDialog(LayoutEditorDialog const&) = delete;
@@ -192,9 +195,10 @@ namespace ao::gtk::layout::editor
     Gtk::Paned _paned{Gtk::Orientation::HORIZONTAL};
 
     LayoutLoaderFn _layoutLoader;
+    PreviewSchedulerFn _previewScheduler;
     std::map<std::string, SessionEntry, std::less<>> _session;
     std::string _currentPresetId;
-    sigc::connection _previewDebounceConn;
+    sigc::scoped_connection _previewDebounceConn;
 
     sigc::signal<void(uimodel::LayoutDocument const&)> _signalApplyPreview;
     sigc::signal<void(std::string_view)> _signalThemePreview;

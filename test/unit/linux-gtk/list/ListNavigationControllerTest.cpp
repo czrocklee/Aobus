@@ -5,6 +5,7 @@
 
 #include "../../TestUtils.h"
 #include "app/ThemeCoordinator.h"
+#include "list/ListNavigationPanel.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
@@ -20,8 +21,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
+#include <gtkmm/listview.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/singleselection.h>
 #include <gtkmm/window.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -238,5 +243,31 @@ namespace ao::gtk::test
 
       CHECK(selectedId == rt::kAllTracksListId);
     }
+  }
+
+  TEST_CASE("ListNavigationPanel - retired selection model no longer drives callbacks", "[gtk][regression][list]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    [[maybe_unused]] auto const listId = createList(fixture.runtime().library(), "Retired Selection Source");
+    std::int32_t selectionChangedCount = 0;
+    auto panel = ListNavigationPanel{
+      {.onSelectionChanged = [&](ListId) { ++selectionChangedCount; }, .onContextMenuRequested = {}}};
+
+    panel.rebuildTree(fixture.runtime().library());
+    auto* const scrolledWindow = dynamic_cast<Gtk::ScrolledWindow*>(&panel.widget());
+    REQUIRE(scrolledWindow != nullptr);
+    auto* const listView = dynamic_cast<Gtk::ListView*>(scrolledWindow->get_child());
+    REQUIRE(listView != nullptr);
+    auto const retiredSelectionPtr = std::dynamic_pointer_cast<Gtk::SingleSelection>(listView->get_model());
+    REQUIRE(retiredSelectionPtr);
+    REQUIRE(retiredSelectionPtr->get_n_items() > 1);
+
+    panel.rebuildTree(fixture.runtime().library());
+    selectionChangedCount = 0;
+    auto const replacementPosition = retiredSelectionPtr->get_selected() == 0 ? 1U : 0U;
+    retiredSelectionPtr->set_selected(replacementPosition);
+
+    CHECK(selectionChangedCount == 0);
   }
 } // namespace ao::gtk::test

@@ -14,6 +14,7 @@
 #include <gtkmm/singleselection.h>
 #include <gtkmm/treelistmodel.h>
 #include <gtkmm/widget.h>
+#include <sigc++/scoped_connection.h>
 
 #include <cstdint>
 #include <functional>
@@ -75,6 +76,7 @@ namespace ao::gtk
     Glib::RefPtr<Gio::ListStore<ListTreeItem>> _listTreeStorePtr;
     Glib::RefPtr<Gtk::TreeListModel> _treeListModelPtr;
     Glib::RefPtr<Gtk::SingleSelection> _listSelectionModelPtr;
+    sigc::scoped_connection _selectionChangedConnection;
     std::map<ListId, Glib::RefPtr<ListTreeItem>> _nodesById;
   };
 } // namespace ao::gtk

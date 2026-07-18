@@ -45,8 +45,8 @@
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
+#include <glibmm/main.h>
 #include <gtkmm/dialog.h>
-#include <gtkmm/object.h>
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
 
@@ -146,6 +146,7 @@ namespace ao::gtk
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
     , _themeCoordinator{requireThemeCoordinator(dependencies)}
+    , _callbackScope{[this] { _queuedOpenEditorConnection.disconnect(); }}
   {
     _runtimeState.componentStateStore = _componentStateStorePtr.get();
     layout::LayoutRuntime::registerStandardComponents(_registry);
@@ -186,9 +187,12 @@ namespace ao::gtk
 
   ShellLayoutController::~ShellLayoutController()
   {
+    _callbackScope.close();
     _tasks.cancelAll();
     _optEditorThemeToken.reset();
     _editorDialogPtr.reset();
+    _outputDevicePopover.detach();
+    _menuPopover.detach();
     // Components retain LayoutRuntimeState and may flush pending state while
     // destructing, so release them before the state and its store owner.
     _host.clearLayout();
@@ -278,12 +282,16 @@ namespace ao::gtk
                    "Output Devices",
                    "Playback",
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
-                   [](layout::ActionActivationContext& ctx)
+                   [this](layout::ActionActivationContext& ctx)
                    {
-                     auto* const popover = Gtk::make_managed<OutputDevicePopover>(ctx.runtime.playback());
-                     popover->set_parent(ctx.anchorWidget);
-                     popover->signal_closed().connect([popover] { popover->unparent(); });
-                     popover->popup();
+                     if (_outputDevicePopover.hasPopover())
+                     {
+                       return;
+                     }
+
+                     auto popoverPtr = std::make_unique<OutputDevicePopover>(ctx.runtime.playback());
+                     _outputDevicePopover.attach(std::move(popoverPtr), ctx.anchorWidget);
+                     _outputDevicePopover.popup();
                    },
                    {});
   }
@@ -298,11 +306,15 @@ namespace ao::gtk
                    {
                      if (_menuModelPtr)
                      {
-                       auto* const popover = Gtk::make_managed<Gtk::PopoverMenu>(_menuModelPtr);
-                       popover->set_parent(ctx.anchorWidget);
-                       popover->set_has_arrow(true);
-                       popover->signal_closed().connect([popover] { popover->unparent(); });
-                       popover->popup();
+                       if (_menuPopover.hasPopover())
+                       {
+                         return;
+                       }
+
+                       auto popoverPtr = std::make_unique<Gtk::PopoverMenu>(_menuModelPtr);
+                       popoverPtr->set_has_arrow(true);
+                       _menuPopover.attach(std::move(popoverPtr), ctx.anchorWidget);
+                       _menuPopover.popup();
                      }
                      else
                      {
@@ -331,10 +343,21 @@ namespace ao::gtk
                    uimodel::LayoutActionCapability::None,
                    [this](layout::ActionActivationContext&)
                    {
-                     if (_configStorePtr)
-                     {
-                       openEditor(*_configStorePtr);
-                     }
+                     _queuedOpenEditorConnection.disconnect();
+                     auto openEditorAfterDispatch = _callbackScope.guard(
+                       [this]
+                       {
+                         if (_configStorePtr)
+                         {
+                           openEditor(*_configStorePtr);
+                         }
+                       });
+                     _queuedOpenEditorConnection = Glib::signal_idle().connect(
+                       [openEditorAfterDispatch = std::move(openEditorAfterDispatch)] mutable
+                       {
+                         openEditorAfterDispatch();
+                         return false;
+                       });
                    },
                    {});
   }

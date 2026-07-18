@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
+#include "common/PopoverAttachment.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -14,10 +15,10 @@
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
-#include <gtkmm/object.h>
 #include <gtkmm/widget.h>
 
 #include <memory>
+#include <utility>
 
 namespace ao::gtk::layout
 {
@@ -46,10 +47,14 @@ namespace ao::gtk::layout
         _button.signal_clicked().connect(
           [this]
           {
-            auto* const popover = Gtk::make_managed<OutputDevicePopover>(_playback, Gtk::PositionType::TOP);
-            popover->set_parent(_button);
-            popover->signal_closed().connect([popover] { popover->unparent(); });
-            popover->popup();
+            if (_popoverAttachment.hasPopover())
+            {
+              return;
+            }
+
+            auto popoverPtr = std::make_unique<OutputDevicePopover>(_playback, Gtk::PositionType::TOP);
+            _popoverAttachment.attach(std::move(popoverPtr), _button);
+            _popoverAttachment.popup();
           });
 
         _viewModel.refresh();
@@ -62,6 +67,7 @@ namespace ao::gtk::layout
       Gtk::Button _button;
       Gtk::Label _label;
       uimodel::OutputDeviceViewModel _viewModel;
+      PopoverAttachment _popoverAttachment;
     };
 
     std::unique_ptr<LayoutComponent> createOutputDeviceSelector(LayoutBuildContext& ctx, LayoutNode const& node)

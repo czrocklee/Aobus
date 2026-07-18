@@ -81,6 +81,7 @@ namespace ao::gtk
     bool flushSharedColumnLayoutUpdate();
     bool flushColumnResolve();
     bool flushTitlePositionVariableUpdate();
+    void connectHorizontalAdjustmentSignals();
     void updateSharedColumnLayout();
     void applySolvedColumnWidths(std::span<uimodel::TrackColumnSolveSpec const> specs);
     std::int32_t resolvedViewportWidth() const;
@@ -100,6 +101,10 @@ namespace ao::gtk
     uimodel::TrackColumnLayoutStore& _layoutStore;
 
     std::vector<ColumnBinding> _columns;
+    sigc::scoped_connection _columnViewMappedConnection;
+    sigc::scoped_connection _horizontalAdjustmentChangedConnection;
+    sigc::scoped_connection _horizontalPageSizeChangedConnection;
+    sigc::scoped_connection _horizontalUpperChangedConnection;
     sigc::scoped_connection _queuedColumnLayoutUpdateConnection;
     sigc::scoped_connection _queuedColumnResolveConnection;
     sigc::scoped_connection _queuedTitlePositionUpdateConnection;

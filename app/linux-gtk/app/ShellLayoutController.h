@@ -4,6 +4,8 @@
 #pragma once
 
 #include "app/ThemeCoordinator.h"
+#include "common/MainContextCallbackScope.h"
+#include "common/PopoverAttachment.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -24,6 +26,7 @@
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <functional>
 #include <memory>
@@ -161,6 +164,8 @@ namespace ao::gtk
     std::function<void(ListId, std::string)> _createSmartListFromExpression;
     Glib::RefPtr<Gio::MenuModel> _menuModelPtr;
     layout::LayoutHost _host;
+    PopoverAttachment _outputDevicePopover;
+    PopoverAttachment _menuPopover;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
     std::vector<rt::Subscription> _playbackSubs;
     uimodel::ShellLayoutSessionModel _session;
@@ -172,5 +177,7 @@ namespace ao::gtk
     std::shared_ptr<layout::editor::LayoutEditorDialog> _editorDialogPtr;
     async::LifetimeScope _tasks;
     ConfirmPromotionFn _confirmPromotionFn;
+    sigc::scoped_connection _queuedOpenEditorConnection;
+    MainContextCallbackScope _callbackScope;
   };
 } // namespace ao::gtk

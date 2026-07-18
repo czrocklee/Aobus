@@ -24,6 +24,15 @@ namespace ao::gtk::layout
     }
   }
 
+  DecoratedLayoutComponent::~DecoratedLayoutComponent()
+  {
+    // Detach interactions while the target content is explicitly known to be alive.
+    if (_interactionPtr)
+    {
+      _interactionPtr->detach();
+    }
+  }
+
   Gtk::Widget& DecoratedLayoutComponent::widget()
   {
     // The tooltip widget is only used by the tooltip controller via query-tooltip.

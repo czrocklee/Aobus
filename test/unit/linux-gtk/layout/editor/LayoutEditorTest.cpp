@@ -14,14 +14,18 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/spinbutton.h>
 #include <gtkmm/treeview.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/signal.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::layout::editor::test
@@ -110,6 +114,39 @@ namespace ao::gtk::layout::editor::test
       CHECK(count > 0);
 
       dialogPtr->close();
+    }
+
+    SECTION("pending property preview is cancelled when the dialog is destroyed")
+    {
+      std::int32_t previewCount = 0;
+      std::int32_t scheduledPreviewCount = 0;
+      auto manualScheduler = sigc::signal<bool()>{};
+      {
+        auto const scheduler = [&](std::function<bool()> callback)
+        {
+          ++scheduledPreviewCount;
+          return manualScheduler.connect(std::move(callback));
+        };
+        auto dialogPtr = std::make_unique<LayoutEditorDialog>(
+          window, registry, actionRegistry, doc, "classic", "modern", stubLoader, scheduler);
+        dialogPtr->signalApplyPreview().connect([&](LayoutDocument const&) { ++previewCount; });
+
+        auto* const treeView = findWidget<Gtk::TreeView>(*dialogPtr);
+        REQUIRE(treeView != nullptr);
+        auto const modelPtr = treeView->get_model();
+        REQUIRE(modelPtr);
+        REQUIRE(!modelPtr->children().empty());
+        treeView->get_selection()->select(modelPtr->children().begin());
+
+        auto const spinButtons = ao::gtk::test::collectAll<Gtk::SpinButton>(*dialogPtr);
+        REQUIRE(!spinButtons.empty());
+        spinButtons.front()->set_value(spinButtons.front()->get_value() + 1.0);
+        REQUIRE(scheduledPreviewCount == 1);
+        CHECK(previewCount == 0);
+      }
+
+      manualScheduler.emit();
+      CHECK(previewCount == 0);
     }
 
     SECTION("added components receive unique ids")

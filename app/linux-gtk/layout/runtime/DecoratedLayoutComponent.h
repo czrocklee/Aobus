@@ -19,7 +19,7 @@ namespace ao::gtk::layout
     DecoratedLayoutComponent(std::unique_ptr<LayoutComponent> contentPtr,
                              std::unique_ptr<LayoutComponent> tooltipPtr,
                              std::unique_ptr<ComponentInteractionController> interactionPtr = nullptr);
-    ~DecoratedLayoutComponent() override = default;
+    ~DecoratedLayoutComponent() override;
 
     DecoratedLayoutComponent(DecoratedLayoutComponent const&) = delete;
     DecoratedLayoutComponent& operator=(DecoratedLayoutComponent const&) = delete;

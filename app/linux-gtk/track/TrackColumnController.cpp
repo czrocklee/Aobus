@@ -42,24 +42,21 @@ namespace ao::gtk
   {
     _dynamicCssProviderPtr = Gtk::CssProvider::create();
 
-    _columnView.signal_map().connect(
+    _columnViewMappedConnection = _columnView.signal_map().connect(
       [this]
       {
         queueColumnResolve();
         queueTitlePositionVariableUpdate();
       });
 
-    if (auto const adjPtr = _columnView.get_hadjustment(); adjPtr)
-    {
-      adjPtr->property_page_size().signal_changed().connect(
-        [this]
-        {
-          queueColumnResolve();
-          queueTitlePositionVariableUpdate();
-        });
-      adjPtr->property_upper().signal_changed().connect(
-        sigc::mem_fun(*this, &TrackColumnController::queueTitlePositionVariableUpdate));
-    }
+    _horizontalAdjustmentChangedConnection = _columnView.property_hadjustment().signal_changed().connect(
+      [this]
+      {
+        connectHorizontalAdjustmentSignals();
+        queueColumnResolve();
+        queueTitlePositionVariableUpdate();
+      });
+    connectHorizontalAdjustmentSignals();
 
     if (auto const columnsPtr = _columnView.get_columns(); columnsPtr)
     {
@@ -263,6 +260,24 @@ namespace ao::gtk
     _queuedTitlePositionUpdateConnection.disconnect();
     updateTitlePositionVariable();
     return false;
+  }
+
+  void TrackColumnController::connectHorizontalAdjustmentSignals()
+  {
+    _horizontalPageSizeChangedConnection.disconnect();
+    _horizontalUpperChangedConnection.disconnect();
+
+    if (auto const adjPtr = _columnView.get_hadjustment(); adjPtr)
+    {
+      _horizontalPageSizeChangedConnection = adjPtr->property_page_size().signal_changed().connect(
+        [this]
+        {
+          queueColumnResolve();
+          queueTitlePositionVariableUpdate();
+        });
+      _horizontalUpperChangedConnection = adjPtr->property_upper().signal_changed().connect(
+        sigc::mem_fun(*this, &TrackColumnController::queueTitlePositionVariableUpdate));
+    }
   }
 
   void TrackColumnController::updateSharedColumnLayout()

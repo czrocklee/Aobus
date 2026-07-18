@@ -132,6 +132,18 @@ namespace ao::gtk::test
       CHECK(window.get_child() != nullptr);
     }
 
+    SECTION("layout edit action defers generation replacement until after dispatch")
+    {
+      REQUIRE(controller.editorDialog() == nullptr);
+
+      auto const result = controller.activateAction("shell.editLayout");
+
+      CHECK(result.outcome == uimodel::LayoutActionActivationOutcome::Activated);
+      CHECK(controller.editorDialog() == nullptr);
+      drainGtkEvents();
+      CHECK(controller.editorDialog() != nullptr);
+    }
+
     SECTION("loadLayout load works")
     {
       controller.loadLayout(*configStorePtr);

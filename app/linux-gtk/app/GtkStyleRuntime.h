@@ -3,12 +3,15 @@
 
 #pragma once
 
+#include <ao/utility/ScopedRegistration.h>
+
+#include <giomm/dbusconnection.h>
 #include <giomm/filemonitor.h>
 #include <glib.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/widget.h>
-#include <sigc++/connection.h>
+#include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
 namespace ao::gtk
@@ -18,6 +21,9 @@ namespace ao::gtk
   public:
     // Idempotent — safe to call multiple times.
     void initialize();
+
+    // Stops callbacks and releases process-level GTK resources. Idempotent.
+    void shutdown();
 
     // Full reload: syncGtkSettings + reloadGtkUserCss + reloadUserCss + signalRefreshed.
     void reload();
@@ -45,7 +51,6 @@ namespace ao::gtk
     void startGtkConfigMonitor();
     void startAobusConfigMonitor();
     void startDBusMonitor();
-    void installSignalHandler();
 
     bool _initialized = false;
 
@@ -55,11 +60,13 @@ namespace ao::gtk
 
     Glib::RefPtr<Gio::FileMonitor> _gtkConfigMonitorPtr;
     Glib::RefPtr<Gio::FileMonitor> _aobusConfigMonitorPtr;
+    sigc::scoped_connection _gtkConfigMonitorConnection;
+    sigc::scoped_connection _aobusConfigMonitorConnection;
 
-    guint _dbusSubscriptionId = 0;
-    guint _sigusr1SourceId = 0;
+    Glib::RefPtr<Gio::DBus::Connection> _dbusConnectionPtr;
+    utility::ScopedRegistration _dbusSubscription;
 
-    sigc::connection _reloadDebounceConnection;
+    sigc::scoped_connection _reloadDebounceConnection;
     sigc::signal<void()> _refreshedSignal;
   };
 } // namespace ao::gtk

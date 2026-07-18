@@ -9,6 +9,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/adjustment.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/signallistitemfactory.h>
@@ -191,5 +192,38 @@ namespace ao::gtk::test
       REQUIRE(adjPtr);
       CHECK(static_cast<std::int32_t>(std::lround(adjPtr->get_page_size())) == columnView.get_width());
     }
+  }
+
+  TEST_CASE("TrackColumnController - follows the active horizontal adjustment",
+            "[gtk][regression][track-column][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto columnView = Gtk::ColumnView{};
+    auto controller = TrackColumnController{columnView, layoutStore, rt::kAllTracksListId};
+    controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+    controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Duration});
+
+    auto const viewportAdjustmentPtr = Gtk::Adjustment::create(0.0, 0.0, 1000.0, 1.0, 10.0, 640.0);
+    columnView.set_hadjustment(viewportAdjustmentPtr);
+    drainGtkEvents();
+
+    auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+    auto const artistColumnPtr = columnForField(columnView, rt::TrackField::Artist);
+    auto const durationColumnPtr = columnForField(columnView, rt::TrackField::Duration);
+    REQUIRE(titleColumnPtr);
+    REQUIRE(artistColumnPtr);
+    REQUIRE(durationColumnPtr);
+
+    CHECK(titleColumnPtr->get_fixed_width() + artistColumnPtr->get_fixed_width() +
+            durationColumnPtr->get_fixed_width() ==
+          640);
+
+    viewportAdjustmentPtr->set_page_size(720.0);
+    drainGtkEvents();
+
+    CHECK(titleColumnPtr->get_fixed_width() + artistColumnPtr->get_fixed_width() +
+            durationColumnPtr->get_fixed_width() ==
+          720);
   }
 } // namespace ao::gtk::test

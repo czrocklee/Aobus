@@ -12,6 +12,7 @@
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
+#include <sigc++/scoped_connection.h>
 
 #include <functional>
 #include <memory>
@@ -74,8 +75,8 @@ namespace ao::gtk
 
     void openTrackContextMenu(TrackViewPage& page, TrackSelection const& selection, double xPosition, double yPosition);
 
-    void openTagEditor(TrackSelection const& selection, Gtk::Widget& relativeTo);
     void presentProperties(TrackSelection const& selection);
+    void openTagEditor(TrackSelection const& selection, Gtk::Widget& relativeTo);
 
     void submitTagChanges(TrackSelection const& selection,
                           std::span<std::string const> tagsToAdd,
@@ -85,6 +86,13 @@ namespace ao::gtk
     void createActions();
     void openTagsPopover(TrackViewPage& page, double xPosition, double yPosition);
     void presentPropertiesDialog();
+    void unparentClosedContextPopover();
+    void scheduleContextPopoverRetirement();
+    void finishContextPopoverRetirement();
+    void retireContextPopover();
+    void unparentClosedTagPopover();
+    void retireTagPopover();
+    void observeTagPopoverAnchor();
 
     void addTagToCurrentSelection(std::string tag);
     void removeTagFromCurrentSelection(std::string tag);
@@ -110,6 +118,13 @@ namespace ao::gtk
     std::unique_ptr<uimodel::TrackAuthoringSession> _tagEditSessionPtr;
     std::unique_ptr<Gtk::PopoverMenu> _contextPopoverPtr;
     Glib::RefPtr<Gio::SimpleActionGroup> _contextActionGroupPtr;
+
+    sigc::scoped_connection _contextPopoverClosedConnection;
+    sigc::scoped_connection _contextAnchorUnmapConnection;
+    sigc::scoped_connection _contextPopoverRetirementConnection;
+    sigc::scoped_connection _tagPopoverClosedConnection;
+    sigc::scoped_connection _tagAnchorUnmapConnection;
+    sigc::scoped_connection _tagsChangedConnection;
 
     TrackViewPage* _contextPage = nullptr;
     double _contextXPosition = 0.0;

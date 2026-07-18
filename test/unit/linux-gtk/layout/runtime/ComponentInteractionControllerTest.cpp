@@ -20,6 +20,8 @@
 #include <gtkmm/gesturelongpress.h>
 #include <gtkmm/window.h>
 
+#include <memory>
+
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
@@ -118,6 +120,46 @@ namespace ao::gtk::layout::test
 
       emitClicked(button);
       CHECK_FALSE(primaryClicked);
+    }
+
+    SECTION("removes installed gesture controllers when destroyed before its target")
+    {
+      auto box = Gtk::Box{};
+      auto node = uimodel::LayoutNode{.type = "box"};
+      node.props[std::string{uimodel::kSecondaryActionProp}] = uimodel::LayoutValue{std::string{"secondary"}};
+      node.props[std::string{uimodel::kPrimaryLongPressActionProp}] = uimodel::LayoutValue{std::string{"primaryLong"}};
+      node.props[std::string{uimodel::kSecondaryLongPressActionProp}] =
+        uimodel::LayoutValue{std::string{"secondaryLong"}};
+      auto const initialControllerCount = box.observe_controllers()->get_n_items();
+
+      {
+        auto controllerPtr = std::make_unique<ComponentInteractionController>();
+        controllerPtr->attach(ctx, node, box, uimodel::kAllExternalActions);
+        CHECK(box.observe_controllers()->get_n_items() == initialControllerCount + 3);
+      }
+
+      CHECK(box.observe_controllers()->get_n_items() == initialControllerCount);
+    }
+
+    SECTION("keeps the bound action alive when dispatch destroys the controller")
+    {
+      auto button = Gtk::Button{};
+      auto controllerPtr = std::make_unique<ComponentInteractionController>();
+      bool actionCompleted = false;
+      registry.registerAction({.id = "destroying", .label = "Destroying", .category = "Test"},
+                              [&](auto&)
+                              {
+                                controllerPtr.reset();
+                                actionCompleted = true;
+                              });
+      auto node = uimodel::LayoutNode{.type = "btn"};
+      node.props[std::string{uimodel::kPrimaryActionProp}] = uimodel::LayoutValue{std::string{"destroying"}};
+      controllerPtr->attach(ctx, node, button, uimodel::kAllExternalActions);
+
+      emitClicked(button);
+
+      CHECK(controllerPtr == nullptr);
+      CHECK(actionCompleted);
     }
   }
 } // namespace ao::gtk::layout::test

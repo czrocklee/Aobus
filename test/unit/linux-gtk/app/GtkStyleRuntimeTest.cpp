@@ -10,6 +10,8 @@
 #include <gtkmm/cssprovider.h>
 #include <gtkmm/label.h>
 
+#include <chrono>
+
 namespace ao::gtk::test
 {
   TEST_CASE("GtkStyleRuntime - initializes providers and emits reload notifications", "[gtk][unit][app][style]")
@@ -17,6 +19,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto& manager = GtkStyleRuntime::instance();
+    manager.initialize();
 
     SECTION("singleton instance exists")
     {
@@ -27,6 +30,28 @@ namespace ao::gtk::test
     {
       CHECK_NOTHROW(manager.initialize());
       CHECK_NOTHROW(manager.initialize());
+    }
+
+    SECTION("shutdown is idempotent and permits reinitialization")
+    {
+      CHECK_NOTHROW(manager.initialize());
+      CHECK_NOTHROW(manager.shutdown());
+      CHECK_NOTHROW(manager.shutdown());
+      CHECK_NOTHROW(manager.initialize());
+      CHECK(manager.appProvider());
+    }
+
+    SECTION("shutdown cancels a pending reload")
+    {
+      bool refreshed = false;
+      auto connection = manager.signalRefreshed().connect([&] { refreshed = true; });
+
+      manager.reload();
+      manager.shutdown();
+      drainGtkEventsFor(std::chrono::milliseconds{200});
+
+      CHECK_FALSE(refreshed);
+      connection.disconnect();
     }
 
     SECTION("reload triggers signal after debounce")
@@ -48,5 +73,7 @@ namespace ao::gtk::test
       CHECK_NOTHROW(manager.addProviderForDisplayOf(label, providerPtr, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION));
       CHECK_NOTHROW(manager.removeProviderForDisplayOf(label, providerPtr));
     }
+
+    manager.shutdown();
   }
 } // namespace ao::gtk::test
