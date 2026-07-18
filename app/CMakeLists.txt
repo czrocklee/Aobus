@@ -166,6 +166,28 @@ add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
 set(AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX "ao/audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/)")
 set(AO_FORBIDDEN_WRITE_AUTHORITY_REGEX "(^|[^A-Za-z0-9_])(WriteTransaction|WritableMusicLibrary)([^A-Za-z0-9_]|$)")
 set(AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX "\"([.]aobus|data[.]mdb)")
+# CMake regexes have no word-boundary escape, so delimit the exact legacy
+# vocabulary without rejecting adjacent type or namespace names.
+set(AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX
+  "#[ \t]*include[ \t]*[<\\\"]ao/rt/(Signal|Subscription)[.]h[>\\\"]|(^|[^A-Za-z0-9_:])((::)?ao::rt::|rt::)(Signal|Subscription)([^A-Za-z0-9_]|$)")
+
+foreach(AO_LEGACY_SIGNAL_SPELLING IN ITEMS "rt::Signal" "ao::rt::Subscription" "::ao::rt::Signal")
+  if(NOT "${AO_LEGACY_SIGNAL_SPELLING}" MATCHES "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}")
+    message(FATAL_ERROR "Signal guardrail does not reject '${AO_LEGACY_SIGNAL_SPELLING}'")
+  endif()
+endforeach()
+
+foreach(AO_ADJACENT_SIGNAL_SPELLING IN ITEMS
+    "rt::SignalRouter"
+    "rt::SubscriptionScope"
+    "Chart::Signal"
+    "Report::Subscription"
+    "other::rt::Signal"
+    "other::ao::rt::Signal")
+  if("${AO_ADJACENT_SIGNAL_SPELLING}" MATCHES "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}")
+    message(FATAL_ERROR "Signal guardrail rejects adjacent vocabulary '${AO_ADJACENT_SIGNAL_SPELLING}'")
+  endif()
+endforeach()
 set(AO_FORBIDDEN_PLATFORM_UI_INCLUDE_REGEX
   "#[ \t]*include[ \t]*[<\\\"](gtkmm|gdkmm|giomm|glibmm|gtk|gdk|gio|glib)/")
 set(AO_FORBIDDEN_UIMODEL_PLATFORM_VOCABULARY_REGEX
@@ -189,6 +211,30 @@ ao_write_guardrail_regex(
   "frontend-library-path"
   "${AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX}"
 )
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX_FILE
+  "application-signal-primitive"
+  "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}"
+)
+
+foreach(AO_LEGACY_SIGNAL_HEADER IN ITEMS Signal.h Subscription.h)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/ao/rt/${AO_LEGACY_SIGNAL_HEADER}")
+    message(FATAL_ERROR
+      "Generic signal primitives belong in ao_async; remove app/include/ao/rt/${AO_LEGACY_SIGNAL_HEADER}")
+  endif()
+endforeach()
+
+add_custom_target(ao_shared_signal_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/test"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking that generic signal primitives stay below application namespaces"
+  VERBATIM
+)
+
+add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
 
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
@@ -272,6 +318,7 @@ add_custom_target(ao_layering_boundary_report
   DEPENDS
     ao_frontend_library_path_boundary_check
     ao_rt_public_boundary_report
+    ao_shared_signal_boundary_check
     ao_uimodel_platform_boundary_report
     ao_uimodel_core_boundary_report
 )

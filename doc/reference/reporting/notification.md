@@ -130,7 +130,7 @@ The short `post` overload initializes activity presentation and content to their
 |---|---|
 | `onFeedUpdated` | `void(NotificationFeedUpdate const&)` |
 
-The member returns an `rt::Subscription` that owns the connection lifetime.
+The member returns an `async::Subscription` that owns the connection lifetime.
 The update reference is valid for the callback invocation; retaining `feedPtr` keeps that immutable snapshot alive.
 
 An observer failure is sent through the owning runtime with context `notification feed observer at revision <N>`.

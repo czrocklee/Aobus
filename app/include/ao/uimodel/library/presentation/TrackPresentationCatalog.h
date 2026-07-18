@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 
 #include <cstdint>
@@ -52,13 +52,13 @@ namespace ao::uimodel
     void addCustomPresentation(rt::CustomTrackPresentationPreset const& state);
     void removeCustomPresentation(std::string_view id);
 
-    rt::Signal<>& signalChanged() noexcept { return _changed; }
+    async::Signal<>& signalChanged() noexcept { return _changed; }
 
   private:
     rt::CustomTrackPresentationPreset const* findCustomPresetById(std::string_view id) const;
 
     rt::WorkspaceService& _workspace;
-    rt::Subscription _customPresetsSub;
-    rt::Signal<> _changed;
+    async::Subscription _customPresetsSub;
+    async::Signal<> _changed;
   };
 } // namespace ao::uimodel

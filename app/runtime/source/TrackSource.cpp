@@ -3,8 +3,8 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
@@ -23,7 +23,7 @@ namespace ao::rt
 {
   TrackSource::~TrackSource() = default;
 
-  Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler)
+  async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler)
   {
     if (!handler)
     {

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
@@ -67,9 +67,9 @@ namespace ao::uimodel
     TrackPresentationCatalog& _catalog;
     ListPresentationPreferenceStore& _preferences;
     std::function<void(TrackPresentationPickerState const&)> _onRender;
-    rt::Subscription _focusSub;
-    rt::Subscription _presentationSub;
-    rt::Subscription _catalogSub;
+    async::Subscription _focusSub;
+    async::Subscription _presentationSub;
+    async::Subscription _catalogSub;
     rt::ViewId _observedViewId = rt::kInvalidViewId;
     rt::ViewId _optimisticViewId = rt::kInvalidViewId;
     std::string _optimisticPresentationId;

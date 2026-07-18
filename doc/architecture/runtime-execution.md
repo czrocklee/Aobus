@@ -44,6 +44,11 @@ The callback executor is the serialized application-control domain.
 Mutable runtime services such as playback, sequence, view, workspace, and notification services keep their authoritative state there unless a public contract explicitly states otherwise.
 Subscription registration, event delivery, and subscription teardown follow the owning service's executor affinity.
 
+`async::Signal` is the reusable synchronous observer mechanism below runtime and UIModel services.
+It is unsynchronized and does not choose an executor, so its owner defines the serialized domain for connection, emission, disconnection, inspection, and destruction.
+Its `post()` operation is a weak-lifetime deferred hop through a supplied executor, not permission for other signal operations to cross threads.
+The [signal delivery specification](../spec/async/signal.md) owns its exact ordering, reentrancy, observer-exception, and destruction behavior.
+
 The notification service refines synchronous callback delivery with a revision queue.
 One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later revision rather than nesting signal delivery.
 Observer failure is contained after every connected observer has run and is reported through `Runtime::reportUnhandledException`, so it cannot unwind an already committed feed command.
@@ -94,6 +99,7 @@ The logging backend may also own its own asynchronous worker, but it is infrastr
 - Frontends construct the callback executor and transfer exclusive ownership to `CoreRuntime`.
 - `CoreRuntime` owns `async::Runtime`; runtime services borrow it or its callback executor and cannot outlive it.
 - Interactive composition injects an async exception handler from the application logging boundary; `ao_async` does not depend on application logging types.
+- Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, transaction ordering, and observer-failure containment remain with those owners.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
 - Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
@@ -184,6 +190,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 ## Implementation map
 
 - [`ao::async::Executor`](../../include/ao/async/Executor.h) defines callback dispatch and deferred-turn semantics.
+- [`ao::async::Signal`](../../include/ao/async/Signal.h) and [`ao::async::Subscription`](../../include/ao/async/Subscription.h) define owner-affine observer delivery and scoped connection lifetime.
 - [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutorBase.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK, TUI, and explicit loops.
 - [`LoopExecutor`](../../include/ao/async/LoopExecutor.h) adds the binary wake signal and owner-driven blocking/non-blocking turn operations.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
@@ -202,6 +209,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, non-default-constructible result transport, and runtime lifetime.
 - [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
 - [`LoopExecutorTest.cpp`](../../test/unit/runtime/LoopExecutorTest.cpp) protects owner affinity, burst wake coalescing, multi-producer admission, non-reentrant turns, and later-turn delivery.
+- [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects connection order, reentrant mutation, nested emission, observer failures, deferred turns, and weak owner lifetime independently of application runtime composition.
 - [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
@@ -215,6 +223,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [System architecture](system-overview.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
 - [Outcome channel specification](../spec/failure/outcome-channel.md)
+- [Signal delivery specification](../spec/async/signal.md)
 - [Notification feed specification](../spec/reporting/notification-feed.md)
 - [Library architecture](library.md)
 - [Playback architecture](playback.md)

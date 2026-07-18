@@ -3,7 +3,7 @@
 
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -116,7 +116,7 @@ namespace ao::rt::test
             "[runtime][unit][source]")
   {
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = Subscription{};
+    auto subscription = async::Subscription{};
 
     {
       auto sourcePtr = std::make_unique<MutableTrackSource>();

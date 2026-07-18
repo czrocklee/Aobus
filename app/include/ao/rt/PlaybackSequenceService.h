@@ -4,10 +4,10 @@
 #pragma once
 
 #include "PlaybackMode.h"
-#include "Subscription.h"
 #include "ViewIds.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 
 #include <chrono>
 #include <cstddef>
@@ -105,9 +105,9 @@ namespace ao::rt
     // Handlers run synchronously on the executor thread. They must defer owner
     // teardown to a later executor turn; Debug contracts reject destruction
     // while a sequence transition or observer publication is still on the stack.
-    Subscription onChanged(std::move_only_function<void(PlaybackSequenceState const&)> handler);
-    Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
-    Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
+    async::Subscription onChanged(std::move_only_function<void(PlaybackSequenceState const&)> handler);
+    async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
+    async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
 
   private:
     friend class PlaybackSessionPersistence;
@@ -126,7 +126,7 @@ namespace ao::rt
                                       RepeatMode repeatMode,
                                       std::chrono::milliseconds elapsed) noexcept;
     void discardPlaybackSessionSnapshot();
-    Subscription onPersistenceIntentChanged(std::move_only_function<void()> handler);
+    async::Subscription onPersistenceIntentChanged(std::move_only_function<void()> handler);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -35,7 +35,7 @@ namespace ao::gtk
     void updateCount();
 
     rt::TrackSourceLease _sourceLease;
-    rt::Subscription _sourceSubscription;
+    async::Subscription _sourceSubscription;
     Gtk::Label _label;
   };
 } // namespace ao::gtk

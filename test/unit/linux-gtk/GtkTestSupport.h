@@ -6,12 +6,12 @@
 #include "linux-gtk/app/GtkMainContextExecutor.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 
@@ -650,10 +650,10 @@ namespace ao::gtk::test
   public:
     rt::TrackDetailSnapshot snapshot() const override { return _snap; }
 
-    rt::Subscription subscribe(std::move_only_function<void(rt::TrackDetailSnapshot const&)> handler) override
+    async::Subscription subscribe(std::move_only_function<void(rt::TrackDetailSnapshot const&)> handler) override
     {
       _handler = std::move(handler);
-      return rt::Subscription{};
+      return async::Subscription{};
     }
 
     void emit(rt::TrackDetailSnapshot const& snap)
@@ -675,72 +675,73 @@ namespace ao::gtk::test
   class FakePlaybackEvents
   {
   public:
-    rt::Subscription onStarted(std::move_only_function<void()> handler)
+    async::Subscription onStarted(std::move_only_function<void()> handler)
     {
       _started = std::move(handler);
-      return rt::Subscription{[this] { _started = nullptr; }};
+      return async::Subscription{[this] { _started = nullptr; }};
     }
 
-    rt::Subscription onPaused(std::move_only_function<void()> handler)
+    async::Subscription onPaused(std::move_only_function<void()> handler)
     {
       _paused = std::move(handler);
-      return rt::Subscription{[this] { _paused = nullptr; }};
+      return async::Subscription{[this] { _paused = nullptr; }};
     }
 
-    rt::Subscription onStopped(std::move_only_function<void()> handler)
+    async::Subscription onStopped(std::move_only_function<void()> handler)
     {
       _stopped = std::move(handler);
-      return rt::Subscription{[this] { _stopped = nullptr; }};
+      return async::Subscription{[this] { _stopped = nullptr; }};
     }
 
-    rt::Subscription onIdle(std::move_only_function<void()> handler)
+    async::Subscription onIdle(std::move_only_function<void()> handler)
     {
       _idle = std::move(handler);
-      return rt::Subscription{[this] { _idle = nullptr; }};
+      return async::Subscription{[this] { _idle = nullptr; }};
     }
 
-    rt::Subscription onPreparing(std::move_only_function<void()> handler)
+    async::Subscription onPreparing(std::move_only_function<void()> handler)
     {
       _preparing = std::move(handler);
-      return rt::Subscription{[this] { _preparing = nullptr; }};
+      return async::Subscription{[this] { _preparing = nullptr; }};
     }
 
-    rt::Subscription onSeekUpdate(std::move_only_function<void(rt::PlaybackService::SeekUpdate const&)> handler)
+    async::Subscription onSeekUpdate(std::move_only_function<void(rt::PlaybackService::SeekUpdate const&)> handler)
     {
       _seekUpdate = std::move(handler);
-      return rt::Subscription{[this] { _seekUpdate = nullptr; }};
+      return async::Subscription{[this] { _seekUpdate = nullptr; }};
     }
 
-    rt::Subscription onOutputDeviceChanged(std::move_only_function<void(rt::OutputDeviceSelection const&)> handler)
+    async::Subscription onOutputDeviceChanged(std::move_only_function<void(rt::OutputDeviceSelection const&)> handler)
     {
       _outputDeviceChanged = std::move(handler);
-      return rt::Subscription{[this] { _outputDeviceChanged = nullptr; }};
+      return async::Subscription{[this] { _outputDeviceChanged = nullptr; }};
     }
 
-    rt::Subscription onQualityChanged(std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> handler)
+    async::Subscription onQualityChanged(
+      std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> handler)
     {
       _qualityChanged = std::move(handler);
-      return rt::Subscription{[this] { _qualityChanged = nullptr; }};
+      return async::Subscription{[this] { _qualityChanged = nullptr; }};
     }
 
-    rt::Subscription onShuffleModeChanged(
+    async::Subscription onShuffleModeChanged(
       std::move_only_function<void(rt::PlaybackSequenceService::ShuffleModeChanged const&)> handler)
     {
       _shuffleModeChanged = std::move(handler);
-      return rt::Subscription{[this] { _shuffleModeChanged = nullptr; }};
+      return async::Subscription{[this] { _shuffleModeChanged = nullptr; }};
     }
 
-    rt::Subscription onRepeatModeChanged(
+    async::Subscription onRepeatModeChanged(
       std::move_only_function<void(rt::PlaybackSequenceService::RepeatModeChanged const&)> handler)
     {
       _repeatModeChanged = std::move(handler);
-      return rt::Subscription{[this] { _repeatModeChanged = nullptr; }};
+      return async::Subscription{[this] { _repeatModeChanged = nullptr; }};
     }
 
-    rt::Subscription onVolumeChanged(std::move_only_function<void(float)> handler)
+    async::Subscription onVolumeChanged(std::move_only_function<void(float)> handler)
     {
       _volumeChanged = std::move(handler);
-      return rt::Subscription{[this] { _volumeChanged = nullptr; }};
+      return async::Subscription{[this] { _volumeChanged = nullptr; }};
     }
 
     void emitStarted()

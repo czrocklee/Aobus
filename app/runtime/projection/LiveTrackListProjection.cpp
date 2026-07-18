@@ -3,15 +3,15 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/ScopedTimer.h>
-#include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -625,9 +625,9 @@ namespace ao::rt
     std::size_t rowsTouchedSinceRebuild = 0;
     std::size_t arenaRebaseThresholdBytes = kMinimumArenaRebaseBytes;
     std::uint64_t rev = 0;
-    Signal<TrackListProjectionDeltaBatch const&> changedSignal;
+    async::Signal<TrackListProjectionDeltaBatch const&> changedSignal;
     bool sourceInvalidated = false;
-    Subscription sourceSubscription;
+    async::Subscription sourceSubscription;
 
     OrderEntry buildOrderEntry(TrackId id, library::TrackView const& view, library::DictionaryStore const& dictionary)
     {
@@ -1515,7 +1515,7 @@ namespace ao::rt
     return _implPtr->sections[*optSectionIndex].rows;
   }
 
-  Subscription LiveTrackListProjection::subscribe(
+  async::Subscription LiveTrackListProjection::subscribe(
     std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler)
   {
     if (!handler)

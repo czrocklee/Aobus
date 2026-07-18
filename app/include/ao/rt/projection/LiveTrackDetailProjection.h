@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "../Subscription.h"
 #include "TrackDetailProjection.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 
 #include <functional>
 #include <memory>
@@ -41,7 +41,7 @@ namespace ao::rt
     LiveTrackDetailProjection& operator=(LiveTrackDetailProjection&&) = delete;
 
     TrackDetailSnapshot snapshot() const override;
-    Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) override;
+    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) override;
 
   private:
     TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;

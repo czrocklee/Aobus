@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include "../Subscription.h"
 #include "AllTracksSource.h"
 #include "SmartListEvaluator.h"
 #include "TrackSource.h"
 #include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
 
@@ -89,7 +89,7 @@ namespace ao::rt
     std::shared_ptr<AllTracksSource> _allTracksPtr;
     SmartListEvaluator _smartEvaluator;
 
-    Subscription _changesSubscription;
+    async::Subscription _changesSubscription;
 
     std::size_t _listMutationDepth = 0;
     bool _refreshDrainActive = false;

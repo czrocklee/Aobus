@@ -9,10 +9,10 @@
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
@@ -128,7 +128,7 @@ namespace ao::rt
     PlaybackCursor _cursor;
     PreparedNextRegistry _preparedNextRegistry;
     ProjectionBatchHandler _projectionBatchHandler;
-    Subscription _projectionSubscription;
+    async::Subscription _projectionSubscription;
     std::size_t _consecutiveFailureCount = 0;
   };
 } // namespace ao::rt

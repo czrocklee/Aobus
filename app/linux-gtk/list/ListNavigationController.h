@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/ViewIds.h>
 
 #include <gdkmm/rectangle.h>
@@ -93,6 +93,6 @@ namespace ao::gtk
     rt::ViewId _observedViewId = rt::kInvalidViewId;
     std::uint64_t _observedWorkspaceRevision = 0;
     bool _syncingWorkspaceSelection = false;
-    rt::Subscription _workspaceSub;
+    async::Subscription _workspaceSub;
   };
 } // namespace ao::gtk

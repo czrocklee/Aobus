@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/Signal.h>
+#include <ao/async/Signal.h>
 #include <ao/rt/TrackField.h>
 
 #include <cstdint>
@@ -40,11 +40,11 @@ namespace ao::uimodel
     ListId activeListId() const noexcept { return _activeListId; }
     std::vector<rt::TrackField> activeFieldOrder() const;
 
-    rt::Signal<ListId>& signalChanged() noexcept { return _changed; }
+    async::Signal<ListId>& signalChanged() noexcept { return _changed; }
 
   private:
     ListId _activeListId = kInvalidListId;
     std::map<ListId, std::vector<TrackColumnState>> _listLayouts{};
-    rt::Signal<ListId> _changed;
+    async::Signal<ListId> _changed;
   };
 } // namespace ao::uimodel

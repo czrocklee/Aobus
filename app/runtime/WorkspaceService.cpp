@@ -5,11 +5,11 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NavigationHistory.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -98,9 +98,9 @@ namespace ao::rt
     ViewService& views;
     WorkspaceSnapshot currentSnapshot;
     NavigationHistory navigationHistory;
-    std::shared_ptr<Signal<WorkspaceChanged const&>> changedSignalPtr =
-      std::make_shared<Signal<WorkspaceChanged const&>>();
-    Subscription listsMutatedSub;
+    std::shared_ptr<async::Signal<WorkspaceChanged const&>> changedSignalPtr =
+      std::make_shared<async::Signal<WorkspaceChanged const&>>();
+    async::Subscription listsMutatedSub;
 
     Impl(async::Executor& callbackExecutor, ViewService& viewService, LibraryChanges const& changes)
       : executor{callbackExecutor}, views{viewService}
@@ -183,7 +183,7 @@ namespace ao::rt
       }
     }
 
-    static void emitChange(std::weak_ptr<Signal<WorkspaceChanged const&>> const& weakSignalPtr,
+    static void emitChange(std::weak_ptr<async::Signal<WorkspaceChanged const&>> const& weakSignalPtr,
                            WorkspaceChanged const& changed) noexcept
     {
       auto signalPtr = weakSignalPtr.lock();
@@ -209,7 +209,7 @@ namespace ao::rt
 
     void publish(PendingCommit pending) noexcept
     {
-      auto weakSignalPtr = std::weak_ptr<Signal<WorkspaceChanged const&>>{changedSignalPtr};
+      auto weakSignalPtr = std::weak_ptr<async::Signal<WorkspaceChanged const&>>{changedSignalPtr};
 
       try
       {
@@ -749,7 +749,7 @@ namespace ao::rt
     return _implPtr->navigationHistory.canGoForward();
   }
 
-  Subscription WorkspaceService::onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler)
+  async::Subscription WorkspaceService::onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->changedSignalPtr->connect(std::move(handler));

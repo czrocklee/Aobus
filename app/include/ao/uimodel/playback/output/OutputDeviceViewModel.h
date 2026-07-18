@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 
 #include <cstdint>
 #include <functional>
@@ -63,6 +63,6 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::function<void(OutputDeviceViewState const&)> _onRender;
 
-    rt::Subscription _outputDeviceChangedSub;
+    async::Subscription _outputDeviceChangedSub;
   };
 } // namespace ao::uimodel

@@ -5,10 +5,10 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/library/WriteTransaction.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <condition_variable>
@@ -107,7 +107,7 @@ namespace ao::rt
     LibraryMutationService& operator=(LibraryMutationService&&) = delete;
 
     LibraryAuthoringAvailability availability() const;
-    Subscription onAvailabilityChanged(
+    async::Subscription onAvailabilityChanged(
       std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
     BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision) const;
@@ -140,6 +140,6 @@ namespace ao::rt
     std::uint64_t _maintenanceGeneration = 0;
     LibraryMaintenanceKind _maintenanceKind = LibraryMaintenanceKind::None;
     bool _publicationInProgress = false;
-    mutable Signal<LibraryAuthoringAvailability const&> _availabilityChanged;
+    mutable async::Signal<LibraryAuthoringAvailability const&> _availabilityChanged;
   };
 } // namespace ao::rt

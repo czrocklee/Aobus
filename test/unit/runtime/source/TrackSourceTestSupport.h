@@ -5,7 +5,7 @@
 
 #include "runtime/source/TrackSourceDeltaBuilder.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -173,7 +173,7 @@ namespace ao::rt::test
     std::vector<TrackSourceDeltaBatch> batches;
 
   private:
-    Subscription _subscription;
+    async::Subscription _subscription;
   };
   // NOLINTEND(cppcoreguidelines-non-private-member-variables-in-classes)
 } // namespace ao::rt::test

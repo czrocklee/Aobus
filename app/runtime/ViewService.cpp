@@ -3,6 +3,8 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -10,9 +12,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/ScopedTimer.h>
-#include <ao/rt/Signal.h>
 #include <ao/rt/StorageResult.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
@@ -218,13 +218,13 @@ namespace ao::rt
     {
     }
 
-    Signal<ViewId> destroyedSignal;
-    Signal<TrackListProjectionChanged const&> projectionChangedSignal;
-    Signal<ViewService::FilterChanged const&> filterChangedSignal;
-    Signal<FilterStatusChanged const&> filterStatusChangedSignal;
-    Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
-    Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
-    Signal<ViewService::ListChanged const&> listChangedSignal;
+    async::Signal<ViewId> destroyedSignal;
+    async::Signal<TrackListProjectionChanged const&> projectionChangedSignal;
+    async::Signal<ViewService::FilterChanged const&> filterChangedSignal;
+    async::Signal<FilterStatusChanged const&> filterStatusChangedSignal;
+    async::Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
+    async::Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
+    async::Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
   ViewService::ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources)
@@ -234,38 +234,40 @@ namespace ao::rt
 
   ViewService::~ViewService() = default;
 
-  Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId)> handler)
+  async::Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId)> handler)
   {
     return _implPtr->destroyedSignal.connect(std::move(handler));
   }
 
-  Subscription ViewService::onProjectionChanged(
+  async::Subscription ViewService::onProjectionChanged(
     std::move_only_function<void(TrackListProjectionChanged const&)> handler)
   {
     return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
-  Subscription ViewService::onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler)
+  async::Subscription ViewService::onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler)
   {
     return _implPtr->filterChangedSignal.connect(std::move(handler));
   }
 
-  Subscription ViewService::onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler)
+  async::Subscription ViewService::onFilterStatusChanged(
+    std::move_only_function<void(FilterStatusChanged const&)> handler)
   {
     return _implPtr->filterStatusChangedSignal.connect(std::move(handler));
   }
 
-  Subscription ViewService::onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler)
+  async::Subscription ViewService::onPresentationChanged(
+    std::move_only_function<void(PresentationChanged const&)> handler)
   {
     return _implPtr->presentationChangedSignal.connect(std::move(handler));
   }
 
-  Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
+  async::Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
   {
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
-  Subscription ViewService::onListChanged(std::move_only_function<void(ListChanged const&)> handler)
+  async::Subscription ViewService::onListChanged(std::move_only_function<void(ListChanged const&)> handler)
   {
     return _implPtr->listChangedSignal.connect(std::move(handler));
   }

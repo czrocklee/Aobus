@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -82,7 +82,7 @@ namespace ao::rt
     CachedListSourceDefinition _definition{};
     TrackSourceLease _parentLease;
     std::unique_ptr<TrackSource> _implementationPtr;
-    Subscription _implementationSubscription;
+    async::Subscription _implementationSubscription;
     std::size_t _publishedSize = 0;
   };
 } // namespace ao::rt

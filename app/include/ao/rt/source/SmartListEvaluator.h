@@ -6,7 +6,7 @@
 #include "IndexedTrackSequence.h"
 #include "TrackSourceDelta.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 
 #include <boost/container/small_vector.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -77,7 +77,7 @@ namespace ao::rt
       TrackSource* source = nullptr;
       IndexedTrackSequence upstreamTracks{};
       std::vector<SmartListSource*> lists{};
-      Subscription subscription{};
+      async::Subscription subscription{};
       bool invalidated = false;
     };
 

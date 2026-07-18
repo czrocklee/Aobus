@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <functional>
@@ -51,7 +51,7 @@ namespace ao::rt
     LibraryTaskService& taskService() noexcept;
 
     LibraryAuthoringAvailability authoringAvailability() const;
-    Subscription onAuthoringAvailabilityChanged(
+    async::Subscription onAuthoringAvailabilityChanged(
       std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
 

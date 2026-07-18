@@ -7,6 +7,7 @@
 #include "runtime/playback/PlaybackCursorSession.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
@@ -17,7 +18,6 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Signal.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
@@ -63,7 +63,7 @@ namespace ao::rt
       bool _previous = false;
     };
 
-    void publishDirtySafely(Signal<>& signal) noexcept
+    void publishDirtySafely(async::Signal<>& signal) noexcept
     {
       try
       {
@@ -719,7 +719,7 @@ namespace ao::rt
     return {};
   }
 
-  Subscription PlaybackSessionPersistence::onDirty(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSessionPersistence::onDirty(std::move_only_function<void()> handler)
   {
     if (!handler)
     {

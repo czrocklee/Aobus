@@ -6,13 +6,13 @@
 #include "MprisPlaybackEndpoint.h"
 #include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -177,7 +177,7 @@ namespace ao::gtk::platform
     utility::ScopedRegistration rootObjectRegistration{};
     utility::ScopedRegistration playerObjectRegistration{};
     bool nameAcquired = false;
-    std::vector<rt::Subscription> subscriptions{};
+    std::vector<async::Subscription> subscriptions{};
 
     Impl(rt::PlaybackService& playbackRef,
          rt::PlaybackSequenceService& sequenceRef,

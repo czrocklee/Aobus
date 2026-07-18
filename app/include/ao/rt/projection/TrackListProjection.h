@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "../Subscription.h"
 #include "../TrackPresentation.h"
 #include "../ViewIds.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 
 #include <boost/container/small_vector.hpp>
 
@@ -104,7 +104,8 @@ namespace ao::rt
     virtual TrackId trackIdAt(std::size_t index) const = 0;
     virtual std::optional<std::size_t> indexOf(TrackId trackId) const noexcept = 0;
 
-    virtual Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
+    virtual async::Subscription subscribe(
+      std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
 
   protected:
     TrackListProjection() = default;

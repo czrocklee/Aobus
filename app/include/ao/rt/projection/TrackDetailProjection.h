@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "../Subscription.h"
 #include "../TrackField.h"
 #include "../TrackFieldValue.h"
 #include "../ViewIds.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 
 #include <array>
 #include <cstdint>
@@ -77,7 +77,7 @@ namespace ao::rt
     TrackDetailProjection& operator=(TrackDetailProjection&&) = delete;
 
     virtual TrackDetailSnapshot snapshot() const = 0;
-    virtual Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
+    virtual async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) = 0;
 
   protected:
     TrackDetailProjection() = default;

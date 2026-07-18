@@ -4,12 +4,12 @@
 #pragma once
 
 #include "../PlaybackLaunchSpec.h"
-#include "../Subscription.h"
 #include "../TrackPresentation.h"
 #include "../ViewIds.h"
 #include "../source/TrackSourceLease.h"
 #include "TrackListProjection.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -66,7 +66,7 @@ namespace ao::rt
 
     void setPresentation(TrackPresentationSpec const& presentation);
 
-    Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
+    async::Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
 
   private:
     struct Impl;

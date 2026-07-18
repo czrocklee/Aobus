@@ -9,7 +9,7 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -167,7 +167,7 @@ namespace ao::gtk::test
         return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
       }
 
-      rt::Subscription subscribe(
+      async::Subscription subscribe(
         std::move_only_function<void(rt::TrackListProjectionDeltaBatch const&)> handler) override
       {
         if (_invalidated)
@@ -185,7 +185,7 @@ namespace ao::gtk::test
           .deltas = {rt::ProjectionReset{}},
         });
 
-        return rt::Subscription{[this] { _handlerPtr.reset(); }};
+        return async::Subscription{[this] { _handlerPtr.reset(); }};
       }
 
       void invalidate()

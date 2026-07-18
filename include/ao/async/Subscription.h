@@ -5,7 +5,7 @@
 
 #include <ao/utility/ScopedRegistration.h>
 
-namespace ao::rt
+namespace ao::async
 {
   using Subscription = utility::ScopedRegistration;
-} // namespace ao::rt
+} // namespace ao::async

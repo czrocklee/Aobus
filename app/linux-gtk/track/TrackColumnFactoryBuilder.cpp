@@ -6,8 +6,8 @@
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowObject.h"
+#include <ao/async/Subscription.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
@@ -49,7 +49,7 @@ namespace ao::gtk
       sigc::scoped_connection commitConnection;         // inline-edit commit (Enter)
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
       std::unique_ptr<uimodel::TrackAuthoringSession> editSessionPtr;
-      rt::Subscription editSessionStateSubscription;
+      async::Subscription editSessionStateSubscription;
       std::uint64_t editSessionGeneration = 0;
 
       void clearEditSession()

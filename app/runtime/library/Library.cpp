@@ -6,9 +6,9 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -88,7 +88,7 @@ namespace ao::rt
     return _implPtr->mutationService.availability();
   }
 
-  Subscription Library::onAuthoringAvailabilityChanged(
+  async::Subscription Library::onAuthoringAvailabilityChanged(
     std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
   {
     return _implPtr->mutationService.onAvailabilityChanged(std::move(handler));

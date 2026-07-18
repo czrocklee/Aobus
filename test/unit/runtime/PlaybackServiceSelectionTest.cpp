@@ -4,6 +4,7 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/runtime/PlaybackServiceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewIds.h>
@@ -41,7 +42,7 @@ namespace ao::rt::test
     REQUIRE(fixturePtr->renderTarget != nullptr);
 
     bool callbackEntered = false;
-    auto subscription = Subscription{};
+    auto subscription = async::Subscription{};
     subscription = fixturePtr->playbackService.onQualityChanged(
       [&subscription, &callbackEntered](PlaybackService::QualityChanged const&)
       {

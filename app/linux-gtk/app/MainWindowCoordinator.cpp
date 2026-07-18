@@ -18,6 +18,7 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
@@ -26,7 +27,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>

@@ -6,7 +6,7 @@
 #include "app/AppDialog.h"
 #include "track/TrackFieldUi.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormModel.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
@@ -94,7 +94,7 @@ namespace ao::gtk
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
     std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
-    rt::Subscription _editSessionStateSubscription;
+    async::Subscription _editSessionStateSubscription;
     bool _multipleTracks = false;
     uimodel::TrackPropertiesFormModel _formModel;
     Gtk::Button* _saveButton = nullptr;

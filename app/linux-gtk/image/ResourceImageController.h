@@ -5,7 +5,7 @@
 
 #include "image/ThumbnailLoader.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <cstdint>
@@ -48,7 +48,7 @@ namespace ao::gtk
     rt::Library const& _reads;
     ImageCache& _cache;
     std::unique_ptr<rt::TrackDetailProjection> _detailProjectionPtr;
-    rt::Subscription _detailSub;
+    async::Subscription _detailSub;
 
     bool _thumbnailMode = false;
     ThumbnailLoader* _thumbnailLoader = nullptr;

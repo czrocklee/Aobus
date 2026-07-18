@@ -4,7 +4,6 @@
 #pragma once
 
 #include "PlaybackLaunchSpec.h"
-#include "Subscription.h"
 #include "TrackMutation.h"
 #include "TrackPresentation.h"
 #include "ViewIds.h"
@@ -13,6 +12,7 @@
 #include "projection/TrackListProjection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 
 #include <chrono>
 #include <cstdint>
@@ -100,13 +100,13 @@ namespace ao::rt
     Result<> openListInView(ViewId viewId, ListId listId);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
-    Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
-    Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
-    Subscription onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler);
-    Subscription onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler);
-    Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
-    Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
-    Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
+    async::Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
+    async::Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
+    async::Subscription onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler);
+    async::Subscription onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler);
+    async::Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
+    async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
+    async::Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
 
     std::vector<ViewRecord> listViews() const;
 

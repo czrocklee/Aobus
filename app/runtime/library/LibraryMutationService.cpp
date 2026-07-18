@@ -6,11 +6,11 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 
@@ -129,7 +129,7 @@ namespace ao::rt
     return availabilityLocked();
   }
 
-  Subscription LibraryMutationService::onAvailabilityChanged(
+  async::Subscription LibraryMutationService::onAvailabilityChanged(
     std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
   {
     return _availabilityChanged.connect(std::move(handler));

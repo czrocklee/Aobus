@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/Signal.h>
+#include <ao/async/Signal.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
@@ -36,11 +36,11 @@ namespace ao::uimodel
 
     rt::TrackPresentationSpec presentationForList(ListPresentationContext const& context) const;
 
-    rt::Signal<ListId>& signalChanged() noexcept { return _changed; }
+    async::Signal<ListId>& signalChanged() noexcept { return _changed; }
 
   private:
     TrackPresentationCatalog& _catalog;
     std::map<ListId, std::string> _presentations{};
-    rt::Signal<ListId> _changed;
+    async::Signal<ListId> _changed;
   };
 } // namespace ao::uimodel

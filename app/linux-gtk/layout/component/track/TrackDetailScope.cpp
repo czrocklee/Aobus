@@ -8,6 +8,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
@@ -150,7 +151,7 @@ namespace ao::gtk::layout
       std::vector<std::unique_ptr<LayoutComponent>> _children;
 
       std::unique_ptr<rt::TrackDetailProjection> _projectionPtr;
-      rt::Subscription _sub;
+      async::Subscription _sub;
       rt::TrackDetailSnapshot _currentSnap;
 
       sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;

@@ -8,7 +8,7 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 
@@ -101,7 +101,7 @@ namespace ao::tui
     std::int32_t _selectedPresentation = 0;
     std::int32_t _selectedTrack = 0;
     std::string _filterDraft{};
-    rt::Subscription _customPresetsSub;
-    rt::Subscription _libraryChangesSub;
+    async::Subscription _customPresetsSub;
+    async::Subscription _libraryChangesSub;
   };
 } // namespace ao::tui

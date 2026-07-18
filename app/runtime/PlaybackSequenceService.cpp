@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
+#include <ao/async/Signal.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/CoverArt.h>
@@ -25,7 +26,6 @@
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/Signal.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -1131,18 +1131,18 @@ namespace ao::rt
     RepeatMode repeatMode = RepeatMode::Off;
     std::unique_ptr<PlaybackCursorSession> sessionPtr;
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
-    Signal<PlaybackSequenceState const&> changedSignal;
-    Signal<PlaybackSequenceService::ShuffleModeChanged const&> shuffleModeChangedSignal;
-    Signal<PlaybackSequenceService::RepeatModeChanged const&> repeatModeChangedSignal;
-    Signal<> persistenceIntentChangedSignal;
+    async::Signal<PlaybackSequenceState const&> changedSignal;
+    async::Signal<PlaybackSequenceService::ShuffleModeChanged const&> shuffleModeChangedSignal;
+    async::Signal<PlaybackSequenceService::RepeatModeChanged const&> repeatModeChangedSignal;
+    async::Signal<> persistenceIntentChangedSignal;
     PlaybackRestartDeadline restartDeadline;
-    Subscription idleSubscription;
-    Subscription nowPlayingSubscription;
-    Subscription outputSubscription;
-    Subscription seekSubscription;
-    Subscription startedSubscription;
-    Subscription pausedSubscription;
-    Subscription stoppedSubscription;
+    async::Subscription idleSubscription;
+    async::Subscription nowPlayingSubscription;
+    async::Subscription outputSubscription;
+    async::Subscription seekSubscription;
+    async::Subscription startedSubscription;
+    async::Subscription pausedSubscription;
+    async::Subscription stoppedSubscription;
     NotificationId skipNotificationId = kInvalidNotificationId;
     std::size_t skippedFailureCount = 0;
     std::atomic_bool closing{false};
@@ -1393,14 +1393,15 @@ namespace ao::rt
     return impl->state;
   }
 
-  Subscription PlaybackSequenceService::onChanged(std::move_only_function<void(PlaybackSequenceState const&)> handler)
+  async::Subscription PlaybackSequenceService::onChanged(
+    std::move_only_function<void(PlaybackSequenceState const&)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->changedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackSequenceService::onShuffleModeChanged(
+  async::Subscription PlaybackSequenceService::onShuffleModeChanged(
     std::move_only_function<void(ShuffleModeChanged const&)> handler)
   {
     auto* const impl = _implPtr.get();
@@ -1408,7 +1409,7 @@ namespace ao::rt
     return impl->shuffleModeChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackSequenceService::onRepeatModeChanged(
+  async::Subscription PlaybackSequenceService::onRepeatModeChanged(
     std::move_only_function<void(RepeatModeChanged const&)> handler)
   {
     auto* const impl = _implPtr.get();
@@ -1525,7 +1526,7 @@ namespace ao::rt
     impl->optLastRestorableSnapshot.reset();
   }
 
-  Subscription PlaybackSequenceService::onPersistenceIntentChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSequenceService::onPersistenceIntentChanged(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();

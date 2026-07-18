@@ -5,6 +5,8 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
@@ -26,8 +28,6 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/PreparedPlayback.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/ViewIds.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -565,20 +565,20 @@ namespace ao::rt
     std::atomic_bool outboundDrainActive{false};
     bool sequenceMutationGranted = false;
     std::atomic_bool closing{false};
-    Signal<> preparingSignal;
-    Signal<> startedSignal;
-    Signal<> pausedSignal;
-    Signal<> idleSignal;
-    Signal<PlaybackService::NowPlayingChanged const&> nowPlayingChangedSignal;
-    Signal<OutputDeviceSelection const&> outputDeviceChangedSignal;
-    Signal<> stoppedSignal;
-    Signal<> outputDevicesChangedSignal;
-    Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
-    Signal<float> volumeChangedSignal;
-    Signal<bool> mutedChangedSignal;
-    Signal<PlaybackService::RevealTrackRequested const&> revealTrackRequestedSignal;
-    Signal<PlaybackService::SeekUpdate const&> seekUpdateSignal;
-    Signal<PlaybackFailure const&> playbackFailureSignal;
+    async::Signal<> preparingSignal;
+    async::Signal<> startedSignal;
+    async::Signal<> pausedSignal;
+    async::Signal<> idleSignal;
+    async::Signal<PlaybackService::NowPlayingChanged const&> nowPlayingChangedSignal;
+    async::Signal<OutputDeviceSelection const&> outputDeviceChangedSignal;
+    async::Signal<> stoppedSignal;
+    async::Signal<> outputDevicesChangedSignal;
+    async::Signal<PlaybackService::QualityChanged const&> qualityChangedSignal;
+    async::Signal<float> volumeChangedSignal;
+    async::Signal<bool> mutedChangedSignal;
+    async::Signal<PlaybackService::RevealTrackRequested const&> revealTrackRequestedSignal;
+    async::Signal<PlaybackService::SeekUpdate const&> seekUpdateSignal;
+    async::Signal<PlaybackFailure const&> playbackFailureSignal;
     std::shared_ptr<PlaybackFailureRecoveryHandler> playbackFailureRecoveryHandlerPtr;
 
     bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
@@ -1419,42 +1419,43 @@ namespace ao::rt
     _implPtr->shutdown();
   }
 
-  Subscription PlaybackService::onPreparing(std::move_only_function<void()> handler)
+  async::Subscription PlaybackService::onPreparing(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->preparingSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onStarted(std::move_only_function<void()> handler)
+  async::Subscription PlaybackService::onStarted(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->startedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onPaused(std::move_only_function<void()> handler)
+  async::Subscription PlaybackService::onPaused(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->pausedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onIdle(std::move_only_function<void()> handler)
+  async::Subscription PlaybackService::onIdle(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->idleSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler)
+  async::Subscription PlaybackService::onNowPlayingChanged(
+    std::move_only_function<void(NowPlayingChanged const&)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->nowPlayingChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onOutputDeviceChanged(
+  async::Subscription PlaybackService::onOutputDeviceChanged(
     std::move_only_function<void(OutputDeviceSelection const&)> handler)
   {
     auto* const impl = _implPtr.get();
@@ -1462,42 +1463,42 @@ namespace ao::rt
     return impl->outputDeviceChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onStopped(std::move_only_function<void()> handler)
+  async::Subscription PlaybackService::onStopped(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->stoppedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onOutputDevicesChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackService::onOutputDevicesChanged(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->outputDevicesChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
+  async::Subscription PlaybackService::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->qualityChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onVolumeChanged(std::move_only_function<void(float)> handler)
+  async::Subscription PlaybackService::onVolumeChanged(std::move_only_function<void(float)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->volumeChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onMutedChanged(std::move_only_function<void(bool)> handler)
+  async::Subscription PlaybackService::onMutedChanged(std::move_only_function<void(bool)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->mutedChangedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onRevealTrackRequested(
+  async::Subscription PlaybackService::onRevealTrackRequested(
     std::move_only_function<void(RevealTrackRequested const&)> handler)
   {
     auto* const impl = _implPtr.get();
@@ -1505,14 +1506,14 @@ namespace ao::rt
     return impl->revealTrackRequestedSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
+  async::Subscription PlaybackService::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->seekUpdateSignal.connect(std::move(handler));
   }
 
-  Subscription PlaybackService::onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler)
+  async::Subscription PlaybackService::onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();

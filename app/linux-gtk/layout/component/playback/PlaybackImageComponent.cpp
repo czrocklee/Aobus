@@ -9,6 +9,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackService.h>
@@ -290,10 +291,10 @@ namespace ao::gtk::layout
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
       ResourceId _currentCoverArtId = kInvalidResourceId;
-      rt::Subscription _sub;
-      rt::Subscription _tracksMutatedSub;
-      rt::Subscription _stoppedSub;
-      rt::Subscription _idleSub;
+      async::Subscription _sub;
+      async::Subscription _tracksMutatedSub;
+      async::Subscription _stoppedSub;
+      async::Subscription _idleSub;
     };
 
     std::unique_ptr<LayoutComponent> createPlaybackImage(LayoutBuildContext& ctx, LayoutNode const& node)

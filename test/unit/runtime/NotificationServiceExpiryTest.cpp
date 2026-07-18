@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
+#include <ao/async/Subscription.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/Subscription.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -31,7 +31,7 @@ namespace ao::rt::test
       async::Runtime runtime;
       NotificationService service;
       std::vector<NotificationFeedUpdate> updates;
-      Subscription updateSub;
+      async::Subscription updateSub;
     };
   } // namespace
 

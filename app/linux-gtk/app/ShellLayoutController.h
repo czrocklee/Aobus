@@ -15,8 +15,8 @@
 #include "layout/runtime/LayoutRuntimeState.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
-#include <ao/rt/Subscription.h>
 #include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
@@ -167,7 +167,7 @@ namespace ao::gtk
     PopoverAttachment _outputDevicePopover;
     PopoverAttachment _menuPopover;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
-    std::vector<rt::Subscription> _playbackSubs;
+    std::vector<async::Subscription> _playbackSubs;
     uimodel::ShellLayoutSessionModel _session;
     std::shared_ptr<AppConfigStore> _configStorePtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;

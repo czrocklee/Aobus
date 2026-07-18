@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <cstdint>
@@ -33,6 +33,6 @@ namespace ao::tui
     std::int32_t _selectedRow = -1;
     std::function<void()> _onChanged;
     uimodel::OutputDeviceViewModel _viewModel;
-    rt::Subscription _outputDevicesChangedSub;
+    async::Subscription _outputDevicesChangedSub;
   };
 } // namespace ao::tui

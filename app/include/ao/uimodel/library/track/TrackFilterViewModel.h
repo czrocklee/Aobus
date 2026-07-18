@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/ViewIds.h>
 
 #include <functional>
@@ -62,7 +62,7 @@ namespace ao::uimodel
     bool _filterPending = false;
     std::optional<Error> _optFilterError;
 
-    rt::Subscription _focusSub;
-    rt::Subscription _filterStatusSub;
+    async::Subscription _focusSub;
+    async::Subscription _filterStatusSub;
   };
 } // namespace ao::uimodel

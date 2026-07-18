@@ -5,7 +5,7 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/TrackMutation.h>
 
 #include <cstdint>
@@ -74,7 +74,7 @@ namespace ao::uimodel
 
     TrackAuthoringSessionState state() const noexcept;
     std::span<TrackId const> targetIds() const noexcept;
-    rt::Subscription onStateChanged(std::move_only_function<void(TrackAuthoringSessionState)> handler) const;
+    async::Subscription onStateChanged(std::move_only_function<void(TrackAuthoringSessionState)> handler) const;
 
     Result<TrackMetadataSubmitResult> submitMetadata(rt::MetadataPatch const& patch);
     Result<TrackTagSubmitResult> submitTags(std::span<std::string const> tagsToAdd,

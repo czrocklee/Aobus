@@ -7,9 +7,9 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
 
 #include <chrono>
 #include <cstdint>
@@ -52,7 +52,7 @@ namespace ao::rt
     Result<> shutdown();
     Result<PlaybackSessionPersistenceRestoreResult> restore();
     Result<> discardRestorableSession();
-    Subscription onDirty(std::move_only_function<void()> handler);
+    async::Subscription onDirty(std::move_only_function<void()> handler);
 
   private:
     using Delay = std::chrono::milliseconds;
@@ -94,14 +94,14 @@ namespace ao::rt
     PlaybackSequenceService& _sequence;
     PlaybackService& _playback;
     async::Runtime& _asyncRuntime;
-    Signal<> _dirtySignal;
-    Subscription _sequenceIntentSubscription;
-    Subscription _volumeSubscription;
-    Subscription _mutedSubscription;
-    Subscription _seekSubscription;
-    Subscription _pausedSubscription;
-    Subscription _stoppedSubscription;
-    Subscription _nowPlayingSubscription;
+    async::Signal<> _dirtySignal;
+    async::Subscription _sequenceIntentSubscription;
+    async::Subscription _volumeSubscription;
+    async::Subscription _mutedSubscription;
+    async::Subscription _seekSubscription;
+    async::Subscription _pausedSubscription;
+    async::Subscription _stoppedSubscription;
+    async::Subscription _nowPlayingSubscription;
     PlaybackSessionRevision _sessionRevision;
     async::TaskHandle _scheduledTask;
     async::TaskHandle _periodicTask;

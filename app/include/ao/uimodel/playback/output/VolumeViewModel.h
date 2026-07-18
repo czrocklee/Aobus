@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 
 #include <cstdint>
 #include <functional>
@@ -60,9 +60,9 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::function<void(VolumeViewState const&)> _onRender;
 
-    rt::Subscription _outputDeviceSub;
-    rt::Subscription _startedSub;
-    rt::Subscription _volumeSub;
-    rt::Subscription _mutedSub;
+    async::Subscription _outputDeviceSub;
+    async::Subscription _startedSub;
+    async::Subscription _volumeSub;
+    async::Subscription _mutedSub;
   };
 } // namespace ao::uimodel

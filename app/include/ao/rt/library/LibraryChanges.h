@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -116,9 +116,11 @@ namespace ao::rt
     LibraryChanges(LibraryChanges&&) = delete;
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
-    Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
-    Subscription onLibraryTaskCompleted(std::move_only_function<void(LibraryTaskCompleted const&)> handler) const;
-    Subscription onLibraryTaskProgress(std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
+    async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
+    async::Subscription onLibraryTaskCompleted(
+      std::move_only_function<void(LibraryTaskCompleted const&)> handler) const;
+    async::Subscription onLibraryTaskProgress(
+      std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
 
   private:
     friend class LibraryMutationService;

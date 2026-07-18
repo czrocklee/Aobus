@@ -3,9 +3,9 @@
 
 #pragma once
 
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #include <array>
@@ -38,8 +38,8 @@ namespace ao::uimodel
     bool isEnabled(PlaybackCommand command) const;
     bool isCapable(PlaybackCommand command) const;
 
-    rt::Subscription onAvailabilityChanged(std::move_only_function<void()> handler);
-    rt::Subscription onAvailabilityChanged(PlaybackCommand command, std::move_only_function<void()> handler);
+    async::Subscription onAvailabilityChanged(std::move_only_function<void()> handler);
+    async::Subscription onAvailabilityChanged(PlaybackCommand command, std::move_only_function<void()> handler);
 
   private:
     static constexpr std::size_t kCommandCount = 8;
@@ -50,8 +50,8 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     rt::PlaybackSequenceService& _sequence;
     std::function<void()> _playSelection;
-    rt::Signal<> _availabilityChangedSignal;
-    std::array<rt::Signal<>, kCommandCount> _commandAvailabilityChangedSignals;
-    std::vector<rt::Subscription> _availabilitySubs;
+    async::Signal<> _availabilityChangedSignal;
+    std::array<async::Signal<>, kCommandCount> _commandAvailabilityChangedSignals;
+    std::vector<async::Subscription> _availabilitySubs;
   };
 } // namespace ao::uimodel

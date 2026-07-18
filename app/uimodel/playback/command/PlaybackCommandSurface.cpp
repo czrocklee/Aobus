@@ -2,12 +2,12 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/Subscription.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
@@ -187,13 +187,13 @@ namespace ao::uimodel
     return false;
   }
 
-  rt::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void()> handler)
   {
     return _availabilityChangedSignal.connect(std::move(handler));
   }
 
-  rt::Subscription PlaybackCommandSurface::onAvailabilityChanged(PlaybackCommand const command,
-                                                                 std::move_only_function<void()> handler)
+  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(PlaybackCommand const command,
+                                                                    std::move_only_function<void()> handler)
   {
     return _commandAvailabilityChangedSignals[commandIndex(command)].connect(std::move(handler));
   }

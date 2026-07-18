@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 
 #include <chrono>
 #include <functional>
@@ -43,11 +43,11 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::function<void(SeekViewState const&)> _onRender;
 
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
-    rt::Subscription _preparingSub;
-    rt::Subscription _seekUpdateSub;
+    async::Subscription _startedSub;
+    async::Subscription _pausedSub;
+    async::Subscription _idleSub;
+    async::Subscription _stoppedSub;
+    async::Subscription _preparingSub;
+    async::Subscription _seekUpdateSub;
   };
 } // namespace ao::uimodel

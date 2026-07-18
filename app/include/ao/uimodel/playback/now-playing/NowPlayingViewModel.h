@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
@@ -88,12 +88,12 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::function<void(NowPlayingViewState const&)> _onRender;
 
-    rt::Subscription _startedSub;
-    rt::Subscription _pausedSub;
-    rt::Subscription _idleSub;
-    rt::Subscription _stoppedSub;
-    rt::Subscription _outputDeviceChangedSub;
-    rt::Subscription _qualityChangedSub;
-    rt::Subscription _nowPlayingSub;
+    async::Subscription _startedSub;
+    async::Subscription _pausedSub;
+    async::Subscription _idleSub;
+    async::Subscription _stoppedSub;
+    async::Subscription _outputDeviceChangedSub;
+    async::Subscription _qualityChangedSub;
+    async::Subscription _nowPlayingSub;
   };
 } // namespace ao::uimodel

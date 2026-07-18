@@ -3,8 +3,8 @@
 
 #include <ao/Exception.h>
 #include <ao/async/Executor.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -185,9 +185,9 @@ namespace ao::rt
     }
 
     async::Executor* callbackExecutor = nullptr;
-    Signal<LibraryChangeSet const&> changedSignal;
-    Signal<LibraryChanges::LibraryTaskCompleted const&> libraryTaskCompletedSignal;
-    Signal<LibraryChanges::LibraryTaskProgressUpdated const&> libraryTaskProgressSignal;
+    async::Signal<LibraryChangeSet const&> changedSignal;
+    async::Signal<LibraryChanges::LibraryTaskCompleted const&> libraryTaskCompletedSignal;
+    async::Signal<LibraryChanges::LibraryTaskProgressUpdated const&> libraryTaskProgressSignal;
     std::mutex mutex;
     std::map<std::uint64_t, PendingPublication> holdback;
     std::optional<std::uint64_t> optNextRevision;
@@ -206,18 +206,18 @@ namespace ao::rt
 
   LibraryChanges::~LibraryChanges() = default;
 
-  Subscription LibraryChanges::onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const
+  async::Subscription LibraryChanges::onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const
   {
     return _implPtr->changedSignal.connect(std::move(handler));
   }
 
-  Subscription LibraryChanges::onLibraryTaskCompleted(
+  async::Subscription LibraryChanges::onLibraryTaskCompleted(
     std::move_only_function<void(LibraryTaskCompleted const&)> handler) const
   {
     return _implPtr->libraryTaskCompletedSignal.connect(std::move(handler));
   }
 
-  Subscription LibraryChanges::onLibraryTaskProgress(
+  async::Subscription LibraryChanges::onLibraryTaskProgress(
     std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const
   {
     return _implPtr->libraryTaskProgressSignal.connect(std::move(handler));

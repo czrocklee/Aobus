@@ -2,10 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "ActivityStatusFeedProjection.h"
+#include <ao/async/Subscription.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -37,9 +37,9 @@ namespace ao::uimodel
     std::optional<std::chrono::steady_clock::time_point> optAutoDismissDeadline{};
 
     std::uint64_t lastAcceptedNotificationRevision = 0;
-    rt::Subscription feedUpdatedSub;
-    rt::Subscription libraryProgressSub;
-    rt::Subscription libraryCompletedSub;
+    async::Subscription feedUpdatedSub;
+    async::Subscription libraryProgressSub;
+    async::Subscription libraryCompletedSub;
 
     Impl(rt::NotificationService& notificationService,
          std::function<void(ActivityStatusViewState const&)> renderCallback,

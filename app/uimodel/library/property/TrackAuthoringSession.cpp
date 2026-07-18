@@ -3,8 +3,8 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -156,8 +156,8 @@ namespace ao::uimodel
     rt::Library& library;
     rt::BoundTrackTargets targets;
     TrackAuthoringSessionState currentState = TrackAuthoringSessionState::Editing;
-    rt::Subscription availabilitySubscription;
-    mutable rt::Signal<TrackAuthoringSessionState> stateChanged;
+    async::Subscription availabilitySubscription;
+    mutable async::Signal<TrackAuthoringSessionState> stateChanged;
   };
 
   Result<std::unique_ptr<TrackAuthoringSession>> TrackAuthoringSession::begin(rt::Library& library,
@@ -191,7 +191,7 @@ namespace ao::uimodel
     return _implPtr->targets.trackIds();
   }
 
-  rt::Subscription TrackAuthoringSession::onStateChanged(
+  async::Subscription TrackAuthoringSession::onStateChanged(
     std::move_only_function<void(TrackAuthoringSessionState)> handler) const
   {
     return _implPtr->stateChanged.connect(std::move(handler));

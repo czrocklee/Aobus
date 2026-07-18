@@ -2,13 +2,13 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/StorageResult.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/ViewIds.h>
@@ -137,9 +137,9 @@ namespace ao::rt
     TrackDetailSnapshot cachedSnapshot;
     std::uint64_t revision = 0;
     std::vector<std::move_only_function<void(TrackDetailSnapshot const&)>> subscribers;
-    Subscription focusSub;
-    Subscription selectionSub;
-    Subscription tracksMutatedSub;
+    async::Subscription focusSub;
+    async::Subscription selectionSub;
+    async::Subscription tracksMutatedSub;
     ViewId trackedViewId = rt::kInvalidViewId;
 
     Impl(DetailTarget target,
@@ -262,14 +262,15 @@ namespace ao::rt
     return _implPtr->cachedSnapshot;
   }
 
-  Subscription LiveTrackDetailProjection::subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler)
+  async::Subscription LiveTrackDetailProjection::subscribe(
+    std::move_only_function<void(TrackDetailSnapshot const&)> handler)
   {
     handler(_implPtr->cachedSnapshot);
 
     auto const index = _implPtr->subscribers.size();
     _implPtr->subscribers.push_back(std::move(handler));
 
-    return Subscription{[this, index] { _implPtr->subscribers[index] = {}; }};
+    return async::Subscription{[this, index] { _implPtr->subscribers[index] = {}; }};
   }
 
   void LiveTrackDetailProjection::publishSnapshot()

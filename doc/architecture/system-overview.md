@@ -41,6 +41,7 @@ The CLI uses `ao_app_runtime` directly when an interactive presentation model is
 
 The libraries under `lib/` and `include/ao/` own reusable mechanisms and domain storage.
 They include the LMDB adapter and music library stores, media-file reading, reusable container parsing, query evaluation, asynchronous runtime primitives, and the audio engine and backends.
+The async library owns executors, coroutine runtime and cancellation mechanisms, plus the shared owner-affine signal and subscription primitives used by runtime, UIModel, and frontends.
 
 Core libraries do not own application workspace state, frontend lifecycle, user notifications, or cross-service orchestration.
 
@@ -83,6 +84,7 @@ Dependencies follow the arrows toward core libraries and never reverse from runt
 - UIModel may depend on runtime, but cannot include platform UI or direct storage/audio-control headers.
 - Frontends may depend on runtime and UIModel and may contain platform adapters for core facilities.
 - CLI behavior-bearing mutations use runtime facades where those roles exist; low-level inspection, dump, verification, relink, and interchange commands still use the `MusicLibrary` escape hatch exposed by `CoreRuntime`.
+- Shared signal mechanisms live in `ao_async`, while the runtime or UIModel service that owns an event remains responsible for its payload, execution domain, and exception-containment policy.
 
 Public runtime headers deliberately hide direct LMDB stores, library store/view types, and audio control-plane implementation types.
 The build attaches include-boundary checks to the runtime, UIModel, and GTK targets so these edges are executable constraints rather than diagram-only guidance.
@@ -152,6 +154,7 @@ Subsystem-specific code families and translations belong to their focused specif
 ## Implementation map
 
 - [`lib/CMakeLists.txt`](../../lib/CMakeLists.txt) defines the core module graph and the `ao` umbrella target.
+- [`Signal`](../../include/ao/async/Signal.h) and [`Subscription`](../../include/ao/async/Subscription.h) define the shared callback-delivery and connection-lifetime mechanisms below application layers.
 - [`include/ao/media/file/`](../../include/ao/media/file/) and [`lib/media/file/`](../../lib/media/file/) form the library-neutral media-file sub-boundary within `ao_media`.
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines runtime, UIModel, frontend targets, and layer guardrails.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
@@ -165,6 +168,7 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive runtime composition and service wiring.
 - [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects canonical per-library path derivation and existing-database detection.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
+- [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects shared signal ordering, reentrancy, exceptions, and deferred lifetime.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects CLI use of the shared runtime.
 - Building `ao_app_runtime`, `ao_app_uimodel`, or `aobus-gtk-lib` runs the attached boundary guardrails from [`app/CMakeLists.txt`](../../app/CMakeLists.txt).
@@ -172,6 +176,7 @@ Subsystem-specific code families and translations belong to their focused specif
 ## Related documents
 
 - [Runtime execution architecture](runtime-execution.md)
+- [Signal delivery specification](../spec/async/signal.md)
 - [Failure and reporting architecture](failure-and-reporting.md)
 - [Encoded media architecture](encoded-media.md)
 - [Library architecture](library.md)

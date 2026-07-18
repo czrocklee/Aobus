@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "Subscription.h"
 #include <ao/async/Executor.h>
+#include <ao/async/Subscription.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -15,7 +15,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace ao::rt
+namespace ao::async
 {
   template<typename... Args>
   class Signal final
@@ -31,7 +31,7 @@ namespace ao::rt
 
     Subscription connect(std::move_only_function<void(Args...)> handler);
     void emit(Args... args);
-    void post(async::Executor& executor, std::decay_t<Args>... args);
+    void post(Executor& executor, std::decay_t<Args>... args);
     bool hasConnectedHandlers() const;
     void disconnectAll();
 
@@ -84,8 +84,8 @@ namespace ao::rt
             catch (...)
             {
               // One faulty observer must not starve later observers. Preserve
-              // the first failure for the signal owner's existing logging or
-              // error handling after every still-connected slot has run.
+              // the first failure for the signal owner after every
+              // still-connected slot has run.
               if (!firstExceptionPtr)
               {
                 firstExceptionPtr = std::current_exception();
@@ -244,7 +244,7 @@ namespace ao::rt
   }
 
   template<typename... Args>
-  void Signal<Args...>::post(async::Executor& executor, std::decay_t<Args>... args)
+  void Signal<Args...>::post(Executor& executor, std::decay_t<Args>... args)
   {
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     executor.defer(
@@ -268,4 +268,4 @@ namespace ao::rt
   {
     _statePtr->disconnectAll();
   }
-} // namespace ao::rt
+} // namespace ao::async

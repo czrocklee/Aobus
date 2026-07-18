@@ -8,9 +8,9 @@
 #include "layout/LayoutConstants.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
@@ -91,12 +91,12 @@ namespace ao::gtk
     TagEditController& _tagEditController;
     ListNavigationController& _listNavigation;
     uimodel::TrackColumnLayoutStore& _layoutStore;
-    rt::Subscription _revealSub;
-    rt::Subscription _nowPlayingSub;
-    rt::Subscription _focusSub;
-    rt::Subscription _viewDestroyedSub;
-    rt::Subscription _projectionChangedSub;
-    rt::Subscription _presentationChangedSub;
+    async::Subscription _revealSub;
+    async::Subscription _nowPlayingSub;
+    async::Subscription _focusSub;
+    async::Subscription _viewDestroyedSub;
+    async::Subscription _projectionChangedSub;
+    async::Subscription _presentationChangedSub;
 
     // Dedicated cache for section-header cover thumbnails (small, decode-at-scale
     // results). Destruction order is reverse declaration order:

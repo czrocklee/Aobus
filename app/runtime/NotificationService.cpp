@@ -3,13 +3,13 @@
 
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/Signal.h>
-#include <ao/rt/Subscription.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -286,7 +286,7 @@ namespace ao::rt
     std::uint64_t nextId = 0;
     std::deque<NotificationFeedUpdate> pendingUpdates;
     bool publishing = false;
-    Signal<NotificationFeedUpdate const&> feedUpdatedSignal;
+    async::Signal<NotificationFeedUpdate const&> feedUpdatedSignal;
     std::unordered_map<NotificationId, async::TaskHandle> expiryTasks;
     std::shared_ptr<ExpiryControl> expiryControlPtr;
   };
@@ -298,7 +298,8 @@ namespace ao::rt
 
   NotificationService::~NotificationService() = default;
 
-  Subscription NotificationService::onFeedUpdated(std::move_only_function<void(NotificationFeedUpdate const&)> handler)
+  async::Subscription NotificationService::onFeedUpdated(
+    std::move_only_function<void(NotificationFeedUpdate const&)> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->feedUpdatedSignal.connect(std::move(handler));

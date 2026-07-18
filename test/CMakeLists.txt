@@ -13,6 +13,9 @@ endif()
 
 # ao_core_test: portable unit + integration tests
 add_executable(ao_core_test
+    # async tests
+    unit/async/SignalTest.cpp
+
     # utility tests
     unit/utility/AtomicFileTest.cpp
     unit/utility/Base64Test.cpp

@@ -15,6 +15,10 @@ Keep exact field, grammar, command, and binary-layout inventories in reference e
 
 Use the [specification template](../template/spec.md).
 
+## Async
+
+- [Signal delivery](async/signal.md) defines owner-affine connection, synchronous and deferred delivery, reentrant mutation, observer failure, and destruction behavior.
+
 ## Failure and reporting
 
 - [Outcome channels](failure/outcome-channel.md) define normal values, recoverable results, asynchronous observations, cancellation, and invariant faults.

@@ -6,10 +6,10 @@
 #include "PlaybackFailure.h"
 #include "PlaybackState.h"
 #include "PreparedPlayback.h"
-#include "Subscription.h"
 #include "ViewIds.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PlaybackInput.h>
@@ -109,25 +109,25 @@ namespace ao::rt
 
     // Subscription registration is part of the executor-affinity contract: these
     // onXxx() methods must be called on the executor's owning thread, and the
-    // returned Subscription must likewise be reset on that thread. Handlers are
+    // returned subscription must likewise be reset on that thread. Handlers are
     // invoked on the executor thread when the matching signal is emitted. A
     // handler must not synchronously destroy this service; Debug contracts
     // require teardown to be deferred to a later executor turn.
 
-    Subscription onPreparing(std::move_only_function<void()> handler);
-    Subscription onStarted(std::move_only_function<void()> handler);
-    Subscription onPaused(std::move_only_function<void()> handler);
-    Subscription onIdle(std::move_only_function<void()> handler);
-    Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
-    Subscription onOutputDeviceChanged(std::move_only_function<void(OutputDeviceSelection const&)> handler);
-    Subscription onStopped(std::move_only_function<void()> handler);
-    Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
-    Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
-    Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
-    Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
-    Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
-    Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
-    Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler);
+    async::Subscription onPreparing(std::move_only_function<void()> handler);
+    async::Subscription onStarted(std::move_only_function<void()> handler);
+    async::Subscription onPaused(std::move_only_function<void()> handler);
+    async::Subscription onIdle(std::move_only_function<void()> handler);
+    async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
+    async::Subscription onOutputDeviceChanged(std::move_only_function<void(OutputDeviceSelection const&)> handler);
+    async::Subscription onStopped(std::move_only_function<void()> handler);
+    async::Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
+    async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
+    async::Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
+    async::Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
+    async::Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
+    async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
+    async::Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler);
 
     Result<PlaybackStartReceipt> playTrack(TrackId trackId, ListId sourceListId);
 

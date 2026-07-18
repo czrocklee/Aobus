@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/Subscription.h>
 
 #include <cstdint>
 #include <functional>
@@ -82,6 +82,6 @@ namespace ao::uimodel
     bool _showLabel;
     std::function<void(TransportViewState const&)> _onRender;
 
-    rt::Subscription _availabilitySub;
+    async::Subscription _availabilitySub;
   };
 } // namespace ao::uimodel

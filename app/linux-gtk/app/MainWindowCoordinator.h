@@ -5,8 +5,8 @@
 
 #include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/Subscription.h>
 
 #include <memory>
 #include <optional>
@@ -90,10 +90,10 @@ namespace ao::gtk
     std::optional<ThemeRegistrationToken> _optThemeToken;
     bool _restoringLayoutState = false;
 
-    rt::Subscription _tracksMutatedSubscription;
-    rt::Subscription _libraryTaskCompletedSubscription;
-    rt::Subscription _listsMutatedSubscription;
-    rt::Subscription _trackPresentationChangedSubscription;
-    rt::Subscription _trackColumnLayoutChangedSubscription;
+    async::Subscription _tracksMutatedSubscription;
+    async::Subscription _libraryTaskCompletedSubscription;
+    async::Subscription _listsMutatedSubscription;
+    async::Subscription _trackPresentationChangedSubscription;
+    async::Subscription _trackColumnLayoutChangedSubscription;
   };
 } // namespace ao::gtk

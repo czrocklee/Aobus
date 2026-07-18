@@ -5,13 +5,13 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
@@ -48,9 +48,9 @@ namespace ao::rt::test
       std::int32_t collectionChanged = 0;
       std::int32_t listsMutated = 0;
 
-      Subscription tracksSub;
-      Subscription collectionSub;
-      Subscription listsSub;
+      async::Subscription tracksSub;
+      async::Subscription collectionSub;
+      async::Subscription listsSub;
     };
 
     bool trackExists(MusicLibraryFixture& libraryFixture, TrackId trackId)

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -42,6 +42,6 @@ namespace ao::gtk
 
     rt::ViewService& _viewService;
     Gtk::Label _label;
-    rt::Subscription _selectionChangedSub;
+    async::Subscription _selectionChangedSub;
   };
 } // namespace ao::gtk

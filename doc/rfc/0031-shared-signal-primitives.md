@@ -1,16 +1,39 @@
 ---
 id: rfc.0031.shared-signal-primitives
 type: rfc
-status: draft
+status: implemented
 domain: async
-summary: Proposes moving the generic signal and runtime subscription surface into ao_async after reporting-feed publication semantics are settled.
+summary: Moved generic signal and runtime subscription mechanisms into ao_async while preserving owner-affine delivery and weak deferred lifetime.
 depends-on: rfc.0011.executor-affine-reporting-feed
 ---
 # RFC 0031: Shared signal primitives
 
+## Disposition
+
+Implemented on 2026-07-18 with the narrow mechanism move described below.
+
+The implementation:
+
+- moves `Signal` and the shared `Subscription` vocabulary into public `ao_async` headers;
+- records the public `ao_async -> ao_utility` dependency explicitly;
+- preserves synchronous connection order, reentrant mutation, nested delivery, first-exception propagation, and weak deferred lifetime;
+- migrates runtime, UIModel, GTK, TUI, and tests without changing subscription member order;
+- deletes both runtime compatibility headers and guards against reintroducing their includes or qualified names;
+- keeps `audio::Subscription` independent so `ao_audio` gains no unnecessary async dependency; and
+- gives the mechanism focused core tests independent of `AppRuntime`.
+
+The implemented canonical publication stages of RFC 0011 had already separated reporting revision queuing and observer-failure containment from the generic signal.
+Its remaining retention and structured-content proposal stages do not alter this primitive, so they do not block this completed move.
+
+`post` remains a member, `hasConnectedHandlers` remains owner-domain inspection, and the type keeps the concise name `Signal`.
+No event bus, mutex, compatibility alias, or reporting-specific policy was added.
+
+The [system architecture](../architecture/system-overview.md), [runtime execution architecture](../architecture/runtime-execution.md), [failure and reporting architecture](../architecture/failure-and-reporting.md), and [signal delivery specification](../spec/async/signal.md) own current behavior.
+They supersede this proposal; this RFC retains the original problem, selected design, and rejected alternatives.
+
 ## Problem
 
-[`rt::Signal`](../../app/include/ao/rt/Signal.h) and [`rt::Subscription`](../../app/include/ao/rt/Subscription.h) are application-runtime names for mechanisms that contain no application-domain semantics.
+At proposal time, `rt::Signal` and `rt::Subscription` were application-runtime names for mechanisms that contained no application-domain semantics.
 
 `Signal` is a header-only reentrant observer list.
 It depends on `async::Executor` only for deferred `post`, and it uses a weak shared state so a deferred emission becomes harmless after signal destruction.
@@ -35,6 +58,7 @@ Making `ao_audio` depend on `ao_async` solely to eliminate an alias would revers
 
 RFC 0011 must first settle whether the reporting feed uses the generic signal at all and how observer exceptions, revision delivery, and reentrant publication are contained.
 The rest of the repository can be inventoried earlier, but the complete public migration and deletion of `rt::Signal` cannot finish safely while that contract is unresolved.
+Its implemented canonical publication stages settled those questions before this RFC was implemented; the remaining RFC 0011 stages concern retention, content, and discoverability instead.
 
 ## Goals
 
@@ -56,7 +80,7 @@ The rest of the repository can be inventoried earlier, but the complete public m
 - Move application event payloads, reporting state, playback state, or UIModel policy into `ao_async`.
 - Force `audio::Subscription` to migrate when doing so would add an otherwise unnecessary `ao_audio -> ao_async` dependency.
 
-## Proposed design
+## Implemented design
 
 ### Core public surface
 
@@ -187,16 +211,17 @@ Mechanical type replacement is not allowed to move a subscription member relativ
 - Concurrency tests and ThreadSanitizer continue to prove producer-to-owner executor handoff; no test treats the primitive itself as thread-safe.
 - The implementation passes `./ao check` and `./ao docs check`.
 
-## Open questions
+## Resolved questions
 
-- Should `post` remain a member or become an `ao::async` free function before the source migration?
-- Should `hasConnectedHandlers` remain public when its answer is only owner-domain stable, or can the few users express the same policy without it?
-- Should the core name remain `Signal`, or would `CallbackSignal` better distinguish it from operating-system signals without adding useful semantic information?
+- `post` remains a member because the weak-state hop is part of the signal lifetime contract and a free adapter would expose the signal object without simplifying ownership.
+- `hasConnectedHandlers` remains public as explicitly owner-domain-only inspection; it is not a synchronization or policy API.
+- The core name remains `Signal`; `CallbackSignal` would add length without distinguishing another callback mechanism used by this API.
 
 ## Promotion plan
 
-If accepted, update the [system architecture](../architecture/system-overview.md) and [runtime execution architecture](../architecture/runtime-execution.md) with the lower-level callback mechanism and explicit owner-affinity rule.
-Update the [failure and reporting architecture](../architecture/failure-and-reporting.md) only for the final reporting-feed use selected by RFC 0011.
+The [system architecture](../architecture/system-overview.md) and [runtime execution architecture](../architecture/runtime-execution.md) now record the lower-level callback mechanism and explicit owner-affinity rule.
+The [failure and reporting architecture](../architecture/failure-and-reporting.md) records the final reporting-feed use selected by the implemented RFC 0011 publication stages.
 
-Update affected public API references that currently name `rt::Subscription`, add focused async signal tests to the test map, and add a development guardrail against generic signal primitives under application namespaces.
-Record a decision only if the selected core placement or exception behavior needs durable rationale beyond this RFC.
+The current [signal delivery specification](../spec/async/signal.md) owns ordering, reentrancy, exception, and deferred-lifetime behavior.
+Public APIs now name `async::Subscription`, focused async signal tests appear in the test maps, and the application build owns the guardrail against restoring runtime signal primitives.
+No separate decision record was needed because the implemented placement and preserved exception behavior match the accepted proposal without a new competing rationale.

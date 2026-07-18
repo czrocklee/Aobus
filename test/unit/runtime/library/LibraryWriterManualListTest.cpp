@@ -6,9 +6,9 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -104,7 +104,7 @@ namespace ao::rt::test
       LibraryChanges changes;
       LibraryWriterFixture writerFixture;
       std::vector<LibraryChangeSet> listEvents;
-      Subscription listSub;
+      async::Subscription listSub;
     };
   } // namespace
 

@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
 #include <giomm/listmodel.h>
@@ -72,7 +72,7 @@ namespace ao::gtk
     void notifyUpdate(::guint position, ::guint count);
 
     std::shared_ptr<rt::TrackListProjection> _projectionPtr;
-    rt::Subscription _projectionSub;
+    async::Subscription _projectionSub;
     TrackRowCache const* _provider = nullptr;
     TrackId _playingTrackId{kInvalidTrackId};
     sigc::signal<void()> _playingChanged;

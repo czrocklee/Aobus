@@ -7,7 +7,7 @@
 #include "TrackSource.h"
 #include "TrackSourceLease.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/Subscription.h>
+#include <ao/async/Subscription.h>
 
 #include <cstddef>
 #include <optional>
@@ -74,6 +74,6 @@ namespace ao::rt
     TrackSourceLease _parentLease;
     IndexedTrackSequence _storedTracks;
     IndexedTrackSequence _effectiveTracks;
-    Subscription _parentSubscription;
+    async::Subscription _parentSubscription;
   };
 } // namespace ao::rt

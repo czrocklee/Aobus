@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "../Subscription.h"
 #include "../TrackField.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 
 #include <array>
 #include <cstdint>
@@ -74,7 +74,7 @@ namespace ao::rt
 
     library::MusicLibrary const& _library;
     std::thread::id _ownerThread;
-    Subscription _libraryChangeSubscription;
+    async::Subscription _libraryChangeSubscription;
 
     bool _snapshotDirty = true;
     bool _tagsReady = false;

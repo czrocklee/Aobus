@@ -13,11 +13,11 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackFieldUi.h"
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/completion/CompletionService.h>
@@ -1242,7 +1242,7 @@ namespace ao::gtk::layout
       TrackDetailScope* _scope;
       TrackDetailUndoController* _detailUndo;
       std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
-      rt::Subscription _editSessionStateSubscription;
+      async::Subscription _editSessionStateSubscription;
       std::optional<rt::TrackDetailSnapshot> _optEditSnapshot;
       std::deque<BuiltInRow> _metadataRows;
       std::deque<CompositeBuiltInRow> _compositeRows;

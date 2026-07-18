@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include "Subscription.h"
 #include "TrackPresentation.h"
 #include "ViewIds.h"
 #include "ViewState.h"
 #include "WorkspaceSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 
 #include <functional>
 #include <memory>
@@ -77,7 +77,7 @@ namespace ao::rt
     bool canGoBack() const;
     bool canGoForward() const;
 
-    Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
+    async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
     Result<WorkspaceCommitReceipt> addCustomPreset(CustomTrackPresentationPreset const& preset);

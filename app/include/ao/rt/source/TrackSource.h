@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "../Signal.h"
-#include "../Subscription.h"
 #include "TrackSourceDelta.h"
 #include <ao/CoreIds.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -45,7 +45,7 @@ namespace ao::rt
     std::uint64_t revision() const noexcept { return _revision; }
     TrackSourceState state() const noexcept { return _state; }
 
-    Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler);
+    async::Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler);
     void invalidate();
 
     // Public notification API
@@ -66,7 +66,7 @@ namespace ao::rt
   private:
     std::uint64_t _revision = 0;
     TrackSourceState _state = TrackSourceState::Live;
-    Signal<TrackSourceDeltaBatch const&> _changedSignal;
+    async::Signal<TrackSourceDeltaBatch const&> _changedSignal;
 
     friend class SmartListEvaluator;
   };

@@ -4,11 +4,11 @@
 #pragma once
 
 #include "CoreRuntime.h"
-#include "Subscription.h"
 #include "WorkspaceSnapshot.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/AsyncExceptionHandler.h>
+#include <ao/async/Subscription.h>
 
 #include <cstddef>
 #include <filesystem>
@@ -73,7 +73,7 @@ namespace ao::rt
     Result<> savePlaybackSession();
     Result<PlaybackSessionRestoreResult> restorePlaybackSession();
     Result<> discardRestorablePlaybackSession();
-    Subscription onPlaybackSessionDirty(std::move_only_function<void()> handler);
+    async::Subscription onPlaybackSessionDirty(std::move_only_function<void()> handler);
 
     void reloadAllTracks();
 

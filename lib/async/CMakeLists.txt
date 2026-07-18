@@ -9,7 +9,7 @@ add_library(ao_async STATIC
 )
 
 target_include_directories(ao_async PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
-target_link_libraries(ao_async PUBLIC Boost::headers)
+target_link_libraries(ao_async PUBLIC ao_utility Boost::headers)
 
 # GCC 15 with ThreadSanitizer misclassifies Boost.Asio's correctly paired
 # coroutine-frame aligned_alloc/free path after inlining. Propagate the

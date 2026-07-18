@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/async/Subscription.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -368,7 +369,7 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto optLease = std::optional<TrackSourceLease>{};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = Subscription{};
+    auto subscription = async::Subscription{};
 
     {
       auto cache = TrackSourceCache{libraryFixture.library(), changes};

@@ -99,6 +99,8 @@ Reentrant commands queue later revisions, while observer exceptions are containe
 Transient lifetime is authoritative runtime state: cancellable sleeps return to the callback executor, and matching id-plus-generation evidence commits one expiry revision for every consumer.
 Session-history and until-dismissed entries do not schedule expiry.
 It does not inspect `Result`, catch subsystem exceptions, choose severity, retry operations, or decide which domain failures deserve a user-facing report.
+The service uses `async::Signal` only as its synchronous observer-list mechanism.
+Revision queuing, immutable update ownership, and observer-exception containment remain reporting-domain behavior above that generic primitive.
 
 Domain services and application workflow coordinators decide when a semantic outcome becomes a notification and provide the frontend-neutral content.
 They also own deduplication and aggregation when reporting every low-level failure would produce noise or misrepresent one higher-level operation.
@@ -250,6 +252,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`StorageResult`](../../app/include/ao/rt/StorageResult.h) is a focused runtime example of narrowing storage outcomes without losing diagnostic origin.
 - [`OperationCancelled`](../../include/ao/async/OperationCancelled.h), [`LifetimeScope`](../../include/ao/async/LifetimeScope.h), and their implementations under [`lib/async/`](../../lib/async) define cancellation and lifetime completion boundaries.
 - [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) and [`Runtime.cpp`](../../lib/async/Runtime.cpp) define unobserved coroutine diagnostic ownership without replacing Asio exception transport.
+- [`Signal`](../../include/ao/async/Signal.h) supplies generic synchronous observer delivery below reporting, while [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) owns feed-specific queuing and exception containment.
 - [`NotificationState`](../../app/include/ao/rt/NotificationState.h), [`NotificationService`](../../app/include/ao/rt/NotificationService.h), and [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) define the runtime reporting feed.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) composes the notification owner with library, source, completion, async, and diagnostic collaborators.
 - [`PlaybackFailure`](../../app/include/ao/rt/PlaybackFailure.h), [`PlaybackService.cpp`](../../app/runtime/PlaybackService.cpp), and [`PlaybackSequenceService.cpp`](../../app/runtime/PlaybackSequenceService.cpp) are the principal typed asynchronous failure, recovery, and summary-reporting path.
@@ -281,6 +284,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [Interactive session lifecycle architecture](interactive-session-lifecycle.md)
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Outcome channel specification](../spec/failure/outcome-channel.md)
+- [Signal delivery specification](../spec/async/signal.md)
 - [Error value reference](../reference/failure/error.md)
 - [Notification feed specification](../spec/reporting/notification-feed.md) and [model reference](../reference/reporting/notification.md)
 - [Activity-status specification](../spec/presentation/activity-status.md) and [surface reference](../reference/presentation/activity-status.md)
