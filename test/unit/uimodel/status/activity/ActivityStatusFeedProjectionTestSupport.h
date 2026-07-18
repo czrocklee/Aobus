@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -45,6 +46,28 @@ namespace ao::uimodel::test
   inline rt::NotificationFeedState feed(std::vector<rt::NotificationEntry> entries)
   {
     return rt::NotificationFeedState{.entries = std::move(entries), .revision = 9};
+  }
+
+  inline rt::NotificationFeedUpdate postedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
+  {
+    auto feedPtr = std::make_shared<rt::NotificationFeedState const>(std::move(snapshot));
+    return rt::NotificationFeedUpdate{
+      .revision = feedPtr->revision,
+      .mutationKind = rt::NotificationFeedMutationKind::Posted,
+      .affectedIds = {id},
+      .feedPtr = std::move(feedPtr),
+    };
+  }
+
+  inline rt::NotificationFeedUpdate dismissedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
+  {
+    auto feedPtr = std::make_shared<rt::NotificationFeedState const>(std::move(snapshot));
+    return rt::NotificationFeedUpdate{
+      .revision = feedPtr->revision,
+      .mutationKind = rt::NotificationFeedMutationKind::Dismissed,
+      .affectedIds = {id},
+      .feedPtr = std::move(feedPtr),
+    };
   }
 
   inline rt::LibraryChanges::LibraryTaskCompleted libraryTaskCompletion(

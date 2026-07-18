@@ -6,6 +6,8 @@
 #include "NotificationIds.h"
 #include "NotificationState.h"
 #include "Subscription.h"
+#include <ao/async/AsyncExceptionHandler.h>
+#include <ao/async/Executor.h>
 
 #include <chrono>
 #include <functional>
@@ -18,7 +20,10 @@ namespace ao::rt
   class NotificationService final
   {
   public:
-    NotificationService();
+    // The executor must outlive this service. Construction, every member call,
+    // and subscription teardown belong to its owning thread. Effective
+    // commands synchronously publish one immutable update after commit.
+    NotificationService(async::Executor& executor, async::AsyncExceptionHandler observerExceptionHandler = {});
     ~NotificationService();
 
     NotificationService(NotificationService const&) = delete;
@@ -41,10 +46,9 @@ namespace ao::rt
     void dismiss(NotificationId id);
     void dismissAll();
 
-    Subscription onPosted(std::move_only_function<void(NotificationId)> handler);
-    Subscription onUpdated(std::move_only_function<void(NotificationId)> handler);
-    Subscription onDismissed(std::move_only_function<void(NotificationId)> handler);
-    Subscription onChanged(std::move_only_function<void()> handler);
+    // The update reference is callback-scoped; copy feedPtr to retain the
+    // immutable revision snapshot beyond the callback.
+    Subscription onFeedUpdated(std::move_only_function<void(NotificationFeedUpdate const&)> handler);
 
   private:
     struct Impl;

@@ -87,6 +87,8 @@ An empty resolver or zero limit returns an empty vector.
 | `emitInitialState` | `bool` | `true` |
 
 The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatusViewState const&)` callback, and optional options.
+Construction snapshots the current feed revision, subscribes to `NotificationFeedUpdate`, and emits the initial projected state only when `emitInitialState` is true.
+Later duplicate, older, empty, or revision-mismatched feed updates do not invoke the render callback.
 
 | Member | Return |
 |---|---|

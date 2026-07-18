@@ -26,7 +26,8 @@ namespace ao::uimodel::test
 {
   TEST_CASE("ActivityStatusViewModel - projects runtime feed updates", "[uimodel][unit][status][activity]")
   {
-    auto notifications = rt::NotificationService{};
+    auto executor = rt::test::InlineExecutor{};
+    auto notifications = rt::NotificationService{executor};
     auto now = std::chrono::steady_clock::time_point{};
     auto latest = ActivityStatusViewState{};
     std::int32_t renderCount = 0;
@@ -42,8 +43,10 @@ namespace ao::uimodel::test
 
     SECTION("persistent warnings render and compact dismiss keeps the feed")
     {
+      auto const renderCountBeforePost = renderCount;
       auto const id = notifications.post(rt::NotificationSeverity::Warning, "Partial import", true);
 
+      CHECK(renderCount == renderCountBeforePost + 1);
       CHECK(latest.compact.kind == ActivityStatusKind::Warning);
       CHECK(latest.compact.text == "Partial import");
       CHECK(latest.compact.dismissible);
@@ -79,6 +82,20 @@ namespace ao::uimodel::test
       CHECK_FALSE(viewModel.hasPendingAutoDismiss());
     }
 
+    SECTION("visible transient updates render the accepted revision once")
+    {
+      auto const id = notifications.post(rt::NotificationSeverity::Info, "Saving playlist");
+      REQUIRE(latest.compact.kind == ActivityStatusKind::Info);
+      REQUIRE(latest.compact.text == "Saving playlist");
+
+      auto const renderCountBeforeUpdate = renderCount;
+      CHECK(notifications.updateMessage(id, "Playlist saved"));
+
+      CHECK(renderCount == renderCountBeforeUpdate + 1);
+      CHECK(latest.compact.kind == ActivityStatusKind::Info);
+      CHECK(latest.compact.text == "Playlist saved");
+    }
+
     SECTION("library task runtime events reuse activity projection")
     {
       viewModel.handleLibraryTaskProgress("Updating: status-progress.flac", 0.625);
@@ -103,7 +120,8 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusViewModel - projects library task events from LibraryChanges",
             "[uimodel][regression][status][activity]")
   {
-    auto notifications = rt::NotificationService{};
+    auto executor = rt::test::InlineExecutor{};
+    auto notifications = rt::NotificationService{executor};
     auto changes = rt::LibraryChanges{};
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
@@ -118,7 +136,6 @@ namespace ao::uimodel::test
     };
 
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto executor = rt::test::InlineExecutor{};
     auto runtime = async::Runtime{executor};
     auto runtimeLibrary = rt::Library{runtime, libraryFixture.library(), changes};
     auto& taskService = runtimeLibrary.taskService();

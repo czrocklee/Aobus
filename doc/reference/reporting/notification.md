@@ -3,7 +3,7 @@ id: reporting.notification-model
 type: reference
 status: current
 domain: system
-summary: Enumerates runtime notification identities, enums, fields, defaults, commands, and observation signals.
+summary: Enumerates runtime notification identities, enums, fields, defaults, commands, and canonical feed updates.
 ---
 # Notification model reference
 
@@ -32,6 +32,7 @@ The public authority is `app/include/ao/rt/`; UIModel and frontends consume thes
 | `NotificationTopic` | `General`, `PlaybackSequence`, `PlaybackError` |
 | `NotificationProgressMode` | `Indeterminate`, `Fraction` |
 | `NotificationActivityPresentation` | `Default`, `DetailOnly`, `Hidden` |
+| `NotificationFeedMutationKind` | `Posted`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Dismissed`, `Cleared` |
 
 Each notification enum is a scoped enum with underlying type `std::uint8_t`.
 `kDefaultNotificationTemplate` is `notification.message`.
@@ -76,7 +77,20 @@ Presentation adapters may expose a bounded subset; that limit is not a `Notifica
 `NotificationEntry` contains the same fields plus `NotificationId id`, whose default is `0`.
 `NotificationFeedState` contains `std::vector<NotificationEntry> entries` and `std::uint64_t revision`, both initially empty or zero.
 
+`NotificationFeedUpdate` contains:
+
+| Field | Type | Default |
+|---|---|---|
+| `revision` | `std::uint64_t` | `0` |
+| `mutationKind` | `NotificationFeedMutationKind` | `Posted` |
+| `affectedIds` | `std::vector<NotificationId>` | empty |
+| `feedPtr` | `std::shared_ptr<NotificationFeedState const>` | empty |
+
+Every update produced by `NotificationService` has a non-empty `feedPtr`, and `revision == feedPtr->revision`.
+
 ### Service API
+
+Construction requires the callback `async::Executor&` and accepts an optional `async::AsyncExceptionHandler` for observer diagnostics.
 
 | Member | Return |
 |---|---|
@@ -96,12 +110,13 @@ The short `post` overload initializes the other request fields to their defaults
 
 | Member | Handler signature |
 |---|---|
-| `onPosted` | `void(NotificationId)` |
-| `onUpdated` | `void(NotificationId)` |
-| `onDismissed` | `void(NotificationId)` |
-| `onChanged` | `void()` |
+| `onFeedUpdated` | `void(NotificationFeedUpdate const&)` |
 
-Each member returns an `rt::Subscription` that owns the connection lifetime.
+The member returns an `rt::Subscription` that owns the connection lifetime.
+The update reference is valid for the callback invocation; retaining `feedPtr` keeps that immutable snapshot alive.
+
+An observer failure is sent to the injected handler with context `notification feed observer at revision <N>`.
+An empty handler disables that diagnostic sink without allowing the observer exception to escape.
 
 ## Validation rules
 
@@ -135,7 +150,7 @@ auto id = notifications.post(ao::rt::NotificationRequest{
 
 ## Test authority
 
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) locks request storage, mutation, and signal behavior.
+- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) locks request storage, mutation, immutable-update, reentrancy, and observer-failure behavior.
 - Activity projection tests under [`test/unit/uimodel/status/activity/`](../../../test/unit/uimodel/status/activity) lock how the model is narrowed for shared presentation.
 
 ## Related documents

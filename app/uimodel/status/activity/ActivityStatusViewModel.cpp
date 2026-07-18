@@ -4,12 +4,14 @@
 #include "ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/rt/Subscription.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -34,8 +36,8 @@ namespace ao::uimodel
     ActivityStatusFeedProjection feedProjection;
     std::optional<std::chrono::steady_clock::time_point> optAutoDismissDeadline{};
 
-    rt::Subscription postedSub;
-    rt::Subscription changedSub;
+    std::uint64_t lastAcceptedNotificationRevision = 0;
+    rt::Subscription feedUpdatedSub;
     rt::Subscription libraryProgressSub;
     rt::Subscription libraryCompletedSub;
 
@@ -49,18 +51,21 @@ namespace ao::uimodel
         clock = defaultActivityStatusNow;
       }
 
-      feedProjection.initialize(notifications.feed());
+      auto const initialFeed = notifications.feed();
+      lastAcceptedNotificationRevision = initialFeed.revision;
+      feedProjection.initialize(initialFeed);
 
-      postedSub = notifications.onPosted(
-        [this](rt::NotificationId const id)
+      feedUpdatedSub = notifications.onFeedUpdated(
+        [this](rt::NotificationFeedUpdate const& update)
         {
-          feedProjection.handleNotificationPosted(notifications.feed(), id);
-          publish();
-        });
-      changedSub = notifications.onChanged(
-        [this]
-        {
-          feedProjection.handleFeedChanged(notifications.feed());
+          if (!update.feedPtr || update.revision <= lastAcceptedNotificationRevision ||
+              update.revision != update.feedPtr->revision)
+          {
+            return;
+          }
+
+          lastAcceptedNotificationRevision = update.revision;
+          feedProjection.handleFeedUpdated(update);
           publish();
         });
 

@@ -42,7 +42,7 @@ GTK and TUI adapt those values to toolkit lifecycle, rendering, input, timing, a
 
 ### Runtime presentation inputs
 
-Runtime owns canonical identities, workspace/view lifecycle under the [workspace architecture](workspace.md), structural presentation specifications, live source/projection state, playback state, notifications, and commands that mutate application behavior.
+Runtime owns canonical identities, workspace/view lifecycle under the [workspace architecture](workspace.md), structural presentation specifications, live source/projection state, playback state, the executor-affine revisioned notification feed, and commands that mutate application behavior.
 It exposes typed snapshots and subscriptions without naming widgets, CSS classes, terminal cells, or native icons.
 
 For track-list views, runtime keeps content and shape as separate state axes.
@@ -56,6 +56,9 @@ That vocabulary is shared by runtime workspace persistence and UIModel presentat
 
 UIModel owns deterministic platform-neutral presentation behavior.
 Its feature capsules contain view models, editor/form models, interaction models, policies, projections, formatters, catalogs, resolvers, and UI-local stores.
+
+The shared activity-status model consumes one immutable notification-feed update per accepted revision.
+It derives compact and detail state from that same snapshot and emits at most one render for the revision; frontend adapters do not combine parallel notification signals into their own refresh policy.
 
 UIModel may subscribe to runtime services, combine several runtime snapshots, format display values, maintain an edit draft or gesture, and emit a runtime command or typed edit result.
 It does not own storage transactions, playback succession, audio control, runtime retry policy, or platform lifecycle.
@@ -120,6 +123,7 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
+- Shared reporting presentation consumes the canonical runtime feed-update stream; GTK and TUI do not reconstruct mutation ordering from independent event types.
 - List-navigation effective parents and sibling order come from one UIModel projection; GTK and TUI only adapt that tree to their native row models.
 - Interactive track-filter field selection, expression classification, live-value ranking, and safe insertion are one UIModel policy shared by GTK and TUI; runtime owns only vocabulary storage mechanics.
 - Presentation affects ordering, grouping, visible fields, and rendering but never changes source membership.
@@ -182,6 +186,7 @@ A quick filter narrows the active membership while retaining the active presenta
 - A UIModel object can be unit-tested without a display server, terminal, storage environment, or audio backend unless it deliberately wraps a narrow runtime service.
 - Frontends retain subscriptions and view models for no longer than the runtime services they observe.
 - Runtime snapshots remain the source of truth after a frontend rebuilds its widget tree or terminal frame.
+- A UIModel notification projection ignores duplicate, older, empty, or revision-mismatched updates rather than regressing its accepted state.
 - UI-local persisted preferences influence presentation but do not replace canonical runtime state.
 - Persisted presentation documents use explicit version gates and runtime-owned stable tokens rather than C++ enum ordinals.
 - Runtime workspace, UIModel layout/preference, and GTK file ownership stay separate; sharing token conversion does not justify a universal cross-layer document codec.

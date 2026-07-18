@@ -41,8 +41,12 @@ audio/device boundary
 ### Callback executor
 
 The callback executor is the serialized application-control domain.
-Mutable runtime services such as playback, sequence, view, and workspace services keep their authoritative state there unless a public contract explicitly states otherwise.
+Mutable runtime services such as playback, sequence, view, workspace, and notification services keep their authoritative state there unless a public contract explicitly states otherwise.
 Subscription registration, event delivery, and subscription teardown follow the owning service's executor affinity.
+
+The notification service refines synchronous callback delivery with a revision queue.
+One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later revision rather than nesting signal delivery.
+Observer failure is contained after every connected observer has run and is reported through `Runtime::reportUnhandledException`, so it cannot unwind an already committed feed command.
 
 GTK supplies `GtkMainContextExecutor`, which wakes and drains work through `Glib::Dispatcher` on the GTK main context.
 TUI supplies its `Executor`, which posts work into the FTXUI screen loop.
@@ -91,6 +95,7 @@ The logging backend may also own its own asynchronous worker, but it is infrastr
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
 - Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
+- Notification feed reads, commands, and subscription registration require the callback executor; foreign producers return through their runtime owner instead of using a cross-thread convenience post.
 - Frontend code does not post directly into audio engine internals, and audio callbacks do not mutate runtime snapshots from backend threads.
 - UIModel and frontend adapters call executor-affine runtime services only from the owning event-loop thread.
 - Dedicated subsystem threads remain implementation details below the runtime service that translates them into application state.
@@ -145,6 +150,7 @@ The current Engine non-realtime queue and Player-to-executor task stream do not 
 - A maintenance guard closes interactive admission across slow preparation but never grants storage write access by itself.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - Synchronous observer delivery cannot destroy the emitting owner on the same callback stack; teardown is deferred to a later executor turn.
+- Reentrant notification publication is revision-queued, so observers of revision R retain one immutable snapshot even if an earlier observer commits revision R+1.
 - A dedicated audio or device thread cannot become a general application worker.
 - Tests replace time, execution, or backend facilities through explicit executor and sleeper seams instead of relying on sleeps.
 
@@ -182,6 +188,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) is the injected terminal diagnostic seam.
 - [`Runtime.cpp`](../../lib/async/Runtime.cpp) implements worker spawning, cancellation, timers, and callback resumption.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) owns executor/runtime lifetime and worker shutdown ordering.
+- [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) enforces reporting-feed affinity and deterministic reentrant publication on that executor.
 - [`Log.cpp`](../../app/runtime/Log.cpp) adapts terminal exceptions to the retained application logger.
 - [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of base-runtime teardown.
 - [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) adapt the three frontend execution models.
@@ -197,6 +204,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSequenceServiceTest.cpp`](../../test/unit/runtime/PlaybackSequenceServiceTest.cpp) exercise executor-affine application services.
+- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises immutable revision delivery, reentrant commands, and observer-fault containment.
 
 ## Related documents
 

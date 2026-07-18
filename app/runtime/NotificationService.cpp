@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/async/AsyncExceptionHandler.h>
+#include <ao/async/Executor.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -8,57 +11,173 @@
 #include <ao/rt/Subscription.h>
 
 #include <algorithm>
+#include <array>
+#include <charconv>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <deque>
+#include <exception>
 #include <functional>
+#include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
+#include <vector>
 
 namespace ao::rt
 {
+  namespace
+  {
+    [[noreturn]] void failExecutorAffinity(std::source_location const& location)
+    {
+      APP_LOG_CRITICAL("NotificationService thread-affinity violation: '{}' invoked off the executor thread ({}:{})",
+                       location.function_name(),
+                       location.file_name(),
+                       location.line());
+
+      if (auto const& loggerPtr = Log::appLogger(); loggerPtr)
+      {
+        loggerPtr->flush();
+      }
+
+      std::abort();
+    }
+  } // namespace
+
   struct NotificationService::Impl final
   {
-    NotificationFeedState state;
-    std::uint64_t nextId = 0;
+    explicit Impl(async::Executor& callbackExecutor, async::AsyncExceptionHandler exceptionHandler)
+      : executor{callbackExecutor}
+      , observerExceptionHandler{std::move(exceptionHandler)}
+      , feedPtr{std::make_shared<NotificationFeedState const>()}
+    {
+    }
 
-    Signal<NotificationId> postedSignal;
-    Signal<NotificationId> updatedSignal;
-    Signal<NotificationId> dismissedSignal;
-    Signal<> changedSignal;
+    void ensureOnExecutor(std::source_location location = std::source_location::current()) const
+    {
+      if (!executor.isCurrent()) [[unlikely]]
+      {
+        failExecutorAffinity(location);
+      }
+    }
+
+    std::shared_ptr<NotificationFeedState> mutableFeedCopy() const
+    {
+      return std::make_shared<NotificationFeedState>(*feedPtr);
+    }
+
+    void commit(std::shared_ptr<NotificationFeedState> candidatePtr,
+                NotificationFeedMutationKind const mutationKind,
+                std::vector<NotificationId> affectedIds,
+                std::uint64_t const committedNextId)
+    {
+      ++candidatePtr->revision;
+      auto immutableFeedPtr = std::shared_ptr<NotificationFeedState const>{std::move(candidatePtr)};
+      auto update = NotificationFeedUpdate{
+        .revision = immutableFeedPtr->revision,
+        .mutationKind = mutationKind,
+        .affectedIds = std::move(affectedIds),
+        .feedPtr = immutableFeedPtr,
+      };
+
+      // Queue allocation is the final operation that may fail before commit.
+      // Once the update is queued, the new snapshot and id watermark become
+      // authoritative together and observer delivery cannot roll them back.
+      pendingUpdates.push_back(std::move(update));
+      feedPtr = std::move(immutableFeedPtr);
+      nextId = committedNextId;
+      drainPendingUpdates();
+    }
+
+    void drainPendingUpdates() noexcept
+    {
+      if (publishing)
+      {
+        return;
+      }
+
+      publishing = true;
+
+      while (!pendingUpdates.empty())
+      {
+        auto update = std::move(pendingUpdates.front());
+        pendingUpdates.pop_front();
+
+        try
+        {
+          feedUpdatedSignal.emit(update);
+        }
+        catch (...)
+        {
+          reportObserverFailure(std::current_exception(), update.revision);
+        }
+      }
+
+      publishing = false;
+    }
+
+    void reportObserverFailure(std::exception_ptr exceptionPtr, std::uint64_t const revision) const noexcept
+    {
+      if (!observerExceptionHandler)
+      {
+        return;
+      }
+
+      constexpr auto kContextPrefix = std::string_view{"notification feed observer at revision "};
+      constexpr auto kContextBufferSize = kContextPrefix.size() + std::numeric_limits<std::uint64_t>::digits10 + 1;
+      auto contextBuffer = std::array<char, kContextBufferSize>{};
+      std::ranges::copy(kContextPrefix, contextBuffer.begin());
+      auto* const numberBegin = contextBuffer.data() + kContextPrefix.size();
+      auto const result = std::to_chars(numberBegin, contextBuffer.data() + contextBuffer.size(), revision);
+      auto const context =
+        result.ec == std::errc{}
+          ? std::string_view{contextBuffer.data(), static_cast<std::size_t>(result.ptr - contextBuffer.data())}
+          : std::string_view{"notification feed observer"};
+
+      try
+      {
+        observerExceptionHandler(std::move(exceptionPtr), context);
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): A diagnostic handler must not escape the committed publication boundary.
+      catch (...)
+      {
+      }
+    }
+
+    async::Executor& executor;
+    async::AsyncExceptionHandler observerExceptionHandler;
+    std::shared_ptr<NotificationFeedState const> feedPtr;
+    std::uint64_t nextId = 0;
+    std::deque<NotificationFeedUpdate> pendingUpdates;
+    bool publishing = false;
+    Signal<NotificationFeedUpdate const&> feedUpdatedSignal;
   };
 
-  NotificationService::NotificationService()
-    : _implPtr{std::make_unique<Impl>()}
+  NotificationService::NotificationService(async::Executor& executor,
+                                           async::AsyncExceptionHandler observerExceptionHandler)
+    : _implPtr{std::make_unique<Impl>(executor, std::move(observerExceptionHandler))}
   {
   }
 
   NotificationService::~NotificationService() = default;
 
-  Subscription NotificationService::onPosted(std::move_only_function<void(NotificationId)> handler)
+  Subscription NotificationService::onFeedUpdated(std::move_only_function<void(NotificationFeedUpdate const&)> handler)
   {
-    return _implPtr->postedSignal.connect(std::move(handler));
-  }
-
-  Subscription NotificationService::onUpdated(std::move_only_function<void(NotificationId)> handler)
-  {
-    return _implPtr->updatedSignal.connect(std::move(handler));
-  }
-
-  Subscription NotificationService::onDismissed(std::move_only_function<void(NotificationId)> handler)
-  {
-    return _implPtr->dismissedSignal.connect(std::move(handler));
-  }
-
-  Subscription NotificationService::onChanged(std::move_only_function<void()> handler)
-  {
-    return _implPtr->changedSignal.connect(std::move(handler));
+    _implPtr->ensureOnExecutor();
+    return _implPtr->feedUpdatedSignal.connect(std::move(handler));
   }
 
   NotificationFeedState NotificationService::feed() const
   {
-    return _implPtr->state;
+    _implPtr->ensureOnExecutor();
+    return *_implPtr->feedPtr;
   }
 
   NotificationId NotificationService::post(NotificationSeverity const severity,
@@ -76,7 +195,10 @@ namespace ao::rt
 
   NotificationId NotificationService::post(NotificationRequest request)
   {
-    auto const id = NotificationId{++_implPtr->nextId};
+    _implPtr->ensureOnExecutor();
+
+    auto const committedNextId = _implPtr->nextId + 1;
+    auto const id = NotificationId{committedNextId};
 
     auto entry = NotificationEntry{
       .id = id,
@@ -88,24 +210,24 @@ namespace ao::rt
       .content = std::move(request.content),
     };
 
-    _implPtr->state.entries.push_back(std::move(entry));
-    ++_implPtr->state.revision;
-    _implPtr->postedSignal.emit(id);
-    _implPtr->changedSignal.emit();
+    auto candidatePtr = _implPtr->mutableFeedCopy();
+    candidatePtr->entries.push_back(std::move(entry));
+    _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, {id}, committedNextId);
 
     return id;
   }
 
   bool NotificationService::updateMessage(NotificationId const id, std::string message)
   {
-    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
+    _implPtr->ensureOnExecutor();
+    auto const& entries = _implPtr->feedPtr->entries;
+    auto const it = std::ranges::find(entries, id, &NotificationEntry::id);
 
-    if (it != _implPtr->state.entries.end())
+    if (it != entries.end())
     {
-      it->message = std::move(message);
-      ++_implPtr->state.revision;
-      _implPtr->updatedSignal.emit(id);
-      _implPtr->changedSignal.emit();
+      auto candidatePtr = _implPtr->mutableFeedCopy();
+      candidatePtr->entries[static_cast<std::size_t>(it - entries.begin())].message = std::move(message);
+      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::MessageUpdated, {id}, _implPtr->nextId);
       return true;
     }
 
@@ -114,63 +236,74 @@ namespace ao::rt
 
   void NotificationService::updateContent(NotificationId const id, NotificationContentState content)
   {
-    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
+    _implPtr->ensureOnExecutor();
+    auto const& entries = _implPtr->feedPtr->entries;
+    auto const it = std::ranges::find(entries, id, &NotificationEntry::id);
 
-    if (it != _implPtr->state.entries.end())
+    if (it != entries.end())
     {
-      it->content = std::move(content);
-      ++_implPtr->state.revision;
-      _implPtr->updatedSignal.emit(id);
-      _implPtr->changedSignal.emit();
+      auto candidatePtr = _implPtr->mutableFeedCopy();
+      candidatePtr->entries[static_cast<std::size_t>(it - entries.begin())].content = std::move(content);
+      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::ContentUpdated, {id}, _implPtr->nextId);
     }
   }
 
   void NotificationService::updateProgress(NotificationId const id, NotificationProgressState progress)
   {
-    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
+    _implPtr->ensureOnExecutor();
+    auto const& entries = _implPtr->feedPtr->entries;
+    auto const it = std::ranges::find(entries, id, &NotificationEntry::id);
 
-    if (it != _implPtr->state.entries.end())
+    if (it != entries.end())
     {
-      it->content.optProgress = std::move(progress);
-      ++_implPtr->state.revision;
-      _implPtr->updatedSignal.emit(id);
-      _implPtr->changedSignal.emit();
+      auto candidatePtr = _implPtr->mutableFeedCopy();
+      candidatePtr->entries[static_cast<std::size_t>(it - entries.begin())].content.optProgress = std::move(progress);
+      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::ProgressUpdated, {id}, _implPtr->nextId);
     }
   }
 
   void NotificationService::clearProgress(NotificationId const id)
   {
-    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
+    _implPtr->ensureOnExecutor();
+    auto const& entries = _implPtr->feedPtr->entries;
+    auto const it = std::ranges::find(entries, id, &NotificationEntry::id);
 
-    if (it != _implPtr->state.entries.end() && it->content.optProgress)
+    if (it != entries.end() && it->content.optProgress)
     {
-      it->content.optProgress = std::nullopt;
-      ++_implPtr->state.revision;
-      _implPtr->updatedSignal.emit(id);
-      _implPtr->changedSignal.emit();
+      auto candidatePtr = _implPtr->mutableFeedCopy();
+      candidatePtr->entries[static_cast<std::size_t>(it - entries.begin())].content.optProgress = std::nullopt;
+      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::ProgressCleared, {id}, _implPtr->nextId);
     }
   }
 
   void NotificationService::dismiss(NotificationId const id)
   {
-    auto const it = std::ranges::find(_implPtr->state.entries, id, &NotificationEntry::id);
+    _implPtr->ensureOnExecutor();
+    auto const& entries = _implPtr->feedPtr->entries;
+    auto const it = std::ranges::find(entries, id, &NotificationEntry::id);
 
-    if (it != _implPtr->state.entries.end())
+    if (it != entries.end())
     {
-      _implPtr->state.entries.erase(it);
-      ++_implPtr->state.revision;
-      _implPtr->dismissedSignal.emit(id);
-      _implPtr->changedSignal.emit();
+      auto candidatePtr = _implPtr->mutableFeedCopy();
+      candidatePtr->entries.erase(candidatePtr->entries.begin() + (it - entries.begin()));
+      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Dismissed, {id}, _implPtr->nextId);
     }
   }
 
   void NotificationService::dismissAll()
   {
-    if (!_implPtr->state.entries.empty())
+    _implPtr->ensureOnExecutor();
+
+    if (!_implPtr->feedPtr->entries.empty())
     {
-      _implPtr->state.entries.clear();
-      ++_implPtr->state.revision;
-      _implPtr->changedSignal.emit();
+      auto affectedIds = std::vector<NotificationId>{};
+      affectedIds.reserve(_implPtr->feedPtr->entries.size());
+      std::ranges::transform(_implPtr->feedPtr->entries, std::back_inserter(affectedIds), &NotificationEntry::id);
+
+      auto candidatePtr = _implPtr->mutableFeedCopy();
+      candidatePtr->entries.clear();
+      _implPtr->commit(
+        std::move(candidatePtr), NotificationFeedMutationKind::Cleared, std::move(affectedIds), _implPtr->nextId);
     }
   }
 } // namespace ao::rt

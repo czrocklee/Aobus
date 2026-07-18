@@ -93,14 +93,23 @@ For notification-like services, cover:
 Callback assertions should be specific enough to reject wrong events:
 
 ```cpp
-auto received = std::vector<NotificationId>{};
-auto sub = service.onDismissed([&](auto id) { received.push_back(id); });
+auto received = std::vector<NotificationFeedUpdate>{};
+auto sub = service.onFeedUpdated(
+  [&](auto const& update)
+  {
+    if (update.mutationKind == NotificationFeedMutationKind::Dismissed)
+    {
+      received.push_back(update);
+    }
+  });
 
 service.dismiss(id);
 service.dismiss(NotificationId{999});
 
 REQUIRE(received.size() == 1);
-CHECK(received[0] == id);
+CHECK(received[0].affectedIds == std::vector{id});
+REQUIRE(received[0].feedPtr);
+CHECK(received[0].revision == received[0].feedPtr->revision);
 ```
 
 Avoid only checking a boolean unless the contract has no payload.
@@ -110,7 +119,8 @@ Avoid only checking a boolean unless the contract has no payload.
 Keep subscriptions in named variables when their lifetime keeps callbacks connected:
 
 ```cpp
-auto sub = service.onUpdated([&](auto id) { updatedId = id; });
+auto sub = service.onFeedUpdated(
+  [&](auto const& update) { latestRevision = update.revision; });
 ```
 
 For cancellation/lifetime tests, assert both sides:

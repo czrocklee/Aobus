@@ -117,7 +117,7 @@ namespace ao::rt::test
       LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
-      NotificationService notifications;
+      NotificationService notifications{executor};
       PlaybackService playback;
       std::unique_ptr<PlaybackSequenceService> sequencePtr;
       TrackId firstTrackId = kInvalidTrackId;
@@ -279,7 +279,7 @@ namespace ao::rt::test
       LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
-      NotificationService notifications;
+      NotificationService notifications{executor};
       std::unique_ptr<PlaybackService> playbackPtr;
       std::unique_ptr<PlaybackSequenceService> sequencePtr;
       TrackId firstTrackId = kInvalidTrackId;

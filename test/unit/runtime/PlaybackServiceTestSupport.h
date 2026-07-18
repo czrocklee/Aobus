@@ -168,7 +168,7 @@ namespace ao::rt::test
     // tears down its Player while the provider mock is still alive.
     MusicLibraryFixture libraryFixture;
     ExecutorT executor;
-    NotificationService notificationService;
+    NotificationService notificationService{executor};
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
     fakeit::Mock<audio::BackendProvider> mockProvider;

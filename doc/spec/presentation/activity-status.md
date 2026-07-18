@@ -36,6 +36,7 @@ It does not dismiss the runtime feed, mutate library work, choose recovery, or d
 ## Invariants
 
 - Runtime notification entries remain unchanged by all activity-status projection commands.
+- `ActivityStatusViewModel` consumes only canonical notification-feed updates, accepts each increasing feed revision at most once, and renders at most once for that accepted revision.
 - Active library-task progress owns the compact slot until the task completes.
 - Without an active task, unsuppressed `Default` error notifications outrank warnings; warnings outrank transient info and completion; an empty projection is idle.
 - Notifications at the selected highest persistent severity are grouped; lower severities remain in detail but do not contribute to that compact group.
@@ -45,6 +46,7 @@ It does not dismiss the runtime feed, mutate library work, choose recovery, or d
 - Compact or detail dismissal is local suppression and never calls `NotificationService::dismiss`.
 - Sticky or progress detail rows cannot be locally dismissed from activity status.
 - Local suppression is pruned after the corresponding notification leaves the runtime feed, so a future entry cannot inherit stale suppression.
+- Updating the source of a visible transient info compact refreshes compact and detail state from the same immutable feed snapshot.
 - Timeout expiry reprojects the current feed and reveals the highest unsuppressed persistent compact, if any.
 
 ## State model
@@ -56,6 +58,7 @@ The projection retains:
 - a notification posted while task progress owns compact state;
 - locally suppressed compact notification ids;
 - locally suppressed detail notification ids;
+- in `ActivityStatusViewModel`, the last accepted notification-feed revision;
 - in `ActivityStatusViewModel`, an optional steady-clock deadline for the current transient compact.
 
 Initial projection includes current eligible detail rows and current unsuppressed persistent warning/error compact state.
@@ -63,14 +66,18 @@ Historical plain info does not become compact merely because a view model subscr
 
 ## Commands and transitions
 
-### Notification post and change
+### Notification feed updates
 
 A newly posted `Default` warning or error participates immediately in persistent projection unless library-task progress currently owns compact state.
 A newly posted `Default` info becomes transient compact only when no unsuppressed persistent warning or error already owns compact.
 While a task is active, compact-eligible notification posts are deferred from compact presentation; detail is still refreshed.
 
-General feed changes always refresh detail.
+The view model ignores an update with an empty snapshot, a snapshot revision that differs from the update revision, or a revision no newer than the last accepted revision.
+One accepted update is projected once from its immutable snapshot and invokes the render callback at most once.
+
+Non-post feed mutations always refresh detail.
 They preserve a still-valid info or success transient when no persistent compact supersedes it, and remove a notification-derived transient when its source leaves the feed.
+Message, content, progress, and progress-clear mutations affecting the source of the visible info transient reproject that compact from the same snapshot instead of retaining stale text or content.
 
 ### Persistent compact grouping
 
@@ -125,6 +132,7 @@ Malformed optional presentation data is narrowed by exact helper policy; it does
 
 The view model owns subscriptions only for its lifetime.
 Runtime and library-change owners outlive the view model according to the application composition order.
+An exception escaping notification projection or its render callback is an observer fault contained and diagnosed by the runtime notification publication boundary after the feed revision has committed.
 
 ## Frontend observations
 
@@ -151,7 +159,7 @@ These are GTK adapter limits, not runtime notification-model limits.
 - [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) proves grouping, timeouts, source removal, and local suppression.
 - [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) proves eligibility, ordering, rich fields, progress, actions, and clearability.
 - [`ActivityStatusFeedProjectionPresentationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionPresentationTest.cpp) proves `Default`, `DetailOnly`, and `Hidden` behavior.
-- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) proves subscriptions, injected-clock expiry, and library task events.
+- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) proves one render per accepted feed revision, coherent transient updates, injected-clock expiry, and library task events.
 - [`ActivityStatusWidgetTest.cpp`](../../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects the GTK adapter and action-resolution boundary.
 
 ## Related documents

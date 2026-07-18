@@ -60,7 +60,7 @@ Good shape:
 
 ```cpp
 auto feedProjection = ActivityStatusFeedProjection{};
-feedProjection.handleNotificationPosted(feed({warning}), warning.id);
+feedProjection.handleFeedUpdated(postedUpdate(feed({warning}), warning.id));
 
 auto const& compact = feedProjection.viewState().compact;
 CHECK(compact.kind == ActivityStatusKind::Warning);

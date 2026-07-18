@@ -26,7 +26,7 @@ namespace ao::uimodel::test
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::Hidden)});
 
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{11});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{11}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
       CHECK(feedProjection.viewState().detail.items.empty());
@@ -41,7 +41,7 @@ namespace ao::uimodel::test
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::DetailOnly)});
 
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{19});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{19}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
       REQUIRE(feedProjection.viewState().detail.items.size() == 1);
@@ -59,7 +59,7 @@ namespace ao::uimodel::test
                                      false,
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::DetailOnly)});
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{25});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{25}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
       CHECK(feedProjection.viewState().compact.text == "Scanning library");
@@ -82,7 +82,7 @@ namespace ao::uimodel::test
                                      false,
                                      std::nullopt,
                                      rt::NotificationActivityPresentation::Hidden)});
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{26});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{26}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
       CHECK(feedProjection.viewState().compact.text == "Updating library");
@@ -92,7 +92,7 @@ namespace ao::uimodel::test
     SECTION("non-compact presentations do not replace transient compact state")
     {
       auto info = entry(rt::NotificationId{27}, rt::NotificationSeverity::Info, "Saved playlist");
-      feedProjection.handleNotificationPosted(feed({info}), rt::NotificationId{27});
+      feedProjection.handleFeedUpdated(postedUpdate(feed({info}), rt::NotificationId{27}));
       REQUIRE(feedProjection.viewState().compact.kind == ActivityStatusKind::Info);
 
       auto detailOnly = entry(rt::NotificationId{28},
@@ -101,7 +101,7 @@ namespace ao::uimodel::test
                               false,
                               std::nullopt,
                               rt::NotificationActivityPresentation::DetailOnly);
-      feedProjection.handleNotificationPosted(feed({info, detailOnly}), rt::NotificationId{28});
+      feedProjection.handleFeedUpdated(postedUpdate(feed({info, detailOnly}), rt::NotificationId{28}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Info);
       CHECK(feedProjection.viewState().compact.text == "Saved playlist");
@@ -113,7 +113,7 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{20}, rt::NotificationSeverity::Warning, "Default warning")});
 
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{20});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{20}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "Default warning");
@@ -124,7 +124,7 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{21}, rt::NotificationSeverity::Info, "Saved playlist")});
 
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{21});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{21}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Info);
       CHECK(feedProjection.viewState().compact.text == "Saved playlist");
@@ -137,7 +137,7 @@ namespace ao::uimodel::test
     {
       auto currentFeed = feed({entry(rt::NotificationId{29}, rt::NotificationSeverity::Info, "Background note", true)});
 
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{29});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{29}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Info);
       CHECK(feedProjection.viewState().compact.text == "Background note");

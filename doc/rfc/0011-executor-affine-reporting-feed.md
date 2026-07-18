@@ -8,23 +8,15 @@ depends-on: none
 ---
 # RFC 0011: Executor-affine reporting feed
 
+Migration stages 1 and 2 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, and activity status renders each accepted feed revision once.
+Typed command outcomes, authoritative retention, typed lifetime, bounds, structured content, and detail discoverability remain proposal work in this RFC.
+
 ## Problem
 
-The current runtime notification model has useful semantic separation from logging and recovery, but its state, observation, retention, and UIModel projection contracts do not form one coherent publication boundary.
+The runtime notification model has useful semantic separation from logging and recovery, but the remaining retention, lifetime, content, and discoverability contracts do not yet form the complete bounded reporting feed proposed here.
 
-[`NotificationService`](../../app/include/ao/rt/NotificationService.h) owns a mutable vector and four synchronous signals without receiving an executor or enforcing thread affinity.
-[`Signal`](../../app/include/ao/rt/Signal.h) deliberately supports reentrant connection and emission, but it has no synchronization; correctness therefore depends on every producer and subscriber already sharing one undocumented execution domain.
-Playback producers usually return through their callback executor, while GTK and TUI also post directly from frontend workflows.
-The type boundary does not prove these calls are serialized.
-
-One effective mutation emits a specific signal and then `onChanged`.
-If a specific-signal observer throws, `Signal::emit` runs the remaining observers and then rethrows, so `NotificationService` never reaches `onChanged` even though its state and revision already changed.
-Consumers can therefore miss the canonical refresh after a committed mutation, and the mutating caller receives an exception after the operation has already taken effect.
-
-[`ActivityStatusViewModel`](../../app/uimodel/status/activity/ActivityStatusViewModel.cpp) subscribes independently to `onPosted` and `onChanged`.
-One post consequently projects and renders twice and resets a transient deadline twice.
-Updates arrive only through the coarse changed signal: persistent compact state is reprojected, but an already-visible transient info compact is intentionally preserved as a previous value, so an updated source can leave stale compact text while detail reflects the new feed.
-Current tests require only that rendering occurs, not one coherent render per feed revision.
+The first two migration stages replaced the previous mutable four-signal publication boundary with an executor-affine immutable update stream and one-revision UIModel projection.
+The remaining problem starts after publication: timeout is still presentation-local, the runtime feed remains unbounded, command outcomes remain inconsistent, and accepted content still includes ambiguous or inert fields.
 
 Retention is also split across owners.
 `NotificationService` stores timeout data but never removes an entry; activity status expires only its local compact projection.
@@ -90,7 +82,7 @@ A caller that cannot return to the owner executor must use its typed domain call
 
 ### One canonical feed update
 
-The four current public observation streams are replaced by one canonical update stream carrying an immutable value equivalent to:
+The four previous public observation streams are replaced by one canonical update stream carrying an immutable value equivalent to:
 
 ```text
 NotificationFeedUpdate
@@ -218,12 +210,12 @@ Existing producers migrate from sticky/timeout fields to typed lifetime and from
 
 Migration occurs in stages:
 
-1. Introduce canonical update values, affinity checks, and deterministic delivery while adapting existing signals internally.
-2. Migrate UIModel to one revision stream and add regression tests for post/update/expiry and one-render-per-revision.
+1. Completed: introduce canonical update values, affinity checks, deterministic delivery, and remove the unconsumed compatibility signals.
+2. Completed for current feed commands: migrate UIModel to one revision stream and add regression tests for post/update and one-render-per-revision; service-owned expiry remains in stage 3.
 3. Introduce typed lifetime and service-owned expiry, then remove UIModel ownership of authoritative timeout.
 4. Add bounds, keyed update, and producer migration.
 5. Remove the inert template field and English prefix parsing, then add structured content atomically with its UIModel resolver when RFCs 0013 and 0030 are implemented.
-6. Remove compatibility signals and ambiguous fields after all consumers move.
+6. Remove the remaining ambiguous fields after all consumers move.
 
 Playback producer migration coordinates with RFC 0005 if that proposal is active.
 Reporting-owner migration coordinates with RFC 0013 but does not wait for its complete operation audit.

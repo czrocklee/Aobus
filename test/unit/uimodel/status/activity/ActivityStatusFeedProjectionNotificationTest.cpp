@@ -41,7 +41,7 @@ namespace ao::uimodel::test
                                      false,
                                      std::chrono::milliseconds{1500})});
 
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{5});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{5}));
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Info);
@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     SECTION("compact dismiss does not remove detail feed")
     {
       auto currentFeed = feed({entry(rt::NotificationId{6}, rt::NotificationSeverity::Error, "Scan failed", true)});
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{6});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{6}));
 
       feedProjection.dismissCompact(currentFeed);
 
@@ -64,12 +64,12 @@ namespace ao::uimodel::test
     SECTION("new persistent notification reappears after previous compact dismiss")
     {
       auto firstFeed = feed({entry(rt::NotificationId{7}, rt::NotificationSeverity::Error, "Old failure", true)});
-      feedProjection.handleNotificationPosted(firstFeed, rt::NotificationId{7});
+      feedProjection.handleFeedUpdated(postedUpdate(firstFeed, rt::NotificationId{7}));
       feedProjection.dismissCompact(firstFeed);
 
       auto nextFeed = feed({entry(rt::NotificationId{7}, rt::NotificationSeverity::Error, "Old failure", true),
                             entry(rt::NotificationId{8}, rt::NotificationSeverity::Error, "New failure", true)});
-      feedProjection.handleNotificationPosted(nextFeed, rt::NotificationId{8});
+      feedProjection.handleFeedUpdated(postedUpdate(nextFeed, rt::NotificationId{8}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Error);
       CHECK(feedProjection.viewState().compact.text == "New failure");
@@ -80,12 +80,12 @@ namespace ao::uimodel::test
     SECTION("dismissed higher severity does not suppress new lower severity persistent notification")
     {
       auto errorFeed = feed({entry(rt::NotificationId{16}, rt::NotificationSeverity::Error, "Old failure", true)});
-      feedProjection.handleNotificationPosted(errorFeed, rt::NotificationId{16});
+      feedProjection.handleFeedUpdated(postedUpdate(errorFeed, rt::NotificationId{16}));
       feedProjection.dismissCompact(errorFeed);
 
       auto warningFeed = feed({entry(rt::NotificationId{16}, rt::NotificationSeverity::Error, "Old failure", true),
                                entry(rt::NotificationId{17}, rt::NotificationSeverity::Warning, "New warning", true)});
-      feedProjection.handleNotificationPosted(warningFeed, rt::NotificationId{17});
+      feedProjection.handleFeedUpdated(postedUpdate(warningFeed, rt::NotificationId{17}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "New warning");
@@ -95,10 +95,10 @@ namespace ao::uimodel::test
     SECTION("notification-derived transient disappears when its source leaves the feed")
     {
       auto currentFeed = feed({entry(rt::NotificationId{18}, rt::NotificationSeverity::Info, "Saved playlist")});
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{18});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{18}));
       REQUIRE(feedProjection.viewState().compact.kind == ActivityStatusKind::Info);
 
-      feedProjection.handleFeedChanged(feed({}));
+      feedProjection.handleFeedUpdated(dismissedUpdate(feed({}), rt::NotificationId{18}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
     }
@@ -106,7 +106,7 @@ namespace ao::uimodel::test
     SECTION("transient expiration returns to persistent warning when present")
     {
       auto currentFeed = feed({entry(rt::NotificationId{9}, rt::NotificationSeverity::Warning, "Partial import")});
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{9});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{9}));
       feedProjection.dismissCompact(currentFeed);
 
       auto replacementFeed = feed({entry(rt::NotificationId{10}, rt::NotificationSeverity::Warning, "New warning")});

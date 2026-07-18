@@ -19,8 +19,7 @@ namespace ao::uimodel
   {
   public:
     void initialize(rt::NotificationFeedState const& feed);
-    void handleFeedChanged(rt::NotificationFeedState const& feed);
-    void handleNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
+    void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
     void handleLibraryTaskProgress(std::string message, double fraction);
     void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
                                     rt::NotificationFeedState const& feed);
@@ -38,6 +37,9 @@ namespace ao::uimodel
       double fraction = 0.0;
     };
 
+    void handleFeedChanged(rt::NotificationFeedState const& feed);
+    void handleNotificationPosted(rt::NotificationFeedState const& feed, rt::NotificationId id);
+    bool refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const;
     void projectDetail(rt::NotificationFeedState const& feed);
     void projectPersistentCompact(rt::NotificationFeedState const& feed);
     void projectNotificationCompact(rt::NotificationEntry const& entry);
@@ -51,7 +53,6 @@ namespace ao::uimodel
     ActivityStatusViewState _state{};
     bool _taskActive = false;
     std::optional<LibraryProgressState> _optLibraryProgress{};
-    std::optional<rt::NotificationEntry> _optDeferredNotification{};
     std::vector<rt::NotificationId> _compactDismissedNotificationIds{};
     std::vector<rt::NotificationId> _detailDismissedNotificationIds{};
   };

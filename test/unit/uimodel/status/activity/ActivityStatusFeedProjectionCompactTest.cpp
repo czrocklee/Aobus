@@ -61,7 +61,7 @@ namespace ao::uimodel::test
 
       auto const error = entry(rt::NotificationId{4}, rt::NotificationSeverity::Error, "Import failed", true);
       auto const currentFeed = feed({error});
-      feedProjection.handleNotificationPosted(currentFeed, rt::NotificationId{4});
+      feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{4}));
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
 
       feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), currentFeed);
@@ -78,7 +78,7 @@ namespace ao::uimodel::test
       feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
 
       auto const error = entry(rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", true);
-      feedProjection.handleNotificationPosted(feed({error}), rt::NotificationId{15});
+      feedProjection.handleFeedUpdated(postedUpdate(feed({error}), rt::NotificationId{15}));
 
       feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), feed({}));
 
@@ -105,11 +105,11 @@ namespace ao::uimodel::test
     SECTION("success and info do not override persistent warnings")
     {
       auto warningFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Partial import")});
-      feedProjection.handleNotificationPosted(warningFeed, rt::NotificationId{2});
+      feedProjection.handleFeedUpdated(postedUpdate(warningFeed, rt::NotificationId{2}));
 
       auto infoFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Partial import"),
                             entry(rt::NotificationId{3}, rt::NotificationSeverity::Info, "Saved playlist")});
-      feedProjection.handleNotificationPosted(infoFeed, rt::NotificationId{3});
+      feedProjection.handleFeedUpdated(postedUpdate(infoFeed, rt::NotificationId{3}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "Partial import");

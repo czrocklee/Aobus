@@ -100,12 +100,40 @@ namespace ao::rt::test
   };
 
   template<typename ExceptionType>
+  bool isExceptionType(std::exception_ptr const& exceptionPtr)
+  {
+    if (!exceptionPtr)
+    {
+      return false;
+    }
+
+    try
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
+    catch (ExceptionType const&)
+    {
+      return true;
+    }
+    catch (...)
+    {
+      return false;
+    }
+  }
+
+  template<typename ExceptionType>
+  void checkRecordedException(RecordedAsyncException const& exception, std::string_view const expectedContext)
+  {
+    CHECK(exception.context == expectedContext);
+    CHECK(isExceptionType<ExceptionType>(exception.exceptionPtr));
+  }
+
+  template<typename ExceptionType>
   void requireSingleRecordedException(AsyncExceptionRecorder const& recorder, std::string_view const expectedContext)
   {
     auto const exceptions = recorder.snapshot();
     REQUIRE(exceptions.size() == 1);
-    CHECK(exceptions.front().context == expectedContext);
-    CHECK_THROWS_AS(std::rethrow_exception(exceptions.front().exceptionPtr), ExceptionType);
+    checkRecordedException<ExceptionType>(exceptions.front(), expectedContext);
   }
 
   template<typename T>

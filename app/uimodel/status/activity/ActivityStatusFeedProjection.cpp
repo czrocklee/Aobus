@@ -209,6 +209,37 @@ namespace ao::uimodel
     projectPersistentCompact(feed);
   }
 
+  void ActivityStatusFeedProjection::handleFeedUpdated(rt::NotificationFeedUpdate const& update)
+  {
+    if (!update.feedPtr || update.revision != update.feedPtr->revision)
+    {
+      return;
+    }
+
+    auto const& feed = *update.feedPtr;
+
+    if (update.mutationKind == rt::NotificationFeedMutationKind::Posted && update.affectedIds.size() == 1)
+    {
+      handleNotificationPosted(feed, update.affectedIds.front());
+      return;
+    }
+
+    if (refreshesVisibleTransient(update))
+    {
+      auto const sourceId = _state.compact.sourceNotificationIds.front();
+      auto const iter = std::ranges::find(feed.entries, sourceId, &rt::NotificationEntry::id);
+
+      if (iter != feed.entries.end() && isCompactPresented(*iter))
+      {
+        projectDetail(feed);
+        projectNotificationCompact(*iter);
+        return;
+      }
+    }
+
+    handleFeedChanged(feed);
+  }
+
   void ActivityStatusFeedProjection::handleFeedChanged(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
@@ -261,7 +292,6 @@ namespace ao::uimodel
 
     if (_taskActive)
     {
-      _optDeferredNotification = *iter;
       return;
     }
 
@@ -277,6 +307,29 @@ namespace ao::uimodel
     {
       projectNotificationCompact(*iter);
     }
+  }
+
+  bool ActivityStatusFeedProjection::refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const
+  {
+    if (_taskActive || _state.compact.kind != ActivityStatusKind::Info ||
+        _state.compact.sourceNotificationIds.size() != 1)
+    {
+      return false;
+    }
+
+    switch (update.mutationKind)
+    {
+      case rt::NotificationFeedMutationKind::MessageUpdated:
+      case rt::NotificationFeedMutationKind::ContentUpdated:
+      case rt::NotificationFeedMutationKind::ProgressUpdated:
+      case rt::NotificationFeedMutationKind::ProgressCleared:
+        return std::ranges::contains(update.affectedIds, _state.compact.sourceNotificationIds.front());
+      case rt::NotificationFeedMutationKind::Posted:
+      case rt::NotificationFeedMutationKind::Dismissed:
+      case rt::NotificationFeedMutationKind::Cleared: return false;
+    }
+
+    return false;
   }
 
   void ActivityStatusFeedProjection::handleLibraryTaskProgress(std::string message, double const fraction)
@@ -300,7 +353,6 @@ namespace ao::uimodel
     _optLibraryProgress.reset();
     projectDetail(feed);
 
-    _optDeferredNotification.reset();
     projectPersistentCompact(feed);
 
     if (_state.compact.kind == ActivityStatusKind::Idle &&

@@ -300,7 +300,14 @@ namespace ao::rt::test
     CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
 
     std::int32_t updateCount = 0;
-    auto updateSub = fixture.notificationService.onUpdated([&](NotificationId) { ++updateCount; });
+    auto updateSub = fixture.notificationService.onFeedUpdated(
+      [&](NotificationFeedUpdate const& update)
+      {
+        if (update.mutationKind == NotificationFeedMutationKind::MessageUpdated)
+        {
+          ++updateCount;
+        }
+      });
 
     REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
     CHECK(updateCount == 1);

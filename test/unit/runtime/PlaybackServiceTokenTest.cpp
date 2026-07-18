@@ -22,7 +22,6 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackService.h>
@@ -362,7 +361,7 @@ namespace ao::rt::test
     auto failureGate = audio::test::StagedFailureGate{};
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};
-    auto notifications = NotificationService{};
+    auto notifications = NotificationService{executor};
     auto playerPtr = std::make_unique<audio::Player>(
       executor, audio::test::makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate));
     auto servicePtr =
@@ -392,7 +391,14 @@ namespace ao::rt::test
                                                          { nowPlaying.push_back(event); });
     auto failureSub =
       servicePtr->onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
-    auto notificationSub = notifications.onPosted([&](NotificationId) { ++notificationCount; });
+    auto notificationSub = notifications.onFeedUpdated(
+      [&](NotificationFeedUpdate const& update)
+      {
+        if (update.mutationKind == NotificationFeedMutationKind::Posted)
+        {
+          ++notificationCount;
+        }
+      });
 
     releaseGuard.release();
     executor.checkQueued(std::chrono::seconds{5});
@@ -489,7 +495,7 @@ namespace ao::rt::test
     auto failureRelease = std::binary_semaphore{0};
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};
-    auto notifications = NotificationService{};
+    auto notifications = NotificationService{executor};
     auto decoderFactory = [&](std::filesystem::path const& path, audio::Format const&)
     {
       return std::make_unique<GatedDecoderSession>(path == std::filesystem::path{"prepared-fail.flac"} ? &failureRelease

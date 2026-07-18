@@ -23,7 +23,7 @@ Use the [reference template](../template/reference.md).
 ## Failure and reporting
 
 - [Error value](failure/error.md) enumerates the shared recoverable error fields, codes, result wrapper, and helper.
-- [Notification model](reporting/notification.md) enumerates runtime reporting identities, fields, enums, defaults, commands, and signals.
+- [Notification model](reporting/notification.md) enumerates runtime reporting identities, fields, enums, defaults, commands, and canonical feed updates.
 
 ## Library
 

@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -91,5 +92,26 @@ namespace ao::rt
   {
     std::vector<NotificationEntry> entries{};
     std::uint64_t revision = 0;
+  };
+
+  enum class NotificationFeedMutationKind : std::uint8_t
+  {
+    Posted,
+    MessageUpdated,
+    ContentUpdated,
+    ProgressUpdated,
+    ProgressCleared,
+    Dismissed,
+    Cleared,
+  };
+
+  struct NotificationFeedUpdate final
+  {
+    std::uint64_t revision = 0;
+    NotificationFeedMutationKind mutationKind = NotificationFeedMutationKind::Posted;
+    std::vector<NotificationId> affectedIds{};
+    // Service-produced updates always carry a non-null immutable snapshot
+    // whose revision equals the update revision.
+    std::shared_ptr<NotificationFeedState const> feedPtr{};
   };
 } // namespace ao::rt

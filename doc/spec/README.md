@@ -18,7 +18,7 @@ Use the [specification template](../template/spec.md).
 ## Failure and reporting
 
 - [Outcome channels](failure/outcome-channel.md) define normal values, recoverable results, asynchronous observations, cancellation, and invariant faults.
-- [Notification feed](reporting/notification-feed.md) defines runtime feed mutation, revision, identity, and observation.
+- [Notification feed](reporting/notification-feed.md) defines executor-affine runtime feed mutation, immutable revision updates, identity, and observation.
 
 ## Storage
 
