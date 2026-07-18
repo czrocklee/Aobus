@@ -6,6 +6,7 @@
 #include "NotificationIds.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -42,12 +43,16 @@ namespace ao::rt
     NotificationProgressMode mode = NotificationProgressMode::Indeterminate;
     double fraction = 0.0;
     std::string label{};
+
+    bool operator==(NotificationProgressState const&) const = default;
   };
 
   struct NotificationAction final
   {
     std::string id{};
     std::string label{};
+
+    bool operator==(NotificationAction const&) const = default;
   };
 
   struct NotificationContentState final
@@ -58,6 +63,8 @@ namespace ao::rt
     std::string iconName{};
     std::vector<NotificationAction> actions{};
     std::optional<NotificationProgressState> optProgress{};
+
+    bool operator==(NotificationContentState const&) const = default;
   };
 
   enum class NotificationActivityPresentation : std::uint8_t
@@ -132,12 +139,15 @@ namespace ao::rt
   struct NotificationEntry final
   {
     NotificationId id{};
+    std::optional<NotificationReportKey> optReportKey{};
     NotificationSeverity severity = NotificationSeverity::Info;
     std::string message{};
     NotificationLifetime lifetime = NotificationLifetime::sessionHistory();
     std::uint64_t lifetimeGeneration = 0;
     NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
     NotificationContentState content{};
+
+    bool operator==(NotificationEntry const&) const = default;
   };
 
   struct NotificationFeedState final
@@ -149,6 +159,7 @@ namespace ao::rt
   enum class NotificationFeedMutationKind : std::uint8_t
   {
     Posted,
+    ReportUpdated,
     MessageUpdated,
     ContentUpdated,
     ProgressUpdated,
@@ -158,11 +169,45 @@ namespace ao::rt
     Cleared,
   };
 
+  enum class NotificationMutationOutcome : std::uint8_t
+  {
+    Applied,
+    Missing,
+    Unchanged,
+    Rejected,
+  };
+
+  struct NotificationMutationReply final
+  {
+    NotificationMutationOutcome outcome = NotificationMutationOutcome::Rejected;
+    NotificationId id = kInvalidNotificationId;
+
+    bool operator==(NotificationMutationReply const&) const = default;
+  };
+
+  struct NotificationFeedLimits final
+  {
+    static constexpr std::size_t kDefaultMaxEntries = 256;
+    static constexpr std::size_t kDefaultMaxSessionHistoryEntries = 128;
+    static constexpr std::size_t kDefaultMaxActionsPerEntry = 8;
+    static constexpr std::size_t kDefaultMaxTextBytes = 4096;
+    static constexpr std::size_t kDefaultMaxTotalTextBytes = std::size_t{256} * 1024;
+
+    std::size_t maxEntries = kDefaultMaxEntries;
+    std::size_t maxSessionHistoryEntries = kDefaultMaxSessionHistoryEntries;
+    std::size_t maxActionsPerEntry = kDefaultMaxActionsPerEntry;
+    std::size_t maxTextBytes = kDefaultMaxTextBytes;
+    std::size_t maxTotalTextBytes = kDefaultMaxTotalTextBytes;
+  };
+
   struct NotificationFeedUpdate final
   {
     std::uint64_t revision = 0;
     NotificationFeedMutationKind mutationKind = NotificationFeedMutationKind::Posted;
     std::vector<NotificationId> affectedIds{};
+    // Automatic history eviction is part of the same committed revision as
+    // the command that required it. Ids are listed from oldest to newest.
+    std::vector<NotificationId> evictedIds{};
     // Service-produced updates always carry a non-null immutable snapshot
     // whose revision equals the update revision.
     std::shared_ptr<NotificationFeedState const> feedPtr{};

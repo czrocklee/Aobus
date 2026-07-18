@@ -837,8 +837,10 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto activityStatusViewModel =
       uimodel::ActivityStatusViewModel{fixture.runtime.notifications(), [](uimodel::ActivityStatusViewState const&) {}};
-    auto const notificationId = fixture.runtime.notifications().post(
-      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory());
+    auto const notificationId =
+      fixture.runtime.notifications()
+        .post(rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory())
+        .id;
     auto hitRegions = TuiHitRegions{};
     hitRegions.activityStatusBox = ftxui::Box{.x_min = 0, .x_max = 24, .y_min = 23, .y_max = 23};
     hitRegions.notificationDetailRows = {NotificationDetailRowHitRegion{

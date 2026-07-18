@@ -25,7 +25,7 @@ namespace ao::rt
     // and subscription teardown belong to its callback executor. Effective
     // commands synchronously publish one immutable update after commit;
     // transient expiry returns through that same executor.
-    explicit NotificationService(async::Runtime& runtime);
+    explicit NotificationService(async::Runtime& runtime, NotificationFeedLimits limits = {});
     ~NotificationService();
 
     NotificationService(NotificationService const&) = delete;
@@ -35,15 +35,16 @@ namespace ao::rt
 
     NotificationFeedState feed() const;
 
-    NotificationId post(NotificationSeverity severity, std::string message, NotificationLifetime lifetime);
-    NotificationId post(NotificationRequest request);
+    NotificationMutationReply post(NotificationSeverity severity, std::string message, NotificationLifetime lifetime);
+    NotificationMutationReply post(NotificationRequest request);
+    NotificationMutationReply createOrUpdate(NotificationReportKey reportKey, NotificationRequest request);
 
-    bool updateMessage(NotificationId id, std::string message);
-    void updateContent(NotificationId id, NotificationContentState content);
-    void updateProgress(NotificationId id, NotificationProgressState progress);
-    void clearProgress(NotificationId id);
-    void dismiss(NotificationId id);
-    void dismissAll();
+    NotificationMutationReply updateMessage(NotificationId id, std::string message);
+    NotificationMutationReply updateContent(NotificationId id, NotificationContentState content);
+    NotificationMutationReply updateProgress(NotificationId id, NotificationProgressState progress);
+    NotificationMutationReply clearProgress(NotificationId id);
+    NotificationMutationReply dismiss(NotificationId id);
+    NotificationMutationReply dismissAll();
 
     // The update reference is callback-scoped; copy feedPtr to retain the
     // immutable revision snapshot beyond the callback.

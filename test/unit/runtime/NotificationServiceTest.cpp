@@ -11,6 +11,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -23,8 +24,9 @@ namespace ao::rt::test
   {
     struct NotificationServiceFixture final
     {
-      explicit NotificationServiceFixture(async::AsyncExceptionHandler exceptionHandler = {})
-        : runtime{executor, 1, std::move(exceptionHandler)}, service{runtime}
+      explicit NotificationServiceFixture(async::AsyncExceptionHandler exceptionHandler = {},
+                                          NotificationFeedLimits limits = {})
+        : runtime{executor, 1, std::move(exceptionHandler)}, service{runtime, limits}
       {
       }
 
@@ -41,8 +43,10 @@ namespace ao::rt::test
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
 
-    auto const id = service.post(NotificationSeverity::Info, "test message", NotificationLifetime::sessionHistory());
+    auto const reply = service.post(NotificationSeverity::Info, "test message", NotificationLifetime::sessionHistory());
+    auto const id = reply.id;
 
+    CHECK(reply.outcome == NotificationMutationOutcome::Applied);
     REQUIRE(updates.size() == 1);
     auto const& update = updates.front();
     CHECK(update.revision == 1);
@@ -61,8 +65,8 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
 
-    auto const firstId = service.post(NotificationSeverity::Info, "first", NotificationLifetime::sessionHistory());
-    auto const secondId = service.post(NotificationSeverity::Info, "second", NotificationLifetime::sessionHistory());
+    auto const firstId = service.post(NotificationSeverity::Info, "first", NotificationLifetime::sessionHistory()).id;
+    auto const secondId = service.post(NotificationSeverity::Info, "second", NotificationLifetime::sessionHistory()).id;
 
     CHECK(firstId != secondId);
     CHECK(firstId == NotificationId{1});
@@ -74,7 +78,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
 
-    auto const id = service.post(NotificationRequest{
+    auto const reply = service.post(NotificationRequest{
       .severity = NotificationSeverity::Info,
       .message = "Importing library",
       .lifetime = NotificationLifetime::untilDismissed(),
@@ -93,7 +97,9 @@ namespace ao::rt::test
             },
         },
     });
+    auto const id = reply.id;
 
+    REQUIRE(reply.outcome == NotificationMutationOutcome::Applied);
     auto const feed = service.feed();
     REQUIRE(feed.entries.size() == 1);
 
@@ -118,19 +124,22 @@ namespace ao::rt::test
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
-    auto const id = service.post(NotificationSeverity::Info, "old message", NotificationLifetime::sessionHistory());
+    auto const id = service.post(NotificationSeverity::Info, "old message", NotificationLifetime::sessionHistory()).id;
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
 
-    CHECK(service.updateMessage(id, "new message"));
-    service.updateContent(id, NotificationContentState{.title = "new title"});
-    service.updateProgress(id,
-                           NotificationProgressState{
-                             .mode = NotificationProgressMode::Fraction,
-                             .fraction = 0.5,
-                             .label = "Halfway",
-                           });
-    service.clearProgress(id);
+    CHECK(service.updateMessage(id, "new message").outcome == NotificationMutationOutcome::Applied);
+    CHECK(service.updateContent(id, NotificationContentState{.title = "new title"}).outcome ==
+          NotificationMutationOutcome::Applied);
+    CHECK(service
+            .updateProgress(id,
+                            NotificationProgressState{
+                              .mode = NotificationProgressMode::Fraction,
+                              .fraction = 0.5,
+                              .label = "Halfway",
+                            })
+            .outcome == NotificationMutationOutcome::Applied);
+    CHECK(service.clearProgress(id).outcome == NotificationMutationOutcome::Applied);
 
     REQUIRE(updates.size() == 4);
     CHECK(updates[0].mutationKind == NotificationFeedMutationKind::MessageUpdated);
@@ -158,15 +167,16 @@ namespace ao::rt::test
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
-    auto const id = service.post(NotificationSeverity::Info, "Scanning", NotificationLifetime::sessionHistory());
+    auto const id = service.post(NotificationSeverity::Info, "Scanning", NotificationLifetime::sessionHistory()).id;
     std::int32_t updateCount = 0;
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++updateCount; });
 
-    CHECK_FALSE(service.updateMessage(NotificationId{999}, "missing"));
-    service.updateContent(NotificationId{999}, {});
-    service.updateProgress(NotificationId{999}, {});
-    service.clearProgress(id);
-    service.dismiss(NotificationId{999});
+    CHECK(service.updateMessage(NotificationId{999}, "missing").outcome == NotificationMutationOutcome::Missing);
+    CHECK(service.updateMessage(id, "Scanning").outcome == NotificationMutationOutcome::Unchanged);
+    CHECK(service.updateContent(NotificationId{999}, {}).outcome == NotificationMutationOutcome::Missing);
+    CHECK(service.updateProgress(NotificationId{999}, {}).outcome == NotificationMutationOutcome::Missing);
+    CHECK(service.clearProgress(id).outcome == NotificationMutationOutcome::Unchanged);
+    CHECK(service.dismiss(NotificationId{999}).outcome == NotificationMutationOutcome::Missing);
 
     CHECK(updateCount == 0);
     CHECK(service.feed().revision == 1);
@@ -176,15 +186,15 @@ namespace ao::rt::test
   {
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
-    auto const firstId = service.post(NotificationSeverity::Info, "a", NotificationLifetime::sessionHistory());
-    auto const secondId = service.post(NotificationSeverity::Info, "b", NotificationLifetime::sessionHistory());
-    auto const thirdId = service.post(NotificationSeverity::Info, "c", NotificationLifetime::sessionHistory());
+    auto const firstId = service.post(NotificationSeverity::Info, "a", NotificationLifetime::sessionHistory()).id;
+    auto const secondId = service.post(NotificationSeverity::Info, "b", NotificationLifetime::sessionHistory()).id;
+    auto const thirdId = service.post(NotificationSeverity::Info, "c", NotificationLifetime::sessionHistory()).id;
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
 
-    service.dismiss(secondId);
-    service.dismissAll();
-    service.dismissAll();
+    CHECK(service.dismiss(secondId).outcome == NotificationMutationOutcome::Applied);
+    CHECK(service.dismissAll().outcome == NotificationMutationOutcome::Applied);
+    CHECK(service.dismissAll().outcome == NotificationMutationOutcome::Unchanged);
 
     REQUIRE(updates.size() == 2);
     CHECK(updates[0].mutationKind == NotificationFeedMutationKind::Dismissed);
@@ -194,6 +204,184 @@ namespace ao::rt::test
     REQUIRE(updates[1].feedPtr);
     CHECK(updates[1].feedPtr->entries.empty());
     CHECK(service.feed().revision == 5);
+  }
+
+  TEST_CASE("NotificationService - invalid bounded input is rejected without consuming identity",
+            "[runtime][unit][notification]")
+  {
+    auto limits = NotificationFeedLimits{};
+    limits.maxActionsPerEntry = 1;
+    limits.maxTextBytes = 32;
+    auto fixture = NotificationServiceFixture{{}, limits};
+    auto& service = fixture.service;
+    std::int32_t updateCount = 0;
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++updateCount; });
+
+    CHECK(
+      service.post(NotificationSeverity::Info, std::string(33, 'x'), NotificationLifetime::sessionHistory()).outcome ==
+      NotificationMutationOutcome::Rejected);
+    CHECK(service
+            .post(NotificationRequest{
+              .message = "too many actions",
+              .lifetime = NotificationLifetime::sessionHistory(),
+              .content =
+                NotificationContentState{
+                  .actions = {{.id = "first", .label = "First"}, {.id = "second", .label = "Second"}},
+                },
+            })
+            .outcome == NotificationMutationOutcome::Rejected);
+    CHECK(service
+            .post(NotificationSeverity::Info,
+                  "invalid duration",
+                  NotificationLifetime::transient(std::chrono::milliseconds::zero()))
+            .outcome == NotificationMutationOutcome::Rejected);
+    CHECK(service
+            .createOrUpdate(NotificationReportKey{},
+                            NotificationRequest{
+                              .message = "empty key",
+                              .lifetime = NotificationLifetime::sessionHistory(),
+                            })
+            .outcome == NotificationMutationOutcome::Rejected);
+
+    CHECK(service.feed().entries.empty());
+    CHECK(service.feed().revision == 0);
+    CHECK(updateCount == 0);
+
+    auto const accepted = service.post(NotificationSeverity::Info, "accepted", NotificationLifetime::sessionHistory());
+    CHECK(accepted.outcome == NotificationMutationOutcome::Applied);
+    CHECK(accepted.id == NotificationId{1});
+    CHECK(service.updateMessage(accepted.id, std::string(33, 'x')).outcome == NotificationMutationOutcome::Rejected);
+    CHECK(service.feed().revision == 1);
+    CHECK(service.feed().entries.front().message == "accepted");
+  }
+
+  TEST_CASE("NotificationService - history eviction is atomic and pinned exhaustion rejects",
+            "[runtime][unit][notification]")
+  {
+    auto limits = NotificationFeedLimits{};
+    limits.maxEntries = 3;
+    limits.maxSessionHistoryEntries = 2;
+    auto fixture = NotificationServiceFixture{{}, limits};
+    auto& service = fixture.service;
+    auto updates = std::vector<NotificationFeedUpdate>{};
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+
+    auto const firstId = service.post(NotificationSeverity::Info, "first", NotificationLifetime::sessionHistory()).id;
+    auto const secondId = service.post(NotificationSeverity::Info, "second", NotificationLifetime::sessionHistory()).id;
+    auto const thirdId = service.post(NotificationSeverity::Info, "third", NotificationLifetime::sessionHistory()).id;
+
+    REQUIRE(updates.size() == 3);
+    CHECK(updates.back().affectedIds == std::vector{thirdId});
+    CHECK(updates.back().evictedIds == std::vector{firstId});
+    CHECK(service.feed().entries[0].id == secondId);
+    CHECK(service.feed().entries[1].id == thirdId);
+
+    auto const firstPinned =
+      service.post(NotificationSeverity::Warning, "pinned one", NotificationLifetime::untilDismissed());
+    auto const secondPinned =
+      service.post(NotificationSeverity::Warning, "pinned two", NotificationLifetime::untilDismissed());
+    auto const thirdPinned =
+      service.post(NotificationSeverity::Warning, "pinned three", NotificationLifetime::untilDismissed());
+
+    REQUIRE(firstPinned.outcome == NotificationMutationOutcome::Applied);
+    REQUIRE(secondPinned.outcome == NotificationMutationOutcome::Applied);
+    REQUIRE(thirdPinned.outcome == NotificationMutationOutcome::Applied);
+    CHECK(updates[4].evictedIds == std::vector{secondId});
+    CHECK(updates[5].evictedIds == std::vector{thirdId});
+
+    auto const rejected = service.post(NotificationSeverity::Error, "no room", NotificationLifetime::untilDismissed());
+    CHECK(rejected.outcome == NotificationMutationOutcome::Rejected);
+    CHECK(rejected.id == kInvalidNotificationId);
+    CHECK(service.feed().revision == 6);
+    REQUIRE(service.feed().entries.size() == 3);
+    CHECK(service.feed().entries[0].id == firstPinned.id);
+    CHECK(service.feed().entries[1].id == secondPinned.id);
+    CHECK(service.feed().entries[2].id == thirdPinned.id);
+
+    REQUIRE(service.dismiss(firstPinned.id).outcome == NotificationMutationOutcome::Applied);
+    auto const acceptedAfterDismissal =
+      service.post(NotificationSeverity::Error, "now fits", NotificationLifetime::untilDismissed());
+    CHECK(acceptedAfterDismissal.outcome == NotificationMutationOutcome::Applied);
+    CHECK(acceptedAfterDismissal.id == NotificationId{7});
+  }
+
+  TEST_CASE("NotificationService - total text bound evicts history before rejecting retained entries",
+            "[runtime][unit][notification]")
+  {
+    auto limits = NotificationFeedLimits{};
+    limits.maxEntries = 10;
+    limits.maxSessionHistoryEntries = 10;
+    limits.maxTotalTextBytes = 10;
+    auto fixture = NotificationServiceFixture{{}, limits};
+    auto& service = fixture.service;
+    auto updates = std::vector<NotificationFeedUpdate>{};
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+
+    auto const history = service.post(NotificationRequest{
+      .message = "12345",
+      .lifetime = NotificationLifetime::sessionHistory(),
+      .content = NotificationContentState{.templateId = ""},
+    });
+    auto const pinned = service.post(NotificationRequest{
+      .message = "123456",
+      .lifetime = NotificationLifetime::untilDismissed(),
+      .content = NotificationContentState{.templateId = ""},
+    });
+
+    REQUIRE(history.outcome == NotificationMutationOutcome::Applied);
+    REQUIRE(pinned.outcome == NotificationMutationOutcome::Applied);
+    CHECK(updates.back().evictedIds == std::vector{history.id});
+    REQUIRE(service.feed().entries.size() == 1);
+    CHECK(service.feed().entries.front().id == pinned.id);
+
+    auto const rejected = service.post(NotificationRequest{
+      .message = "12345",
+      .lifetime = NotificationLifetime::untilDismissed(),
+      .content = NotificationContentState{.templateId = ""},
+    });
+    CHECK(rejected.outcome == NotificationMutationOutcome::Rejected);
+    CHECK(service.feed().revision == 2);
+    REQUIRE(service.feed().entries.size() == 1);
+    CHECK(service.feed().entries.front().id == pinned.id);
+  }
+
+  TEST_CASE("NotificationService - keyed create-or-update owns correlation and suppresses identical updates",
+            "[runtime][unit][notification]")
+  {
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
+    auto updates = std::vector<NotificationFeedUpdate>{};
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+    auto const key = NotificationReportKey{"library.scan.current"};
+    auto request = NotificationRequest{
+      .severity = NotificationSeverity::Warning,
+      .message = "Skipped 1 file",
+      .lifetime = NotificationLifetime::sessionHistory(),
+    };
+
+    auto const created = service.createOrUpdate(key, request);
+    auto const unchanged = service.createOrUpdate(key, request);
+    request.message = "Skipped 2 files";
+    auto const updated = service.createOrUpdate(key, request);
+
+    REQUIRE(created.outcome == NotificationMutationOutcome::Applied);
+    CHECK(unchanged ==
+          (NotificationMutationReply{.outcome = NotificationMutationOutcome::Unchanged, .id = created.id}));
+    CHECK(updated == (NotificationMutationReply{.outcome = NotificationMutationOutcome::Applied, .id = created.id}));
+    REQUIRE(updates.size() == 2);
+    CHECK(updates[0].mutationKind == NotificationFeedMutationKind::Posted);
+    CHECK(updates[1].mutationKind == NotificationFeedMutationKind::ReportUpdated);
+    CHECK(updates[1].affectedIds == std::vector{created.id});
+    CHECK(service.feed().revision == 2);
+    REQUIRE(service.feed().entries.size() == 1);
+    REQUIRE(service.feed().entries.front().optReportKey);
+    CHECK(*service.feed().entries.front().optReportKey == key);
+    CHECK(service.feed().entries.front().message == "Skipped 2 files");
+
+    REQUIRE(service.dismiss(created.id).outcome == NotificationMutationOutcome::Applied);
+    auto const recreated = service.createOrUpdate(key, request);
+    CHECK(recreated.outcome == NotificationMutationOutcome::Applied);
+    CHECK(recreated.id != created.id);
   }
 
   TEST_CASE("NotificationService - observer failure is contained across committed revisions",
@@ -239,7 +427,8 @@ namespace ao::rt::test
             return;
           }
 
-          CHECK(service.updateMessage(update.affectedIds.front(), "updated"));
+          CHECK(service.updateMessage(update.affectedIds.front(), "updated").outcome ==
+                NotificationMutationOutcome::Applied);
         }
       });
     auto observingSub = service.onFeedUpdated(
@@ -281,11 +470,11 @@ namespace ao::rt::test
       {
         if (update.revision == 1)
         {
-          nestedId = service.post(NotificationSeverity::Info, "nested", NotificationLifetime::sessionHistory());
+          nestedId = service.post(NotificationSeverity::Info, "nested", NotificationLifetime::sessionHistory()).id;
         }
       });
 
-    auto const outerId = service.post(NotificationSeverity::Info, "outer", NotificationLifetime::sessionHistory());
+    auto const outerId = service.post(NotificationSeverity::Info, "outer", NotificationLifetime::sessionHistory()).id;
 
     CHECK(outerId == NotificationId{1});
     CHECK(nestedId == NotificationId{2});

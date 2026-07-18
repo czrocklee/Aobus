@@ -518,11 +518,11 @@ namespace ao::rt
       audio::Engine::PreparedTransitionMode transition = audio::Engine::PreparedTransitionMode::DrainFallback;
     };
 
-    struct PlaybackFailureNotification final
+    struct PlaybackFailureReport final
     {
       PlaybackFailureKind kind = PlaybackFailureKind::TrackOpen;
       TrackId trackId = kInvalidTrackId;
-      NotificationId notificationId = kInvalidNotificationId;
+      NotificationReportKey reportKey{};
     };
 
     struct PlaybackItemProvenance final
@@ -553,7 +553,8 @@ namespace ao::rt
     audio::Engine::PlaybackItemId currentPlaybackItemId;
     std::uint64_t currentPlaybackGeneration = 0;
     std::string lastPlaybackError{};
-    std::optional<PlaybackFailureNotification> optLastPlaybackFailureNotification;
+    std::optional<PlaybackFailureReport> optLastPlaybackFailureReport;
+    std::uint64_t nextPlaybackFailureReportKey = 0;
     std::vector<PreparedPlaybackRequest> preparedRequests;
     std::optional<PreparedNextToken> optActivePreparedToken;
     std::optional<DeferredResumeRequest> optDeferredResume;
@@ -1102,23 +1103,30 @@ namespace ao::rt
     void postOrUpdateFailureNotification(PlaybackFailure const& failure)
     {
       auto const message = playbackFailureNotificationMessage(failure);
+      auto const continuesExistingReport =
+        optLastPlaybackFailureReport && optLastPlaybackFailureReport->kind == failure.kind &&
+        (isOutputFailureKind(failure.kind) || optLastPlaybackFailureReport->trackId == failure.trackId);
 
-      if (optLastPlaybackFailureNotification && optLastPlaybackFailureNotification->kind == failure.kind &&
-          (isOutputFailureKind(failure.kind) || optLastPlaybackFailureNotification->trackId == failure.trackId) &&
-          notifications.updateMessage(optLastPlaybackFailureNotification->notificationId, message))
+      if (!continuesExistingReport)
       {
-        return;
+        ++nextPlaybackFailureReportKey;
+        optLastPlaybackFailureReport = PlaybackFailureReport{
+          .kind = failure.kind,
+          .trackId = failure.trackId,
+          .reportKey = NotificationReportKey{std::format("playback.failure.{}", nextPlaybackFailureReportKey)},
+        };
       }
 
-      auto const notificationId = notifications.post(NotificationRequest{
-        .severity = NotificationSeverity::Error,
-        .message = message,
-        .lifetime =
-          failure.recoverable ? NotificationLifetime::sessionHistory() : NotificationLifetime::untilDismissed(),
-        .content = NotificationContentState{.topic = NotificationTopic::PlaybackError},
-      });
-      optLastPlaybackFailureNotification =
-        PlaybackFailureNotification{.kind = failure.kind, .trackId = failure.trackId, .notificationId = notificationId};
+      gsl_Expects(optLastPlaybackFailureReport);
+      std::ignore =
+        notifications.createOrUpdate(optLastPlaybackFailureReport->reportKey,
+                                     NotificationRequest{
+                                       .severity = NotificationSeverity::Error,
+                                       .message = message,
+                                       .lifetime = failure.recoverable ? NotificationLifetime::sessionHistory()
+                                                                       : NotificationLifetime::untilDismissed(),
+                                       .content = NotificationContentState{.topic = NotificationTopic::PlaybackError},
+                                     });
     }
 
     void publishPlaybackFailure(PlaybackFailure failure)

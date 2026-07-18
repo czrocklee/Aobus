@@ -8,18 +8,16 @@ depends-on: none
 ---
 # RFC 0011: Executor-affine reporting feed
 
-Migration stages 1 through 3 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, owns typed transient lifetime and generation-checked expiry, and activity status renders each accepted feed revision once.
-Typed command outcomes, bounded history, keyed aggregation, structured content, and detail discoverability remain proposal work in this RFC.
+Migration stages 1 through 4 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, owns typed transient lifetime and generation-checked expiry, bounds retained state, exposes typed command outcomes, and correlates producer-owned report keys.
+Structured content and detail discoverability remain proposal work in this RFC.
 
 ## Problem
 
-The runtime notification model has useful semantic separation from logging and recovery, but the remaining retention, lifetime, content, and discoverability contracts do not yet form the complete bounded reporting feed proposed here.
+The runtime notification model has useful semantic separation from logging and recovery, and its feed mechanics now form the bounded executor-affine state machine proposed here.
+The remaining gaps are content authority and cross-frontend discoverability.
 
-The first two migration stages replaced the previous mutable four-signal publication boundary with an executor-affine immutable update stream and one-revision UIModel projection.
-The remaining problem starts after transient expiry: retained runtime history remains unbounded, command outcomes remain inconsistent, and accepted content still includes ambiguous or inert fields.
-
-Runtime now removes `Transient(duration)` entries for every consumer and UIModel reserves its local timer for retained or synthetic presentation state.
-However, `SessionHistory` still has no history bound, and the feed and action vectors have no model-level bounds while GTK independently caps displayed detail rows and actions.
+The first four migration stages replaced the previous mutable four-signal publication boundary with an executor-affine immutable update stream and one-revision UIModel projection, added authoritative transient expiry, and bounded retained history and content.
+`SessionHistory` now yields oldest-first under capacity pressure, actionable entries are rejected rather than silently removed, and keyed producers no longer retain raw feed ids.
 
 Finally, `DetailOnly` can create detail state without a compact state.
 GTK currently opens detail only through a visible compact readout, making that entry unreachable in an idle-hidden layout, while TUI has a direct notification-center command.
@@ -102,8 +100,8 @@ The implemented RFC 0012 handler can carry the original exception and a short ob
 
 ### Typed mutation outcomes
 
-All id-targeted commands return one consistent result shape that distinguishes `Applied`, `Missing`, and `Unchanged`.
-Post returns a result containing the new id because request validation can reject invalid input without partially mutating the feed.
+All commands now return one `NotificationMutationReply` shape that distinguishes `Applied`, `Missing`, `Unchanged`, and `Rejected` and carries the correlated id.
+Post returns the new id only when request validation and bounded candidate construction accept the input without partially mutating the feed.
 
 Commands do not infer success from emitted callbacks.
 The immutable update is an observation of an already accepted mutation, while the command result describes whether that mutation was accepted.
@@ -122,15 +120,18 @@ The implemented subset is:
 The runtime service owns expiry and removes or transitions entries on the callback executor.
 UIModel may animate or locally suppress compact state, but it no longer treats a local timer as authoritative feed lifetime.
 All consumers observe the same expiry revision.
+Timer generations remain monotonic across keyed transitions through retained lifetimes, because cancellation cannot retract a callback that already reached the callback executor.
 
-The feed has configurable production bounds for recent non-active history, per-entry action count, text sizes, and total retained payload.
+The feed has configurable production bounds for total entries, recent non-active history, per-entry action count, text sizes, and total retained text payload.
+Production defaults are 256 total entries, 128 session-history entries, 8 actions per entry, 4096 bytes per text value, and 256 KiB total text.
 Active progress and explicitly persistent error entries are not silently evicted; when their bound would be exceeded, post is rejected or the producer must aggregate by a stable report key.
-Eviction of eligible recent history is itself a revisioned mutation.
+Eligible recent-history eviction is reported inside the same atomic revision as the command that required it.
+Rejected commands also produce a direct application-log diagnostic so best-effort reporting callers cannot lose the rejection silently.
 
 ### Stable report identity and aggregation
 
-A request may carry an optional typed report key owned by the producing workflow.
-Posting with an active matching key uses an explicit create-or-update command rather than relying on message equality or a producer-retained raw id.
+An explicit create-or-update command accepts a typed report key owned by the producing workflow.
+An active matching key updates the existing entry rather than relying on message equality or a producer-retained raw id; an absent key creates a new entry.
 
 The feed does not choose aggregation policy.
 The operation owner decides that several lower failures describe one report, supplies the key, and updates its semantic summary.
@@ -214,7 +215,7 @@ Migration occurs in stages:
 1. Completed: introduce canonical update values, affinity checks, deterministic delivery, and remove the unconsumed compatibility signals.
 2. Completed: migrate UIModel to one revision stream and add regression tests for post/update and one-render-per-revision.
 3. Completed: introduce typed lifetime and service-owned expiry, generation-check stale timers, and restrict UIModel deadlines to presentation-only state.
-4. Add bounds, keyed update, and producer migration.
+4. Completed: add typed mutation outcomes, bounds, atomic history eviction, keyed update, and playback producer migration.
 5. Remove the inert template field and English prefix parsing, then add structured content atomically with its UIModel resolver when RFCs 0013 and 0030 are implemented.
 6. Remove the remaining ambiguous fields after all consumers move.
 
@@ -245,7 +246,6 @@ Reporting-owner migration coordinates with RFC 0013 but does not wait for its co
 
 - Should immutable feed snapshots be values, shared immutable state, or revision-addressable views?
 - Should a future real progress owner add `WhileActive`, or express completion by an explicit update into one of the three implemented lifetimes?
-- What production bounds apply to history entries, text, actions, and total payload?
 - Does an update to a locally suppressed entry resurface by default, or only when the producer increments an explicit presentation generation?
 - Should detail-only support be mandatory for every interactive frontend or negotiated as a composition capability?
 - Should observer diagnostics use the existing RFC 0012 exception handler directly or a feed-specific adapter that adds revision context?

@@ -283,7 +283,7 @@ namespace ao::gtk::test
       auto& runtime = mounted.runtime();
       auto& status = mounted.status;
 
-      auto const id = runtime.notifications().post(request);
+      auto const id = runtime.notifications().post(request).id;
       mounted.drain();
 
       auto buttons = actionButtons(status.detailContent());

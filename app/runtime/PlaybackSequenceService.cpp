@@ -525,7 +525,7 @@ namespace ao::rt
 
     void resetFailureState() noexcept
     {
-      skipNotificationId = kInvalidNotificationId;
+      optSkipReportKey.reset();
       skippedFailureCount = 0;
 
       if (sessionPtr)
@@ -539,15 +539,20 @@ namespace ao::rt
       ++skippedFailureCount;
       auto const message = skippedTracksMessage(skippedFailureCount);
 
-      if (skipNotificationId == kInvalidNotificationId || !notifications.updateMessage(skipNotificationId, message))
+      if (!optSkipReportKey)
       {
-        skipNotificationId = notifications.post(NotificationRequest{
+        ++nextSkipReportKey;
+        optSkipReportKey.emplace(std::format("playback-sequence.skipped-tracks.{}", nextSkipReportKey));
+      }
+
+      std::ignore = notifications.createOrUpdate(
+        *optSkipReportKey,
+        NotificationRequest{
           .severity = NotificationSeverity::Warning,
           .message = message,
           .lifetime = NotificationLifetime::sessionHistory(),
           .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
         });
-      }
     }
 
     void reportFailureLimit()
@@ -1143,7 +1148,8 @@ namespace ao::rt
     async::Subscription startedSubscription;
     async::Subscription pausedSubscription;
     async::Subscription stoppedSubscription;
-    NotificationId skipNotificationId = kInvalidNotificationId;
+    std::optional<NotificationReportKey> optSkipReportKey;
+    std::uint64_t nextSkipReportKey = 0;
     std::size_t skippedFailureCount = 0;
     std::atomic_bool closing{false};
     std::atomic_size_t acceptanceDepth{0};

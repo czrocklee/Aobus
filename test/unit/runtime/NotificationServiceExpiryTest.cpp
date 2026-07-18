@@ -41,7 +41,7 @@ namespace ao::rt::test
     auto fixture = NotificationExpiryFixture{};
     constexpr auto kDuration = std::chrono::milliseconds{1250};
     auto const id =
-      fixture.service.post(NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(kDuration));
+      fixture.service.post(NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(kDuration)).id;
 
     REQUIRE(fixture.sleeper.waitForCallCount(1));
     CHECK(fixture.sleeper.call(0).delay == kDuration);
@@ -81,13 +81,15 @@ namespace ao::rt::test
             "[runtime][regression][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
-    auto const id = fixture.service.post(
-      NotificationSeverity::Info, "Initial", NotificationLifetime::transient(std::chrono::seconds{30}));
+    auto const id =
+      fixture.service
+        .post(NotificationSeverity::Info, "Initial", NotificationLifetime::transient(std::chrono::seconds{30}))
+        .id;
     REQUIRE(fixture.sleeper.waitForCallCount(1));
 
     REQUIRE(fixture.sleeper.fire(0));
     fixture.executor.checkQueued();
-    REQUIRE(fixture.service.updateMessage(id, "Updated"));
+    REQUIRE(fixture.service.updateMessage(id, "Updated").outcome == NotificationMutationOutcome::Applied);
     REQUIRE(fixture.sleeper.waitForCallCount(2));
 
     auto feed = fixture.service.feed();
@@ -116,8 +118,10 @@ namespace ao::rt::test
             "[runtime][regression][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
-    auto const id = fixture.service.post(
-      NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(std::chrono::seconds{30}));
+    auto const id =
+      fixture.service
+        .post(NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(std::chrono::seconds{30}))
+        .id;
     REQUIRE(fixture.sleeper.waitForCallCount(1));
     REQUIRE(fixture.sleeper.fire(0));
     fixture.executor.checkQueued();
@@ -137,8 +141,10 @@ namespace ao::rt::test
             "[runtime][regression][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};
-    auto const id = fixture.service.post(
-      NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(std::chrono::seconds{30}));
+    auto const id =
+      fixture.service
+        .post(NotificationSeverity::Info, "Temporary", NotificationLifetime::transient(std::chrono::seconds{30}))
+        .id;
     REQUIRE(fixture.sleeper.waitForCallCount(1));
 
     fixture.service.dismiss(id);
@@ -147,6 +153,60 @@ namespace ao::rt::test
     CHECK_FALSE(fixture.sleeper.fire(0));
     CHECK(fixture.service.feed().entries.empty());
     CHECK(fixture.service.feed().revision == 2);
+  }
+
+  TEST_CASE("NotificationService expiry - keyed lifetime transitions reject a queued obsolete timer",
+            "[runtime][regression][notification][concurrency]")
+  {
+    auto fixture = NotificationExpiryFixture{};
+    auto const key = NotificationReportKey{"runtime.operation.current"};
+    auto request = NotificationRequest{
+      .severity = NotificationSeverity::Info,
+      .message = "Working",
+      .lifetime = NotificationLifetime::transient(std::chrono::seconds{30}),
+    };
+
+    auto const created = fixture.service.createOrUpdate(key, request);
+    REQUIRE(created.outcome == NotificationMutationOutcome::Applied);
+    REQUIRE(fixture.sleeper.waitForCallCount(1));
+
+    auto const unchanged = fixture.service.createOrUpdate(key, request);
+    CHECK(unchanged.outcome == NotificationMutationOutcome::Unchanged);
+    CHECK(unchanged.id == created.id);
+    CHECK(fixture.sleeper.callCount() == 1);
+    CHECK(fixture.service.feed().revision == 1);
+    CHECK(fixture.service.feed().entries.front().lifetimeGeneration == 1);
+
+    REQUIRE(fixture.sleeper.fire(0));
+    fixture.executor.checkQueued();
+
+    request.lifetime = NotificationLifetime::sessionHistory();
+    auto const retained = fixture.service.createOrUpdate(key, request);
+    CHECK(retained.outcome == NotificationMutationOutcome::Applied);
+    CHECK(fixture.service.feed().revision == 2);
+    CHECK(fixture.service.feed().entries.front().lifetimeGeneration == 1);
+
+    request.lifetime = NotificationLifetime::transient(std::chrono::seconds{45});
+    auto const restarted = fixture.service.createOrUpdate(key, request);
+    CHECK(restarted.outcome == NotificationMutationOutcome::Applied);
+    CHECK(restarted.id == created.id);
+    REQUIRE(fixture.sleeper.waitForCallCount(2));
+    CHECK(fixture.sleeper.call(1).delay == std::chrono::seconds{45});
+    CHECK(fixture.service.feed().revision == 3);
+    CHECK(fixture.service.feed().entries.front().lifetimeGeneration == 2);
+
+    fixture.executor.drain();
+
+    REQUIRE(fixture.service.feed().entries.size() == 1);
+    CHECK(fixture.service.feed().entries.front().id == created.id);
+    CHECK(fixture.service.feed().revision == 3);
+
+    REQUIRE(fixture.sleeper.fire(1));
+    fixture.executor.checkQueued();
+    fixture.executor.drain();
+
+    CHECK(fixture.service.feed().entries.empty());
+    CHECK(fixture.service.feed().revision == 4);
   }
 
   TEST_CASE("NotificationService expiry - queued callback is safe after service destruction",

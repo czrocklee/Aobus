@@ -25,6 +25,7 @@ The public authority is `app/include/ao/rt/`; UIModel and frontends consume thes
 
 `NotificationId` is a strong `std::uint64_t` value.
 `kInvalidNotificationId` is `0`; service-generated ids begin at `1`.
+`NotificationReportKey` is a strong owning `std::string` used only by explicit keyed create-or-update commands.
 
 | Enum | Values |
 |---|---|
@@ -33,7 +34,8 @@ The public authority is `app/include/ao/rt/`; UIModel and frontends consume thes
 | `NotificationProgressMode` | `Indeterminate`, `Fraction` |
 | `NotificationActivityPresentation` | `Default`, `DetailOnly`, `Hidden` |
 | `NotificationLifetimeKind` | `Transient`, `SessionHistory`, `UntilDismissed` |
-| `NotificationFeedMutationKind` | `Posted`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Expired`, `Dismissed`, `Cleared` |
+| `NotificationFeedMutationKind` | `Posted`, `ReportUpdated`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Expired`, `Dismissed`, `Cleared` |
+| `NotificationMutationOutcome` | `Applied`, `Missing`, `Unchanged`, `Rejected` |
 
 Each notification enum is a scoped enum with underlying type `std::uint8_t`.
 `kDefaultNotificationTemplate` is `notification.message`.
@@ -59,8 +61,8 @@ Each notification enum is a scoped enum with underlying type `std::uint8_t`.
 | `actions` | `std::vector<NotificationAction>` | empty |
 | `optProgress` | `std::optional<NotificationProgressState>` | empty |
 
-The runtime action vector has no model-level maximum.
-Presentation adapters may expose a bounded subset; that limit is not a `NotificationContentState` invariant.
+The runtime action vector is bounded by `NotificationFeedLimits::maxActionsPerEntry`.
+Presentation adapters may expose a smaller subset.
 
 ### Lifetime
 
@@ -88,9 +90,10 @@ Severity and lifetime are independent.
 | `activityPresentation` | `NotificationActivityPresentation` | `Default` |
 | `content` | `NotificationContentState` | default content |
 
-`NotificationEntry` contains the same fields plus `NotificationId id`, whose default is `0`, and `std::uint64_t lifetimeGeneration`, whose default is `0`.
+`NotificationEntry` contains the same fields plus `NotificationId id`, whose default is `0`, optional `NotificationReportKey optReportKey`, and `std::uint64_t lifetimeGeneration`, whose default is `0`.
 Its value default for `lifetime` is `sessionHistory()` so an empty feed/value snapshot remains constructible; producer requests do not inherit that default.
-Service-produced transient entries start at generation `1`, and effective updates increment it.
+Service-produced transient entries start at generation `1`.
+Every later scheduled transient period increments the generation, while retained lifetime transitions preserve it, so a live entry never reuses an earlier timer generation.
 `NotificationFeedState` contains `std::vector<NotificationEntry> entries` and `std::uint64_t revision`, both initially empty or zero.
 
 `NotificationFeedUpdate` contains:
@@ -100,29 +103,50 @@ Service-produced transient entries start at generation `1`, and effective update
 | `revision` | `std::uint64_t` | `0` |
 | `mutationKind` | `NotificationFeedMutationKind` | `Posted` |
 | `affectedIds` | `std::vector<NotificationId>` | empty |
+| `evictedIds` | `std::vector<NotificationId>` | empty |
 | `feedPtr` | `std::shared_ptr<NotificationFeedState const>` | empty |
 
 Every update produced by `NotificationService` has a non-empty `feedPtr`, and `revision == feedPtr->revision`.
+`evictedIds` lists automatic session-history eviction from oldest to newest inside that same revision; explicit dismissal and expiry remain represented by their mutation kind and `affectedIds`.
+
+`NotificationMutationReply` contains `NotificationMutationOutcome outcome`, defaulting to `Rejected`, and `NotificationId id`, defaulting to the invalid id.
+
+### Feed limits
+
+`NotificationFeedLimits` has these production defaults:
+
+| Field | Default | Meaning |
+|---|---:|---|
+| `maxEntries` | `256` | Maximum entries of every lifetime combined. |
+| `maxSessionHistoryEntries` | `128` | Maximum recent `SessionHistory` entries after automatic eviction. |
+| `maxActionsPerEntry` | `8` | Maximum actions accepted in one content value. |
+| `maxTextBytes` | `4096` | Maximum `std::string::size()` for each report key or text field. |
+| `maxTotalTextBytes` | `256 * 1024` | Maximum summed text bytes retained by the complete feed. |
+
+Total text includes report keys, messages, template ids, titles, icon names, action ids and labels, and progress labels.
+Limits are immutable for one service instance and may be reduced through constructor injection for deterministic tests.
 
 ### Service API
 
-Construction requires the owning `async::Runtime&`.
+Construction requires the owning `async::Runtime&` and optionally accepts `NotificationFeedLimits`.
 The service uses its callback executor for affinity and expiry delivery, its sleeper for delayed expiry, and its exception handler for observer diagnostics.
 The runtime must outlive the service.
 
 | Member | Return |
 |---|---|
 | `feed() const` | `NotificationFeedState` |
-| `post(NotificationSeverity, std::string, NotificationLifetime)` | `NotificationId` |
-| `post(NotificationRequest)` | `NotificationId` |
-| `updateMessage(NotificationId, std::string)` | `bool` |
-| `updateContent(NotificationId, NotificationContentState)` | `void` |
-| `updateProgress(NotificationId, NotificationProgressState)` | `void` |
-| `clearProgress(NotificationId)` | `void` |
-| `dismiss(NotificationId)` | `void` |
-| `dismissAll()` | `void` |
+| `post(NotificationSeverity, std::string, NotificationLifetime)` | `NotificationMutationReply` |
+| `post(NotificationRequest)` | `NotificationMutationReply` |
+| `createOrUpdate(NotificationReportKey, NotificationRequest)` | `NotificationMutationReply` |
+| `updateMessage(NotificationId, std::string)` | `NotificationMutationReply` |
+| `updateContent(NotificationId, NotificationContentState)` | `NotificationMutationReply` |
+| `updateProgress(NotificationId, NotificationProgressState)` | `NotificationMutationReply` |
+| `clearProgress(NotificationId)` | `NotificationMutationReply` |
+| `dismiss(NotificationId)` | `NotificationMutationReply` |
+| `dismissAll()` | `NotificationMutationReply` |
 
 The short `post` overload initializes activity presentation and content to their defaults, but still requires explicit lifetime policy.
+`createOrUpdate` requires a non-empty key, replaces the complete request-shaped state of a matching entry without reordering it, and posts a new entry when the key is absent.
 
 ### Observation API
 
@@ -135,10 +159,13 @@ The update reference is valid for the callback invocation; retaining `feedPtr` k
 
 An observer failure is sent through the owning runtime with context `notification feed observer at revision <N>`.
 The runtime's injected handler or stderr fallback owns the final diagnostic without allowing the observer exception to escape.
+Rejected commands also write an application-log error diagnostic identifying the mutation, correlated id, and rejection reason.
 
 ## Validation rules
 
-`NotificationService` does not validate or clamp progress fractions, require non-empty messages, resolve action ids, cap action count, or verify template and icon names.
+`NotificationService` rejects empty report keys, non-positive transient durations, action vectors beyond the configured count, and any report key or text field beyond the configured byte count.
+It also applies total entry, recent-history, and retained-text bounds as specified by the notification feed.
+It does not clamp progress fractions, require non-empty messages, resolve action ids, or interpret template and icon names.
 Producers supply semantically valid content, and presentation adapters decide which optional fields they can render.
 
 `NotificationLifetime::transient` accepts a duration value, and `NotificationService` requires it to be greater than zero when scheduling.
@@ -153,11 +180,13 @@ Any surface change requires synchronized implementation, specification, referenc
 ## Examples
 
 ```cpp
-auto id = notifications.post(ao::rt::NotificationRequest{
-  .severity = ao::rt::NotificationSeverity::Warning,
-  .message = "Some tracks could not be imported",
-  .lifetime = ao::rt::NotificationLifetime::sessionHistory(),
-});
+auto const reply = notifications.createOrUpdate(
+  ao::rt::NotificationReportKey{"library.scan.current"},
+  ao::rt::NotificationRequest{
+    .severity = ao::rt::NotificationSeverity::Warning,
+    .message = "Some tracks could not be imported",
+    .lifetime = ao::rt::NotificationLifetime::sessionHistory(),
+  });
 ```
 
 ## Implementation authority
@@ -168,8 +197,8 @@ auto id = notifications.post(ao::rt::NotificationRequest{
 
 ## Test authority
 
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) locks request storage, mutation, immutable-update, reentrancy, and observer-failure behavior.
-- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) locks typed lifetime scheduling, expiry revisions, generations, cancellation races, and teardown.
+- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) locks request storage, typed mutation replies, configured bounds, atomic history eviction, keyed aggregation, immutable updates, reentrancy, and observer-failure behavior.
+- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) locks typed lifetime scheduling, unchanged suppression, keyed lifetime transitions, expiry revisions, generations, cancellation races, and teardown.
 - Activity projection tests under [`test/unit/uimodel/status/activity/`](../../../test/unit/uimodel/status/activity) lock how the model is narrowed for shared presentation.
 
 ## Related documents

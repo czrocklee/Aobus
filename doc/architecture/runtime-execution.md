@@ -52,6 +52,7 @@ The [signal delivery specification](../spec/async/signal.md) owns its exact orde
 The notification service refines synchronous callback delivery with a revision queue.
 One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later revision rather than nesting signal delivery.
 Observer failure is contained after every connected observer has run and is reported through `Runtime::reportUnhandledException`, so it cannot unwind an already committed feed command.
+Candidate bounding and eligible session-history eviction complete before that commit, so rejection leaves the current snapshot and id watermark untouched while accepted eviction remains part of one observed revision.
 For transient notification lifetime, the service schedules a cancellable worker sleep through the same runtime and defers completion to the callback executor.
 Only a callback carrying the current notification id and lifetime generation may commit expiry; updates restart the duration, while cancellation merely avoids obsolete work.
 
@@ -215,8 +216,8 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSequenceServiceTest.cpp`](../../test/unit/runtime/PlaybackSequenceServiceTest.cpp) exercise executor-affine application services.
-- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises immutable revision delivery, reentrant commands, and observer-fault containment.
-- [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
+- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable revision delivery, reentrant commands, and observer-fault containment.
+- [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
 
 ## Related documents
 

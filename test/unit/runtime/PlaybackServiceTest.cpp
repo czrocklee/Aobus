@@ -282,8 +282,9 @@ namespace ao::rt::test
     REQUIRE(fixture.notificationService.feed().entries.size() == 1);
   }
 
-  TEST_CASE("PlaybackService playback - rejected preflight notification dedupes and renews after dismissal",
-            "[runtime][unit][playback][error]")
+  TEST_CASE(
+    "PlaybackService playback - rejected preflight report suppresses identical updates and renews after dismissal",
+    "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -299,21 +300,16 @@ namespace ao::rt::test
     CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
 
-    std::int32_t updateCount = 0;
-    auto updateSub = fixture.notificationService.onFeedUpdated(
-      [&](NotificationFeedUpdate const& update)
-      {
-        if (update.mutationKind == NotificationFeedMutationKind::MessageUpdated)
-        {
-          ++updateCount;
-        }
-      });
+    auto const revisionBeforeDuplicate = feed.revision;
+    std::int32_t mutationCount = 0;
+    auto updateSub = fixture.notificationService.onFeedUpdated([&](NotificationFeedUpdate const&) { ++mutationCount; });
 
     REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    CHECK(updateCount == 1);
+    CHECK(mutationCount == 0);
 
     feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.revision == revisionBeforeDuplicate);
 
     auto const dismissedId = feed.entries.front().id;
     fixture.notificationService.dismiss(dismissedId);

@@ -218,7 +218,8 @@ namespace ao::uimodel
 
     auto const& feed = *update.feedPtr;
 
-    if (update.mutationKind == rt::NotificationFeedMutationKind::Posted && update.affectedIds.size() == 1)
+    if (update.mutationKind == rt::NotificationFeedMutationKind::Posted && update.affectedIds.size() == 1 &&
+        update.evictedIds.empty())
     {
       handleNotificationPosted(feed, update.affectedIds.front());
       return;
@@ -319,6 +320,7 @@ namespace ao::uimodel
 
     switch (update.mutationKind)
     {
+      case rt::NotificationFeedMutationKind::ReportUpdated:
       case rt::NotificationFeedMutationKind::MessageUpdated:
       case rt::NotificationFeedMutationKind::ContentUpdated:
       case rt::NotificationFeedMutationKind::ProgressUpdated:

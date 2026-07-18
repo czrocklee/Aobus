@@ -46,8 +46,10 @@ namespace ao::uimodel::test
     SECTION("persistent warnings render and compact dismiss keeps the feed")
     {
       auto const renderCountBeforePost = renderCount;
-      auto const id = notifications.post(
-        rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::untilDismissed());
+      auto const id =
+        notifications
+          .post(rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::untilDismissed())
+          .id;
 
       CHECK(renderCount == renderCountBeforePost + 1);
       CHECK(latest.compact.kind == ActivityStatusKind::Warning);
@@ -94,13 +96,15 @@ namespace ao::uimodel::test
 
     SECTION("visible transient updates render the accepted revision once")
     {
-      auto const id = notifications.post(
-        rt::NotificationSeverity::Info, "Saving playlist", rt::NotificationLifetime::sessionHistory());
+      auto const id =
+        notifications
+          .post(rt::NotificationSeverity::Info, "Saving playlist", rt::NotificationLifetime::sessionHistory())
+          .id;
       REQUIRE(latest.compact.kind == ActivityStatusKind::Info);
       REQUIRE(latest.compact.text == "Saving playlist");
 
       auto const renderCountBeforeUpdate = renderCount;
-      CHECK(notifications.updateMessage(id, "Playlist saved"));
+      CHECK(notifications.updateMessage(id, "Playlist saved").outcome == rt::NotificationMutationOutcome::Applied);
 
       CHECK(renderCount == renderCountBeforeUpdate + 1);
       CHECK(latest.compact.kind == ActivityStatusKind::Info);
@@ -126,6 +130,76 @@ namespace ao::uimodel::test
     }
 
     CHECK(renderCount > 0);
+  }
+
+  TEST_CASE("ActivityStatusViewModel - accepted history eviction projects one bounded snapshot",
+            "[uimodel][unit][status][activity]")
+  {
+    auto executor = rt::test::InlineExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto limits = rt::NotificationFeedLimits{};
+    limits.maxEntries = 1;
+    limits.maxSessionHistoryEntries = 1;
+    auto notifications = rt::NotificationService{runtime, limits};
+    auto latest = ActivityStatusViewState{};
+    std::int32_t renderCount = 0;
+    auto viewModel = ActivityStatusViewModel{
+      notifications,
+      [&](ActivityStatusViewState const& view)
+      {
+        latest = view;
+        ++renderCount;
+      },
+    };
+    auto const renderCountBeforePosts = renderCount;
+
+    auto const first = notifications.post(
+      rt::NotificationSeverity::Warning, "First warning", rt::NotificationLifetime::sessionHistory());
+    auto const second = notifications.post(
+      rt::NotificationSeverity::Warning, "Second warning", rt::NotificationLifetime::sessionHistory());
+
+    REQUIRE(first.outcome == rt::NotificationMutationOutcome::Applied);
+    REQUIRE(second.outcome == rt::NotificationMutationOutcome::Applied);
+    CHECK(renderCount == renderCountBeforePosts + 2);
+    REQUIRE(latest.detail.items.size() == 1);
+    CHECK(latest.detail.items.front().id == second.id);
+    CHECK(latest.detail.items.front().message == "Second warning");
+    CHECK(latest.compact.kind == ActivityStatusKind::Warning);
+    CHECK(latest.compact.text == "Second warning");
+    REQUIRE(notifications.feed().entries.size() == 1);
+    CHECK(notifications.feed().entries.front().id == second.id);
+  }
+
+  TEST_CASE("ActivityStatusViewModel - hidden post eviction removes the compact source",
+            "[uimodel][regression][status][activity]")
+  {
+    auto executor = rt::test::InlineExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto limits = rt::NotificationFeedLimits{};
+    limits.maxEntries = 1;
+    limits.maxSessionHistoryEntries = 1;
+    auto notifications = rt::NotificationService{runtime, limits};
+    auto latest = ActivityStatusViewState{};
+    auto viewModel =
+      ActivityStatusViewModel{notifications, [&](ActivityStatusViewState const& view) { latest = view; }};
+
+    auto const visible = notifications.post(
+      rt::NotificationSeverity::Warning, "Visible warning", rt::NotificationLifetime::sessionHistory());
+    REQUIRE(visible.outcome == rt::NotificationMutationOutcome::Applied);
+    REQUIRE(latest.compact.kind == ActivityStatusKind::Warning);
+
+    auto const hidden = notifications.post(rt::NotificationRequest{
+      .message = "Hidden replacement",
+      .lifetime = rt::NotificationLifetime::sessionHistory(),
+      .activityPresentation = rt::NotificationActivityPresentation::Hidden,
+    });
+
+    REQUIRE(hidden.outcome == rt::NotificationMutationOutcome::Applied);
+    CHECK(latest.compact.kind == ActivityStatusKind::Idle);
+    CHECK(latest.compact.sourceNotificationIds.empty());
+    CHECK(latest.detail.items.empty());
+    REQUIRE(notifications.feed().entries.size() == 1);
+    CHECK(notifications.feed().entries.front().id == hidden.id);
   }
 
   TEST_CASE("ActivityStatusViewModel - projects library task events from LibraryChanges",

@@ -54,6 +54,156 @@ namespace ao::rt
 
       std::abort();
     }
+
+    bool textFits(std::string_view const text, NotificationFeedLimits const& limits) noexcept
+    {
+      return text.size() <= limits.maxTextBytes;
+    }
+
+    void canonicalizeStorage(std::string& text)
+    {
+      text.shrink_to_fit();
+    }
+
+    void canonicalizeStorage(NotificationProgressState& progress)
+    {
+      canonicalizeStorage(progress.label);
+    }
+
+    void canonicalizeStorage(NotificationContentState& content)
+    {
+      canonicalizeStorage(content.templateId);
+      canonicalizeStorage(content.title);
+      canonicalizeStorage(content.iconName);
+
+      for (auto& action : content.actions)
+      {
+        canonicalizeStorage(action.id);
+        canonicalizeStorage(action.label);
+      }
+
+      content.actions.shrink_to_fit();
+
+      if (content.optProgress)
+      {
+        canonicalizeStorage(*content.optProgress);
+      }
+    }
+
+    void canonicalizeStorage(std::optional<NotificationProgressState>& optProgress)
+    {
+      if (optProgress)
+      {
+        canonicalizeStorage(*optProgress);
+      }
+    }
+
+    void canonicalizeStorage(NotificationEntry& entry)
+    {
+      if (entry.optReportKey)
+      {
+        canonicalizeStorage(entry.optReportKey->raw());
+      }
+
+      canonicalizeStorage(entry.message);
+      canonicalizeStorage(entry.content);
+    }
+
+    bool contentFits(NotificationContentState const& content, NotificationFeedLimits const& limits) noexcept
+    {
+      if (!textFits(content.templateId, limits) || !textFits(content.title, limits) ||
+          !textFits(content.iconName, limits) || content.actions.size() > limits.maxActionsPerEntry)
+      {
+        return false;
+      }
+
+      if (content.optProgress && !textFits(content.optProgress->label, limits))
+      {
+        return false;
+      }
+
+      return std::ranges::all_of(content.actions,
+                                 [&](NotificationAction const& action)
+                                 { return textFits(action.id, limits) && textFits(action.label, limits); });
+    }
+
+    bool lifetimeFits(NotificationLifetime const lifetime) noexcept
+    {
+      auto const optDuration = lifetime.optTransientDuration();
+      return !optDuration || *optDuration > std::chrono::milliseconds::zero();
+    }
+
+    bool entryFits(NotificationEntry const& entry, NotificationFeedLimits const& limits) noexcept
+    {
+      return (!entry.optReportKey || (!entry.optReportKey->empty() && textFits(entry.optReportKey->raw(), limits))) &&
+             textFits(entry.message, limits) && contentFits(entry.content, limits) && lifetimeFits(entry.lifetime);
+    }
+
+    bool consumeText(std::string_view const text, std::size_t& remainingBytes) noexcept
+    {
+      if (text.size() > remainingBytes)
+      {
+        return false;
+      }
+
+      remainingBytes -= text.size();
+      return true;
+    }
+
+    bool consumeEntryText(NotificationEntry const& entry, std::size_t& remainingBytes) noexcept
+    {
+      if ((entry.optReportKey && !consumeText(entry.optReportKey->raw(), remainingBytes)) ||
+          !consumeText(entry.message, remainingBytes) || !consumeText(entry.content.templateId, remainingBytes) ||
+          !consumeText(entry.content.title, remainingBytes) || !consumeText(entry.content.iconName, remainingBytes))
+      {
+        return false;
+      }
+
+      for (auto const& action : entry.content.actions)
+      {
+        if (!consumeText(action.id, remainingBytes) || !consumeText(action.label, remainingBytes))
+        {
+          return false;
+        }
+      }
+
+      return !entry.content.optProgress || consumeText(entry.content.optProgress->label, remainingBytes);
+    }
+
+    NotificationEntry entryFromRequest(NotificationId const id,
+                                       std::optional<NotificationReportKey> optReportKey,
+                                       NotificationRequest request,
+                                       std::uint64_t const lifetimeGeneration = 0)
+    {
+      return NotificationEntry{
+        .id = id,
+        .optReportKey = std::move(optReportKey),
+        .severity = request.severity,
+        .message = std::move(request.message),
+        .lifetime = request.lifetime,
+        .lifetimeGeneration = lifetimeGeneration,
+        .activityPresentation = request.activityPresentation,
+        .content = std::move(request.content),
+      };
+    }
+
+    std::string_view mutationName(NotificationFeedMutationKind const mutationKind) noexcept
+    {
+      switch (mutationKind)
+      {
+        case NotificationFeedMutationKind::Posted: return "post";
+        case NotificationFeedMutationKind::ReportUpdated: return "report update";
+        case NotificationFeedMutationKind::MessageUpdated: return "message update";
+        case NotificationFeedMutationKind::ContentUpdated: return "content update";
+        case NotificationFeedMutationKind::ProgressUpdated: return "progress update";
+        case NotificationFeedMutationKind::ProgressCleared: return "progress clear";
+        case NotificationFeedMutationKind::Expired: return "expiry";
+        case NotificationFeedMutationKind::Dismissed: return "dismissal";
+        case NotificationFeedMutationKind::Cleared: return "clear";
+      }
+
+      return "unknown";
+    }
   } // namespace
 
   struct NotificationService::Impl final
@@ -68,9 +218,10 @@ namespace ao::rt
       Impl* owner;
     };
 
-    explicit Impl(async::Runtime& asyncRuntime)
+    explicit Impl(async::Runtime& asyncRuntime, NotificationFeedLimits feedLimits)
       : runtime{asyncRuntime}
       , executor{asyncRuntime.callbackExecutor()}
+      , limits{feedLimits}
       , feedPtr{std::make_shared<NotificationFeedState const>()}
       , expiryControlPtr{std::make_shared<ExpiryControl>(this)}
     {
@@ -106,6 +257,7 @@ namespace ao::rt
     void commit(std::shared_ptr<NotificationFeedState> candidatePtr,
                 NotificationFeedMutationKind const mutationKind,
                 std::vector<NotificationId> affectedIds,
+                std::vector<NotificationId> const& evictedIds,
                 std::uint64_t const committedNextId)
     {
       ++candidatePtr->revision;
@@ -114,6 +266,7 @@ namespace ao::rt
         .revision = immutableFeedPtr->revision,
         .mutationKind = mutationKind,
         .affectedIds = std::move(affectedIds),
+        .evictedIds = evictedIds,
         .feedPtr = immutableFeedPtr,
       };
 
@@ -203,7 +356,7 @@ namespace ao::rt
         { return waitForExpiry(runtime, executor, expiryControlWeakPtr, id, generation, duration, stopToken); });
     }
 
-    async::TaskHandle prepareRestartedExpiry(NotificationEntry& entry)
+    async::TaskHandle prepareExpiryAfterMutation(NotificationEntry& entry)
     {
       auto const optDuration = entry.lifetime.optTransientDuration();
 
@@ -216,7 +369,7 @@ namespace ao::rt
       return scheduleExpiry(entry.id, entry.lifetimeGeneration, *optDuration);
     }
 
-    void installRestartedExpiry(NotificationId const id, std::uint64_t const generation, async::TaskHandle expiryTask)
+    void installPreparedExpiry(NotificationId const id, std::uint64_t const generation, async::TaskHandle expiryTask)
     {
       auto const& entries = feedPtr->entries;
       auto const entryIter = std::ranges::find(entries, id, &NotificationEntry::id);
@@ -233,6 +386,68 @@ namespace ao::rt
       taskIter->second = std::move(expiryTask);
     }
 
+    bool feedFitsBounds(NotificationFeedState const& candidate) const noexcept
+    {
+      if (candidate.entries.size() > limits.maxEntries)
+      {
+        return false;
+      }
+
+      auto const historyCount =
+        std::ranges::count_if(candidate.entries,
+                              [](NotificationEntry const& entry)
+                              { return entry.lifetime.kind() == NotificationLifetimeKind::SessionHistory; });
+
+      if (std::cmp_greater(historyCount, limits.maxSessionHistoryEntries))
+      {
+        return false;
+      }
+
+      auto remainingBytes = limits.maxTotalTextBytes;
+      return std::ranges::all_of(
+        candidate.entries, [&](NotificationEntry const& entry) { return consumeEntryText(entry, remainingBytes); });
+    }
+
+    std::optional<std::vector<NotificationId>> evictHistoryToFit(NotificationFeedState& candidate,
+                                                                 NotificationId const protectedId) const
+    {
+      auto evictedIds = std::vector<NotificationId>{};
+
+      while (!feedFitsBounds(candidate))
+      {
+        auto const entryIter = std::ranges::find_if(
+          candidate.entries,
+          [&](NotificationEntry const& entry)
+          { return entry.id != protectedId && entry.lifetime.kind() == NotificationLifetimeKind::SessionHistory; });
+
+        if (entryIter == candidate.entries.end())
+        {
+          return std::nullopt;
+        }
+
+        evictedIds.push_back(entryIter->id);
+        candidate.entries.erase(entryIter);
+      }
+
+      return evictedIds;
+    }
+
+    void eraseExpiryRegistrations(std::vector<NotificationId> const& ids)
+    {
+      for (auto const id : ids)
+      {
+        expiryTasks.erase(id);
+      }
+    }
+
+    NotificationMutationReply rejectMutation(NotificationFeedMutationKind const mutationKind,
+                                             NotificationId const id,
+                                             std::string_view const reason) const
+    {
+      APP_LOG_ERROR("NotificationService rejected {} for notification {}: {}", mutationName(mutationKind), id, reason);
+      return {.outcome = NotificationMutationOutcome::Rejected, .id = id};
+    }
+
     void expireTransient(NotificationId const id, std::uint64_t const generation)
     {
       ensureOnExecutor();
@@ -247,12 +462,51 @@ namespace ao::rt
 
       auto candidatePtr = mutableFeedCopy();
       candidatePtr->entries.erase(candidatePtr->entries.begin() + (entryIter - entries.begin()));
-      commit(std::move(candidatePtr), NotificationFeedMutationKind::Expired, {id}, nextId);
+      commit(std::move(candidatePtr), NotificationFeedMutationKind::Expired, {id}, {}, nextId);
       expiryTasks.erase(id);
     }
 
-    template<typename Mutator>
-    bool mutateEntry(NotificationId const id, NotificationFeedMutationKind const mutationKind, Mutator&& mutator)
+    NotificationMutationReply commitCandidateMutation(std::shared_ptr<NotificationFeedState> candidatePtr,
+                                                      NotificationId const id,
+                                                      NotificationFeedMutationKind const mutationKind)
+    {
+      auto candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
+      gsl_Expects(candidateEntryIter != candidatePtr->entries.end());
+
+      if (!entryFits(*candidateEntryIter, limits))
+      {
+        return rejectMutation(mutationKind, id, "candidate violates request limits");
+      }
+
+      if (candidateEntryIter->lifetime.kind() == NotificationLifetimeKind::Transient &&
+          candidateEntryIter->lifetimeGeneration == std::numeric_limits<std::uint64_t>::max())
+      {
+        return rejectMutation(mutationKind, id, "lifetime generation is exhausted");
+      }
+
+      auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
+
+      if (!optEvictedIds)
+      {
+        return rejectMutation(mutationKind, id, "feed capacity is exhausted by non-evictable entries");
+      }
+
+      candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
+      gsl_Expects(candidateEntryIter != candidatePtr->entries.end());
+      auto expiryTask = prepareExpiryAfterMutation(*candidateEntryIter);
+      auto const generation = candidateEntryIter->lifetimeGeneration;
+
+      commit(std::move(candidatePtr), mutationKind, {id}, *optEvictedIds, nextId);
+      eraseExpiryRegistrations(*optEvictedIds);
+      installPreparedExpiry(id, generation, std::move(expiryTask));
+      return {.outcome = NotificationMutationOutcome::Applied, .id = id};
+    }
+
+    template<typename Value, typename Accessor>
+    NotificationMutationReply replaceEntryValue(NotificationId const id,
+                                                NotificationFeedMutationKind const mutationKind,
+                                                Value&& value,
+                                                Accessor accessor)
     {
       ensureOnExecutor();
       auto const& entries = feedPtr->entries;
@@ -260,39 +514,98 @@ namespace ao::rt
 
       if (entryIter == entries.end())
       {
-        return false;
+        return {.outcome = NotificationMutationOutcome::Missing, .id = id};
       }
 
+      if (std::invoke(accessor, *entryIter) == value)
+      {
+        return {.outcome = NotificationMutationOutcome::Unchanged, .id = id};
+      }
+
+      canonicalizeStorage(value);
       auto candidatePtr = mutableFeedCopy();
       auto& candidateEntry = candidatePtr->entries[static_cast<std::size_t>(entryIter - entries.begin())];
+      std::invoke(accessor, candidateEntry) = std::forward<Value>(value);
+      return commitCandidateMutation(std::move(candidatePtr), id, mutationKind);
+    }
 
-      std::invoke(std::forward<Mutator>(mutator), candidateEntry);
+    NotificationMutationReply replaceProgress(NotificationId const id,
+                                              NotificationFeedMutationKind const mutationKind,
+                                              std::optional<NotificationProgressState> optProgress)
+    {
+      return replaceEntryValue(id,
+                               mutationKind,
+                               std::move(optProgress),
+                               [](auto& entry) -> decltype(auto) { return (entry.content.optProgress); });
+    }
 
-      auto expiryTask = prepareRestartedExpiry(candidateEntry);
-      auto const generation = candidateEntry.lifetimeGeneration;
-      commit(std::move(candidatePtr), mutationKind, {id}, nextId);
+    NotificationMutationReply post(std::optional<NotificationReportKey> optReportKey, NotificationRequest request)
+    {
+      ensureOnExecutor();
 
-      if (expiryTask)
+      if (nextId == std::numeric_limits<std::uint64_t>::max())
       {
-        installRestartedExpiry(id, generation, std::move(expiryTask));
+        return rejectMutation(
+          NotificationFeedMutationKind::Posted, kInvalidNotificationId, "notification id space is exhausted");
       }
 
-      return true;
+      auto const committedNextId = nextId + 1;
+      auto const id = NotificationId{committedNextId};
+      auto entry = entryFromRequest(id, std::move(optReportKey), std::move(request));
+
+      if (!entryFits(entry, limits))
+      {
+        return rejectMutation(NotificationFeedMutationKind::Posted, kInvalidNotificationId, "request violates limits");
+      }
+
+      canonicalizeStorage(entry);
+      auto candidatePtr = mutableFeedCopy();
+      candidatePtr->entries.push_back(std::move(entry));
+      auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
+
+      if (!optEvictedIds)
+      {
+        return rejectMutation(NotificationFeedMutationKind::Posted,
+                              kInvalidNotificationId,
+                              "feed capacity is exhausted by non-evictable entries");
+      }
+
+      auto& candidateEntry = candidatePtr->entries.back();
+      auto expiryTask = prepareExpiryAfterMutation(candidateEntry);
+      auto const [taskIter, inserted] = expiryTasks.try_emplace(id, std::move(expiryTask));
+      std::ignore = taskIter;
+      gsl_Expects(inserted);
+
+      try
+      {
+        commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, {id}, *optEvictedIds, committedNextId);
+      }
+      catch (...)
+      {
+        expiryTasks.erase(id);
+        throw;
+      }
+
+      eraseExpiryRegistrations(*optEvictedIds);
+      return {.outcome = NotificationMutationOutcome::Applied, .id = id};
     }
 
     async::Runtime& runtime;
     async::Executor& executor;
+    NotificationFeedLimits limits;
     std::shared_ptr<NotificationFeedState const> feedPtr;
     std::uint64_t nextId = 0;
     std::deque<NotificationFeedUpdate> pendingUpdates;
     bool publishing = false;
     async::Signal<NotificationFeedUpdate const&> feedUpdatedSignal;
+    // Every live entry owns one slot. Retained entries hold an empty handle so
+    // a keyed lifetime transition never needs to allocate after feed commit.
     std::unordered_map<NotificationId, async::TaskHandle> expiryTasks;
     std::shared_ptr<ExpiryControl> expiryControlPtr;
   };
 
-  NotificationService::NotificationService(async::Runtime& runtime)
-    : _implPtr{std::make_unique<Impl>(runtime)}
+  NotificationService::NotificationService(async::Runtime& runtime, NotificationFeedLimits limits)
+    : _implPtr{std::make_unique<Impl>(runtime, limits)}
   {
   }
 
@@ -311,9 +624,9 @@ namespace ao::rt
     return *_implPtr->feedPtr;
   }
 
-  NotificationId NotificationService::post(NotificationSeverity const severity,
-                                           std::string message,
-                                           NotificationLifetime const lifetime)
+  NotificationMutationReply NotificationService::post(NotificationSeverity const severity,
+                                                      std::string message,
+                                                      NotificationLifetime const lifetime)
   {
     return post(NotificationRequest{
       .severity = severity,
@@ -322,124 +635,109 @@ namespace ao::rt
     });
   }
 
-  NotificationId NotificationService::post(NotificationRequest request)
+  NotificationMutationReply NotificationService::post(NotificationRequest request)
+  {
+    return _implPtr->post(std::nullopt, std::move(request));
+  }
+
+  NotificationMutationReply NotificationService::createOrUpdate(NotificationReportKey reportKey,
+                                                                NotificationRequest request)
   {
     _implPtr->ensureOnExecutor();
+    auto const& entries = _implPtr->feedPtr->entries;
+    auto const entryIter =
+      std::ranges::find_if(entries, [&](NotificationEntry const& entry) { return entry.optReportKey == reportKey; });
 
-    auto const committedNextId = _implPtr->nextId + 1;
-    auto const id = NotificationId{committedNextId};
+    if (entryIter == entries.end())
+    {
+      return _implPtr->post(std::optional{std::move(reportKey)}, std::move(request));
+    }
 
-    auto entry = NotificationEntry{
-      .id = id,
-      .severity = request.severity,
-      .message = std::move(request.message),
-      .lifetime = request.lifetime,
-      .activityPresentation = request.activityPresentation,
-      .content = std::move(request.content),
-    };
+    auto const id = entryIter->id;
+    auto replacement =
+      entryFromRequest(id, std::optional{std::move(reportKey)}, std::move(request), entryIter->lifetimeGeneration);
 
+    if (!entryFits(replacement, _implPtr->limits))
+    {
+      return _implPtr->rejectMutation(NotificationFeedMutationKind::ReportUpdated, id, "request violates limits");
+    }
+
+    if (*entryIter == replacement)
+    {
+      return {.outcome = NotificationMutationOutcome::Unchanged, .id = id};
+    }
+
+    canonicalizeStorage(replacement);
     auto candidatePtr = _implPtr->mutableFeedCopy();
-    candidatePtr->entries.push_back(std::move(entry));
-    auto& candidateEntry = candidatePtr->entries.back();
-    auto expiryTask = _implPtr->prepareRestartedExpiry(candidateEntry);
-
-    if (expiryTask)
-    {
-      auto const [taskIter, inserted] = _implPtr->expiryTasks.try_emplace(id, std::move(expiryTask));
-      std::ignore = taskIter;
-      gsl_Expects(inserted);
-
-      try
-      {
-        _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, {id}, committedNextId);
-      }
-      catch (...)
-      {
-        _implPtr->expiryTasks.erase(id);
-        throw;
-      }
-    }
-    else
-    {
-      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, {id}, committedNextId);
-    }
-
-    return id;
+    candidatePtr->entries[static_cast<std::size_t>(entryIter - entries.begin())] = std::move(replacement);
+    return _implPtr->commitCandidateMutation(std::move(candidatePtr), id, NotificationFeedMutationKind::ReportUpdated);
   }
 
-  bool NotificationService::updateMessage(NotificationId const id, std::string message)
+  NotificationMutationReply NotificationService::updateMessage(NotificationId const id, std::string message)
   {
-    return _implPtr->mutateEntry(id,
-                                 NotificationFeedMutationKind::MessageUpdated,
-                                 [message = std::move(message)](NotificationEntry& entry) mutable
-                                 { entry.message = std::move(message); });
+    return _implPtr->replaceEntryValue(id,
+                                       NotificationFeedMutationKind::MessageUpdated,
+                                       std::move(message),
+                                       [](auto& entry) -> decltype(auto) { return (entry.message); });
   }
 
-  void NotificationService::updateContent(NotificationId const id, NotificationContentState content)
+  NotificationMutationReply NotificationService::updateContent(NotificationId const id,
+                                                               NotificationContentState content)
   {
-    std::ignore = _implPtr->mutateEntry(id,
-                                        NotificationFeedMutationKind::ContentUpdated,
-                                        [content = std::move(content)](NotificationEntry& entry) mutable
-                                        { entry.content = std::move(content); });
+    return _implPtr->replaceEntryValue(id,
+                                       NotificationFeedMutationKind::ContentUpdated,
+                                       std::move(content),
+                                       [](auto& entry) -> decltype(auto) { return (entry.content); });
   }
 
-  void NotificationService::updateProgress(NotificationId const id, NotificationProgressState progress)
+  NotificationMutationReply NotificationService::updateProgress(NotificationId const id,
+                                                                NotificationProgressState progress)
   {
-    std::ignore = _implPtr->mutateEntry(id,
-                                        NotificationFeedMutationKind::ProgressUpdated,
-                                        [progress = std::move(progress)](NotificationEntry& entry) mutable
-                                        { entry.content.optProgress = std::move(progress); });
+    return _implPtr->replaceProgress(
+      id, NotificationFeedMutationKind::ProgressUpdated, std::optional{std::move(progress)});
   }
 
-  void NotificationService::clearProgress(NotificationId const id)
+  NotificationMutationReply NotificationService::clearProgress(NotificationId const id)
+  {
+    return _implPtr->replaceProgress(
+      id, NotificationFeedMutationKind::ProgressCleared, std::optional<NotificationProgressState>{});
+  }
+
+  NotificationMutationReply NotificationService::dismiss(NotificationId const id)
   {
     _implPtr->ensureOnExecutor();
     auto const& entries = _implPtr->feedPtr->entries;
     auto const entryIter = std::ranges::find(entries, id, &NotificationEntry::id);
 
-    if (entryIter == entries.end() || !entryIter->content.optProgress)
+    if (entryIter == entries.end())
     {
-      return;
+      return {.outcome = NotificationMutationOutcome::Missing, .id = id};
     }
 
-    std::ignore = _implPtr->mutateEntry(id,
-                                        NotificationFeedMutationKind::ProgressCleared,
-                                        [](NotificationEntry& entry) { entry.content.optProgress = std::nullopt; });
+    auto candidatePtr = _implPtr->mutableFeedCopy();
+    candidatePtr->entries.erase(candidatePtr->entries.begin() + (entryIter - entries.begin()));
+    _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Dismissed, {id}, {}, _implPtr->nextId);
+    _implPtr->expiryTasks.erase(id);
+    return {.outcome = NotificationMutationOutcome::Applied, .id = id};
   }
 
-  void NotificationService::dismiss(NotificationId const id)
-  {
-    _implPtr->ensureOnExecutor();
-    auto const& entries = _implPtr->feedPtr->entries;
-    auto const it = std::ranges::find(entries, id, &NotificationEntry::id);
-
-    if (it != entries.end())
-    {
-      auto candidatePtr = _implPtr->mutableFeedCopy();
-      candidatePtr->entries.erase(candidatePtr->entries.begin() + (it - entries.begin()));
-      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Dismissed, {id}, _implPtr->nextId);
-      _implPtr->expiryTasks.erase(id);
-    }
-  }
-
-  void NotificationService::dismissAll()
+  NotificationMutationReply NotificationService::dismissAll()
   {
     _implPtr->ensureOnExecutor();
 
-    if (!_implPtr->feedPtr->entries.empty())
+    if (_implPtr->feedPtr->entries.empty())
     {
-      auto affectedIds = std::vector<NotificationId>{};
-      affectedIds.reserve(_implPtr->feedPtr->entries.size());
-      std::ranges::transform(_implPtr->feedPtr->entries, std::back_inserter(affectedIds), &NotificationEntry::id);
-
-      auto candidatePtr = _implPtr->mutableFeedCopy();
-      candidatePtr->entries.clear();
-      _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Cleared, affectedIds, _implPtr->nextId);
-
-      for (auto const id : affectedIds)
-      {
-        _implPtr->expiryTasks.erase(id);
-      }
+      return {.outcome = NotificationMutationOutcome::Unchanged};
     }
+
+    auto affectedIds = std::vector<NotificationId>{};
+    affectedIds.reserve(_implPtr->feedPtr->entries.size());
+    std::ranges::transform(_implPtr->feedPtr->entries, std::back_inserter(affectedIds), &NotificationEntry::id);
+
+    auto candidatePtr = _implPtr->mutableFeedCopy();
+    candidatePtr->entries.clear();
+    _implPtr->commit(std::move(candidatePtr), NotificationFeedMutationKind::Cleared, affectedIds, {}, _implPtr->nextId);
+    _implPtr->eraseExpiryRegistrations(affectedIds);
+    return {.outcome = NotificationMutationOutcome::Applied};
   }
 } // namespace ao::rt
