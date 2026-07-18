@@ -102,7 +102,8 @@ namespace ao::gtk::test
 
     SECTION("warning notifications render as persistent readout")
     {
-      runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import", true);
+      runtime.notifications().post(
+        rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::untilDismissed());
       mounted.drain();
 
       CHECK(status.widget().get_visible());
@@ -116,6 +117,7 @@ namespace ao::gtk::test
       runtime.notifications().post(rt::NotificationRequest{
         .severity = rt::NotificationSeverity::Info,
         .message = "Aobus Ready",
+        .lifetime = rt::NotificationLifetime::transient(),
         .activityPresentation = rt::NotificationActivityPresentation::Hidden,
       });
       mounted.drain();
@@ -131,7 +133,8 @@ namespace ao::gtk::test
     auto& runtime = mounted.runtime();
     auto& status = mounted.status;
 
-    runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed", true);
+    runtime.notifications().post(
+      rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::untilDismissed());
     mounted.drain();
     REQUIRE(status.widget().get_visible());
     CHECK(hasCssClass(status.widget(), "ao-activity-status-error"));
@@ -157,7 +160,8 @@ namespace ao::gtk::test
 
     SECTION("warning notification opens a compact detail row")
     {
-      runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import", true);
+      runtime.notifications().post(
+        rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::untilDismissed());
       mounted.drain();
 
       CHECK(hasCssClass(status.widget(), "ao-activity-status-openable"));
@@ -169,7 +173,8 @@ namespace ao::gtk::test
 
     SECTION("plain info notification does not open detail")
     {
-      runtime.notifications().post(rt::NotificationSeverity::Info, "Saved playlist");
+      runtime.notifications().post(
+        rt::NotificationSeverity::Info, "Saved playlist", rt::NotificationLifetime::transient());
       mounted.drain();
 
       CHECK(status.widget().get_visible());
@@ -186,6 +191,7 @@ namespace ao::gtk::test
       runtime.notifications().post(rt::NotificationRequest{
         .severity = rt::NotificationSeverity::Info,
         .message = "Index diagnostic",
+        .lifetime = rt::NotificationLifetime::sessionHistory(),
         .activityPresentation = rt::NotificationActivityPresentation::DetailOnly,
       });
       mounted.drain();
@@ -203,6 +209,7 @@ namespace ao::gtk::test
       runtime.notifications().post(rt::NotificationRequest{
         .severity = rt::NotificationSeverity::Warning,
         .message = "Partial import",
+        .lifetime = rt::NotificationLifetime::sessionHistory(),
         .content = rt::NotificationContentState{.title = "Import"},
       });
       mounted.drain();
@@ -229,7 +236,8 @@ namespace ao::gtk::test
     auto& runtime = mounted.runtime();
     auto& status = mounted.status;
 
-    runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import");
+    runtime.notifications().post(
+      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory());
     mounted.drain();
 
     auto* const dismissButton = findWidgetByClass<Gtk::Button>(status.detailContent(), "ao-activity-detail-dismiss");
@@ -249,6 +257,7 @@ namespace ao::gtk::test
     auto request = rt::NotificationRequest{
       .severity = rt::NotificationSeverity::Warning,
       .message = "Partial import",
+      .lifetime = rt::NotificationLifetime::sessionHistory(),
       .content =
         rt::NotificationContentState{
           .title = "Import",
@@ -361,6 +370,7 @@ namespace ao::gtk::test
       runtime.notifications().post(rt::NotificationRequest{
         .severity = rt::NotificationSeverity::Warning,
         .message = "Partial import",
+        .lifetime = rt::NotificationLifetime::sessionHistory(),
         .content =
           rt::NotificationContentState{
             .title = "Import",

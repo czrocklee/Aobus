@@ -32,7 +32,8 @@ The public authority is `app/include/ao/rt/`; UIModel and frontends consume thes
 | `NotificationTopic` | `General`, `PlaybackSequence`, `PlaybackError` |
 | `NotificationProgressMode` | `Indeterminate`, `Fraction` |
 | `NotificationActivityPresentation` | `Default`, `DetailOnly`, `Hidden` |
-| `NotificationFeedMutationKind` | `Posted`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Dismissed`, `Cleared` |
+| `NotificationLifetimeKind` | `Transient`, `SessionHistory`, `UntilDismissed` |
+| `NotificationFeedMutationKind` | `Posted`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Expired`, `Dismissed`, `Cleared` |
 
 Each notification enum is a scoped enum with underlying type `std::uint8_t`.
 `kDefaultNotificationTemplate` is `notification.message`.
@@ -61,6 +62,20 @@ Each notification enum is a scoped enum with underlying type `std::uint8_t`.
 The runtime action vector has no model-level maximum.
 Presentation adapters may expose a bounded subset; that limit is not a `NotificationContentState` invariant.
 
+### Lifetime
+
+`NotificationLifetime` is an immutable policy value constructed through these factories:
+
+| Factory | Meaning |
+|---|---|
+| `transient(duration)` | Authoritative feed entry expires after the positive duration. The default argument is `kDefaultNotificationTransientDuration`, currently `5000ms`. |
+| `sessionHistory()` | Entry remains in the in-memory session feed until an explicit dismissal or clear. |
+| `untilDismissed()` | Entry remains authoritative until explicit dismissal and is presented as not locally dismissible in activity detail. |
+
+`kind()` returns `NotificationLifetimeKind`.
+`optTransientDuration()` returns the duration only for `Transient` and an empty optional for retained lifetimes.
+Severity and lifetime are independent.
+
 ### Request and entry
 
 `NotificationRequest` has these fields and defaults:
@@ -69,12 +84,13 @@ Presentation adapters may expose a bounded subset; that limit is not a `Notifica
 |---|---|---|
 | `severity` | `NotificationSeverity` | `Info` |
 | `message` | `std::string` | empty |
-| `sticky` | `bool` | `false` |
-| `optTimeout` | `std::optional<std::chrono::milliseconds>` | empty |
+| `lifetime` | `NotificationLifetime` | none; every request must select one explicitly |
 | `activityPresentation` | `NotificationActivityPresentation` | `Default` |
 | `content` | `NotificationContentState` | default content |
 
-`NotificationEntry` contains the same fields plus `NotificationId id`, whose default is `0`.
+`NotificationEntry` contains the same fields plus `NotificationId id`, whose default is `0`, and `std::uint64_t lifetimeGeneration`, whose default is `0`.
+Its value default for `lifetime` is `sessionHistory()` so an empty feed/value snapshot remains constructible; producer requests do not inherit that default.
+Service-produced transient entries start at generation `1`, and effective updates increment it.
 `NotificationFeedState` contains `std::vector<NotificationEntry> entries` and `std::uint64_t revision`, both initially empty or zero.
 
 `NotificationFeedUpdate` contains:
@@ -90,12 +106,14 @@ Every update produced by `NotificationService` has a non-empty `feedPtr`, and `r
 
 ### Service API
 
-Construction requires the callback `async::Executor&` and accepts an optional `async::AsyncExceptionHandler` for observer diagnostics.
+Construction requires the owning `async::Runtime&`.
+The service uses its callback executor for affinity and expiry delivery, its sleeper for delayed expiry, and its exception handler for observer diagnostics.
+The runtime must outlive the service.
 
 | Member | Return |
 |---|---|
 | `feed() const` | `NotificationFeedState` |
-| `post(NotificationSeverity, std::string, bool, optional<milliseconds>)` | `NotificationId` |
+| `post(NotificationSeverity, std::string, NotificationLifetime)` | `NotificationId` |
 | `post(NotificationRequest)` | `NotificationId` |
 | `updateMessage(NotificationId, std::string)` | `bool` |
 | `updateContent(NotificationId, NotificationContentState)` | `void` |
@@ -104,7 +122,7 @@ Construction requires the callback `async::Executor&` and accepts an optional `a
 | `dismiss(NotificationId)` | `void` |
 | `dismissAll()` | `void` |
 
-The short `post` overload initializes the other request fields to their defaults.
+The short `post` overload initializes activity presentation and content to their defaults, but still requires explicit lifetime policy.
 
 ### Observation API
 
@@ -115,16 +133,16 @@ The short `post` overload initializes the other request fields to their defaults
 The member returns an `rt::Subscription` that owns the connection lifetime.
 The update reference is valid for the callback invocation; retaining `feedPtr` keeps that immutable snapshot alive.
 
-An observer failure is sent to the injected handler with context `notification feed observer at revision <N>`.
-An empty handler disables that diagnostic sink without allowing the observer exception to escape.
+An observer failure is sent through the owning runtime with context `notification feed observer at revision <N>`.
+The runtime's injected handler or stderr fallback owns the final diagnostic without allowing the observer exception to escape.
 
 ## Validation rules
 
 `NotificationService` does not validate or clamp progress fractions, require non-empty messages, resolve action ids, cap action count, or verify template and icon names.
 Producers supply semantically valid content, and presentation adapters decide which optional fields they can render.
 
-`sticky` does not override or erase `optTimeout` in the stored model.
-Consumers decide how those fields interact in their presentation contract.
+`NotificationLifetime::transient` accepts a duration value, and `NotificationService` requires it to be greater than zero when scheduling.
+The lifetime type makes retained and timed states mutually exclusive rather than asking consumers to reconcile independent flags.
 
 ## Compatibility and versioning
 
@@ -138,7 +156,7 @@ Any surface change requires synchronized implementation, specification, referenc
 auto id = notifications.post(ao::rt::NotificationRequest{
   .severity = ao::rt::NotificationSeverity::Warning,
   .message = "Some tracks could not be imported",
-  .sticky = true,
+  .lifetime = ao::rt::NotificationLifetime::sessionHistory(),
 });
 ```
 
@@ -151,6 +169,7 @@ auto id = notifications.post(ao::rt::NotificationRequest{
 ## Test authority
 
 - [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) locks request storage, mutation, immutable-update, reentrancy, and observer-failure behavior.
+- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) locks typed lifetime scheduling, expiry revisions, generations, cancellation races, and teardown.
 - Activity projection tests under [`test/unit/uimodel/status/activity/`](../../../test/unit/uimodel/status/activity) lock how the model is narrowed for shared presentation.
 
 ## Related documents

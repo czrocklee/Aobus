@@ -196,7 +196,8 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = InlineExecutor{};
-    auto notificationService = NotificationService{executor};
+    auto runtime = async::Runtime{executor, 1};
+    auto notificationService = NotificationService{runtime};
     auto playbackService = makePlaybackService(executor, libraryFixture.library(), notificationService);
 
     bool preparingFired = false;

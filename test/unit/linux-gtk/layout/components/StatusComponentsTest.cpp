@@ -88,6 +88,7 @@ namespace ao::gtk::layout::test
     runtime.notifications().post(rt::NotificationRequest{
       .severity = rt::NotificationSeverity::Warning,
       .message = "Partial import",
+      .lifetime = rt::NotificationLifetime::sessionHistory(),
       .content =
         rt::NotificationContentState{
           .title = "Import",
@@ -151,6 +152,7 @@ namespace ao::gtk::layout::test
     runtime.notifications().post(rt::NotificationRequest{
       .severity = rt::NotificationSeverity::Warning,
       .message = "Partial import",
+      .lifetime = rt::NotificationLifetime::sessionHistory(),
       .content =
         rt::NotificationContentState{
           .title = "Import",

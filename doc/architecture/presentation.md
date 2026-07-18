@@ -59,6 +59,8 @@ Its feature capsules contain view models, editor/form models, interaction models
 
 The shared activity-status model consumes one immutable notification-feed update per accepted revision.
 It derives compact and detail state from that same snapshot and emits at most one render for the revision; frontend adapters do not combine parallel notification signals into their own refresh policy.
+Runtime-transient expiry is one such authoritative feed revision.
+UIModel timers remain presentation-only for retained info and synthetic completion state, so frontend timing cannot disagree about whether a runtime notification still exists.
 
 UIModel may subscribe to runtime services, combine several runtime snapshots, format display values, maintain an edit draft or gesture, and emit a runtime command or typed edit result.
 It does not own storage transactions, playback succession, audio control, runtime retry policy, or platform lifecycle.

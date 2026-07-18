@@ -283,6 +283,7 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryAuthoringTest.cpp
     unit/runtime/completion/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
+    unit/runtime/NotificationServiceExpiryTest.cpp
     unit/runtime/completion/QueryExpressionCompleterTest.cpp
     unit/runtime/ViewServiceLifecycleTest.cpp
     unit/runtime/ViewServiceListFilterTest.cpp

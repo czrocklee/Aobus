@@ -59,7 +59,10 @@ namespace ao::uimodel::test
     {
       feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
 
-      auto const error = entry(rt::NotificationId{4}, rt::NotificationSeverity::Error, "Import failed", true);
+      auto const error = entry(rt::NotificationId{4},
+                               rt::NotificationSeverity::Error,
+                               "Import failed",
+                               rt::NotificationLifetime::untilDismissed());
       auto const currentFeed = feed({error});
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{4}));
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
@@ -77,7 +80,10 @@ namespace ao::uimodel::test
     {
       feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
 
-      auto const error = entry(rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", true);
+      auto const error = entry(rt::NotificationId{15},
+                               rt::NotificationSeverity::Error,
+                               "Import failed",
+                               rt::NotificationLifetime::untilDismissed());
       feedProjection.handleFeedUpdated(postedUpdate(feed({error}), rt::NotificationId{15}));
 
       feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), feed({}));

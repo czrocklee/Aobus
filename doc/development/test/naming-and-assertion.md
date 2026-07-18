@@ -196,7 +196,7 @@ Use `CHECK` for independent observations after the action:
 ```cpp
 CHECK(entry.id == id);
 CHECK(entry.message == "Importing library");
-CHECK(entry.sticky);
+CHECK(entry.lifetime == NotificationLifetime::untilDismissed());
 ```
 
 ## Expected values

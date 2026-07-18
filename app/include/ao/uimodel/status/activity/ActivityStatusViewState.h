@@ -72,7 +72,6 @@ namespace ao::uimodel
     std::string title{};
     std::string message{};
     std::string iconName{};
-    bool sticky = false;
     bool dismissible = false;
     std::optional<rt::NotificationProgressMode> optProgressMode{};
     double progressFraction = 0.0;

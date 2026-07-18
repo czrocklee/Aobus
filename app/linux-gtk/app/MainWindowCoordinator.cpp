@@ -270,6 +270,7 @@ namespace ao::gtk
     _runtime.notifications().post(rt::NotificationRequest{
       .severity = rt::NotificationSeverity::Info,
       .message = "Aobus Ready",
+      .lifetime = rt::NotificationLifetime::transient(),
       .activityPresentation = rt::NotificationActivityPresentation::Hidden,
     });
 

@@ -58,7 +58,7 @@ namespace ao::rt::test
     struct PlaybackSequenceFixture final
     {
       PlaybackSequenceFixture()
-        : asyncRuntime{executor}
+        : asyncRuntime{executor, 1, {}, &sleeper}
         , writerFixture{libraryFixture.library(), changes}
         , sources{libraryFixture.library(), changes}
         , views{executor, libraryFixture.library(), sources}
@@ -111,13 +111,14 @@ namespace ao::rt::test
       }
 
       MusicLibraryFixture libraryFixture;
+      ControlledSleeper sleeper;
       InlineExecutor executor;
       async::Runtime asyncRuntime;
       LibraryChanges changes;
       LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
-      NotificationService notifications{executor};
+      NotificationService notifications{asyncRuntime};
       PlaybackService playback;
       std::unique_ptr<PlaybackSequenceService> sequencePtr;
       TrackId firstTrackId = kInvalidTrackId;
@@ -131,7 +132,7 @@ namespace ao::rt::test
     struct PlaybackSequenceTransportFixture final
     {
       PlaybackSequenceTransportFixture()
-        : asyncRuntime{transport.executor}
+        : asyncRuntime{transport.executor, 1, {}, &sleeper}
         , writerFixture{transport.libraryFixture.library(), changes}
         , sources{transport.libraryFixture.library(), changes}
         , views{transport.executor, transport.libraryFixture.library(), sources}
@@ -180,6 +181,7 @@ namespace ao::rt::test
       }
 
       PlaybackFixture<QueuedExecutor> transport;
+      ControlledSleeper sleeper;
       async::Runtime asyncRuntime;
       LibraryChanges changes;
       LibraryWriterFixture writerFixture;
@@ -279,7 +281,7 @@ namespace ao::rt::test
       LibraryWriterFixture writerFixture;
       TrackSourceCache sources;
       ViewService views;
-      NotificationService notifications{executor};
+      NotificationService notifications{asyncRuntime};
       std::unique_ptr<PlaybackService> playbackPtr;
       std::unique_ptr<PlaybackSequenceService> sequencePtr;
       TrackId firstTrackId = kInvalidTrackId;
@@ -352,7 +354,7 @@ namespace ao::rt::test
     auto const rejectionFeed = fixture.notifications.feed();
     REQUIRE(rejectionFeed.entries.size() == 1);
     CHECK(rejectionFeed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(rejectionFeed.entries.front().sticky);
+    CHECK(rejectionFeed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(rejectionFeed.entries.front().content.topic == NotificationTopic::PlaybackError);
     CHECK(sequence.state() == sequenceBeforeRejection);
     CHECK(sequence.state().semanticRevision == sequenceBeforeRejection.semanticRevision);
@@ -485,7 +487,7 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().message == "Playback sequence finished");
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
-    CHECK_FALSE(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
@@ -659,7 +661,7 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().message == "Playback sequence finished");
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
-    CHECK_FALSE(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
@@ -697,7 +699,7 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().message == "Playback sequence finished");
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
-    CHECK_FALSE(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
@@ -883,11 +885,11 @@ namespace ao::rt::test
 
     REQUIRE(skipSummary != nullptr);
     CHECK(skipSummary->severity == NotificationSeverity::Warning);
-    CHECK_FALSE(skipSummary->sticky);
+    CHECK(skipSummary->lifetime == NotificationLifetime::sessionHistory());
     CHECK(skipSummary->content.topic == NotificationTopic::PlaybackSequence);
     REQUIRE(failureLimit != nullptr);
     CHECK(failureLimit->severity == NotificationSeverity::Error);
-    CHECK(failureLimit->sticky);
+    CHECK(failureLimit->lifetime == NotificationLifetime::untilDismissed());
     CHECK(failureLimit->content.topic == NotificationTopic::PlaybackSequence);
   }
 
@@ -944,7 +946,7 @@ namespace ao::rt::test
     auto const feed = fixture.notifications.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
     CHECK(feed.entries.front().message.contains("Failing current"));
     CHECK(feed.entries.front().message.contains("gated staged decode failure"));

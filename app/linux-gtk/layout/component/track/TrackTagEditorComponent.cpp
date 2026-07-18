@@ -84,7 +84,9 @@ namespace ao::gtk::layout
           if (!sessionResult)
           {
             APP_LOG_ERROR("Tag edit could not start: {}", sessionResult.error().message);
-            _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
+            _notifications.post(rt::NotificationSeverity::Error,
+                                sessionResult.error().message,
+                                rt::NotificationLifetime::sessionHistory());
             return;
           }
 
@@ -101,7 +103,8 @@ namespace ao::gtk::layout
         if (result.rejected || result.stale)
         {
           APP_LOG_ERROR("Tag edit failed: {}", result.notificationText);
-          _notifications.post(rt::NotificationSeverity::Error, result.notificationText);
+          _notifications.post(
+            rt::NotificationSeverity::Error, result.notificationText, rt::NotificationLifetime::sessionHistory());
 
           if (result.stale)
           {
@@ -113,7 +116,8 @@ namespace ao::gtk::layout
 
         if (result.applied)
         {
-          _notifications.post(rt::NotificationSeverity::Info, result.notificationText);
+          _notifications.post(
+            rt::NotificationSeverity::Info, result.notificationText, rt::NotificationLifetime::transient());
         }
       }
 

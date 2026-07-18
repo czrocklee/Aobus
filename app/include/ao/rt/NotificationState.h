@@ -67,12 +67,64 @@ namespace ao::rt
     Hidden,
   };
 
+  enum class NotificationLifetimeKind : std::uint8_t
+  {
+    Transient,
+    SessionHistory,
+    UntilDismissed,
+  };
+
+  inline constexpr std::chrono::milliseconds kDefaultNotificationTransientDuration{5000};
+
+  class NotificationLifetime final
+  {
+  public:
+    static constexpr NotificationLifetime transient(
+      std::chrono::milliseconds duration = kDefaultNotificationTransientDuration) noexcept
+    {
+      return NotificationLifetime{NotificationLifetimeKind::Transient, duration};
+    }
+
+    static constexpr NotificationLifetime sessionHistory() noexcept
+    {
+      return NotificationLifetime{NotificationLifetimeKind::SessionHistory, {}};
+    }
+
+    static constexpr NotificationLifetime untilDismissed() noexcept
+    {
+      return NotificationLifetime{NotificationLifetimeKind::UntilDismissed, {}};
+    }
+
+    constexpr NotificationLifetimeKind kind() const noexcept { return _kind; }
+
+    constexpr std::optional<std::chrono::milliseconds> optTransientDuration() const noexcept
+    {
+      if (_kind == NotificationLifetimeKind::Transient)
+      {
+        return _duration;
+      }
+
+      return std::nullopt;
+    }
+
+    friend constexpr bool operator==(NotificationLifetime const&, NotificationLifetime const&) = default;
+
+  private:
+    constexpr NotificationLifetime(NotificationLifetimeKind const kind,
+                                   std::chrono::milliseconds const duration) noexcept
+      : _kind{kind}, _duration{duration}
+    {
+    }
+
+    NotificationLifetimeKind _kind = NotificationLifetimeKind::SessionHistory;
+    std::chrono::milliseconds _duration{};
+  };
+
   struct NotificationRequest final
   {
     NotificationSeverity severity = NotificationSeverity::Info;
     std::string message{};
-    bool sticky = false;
-    std::optional<std::chrono::milliseconds> optTimeout{};
+    NotificationLifetime lifetime;
     NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
     NotificationContentState content{};
   };
@@ -82,8 +134,8 @@ namespace ao::rt
     NotificationId id{};
     NotificationSeverity severity = NotificationSeverity::Info;
     std::string message{};
-    bool sticky = false;
-    std::optional<std::chrono::milliseconds> optTimeout{};
+    NotificationLifetime lifetime = NotificationLifetime::sessionHistory();
+    std::uint64_t lifetimeGeneration = 0;
     NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
     NotificationContentState content{};
   };
@@ -101,6 +153,7 @@ namespace ao::rt
     ContentUpdated,
     ProgressUpdated,
     ProgressCleared,
+    Expired,
     Dismissed,
     Cleared,
   };

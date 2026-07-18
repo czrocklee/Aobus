@@ -255,7 +255,7 @@ namespace ao::rt::test
     CHECK(failures.empty());
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
   }
 
@@ -296,7 +296,7 @@ namespace ao::rt::test
     auto feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
 
     std::int32_t updateCount = 0;
@@ -364,11 +364,11 @@ namespace ao::rt::test
 
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().message.contains("Could not start playback"));
   }
 
-  TEST_CASE("PlaybackService playback - backend error publishes sticky device failure",
+  TEST_CASE("PlaybackService playback - backend error publishes until-dismissed device failure",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackFixture<QueuedExecutor>{};
@@ -399,7 +399,7 @@ namespace ao::rt::test
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().sticky);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().message.contains("Playback device failed"));
     CHECK(feed.entries.front().message.contains("device lost"));
   }

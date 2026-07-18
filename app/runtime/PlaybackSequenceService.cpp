@@ -517,6 +517,7 @@ namespace ao::rt
         notifications.post(NotificationRequest{
           .severity = NotificationSeverity::Info,
           .message = "Playback sequence finished",
+          .lifetime = NotificationLifetime::transient(),
           .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
         });
       }
@@ -543,6 +544,7 @@ namespace ao::rt
         skipNotificationId = notifications.post(NotificationRequest{
           .severity = NotificationSeverity::Warning,
           .message = message,
+          .lifetime = NotificationLifetime::sessionHistory(),
           .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
         });
       }
@@ -553,7 +555,7 @@ namespace ao::rt
       notifications.post(NotificationRequest{
         .severity = NotificationSeverity::Error,
         .message = playbackStoppedMessage(),
-        .sticky = true,
+        .lifetime = NotificationLifetime::untilDismissed(),
         .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
       });
     }
@@ -563,7 +565,7 @@ namespace ao::rt
       notifications.post(NotificationRequest{
         .severity = NotificationSeverity::Error,
         .message = terminalTrackFailureMessage(failure),
-        .sticky = true,
+        .lifetime = NotificationLifetime::untilDismissed(),
         .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
       });
     }

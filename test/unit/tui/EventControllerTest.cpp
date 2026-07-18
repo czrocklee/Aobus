@@ -770,7 +770,8 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Character("n")));
     CHECK(fixture.shell.overlay() == Overlay::None);
 
-    fixture.runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import");
+    fixture.runtime.notifications().post(
+      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory());
 
     CHECK(controller.handleEvent(ftxui::Event::Character("n")));
     CHECK(fixture.shell.overlay() == Overlay::Notifications);
@@ -806,11 +807,9 @@ namespace ao::tui::test
   {
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
-    auto now = std::chrono::steady_clock::time_point{};
     auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
       fixture.runtime.notifications(),
       [](uimodel::ActivityStatusViewState const&) {},
-      uimodel::ActivityStatusViewModelOptions{.clock = [&] { return now; }},
     };
     auto controller = EventController{fixture.screen,
                                       fixture.shell,
@@ -826,12 +825,10 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Info);
     CHECK(activityStatusViewModel.viewState().compact.text == "Lists");
-    CHECK(activityStatusViewModel.hasPendingAutoDismiss());
-
-    now += uimodel::kActivityStatusDefaultAutoDismissTimeout;
-
-    CHECK(activityStatusViewModel.expireTransientIfDue());
-    CHECK(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Idle);
+    CHECK_FALSE(activityStatusViewModel.hasPendingAutoDismiss());
+    auto const feed = fixture.runtime.notifications().feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().lifetime == rt::NotificationLifetime::transient());
   }
 
   TEST_CASE("EventController - notification mouse targets hide only activity presentation", "[tui][unit][event]")
@@ -840,8 +837,8 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto activityStatusViewModel =
       uimodel::ActivityStatusViewModel{fixture.runtime.notifications(), [](uimodel::ActivityStatusViewState const&) {}};
-    auto const notificationId =
-      fixture.runtime.notifications().post(rt::NotificationSeverity::Warning, "Partial import");
+    auto const notificationId = fixture.runtime.notifications().post(
+      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory());
     auto hitRegions = TuiHitRegions{};
     hitRegions.activityStatusBox = ftxui::Box{.x_min = 0, .x_max = 24, .y_min = 23, .y_max = 23};
     hitRegions.notificationDetailRows = {NotificationDetailRowHitRegion{

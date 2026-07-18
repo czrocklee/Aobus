@@ -19,7 +19,10 @@ namespace ao::uimodel::test
             "[uimodel][unit][status][activity]")
   {
     auto feedProjection = ActivityStatusFeedProjection{};
-    auto notification = entry(rt::NotificationId{12}, rt::NotificationSeverity::Error, "Write failed", true);
+    auto notification = entry(rt::NotificationId{12},
+                              rt::NotificationSeverity::Error,
+                              "Write failed",
+                              rt::NotificationLifetime::untilDismissed());
     notification.content.title = "Library Error";
     notification.content.iconName = "dialog-error-symbolic";
     notification.content.actions = {rt::NotificationAction{.id = "library.retry", .label = "Retry"}};
@@ -54,7 +57,7 @@ namespace ao::uimodel::test
       CHECK(detail.hasActiveProgress);
     }
 
-    SECTION("detail items expose title icon sticky severity and actions")
+    SECTION("detail items expose title icon severity actions and dismissibility")
     {
       auto const& item = feedProjection.viewState().detail.items[2];
 
@@ -62,14 +65,13 @@ namespace ao::uimodel::test
       CHECK(item.title == "Library Error");
       CHECK(item.message == "Write failed");
       CHECK(item.iconName == "dialog-error-symbolic");
-      CHECK(item.sticky);
       CHECK_FALSE(item.dismissible);
       REQUIRE(item.actions.size() == 1);
       CHECK(item.actions[0].id == "library.retry");
       CHECK(item.actions[0].label == "Retry");
     }
 
-    SECTION("clearable ids skip sticky and progress notifications")
+    SECTION("clearable ids skip until-dismissed and progress notifications")
     {
       auto const ids = feedProjection.locallyHideableNotificationIds(currentFeed);
 
@@ -77,7 +79,7 @@ namespace ao::uimodel::test
       CHECK(ids[0] == rt::NotificationId{13});
     }
 
-    SECTION("detail dismiss ignores sticky and progress notifications")
+    SECTION("detail dismiss ignores until-dismissed and progress notifications")
     {
       feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{12}, currentFeed);
       feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{14}, currentFeed);

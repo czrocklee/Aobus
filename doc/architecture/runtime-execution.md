@@ -47,6 +47,8 @@ Subscription registration, event delivery, and subscription teardown follow the 
 The notification service refines synchronous callback delivery with a revision queue.
 One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later revision rather than nesting signal delivery.
 Observer failure is contained after every connected observer has run and is reported through `Runtime::reportUnhandledException`, so it cannot unwind an already committed feed command.
+For transient notification lifetime, the service schedules a cancellable worker sleep through the same runtime and defers completion to the callback executor.
+Only a callback carrying the current notification id and lifetime generation may commit expiry; updates restart the duration, while cancellation merely avoids obsolete work.
 
 GTK supplies `GtkMainContextExecutor`, which wakes and drains work through `Glib::Dispatcher` on the GTK main context.
 TUI supplies its `Executor`, which posts work into the FTXUI screen loop.
@@ -151,6 +153,7 @@ The current Engine non-realtime queue and Player-to-executor task stream do not 
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - Synchronous observer delivery cannot destroy the emitting owner on the same callback stack; teardown is deferred to a later executor turn.
 - Reentrant notification publication is revision-queued, so observers of revision R retain one immutable snapshot even if an earlier observer commits revision R+1.
+- Notification expiry tasks never mutate feed state on a worker; a stale, cancelled, or owner-retired expiry callback is rejected on the callback executor.
 - A dedicated audio or device thread cannot become a general application worker.
 - Tests replace time, execution, or backend facilities through explicit executor and sleeper seams instead of relying on sleeps.
 
@@ -168,7 +171,7 @@ Runtime shutdown proceeds from producers toward dependencies:
 
 1. Interactive runtime owners stop playback-session scheduling and quiesce audio callback producers.
 2. Frontend subscriptions and adapters release their observations.
-3. `CoreRuntime` requests worker-pool stop and joins it while storage-backed collaborators still exist.
+3. `CoreRuntime` requests worker-pool stop and joins it while storage-backed and notification collaborators still exist.
 4. Library, source, completion, and notification collaborators are destroyed.
 5. The callback executor is released last within `CoreRuntime` ownership.
 
@@ -205,6 +208,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSequenceServiceTest.cpp`](../../test/unit/runtime/PlaybackSequenceServiceTest.cpp) exercise executor-affine application services.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises immutable revision delivery, reentrant commands, and observer-fault containment.
+- [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
 
 ## Related documents
 

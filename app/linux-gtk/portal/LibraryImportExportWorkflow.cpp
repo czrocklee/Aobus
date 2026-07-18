@@ -166,7 +166,9 @@ namespace ao::gtk::portal
     if (!result)
     {
       logStructuredError("Audio identity indexing failed", result.error());
-      _runtime.notifications().post(rt::NotificationSeverity::Warning, "Audio identity indexing failed");
+      _runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                    "Audio identity indexing failed",
+                                    rt::NotificationLifetime::sessionHistory());
       co_return;
     }
 
@@ -177,11 +179,14 @@ namespace ao::gtk::portal
 
     if (result->failureCount > 0)
     {
-      _runtime.notifications().post(rt::NotificationSeverity::Warning, "Audio identity indexing completed with errors");
+      _runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                    "Audio identity indexing completed with errors",
+                                    rt::NotificationLifetime::sessionHistory());
     }
     else if (result->completedCount > 0)
     {
-      _runtime.notifications().post(rt::NotificationSeverity::Info, "Audio identity indexing complete");
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Info, "Audio identity indexing complete", rt::NotificationLifetime::transient());
     }
   }
 
@@ -197,7 +202,8 @@ namespace ao::gtk::portal
       co_return;
     }
 
-    _runtime.notifications().post(rt::NotificationSeverity::Info, "Library exported successfully");
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Info, "Library exported successfully", rt::NotificationLifetime::transient());
   }
 
   async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflow(ImportExportCallbacks callbacks,
@@ -280,7 +286,8 @@ namespace ao::gtk::portal
       callbacks.onLibraryDataMutated();
     }
 
-    _runtime.notifications().post(rt::NotificationSeverity::Info, "Library imported successfully");
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Info, "Library imported successfully", rt::NotificationLifetime::transient());
   }
 
   async::Task<std::optional<rt::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure(
@@ -307,7 +314,8 @@ namespace ao::gtk::portal
 
     if (plan.count(rt::ScanClassification::Error) == 0)
     {
-      _runtime.notifications().post(rt::NotificationSeverity::Info, "Library is up to date");
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Info, "Library is up to date", rt::NotificationLifetime::transient());
       return true;
     }
 
@@ -319,7 +327,8 @@ namespace ao::gtk::portal
       }
     }
 
-    _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed");
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::sessionHistory());
     return true;
   }
 
@@ -357,15 +366,19 @@ namespace ao::gtk::portal
           message += std::format("; {}", scanCompletionSummary(*result));
         }
 
-        _runtime.notifications().post(rt::NotificationSeverity::Warning, std::move(message));
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Warning, std::move(message), rt::NotificationLifetime::sessionHistory());
       }
       else if (result->missingCount > 0)
       {
-        _runtime.notifications().post(rt::NotificationSeverity::Warning, scanCompletionSummary(*result));
+        _runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                      scanCompletionSummary(*result),
+                                      rt::NotificationLifetime::sessionHistory());
       }
       else
       {
-        _runtime.notifications().post(rt::NotificationSeverity::Info, scanCompletionSummary(*result));
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Info, scanCompletionSummary(*result), rt::NotificationLifetime::transient());
       }
 
       if (mode == ScanRequestMode::FastBootstrap)
@@ -377,8 +390,9 @@ namespace ao::gtk::portal
 
   void LibraryImportExportWorkflow::startAudioIdentityIndexing()
   {
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Info, "Library ready; indexing audio identity in background");
+    _runtime.notifications().post(rt::NotificationSeverity::Info,
+                                  "Library ready; indexing audio identity in background",
+                                  rt::NotificationLifetime::transient());
 
     spawnUiWorkflow(
       _runtime.async(),
@@ -396,11 +410,13 @@ namespace ao::gtk::portal
                                                    Error const& error)
   {
     logStructuredError(action, error);
-    _runtime.notifications().post(rt::NotificationSeverity::Error, notificationMessage);
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Error, notificationMessage, rt::NotificationLifetime::sessionHistory());
   }
 
   void LibraryImportExportWorkflow::presentInternalFailure(std::string_view notificationMessage)
   {
-    _runtime.notifications().post(rt::NotificationSeverity::Error, std::string{notificationMessage});
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Error, std::string{notificationMessage}, rt::NotificationLifetime::sessionHistory());
   }
 } // namespace ao::gtk::portal

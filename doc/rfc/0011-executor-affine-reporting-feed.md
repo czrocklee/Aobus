@@ -8,20 +8,18 @@ depends-on: none
 ---
 # RFC 0011: Executor-affine reporting feed
 
-Migration stages 1 and 2 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, and activity status renders each accepted feed revision once.
-Typed command outcomes, authoritative retention, typed lifetime, bounds, structured content, and detail discoverability remain proposal work in this RFC.
+Migration stages 1 through 3 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, owns typed transient lifetime and generation-checked expiry, and activity status renders each accepted feed revision once.
+Typed command outcomes, bounded history, keyed aggregation, structured content, and detail discoverability remain proposal work in this RFC.
 
 ## Problem
 
 The runtime notification model has useful semantic separation from logging and recovery, but the remaining retention, lifetime, content, and discoverability contracts do not yet form the complete bounded reporting feed proposed here.
 
 The first two migration stages replaced the previous mutable four-signal publication boundary with an executor-affine immutable update stream and one-revision UIModel projection.
-The remaining problem starts after publication: timeout is still presentation-local, the runtime feed remains unbounded, command outcomes remain inconsistent, and accepted content still includes ambiguous or inert fields.
+The remaining problem starts after transient expiry: retained runtime history remains unbounded, command outcomes remain inconsistent, and accepted content still includes ambiguous or inert fields.
 
-Retention is also split across owners.
-`NotificationService` stores timeout data but never removes an entry; activity status expires only its local compact projection.
-Ordinary info notifications posted by TUI, GTK workflows, and runtime producers can therefore remain in the authoritative feed for the complete runtime lifetime even after no presentation shows them.
-The feed and action vectors have no model-level bounds, while GTK independently caps displayed detail rows and actions.
+Runtime now removes `Transient(duration)` entries for every consumer and UIModel reserves its local timer for retained or synthetic presentation state.
+However, `SessionHistory` still has no history bound, and the feed and action vectors have no model-level bounds while GTK independently caps displayed detail rows and actions.
 
 Finally, `DetailOnly` can create detail state without a compact state.
 GTK currently opens detail only through a visible compact readout, making that entry unreachable in an idle-hidden layout, while TUI has a direct notification-center command.
@@ -112,12 +110,14 @@ The immutable update is an observation of an already accepted mutation, while th
 
 ### Authoritative retention
 
-`NotificationRequest` replaces the independent sticky and timeout interpretation with a typed lifetime policy:
+`NotificationRequest` replaces the independent sticky and timeout interpretation with a typed lifetime policy.
+The implemented subset is:
 
 - `Transient(duration)` remains authoritative until its service-owned expiry deadline;
 - `UntilDismissed` remains until explicit dismissal;
-- `WhileActive` is retained while progress or an owning operation is active and requires an explicit completion transition;
-- `SessionHistory` enters bounded recent history after completion.
+- `SessionHistory` remains retained for the current session and is the class eligible for bounded recent-history eviction in stage 4.
+
+`WhileActive` remains deferred until a real producer and explicit completion transition land together; the current model does not carry an inert lifetime case.
 
 The runtime service owns expiry and removes or transitions entries on the callback executor.
 UIModel may animate or locally suppress compact state, but it no longer treats a local timer as authoritative feed lifetime.
@@ -206,13 +206,14 @@ Operational diagnostics already belong in logs.
 ## Compatibility and migration
 
 The proposal changes in-process runtime and UIModel APIs; there is no persisted notification compatibility obligation.
-Existing producers migrate from sticky/timeout fields to typed lifetime and from retained ids to typed keys where aggregation is required.
+Existing producers have migrated from sticky/timeout fields to explicit typed lifetime.
+Migration from retained ids to typed keys remains part of aggregation work where required.
 
 Migration occurs in stages:
 
 1. Completed: introduce canonical update values, affinity checks, deterministic delivery, and remove the unconsumed compatibility signals.
-2. Completed for current feed commands: migrate UIModel to one revision stream and add regression tests for post/update and one-render-per-revision; service-owned expiry remains in stage 3.
-3. Introduce typed lifetime and service-owned expiry, then remove UIModel ownership of authoritative timeout.
+2. Completed: migrate UIModel to one revision stream and add regression tests for post/update and one-render-per-revision.
+3. Completed: introduce typed lifetime and service-owned expiry, generation-check stale timers, and restrict UIModel deadlines to presentation-only state.
 4. Add bounds, keyed update, and producer migration.
 5. Remove the inert template field and English prefix parsing, then add structured content atomically with its UIModel resolver when RFCs 0013 and 0030 are implemented.
 6. Remove the remaining ambiguous fields after all consumers move.
@@ -231,7 +232,7 @@ Reporting-owner migration coordinates with RFC 0013 but does not wait for its co
 - Updating a visible transient refreshes compact and detail content coherently.
 - Stale expiry tokens cannot clear updated or replacement activity.
 - Transient entries leave the authoritative feed after expiry, and bounded history tests prove memory does not grow with an unbounded sequence of info reports.
-- Active/sticky bound exhaustion fails explicitly instead of silently evicting actionable state.
+- Active/until-dismissed bound exhaustion fails explicitly instead of silently evicting actionable state.
 - GTK and TUI tests prove detail-only state has a reachable interaction path.
 - Existing playback aggregation, local suppression, progress, action-resolution, and dismissal tests migrate without changing their domain ownership.
 - Content tests prove every stored field affects projection or is absent; no compatibility field is retained only for a hypothetical future consumer.
@@ -243,7 +244,7 @@ Reporting-owner migration coordinates with RFC 0013 but does not wait for its co
 ## Open questions
 
 - Should immutable feed snapshots be values, shared immutable state, or revision-addressable views?
-- Which lifetime names best distinguish active progress, transient presentation, retained history, and explicit acknowledgement?
+- Should a future real progress owner add `WhileActive`, or express completion by an explicit update into one of the three implemented lifetimes?
 - What production bounds apply to history entries, text, actions, and total payload?
 - Does an update to a locally suppressed entry resurface by default, or only when the producer increments an explicit presentation generation?
 - Should detail-only support be mandatory for every interactive frontend or negotiated as a composition capability?

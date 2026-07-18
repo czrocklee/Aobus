@@ -27,7 +27,9 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusViewModel - projects runtime feed updates", "[uimodel][unit][status][activity]")
   {
     auto executor = rt::test::InlineExecutor{};
-    auto notifications = rt::NotificationService{executor};
+    auto sleeper = rt::test::ControlledSleeper{};
+    auto asyncRuntime = async::Runtime{executor, 1, {}, &sleeper};
+    auto notifications = rt::NotificationService{asyncRuntime};
     auto now = std::chrono::steady_clock::time_point{};
     auto latest = ActivityStatusViewState{};
     std::int32_t renderCount = 0;
@@ -44,7 +46,8 @@ namespace ao::uimodel::test
     SECTION("persistent warnings render and compact dismiss keeps the feed")
     {
       auto const renderCountBeforePost = renderCount;
-      auto const id = notifications.post(rt::NotificationSeverity::Warning, "Partial import", true);
+      auto const id = notifications.post(
+        rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::untilDismissed());
 
       CHECK(renderCount == renderCountBeforePost + 1);
       CHECK(latest.compact.kind == ActivityStatusKind::Warning);
@@ -62,17 +65,15 @@ namespace ao::uimodel::test
       CHECK(latest.detail.items.front().message == "Partial import");
     }
 
-    SECTION("transient info notifications expire through the injected clock")
+    SECTION("retained info compact expires presentation-locally through the injected clock")
     {
-      notifications.post(rt::NotificationRequest{.severity = rt::NotificationSeverity::Info,
-                                                 .message = "Saved playlist",
-                                                 .optTimeout = std::chrono::milliseconds{1500}});
+      notifications.post(rt::NotificationSeverity::Info, "Saved playlist", rt::NotificationLifetime::sessionHistory());
 
       CHECK(latest.compact.kind == ActivityStatusKind::Info);
       CHECK(latest.compact.text == "Saved playlist");
       CHECK(viewModel.hasPendingAutoDismiss());
 
-      now += std::chrono::milliseconds{1499};
+      now += kActivityStatusDefaultAutoDismissTimeout - std::chrono::milliseconds{1};
       CHECK_FALSE(viewModel.expireTransientIfDue());
       CHECK(latest.compact.kind == ActivityStatusKind::Info);
 
@@ -80,11 +81,21 @@ namespace ao::uimodel::test
       CHECK(viewModel.expireTransientIfDue());
       CHECK(latest.compact.kind == ActivityStatusKind::Idle);
       CHECK_FALSE(viewModel.hasPendingAutoDismiss());
+      CHECK(notifications.feed().entries.size() == 1);
+    }
+
+    SECTION("runtime-transient info does not create a presentation-local deadline")
+    {
+      notifications.post(rt::NotificationSeverity::Info, "Saved playlist", rt::NotificationLifetime::transient());
+
+      CHECK(latest.compact.kind == ActivityStatusKind::Info);
+      CHECK_FALSE(viewModel.hasPendingAutoDismiss());
     }
 
     SECTION("visible transient updates render the accepted revision once")
     {
-      auto const id = notifications.post(rt::NotificationSeverity::Info, "Saving playlist");
+      auto const id = notifications.post(
+        rt::NotificationSeverity::Info, "Saving playlist", rt::NotificationLifetime::sessionHistory());
       REQUIRE(latest.compact.kind == ActivityStatusKind::Info);
       REQUIRE(latest.compact.text == "Saving playlist");
 
@@ -121,7 +132,8 @@ namespace ao::uimodel::test
             "[uimodel][regression][status][activity]")
   {
     auto executor = rt::test::InlineExecutor{};
-    auto notifications = rt::NotificationService{executor};
+    auto runtime = async::Runtime{executor, 1};
+    auto notifications = rt::NotificationService{runtime};
     auto changes = rt::LibraryChanges{};
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
@@ -136,7 +148,6 @@ namespace ao::uimodel::test
     };
 
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto runtime = async::Runtime{executor};
     auto runtimeLibrary = rt::Library{runtime, libraryFixture.library(), changes};
     auto& taskService = runtimeLibrary.taskService();
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");

@@ -14,10 +14,8 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <memory>
-#include <string_view>
 #include <utility>
 
 namespace ao::rt
@@ -61,9 +59,7 @@ namespace ao::rt
       , libraryFacade{asyncRuntime, musicLibrary, libraryChanges}
       , completionService{musicLibrary, libraryChanges}
       , trackSourceCache{musicLibrary, libraryChanges}
-      , notificationService{*executorPtr,
-                            [this](std::exception_ptr exceptionPtr, std::string_view const context) noexcept
-                            { asyncRuntime.reportUnhandledException(std::move(exceptionPtr), context); }}
+      , notificationService{asyncRuntime}
     {
     }
 

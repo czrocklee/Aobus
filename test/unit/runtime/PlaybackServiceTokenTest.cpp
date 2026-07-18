@@ -361,7 +361,8 @@ namespace ao::rt::test
     auto failureGate = audio::test::StagedFailureGate{};
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};
-    auto notifications = NotificationService{executor};
+    auto runtime = async::Runtime{executor, 1};
+    auto notifications = NotificationService{runtime};
     auto playerPtr = std::make_unique<audio::Player>(
       executor, audio::test::makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate));
     auto servicePtr =
@@ -495,7 +496,8 @@ namespace ao::rt::test
     auto failureRelease = std::binary_semaphore{0};
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};
-    auto notifications = NotificationService{executor};
+    auto runtime = async::Runtime{executor, 1};
+    auto notifications = NotificationService{runtime};
     auto decoderFactory = [&](std::filesystem::path const& path, audio::Format const&)
     {
       return std::make_unique<GatedDecoderSession>(path == std::filesystem::path{"prepared-fail.flac"} ? &failureRelease

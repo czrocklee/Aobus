@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include <ao/Exception.h>
+#include <ao/async/AsyncExceptionHandler.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -13,18 +14,34 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    struct NotificationServiceFixture final
+    {
+      explicit NotificationServiceFixture(async::AsyncExceptionHandler exceptionHandler = {})
+        : runtime{executor, 1, std::move(exceptionHandler)}, service{runtime}
+      {
+      }
+
+      InlineExecutor executor;
+      async::Runtime runtime;
+      NotificationService service;
+    };
+  } // namespace
+
   TEST_CASE("NotificationService - post publishes one revision-correlated snapshot", "[runtime][unit][notification]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
 
-    auto const id = service.post(NotificationSeverity::Info, "test message");
+    auto const id = service.post(NotificationSeverity::Info, "test message", NotificationLifetime::sessionHistory());
 
     REQUIRE(updates.size() == 1);
     auto const& update = updates.front();
@@ -41,11 +58,11 @@ namespace ao::rt::test
 
   TEST_CASE("NotificationService - multiple posts assign distinct ids", "[runtime][unit][notification]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
 
-    auto const firstId = service.post(NotificationSeverity::Info, "first");
-    auto const secondId = service.post(NotificationSeverity::Info, "second");
+    auto const firstId = service.post(NotificationSeverity::Info, "first", NotificationLifetime::sessionHistory());
+    auto const secondId = service.post(NotificationSeverity::Info, "second", NotificationLifetime::sessionHistory());
 
     CHECK(firstId != secondId);
     CHECK(firstId == NotificationId{1});
@@ -54,13 +71,13 @@ namespace ao::rt::test
 
   TEST_CASE("NotificationService - rich post stores content state", "[runtime][unit][notification]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
 
     auto const id = service.post(NotificationRequest{
       .severity = NotificationSeverity::Info,
       .message = "Importing library",
-      .sticky = true,
+      .lifetime = NotificationLifetime::untilDismissed(),
       .activityPresentation = NotificationActivityPresentation::DetailOnly,
       .content =
         NotificationContentState{
@@ -83,7 +100,8 @@ namespace ao::rt::test
     auto const& entry = feed.entries.front();
     CHECK(entry.id == id);
     CHECK(entry.message == "Importing library");
-    CHECK(entry.sticky);
+    CHECK(entry.lifetime == NotificationLifetime::untilDismissed());
+    CHECK(entry.lifetimeGeneration == 0);
     CHECK(entry.activityPresentation == NotificationActivityPresentation::DetailOnly);
     CHECK(entry.content.templateId == "notification.import-progress");
     CHECK(entry.content.title == "Library import");
@@ -98,9 +116,9 @@ namespace ao::rt::test
 
   TEST_CASE("NotificationService - update commands publish their exact mutation kinds", "[runtime][unit][notification]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
-    auto const id = service.post(NotificationSeverity::Info, "old message", true);
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
+    auto const id = service.post(NotificationSeverity::Info, "old message", NotificationLifetime::sessionHistory());
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
 
@@ -138,9 +156,9 @@ namespace ao::rt::test
 
   TEST_CASE("NotificationService - ineffective commands do not publish", "[runtime][unit][notification]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
-    auto const id = service.post(NotificationSeverity::Info, "Scanning", true);
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
+    auto const id = service.post(NotificationSeverity::Info, "Scanning", NotificationLifetime::sessionHistory());
     std::int32_t updateCount = 0;
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++updateCount; });
 
@@ -156,11 +174,11 @@ namespace ao::rt::test
 
   TEST_CASE("NotificationService - dismissal updates identify every removed entry", "[runtime][unit][notification]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
-    auto const firstId = service.post(NotificationSeverity::Info, "a");
-    auto const secondId = service.post(NotificationSeverity::Info, "b");
-    auto const thirdId = service.post(NotificationSeverity::Info, "c");
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
+    auto const firstId = service.post(NotificationSeverity::Info, "a", NotificationLifetime::sessionHistory());
+    auto const secondId = service.post(NotificationSeverity::Info, "b", NotificationLifetime::sessionHistory());
+    auto const thirdId = service.post(NotificationSeverity::Info, "c", NotificationLifetime::sessionHistory());
     auto updates = std::vector<NotificationFeedUpdate>{};
     auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
 
@@ -181,17 +199,17 @@ namespace ao::rt::test
   TEST_CASE("NotificationService - observer failure is contained across committed revisions",
             "[runtime][regression][notification][concurrency]")
   {
-    auto executor = InlineExecutor{};
     auto recorder = AsyncExceptionRecorder{};
-    auto service = NotificationService{executor, recorder.handler()};
+    auto fixture = NotificationServiceFixture{recorder.handler()};
+    auto& service = fixture.service;
     auto laterObserverRevisions = std::vector<std::uint64_t>{};
     auto throwingSub =
       service.onFeedUpdated([](NotificationFeedUpdate const&) { throwException<Exception>("observer failed"); });
     auto laterSub = service.onFeedUpdated([&](NotificationFeedUpdate const& update)
                                           { laterObserverRevisions.push_back(update.revision); });
 
-    CHECK_NOTHROW(service.post(NotificationSeverity::Warning, "committed"));
-    CHECK_NOTHROW(service.post(NotificationSeverity::Info, "later"));
+    CHECK_NOTHROW(service.post(NotificationSeverity::Warning, "committed", NotificationLifetime::sessionHistory()));
+    CHECK_NOTHROW(service.post(NotificationSeverity::Info, "later", NotificationLifetime::sessionHistory()));
 
     CHECK(service.feed().revision == 2);
     CHECK(laterObserverRevisions == std::vector<std::uint64_t>{1, 2});
@@ -205,8 +223,8 @@ namespace ao::rt::test
   TEST_CASE("NotificationService - reentrant mutation preserves immutable revision order",
             "[runtime][regression][notification][concurrency]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
     auto observedRevisions = std::vector<std::uint64_t>{};
     auto observedMessages = std::vector<std::string>{};
     auto mutatingSub = service.onFeedUpdated(
@@ -245,7 +263,7 @@ namespace ao::rt::test
         observedMessages.push_back(update.feedPtr->entries.front().message);
       });
 
-    service.post(NotificationSeverity::Info, "initial");
+    service.post(NotificationSeverity::Info, "initial", NotificationLifetime::sessionHistory());
 
     CHECK(observedRevisions == std::vector<std::uint64_t>{1, 2});
     CHECK(observedMessages == std::vector<std::string>{"initial", "updated"});
@@ -255,19 +273,19 @@ namespace ao::rt::test
   TEST_CASE("NotificationService - reentrant post advances the id watermark before publication",
             "[runtime][regression][notification][concurrency]")
   {
-    auto executor = InlineExecutor{};
-    auto service = NotificationService{executor};
+    auto fixture = NotificationServiceFixture{};
+    auto& service = fixture.service;
     auto nestedId = kInvalidNotificationId;
     auto sub = service.onFeedUpdated(
       [&](NotificationFeedUpdate const& update)
       {
         if (update.revision == 1)
         {
-          nestedId = service.post(NotificationSeverity::Info, "nested");
+          nestedId = service.post(NotificationSeverity::Info, "nested", NotificationLifetime::sessionHistory());
         }
       });
 
-    auto const outerId = service.post(NotificationSeverity::Info, "outer");
+    auto const outerId = service.post(NotificationSeverity::Info, "outer", NotificationLifetime::sessionHistory());
 
     CHECK(outerId == NotificationId{1});
     CHECK(nestedId == NotificationId{2});

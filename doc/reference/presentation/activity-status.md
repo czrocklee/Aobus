@@ -27,7 +27,8 @@ The public authority is `app/include/ao/uimodel/status/activity/`; it may contai
 Its values are `Idle`, `Processing`, `Success`, `Info`, `Warning`, and `Error`.
 Frontend adapters map these semantic values to toolkit-specific styles.
 
-The shared default auto-dismiss timeout is `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
+The shared default presentation-only auto-dismiss timeout is `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
+It applies to retained info compact state and synthetic successful library-task completion, not to runtime `Transient` lifetime.
 
 ### Action values
 
@@ -65,12 +66,12 @@ An empty resolver or zero limit returns an empty vector.
 
 | Type | Fields |
 |---|---|
-| `ActivityDetailItem` | `id`, `severity`, `title`, `message`, `iconName`, `sticky`, `dismissible`, `optProgressMode`, `progressFraction`, `progressLabel`, `actions` |
+| `ActivityDetailItem` | `id`, `severity`, `title`, `message`, `iconName`, `dismissible`, `optProgressMode`, `progressFraction`, `progressLabel`, `actions` |
 | `ActivityTaskDetail` | `message`, `progressFraction` |
 | `ActivityDetailState` | `items`, `optLibraryTask`, `hasActiveProgress` |
 | `ActivityStatusViewState` | `compact`, `detail` |
 
-`ActivityDetailItem` defaults to invalid id `0`, info severity, empty text and actions, non-sticky, non-dismissible, no progress mode, and progress fraction `0.0`.
+`ActivityDetailItem` defaults to invalid id `0`, info severity, empty text and actions, non-dismissible, no progress mode, and progress fraction `0.0`.
 `ActivityTaskDetail` defaults to empty message and fraction `0.0`.
 
 `hasDetailContent(detail)` returns true when `detail.items` is non-empty or `detail.optLibraryTask` has a value.
@@ -101,7 +102,8 @@ Later duplicate, older, empty, or revision-mismatched feed updates do not invoke
 | `handleLibraryTaskProgress(std::string, double)` | `void` |
 | `handleLibraryTaskCompleted(LibraryTaskCompleted const&)` | `void` |
 
-`expireTransientIfDue()` returns `true` only when it performs an expiry transition.
+`expireTransientIfDue()` returns `true` only when it performs a presentation-local expiry transition.
+Runtime-transient notification expiry arrives through `NotificationFeedUpdate` and does not create a view-model deadline.
 
 ### Current generated compact text
 

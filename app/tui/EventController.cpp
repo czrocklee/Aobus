@@ -146,7 +146,10 @@ namespace ao::tui
   {
     if (_notifications != nullptr)
     {
-      _notifications->post(rt::NotificationRequest{.severity = severity, .message = std::move(message)});
+      auto const lifetime = severity == rt::NotificationSeverity::Info ? rt::NotificationLifetime::transient()
+                                                                       : rt::NotificationLifetime::sessionHistory();
+      _notifications->post(
+        rt::NotificationRequest{.severity = severity, .message = std::move(message), .lifetime = lifetime});
     }
   }
 

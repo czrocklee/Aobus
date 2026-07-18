@@ -87,15 +87,17 @@ It decides whether to retry, skip, retain the last valid state, stop a workflow,
 Core mechanisms report evidence; UIModel and frontends do not reconstruct subsystem recovery policy from an error string.
 
 Recovery and reporting are separate decisions.
-A service may recover and publish one summary warning, stop and publish a sticky error, return a rejection directly to the initiating editor, or log a best-effort preference failure without adding it to the notification feed.
+A service may recover and publish one session-history warning, stop and publish an until-dismissed error, return a rejection directly to the initiating editor, or log a best-effort preference failure without adding it to the notification feed.
 There is no process-wide recovery manager.
 
 ### Runtime reporting
 
 `CoreRuntime` owns one `NotificationService` for the active runtime composition.
-The service owns an executor-confined in-memory feed and commands that post, update, and dismiss entries.
+The service owns an executor-confined in-memory feed, typed notification lifetime, and commands that post, update, and dismiss entries.
 Each effective command commits one immutable revision snapshot and publishes one canonical update on the callback executor.
 Reentrant commands queue later revisions, while observer exceptions are contained after commit and forwarded to the async-runtime diagnostic handler with revision context.
+Transient lifetime is authoritative runtime state: cancellable sleeps return to the callback executor, and matching id-plus-generation evidence commits one expiry revision for every consumer.
+Session-history and until-dismissed entries do not schedule expiry.
 It does not inspect `Result`, catch subsystem exceptions, choose severity, retry operations, or decide which domain failures deserve a user-facing report.
 
 Domain services and application workflow coordinators decide when a semantic outcome becomes a notification and provide the frontend-neutral content.
@@ -105,7 +107,9 @@ Typed domain events remain available when consumers need structured recovery or 
 ### UIModel reporting projection
 
 UIModel adapts runtime reporting state into reusable platform-neutral presentation state.
-The activity-status feature accepts each canonical feed revision once, combines its immutable snapshot with library-task progress, selects compact and detail representations, and owns presentation-local timeout and suppression policy.
+The activity-status feature accepts each canonical feed revision once, combines its immutable snapshot with library-task progress, and selects compact and detail representations.
+It owns presentation-local timeout only for retained info or synthetic completion state; it observes runtime-transient expiry rather than starting a competing authoritative timer.
+It also owns presentation-local suppression policy.
 
 UIModel does not mutate the failed subsystem, select retry or skip behavior, or turn a locally hidden activity row into dismissal of the authoritative runtime feed unless an explicit command requests that mutation.
 Validation attached to an editor may remain local typed view state instead of entering the global notification feed.
@@ -261,6 +265,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`UiWorkflowTest.cpp`](../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
 - [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects the retained application-log adapter.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, immutable revisions, executor-owned observation, reentrant publication, and observer-fault containment.
+- [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects transient scheduling, callback-executor expiry, generation races, cancellation, and teardown.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSequenceServiceTest.cpp`](../../test/unit/runtime/PlaybackSequenceServiceTest.cpp) protect typed failure correlation, recovery ownership, and notification aggregation.
 - Activity-status tests under [`test/unit/uimodel/status/activity/`](../../test/unit/uimodel/status/activity) protect the runtime-feed to UIModel boundary and presentation-local suppression.
 - [`ActivityStatusWidgetTest.cpp`](../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects GTK rendering, and [`CommandErrorTest.cpp`](../../test/unit/cli/CommandErrorTest.cpp) protects the CLI command adapter.

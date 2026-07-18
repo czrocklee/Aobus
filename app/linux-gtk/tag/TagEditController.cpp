@@ -178,7 +178,8 @@ namespace ao::gtk
 
     if (result.rejected || result.stale)
     {
-      _runtime.notifications().post(rt::NotificationSeverity::Error, result.notificationText);
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, result.notificationText, rt::NotificationLifetime::sessionHistory());
 
       if (result.stale)
       {
@@ -198,7 +199,8 @@ namespace ao::gtk
       _callbacks.onTagsMutated();
     }
 
-    _runtime.notifications().post(rt::NotificationSeverity::Info, result.notificationText);
+    _runtime.notifications().post(
+      rt::NotificationSeverity::Info, result.notificationText, rt::NotificationLifetime::transient());
   }
 
   void TagEditController::createActions()
@@ -381,7 +383,8 @@ namespace ao::gtk
     if (!sessionResult)
     {
       _tagEditSessionPtr.reset();
-      _runtime.notifications().post(rt::NotificationSeverity::Error, sessionResult.error().message);
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::sessionHistory());
       return false;
     }
 

@@ -8,8 +8,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <optional>
-
 namespace ao::uimodel::test
 {
   TEST_CASE("ActivityStatusFeedProjection - applies notification activity presentation policy",
@@ -22,8 +20,7 @@ namespace ao::uimodel::test
       auto currentFeed = feed({entry(rt::NotificationId{11},
                                      rt::NotificationSeverity::Info,
                                      "Aobus Ready",
-                                     false,
-                                     std::nullopt,
+                                     rt::NotificationLifetime::transient(),
                                      rt::NotificationActivityPresentation::Hidden)});
 
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{11}));
@@ -37,8 +34,7 @@ namespace ao::uimodel::test
       auto currentFeed = feed({entry(rt::NotificationId{19},
                                      rt::NotificationSeverity::Info,
                                      "Index diagnostic",
-                                     false,
-                                     std::nullopt,
+                                     rt::NotificationLifetime::sessionHistory(),
                                      rt::NotificationActivityPresentation::DetailOnly)});
 
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{19}));
@@ -56,8 +52,7 @@ namespace ao::uimodel::test
       auto currentFeed = feed({entry(rt::NotificationId{25},
                                      rt::NotificationSeverity::Info,
                                      "Index diagnostic",
-                                     false,
-                                     std::nullopt,
+                                     rt::NotificationLifetime::sessionHistory(),
                                      rt::NotificationActivityPresentation::DetailOnly)});
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{25}));
 
@@ -79,8 +74,7 @@ namespace ao::uimodel::test
       auto currentFeed = feed({entry(rt::NotificationId{26},
                                      rt::NotificationSeverity::Info,
                                      "Aobus Ready",
-                                     false,
-                                     std::nullopt,
+                                     rt::NotificationLifetime::transient(),
                                      rt::NotificationActivityPresentation::Hidden)});
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{26}));
 
@@ -98,8 +92,7 @@ namespace ao::uimodel::test
       auto detailOnly = entry(rt::NotificationId{28},
                               rt::NotificationSeverity::Info,
                               "Index diagnostic",
-                              false,
-                              std::nullopt,
+                              rt::NotificationLifetime::sessionHistory(),
                               rt::NotificationActivityPresentation::DetailOnly);
       feedProjection.handleFeedUpdated(postedUpdate(feed({info, detailOnly}), rt::NotificationId{28}));
 
@@ -133,9 +126,12 @@ namespace ao::uimodel::test
       CHECK_FALSE(hasDetailContent(feedProjection.viewState().detail));
     }
 
-    SECTION("sticky info remains transient compact while staying detail eligible")
+    SECTION("until-dismissed info stays detail eligible while compact remains presentation-transient")
     {
-      auto currentFeed = feed({entry(rt::NotificationId{29}, rt::NotificationSeverity::Info, "Background note", true)});
+      auto currentFeed = feed({entry(rt::NotificationId{29},
+                                     rt::NotificationSeverity::Info,
+                                     "Background note",
+                                     rt::NotificationLifetime::untilDismissed())});
 
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{29}));
 
@@ -144,7 +140,7 @@ namespace ao::uimodel::test
       CHECK_FALSE(feedProjection.viewState().compact.persistent);
       CHECK(feedProjection.viewState().compact.optAutoDismissTimeout == kActivityStatusDefaultAutoDismissTimeout);
       REQUIRE(feedProjection.viewState().detail.items.size() == 1);
-      CHECK(feedProjection.viewState().detail.items[0].sticky);
+      CHECK_FALSE(feedProjection.viewState().detail.items[0].dismissible);
     }
   }
 } // namespace ao::uimodel::test

@@ -883,7 +883,8 @@ namespace ao::gtk::layout
         if (!sessionResult)
         {
           APP_LOG_ERROR("Custom metadata delete could not start: {}", sessionResult.error().message);
-          _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
+          _notifications.post(
+            rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::sessionHistory());
           return;
         }
 
@@ -923,7 +924,8 @@ namespace ao::gtk::layout
         if (!sessionResult)
         {
           APP_LOG_ERROR("Custom metadata add could not start: {}", sessionResult.error().message);
-          _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
+          _notifications.post(
+            rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::sessionHistory());
           return;
         }
 
@@ -970,7 +972,7 @@ namespace ao::gtk::layout
         }
 
         APP_LOG_ERROR("{} failed: {}", operation, message);
-        _notifications.post(rt::NotificationSeverity::Error, message);
+        _notifications.post(rt::NotificationSeverity::Error, message, rt::NotificationLifetime::sessionHistory());
         return true;
       }
 
@@ -1144,7 +1146,8 @@ namespace ao::gtk::layout
         if (!sessionResult)
         {
           APP_LOG_ERROR("Metadata edit could not start: {}", sessionResult.error().message);
-          _notifications.post(rt::NotificationSeverity::Error, sessionResult.error().message);
+          _notifications.post(
+            rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::sessionHistory());
           return;
         }
 

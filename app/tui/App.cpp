@@ -664,7 +664,7 @@ namespace ao::tui
         requestRefresh();
       },
       uimodel::ActivityStatusViewModelOptions{.libraryChanges = &runtime.library().changes()}};
-    runtime.notifications().post(rt::NotificationSeverity::Info, "Ready");
+    runtime.notifications().post(rt::NotificationSeverity::Info, "Ready", rt::NotificationLifetime::transient());
 
     auto nowPlayingSub = playback.onNowPlayingChanged([requestRefresh](auto const&) { requestRefresh(); });
     auto qualitySub = playback.onQualityChanged([requestRefresh](auto const&) { requestRefresh(); });

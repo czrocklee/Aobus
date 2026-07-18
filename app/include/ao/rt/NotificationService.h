@@ -1,29 +1,31 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
 #include "NotificationIds.h"
 #include "NotificationState.h"
 #include "Subscription.h"
-#include <ao/async/AsyncExceptionHandler.h>
-#include <ao/async/Executor.h>
 
-#include <chrono>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
+
+namespace ao::async
+{
+  class Runtime;
+}
 
 namespace ao::rt
 {
   class NotificationService final
   {
   public:
-    // The executor must outlive this service. Construction, every member call,
-    // and subscription teardown belong to its owning thread. Effective
-    // commands synchronously publish one immutable update after commit.
-    NotificationService(async::Executor& executor, async::AsyncExceptionHandler observerExceptionHandler = {});
+    // The runtime must outlive this service. Construction, every member call,
+    // and subscription teardown belong to its callback executor. Effective
+    // commands synchronously publish one immutable update after commit;
+    // transient expiry returns through that same executor.
+    explicit NotificationService(async::Runtime& runtime);
     ~NotificationService();
 
     NotificationService(NotificationService const&) = delete;
@@ -33,10 +35,7 @@ namespace ao::rt
 
     NotificationFeedState feed() const;
 
-    NotificationId post(NotificationSeverity severity,
-                        std::string message,
-                        bool sticky = false,
-                        std::optional<std::chrono::milliseconds> optTimeout = std::nullopt);
+    NotificationId post(NotificationSeverity severity, std::string message, NotificationLifetime lifetime);
     NotificationId post(NotificationRequest request);
 
     bool updateMessage(NotificationId id, std::string message);

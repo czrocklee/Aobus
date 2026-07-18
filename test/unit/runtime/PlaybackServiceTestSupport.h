@@ -163,12 +163,13 @@ namespace ao::rt::test
       return audio::test::installAudioFixture(libraryFixture.root(), fileName, libraryUri);
     }
 
-    // Declaration order matters: the executor must outlive PlaybackService,
-    // and playbackService (destroyed first)
-    // tears down its Player while the provider mock is still alive.
+    // Declaration order matters: the executor and async runtime must outlive
+    // NotificationService and PlaybackService, and playbackService (destroyed
+    // first) tears down its Player while the provider mock is still alive.
     MusicLibraryFixture libraryFixture;
     ExecutorT executor;
-    NotificationService notificationService{executor};
+    async::Runtime asyncRuntime{executor, 1};
+    NotificationService notificationService{asyncRuntime};
 
     std::shared_ptr<audio::test::SpyBackend<>> spyBackendPtr = std::make_shared<audio::test::SpyBackend<>>();
     fakeit::Mock<audio::BackendProvider> mockProvider;

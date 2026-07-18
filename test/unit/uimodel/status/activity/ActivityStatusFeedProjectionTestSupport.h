@@ -7,10 +7,8 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
 
-#include <chrono>
 #include <cstddef>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -21,16 +19,14 @@ namespace ao::uimodel::test
     rt::NotificationId id,
     rt::NotificationSeverity severity,
     std::string message,
-    bool sticky = false,
-    std::optional<std::chrono::milliseconds> optTimeout = std::nullopt,
+    rt::NotificationLifetime lifetime = rt::NotificationLifetime::sessionHistory(),
     rt::NotificationActivityPresentation activityPresentation = rt::NotificationActivityPresentation::Default)
   {
     return rt::NotificationEntry{
       .id = id,
       .severity = severity,
       .message = std::move(message),
-      .sticky = sticky,
-      .optTimeout = optTimeout,
+      .lifetime = lifetime,
       .activityPresentation = activityPresentation,
     };
   }

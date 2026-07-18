@@ -10,7 +10,7 @@ summary: Defines the shared UIModel projection of runtime notifications and libr
 ## Scope
 
 This specification owns the frontend-neutral UIModel projection that combines runtime notifications and active library-task progress into compact activity status and detail state.
-It defines eligibility, priority, grouping, ordering, transient lifetime, and presentation-local suppression.
+It defines eligibility, priority, grouping, ordering, presentation-local compact lifetime, and suppression.
 
 It does not own failure classification, recovery, the authoritative notification feed, library-task execution, or GTK/TUI rendering geometry.
 Those facts belong to the [failure and reporting architecture](../../architecture/failure-and-reporting.md), [notification feed specification](../reporting/notification-feed.md), [library task specification](../library/runtime/task-execution.md), and frontend documents.
@@ -29,7 +29,8 @@ It does not dismiss the runtime feed, mutate library work, choose recovery, or d
 - **Compact state** is the single inline activity summary shared by GTK and TUI.
 - **Detail state** is the narrower list of eligible notification rows plus optional active library-task detail.
 - A **persistent compact** is a warning or error summary that does not receive an automatic timeout.
-- A **transient compact** is an info or successful-completion summary with an automatic timeout.
+- A **presentation-transient compact** is a locally retained info or successful-completion summary with a UIModel-owned automatic timeout.
+- A **runtime-transient notification** is a feed entry whose authoritative removal is scheduled by `NotificationService`; it does not receive a second UIModel deadline.
 - **Local suppression** hides a notification only from the activity projection while its runtime feed entry remains authoritative for other consumers.
 - **Openable detail** means the detail state has a notification row or active library-task row; each frontend additionally controls how users reach it.
 
@@ -41,13 +42,14 @@ It does not dismiss the runtime feed, mutate library work, choose recovery, or d
 - Without an active task, unsuppressed `Default` error notifications outrank warnings; warnings outrank transient info and completion; an empty projection is idle.
 - Notifications at the selected highest persistent severity are grouped; lower severities remain in detail but do not contribute to that compact group.
 - `DetailOnly` notifications may enter detail but never compact, and `Hidden` notifications enter neither activity surface.
-- Plain `Default` info without sticky, progress, title, icon, or actions may create transient compact text but does not create a detail row.
+- Plain `Default` info without until-dismissed lifetime, progress, title, icon, or actions may create compact text but does not create a detail row.
 - Detail ordering places progress notifications first and orders each progress/non-progress partition by newest notification id first.
 - Compact or detail dismissal is local suppression and never calls `NotificationService::dismiss`.
-- Sticky or progress detail rows cannot be locally dismissed from activity status.
+- Until-dismissed or progress detail rows cannot be locally dismissed from activity status.
 - Local suppression is pruned after the corresponding notification leaves the runtime feed, so a future entry cannot inherit stale suppression.
 - Updating the source of a visible transient info compact refreshes compact and detail state from the same immutable feed snapshot.
-- Timeout expiry reprojects the current feed and reveals the highest unsuppressed persistent compact, if any.
+- Authoritative runtime expiry arrives as a feed revision and removes that notification from compact and detail projection together.
+- Presentation-local timeout expiry reprojects the current feed and reveals the highest unsuppressed persistent compact, if any, without removing retained feed state.
 
 ## State model
 
@@ -59,7 +61,7 @@ The projection retains:
 - locally suppressed compact notification ids;
 - locally suppressed detail notification ids;
 - in `ActivityStatusViewModel`, the last accepted notification-feed revision;
-- in `ActivityStatusViewModel`, an optional steady-clock deadline for the current transient compact.
+- in `ActivityStatusViewModel`, an optional steady-clock deadline only for the current presentation-transient compact.
 
 Initial projection includes current eligible detail rows and current unsuppressed persistent warning/error compact state.
 Historical plain info does not become compact merely because a view model subscribes after it was posted.
@@ -78,6 +80,7 @@ One accepted update is projected once from its immutable snapshot and invokes th
 Non-post feed mutations always refresh detail.
 They preserve a still-valid info or success transient when no persistent compact supersedes it, and remove a notification-derived transient when its source leaves the feed.
 Message, content, progress, and progress-clear mutations affecting the source of the visible info transient reproject that compact from the same snapshot instead of retaining stale text or content.
+An `Expired` mutation follows the same source-removal path as explicit dismissal but remains distinguishable in the canonical runtime update.
 
 ### Persistent compact grouping
 
@@ -100,12 +103,12 @@ A notification is detail-eligible when it is not `Hidden` and one of these condi
 
 - presentation is `DetailOnly`;
 - severity is `Warning` or `Error`;
-- it is sticky;
+- its lifetime is `UntilDismissed`;
 - it carries progress;
 - it has a non-empty title or icon name;
 - it has at least one action.
 
-Detail copies notification severity, title, message, icon, sticky state, progress, and actions into frontend-neutral activity values.
+Detail copies notification severity, title, message, icon, progress, actions, and derived dismissibility into frontend-neutral activity values.
 It also exposes whether any notification or library-task progress is active.
 
 ### Local dismissal
@@ -113,17 +116,22 @@ It also exposes whether any notification or library-task progress is active.
 Compact dismissal records every current compact source id as locally suppressed, resets compact to idle, and retains eligible detail.
 A later new persistent notification can reappear; suppressing an error does not suppress a later warning with a different id.
 
-Detail dismissal accepts only a currently eligible entry that is neither sticky nor carrying progress.
+Detail dismissal accepts only a currently eligible entry that is neither until-dismissed nor carrying progress.
 It hides that row and removes it from persistent compact grouping when applicable, without changing the runtime feed.
 
-### Transient lifetime
+### Runtime and presentation lifetime
 
-An info notification uses its explicit timeout when present, otherwise the shared default.
-Warning and error compact state has no auto-dismiss timeout.
-Stickiness alone does not make an info compact persistent: sticky info remains transient in compact while remaining detail-eligible.
+`NotificationService` owns authoritative `Transient(duration)` expiry.
+An info entry with that runtime lifetime produces no `optAutoDismissTimeout`; its `Expired` feed revision removes it for every consumer.
+This prevents GTK and TUI event-loop timing from becoming competing authorities over feed retention.
 
-`ActivityStatusViewModel` owns the steady-clock deadline and exposes explicit expiry checks for frontend event loops.
-The runtime feed stores timeout data but never performs this transition.
+`SessionHistory` and `UntilDismissed` info may still be compact-presented temporarily.
+Those retained entries use `kActivityStatusDefaultAutoDismissTimeout` as presentation-only suppression, and the runtime feed entry remains after the local compact disappears.
+Until-dismissed info remains detail-eligible and not locally dismissible.
+Warning and error compact state has no presentation auto-dismiss timeout regardless of lifetime.
+
+Successful library-task completion is synthetic UIModel state rather than a notification entry and also uses the shared presentation timeout.
+`ActivityStatusViewModel` therefore retains its injected steady clock and explicit expiry checks for these presentation-only cases.
 
 ## Failure and cancellation
 
@@ -156,10 +164,10 @@ These are GTK adapter limits, not runtime notification-model limits.
 ## Test map
 
 - [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves compact priority, task ownership, deferral, and completion.
-- [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) proves grouping, timeouts, source removal, and local suppression.
+- [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) proves grouping, runtime-transient timeout exclusion, source removal, and local suppression.
 - [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) proves eligibility, ordering, rich fields, progress, actions, and clearability.
 - [`ActivityStatusFeedProjectionPresentationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionPresentationTest.cpp) proves `Default`, `DetailOnly`, and `Hidden` behavior.
-- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) proves one render per accepted feed revision, coherent transient updates, injected-clock expiry, and library task events.
+- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) proves one render per accepted feed revision, coherent transient updates, presentation-only injected-clock expiry, and library task events.
 - [`ActivityStatusWidgetTest.cpp`](../../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects the GTK adapter and action-resolution boundary.
 
 ## Related documents

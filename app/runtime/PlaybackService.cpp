@@ -1113,7 +1113,8 @@ namespace ao::rt
       auto const notificationId = notifications.post(NotificationRequest{
         .severity = NotificationSeverity::Error,
         .message = message,
-        .sticky = !failure.recoverable,
+        .lifetime =
+          failure.recoverable ? NotificationLifetime::sessionHistory() : NotificationLifetime::untilDismissed(),
         .content = NotificationContentState{.topic = NotificationTopic::PlaybackError},
       });
       optLastPlaybackFailureNotification =

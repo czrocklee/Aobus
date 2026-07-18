@@ -70,8 +70,8 @@ namespace ao::uimodel
 
     bool hasRichDetail(rt::NotificationEntry const& entry)
     {
-      return entry.sticky || entry.content.optProgress || !entry.content.title.empty() ||
-             !entry.content.iconName.empty() || !entry.content.actions.empty();
+      return entry.lifetime.kind() == rt::NotificationLifetimeKind::UntilDismissed || entry.content.optProgress ||
+             !entry.content.title.empty() || !entry.content.iconName.empty() || !entry.content.actions.empty();
     }
 
     bool isDetailEligible(rt::NotificationEntry const& entry)
@@ -91,7 +91,8 @@ namespace ao::uimodel
 
     bool isDetailClearable(rt::NotificationEntry const& entry)
     {
-      return isDetailEligible(entry) && !entry.sticky && !entry.content.optProgress;
+      return isDetailEligible(entry) && entry.lifetime.kind() != rt::NotificationLifetimeKind::UntilDismissed &&
+             !entry.content.optProgress;
     }
 
     std::string compactProgressText(std::string message)
@@ -139,7 +140,6 @@ namespace ao::uimodel
         .title = entry.content.title,
         .message = entry.message,
         .iconName = entry.content.iconName,
-        .sticky = entry.sticky,
         .dismissible = isDetailClearable(entry),
       };
 
@@ -325,6 +325,7 @@ namespace ao::uimodel
       case rt::NotificationFeedMutationKind::ProgressCleared:
         return std::ranges::contains(update.affectedIds, _state.compact.sourceNotificationIds.front());
       case rt::NotificationFeedMutationKind::Posted:
+      case rt::NotificationFeedMutationKind::Expired:
       case rt::NotificationFeedMutationKind::Dismissed:
       case rt::NotificationFeedMutationKind::Cleared: return false;
     }
@@ -405,7 +406,12 @@ namespace ao::uimodel
     return feed.entries | std::views::filter(isDetailEligible) |
            std::views::filter([this](auto const& entry)
                               { return !std::ranges::contains(_detailDismissedNotificationIds, entry.id); }) |
-           std::views::filter([](auto const& entry) { return !entry.sticky && !entry.content.optProgress; }) |
+           std::views::filter(
+             [](auto const& entry)
+             {
+               return entry.lifetime.kind() != rt::NotificationLifetimeKind::UntilDismissed &&
+                      !entry.content.optProgress;
+             }) |
            std::views::transform(&rt::NotificationEntry::id) | std::ranges::to<std::vector>();
   }
 
@@ -541,9 +547,10 @@ namespace ao::uimodel
       .persistent = isPersistentSeverity(entry.severity),
       .dismissible = true,
       .hasDetails = isDetailEligible(entry),
-      .optAutoDismissTimeout = isPersistentSeverity(entry.severity)
-                                 ? std::optional<std::chrono::milliseconds>{}
-                                 : entry.optTimeout.value_or(kActivityStatusDefaultAutoDismissTimeout),
+      .optAutoDismissTimeout =
+        isPersistentSeverity(entry.severity) || entry.lifetime.kind() == rt::NotificationLifetimeKind::Transient
+          ? std::optional<std::chrono::milliseconds>{}
+          : std::optional{kActivityStatusDefaultAutoDismissTimeout},
       .sourceNotificationIds = {entry.id},
     };
   }
