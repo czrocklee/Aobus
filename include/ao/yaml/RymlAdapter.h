@@ -27,6 +27,8 @@
 
 namespace ao::yaml
 {
+  inline constexpr std::size_t kMaximumErrorContextBytes = 160;
+
   class ErrorCallbackState final
   {
   public:
@@ -149,6 +151,19 @@ namespace ao::yaml
   inline void setValue(ryml::NodeRef node, std::string_view value)
   {
     node.set_val(copyToArena(node, value));
+  }
+
+  inline std::string boundedErrorContext(std::string_view context)
+  {
+    if (context.size() <= kMaximumErrorContextBytes)
+    {
+      return std::string{context};
+    }
+
+    constexpr auto kSuffix = std::string_view{"..."};
+    auto result = std::string{context.substr(0, kMaximumErrorContextBytes - kSuffix.size())};
+    result += kSuffix;
+    return result;
   }
 
   /**
@@ -310,7 +325,7 @@ namespace ao::yaml
 
   inline bool tryReadScalar(ryml::ConstNodeRef const& node, std::string_view& value) noexcept
   {
-    if (!node.has_val())
+    if (!node.has_val() || node.val_is_null())
     {
       return false;
     }
@@ -355,12 +370,14 @@ namespace ao::yaml
   template<typename T>
   inline Result<T> scalarAs(ryml::ConstNodeRef const& node, std::string_view context)
   {
-    if (T value = {}; tryReadScalar(node, value))
+    auto parsed = Result<T>{std::in_place};
+
+    if (!tryReadScalar(node, *parsed))
     {
-      return value;
+      return makeError(Error::Code::FormatRejected, boundedErrorContext(context) + " must be a valid scalar");
     }
 
-    return makeError(Error::Code::FormatRejected, std::string{context} + " must be a valid scalar");
+    return parsed;
   }
 
   /**

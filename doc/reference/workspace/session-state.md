@@ -16,18 +16,19 @@ The required `presentationVersion` is currently `1`.
 It versions the nested presentation vocabulary, not the complete workspace document.
 The payload still has no root workspace schema version or migration registry; [RFC 0017](../../rfc/0017-versioned-workspace-session.md) owns that broader proposal.
 
-The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, focus fallback, commit, and failures after decoding.
+The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, focus fallback, commit, and failures after deserialization.
 The [application managed-state surface](../persistence/application-config.md) owns document and writer registration.
 
 ## Code boundary
 
 This surface belongs to the application runtime layer from the [system architecture](../../architecture/system-overview.md), as refined by the [workspace architecture](../../architecture/workspace.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
 `WorkspaceSessionState` remains the runtime semantic candidate.
-The private `WorkspaceSessionDocument` and nested stored DTOs in `app/runtime/WorkspaceSessionCodec.h` are the exact YAML model.
-`WorkspaceSessionCodec.cpp` converts between that document and runtime `TrackListViewConfig`, `TrackPresentationSpec`, and custom-preset values.
+The private `WorkspaceSessionDocument` and nested stored DTOs in `app/runtime/WorkspaceSessionYamlSchema.h` are the exact YAML model.
+`WorkspaceSessionYamlSchema.cpp` converts between that document and runtime `TrackListViewConfig`, `TrackPresentationSpec`, and custom-preset values.
 
-`WorkspaceService` selects the literal `workspace` group and uses `ConfigStore::loadExact` before semantic conversion.
-Frontends select the containing path but do not decode or redefine fields.
+`WorkspaceService` selects the literal `workspace` group and passes `WorkspaceSessionYamlSchema` explicitly to `ConfigStore::load()` and `save()`.
+The schema performs structural deserialization into its private persistence document, semantic conversion into `WorkspaceSessionState`, and candidate validation before the store can assign the result.
+Frontends select the containing path but do not deserialize or redefine fields.
 
 ## Surface
 
@@ -72,7 +73,7 @@ Each view `presentation` and custom-preset `spec` contains:
 | `redundantFields` | Sequence of stable track-field strings. | Required, known, and unique. |
 
 The stable token catalogs are owned by the [runtime track-field catalog](../library/model/track-field.md) and routed through the [persisted presentation-state reference](../presentation/persisted-state.md).
-Presentation ids are not resolved against the current catalog during decoding.
+Presentation ids are not resolved against the current catalog during deserialization.
 
 ### Sort term
 
@@ -95,26 +96,27 @@ Every `customPresets` entry contains:
 
 ## Validation rules
 
-- The group uses strict recursive aggregate/vector decoding; every listed member is required.
+- The explicit schema validates each mapping and sequence recursively; every listed member is required.
 - Unknown members, missing members, wrong node kinds, malformed scalar values, and malformed vector elements reject the whole workspace document.
 - `presentationVersion` must be `1`.
 - View list ids must be nonzero; existence in the active library is checked while candidate views are created.
 - Closed field, sort, group, and direction tokens must resolve exactly and case-sensitively.
 - Duplicate sort fields and duplicate values within either field collection reject the document.
-- Presentation ids must be nonempty and decoded presentations must have at least one visible field.
-- Encoding requires every live view to supply an exact presentation and rejects invalid enum values, duplicate sort fields, invalid list ids, and empty ids as `InvalidState`.
-- Encoding normalizes permitted live defaults, deduplicates field collections, and supplies `title` for an empty visible set, so canonical output always has a nonempty `visibleFields` sequence.
-- Structural and semantic decode completes before `WorkspaceService` creates or installs candidate views.
+- Presentation ids must be nonempty and deserialized presentations must have at least one visible field.
+- Serialization requires every live view to supply an exact presentation and rejects invalid enum values, duplicate sort fields, invalid list ids, and empty ids as `InvalidState`.
+- Serialization normalizes permitted live defaults, deduplicates field collections, and supplies `title` for an empty visible set, so canonical output always has a nonempty `visibleFields` sequence.
+- Structural and semantic deserialize completes before `WorkspaceService` creates or installs candidate views.
 
-There is no codec-level limit for view count, preset count, string length, sort-term count, or field count.
+There is no schema-level limit for view count, preset count, string length, sort-term count, or field count.
 Library binding, resource budgets, exact active-view identity, and complete candidate-set validation remain RFC 0017 concerns.
 
 ## Compatibility and versioning
 
-Version 1 is the first supported stable presentation encoding.
-Unversioned reflected workspace state, numeric enums, unknown closed tokens, and unsupported presentation versions are rejected without migration or automatic rewrite.
+Version 1 is the first supported stable presentation serialization.
+Unversioned legacy workspace state, numeric enums, unknown closed tokens, and unsupported presentation versions are rejected without migration or automatic rewrite.
+An unsupported presentation version returns `NotSupported` before version-specific sibling fields are interpreted.
 
-Strict decoding fixes the current root member set, so changing those keys cannot remain an unnoticed version-1 edit.
+Strict deserialization fixes the current root member set, so changing those keys cannot remain an unnoticed version-1 edit.
 However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no document kind, library binding, filter-expression dialect contract, exact active-view identity, collection budgets, or root migration policy.
 Those remaining compatibility limits are why this payload is not described as a complete version-1 workspace envelope.
 
@@ -162,19 +164,19 @@ workspace:
           - work
 ```
 
-Mapping order is not semantically significant, although canonical reflected emission follows DTO declaration order.
+Mapping order is not semantically significant; canonical explicit emission follows the field order shown above.
 
 ## Implementation authority
 
-- [`WorkspaceSessionCodec.h`](../../../app/runtime/WorkspaceSessionCodec.h) owns exact stored DTO members and the presentation-version constant.
-- [`WorkspaceSessionCodec.cpp`](../../../app/runtime/WorkspaceSessionCodec.cpp) owns stable conversion and semantic validation.
-- [`WorkspaceSessionState.h`](../../../app/include/ao/rt/WorkspaceSessionState.h) owns the decoded semantic candidate.
+- [`WorkspaceSessionYamlSchema.h`](../../../app/runtime/WorkspaceSessionYamlSchema.h) owns exact stored DTO members, the presentation-version constant, and the explicit store schema.
+- [`WorkspaceSessionYamlSchema.cpp`](../../../app/runtime/WorkspaceSessionYamlSchema.cpp) owns structural YAML mapping, stable conversion, and semantic validation.
+- [`WorkspaceSessionState.h`](../../../app/include/ao/rt/WorkspaceSessionState.h) owns the deserialized semantic candidate.
 - [`WorkspaceService.cpp`](../../../app/runtime/WorkspaceService.cpp) owns group selection, capture, candidate preparation, and installation.
 - [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) and [`TrackField.cpp`](../../../app/runtime/TrackField.cpp) own the stable vocabulary.
 
 ## Test authority
 
-- [`WorkspaceSessionCodecTest.cpp`](../../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) protects exact semantic conversion, canonical tokens, and invalid-object rejection.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects exact semantic conversion, canonical tokens, and invalid-object rejection.
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, unsupported, strict-schema, fallback, and transactional restoration outcomes.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects canonical persisted text and presentation reconstruction across runtime instances.
 - [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) protects exhaustive stable token lookup.

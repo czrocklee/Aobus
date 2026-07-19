@@ -5,6 +5,8 @@
 
 #include "app/AppConfigStore.h"
 #include "app/WindowState.h"
+#include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/BackendIds.h>
@@ -109,11 +111,12 @@ namespace ao::gtk::test
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    REQUIRE(runtime.playbackSessionConfigStore().save("playback-session", rt::AppSessionState{}));
+    REQUIRE(runtime.playbackSessionConfigStore().save(
+      rt::kPlaybackSessionConfigGroup, rt::PlaybackSessionState{}, rt::PlaybackSessionYamlSchema{}));
 
     auto window = MainWindow{runtime, configStorePtr, nullptr};
     REQUIRE(window.prepareForLibrarySwitch());
-    CHECK_FALSE(*runtime.playbackSessionConfigStore().contains("playback-session"));
+    CHECK_FALSE(*runtime.playbackSessionConfigStore().contains(rt::kPlaybackSessionConfigGroup));
 
     auto switchedSession = rt::AppSessionState{};
     switchedSession.lastLibraryPath = "/tmp/new-library";

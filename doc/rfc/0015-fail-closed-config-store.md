@@ -3,7 +3,7 @@ id: rfc.0015.fail-closed-config-store
 type: rfc
 status: rejected
 domain: persistence
-summary: Rejected a blocked-store transaction state machine after candidate decoding and one-shot candidate saves closed the verified destructive paths.
+summary: Rejected a blocked-store transaction state machine after candidate deserialization and one-shot candidate saves closed the verified destructive paths.
 depends-on: none
 ---
 # RFC 0015: Fail-closed grouped configuration transactions
@@ -16,20 +16,20 @@ The destructive persistence paths were real, but the proposed explicit store sta
 A smaller implementation makes the ordinary boundary fail closed:
 
 - existing files are read and parsed into local candidates, including top-level mapping validation, before becoming the live document;
-- `load()` and `loadExact()` decode into copies and assign the caller's target only after successful decoding;
-- result-bearing `save()` establishes the backing document, clones the complete live document, and encodes one or more group/value pairs into that candidate;
-- encoding, emission, or pre-replacement failure cannot expose the candidate as live state or backing bytes;
+- `load()` invokes an explicit owner schema and assigns the caller's target only after that schema returns a complete accepted candidate;
+- result-bearing `save()` and `saveTogether()` establish the backing document, clone the complete live document, and serialize every requested group into that private candidate;
+- serialization, emission, or pre-replacement failure cannot expose the candidate as live state or backing bytes;
 - successful atomic replacement precedes no-throw installation of the matching candidate as the live document;
 - `removeGroup()` uses the same candidate/replace/install path and avoids writing when the group is absent;
 - public `saveResult()` and `flush()` are gone, so callers cannot stage a partial live tree or emit an uninitialized one; and
-- production callers use one result-bearing save boundary, including one multi-group save for GTK layout and presentation state.
+- production callers use one result-bearing save boundary, including one `saveTogether()` operation for GTK layout and presentation state.
 
 The implementation deliberately does not add a sticky `Blocked` state, `reload()`, generic corrupt-document recovery, detached transaction objects, store generations, conflict detection, or commit receipts.
 One store instance remains externally confined to one serialized owner, and every mutation is already one synchronous complete-document candidate.
 There is no current detached or competing transaction for a generation to disambiguate.
 
-Generic ordinary container salvage also remains current behavior.
-Strict schema, version, validation, and recovery decisions belong to each payload owner; `loadExact()` and payload-specific codecs are available where the generic overlay policy is insufficient.
+[RFC 0032](0032-explicit-managed-state-schemas.md) subsequently removed generic aggregate salvage and `loadExact()` while preserving the candidate/replace/install boundary established here.
+Strict schema, version, validation, defaults, and recovery decisions now belong entirely to each explicitly selected payload schema.
 
 The [grouped configuration store specification](../spec/persistence/config-store.md) and [persistence architecture](../architecture/persistence-and-managed-state.md) are the current authorities.
 They supersede this proposal; this RFC remains the record of why the larger transaction and recovery system was not adopted.
@@ -49,11 +49,11 @@ That enabled a destructive sequence:
 Production workspace, GTK configuration, keymap, presentation, and layout writers used this save-then-flush pattern.
 Atomic file replacement prevented partial output bytes, but it could still faithfully install the wrong complete document.
 
-`saveResult()` also cleared or created a group in the live tree before invoking its codec.
-A codec exception could therefore leave damaged staged state that a later successful operation flushed.
+`saveResult()` also cleared or created a group in the live tree before invoking its schema.
+A schema exception could therefore leave damaged staged state that a later successful operation flushed.
 Sequential saves intended as one document update could similarly stage the first group before the second failed.
 
-Reads had the matching target-mutation hazard: ordinary aggregate decoding could modify known fields before a later field failed.
+Reads had the matching target-mutation hazard: ordinary aggregate deserialization could modify known fields before a later field failed.
 The proposal combined these concrete bugs with a broader strict-container, blocked-store, recovery, transaction-generation, and receipt design.
 
 ## Dependencies
@@ -71,15 +71,15 @@ The [atomic replacement specification](../spec/persistence/atomic-replacement.md
 The proposal sought to:
 
 - prevent an ordinary save from replacing a document that initialization rejected;
-- remove operations that emit an uninitialized or partially encoded live tree;
-- leave caller targets unchanged when group decoding fails;
+- remove operations that emit an uninitialized or partially serialized live tree;
+- leave caller targets unchanged when group deserialization fails;
 - isolate one or more group updates in a complete-document candidate;
-- reject malformed present elements through a universally strict generic codec;
+- reject malformed present elements through a universally strict generic schema;
 - expose blocked/reload/recovery states explicitly;
 - detect stale detached transactions through a store generation; and
 - return an applied-generation commit receipt.
 
-The initialization, candidate decode, candidate write, multi-group atomicity, result propagation, and destructive-API removal goals were achieved by the narrower implementation.
+The initialization, candidate deserialization, candidate write, multi-group atomicity, result propagation, and destructive-API removal goals were achieved by the narrower implementation.
 Universal strictness, explicit recovery, detached transactions, generations, and receipts were deliberately not adopted.
 
 ## Non-goals
@@ -95,7 +95,7 @@ Universal strictness, explicit recovery, detached transactions, generations, and
 ## Rejected design
 
 The rejected design replaced the lazy-load flag with `Uninitialized`, `ReadyNew`, `ReadyExisting`, and sticky `Blocked` states.
-It added explicit reload and recovery commands, a candidate-returning read API with presence, strict overlay/exact codecs, and a move-only `ConfigTransaction` that owned a whole-document candidate.
+It added explicit reload and recovery commands, a candidate-returning read API with presence, strict overlay/exact schemas, and a move-only `ConfigTransaction` that owned a whole-document candidate.
 
 Transactions would have captured a monotonically increasing store generation.
 Commit would have rejected stale generations, atomically replaced the file, installed the candidate, advanced the generation, and returned a `ConfigCommitReceipt` identifying the applied store generation.
@@ -122,8 +122,8 @@ Result<> load(std::string_view group, T& target);
 Result<> loadExact(std::string_view group, T& target);
 ```
 
-The selected codec runs against the candidate.
-Only complete decode success moves that candidate into the caller's target.
+The selected schema runs against the candidate.
+Only complete deserialize success moves that candidate into the caller's target.
 Missing groups retain the existing successful no-change behavior; callers use `contains()` when presence matters.
 
 Writes expose one operation rather than staging plus flush:
@@ -144,7 +144,7 @@ Each effective write:
 5. atomically replaces the backing file; and
 6. moves the candidate into live state only after replacement succeeds.
 
-An encoding or emitter exception unwinds the isolated candidate.
+An serialization or emitter exception unwinds the isolated candidate.
 A returned atomic-replacement error also leaves live state unchanged.
 The next successful operation therefore cannot accidentally include a group from the failed attempt.
 
@@ -174,11 +174,11 @@ That remaining product behavior belongs to each workflow and reporting policy; i
 
 ### Remove only the void wrapper
 
-Rejected because a public bare `flush()` and live-tree mutation would still permit uninitialized or partially encoded state to reach disk.
+Rejected because a public bare `flush()` and live-tree mutation would still permit uninitialized or partially serialized state to reach disk.
 
 ### Make `flush()` initialize first
 
-Rejected because initialization alone would not isolate failed encoding or combine related group updates.
+Rejected because initialization alone would not isolate failed serialization or combine related group updates.
 The split API would continue to make correctness a caller sequencing rule.
 
 ### Require an explicit transaction object
@@ -194,7 +194,7 @@ Current failures preserve the original bytes and retry initialization; only the 
 ### Make every generic container strict
 
 Deferred because this is persisted-format compatibility and recovery policy, not required write isolation.
-Versioned owners can use exact or domain-specific decoding and validation.
+Versioned owners can use exact or domain-specific deserialization and validation.
 
 ## Compatibility and migration
 
@@ -203,7 +203,7 @@ The void `save()`, public `saveResult()`, and public `flush()` operations were r
 Candidate loads now require copy-constructible, move-assignable payload values, and `removeGroup()` treats absence as success rather than returning a separate removed/not-removed boolean.
 
 No path, group name, or payload schema changed.
-Ordinary and exact codec meanings remain as documented, including ordinary container salvage.
+Ordinary and exact schema meanings remain as documented, including ordinary container salvage.
 The store does not rewrite a file merely because it loads successfully, and rejected files remain byte-identical until an explicit successful save is authorized.
 
 ## Validation
@@ -211,9 +211,9 @@ The store does not rewrite a file merely because it loads successfully, and reje
 The narrower implementation is accepted with tests proving that:
 
 - malformed and non-mapping backing documents are rejected and preserved byte-for-byte;
-- a failed batch encoder changes neither disk nor later live-state commits;
+- a failed batch serializer changes neither disk nor later live-state commits;
 - a pre-replacement write failure preserves the previous bytes and does not enter later live-state commits;
-- a failed ordinary decode leaves a seeded target unchanged;
+- a failed ordinary deserialize leaves a seeded target unchanged;
 - one save commits several groups together and preserves unrelated groups;
 - removal is durable, exact, idempotent, and does not create a missing file;
 - read-only stores reject writes and preserve missing-file behavior;

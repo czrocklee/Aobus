@@ -18,7 +18,7 @@ Transient quick-filter behavior belongs to [track filtering](track-filter.md).
 ## Code boundary
 
 This contract spans the **application runtime**, **UIModel**, and GTK persistence adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation](../../architecture/presentation.md), [workspace](../../architecture/workspace.md), and [persistence and managed-state](../../architecture/persistence-and-managed-state.md) architectures.
-Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map, recommendation policy, and versioned semantic codec; GTK owns the per-library persistence location and save boundary.
+Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map, recommendation policy, and versioned semantic schema; GTK owns the per-library persistence location and save boundary.
 
 ## Terminology
 
@@ -104,7 +104,8 @@ The exact fields belong to the [persisted presentation-state reference](../../re
 
 The persisted value is a presentation id, so changing or removing a built-in id requires a compatibility path.
 Unknown custom ids remain tolerated because custom presentations may be removed independently.
-Unversioned reflected preference maps and unsupported future versions are rejected without migration or automatic rewrite.
+Unversioned legacy preference maps and unsupported future versions are rejected without migration or automatic rewrite.
+The explicit schema returns `NotSupported` for a future version before interpreting its preferences.
 
 TUI currently uses runtime presentation state but does not use the GTK per-library preference store.
 
@@ -118,7 +119,7 @@ Quick-filter controls and Smart List editors may display the current presentatio
 ## Implementation map
 
 - [`ListPresentationPreferenceStore`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceStore.h) owns the map and resolution order.
-- [`ListPresentationPreferenceCodec`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) owns the versioned document and semantic conversion.
+- [`ListPresentationPreferenceYamlSchema`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) owns explicit YAML mapping, the versioned document, and semantic conversion.
 - [`TrackPresentationRecommender`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationRecommender.h) owns source-aware fallback policy.
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns active presentation state.
@@ -128,7 +129,7 @@ Quick-filter controls and Smart List editors may display the current presentatio
 ## Test map
 
 - [`ListPresentationPreferenceStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp) proves map behavior, resolution, and fallbacks.
-- [`ListPresentationPreferenceCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceCodecTest.cpp) proves version gates, opaque ids, and whole-group rejection.
+- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
 - [`TrackPresentationRecommenderTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp) proves source-aware recommendations.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) proves per-library persistence.
 - Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime/) prove snapshot replay semantics.

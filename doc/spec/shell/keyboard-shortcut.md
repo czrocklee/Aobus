@@ -60,7 +60,8 @@ This reconciliation prevents removed or reset shortcuts from remaining active un
 
 ## Failure and cancellation
 
-Invalid persisted chord strings are skipped and diagnosed; valid siblings still apply.
+The owner-local persistence schema rejects a non-mapping group, duplicate or empty action id, non-sequence binding, or null/non-scalar sequence element as one failed candidate; the existing effective map remains unchanged.
+After that structural boundary accepts the group, invalid chord strings are skipped and diagnosed while valid siblings still apply.
 Neutral keys that cannot map to GTK accelerators are skipped with a warning.
 Unknown action ids are reportable by the model and cannot become valid catalog-backed editor rows.
 
@@ -91,7 +92,7 @@ They remain GTK-owned until a shared scoped-shortcut contract is defined.
 
 ## Implementation map
 
-- [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp), [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp), and [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) own neutral policy and encoding.
+- [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp), [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp), and [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) own neutral policy and the explicit override schema.
 - [`KeymapApplicator.cpp`](../../../app/linux-gtk/app/KeymapApplicator.cpp) and [`GtkAccelTranslator.cpp`](../../../app/linux-gtk/app/GtkAccelTranslator.cpp) own GTK projection.
 - [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing and conflict confirmation.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) owns the global group adapter.

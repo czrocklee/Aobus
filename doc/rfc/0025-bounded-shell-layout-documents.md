@@ -3,7 +3,7 @@ id: rfc.0025.bounded-shell-layout-documents
 type: rfc
 status: draft
 domain: application-shell
-summary: Proposes strict version gates and resource budgets for shell layout decoding, validation, template expansion, installation, and persistence.
+summary: Proposes strict version gates and resource budgets for shell layout deserialization, validation, template expansion, installation, and persistence.
 depends-on: none
 ---
 # RFC 0025: Bounded shell layout documents
@@ -13,7 +13,7 @@ depends-on: none
 Shell layout documents are user-controlled YAML that can drive recursive model construction and GTK widget creation, but the current loading boundary is permissive and effectively unbounded.
 
 The serialized document contains a required `version` field and currently emits version `1`.
-The decoder reads any numeric version into `LayoutDocument`, and `ShellLayoutStoreTest` explicitly proves that version `42` round-trips.
+The reader accepts any numeric version into `LayoutDocument`, and `ShellLayoutStoreTest` explicitly proves that version `42` round-trips.
 Component-state documents reject unsupported versions, while authored layout documents do not.
 An older application can therefore interpret and later rewrite a future layout using version-1 assumptions.
 
@@ -28,7 +28,7 @@ The file path is constrained by preset id, but the content has no product limits
 
 Cycle detection prevents a direct recursive template loop from recursing forever, but it does not bound a long acyclic chain or multiplicative expansion.
 A small authored template graph can produce a much larger effective tree when referenced repeatedly.
-Large values also flow through generic `ConfigStore`/RapidYAML decoding before the shell catalog has an opportunity to validate component semantics.
+Large values also flow through generic `ConfigStore`/RapidYAML deserialization before the shell catalog has an opportunity to validate component semantics.
 
 Malformed custom layouts currently fall back to the built-in preset, which is a useful availability policy.
 However, parse failure, unsupported version, resource rejection, schema rejection, template-budget rejection, and component validation are not one typed candidate boundary.
@@ -41,18 +41,18 @@ Layout budgets must account for template expansion and widget construction, conc
 
 - Hard: None.
 - Conditional: None.
-- Integration: [RFC 0010](0010-versioned-presentation-state.md), [RFC 0032](0032-explicit-managed-state-codecs.md).
+- Integration: [RFC 0010](0010-versioned-presentation-state.md), [RFC 0032](0032-explicit-managed-state-schemas.md).
 
 RFC 0010 supplies the implemented stable presentation-state pattern; this RFC should align component, action, and node identifiers with its explicit-version and strict-candidate principles where the shell model shares those risks.
-RFC 0032 proposes replacing reflected aggregate persistence with owner-local explicit codecs; joint implementations use that codec boundary while this RFC remains the authority for shell-specific versions, limits, fallback, and preservation.
+RFC 0032 proposes replacing reflected aggregate persistence with owner-local explicit schemas; joint implementations use that schema boundary while this RFC remains the authority for shell-specific versions, limits, fallback, and preservation.
 The current [atomic replacement contract](../spec/persistence/atomic-replacement.md) provides complete private-file replacement for saved custom documents.
-The current [grouped configuration store](../spec/persistence/config-store.md) already isolates candidate encoding and reports whole-document replacement; this RFC must expose and classify that result at the shell workflow boundary.
+The current [grouped configuration store](../spec/persistence/config-store.md) already isolates candidate serialization and reports whole-document replacement; this RFC must expose and classify that result at the shell workflow boundary.
 
 ## Goals
 
 - Reject unsupported layout document versions before semantic interpretation or live installation.
-- Bound input bytes, decoded model cost, nesting, template expansion, and effective GTK construction.
-- Use one candidate decode/validate/expand pipeline for startup, editor preview, save, and programmatic installation.
+- Bound input bytes, deserialized model cost, nesting, template expansion, and effective GTK construction.
+- Use one candidate deserialization/validation/expansion pipeline for startup, editor preview, save, and programmatic installation.
 - Preserve the last valid live shell when a candidate fails.
 - Preserve unsupported or rejected custom files for recovery instead of rewriting them through an older model.
 - Produce typed diagnostics that distinguish absence, parse, schema, version, budget, template, catalog, and I/O outcomes.
@@ -70,7 +70,7 @@ The current [grouped configuration store](../spec/persistence/config-store.md) a
 
 ## Proposed design
 
-### Shell-owned decode limits
+### Shell-owned deserialize limits
 
 Define a `LayoutDocumentLimits` product value with conservative defaults and injectable test values.
 It covers at least:
@@ -82,7 +82,7 @@ maximum templates and references
 maximum children per node
 maximum properties/layout entries per node
 maximum key, scalar string, tooltip, and string-list sizes
-maximum total decoded string bytes
+maximum total deserialized string bytes
 maximum template expansion depth
 maximum effective nodes and effective total value cost
 maximum GTK components admitted for one build
@@ -100,7 +100,7 @@ All authored layouts pass through one platform-neutral candidate pipeline:
 ```text
 bounded bytes
   -> YAML parse with contained diagnostics
-  -> strict root/schema decode
+  -> strict root/schema deserialize
   -> supported-version dispatch
   -> authored-tree budget validation
   -> component/action/node-id semantic validation
@@ -117,7 +117,7 @@ Built-in documents are validated in tests and may fail fast as a packaging invar
 
 ### Strict version dispatch
 
-Version `1` decoding validates the documented version-1 surface.
+Version `1` deserialization validates the documented version-1 surface.
 An absent, malformed, zero, or unsupported version yields a typed version/schema rejection before node interpretation.
 
 The store retains the original custom file untouched on unsupported version.
@@ -126,20 +126,20 @@ If a future version has a registered migrator, migration produces a separate can
 
 Version gates apply independently to authored layout and component-state documents because they have different schemas and lifecycle owners.
 
-### Bounded model decode
+### Bounded model deserialize
 
-Decode into a fresh candidate, never into the active document.
+Deserialize into a fresh candidate, never into the active document.
 Traversal accounts for every root, child, tooltip, template root, property entry, sequence item, and owned string.
 
 Reject wrong node kinds and missing required `type`/root structure rather than relying on empty defaults to become unknown components.
 Unknown top-level or node keys follow an explicit version-1 policy: either reject them for fail-closed authoring or preserve them in an extension map.
-Silently dropping them during re-encode is not acceptable for a document that the application claims to edit losslessly.
+Silently dropping them during re-serialize is not acceptable for a document that the application claims to edit losslessly.
 
 The initial proposal recommends strict rejection for unknown structural keys and catalog-governed handling for unknown component types/properties.
 
 ### Bounded template expansion
 
-Template expansion receives a budget object and returns `Result<ExpandedLayout>` rather than encoding every failure as an ordinary diagnostic node.
+Template expansion receives a budget object and returns `Result<ExpandedLayout>` rather than representing every failure as an ordinary diagnostic node.
 It tracks:
 
 - the current reference stack for cycle diagnostics;

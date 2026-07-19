@@ -32,7 +32,6 @@ namespace ao::gtk::test
     {
       auto store = ShellLayoutStore{layoutsDir};
       auto doc = uimodel::LayoutDocument{};
-      doc.version = 42;
       doc.root.type = "box";
       doc.root.id = "my-root";
 
@@ -42,7 +41,7 @@ namespace ao::gtk::test
       auto const optLoaded = store2.load("classic");
 
       REQUIRE(optLoaded);
-      CHECK(optLoaded->version == 42);
+      CHECK(optLoaded->version == uimodel::kLayoutDocumentVersion);
       CHECK(optLoaded->root.type == "box");
       CHECK(optLoaded->root.id == "my-root");
     }
@@ -62,10 +61,20 @@ namespace ao::gtk::test
       CHECK(!optResult);
     }
 
+    SECTION("load rejects an existing file without the layout group")
+    {
+      std::filesystem::create_directories(layoutsDir);
+      std::ofstream{layoutsDir / "missing-group.yaml"} << "other: {}\n";
+
+      auto const store = ShellLayoutStore{layoutsDir};
+      CHECK_FALSE(store.load("missing-group"));
+    }
+
     SECTION("remove deletes the file, remove on a missing file is a no-op")
     {
       auto store = ShellLayoutStore{layoutsDir};
       auto doc = uimodel::LayoutDocument{};
+      doc.root.type = "box";
       store.save(doc, "classic");
 
       CHECK(std::filesystem::exists(layoutsDir / "classic.yaml"));

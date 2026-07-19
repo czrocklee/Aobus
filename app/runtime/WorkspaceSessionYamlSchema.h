@@ -5,6 +5,8 @@
 
 #include <ao/Error.h>
 
+#include <ryml.hpp>
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -18,7 +20,7 @@ namespace ao::rt::detail
 {
   inline constexpr std::uint32_t kWorkspacePresentationVersion = 1;
 
-  // Persistence DTOs: member names are the exact versioned YAML keys.
+  // Persistence DTOs isolate the versioned wire shape from live workspace state.
   struct StoredTrackSortTerm final
   {
     std::string field{};
@@ -56,6 +58,12 @@ namespace ao::rt::detail
     std::vector<StoredCustomTrackPresentationPreset> customPresets{};
   };
 
-  Result<WorkspaceSessionDocument> encodeWorkspaceSession(WorkspaceSessionState const& state);
-  Result<WorkspaceSessionState> decodeWorkspaceSession(WorkspaceSessionDocument const& document);
+  Result<WorkspaceSessionDocument> toWorkspaceSessionDocument(WorkspaceSessionState const& state);
+  Result<WorkspaceSessionState> workspaceSessionStateFromDocument(WorkspaceSessionDocument const& document);
+
+  struct WorkspaceSessionYamlSchema final
+  {
+    Result<> serialize(ryml::NodeRef node, WorkspaceSessionState const& state) const;
+    Result<WorkspaceSessionState> deserialize(ryml::ConstNodeRef node, WorkspaceSessionState const& seed) const;
+  };
 } // namespace ao::rt::detail

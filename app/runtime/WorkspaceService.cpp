@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "WorkspaceSessionCodec.h"
+#include "WorkspaceSessionYamlSchema.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
@@ -798,15 +798,7 @@ namespace ao::rt
       });
     }
 
-    auto document = detail::encodeWorkspaceSession(state);
-
-    if (!document)
-    {
-      APP_LOG_ERROR("WorkspaceService: Failed to encode session - {}", document.error().message);
-      return;
-    }
-
-    if (auto const result = store.save("workspace", *document); !result)
+    if (auto const result = store.save("workspace", state, detail::WorkspaceSessionYamlSchema{}); !result)
     {
       APP_LOG_ERROR("WorkspaceService: Failed to save session - {}", result.error().message);
     }
@@ -815,38 +807,23 @@ namespace ao::rt
   Result<WorkspaceCommitReceipt> WorkspaceService::restoreSession(ConfigStore& store)
   {
     _implPtr->ensureOnExecutor();
-    auto const containsWorkspace = store.contains("workspace");
+    auto state = WorkspaceSessionState{};
+    auto const loaded = store.load("workspace", state, detail::WorkspaceSessionYamlSchema{});
 
-    if (!containsWorkspace)
+    if (!loaded)
     {
-      if (containsWorkspace.error().code == Error::Code::NotFound)
+      if (loaded.error().code == Error::Code::NotFound)
       {
         return _implPtr->noChangeReceipt();
       }
 
-      return std::unexpected{containsWorkspace.error()};
+      return std::unexpected{loaded.error()};
     }
 
-    if (!*containsWorkspace)
+    if (!*loaded)
     {
       return _implPtr->noChangeReceipt();
     }
-
-    auto document = detail::WorkspaceSessionDocument{};
-
-    if (auto const result = store.loadExact("workspace", document); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    auto stateResult = detail::decodeWorkspaceSession(document);
-
-    if (!stateResult)
-    {
-      return std::unexpected{stateResult.error()};
-    }
-
-    auto state = std::move(*stateResult);
 
     auto createdViewIds = std::vector<ViewId>{};
     createdViewIds.reserve(state.openViews.size());

@@ -19,14 +19,16 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  inline constexpr std::uint32_t kLayoutDocumentVersion = 1;
+
   struct LayoutDocument final
   {
-    std::uint32_t version = 1;
+    std::uint32_t version = kLayoutDocumentVersion;
     LayoutNode root{};
     std::map<std::string, LayoutNode, std::less<>> templates{};
   };
 
-  Result<> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc);
+  Result<bool> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc);
 
   Result<> saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc);
 } // namespace ao::uimodel

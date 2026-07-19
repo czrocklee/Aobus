@@ -15,12 +15,12 @@ Capture, validation, restore, normalization, dirty, retry, discard, and shutdown
 ## Code boundary
 
 The payload belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [playback](../../architecture/playback.md) and [persistence](../../architecture/persistence-and-managed-state.md) architectures.
-It is encoded through the runtime grouped configuration store.
+`PlaybackSessionYamlSchema` explicitly maps and validates the payload before `PlaybackSessionPersistence` installs it through the runtime grouped configuration store.
 
 ## Surface
 
 The literal top-level group is `playback-session`.
-Exact decoding requires every aggregate field:
+The schema requires every root field:
 
 | Field | C++ type | Default | Meaning |
 |---|---|---|---|
@@ -68,7 +68,9 @@ The payload contains none of these:
 - Volume must be finite and within `[0, 1]` for stored-state acceptance.
 - Sort fields and directions must be valid, fields cannot repeat, and term count cannot exceed the field catalog.
 - The quick filter must parse and compile under the active library vocabulary.
-- Exact aggregate decode rejects missing fields and wrong node kinds before semantic validation.
+- Root and sort-term mappings reject unknown and duplicate fields; every sequence element is validated.
+- Missing fields, wrong node kinds, malformed scalars, and malformed sort entries reject the complete candidate before live state changes.
+- The schema checks `schemaVersion` first and returns `NotSupported` for another version before interpreting version-specific siblings.
 
 ## Compatibility and versioning
 
@@ -101,18 +103,18 @@ playback-session:
   muted: false
 ```
 
-Enum and strong-id scalar encoding follows the application YAML codec; semantic validity remains the specification's responsibility.
+The runtime schema writes strong ids through their explicit unsigned raw values and writes playback and sort enums through the version-3 numeric mappings above.
 
 ## Implementation authority
 
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h) defines group, version, fields, defaults, and maximum sort terms.
-- [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) defines exact decode and validation.
-- [`ConfigStore.h`](../../../app/include/ao/rt/ConfigStore.h) defines exact aggregate decode.
+- [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h) and [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp) define explicit field mapping, version dispatch, structural deserialization, and semantic validation.
+- [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) owns store invocation and restore installation.
 
 ## Test authority
 
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects every field, missing-field rejection, schema gate, semantic validation, and round trip.
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects exact aggregate decode mechanics.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects the explicit schema invocation and failed-candidate boundary used by this payload.
 
 ## Related documents
 

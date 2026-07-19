@@ -205,17 +205,17 @@ namespace ao::gtk::layout::editor::test
     SECTION("template YAML round-trip")
     {
       auto doc = LayoutDocument{};
-      doc.version = 2;
+      doc.root.type = "box";
       doc.templates = builtInTemplates();
 
       auto tree = ryml::Tree{};
-      yaml::write(tree.rootref(), doc);
+      REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-      auto decoded = LayoutDocument{};
-      REQUIRE(yaml::read(tree.rootref(), decoded));
+      auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      REQUIRE(decoded);
 
-      REQUIRE(decoded.templates.contains("playback.compactControls"));
-      CHECK(decoded.templates.at("playback.compactControls").type == "box");
+      REQUIRE(decoded->templates.contains("playback.compactControls"));
+      CHECK(decoded->templates.at("playback.compactControls").type == "box");
     }
   }
 } // namespace ao::gtk::layout::editor::test

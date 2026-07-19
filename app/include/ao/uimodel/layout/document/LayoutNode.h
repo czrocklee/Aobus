@@ -169,6 +169,8 @@ namespace ao::uimodel
     Value data{};
   };
 
+  using LayoutValueMap = std::map<std::string, LayoutValue, std::less<>>;
+
   struct LayoutNode;
 
   struct BoxedLayoutNode final
@@ -213,8 +215,8 @@ namespace ao::uimodel
 
     std::string id{};
     std::string type{};
-    std::map<std::string, LayoutValue, std::less<>> props{};
-    std::map<std::string, LayoutValue, std::less<>> layout{};
+    LayoutValueMap props{};
+    LayoutValueMap layout{};
     std::vector<LayoutNode> children{};
     std::optional<BoxedLayoutNode> optTooltip{};
   };

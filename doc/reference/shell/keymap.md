@@ -87,7 +87,9 @@ shortcuts:
 - A chord requires a non-empty key token.
 - A modifier segment must be recognized before the final key token.
 - Equivalent parsed chords compare equal and are deduplicated within one action.
-- An action id may be any string at persistence decode; catalog validation reports unknown ids later.
+- The persistence schema requires a mapping with nonempty, nonduplicate action-id keys and sequence values whose every element is a non-null scalar string.
+- A structurally valid action id need not be known to the current catalog; catalog validation reports unknown ids later.
+- A structurally valid but unparsable chord string is skipped by semantic keymap application without discarding valid siblings.
 - Shortcut-editor eligibility excludes actions with `RequiresAnchor` or `PresentsMenu`.
 - GTK may skip a neutral key it cannot translate to a native accelerator without changing the stored neutral value.
 
@@ -101,14 +103,14 @@ There is no explicit migration table for renamed actions or key tokens.
 
 - [`KeyChord.h`](../../../app/include/ao/uimodel/input/KeyChord.h) and [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp) own syntax and aliases.
 - [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp) owns the default inventory.
-- [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) owns the override group codec.
+- [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) owns the explicit override group schema and structural candidate policy.
 - [`LayoutActionCapabilities.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionCapabilities.h) owns eligibility flags.
 
 ## Test authority
 
 - [`KeyChordTest.cpp`](../../../test/unit/uimodel/input/KeyChordTest.cpp) protects syntax, canonicalization, aliases, plus, and rejection.
 - [`KeymapModelTest.cpp`](../../../test/unit/uimodel/input/KeymapModelTest.cpp) protects defaults and override/delta values.
-- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects serialized shape.
+- [`KeymapStoreTest.cpp`](../../../test/unit/uimodel/input/KeymapStoreTest.cpp) protects serialized shape, dynamic action ids, malformed-candidate rejection, and invalid-chord semantic handling.
 - [`GtkAccelTranslatorTest.cpp`](../../../test/unit/linux-gtk/app/GtkAccelTranslatorTest.cpp) protects the platform edge.
 
 ## Related documents

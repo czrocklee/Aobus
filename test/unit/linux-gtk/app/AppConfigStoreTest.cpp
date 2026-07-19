@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <fstream>
 
 namespace ao::gtk::test
 {
@@ -90,6 +91,41 @@ namespace ao::gtk::test
       CHECK(loadSession.lastOutputBackendId == "session-backend");
       CHECK(loadSession.lastOutputDeviceId == "session-device");
       CHECK(loadSession.lastOutputProfileId == "session-profile");
+    }
+
+    SECTION("Partial window groups retain seeded fields and allow unknown keys")
+    {
+      auto output = std::ofstream{configPath};
+      output << "window:\n"
+                "  width: 1200\n"
+                "  futurePlacementPolicy: centered\n";
+      output.close();
+
+      auto const configStore = AppConfigStore{configPath};
+      auto state = WindowState{.width = 640, .height = 480, .maximized = true};
+      configStore.loadWindow(state);
+
+      CHECK(state.width == 1200);
+      CHECK(state.height == 480);
+      CHECK(state.maximized);
+    }
+
+    SECTION("Malformed known fields reject the whole group")
+    {
+      auto output = std::ofstream{configPath};
+      output << "window:\n"
+                "  width: 1200\n"
+                "  height: malformed\n"
+                "  maximized: false\n";
+      output.close();
+
+      auto const configStore = AppConfigStore{configPath};
+      auto state = WindowState{.width = 640, .height = 480, .maximized = true};
+      configStore.loadWindow(state);
+
+      CHECK(state.width == 640);
+      CHECK(state.height == 480);
+      CHECK(state.maximized);
     }
   }
 } // namespace ao::gtk::test

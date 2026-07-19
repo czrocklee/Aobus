@@ -3,23 +3,27 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/uimodel/layout/document/LayoutDocument.h>
+
 #include <ryml.hpp>
+
+#include <string_view>
 
 namespace ao::uimodel
 {
-  struct LayoutValue;
-  struct LayoutNode;
-  struct LayoutDocument;
-}
+  Result<> writeLayoutValue(ryml::NodeRef node, LayoutValue const& value);
+  Result<LayoutValue> readLayoutValue(ryml::ConstNodeRef node, std::string_view context);
 
-namespace ao::yaml
-{
-  void write(ryml::NodeRef node, uimodel::LayoutValue const& value);
-  bool read(ryml::ConstNodeRef node, uimodel::LayoutValue& value);
+  Result<> writeLayoutValueMap(ryml::NodeRef node, LayoutValueMap const& values);
+  Result<LayoutValueMap> readLayoutValueMap(ryml::ConstNodeRef node, std::string_view context);
 
-  void write(ryml::NodeRef node, uimodel::LayoutNode const& value);
-  bool read(ryml::ConstNodeRef node, uimodel::LayoutNode& value);
+  Result<> writeLayoutNode(ryml::NodeRef node, LayoutNode const& value);
+  Result<LayoutNode> readLayoutNode(ryml::ConstNodeRef node, std::string_view context);
 
-  void write(ryml::NodeRef node, uimodel::LayoutDocument const& value);
-  bool read(ryml::ConstNodeRef node, uimodel::LayoutDocument& value);
-} // namespace ao::yaml
+  struct LayoutDocumentYamlSchema final
+  {
+    Result<> serialize(ryml::NodeRef node, LayoutDocument const& document) const;
+    Result<LayoutDocument> deserialize(ryml::ConstNodeRef node, LayoutDocument const& seed) const;
+  };
+} // namespace ao::uimodel

@@ -107,7 +107,7 @@ namespace ao::rt::test
 
         auto const encoded = ao::test::readFile(workspaceConfigPath);
         CHECK(encoded.contains("presentationVersion: 1"));
-        CHECK(encoded.contains("group: none"));
+        CHECK(encoded.contains("group: \"none\""));
         CHECK(encoded.contains("display-track-number"));
       }
 
@@ -139,9 +139,9 @@ namespace ao::rt::test
 
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
         auto const encoded = ao::test::readFile(workspaceConfigPath);
-        CHECK(encoded.contains("group: album-artist"));
-        CHECK(encoded.contains("field: album-artist"));
-        CHECK(encoded.contains("direction: ascending"));
+        CHECK(encoded.contains("group: \"album-artist\""));
+        CHECK(encoded.contains("field: \"album-artist\""));
+        CHECK(encoded.contains("direction: \"ascending\""));
       }
 
       // Restore in new runtime

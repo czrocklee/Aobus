@@ -3,19 +3,17 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
+
 #include <ryml.hpp>
 
 namespace ao::uimodel
 {
-  struct LayoutComponentStateEntry;
-  struct LayoutComponentStateDocument;
+  struct LayoutComponentStateYamlSchema final
+  {
+    Result<> serialize(ryml::NodeRef node, LayoutComponentStateDocument const& document) const;
+    Result<LayoutComponentStateDocument> deserialize(ryml::ConstNodeRef node,
+                                                     LayoutComponentStateDocument const& seed) const;
+  };
 } // namespace ao::uimodel
-
-namespace ao::yaml
-{
-  void write(ryml::NodeRef node, uimodel::LayoutComponentStateEntry const& value);
-  bool read(ryml::ConstNodeRef node, uimodel::LayoutComponentStateEntry& value);
-
-  void write(ryml::NodeRef node, uimodel::LayoutComponentStateDocument const& value);
-  bool read(ryml::ConstNodeRef node, uimodel::LayoutComponentStateDocument& value);
-} // namespace ao::yaml

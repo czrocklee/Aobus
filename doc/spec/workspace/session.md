@@ -17,11 +17,11 @@ It does not enumerate serialized fields, generic `ConfigStore` mechanics, manage
 ## Code boundary
 
 Workspace session behavior belongs to the **application runtime** layer from the [system architecture](../../architecture/system-overview.md), as refined by the [workspace architecture](../../architecture/workspace.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
-`WorkspaceService::saveSession()` and `restoreSession()` are the public owner, `WorkspaceSessionState` is the decoded semantic candidate, and `WorkspaceSnapshot` is the live committed aggregate.
-The private `WorkspaceSessionDocument` codec owns strict persisted structure and stable presentation conversion.
+`WorkspaceService::saveSession()` and `restoreSession()` are the public owner, `WorkspaceSessionState` is the deserialized semantic candidate, and `WorkspaceSnapshot` is the live committed aggregate.
+The owner-local `WorkspaceSessionYamlSchema` owns explicit YAML structure, a private persistence document, stable presentation conversion, and pre-install semantic validation.
 
-`ConfigStore` supplies candidate group decoding and atomic whole-document saves.
-Frontends choose lifecycle points and inject the store but do not decode workspace fields.
+`ConfigStore` invokes that schema explicitly, reports group presence, and supplies atomic whole-document saves.
+Frontends choose lifecycle points and inject the store but do not deserialize workspace fields.
 
 ## Terminology
 
@@ -51,8 +51,8 @@ The live `WorkspaceSnapshot` contains ordered open ids, active id, custom preset
 Each open id identifies `TrackListViewState` owned by `ViewService`.
 
 The persistence candidate contains ordered semantic `TrackListViewConfig` values, one active-list hint, and custom presets.
-Each decoded config carries base list, filter, and a required exact presentation; the derived group and sort fields mirror that presentation for view creation.
-The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact current encoding.
+Each deserialized config carries base list, filter, and a required exact presentation; the derived group and sort fields mirror that presentation for view creation.
+The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact current serialization.
 
 ## Commands and transitions
 
@@ -63,17 +63,19 @@ For each live view it records list, filter, group, sort, and exact presentation.
 The active view contributes its base list as the active-list hint.
 The session also copies the snapshot's complete custom-preset collection.
 
-The command first converts the semantic state to one canonical `WorkspaceSessionDocument`, then calls `ConfigStore::save("workspace", document)` once.
-A load, encode, emission, or atomic-replacement failure leaves the previous document unchanged; the workspace wrapper logs that recoverable failure and returns normally.
+The command passes the captured semantic state and `WorkspaceSessionYamlSchema` to one `ConfigStore::save("workspace", state, schema)` call.
+The schema converts through its private document and emits the canonical YAML subtree.
+A load, serialize, emission, or atomic-replacement failure leaves the previous document unchanged; the workspace wrapper logs that recoverable failure and returns normally.
 There is no workspace dirty revision, retry scheduler, or durable acknowledgement.
 
 ### Load and prepare
 
-`restoreSession(store)` default-constructs a persistence document, asks the store for strict recursive decoding of the `workspace` group, and converts the complete document to one semantic candidate.
+`restoreSession(store)` seeds a `WorkspaceSessionState` and asks the store to load the `workspace` group through `WorkspaceSessionYamlSchema`.
+The schema strictly deserializes its private document and returns one complete semantic candidate.
 
 - A missing group returns a `NoChange` receipt without creating a view or publishing an event.
-- File, parse, node-shape, missing/extra field, aggregate/vector-decode, version, or stable-vocabulary failure returns before view creation.
-- Successful decode attempts to create every configured view through `ViewService`.
+- File, parse, node-shape, missing/extra field, sequence-element, version, or stable-vocabulary failure returns before view creation.
+- Successful deserialize attempts to create every configured view through `ViewService`.
 - If a later creation fails, all earlier candidate ids are destroyed and the error returns.
 
 View creation is synchronous and emits no creation observation.
@@ -96,7 +98,7 @@ That initial point is deduplicated normally and has no previous entry in the ord
 
 Restore installs open ids, focus, complete custom presets, navigation availability, history cursor, and revision through one workspace commit.
 The returned `WorkspaceCommitReceipt` identifies the before and after revisions and resulting active view.
-An effectively identical decoded candidate returns `NoChange`.
+An effectively identical deserialized candidate returns `NoChange`.
 
 One `WorkspaceChanged` event with cause `Restore` is queued after acceptance.
 Consumers never receive a sequence of partially added views or a separate preset/focus event.
@@ -121,9 +123,9 @@ Save and restore are synchronous callback-executor commands with no cancellation
 Restore errors before commit preserve the live workspace aggregate and history.
 Candidate cleanup releases projections and source leases through `ViewService::destroyView()`.
 
-Workspace persistence uses exact aggregate/vector membership plus semantic presentation validation.
+Workspace persistence uses an explicit recursively strict schema plus semantic presentation validation.
 Missing or extra fields and malformed vector elements reject the complete document instead of retaining defaults or being skipped.
-Unsupported `presentationVersion` values and unknown closed presentation tokens are `FormatRejected`.
+Unsupported `presentationVersion` values return `NotSupported` before version-specific siblings are interpreted; unknown closed presentation tokens are `FormatRejected`.
 
 Resource limits, full root versioning, library binding, exact active-view identity, and recovery remain [RFC 0017](../../rfc/0017-versioned-workspace-session.md) concerns.
 
@@ -146,15 +148,15 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) captures, prepares, commits, and reports session operations.
 - [`WorkspaceSnapshot`](../../../app/include/ao/rt/WorkspaceSnapshot.h) is the one live aggregate installed by restore.
 - [`WorkspaceSessionState`](../../../app/include/ao/rt/WorkspaceSessionState.h) is the persistence candidate.
-- [`WorkspaceSessionCodec`](../../../app/runtime/WorkspaceSessionCodec.h) owns the private strict document and stable presentation conversion.
+- [`WorkspaceSessionYamlSchema`](../../../app/runtime/WorkspaceSessionYamlSchema.h) owns explicit YAML mapping, the private strict document, and stable presentation conversion.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) creates and destroys candidate views.
-- [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) supplies candidate decoding and one-shot save.
+- [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) supplies explicit schema invocation, presence-aware candidate loading, and one-shot save.
 - [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) owns current GTK restore/default/checkpoint sequencing.
 
 ## Test map
 
 - [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group `NoChange`, one-event multi-view restore, initial history, fallback, malformed rejection, and candidate cleanup.
-- [`WorkspaceSessionCodecTest.cpp`](../../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
 - [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK workspace/playback restore composition.

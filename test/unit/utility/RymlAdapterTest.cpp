@@ -97,6 +97,22 @@ namespace ao::test
       CHECK(result.error().code == Error::Code::FormatRejected);
       CHECK(result.error().message.contains("duration"));
     }
+
+    SECTION("null is not accepted as a string scalar")
+    {
+      auto tree = parseYaml("null");
+      auto result = yaml::scalarAs<std::string>(tree.rootref(), "identifier");
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::FormatRejected);
+    }
+
+    SECTION("diagnostic context is bounded")
+    {
+      auto const bounded = yaml::boundedErrorContext(std::string(500, 'x'));
+      CHECK(bounded.size() == yaml::kMaximumErrorContextBytes);
+      CHECK(bounded.ends_with("..."));
+    }
   }
 
   TEST_CASE("RymlAdapter - error callback state owns diagnostic filename", "[core][unit][yaml]")

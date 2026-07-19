@@ -256,10 +256,12 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(runtime.library().writer().createList(
       LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Valid"}));
     auto const configPath = tempDir.path() / "versioned.yaml";
+    auto expectedCode = Error::Code::FormatRejected;
 
     SECTION("Unsupported presentation version")
     {
       writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw(), "none", 2);
+      expectedCode = Error::Code::NotSupported;
     }
 
     SECTION("Unknown group id")
@@ -277,7 +279,7 @@ namespace ao::rt::test
     auto const result = runtime.workspace().restoreSession(*storePtr);
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(result.error().code == expectedCode);
     CHECK(runtime.workspace().snapshot().openViews.empty());
     CHECK(runtime.views().listViews().empty());
   }

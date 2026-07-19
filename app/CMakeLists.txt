@@ -20,6 +20,7 @@ add_library(ao_app_runtime STATIC
     runtime/ConfigStore.cpp
     runtime/PlaybackService.cpp
     runtime/PlaybackSequenceService.cpp
+    runtime/PlaybackSessionYamlSchema.cpp
     runtime/PlaybackSessionPersistence.cpp
     runtime/playback/PlaybackCursor.cpp
     runtime/playback/PlaybackCursorSession.cpp
@@ -38,7 +39,7 @@ add_library(ao_app_runtime STATIC
     runtime/source/TrackSourceCache.cpp
     runtime/source/ManualListSource.cpp
     runtime/NavigationHistory.cpp
-    runtime/WorkspaceSessionCodec.cpp
+    runtime/WorkspaceSessionYamlSchema.cpp
     runtime/WorkspaceService.cpp
     runtime/NotificationService.cpp
     runtime/source/SmartListEvaluator.cpp
@@ -93,13 +94,13 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/list/SmartListPreview.cpp
     uimodel/library/list/SmartListTrackPresentationResolver.cpp
     uimodel/library/presentation/TrackColumnLayoutPolicy.cpp
-    uimodel/library/presentation/TrackColumnLayoutCodec.cpp
+    uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp
     uimodel/library/presentation/TrackColumnLayoutStore.cpp
     uimodel/library/presentation/TrackColumnWidthSolver.cpp
     uimodel/library/presentation/CustomPresentationEditorModel.cpp
     uimodel/library/presentation/TrackFieldPresentationPolicy.cpp
     uimodel/library/presentation/TrackPresentationCatalog.cpp
-    uimodel/library/presentation/ListPresentationPreferenceCodec.cpp
+    uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp
     uimodel/library/presentation/ListPresentationPreferenceStore.cpp
     uimodel/library/presentation/TrackPresentationRecommender.cpp
     uimodel/library/presentation/TrackPresentationPickerViewModel.cpp
@@ -197,6 +198,10 @@ set(AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX
 set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
+set(AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX
+  "ao/yaml/Reflect[.]h|namespace[ \t\r\n]+ao::yaml")
+set(AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX
+  "#[ \t]*include[ \t]*[<\\\"]ao/(CoreIds[.]h|rt/|uimodel/)|APP_LOG_|#[ \t]*include[ \t]*[<\\\"]spdlog/")
 
 ao_write_guardrail_regex(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX_FILE "rt-public" "${AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX}")
 ao_write_guardrail_regex(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX_FILE "uimodel-core" "${AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX}")
@@ -216,6 +221,20 @@ ao_write_guardrail_regex(
   "application-signal-primitive"
   "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}"
 )
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX_FILE
+  "managed-state-mechanism"
+  "${AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX_FILE
+  "core-yaml-domain"
+  "${AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX}"
+)
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/ao/yaml/ConfigTraits.h")
+  message(FATAL_ERROR "Managed state must use owner-local explicit schemas; remove ConfigTraits.h")
+endif()
 
 foreach(AO_LEGACY_SIGNAL_HEADER IN ITEMS Signal.h Subscription.h)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/ao/rt/${AO_LEGACY_SIGNAL_HEADER}")
@@ -235,6 +254,29 @@ add_custom_target(ao_shared_signal_boundary_check
 )
 
 add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
+
+add_custom_target(ao_managed_state_schema_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include;${CMAKE_SOURCE_DIR}/app/runtime;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/linux-gtk"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking application-managed state uses owner-local explicit schemas"
+  VERBATIM
+)
+
+add_custom_target(ao_core_yaml_domain_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/include/ao/yaml"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking core YAML helpers remain application-domain neutral"
+  VERBATIM
+)
+
+add_dependencies(ao_app_runtime ao_managed_state_schema_boundary_check ao_core_yaml_domain_boundary_check)
+add_dependencies(ao_app_uimodel ao_managed_state_schema_boundary_check)
 
 add_custom_target(ao_rt_public_boundary_report
   COMMAND ${CMAKE_COMMAND}
@@ -316,7 +358,9 @@ add_custom_target(ao_frontend_library_path_boundary_check
 
 add_custom_target(ao_layering_boundary_report
   DEPENDS
+    ao_core_yaml_domain_boundary_check
     ao_frontend_library_path_boundary_check
+    ao_managed_state_schema_boundary_check
     ao_rt_public_boundary_report
     ao_shared_signal_boundary_check
     ao_uimodel_platform_boundary_report

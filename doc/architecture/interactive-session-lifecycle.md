@@ -63,7 +63,7 @@ It currently does not restore and checkpoint workspace or playback sessions arou
 - Frontends construct `AppRuntime`; application runtime never depends on UIModel, GTK, TUI, platform paths, or toolkit lifecycle types.
 - The [workspace architecture](workspace.md) owns view and aggregate semantics inside the runtime graph.
 - The [playback architecture](playback.md) owns restorable listening intent and audio teardown inside the graph.
-- The [persistence and managed-state architecture](persistence-and-managed-state.md) owns store, path, codec, and durable-write boundaries.
+- The [persistence and managed-state architecture](persistence-and-managed-state.md) owns store, path, schema, and durable-write boundaries.
 - The [runtime execution architecture](runtime-execution.md) owns callback admission, worker quiescence, cancellation, and join ordering.
 - The [presentation architecture](presentation.md) owns runtime-to-UIModel-to-frontend adaptation after the runtime exists.
 - Platform dialogs and portals can request lifecycle operations but do not own runtime replacement.

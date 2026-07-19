@@ -46,7 +46,7 @@ These documents constrain several systems without becoming their behavioral owne
 |---|---|
 | [Runtime execution architecture](runtime-execution.md) | Callback affinity, worker and dedicated-thread execution, cancellation ownership, and teardown order. |
 | [Failure and reporting architecture](failure-and-reporting.md) | Failure channels, boundary translation, recovery ownership, notifications, diagnostics, and application-leaf reporting. |
-| [Persistence and managed-state architecture](persistence-and-managed-state.md) | Durable truth, managed state, codecs, stores, paths, save/restore flow, and lifecycle boundaries. |
+| [Persistence and managed-state architecture](persistence-and-managed-state.md) | Durable truth, managed state, schemas, stores, paths, save/restore flow, and lifecycle boundaries. |
 
 ### Domain systems
 

@@ -6,6 +6,8 @@
 #include "ListPresentationPreferenceStore.h"
 #include <ao/Error.h>
 
+#include <ryml.hpp>
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -14,7 +16,7 @@ namespace ao::uimodel
 {
   inline constexpr std::uint32_t kListPresentationPreferenceVersion = 1;
 
-  // Persistence DTOs: member names are the exact versioned YAML keys.
+  // Persistence DTOs isolate the versioned wire shape from live UIModel state.
   struct StoredListPresentationPreference final
   {
     std::uint32_t listId = 0;
@@ -27,8 +29,15 @@ namespace ao::uimodel
     std::vector<StoredListPresentationPreference> preferences{};
   };
 
-  Result<ListPresentationPreferenceDocument> encodeListPresentationPreferences(
+  Result<ListPresentationPreferenceDocument> toListPresentationPreferenceDocument(
     ListPresentationPreferenceState const& state);
-  Result<ListPresentationPreferenceState> decodeListPresentationPreferences(
+  Result<ListPresentationPreferenceState> listPresentationPreferenceStateFromDocument(
     ListPresentationPreferenceDocument const& document);
+
+  struct ListPresentationPreferenceYamlSchema final
+  {
+    Result<> serialize(ryml::NodeRef node, ListPresentationPreferenceState const& state) const;
+    Result<ListPresentationPreferenceState> deserialize(ryml::ConstNodeRef node,
+                                                        ListPresentationPreferenceState const& seed) const;
+  };
 } // namespace ao::uimodel

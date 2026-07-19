@@ -6,17 +6,44 @@
 #include <ao/rt/Log.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/input/KeymapStore.h>
+#include <ao/yaml/Serialization.h>
 
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::uimodel
 {
+  namespace
+  {
+    struct KeymapOverridesYamlSchema final
+    {
+      Result<> serialize(ryml::NodeRef node, KeymapOverrides const& overrides) const
+      {
+        return yaml::writeStringMap(node,
+                                    overrides,
+                                    "keymap overrides",
+                                    [](ryml::NodeRef child, auto const& bindings)
+                                    { return yaml::writeScalarSequence(child, bindings); });
+      }
+
+      Result<KeymapOverrides> deserialize(ryml::ConstNodeRef node, KeymapOverrides const& /*seed*/) const
+      {
+        constexpr auto kContext = std::string_view{"keymap overrides"};
+        return yaml::readStringMap<KeymapOverrides>(node,
+                                                    kContext,
+                                                    [](ryml::ConstNodeRef child, std::string_view context)
+                                                    { return yaml::readScalarSequence<std::string>(child, context); });
+      }
+    };
+  } // namespace
+
   KeymapModel loadKeymap(rt::ConfigStore& store, KeymapBindings defaults)
   {
     auto keymap = KeymapModel{std::move(defaults)};
     auto overrides = KeymapOverrides{};
 
-    if (auto const res = store.load(kKeymapConfigGroup, overrides); !res)
+    if (auto const res = store.load(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !res)
     {
       if (res.error().code != Error::Code::NotFound)
       {
@@ -39,7 +66,9 @@ namespace ao::uimodel
 
   void saveKeymap(rt::ConfigStore& store, KeymapModel const& keymap)
   {
-    if (auto const res = store.save(kKeymapConfigGroup, keymap.toOverrides()); !res)
+    auto const overrides = keymap.toOverrides();
+
+    if (auto const res = store.save(kKeymapConfigGroup, overrides, KeymapOverridesYamlSchema{}); !res)
     {
       APP_LOG_ERROR("KeymapStore: failed to save keymap overrides: {}", res.error().message);
     }

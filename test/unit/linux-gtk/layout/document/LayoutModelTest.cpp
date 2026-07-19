@@ -21,7 +21,6 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
-  namespace yaml = ao::yaml;
 
   TEST_CASE("LayoutModel - GTK built-in layout documents define stable preset contracts", "[gtk][unit][layout][model]")
   {
@@ -29,37 +28,37 @@ namespace ao::gtk::layout::test
     {
       auto const doc = makeDefaultLayout();
       auto tree = ryml::Tree{};
-      yaml::write(tree.rootref(), doc);
+      REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));
 
-      auto decoded = LayoutDocument{};
-      REQUIRE(yaml::read(tree.rootref(), decoded));
+      auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
+      REQUIRE(decoded);
 
-      CHECK(decoded.version == 1);
-      CHECK(decoded.root.type == "box");
-      REQUIRE(!decoded.root.children.empty());
+      CHECK(decoded->version == 1);
+      CHECK(decoded->root.type == "box");
+      REQUIRE(!decoded->root.children.empty());
 
       // Verify menu bar is a template
-      auto const& menuBar = decoded.root.children[0];
+      auto const& menuBar = decoded->root.children[0];
       CHECK(menuBar.type == "template");
       CHECK(menuBar.propertyOr<std::string>("templateId", "") == "app.defaultMenuBar");
 
       // Verify playback row is a template
-      REQUIRE(decoded.root.children.size() > 1);
-      auto const& playbackBar = decoded.root.children[1];
+      REQUIRE(decoded->root.children.size() > 1);
+      auto const& playbackBar = decoded->root.children[1];
       CHECK(playbackBar.id == "playback-bar");
       CHECK(playbackBar.type == "template");
       CHECK(playbackBar.propertyOr<std::string>("templateId", "") == "playback.defaultBar");
 
       // Verify main paned area is a template (shifted to index 3 due to separator)
-      REQUIRE(decoded.root.children.size() > 3);
-      auto const& mainPaned = decoded.root.children[3];
+      REQUIRE(decoded->root.children.size() > 3);
+      auto const& mainPaned = decoded->root.children[3];
       CHECK(mainPaned.id == "main-paned");
       CHECK(mainPaned.type == "template");
       CHECK(mainPaned.propertyOr<std::string>("templateId", "") == "app.defaultMainPaned");
 
       // Verify status bar region is a template (shifted to index 5 due to separator)
-      REQUIRE(decoded.root.children.size() > 5);
-      auto const& statusBar = decoded.root.children[5];
+      REQUIRE(decoded->root.children.size() > 5);
+      auto const& statusBar = decoded->root.children[5];
       CHECK(statusBar.type == "template");
       CHECK(statusBar.propertyOr<std::string>("templateId", "") == "status.defaultBar");
     }

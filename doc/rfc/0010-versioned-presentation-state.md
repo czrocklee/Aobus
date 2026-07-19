@@ -3,21 +3,21 @@ id: rfc.0010.versioned-presentation-state
 type: rfc
 status: implemented
 domain: presentation
-summary: Implements versioned presentation payloads, stable textual field vocabulary, strict candidate decoding, and fail-closed installation.
+summary: Implements versioned presentation payloads, stable textual field vocabulary, strict candidate deserialization, and fail-closed installation.
 depends-on: none
 ---
 # RFC 0010: Versioned presentation state
 
 ## Disposition
 
-Implemented on 2026-07-16 with a narrower layered design than the original shared-codec and legacy-migration proposal.
+Implemented on 2026-07-16 with a narrower layered design than the original shared-schema and legacy-migration proposal.
 
 The implementation:
 
 - makes runtime `TrackField`, `TrackSortField`, and `TrackGroupKey` choices persist through explicit stable textual ids;
 - gives GTK column layouts and list-presentation preferences separate version-1 UIModel documents;
 - adds a presentation-vocabulary version to the current workspace document without claiming the complete workspace envelope proposed by [RFC 0017](0017-versioned-workspace-session.md);
-- decodes each versioned document with strict recursive aggregate/vector membership before semantic conversion;
+- deserializes each versioned document through a strict owner-local schema before semantic conversion;
 - validates unknown ids, duplicates, noncanonical column dimensions, sort directions, and required presentation values before installation;
 - keeps independently stored GTK groups independent on load while restoring the workspace as one all-or-nothing candidate;
 - emits only canonical version-1 text tokens on explicit save; and
@@ -26,6 +26,9 @@ The implementation:
 No legacy migration was implemented because Aobus currently has no compatibility requirement for these development-era files.
 Inventing and permanently governing frozen ordinal tables would add a second vocabulary without protecting shipped user data.
 An explicitly rejected old document is safer than a permissive cast that can silently change meaning.
+
+[RFC 0032](0032-explicit-managed-state-schemas.md) subsequently replaced reflected DTO deserialization and `ConfigStore::loadExact()` with explicitly selected owner-local schemas.
+That mechanism change preserves this RFC's version-1 field vocabulary, complete-candidate rejection, and semantic conversion boundaries; unsupported future versions now use `NotSupported` rather than the earlier generic `FormatRejected` classification.
 
 The [presentation-state reference](../reference/presentation/persisted-state.md), [workspace session-state reference](../reference/workspace/session-state.md), presentation specifications, and persistence registry linked in the promotion section own current behavior.
 They supersede this proposal; this RFC records the problem, chosen boundary, and mechanisms deliberately not adopted.
@@ -36,12 +39,12 @@ Track-table layouts and workspace presentation state persisted choices represent
 GTK column-layout files wrote numeric `TrackField` values, and workspace state reflected nested enums directly.
 
 Enum ordinals are implementation details rather than durable identifiers.
-Inserting, removing, or reordering an enumerator can make an old file decode as a different field, sort, or group without any parse failure.
+Inserting, removing, or reordering an enumerator can make an old file deserialize as a different field, sort, or group without any parse failure.
 That silent semantic substitution is more dangerous than rejecting the document.
 
-Presentation payloads also lacked explicit version gates and used ordinary reflected decoding.
+Presentation payloads also lacked explicit version gates and used ordinary reflected deserialization.
 Missing fields could retain defaults, unknown fields could be ignored, and malformed vector elements could be skipped.
-Consequently, the application could install a partially decoded presentation whose meaning no longer matched the saved object.
+Consequently, the application could install a partially deserialized presentation whose meaning no longer matched the saved object.
 
 ## Dependencies
 
@@ -82,12 +85,12 @@ Runtime owns bidirectional conversions for every persisted closed presentation c
 - workspace sort direction uses the exact strings `ascending` and `descending`.
 
 The tables are exhaustive and case-sensitive.
-Invalid enum inputs encode as an empty id, unknown strings do not decode, and tests prove uniqueness and round trip for every current value.
+Invalid enum inputs serialize as an empty id, unknown strings do not deserialize, and tests prove uniqueness and round trip for every current value.
 C++ enumerator names and ordinals are not file-format tokens.
 
-### Layered document codecs
+### Layered document schemas
 
-The implementation shares the stable vocabulary rather than forcing unrelated documents through one cross-layer codec.
+The implementation shares the stable vocabulary rather than forcing unrelated documents through one cross-layer schema.
 
 Runtime privately owns `WorkspaceSessionDocument` and conversion to and from semantic `WorkspaceSessionState`.
 UIModel owns `TrackColumnLayoutDocument` and `ListPresentationPreferenceDocument` plus their conversion to and from UI-local state.
@@ -100,11 +103,11 @@ This keeps runtime independent of UIModel, keeps UIModel independent of GTK, and
 The two GTK groups each carry `version: 1`.
 The current workspace group carries `presentationVersion: 1`, which versions its nested presentation vocabulary but is not a claim that the complete workspace format is version 1.
 
-All three paths use `ConfigStore::loadExact` with dedicated persistence DTOs whose member names are the exact YAML keys.
+All three paths use explicitly selected owner-local schemas with dedicated persistence DTOs and literal YAML keys.
 Missing members, extra members, malformed aggregate values, and malformed vector elements reject the containing group or workspace candidate rather than being seeded, ignored, or skipped.
 
-Unsupported versions return `FormatRejected`.
-No decoder interprets an absent version as an implicit legacy format.
+Unsupported versions return `NotSupported`.
+No schema reader interprets an absent version as an implicit legacy format.
 
 ### Semantic candidate validation
 
@@ -125,18 +128,18 @@ Workspace presentation conversion requires:
 - known group, sort, and field tokens;
 - `ascending` or `descending` direction;
 - unique sort fields and unique entries in each field collection; and
-- at least one visible field in a decoded version-1 presentation.
+- at least one visible field in a deserialized version-1 presentation.
 
-Encoding normalizes permitted live presentation defaults and deduplicates field collections before writing, while invalid enum values, duplicate sort fields, missing exact view presentations, empty ids, and invalid list ids fail with `InvalidState`.
+Serialization normalizes permitted live presentation defaults and deduplicates field collections before writing, while invalid enum values, duplicate sort fields, missing exact view presentations, empty ids, and invalid list ids fail with `InvalidState`.
 
 ### Installation and fallback boundaries
 
-`GtkLayoutStateStore::load` decodes the two groups independently into temporary documents and states.
+`GtkLayoutStateStore::load` deserializes the two groups independently into temporary documents and states.
 A missing or rejected group leaves the caller's corresponding seeded state unchanged; a valid sibling group can still load.
 No invalid layout is installed column by column.
 
-Workspace decoding happens before any candidate view is created.
-After semantic decoding, the existing workspace transaction creates every candidate view and installs views, focus, presets, history, and revision only when all candidates succeed.
+Workspace deserialization happens before any candidate view is created.
+After semantic deserialization, the existing workspace transaction creates every candidate view and installs views, focus, presets, history, and revision only when all candidates succeed.
 Any structural, vocabulary, or view-creation failure preserves the live workspace aggregate.
 
 Unknown list-presentation preference ids are intentionally different from unknown closed-vocabulary tokens.
@@ -145,13 +148,13 @@ The former are extensible references and fall back through the catalog; the latt
 ### Canonical writes
 
 Writers emit only current stable text ids and explicit version fields.
-`GtkLayoutStateStore` encodes both groups before asking `ConfigStore` to replace them together in one whole-file candidate.
-Workspace capture encodes one complete document before saving the `workspace` group.
+`GtkLayoutStateStore` submits both owner schemas to one `ConfigStore::saveTogether()` operation, which serializes them into one private whole-file candidate before replacement.
+Workspace capture submits one semantic state and schema that serializes one complete document inside the private `workspace` write candidate.
 
 GTK creates its default All Tracks view after either an accepted empty restore or a rejected restore.
 It performs the automatic initial workspace checkpoint only for the accepted case, so reading an unsupported or invalid presentation document cannot overwrite it during initialization.
 
-Encoding or replacement failure leaves the previous durable document intact under the existing [atomic replacement contract](../spec/persistence/atomic-replacement.md).
+Serialization or replacement failure leaves the previous durable document intact under the existing [atomic replacement contract](../spec/persistence/atomic-replacement.md).
 Reading rejected or unsupported data performs no write.
 
 ## Alternatives
@@ -169,7 +172,7 @@ Explicit ids let implementation names evolve independently.
 
 Rejected because every enum insertion or reorder would still require a migration and files would remain difficult to inspect.
 
-### Use one universal presentation codec
+### Use one universal presentation schema
 
 Not adopted.
 Workspace state belongs to runtime, column and preference state belongs to UIModel, and paths belong to GTK.
@@ -202,9 +205,9 @@ The current document still lacks a full root schema version, library identity, e
 The implementation is validated by:
 
 - exhaustive stable field/sort/group id uniqueness and round-trip tests;
-- direct workspace codec round trips covering grouping, ascending and descending sorts, visible fields, redundant fields, and custom presets;
+- direct workspace schema round trips covering grouping, ascending and descending sorts, visible fields, redundant fields, and custom presets;
 - rejection tests for unsupported versions, missing/extra schema members, unknown tokens, duplicate tokens, invalid list ids, and noncanonical live state;
-- UIModel codec tests for canonical column dimensions and opaque list-presentation references;
+- UIModel schema tests for canonical column dimensions and opaque list-presentation references;
 - GTK adapter tests proving canonical text output, two-group round trip, seeded-state preservation, and unversioned-format rejection;
 - runtime tests proving cross-instance workspace restoration and all-or-nothing failure behavior;
 - documentation validation; and
@@ -213,7 +216,7 @@ The implementation is validated by:
 ## Open questions
 
 None for this RFC.
-Complete workspace versioning and bounded decoding remain tracked by RFC 0017.
+Complete workspace versioning and bounded deserialization remain tracked by RFC 0017.
 A compatibility migration should be proposed only when a supported earlier version exists and its historical meaning is documented.
 
 ## Promotion plan

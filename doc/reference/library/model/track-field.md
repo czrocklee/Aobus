@@ -133,7 +133,7 @@ All three rows have category `Synthetic`, set the synthetic capability, and are 
 
 Track-field, sort-field, and group-key ids appear in versioned presentation state and must not be renamed or rebound without an explicit compatibility decision.
 Current presentation documents never serialize their enum raw values.
-The playback-session version-3 payload separately persists `TrackSortField` raw values through its generic enum codec; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
+The playback-session version-3 schema separately persists numeric `TrackSortField` raw values; changing those raw values therefore requires a playback-schema compatibility decision even though presentation documents use stable ids.
 The raw `TrackField` and `TrackGroupKey` columns remain C++ lookup information rather than current presentation-format tokens.
 
 Query-variable text is owned by the predicate language.
@@ -161,7 +161,7 @@ Adding a field requires coordinated decisions about persistence source, projecti
 - [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks catalog completeness, ids, labels, capabilities, exhaustive typed mappings, and invalid lookup behavior.
 - [`TrackFieldPresentationPolicyTest.cpp`](../../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) ensures every presentable field has UIModel column policy.
 - [`CompletionServiceTest.cpp`](../../../../test/unit/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
-- [`WorkspaceSessionCodecTest.cpp`](../../../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.
 
 ## Related documents
 

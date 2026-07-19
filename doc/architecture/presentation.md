@@ -50,7 +50,7 @@ For track-list views, runtime keeps content and shape as separate state axes.
 `LiveTrackListProjection` is their composition point, not a second authority for either concern.
 
 Runtime also owns the stable textual vocabulary for persisted `TrackField`, `TrackSortField`, and `TrackGroupKey` choices.
-That vocabulary is shared by runtime workspace persistence and UIModel presentation codecs without making either layer own the other's document shape.
+That vocabulary is shared by runtime workspace persistence and UIModel presentation schemas without making either layer own the other's document shape.
 
 ### UIModel
 
@@ -74,8 +74,8 @@ It derives effective parent relationships, malformed-parent recovery, and stable
 UIModel owns semantic track-field column roles, including sizing and start/end alignment.
 GTK and TUI translate those roles to native geometry without maintaining independent field classifications.
 
-UIModel owns versioned semantic codecs for its per-library column-layout and list-presentation preference state.
-The codecs produce and validate platform-neutral documents; they do not choose paths or perform GTK lifecycle saves.
+UIModel owns versioned semantic schemas for its per-library column-layout and list-presentation preference state.
+The schemas produce and validate platform-neutral documents; they do not choose paths or perform GTK lifecycle saves.
 
 UIModel owns the closed application-theme choices and their stable string ids.
 Runtime persists the selected id as opaque application-preference text, while GTK maps the resolved UIModel choice to CSS classes.
@@ -111,7 +111,7 @@ Its list chooser consumes the shared UIModel list-tree projection, and its comma
 ### CLI
 
 CLI is an application adapter rather than an interactive presentation layer.
-It parses commands, invokes `CoreRuntime` library facilities, and encodes plain, YAML, or JSON output.
+It parses commands, invokes `CoreRuntime` library facilities, and serializes plain, YAML, or JSON output.
 It bypasses UIModel because it does not maintain a reusable interactive view state.
 Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029-versioned-cli-automation-protocol.md) proposes an explicit protocol envelope and compatibility policy.
 
@@ -191,7 +191,7 @@ A quick filter narrows the active membership while retaining the active presenta
 - A UIModel notification projection ignores duplicate, older, empty, or revision-mismatched updates rather than regressing its accepted state.
 - UI-local persisted preferences influence presentation but do not replace canonical runtime state.
 - Persisted presentation documents use explicit version gates and runtime-owned stable tokens rather than C++ enum ordinals.
-- Runtime workspace, UIModel layout/preference, and GTK file ownership stay separate; sharing token conversion does not justify a universal cross-layer document codec.
+- Runtime workspace, UIModel layout/preference, and GTK file ownership stay separate; sharing token conversion does not justify a universal cross-layer document schema.
 - Layout component factories receive an explicit dependency bundle and runtime-state carrier rather than reaching through global frontend singletons.
 - Narrow GTK evaluator composition may borrow the const core-library view; committing authority remains inaccessible to GTK and UIModel.
 - An open authoring session never retargets when GTK recycles a row, selection changes, or a detail projection refreshes.
@@ -220,7 +220,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
 - [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
-- [`TrackColumnLayoutCodec`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutCodec.h) and [`ListPresentationPreferenceCodec`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) own versioned UIModel presentation documents.
+- [`TrackColumnLayoutYamlSchema`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own versioned UIModel presentation documents.
 - [`ListTreeProjection`](../../app/include/ao/uimodel/library/list/ListTreeProjection.h) owns shared list-navigation hierarchy and recovery policy.
 - [`ThemePreset`](../../app/include/ao/uimodel/preference/ThemePreset.h) owns semantic application-theme choices and stable-id resolution.
 - [`MainWindow`](../../app/linux-gtk/app/MainWindow.h), [`MainWindowCoordinator`](../../app/linux-gtk/app/MainWindowCoordinator.h), and [`GtkUiDependencies`](../../app/linux-gtk/app/GtkUiDependencies.h) define GTK composition boundaries.
@@ -234,7 +234,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding, stale-state, all-or-none outcomes, and guarded follow-up submissions.
-- [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation codec tests protect stable persistence vocabulary and semantic document validation.
+- [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.
 - [`ThemePresetTest.cpp`](../../test/unit/uimodel/preference/ThemePresetTest.cpp) protects theme-id resolution and fallback.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.

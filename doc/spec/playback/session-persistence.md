@@ -17,7 +17,7 @@ It does not persist a materialized queue, workspace selection, prepared-next tok
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [playback](../../architecture/playback.md), [persistence](../../architecture/persistence-and-managed-state.md), and [interactive session lifecycle](../../architecture/interactive-session-lifecycle.md) architectures.
-`PlaybackSessionPersistence` coordinates `PlaybackSequenceService`, `PlaybackService`, runtime library reads, `ConfigStore`, and the async runtime.
+`PlaybackSessionPersistence` coordinates `PlaybackSequenceService`, `PlaybackService`, runtime library reads, the explicit `PlaybackSessionYamlSchema`, `ConfigStore`, and the async runtime.
 
 ## Terminology
 
@@ -109,9 +109,9 @@ Observer exceptions are logged and do not stop other persistence behavior.
 Ordinary dirty state schedules a one-second debounce.
 Significant events request immediate checkpoint through the same save state machine.
 
-Save writes the exact payload through one result-bearing `ConfigStore::save` candidate commit.
+Save writes the payload through an explicit `PlaybackSessionYamlSchema` and one result-bearing `ConfigStore::save` candidate commit.
 Only complete success acknowledges the captured revision and resets retry delay.
-Load, encode, emission, or replacement failure keeps dirty and schedules bounded exponential retry even while paused.
+Load, serialize, emission, or replacement failure keeps dirty and schedules bounded exponential retry even while paused.
 
 Periodic and shutdown checkpoints are safety nets, not the only route to durability.
 Frontends start, restore/checkpoint, and shut down the owner but do not implement the timer policy.
@@ -124,7 +124,7 @@ Periodic saves remain no-ops while discarded until a later discrete active-sessi
 
 ## Failure and cancellation
 
-Malformed exact decode, semantic validation, source/filter/projection construction, transport preparation, and store failures return typed results.
+Malformed structural deserialize, unsupported versions, schema semantic validation, source/filter/projection construction, transport preparation, and store failures return typed results.
 Restore and discard are fail-closed with respect to live/restorable state as described above.
 
 Scheduled tasks use the shared async runtime and owner lifetime.
@@ -153,6 +153,7 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 
 - [`PlaybackSessionPersistence.h`](../../../app/runtime/PlaybackSessionPersistence.h) and [`PlaybackSessionPersistence.cpp`](../../../app/runtime/PlaybackSessionPersistence.cpp) own behavior.
 - [`PlaybackSessionState.h`](../../../app/runtime/PlaybackSessionState.h) owns payload and internal transport snapshot values.
+- [`PlaybackSessionYamlSchema.h`](../../../app/runtime/PlaybackSessionYamlSchema.h) and [`PlaybackSessionYamlSchema.cpp`](../../../app/runtime/PlaybackSessionYamlSchema.cpp) own explicit YAML mapping, version dispatch, and pre-restore validation.
 - [`PlaybackSessionRevision.h`](../../../app/runtime/playback/PlaybackSessionRevision.h) owns exact dirty acknowledgement.
 - [`AppRuntime.cpp`](../../../app/runtime/AppRuntime.cpp) owns public composition and lifecycle forwarding.
 

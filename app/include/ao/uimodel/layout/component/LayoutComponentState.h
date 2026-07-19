@@ -23,7 +23,7 @@ namespace ao::uimodel
     std::string type{};
     std::uint32_t stateVersion = kStateEntryVersion;
     std::string baselineHash{};
-    std::map<std::string, LayoutValue, std::less<>> state{};
+    LayoutValueMap state{};
   };
 
   struct LayoutComponentStateDocument final

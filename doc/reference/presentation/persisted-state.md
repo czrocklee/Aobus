@@ -22,7 +22,7 @@ There is no legacy numeric migration.
 
 This surface spans the application runtime, UIModel, and GTK persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
-The two GTK payload models and semantic converters belong to UIModel in `TrackColumnLayoutCodec` and `ListPresentationPreferenceCodec`.
+The two GTK payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
 `GtkLayoutStateStore` owns the per-library file and literal group names but does not redefine either payload.
 
 ## Stable vocabulary
@@ -113,7 +113,7 @@ trackView.presentations:
 | `listId` | Unsigned 32-bit integer. | Required, nonzero, and unique in the document. |
 | `presentationId` | String. | Required and nonempty. It need not resolve in the current catalog. |
 
-An unavailable `presentationId` survives decoding and follows the recommendation fallback in the [list-preference specification](../../spec/presentation/list-preference.md).
+An unavailable `presentationId` survives deserialization and follows the recommendation fallback in the [list-preference specification](../../spec/presentation/list-preference.md).
 This extensible-reference rule does not apply to closed field, sort, group, or direction tokens.
 
 ## Workspace relationship
@@ -121,24 +121,25 @@ This extensible-reference rule does not apply to closed field, sort, group, or d
 The workspace group carries `presentationVersion: 1` and uses the same stable field, sort, group, direction, and preset-id vocabulary.
 Its root and nested fields are exhaustively defined by the [workspace session-state reference](../workspace/session-state.md).
 
-`presentationVersion` versions only the nested presentation encoding.
+`presentationVersion` versions only the nested presentation serialization.
 It is not the complete workspace schema version proposed by [RFC 0017](../../rfc/0017-versioned-workspace-session.md).
 
 ## Validation rules
 
-- Both GTK groups use strict recursive aggregate/vector decoding.
+- Both GTK groups use explicit UIModel schemas that validate each mapping and sequence recursively.
 - Every declared field is required; unknown fields, missing fields, wrong node kinds, malformed vector elements, and unsupported versions reject the complete containing group.
 - Semantic conversion occurs into a temporary candidate; no column or preference entry is installed before the whole group succeeds.
 - A missing or rejected group leaves the caller's seeded state unchanged.
 - The two groups are independent on load, so rejection of one does not reject a valid sibling group.
 - The GTK coordinator suppresses save callbacks while installing loaded candidates, so a valid sibling cannot overwrite a rejected group during restore.
-- Encoding rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
-- `GtkLayoutStateStore` encodes both groups before one multi-group save, so an encoding failure cannot persist only one new group.
+- Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
+- `GtkLayoutStateStore` submits both schemas through one `saveTogether()` candidate, so a serialization failure cannot persist only one new group.
 
 ## Compatibility and versioning
 
 Writers emit only version 1 with stable text ids and canonical member names.
-Unversioned reflected state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
+Unversioned legacy state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
+Future versions return `NotSupported` before version-specific sibling fields are interpreted.
 
 Changing a stable token's meaning or spelling requires an explicit compatibility decision.
 Adding a token does not change the meaning of existing version-1 documents, but older readers reject a document that uses the new unknown value.
@@ -149,17 +150,17 @@ Each literal group carries and gates its own payload version.
 ## Implementation authority
 
 - [`TrackField.h`](../../../app/include/ao/rt/TrackField.h) and [`TrackField.cpp`](../../../app/runtime/TrackField.cpp) own stable token conversion.
-- [`TrackColumnLayoutCodec.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutCodec.h) and [`TrackColumnLayoutCodec.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutCodec.cpp) own the layout document and conversion.
-- [`ListPresentationPreferenceCodec.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceCodec.h) and [`ListPresentationPreferenceCodec.cpp`](../../../app/uimodel/library/presentation/ListPresentationPreferenceCodec.cpp) own the preference document and conversion.
+- [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) own the layout document and conversion.
+- [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.cpp`](../../../app/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp) own the preference document and conversion.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns group selection, load policy, and the file save boundary.
 
 ## Test authority
 
 - [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) proves stable token coverage, uniqueness, and round trip.
-- [`TrackColumnLayoutCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutCodecTest.cpp) protects layout conversion and rejection.
-- [`ListPresentationPreferenceCodecTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceCodecTest.cpp) protects opaque preference ids and rejection.
+- [`TrackColumnLayoutYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackColumnLayoutYamlSchemaTest.cpp) protects layout conversion and rejection.
+- [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) protects opaque preference ids and rejection.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protects exact group integration, seeded fallback, and canonical output.
-- [`WorkspaceSessionCodecTest.cpp`](../../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) protects the shared workspace vocabulary.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects the shared workspace vocabulary.
 
 ## Related documents
 

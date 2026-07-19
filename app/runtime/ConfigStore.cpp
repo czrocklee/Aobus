@@ -7,7 +7,9 @@
 #include <ao/rt/Log.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
+#include <ao/yaml/Serialization.h>
 
+#include <array>
 #include <cassert>
 #include <exception>
 #include <expected>
@@ -112,6 +114,16 @@ namespace ao::rt
                        std::format("Config file '{}' does not contain a top-level mapping", _filePath.string()));
     }
 
+    constexpr auto kNoFixedGroups = std::array<std::string_view, 0>{};
+
+    if (auto const result =
+          yaml::validateMapKeys(root.rootref(), kNoFixedGroups, "config document", yaml::UnknownKeyPolicy::Allow);
+        !result)
+    {
+      return makeError(
+        Error::Code::FormatRejected, std::format("Config file '{}': {}", _filePath.string(), result.error().message));
+    }
+
     _inputBuffer = std::move(inputBuffer);
     _root = std::move(root);
     _loaded = true;
@@ -132,7 +144,7 @@ namespace ao::rt
 
     assert(_root.is_map(0) && "Successful ConfigStore initialization must establish a top-level mapping");
 
-    // The complete-tree snapshot isolates encoding failures until atomic replacement succeeds.
+    // The complete-tree snapshot isolates serialization failures until atomic replacement succeeds.
     return _root;
   }
 

@@ -45,25 +45,25 @@ namespace ao::gtk::test
         prefState.presentations[ListId{10}] = "albums";
         store.save(state, prefState);
 
-        auto const encoded = ao::test::readFile(libraryPath / "gtk_layout.yaml");
-        CHECK(encoded == "trackView.columnLayouts:\n"
-                         "  version: 1\n"
-                         "  layouts:\n"
-                         "    - listId: 10\n"
-                         "      columns:\n"
-                         "        - field: artist\n"
-                         "          width: -1\n"
-                         "          weight: 1.75\n"
-                         "    - listId: 20\n"
-                         "      columns:\n"
-                         "        - field: duration\n"
-                         "          width: 200\n"
-                         "          weight: -1\n"
-                         "trackView.presentations:\n"
-                         "  version: 1\n"
-                         "  preferences:\n"
-                         "    - listId: 10\n"
-                         "      presentationId: albums\n");
+        auto const serialized = ao::test::readFile(libraryPath / "gtk_layout.yaml");
+        CHECK(serialized == "trackView.columnLayouts:\n"
+                            "  version: 1\n"
+                            "  layouts:\n"
+                            "    - listId: 10\n"
+                            "      columns:\n"
+                            "        - field: \"artist\"\n"
+                            "          width: -1\n"
+                            "          weight: 1.75\n"
+                            "    - listId: 20\n"
+                            "      columns:\n"
+                            "        - field: \"duration\"\n"
+                            "          width: 200\n"
+                            "          weight: -1\n"
+                            "trackView.presentations:\n"
+                            "  version: 1\n"
+                            "  preferences:\n"
+                            "    - listId: 10\n"
+                            "      presentationId: \"albums\"\n");
       }
 
       {
@@ -155,7 +155,7 @@ namespace ao::gtk::test
       CHECK(prefState.presentations.at(ListId{42}) == "albums");
     }
 
-    SECTION("Encoding failure leaves both durable groups unchanged")
+    SECTION("Serialization failure leaves both durable groups unchanged")
     {
       auto store = GtkLayoutStateStore{libraryPath};
       auto state = uimodel::TrackColumnLayoutState{};

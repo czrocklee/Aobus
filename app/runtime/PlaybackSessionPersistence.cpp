@@ -4,39 +4,34 @@
 #include "runtime/PlaybackSessionPersistence.h"
 
 #include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackCursorSession.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
-#include <ao/query/Parser.h>
-#include <ao/query/QueryCompiler.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackService.h>
-#include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <utility>
-#include <vector>
 
 namespace ao::rt
 {
@@ -89,87 +84,6 @@ namespace ao::rt
         {
         }
       }
-    }
-
-    bool isValidShuffleMode(ShuffleMode const mode) noexcept
-    {
-      switch (mode)
-      {
-        case ShuffleMode::Off:
-        case ShuffleMode::On: return true;
-      }
-
-      return false;
-    }
-
-    bool isValidRepeatMode(RepeatMode const mode) noexcept
-    {
-      switch (mode)
-      {
-        case RepeatMode::Off:
-        case RepeatMode::One:
-        case RepeatMode::All: return true;
-      }
-
-      return false;
-    }
-
-    Result<> validatePlaybackSession(PlaybackSessionState const& session)
-    {
-      if (session.schemaVersion != kPlaybackSessionSchemaVersion)
-      {
-        return makeError(Error::Code::FormatRejected, "Unsupported playback session schema version");
-      }
-
-      if (session.sourceListId == kInvalidListId || session.currentTrackId == kInvalidTrackId)
-      {
-        return makeError(Error::Code::CorruptData, "Playback session contains an invalid source or current track id");
-      }
-
-      if (session.anchorIndex > static_cast<std::uint64_t>(std::numeric_limits<std::ptrdiff_t>::max()) ||
-          session.positionMs > static_cast<std::uint64_t>(std::chrono::milliseconds::max().count()))
-      {
-        return makeError(Error::Code::CorruptData, "Playback session anchor or position is out of range");
-      }
-
-      if (!std::isfinite(session.volume) || session.volume < 0.0F || session.volume > 1.0F ||
-          !isValidShuffleMode(session.shuffleMode) || !isValidRepeatMode(session.repeatMode))
-      {
-        return makeError(Error::Code::CorruptData, "Playback session contains invalid playback values");
-      }
-
-      if (session.sortBy.size() > kPlaybackSessionMaxSortTerms)
-      {
-        return makeError(Error::Code::CorruptData, "Playback session contains too many sort terms");
-      }
-
-      auto seenFields = std::vector<TrackSortField>{};
-      seenFields.reserve(session.sortBy.size());
-
-      for (auto const& term : session.sortBy)
-      {
-        if (static_cast<std::size_t>(term.field) >= kTrackSortFieldCount ||
-            std::ranges::contains(seenFields, term.field))
-        {
-          return makeError(Error::Code::CorruptData, "Playback session contains invalid or duplicate sort fields");
-        }
-
-        seenFields.push_back(term.field);
-      }
-
-      auto parsed = query::parse(session.quickFilterExpression.empty() ? "true" : session.quickFilterExpression);
-
-      if (!parsed)
-      {
-        return std::unexpected{parsed.error()};
-      }
-
-      if (auto compiled = query::compileQuery(*parsed); !compiled)
-      {
-        return std::unexpected{compiled.error()};
-      }
-
-      return {};
     }
 
     PlaybackSessionState snapshotState(PlaybackLaunchSpec launchSpec,
@@ -514,7 +428,7 @@ namespace ao::rt
     auto const session =
       snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, transport, _sequence.state());
 
-    if (auto const saved = _config.save(kPlaybackSessionConfigGroup, session); !saved)
+    if (auto const saved = _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{}); !saved)
     {
       return saved;
     }
@@ -531,28 +445,17 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback session restore is already in progress");
     }
 
-    auto const containsSession = _config.contains(kPlaybackSessionConfigGroup);
+    auto loaded = PlaybackSessionState{};
+    auto const loadedSession = _config.load(kPlaybackSessionConfigGroup, loaded, PlaybackSessionYamlSchema{});
 
-    if (!containsSession)
+    if (!loadedSession)
     {
-      return std::unexpected{containsSession.error()};
+      return std::unexpected{loadedSession.error()};
     }
 
-    if (!*containsSession)
+    if (!*loadedSession)
     {
       return PlaybackSessionPersistenceRestoreResult{};
-    }
-
-    auto loaded = PlaybackSessionState{};
-
-    if (auto const result = _config.loadExact(kPlaybackSessionConfigGroup, loaded); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    if (auto const valid = validatePlaybackSession(loaded); !valid)
-    {
-      return std::unexpected{valid.error()};
     }
 
     try

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/PlaybackSessionState.h"
+#include "runtime/PlaybackSessionYamlSchema.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -30,6 +31,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -104,13 +106,16 @@ namespace ao::rt::test
     PlaybackSessionState storedSession(ConfigStore& store)
     {
       auto session = PlaybackSessionState{};
-      REQUIRE(store.load(kPlaybackSessionConfigGroup, session));
+      auto const loaded = store.load(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
+      REQUIRE(loaded);
+      REQUIRE(*loaded);
       return session;
     }
 
     void storeSession(AppRuntime& runtime, PlaybackSessionState const& session)
     {
-      REQUIRE(runtime.playbackSessionConfigStore().save(kPlaybackSessionConfigGroup, session));
+      REQUIRE(
+        runtime.playbackSessionConfigStore().save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{}));
     }
 
     struct ManualView final
@@ -256,6 +261,71 @@ namespace ao::rt::test
     for (auto const& [field, ordinal] : kPlaybackSessionV3SortFieldOrdinals)
     {
       CHECK(static_cast<std::int32_t>(field) == ordinal);
+    }
+  }
+
+  TEST_CASE("PlaybackSessionYamlSchema - owns the exact YAML mapping", "[runtime][unit][playback-session][schema]")
+  {
+    auto const state = PlaybackSessionState{
+      .sourceListId = kAllTracksListId,
+      .quickFilterExpression = "$year > 2000",
+      .sortBy = {{.field = TrackSortField::Title, .ascending = false}},
+      .currentTrackId = TrackId{42},
+      .anchorIndex = 3,
+      .positionMs = 900,
+      .shuffleMode = ShuffleMode::On,
+      .repeatMode = RepeatMode::All,
+      .volume = 0.75F,
+      .muted = true,
+    };
+    auto tree = ryml::Tree{yaml::callbacks()};
+
+    REQUIRE(PlaybackSessionYamlSchema{}.serialize(tree.rootref(), state));
+    CHECK(yaml::scalarView(tree.rootref()["schemaVersion"]) == "3");
+    CHECK(yaml::scalarView(tree.rootref()["sortBy"][0]["field"]) == "13");
+
+    auto const decoded = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+    REQUIRE(decoded);
+    CHECK(*decoded == state);
+  }
+
+  TEST_CASE("PlaybackSessionYamlSchema - rejects future and unknown YAML structure",
+            "[runtime][unit][playback-session][schema]")
+  {
+    SECTION("Future version is reported before interpreting its payload")
+    {
+      auto const* source = "schemaVersion: 99\nsortBy: malformed\nfuture: true\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("Unknown structural keys are rejected")
+    {
+      auto const* source = R"(
+        schemaVersion: 3
+        sourceListId: 1
+        quickFilterExpression: ""
+        sortBy: []
+        currentTrackId: 42
+        anchorIndex: 0
+        positionMs: 0
+        shuffleMode: 0
+        repeatMode: 0
+        volume: 1
+        muted: false
+        future: true
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = PlaybackSessionYamlSchema{}.deserialize(tree.rootref(), PlaybackSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("future"));
     }
   }
 
@@ -632,7 +702,7 @@ namespace ao::rt::test
     SECTION("schema v2 is rejected")
     {
       payload.schemaVersion = 2;
-      expectedError = Error::Code::FormatRejected;
+      expectedError = Error::Code::NotSupported;
     }
 
     SECTION("invalid identities are rejected")
@@ -700,7 +770,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackSession - exact schema rejects missing and malformed raw YAML fields",
-            "[runtime][regression][playback-session][serializer]")
+            "[runtime][regression][playback-session][schema]")
   {
     auto tempDir = ao::test::TempDir{};
     auto runtime = makeRuntime(tempDir);

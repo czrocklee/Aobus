@@ -6,6 +6,8 @@
 #include "TrackColumnLayoutStore.h"
 #include <ao/Error.h>
 
+#include <ryml.hpp>
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -14,7 +16,7 @@ namespace ao::uimodel
 {
   inline constexpr std::uint32_t kTrackColumnLayoutVersion = 1;
 
-  // Persistence DTOs: member names are the exact versioned YAML keys.
+  // Persistence DTOs isolate the versioned wire shape from live UIModel state.
   struct StoredTrackColumn final
   {
     std::string field{};
@@ -34,6 +36,12 @@ namespace ao::uimodel
     std::vector<StoredTrackColumnLayout> layouts{};
   };
 
-  Result<TrackColumnLayoutDocument> encodeTrackColumnLayout(TrackColumnLayoutState const& state);
-  Result<TrackColumnLayoutState> decodeTrackColumnLayout(TrackColumnLayoutDocument const& document);
+  Result<TrackColumnLayoutDocument> toTrackColumnLayoutDocument(TrackColumnLayoutState const& state);
+  Result<TrackColumnLayoutState> trackColumnLayoutStateFromDocument(TrackColumnLayoutDocument const& document);
+
+  struct TrackColumnLayoutYamlSchema final
+  {
+    Result<> serialize(ryml::NodeRef node, TrackColumnLayoutState const& state) const;
+    Result<TrackColumnLayoutState> deserialize(ryml::ConstNodeRef node, TrackColumnLayoutState const& seed) const;
+  };
 } // namespace ao::uimodel

@@ -73,7 +73,7 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 - The [library architecture](library.md) owns `ListId`, source membership, leases, and projection mechanics below the view boundary.
 - The [track expression architecture](track-expression.md) owns expression compilation and membership semantics used by filtered and Smart List views.
 - The [presentation architecture](presentation.md) owns display and interaction policy, not the workspace aggregate.
-- The [persistence and managed-state architecture](persistence-and-managed-state.md) owns stores and codecs; workspace owns the meaning of its session candidate.
+- The [persistence and managed-state architecture](persistence-and-managed-state.md) owns stores and schemas; workspace owns the meaning of its session candidate.
 - The [playback architecture](playback.md) owns transport and succession even when a workspace command initiates reveal or play intent.
 - CLI uses `CoreRuntime` and does not acquire view or workspace behavior.
 
@@ -99,7 +99,7 @@ The [workspace navigation specification](../spec/workspace/navigation.md) owns t
 ```text
 workspace aggregate
   -> semantic view reconstruction records
-  -> managed-state codec and store
+  -> managed-state schema and store
   -> validated candidate views
   -> one restored open/focused aggregate
 ```
@@ -133,11 +133,11 @@ Observer exceptions are contained and logged after all still-connected observers
 Restore treats a missing group as an empty first-run state.
 Malformed data or an unresolvable view returns a recoverable error, and candidate views created before a later failure are destroyed before the error returns.
 
-Strict document and presentation decoding finishes before candidate view creation.
+Strict document and presentation deserialization finishes before candidate view creation.
 Unsupported presentation versions, missing or extra fields, malformed vector elements, and unknown closed presentation tokens therefore cannot partially populate `ViewService`.
 
 [RFC 0016](../rfc/0016-coherent-workspace-transactions.md) records the implemented command, snapshot, history, observation, and application-navigation boundary.
-[RFC 0010](../rfc/0010-versioned-presentation-state.md) records the implemented stable nested presentation codec.
+[RFC 0010](../rfc/0010-versioned-presentation-state.md) records the implemented stable nested presentation schema.
 [RFC 0017](../rfc/0017-versioned-workspace-session.md) proposes full root versioning, library binding, bounded validation, and stable session-local identities.
 RFC 0017 is not current behavior.
 
@@ -148,14 +148,14 @@ RFC 0017 is not current behavior.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) owns album-reveal composition above workspace and playback.
 - [`NavigationHistory`](../../app/include/ao/rt/NavigationHistory.h) owns bounded semantic navigation history.
 - [`WorkspaceSessionState`](../../app/include/ao/rt/WorkspaceSessionState.h) defines the current persistence candidate model.
-- [`WorkspaceSessionCodec`](../../app/runtime/WorkspaceSessionCodec.h) defines the private strict document and stable presentation conversion.
+- [`WorkspaceSessionYamlSchema`](../../app/runtime/WorkspaceSessionYamlSchema.h) defines the private strict document and stable presentation conversion.
 
 ## Test map
 
 - [`ViewServiceLifecycleTest.cpp`](../../test/unit/runtime/ViewServiceLifecycleTest.cpp) protects view allocation, lifecycle, and resource release.
 - [`WorkspaceNavigationTest.cpp`](../../test/unit/runtime/WorkspaceNavigationTest.cpp), [`WorkspaceHistoryTest.cpp`](../../test/unit/runtime/WorkspaceHistoryTest.cpp), and [`NavigationHistoryTest.cpp`](../../test/unit/runtime/NavigationHistoryTest.cpp) protect navigation ownership and replay.
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protect semantic reconstruction and fallback.
-- [`WorkspaceSessionCodecTest.cpp`](../../test/unit/runtime/WorkspaceSessionCodecTest.cpp) protects versioned stable vocabulary and semantic candidate validation.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects versioned stable vocabulary and semantic candidate validation.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects TUI use of the runtime workspace authority.
 
 ## Related documents

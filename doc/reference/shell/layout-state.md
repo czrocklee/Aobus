@@ -64,10 +64,13 @@ The hash above is illustrative; conforming files use the value computed from the
 
 ## Validation rules
 
-- The root must contain readable `version`, `preset`, and `components` values.
-- Every entry must contain readable `type`, `stateVersion`, `baselineHash`, and `state` values.
-- The decoded `preset` must equal the requested/file-name preset before the GTK store returns the document.
-- Resolution requires file version `1`, non-empty node id, matching entry type, entry version `1`, and exact baseline hash.
+- The explicit schema requires exactly `version`, `preset`, and `components` at the root and rejects unknown or duplicate root keys.
+- It requires exactly `type`, `stateVersion`, `baselineHash`, and `state` in every entry and rejects unknown or duplicate entry keys.
+- `version` is checked before other root fields, and `stateVersion` is checked before other entry fields; an unsupported value returns `NotSupported` and rejects the whole candidate.
+- The preset id, component ids, entry types, and baseline hashes must be nonempty.
+- `components` and each `state` are dynamic mappings, but duplicate or empty keys and malformed `LayoutValue` values reject the whole candidate.
+- The deserialized `preset` must equal the requested/file-name preset before the GTK store returns the document.
+- Resolution of an in-memory document requires file version `1`, non-empty node id, matching entry type, entry version `1`, and exact baseline hash.
 - A missing, unknown, mismatched, or stale entry is ignored.
 - Pruning removes entries whose expanded node is absent or whose type, version, or baseline no longer matches.
 - Preset ids reject empty values, `/`, `\`, `..`, and NUL.
@@ -75,8 +78,9 @@ The hash above is illustrative; conforming files use the value computed from the
 ## Compatibility and versioning
 
 There is no migration path.
-A document-version mismatch makes resolution fail and pruning clears all entries.
-An entry-version mismatch makes that entry unusable and prunable.
+The file adapter preserves live/default state when structural deserialization fails.
+Serialized document- or entry-version mismatches are rejected rather than admitted for later pruning, and there is no legacy fallback.
+Programmatically constructed mismatched in-memory entries remain unusable and prunable.
 A changed authored baseline intentionally invalidates the old interaction state.
 
 Runtime state is regenerable and may be deleted without changing the authored layout.
@@ -85,13 +89,14 @@ It is stored under the platform state location rather than configuration.
 ## Implementation authority
 
 - [`LayoutComponentState.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentState.h) defines the document and entry.
-- [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) defines codec, baseline, resolution, and pruning.
+- [`LayoutComponentStateYaml.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentStateYaml.h) declares the owner-local schema.
+- [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) defines explicit YAML mapping, baseline, resolution, and pruning.
 - [`LayoutStatePromoter.cpp`](../../../app/uimodel/layout/component/LayoutStatePromoter.cpp) defines promoted fields.
 - [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) owns the GTK file boundary.
 
 ## Test authority
 
-- [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects codec, hash, resolution, and pruning.
+- [`LayoutComponentStateTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutComponentStateTest.cpp) protects strict schema structure, version dispatch, unknown keys, whole-candidate rejection, hash, resolution, and pruning.
 - [`LayoutStatePromoterTest.cpp`](../../../test/unit/uimodel/layout/component/LayoutStatePromoterTest.cpp) protects exact promotion fields and residual state.
 - [`ShellLayoutComponentStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp) protects preset validation, locking, files, and replacement.
 - [`SplitComponentTest.cpp`](../../../test/unit/linux-gtk/layout/components/SplitComponentTest.cpp) and [`CollapsibleSplitComponentTest.cpp`](../../../test/unit/linux-gtk/layout/components/CollapsibleSplitComponentTest.cpp) protect GTK state consumption.

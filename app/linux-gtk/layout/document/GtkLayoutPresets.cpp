@@ -18,6 +18,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk::layout
 {
@@ -35,14 +36,14 @@ namespace ao::gtk::layout
         auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
         yaml::parseInArena(tree, std::string_view{data, size}, yamlErrorState);
 
-        auto doc = uimodel::LayoutDocument{};
+        auto doc = uimodel::LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutDocument{});
 
-        if (!yaml::read(tree.rootref(), doc))
+        if (!doc)
         {
-          throwException<Exception>("Failed to decode built-in layout from {}", path);
+          throwException<Exception>("Failed to deserialize built-in layout from {}: {}", path, doc.error().message);
         }
 
-        return doc;
+        return std::move(*doc);
       }
       catch (Glib::Error const& e)
       {

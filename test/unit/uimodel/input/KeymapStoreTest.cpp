@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -77,5 +78,56 @@ namespace ao::uimodel::test
     auto store = rt::ConfigStore{configPath};
     auto const reloaded = loadKeymap(store, newDefaults);
     CHECK(reloaded.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+Shift+P")});
+  }
+
+  TEST_CASE("saveKeymap rejects an empty action id", "[uimodel][unit][input][keymapstore]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto store = rt::ConfigStore{configPath};
+    auto keymap = KeymapModel{sampleDefaults()};
+    REQUIRE(keymap.bind("", chord("Ctrl+E")));
+
+    saveKeymap(store, keymap);
+
+    CHECK_FALSE(std::filesystem::exists(configPath));
+  }
+
+  TEST_CASE("loadKeymap rejects malformed YAML as one candidate", "[uimodel][unit][input][keymapstore]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto output = std::ofstream{configPath};
+    output << "shortcuts:\n"
+              "  playback.playPause:\n"
+              "    - Ctrl+Shift+P\n"
+              "  playback.next:\n"
+              "    - nested: invalid\n";
+    output.close();
+
+    auto store = rt::ConfigStore{configPath};
+    auto const keymap = loadKeymap(store, sampleDefaults());
+
+    CHECK(keymap.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
+    CHECK(keymap.chordsFor("playback.next") == std::vector<KeyChord>{chord("Ctrl+Right")});
+  }
+
+  TEST_CASE("loadKeymap preserves dynamic action ids and skips invalid chord strings semantically",
+            "[uimodel][unit][input][keymapstore]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+    auto output = std::ofstream{configPath};
+    output << "shortcuts:\n"
+              "  plugin.futureAction:\n"
+              "    - Ctrl+F\n"
+              "    - Ctrl+\n";
+    output.close();
+
+    auto store = rt::ConfigStore{configPath};
+    auto const keymap = loadKeymap(store, sampleDefaults());
+
+    CHECK(keymap.chordsFor("plugin.futureAction") == std::vector<KeyChord>{chord("Ctrl+F")});
+    CHECK(keymap.chordsFor("playback.playPause") == std::vector<KeyChord>{chord("Ctrl+P")});
   }
 } // namespace ao::uimodel::test

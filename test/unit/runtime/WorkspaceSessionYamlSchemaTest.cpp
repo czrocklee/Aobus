@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "runtime/WorkspaceSessionCodec.h"
+#include "runtime/WorkspaceSessionYamlSchema.h"
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -9,6 +9,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceSessionState.h>
+#include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -36,8 +37,8 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("WorkspaceSessionCodec - round-trip uses stable presentation vocabulary",
-            "[runtime][unit][workspace][session-codec]")
+  TEST_CASE("WorkspaceSessionYamlSchema - round-trip uses stable presentation vocabulary",
+            "[runtime][unit][workspace][session-schema]")
   {
     auto const presentation = makePresentation();
     auto const state = WorkspaceSessionState{
@@ -62,7 +63,7 @@ namespace ao::rt::test
         },
     };
 
-    auto const document = detail::encodeWorkspaceSession(state);
+    auto const document = detail::toWorkspaceSessionDocument(state);
 
     REQUIRE(document);
     CHECK(document->presentationVersion == 1);
@@ -77,7 +78,7 @@ namespace ao::rt::test
     CHECK(stored.visibleFields == std::vector<std::string>{"title", "duration"});
     CHECK(stored.redundantFields == std::vector<std::string>{"album"});
 
-    auto const decoded = detail::decodeWorkspaceSession(*document);
+    auto const decoded = detail::workspaceSessionStateFromDocument(*document);
 
     REQUIRE(decoded);
     REQUIRE(decoded->openViews.size() == 1);
@@ -90,8 +91,8 @@ namespace ao::rt::test
     CHECK(decoded->customPresets[0] == state.customPresets[0]);
   }
 
-  TEST_CASE("WorkspaceSessionCodec - canonicalizes permitted live presentation state",
-            "[runtime][unit][workspace][session-codec]")
+  TEST_CASE("WorkspaceSessionYamlSchema - canonicalizes permitted live presentation state",
+            "[runtime][unit][workspace][session-schema]")
   {
     auto const duplicateFields = TrackPresentationSpec{
       .id = "custom.minimal",
@@ -109,7 +110,7 @@ namespace ao::rt::test
         },
     };
 
-    auto const document = detail::encodeWorkspaceSession(state);
+    auto const document = detail::toWorkspaceSessionDocument(state);
 
     REQUIRE(document);
     REQUIRE(document->openViews.size() == 2);
@@ -118,7 +119,8 @@ namespace ao::rt::test
     CHECK(document->openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
   }
 
-  TEST_CASE("WorkspaceSessionCodec - rejects invalid presentation objects", "[runtime][unit][workspace][session-codec]")
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid presentation objects",
+            "[runtime][unit][workspace][session-schema]")
   {
     auto const validState = WorkspaceSessionState{
       .openViews =
@@ -126,14 +128,16 @@ namespace ao::rt::test
           TrackListViewConfig{.listId = ListId{10}, .optPresentation = makePresentation()},
         },
     };
-    auto documentResult = detail::encodeWorkspaceSession(validState);
+    auto documentResult = detail::toWorkspaceSessionDocument(validState);
     REQUIRE(documentResult);
     auto document = std::move(*documentResult);
     auto& presentation = document.openViews[0].presentation;
+    auto expectedCode = Error::Code::FormatRejected;
 
     SECTION("Unsupported version")
     {
       document.presentationVersion = 2;
+      expectedCode = Error::Code::NotSupported;
     }
 
     SECTION("Invalid list id")
@@ -181,13 +185,14 @@ namespace ao::rt::test
       presentation.redundantFields.push_back(presentation.redundantFields[0]);
     }
 
-    auto const result = detail::decodeWorkspaceSession(document);
+    auto const result = detail::workspaceSessionStateFromDocument(document);
 
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(result.error().code == expectedCode);
   }
 
-  TEST_CASE("WorkspaceSessionCodec - refuses to encode invalid live state", "[runtime][unit][workspace][session-codec]")
+  TEST_CASE("WorkspaceSessionYamlSchema - refuses to serialize invalid live state",
+            "[runtime][unit][workspace][session-schema]")
   {
     auto state = WorkspaceSessionState{
       .openViews =
@@ -221,9 +226,98 @@ namespace ao::rt::test
       state.openViews[0].optPresentation->visibleFields[0] = static_cast<TrackField>(255);
     }
 
-    auto const result = detail::encodeWorkspaceSession(state);
+    auto const result = detail::toWorkspaceSessionDocument(state);
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidState);
+  }
+
+  TEST_CASE("WorkspaceSessionYamlSchema - owns the exact YAML mapping", "[runtime][unit][workspace][session-schema]")
+  {
+    auto const presentation = makePresentation();
+    auto const state = WorkspaceSessionState{
+      .openViews =
+        {
+          TrackListViewConfig{
+            .listId = ListId{10},
+            .filterExpression = "$genre = \"Jazz\"",
+            .groupBy = presentation.groupBy,
+            .sortBy = presentation.sortBy,
+            .optPresentation = presentation,
+          },
+        },
+      .activeListId = ListId{10},
+    };
+    auto tree = ryml::Tree{yaml::callbacks()};
+
+    REQUIRE(detail::WorkspaceSessionYamlSchema{}.serialize(tree.rootref(), state));
+    CHECK(yaml::scalarView(tree.rootref()["presentationVersion"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["openViews"][0]["presentation"]["sort"][0]["field"]) == "disc-number");
+
+    auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+    REQUIRE(decoded);
+    REQUIRE(decoded->openViews.size() == 1);
+    CHECK(decoded->openViews[0].listId == ListId{10});
+    CHECK(decoded->openViews[0].optPresentation == state.openViews[0].optPresentation);
+  }
+
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid YAML candidates",
+            "[runtime][unit][workspace][session-schema]")
+  {
+    SECTION("Future version is reported before interpreting its payload")
+    {
+      auto const* source = "presentationVersion: 99\nopenViews: malformed\nactiveListId: malformed\ncustomPresets: "
+                           "malformed\nfuture: true\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("Missing required fields are rejected")
+    {
+      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveListId: 0\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("customPresets"));
+    }
+
+    SECTION("Unknown structural keys are rejected")
+    {
+      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveListId: 0\ncustomPresets: []\nfuture: true\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("future"));
+    }
+
+    SECTION("Malformed nested entries reject the whole candidate")
+    {
+      auto const* source = R"(
+        presentationVersion: 1
+        openViews:
+          - listId: 10
+            filterExpression: ""
+            presentation: malformed
+        activeListId: 10
+        customPresets: []
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("presentation"));
+    }
   }
 } // namespace ao::rt::test

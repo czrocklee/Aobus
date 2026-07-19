@@ -48,16 +48,16 @@ namespace ao::uimodel::test
     auto original = stateDocFor(node);
 
     auto tree = ryml::Tree{};
-    yaml::write(tree.rootref(), original);
+    REQUIRE(LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), original));
 
-    auto decoded = LayoutComponentStateDocument{};
-    REQUIRE(yaml::read(tree.rootref(), decoded));
+    auto decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+    REQUIRE(decoded);
 
-    CHECK(decoded.version == kStateFileVersion);
-    CHECK(decoded.preset == "modern");
-    REQUIRE(decoded.components.contains("main-paned"));
-    CHECK(decoded.components.at("main-paned").type == "split");
-    CHECK(decoded.components.at("main-paned").state.at("positionPercent").asDouble() == 0.42);
+    CHECK(decoded->version == kStateFileVersion);
+    CHECK(decoded->preset == "modern");
+    REQUIRE(decoded->components.contains("main-paned"));
+    CHECK(decoded->components.at("main-paned").type == "split");
+    CHECK(decoded->components.at("main-paned").state.at("positionPercent").asDouble() == 0.42);
   }
 
   TEST_CASE("LayoutComponentState - resolver validates versions type and baseline",
@@ -137,7 +137,7 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("LayoutComponentState - YAML decode handles corrupt files", "[uimodel][unit][layout][component]")
+  TEST_CASE("LayoutComponentState - YAML deserialization handles corrupt files", "[uimodel][unit][layout][component]")
   {
     SECTION("malformed state root is rejected")
     {
@@ -145,11 +145,12 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
 
-      auto decoded = LayoutComponentStateDocument{};
-      CHECK_FALSE(yaml::read(tree.rootref(), decoded));
+      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
     }
 
-    SECTION("malformed component entries are skipped")
+    SECTION("one malformed component rejects the whole candidate")
     {
       auto const* text = R"(
         version: 1
@@ -168,11 +169,43 @@ namespace ao::uimodel::test
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
 
-      auto decoded = LayoutComponentStateDocument{};
-      REQUIRE(yaml::read(tree.rootref(), decoded));
-      CHECK_FALSE(decoded.components.contains("bad-entry"));
-      REQUIRE(decoded.components.contains("valid-entry"));
-      CHECK(decoded.components.at("valid-entry").state.at("positionPercent").asDouble() == 0.33);
+      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("bad-entry"));
+    }
+
+    SECTION("future file version wins over unknown payload structure")
+    {
+      auto const* text = R"(
+        version: 99
+        preset: modern
+        components: invalid
+        futureField: true
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
+      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::NotSupported);
+    }
+
+    SECTION("unknown structural keys are rejected")
+    {
+      auto const* text = R"(
+        version: 1
+        preset: modern
+        components: {}
+        futureField: true
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(text), &tree);
+      auto const decoded = LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), LayoutComponentStateDocument{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("futureField"));
     }
   }
 

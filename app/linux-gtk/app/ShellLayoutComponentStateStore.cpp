@@ -78,23 +78,26 @@ namespace ao::gtk
       auto tree = ryml::Tree{yaml::callbacks(yamlErrorState)};
       yaml::parseInPlace(tree, buffer, yamlErrorState);
 
-      auto doc = uimodel::LayoutComponentStateDocument{};
+      auto doc =
+        uimodel::LayoutComponentStateYamlSchema{}.deserialize(tree.rootref(), uimodel::LayoutComponentStateDocument{});
 
-      if (!yaml::read(tree.rootref(), doc))
+      if (!doc)
       {
-        APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to decode state file ({})", path.string());
+        APP_LOG_WARN("ShellLayoutComponentStateStore: Failed to deserialize state file ({}): {}",
+                     path.string(),
+                     doc.error().message);
         return std::nullopt;
       }
 
-      if (doc.preset != presetId)
+      if (doc->preset != presetId)
       {
         APP_LOG_WARN("ShellLayoutComponentStateStore: Ignoring state file ({}) with mismatched preset '{}'",
                      path.string(),
-                     doc.preset);
+                     doc->preset);
         return std::nullopt;
       }
 
-      return doc;
+      return std::move(*doc);
     }
     catch (std::exception const& e)
     {
@@ -123,8 +126,17 @@ namespace ao::gtk
 
     try
     {
-      auto tree = ryml::Tree{};
-      yaml::write(tree.rootref(), stored);
+      auto tree = ryml::Tree{yaml::callbacks()};
+
+      if (auto const serialized = uimodel::LayoutComponentStateYamlSchema{}.serialize(tree.rootref(), stored);
+          !serialized)
+      {
+        APP_LOG_ERROR("ShellLayoutComponentStateStore: Failed to serialize state file ({}): {}",
+                      path.string(),
+                      serialized.error().message);
+        return false;
+      }
+
       auto const text = ryml::emitrs_yaml<std::string>(tree);
 
       if (auto const result = utility::writeAtomically(path, text); !result)

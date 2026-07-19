@@ -98,8 +98,8 @@ The controller asks for confirmation before writing and installing the promoted 
 
 ## Failure and cancellation
 
-Malformed or absent custom layout files fall back to the built-in preset through `ShellLayoutStore::load()`.
-Malformed, mismatched, absent, or unsupported component-state documents fall back to empty state.
+Malformed, unsupported-version, or absent custom layout files fall back to the built-in preset through `ShellLayoutStore::load()`.
+Malformed, mismatched, absent, or unsupported component-state documents are rejected and fall back to empty state.
 Preset ids reject empty values, path separators, and `..`; component-state ids also reject NUL.
 
 Unknown components and template errors remain visible in the rendered layout instead of aborting the whole build.
@@ -118,8 +118,8 @@ Customized layouts use one YAML file per preset under the layout configuration d
 Component runtime state uses one YAML file per preset under the state directory.
 
 Layout documents and component-state documents currently use version `1`.
-An unsupported component-state document or entry version is ignored rather than migrated.
-Authored layout documents currently do not reject an unsupported numeric version and have no shared file/model/expansion budget; [RFC 0025](../../rfc/0025-bounded-shell-layout-documents.md) proposes the strict bounded candidate behavior.
+Their explicit schemas reject unsupported document and entry versions before interpreting version-specific payload; neither format has a legacy or migration fallback.
+They still have no shared file/model/template-expansion budget; [RFC 0025](../../rfc/0025-bounded-shell-layout-documents.md) proposes those bounded-resource and broader preservation policies.
 Exact fields and managed locations belong to reference.
 
 ## Frontend observations
@@ -137,7 +137,7 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - [`ShellLayoutSessionModel.cpp`](../../../app/uimodel/layout/shell/ShellLayoutSessionModel.cpp) owns active-session policy.
 - [`LayoutTemplateExpansion.cpp`](../../../app/uimodel/layout/document/LayoutTemplateExpansion.cpp) owns template behavior.
 - [`LayoutRuntime.cpp`](../../../app/linux-gtk/layout/runtime/LayoutRuntime.cpp), [`ComponentRegistry.cpp`](../../../app/linux-gtk/layout/runtime/ComponentRegistry.cpp), and [`LayoutHost.cpp`](../../../app/linux-gtk/layout/runtime/LayoutHost.cpp) own GTK construction.
-- [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) and [`LayoutStatePromoter.cpp`](../../../app/uimodel/layout/component/LayoutStatePromoter.cpp) own reusable state policy.
+- [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) and [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) own explicit document/state schemas; [`LayoutStatePromoter.cpp`](../../../app/uimodel/layout/component/LayoutStatePromoter.cpp) owns reusable promotion policy.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own files.
 
 ## Test map

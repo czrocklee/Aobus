@@ -25,6 +25,7 @@ Use the [development guide template](../template/development.md) for a new contr
 - [Dependency upgrade](dependency-upgrade.md) gives the supported procedure for changing dependency and tool pins.
 - [Windows development](windows.md) covers the native Windows portal, local state, tool bootstrap, and mapped-source workflow.
 - [Agent council](agent-council.md) defines the advisory multi-model review workflow and its evidence boundary.
+- [Managed-state schemas](managed-state-schemas.md) defines owner-local YAML schema policy, implementation workflow, test evidence, and schema guardrails.
 
 ## Testing
 

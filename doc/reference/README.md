@@ -18,7 +18,7 @@ Use the [reference template](../template/reference.md).
 ## Persistence
 
 - [Managed file locations](persistence/location.md) enumerate default Linux product paths and frontend overrides.
-- [Application managed-state surface](persistence/application-config.md) enumerates managed YAML documents, registered groups, payload authorities, codecs, and version markers.
+- [Application managed-state surface](persistence/application-config.md) enumerates managed YAML documents, registered groups, payload authorities, schemas, and version markers.
 
 ## Failure and reporting
 

@@ -7,7 +7,6 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
-#include <ao/uimodel/layout/document/LayoutYaml.h>
 
 #include <filesystem>
 #include <format>
@@ -49,9 +48,17 @@ namespace ao::gtk
     auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly};
     auto doc = uimodel::LayoutDocument{};
 
-    if (auto const res = uimodel::loadLayout(store, "layout", doc); !res)
+    auto const loaded = uimodel::loadLayout(store, "layout", doc);
+
+    if (!loaded)
     {
-      APP_LOG_WARN("ShellLayoutStore: Failed to load layout ({}): {}", path.string(), res.error().message);
+      APP_LOG_WARN("ShellLayoutStore: Failed to load layout ({}): {}", path.string(), loaded.error().message);
+      return std::nullopt;
+    }
+
+    if (!*loaded)
+    {
+      APP_LOG_WARN("ShellLayoutStore: Layout file ({}) has no 'layout' group", path.string());
       return std::nullopt;
     }
 

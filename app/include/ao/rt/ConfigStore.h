@@ -5,15 +5,15 @@
 
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/yaml/ConfigTraits.h> // IWYU pragma: export
-#include <ao/yaml/RymlAdapter.h>
+#include <ao/yaml/Serialization.h>
 
-#include <cstddef>
+#include <concepts>
 #include <cstdint>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -21,6 +21,27 @@
 
 namespace ao::rt
 {
+  template<typename Schema, typename T>
+  concept ConfigSchema =
+    requires(Schema const& schema, ryml::NodeRef output, ryml::ConstNodeRef input, T const& value) {
+      { schema.serialize(output, value) } -> std::same_as<Result<>>;
+      { schema.deserialize(input, value) } -> std::same_as<Result<T>>;
+    };
+
+  template<typename T, ConfigSchema<T> Schema>
+  struct ConfigWrite final
+  {
+    std::string_view group;
+    T const& value;
+    Schema schema;
+  };
+
+  template<typename T, ConfigSchema<T> Schema>
+  ConfigWrite<T, Schema> configWrite(std::string_view group, T const& value, Schema schema)
+  {
+    return {.group = group, .value = value, .schema = std::move(schema)};
+  }
+
   class ConfigStore final
   {
   public:
@@ -42,9 +63,98 @@ namespace ao::rt
     Result<bool> contains(std::string_view group);
     Result<> removeGroup(std::string_view group);
 
-    template<typename T, typename... Remaining>
-      requires(sizeof...(Remaining) % 2 == 0)
-    Result<> save(std::string_view group, T const& obj, Remaining const&... remaining)
+    template<typename T, ConfigSchema<T> Schema>
+    Result<> save(std::string_view group, T const& value, Schema schema)
+    {
+      return saveWrites(configWrite(group, value, std::move(schema)));
+    }
+
+    template<typename... T, typename... Schema>
+      requires(sizeof...(T) > 1)
+    Result<> saveTogether(ConfigWrite<T, Schema> const&... writes)
+    {
+      return saveWrites(writes...);
+    }
+
+    template<typename T, ConfigSchema<T> Schema>
+      requires std::is_move_assignable_v<T>
+    Result<bool> load(std::string_view group, T& value, Schema const& schema)
+    {
+      if (auto const result = ensureLoaded(); !result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      auto const child = _root.rootref()[yaml::toCsubstr(group)];
+
+      if (!child.readable())
+      {
+        return false;
+      }
+
+      try
+      {
+        auto deserialized = schema.deserialize(child, value);
+
+        if (!deserialized)
+        {
+          return std::unexpected{withGroupContext(deserialized.error(), "deserialize", group)};
+        }
+
+        value = std::move(*deserialized);
+        return true;
+      }
+      catch (std::exception const& error)
+      {
+        return makeError(Error::Code::FormatRejected,
+                         std::format("Failed to deserialize config group '{}': {}",
+                                     yaml::boundedErrorContext(group),
+                                     yaml::boundedErrorContext(error.what())));
+      }
+    }
+
+  private:
+    static Error withGroupContext(Error error, std::string_view operation, std::string_view group)
+    {
+      error.message = std::format("Failed to {} config group '{}': {}",
+                                  operation,
+                                  yaml::boundedErrorContext(group),
+                                  yaml::boundedErrorContext(error.message));
+      return error;
+    }
+
+    template<typename T, ConfigSchema<T> Schema>
+    static Result<> serializeGroup(ryml::Tree& candidate, std::string_view group, T const& value, Schema const& schema)
+    {
+      try
+      {
+        auto root = candidate.rootref();
+
+        if (auto const groupName = yaml::toCsubstr(group); root[groupName].readable())
+        {
+          root.remove_child(groupName);
+        }
+
+        auto output = yaml::appendChild(root, group);
+
+        if (auto const result = schema.serialize(output, value); !result)
+        {
+          return std::unexpected{withGroupContext(result.error(), "serialize", group)};
+        }
+      }
+      catch (std::exception const& error)
+      {
+        return makeError(Error::Code::InvalidState,
+                         std::format("Failed to serialize config group '{}': {}",
+                                     yaml::boundedErrorContext(group),
+                                     yaml::boundedErrorContext(error.what())));
+      }
+
+      return {};
+    }
+
+    template<typename... T, typename... Schema>
+    Result<> saveWrites(ConfigWrite<T, Schema> const&... writes)
     {
       auto candidateResult = prepareWriteCandidate();
 
@@ -54,133 +164,32 @@ namespace ao::rt
       }
 
       auto candidate = std::move(*candidateResult);
-      writeGroups(candidate, group, obj, remaining...);
-      return commitCandidate(std::move(candidate));
-    }
 
-    template<typename T>
-      requires(std::is_copy_constructible_v<T> && std::is_move_assignable_v<T>)
-    Result<> load(std::string_view group, T& obj)
-    {
-      if (auto const result = ensureLoaded(); !result)
+      try
       {
-        return result;
-      }
-
-      if (_root.is_map(0))
-      {
-        if (auto const child = _root.rootref()[yaml::toCsubstr(group)]; child.readable())
+        auto serialized = Result<>{};
+        auto const serialize = [&candidate, &serialized](auto const& write)
         {
-          auto candidate = obj;
-
-          try
+          if (serialized)
           {
-            if (!yaml::read(child, candidate))
-            {
-              return makeError(Error::Code::FormatRejected, std::format("Failed to decode config key '{}'", group));
-            }
+            serialized = serializeGroup(candidate, write.group, write.value, write.schema);
           }
-          catch (std::exception const& e)
-          {
-            return makeError(
-              Error::Code::FormatRejected, std::format("Failed to decode config key '{}': {}", group, e.what()));
-          }
+        };
+        (serialize(writes), ...);
 
-          obj = std::move(candidate);
-        }
-      }
-
-      return {};
-    }
-
-    /** Strict recursive aggregate/vector decoding for explicitly versioned payloads. */
-    template<typename T>
-      requires(std::is_copy_constructible_v<T> && std::is_move_assignable_v<T>)
-    Result<> loadExact(std::string_view group, T& obj)
-    {
-      if (auto const result = ensureLoaded(); !result)
-      {
-        return result;
-      }
-
-      if (_root.is_map(0))
-      {
-        if (auto const child = _root.rootref()[yaml::toCsubstr(group)]; child.readable())
+        if (!serialized)
         {
-          auto candidate = obj;
-
-          try
-          {
-            if (!yaml::readExact(child, candidate))
-            {
-              return makeError(
-                Error::Code::FormatRejected, std::format("Failed to decode exact config key '{}'", group));
-            }
-          }
-          catch (std::exception const& e)
-          {
-            return makeError(
-              Error::Code::FormatRejected, std::format("Failed to decode exact config key '{}': {}", group, e.what()));
-          }
-
-          obj = std::move(candidate);
+          return serialized;
         }
+
+        return commitCandidate(std::move(candidate));
       }
-
-      return {};
-    }
-
-  private:
-    // String-literal group names use an array reference to preserve their length without decay.
-    // NOLINTBEGIN(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
-    template<std::size_t N>
-    static constexpr std::string_view asGroupView(char const (&group)[N]) noexcept
-    {
-      return {&group[0], N - 1};
-    }
-    // NOLINTEND(cppcoreguidelines-avoid-c-arrays,modernize-avoid-c-arrays)
-
-    template<typename Group>
-    static std::string_view asGroupView(Group const& group)
-    {
-      return std::string_view{group};
-    }
-
-    template<typename T>
-    static void writeGroup(ryml::Tree& candidate, std::string_view group, T const& obj)
-    {
-      auto const groupName = yaml::toCsubstr(group);
-      auto child = candidate.rootref()[groupName];
-
-      if (!child.readable())
+      catch (std::exception const& error)
       {
-        child = candidate.rootref().append_child();
-        yaml::setKey(child, group);
+        return makeError(
+          Error::Code::InvalidState,
+          std::format("Failed to assemble config write candidate: {}", yaml::boundedErrorContext(error.what())));
       }
-      else
-      {
-        child.clear_children();
-      }
-
-      yaml::write(child, obj);
-    }
-
-    template<typename T>
-    static void writeGroups(ryml::Tree& candidate, std::string_view group, T const& obj)
-    {
-      writeGroup(candidate, group, obj);
-    }
-
-    template<typename T, typename NextGroup, typename NextT, typename... Remaining>
-    static void writeGroups(ryml::Tree& candidate,
-                            std::string_view group,
-                            T const& obj,
-                            NextGroup const& nextGroup,
-                            NextT const& nextObj,
-                            Remaining const&... remaining)
-    {
-      writeGroup(candidate, group, obj);
-      writeGroups(candidate, asGroupView(nextGroup), nextObj, remaining...);
     }
 
     Result<> ensureLoaded();

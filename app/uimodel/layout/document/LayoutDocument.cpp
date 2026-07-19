@@ -1,36 +1,58 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-// clang-format off
+#include <ao/Error.h>
+#include <ao/rt/ConfigStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
-// clang-format on
-
-#include <ao/Error.h>
-#include <ao/rt/ConfigStore.h>
-#include <ao/yaml/ConfigTraits.h>
 #include <ao/yaml/RymlAdapter.h>
+#include <ao/yaml/Serialization.h>
 
-#include <charconv>
+#include <array>
 #include <cstdint>
+#include <expected>
+#include <format>
+#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
-namespace ao::yaml
+namespace ao::uimodel
 {
-  using namespace ao::uimodel;
-
-  void write(ryml::NodeRef node, LayoutValue const& value)
+  Result<> writeLayoutValueMap(ryml::NodeRef node, LayoutValueMap const& values)
   {
-    std::visit(
-      [&node](auto const& nodeValue)
+    return yaml::writeStringMap(node, values, "layout value map", writeLayoutValue);
+  }
+
+  Result<LayoutValueMap> readLayoutValueMap(ryml::ConstNodeRef node, std::string_view context)
+  {
+    return yaml::readStringMap<LayoutValueMap>(node, context, readLayoutValue);
+  }
+
+  namespace
+  {
+    using LayoutNodeMap = std::map<std::string, LayoutNode, std::less<>>;
+
+    Result<> writeLayoutNodeMap(ryml::NodeRef node, LayoutNodeMap const& values)
+    {
+      return yaml::writeStringMap(node, values, "layout templates", writeLayoutNode);
+    }
+
+    Result<LayoutNodeMap> readLayoutNodeMap(ryml::ConstNodeRef node, std::string_view context)
+    {
+      return yaml::readStringMap<LayoutNodeMap>(node, context, readLayoutNode);
+    }
+  } // namespace
+
+  Result<> writeLayoutValue(ryml::NodeRef node, LayoutValue const& value)
+  {
+    return std::visit(
+      [&node](auto const& nodeValue) -> Result<>
       {
         using T = std::decay_t<decltype(nodeValue)>;
 
@@ -40,230 +62,206 @@ namespace ao::yaml
         }
         else if constexpr (std::is_same_v<T, std::vector<std::string>>)
         {
-          node |= ryml::SEQ;
-
-          for (auto const& item : nodeValue)
-          {
-            setValue(node.append_child(), item);
-          }
-        }
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-          setValue(node, nodeValue);
+          return yaml::writeScalarSequence(node, nodeValue);
         }
         else
         {
-          write(node, nodeValue);
+          yaml::writeScalar(node, nodeValue);
         }
+
+        return {};
       },
       value.data);
   }
 
-  bool read(ryml::ConstNodeRef node, LayoutValue& value)
+  Result<LayoutValue> readLayoutValue(ryml::ConstNodeRef node, std::string_view context)
   {
     if (node.invalid() || (node.has_val() && node.val_is_null()))
     {
-      value.data = std::monostate{};
-      return true;
+      return LayoutValue{std::monostate{}};
     }
 
     if (node.has_val())
     {
-      auto const scalar = scalarView(node);
+      auto const scalar = yaml::scalarView(node);
+
+      if (node.is_val_quoted())
+      {
+        return LayoutValue{std::string{scalar}};
+      }
 
       if (scalar == "true")
       {
-        value.data = true;
-        return true;
+        return LayoutValue{true};
       }
 
       if (scalar == "false")
       {
-        value.data = false;
-        return true;
+        return LayoutValue{false};
       }
 
-      auto const* const first = scalar.data();
-      auto const* const last = first + scalar.size();
-
+      if (std::int64_t integer = 0; yaml::tryParseScalar(scalar, integer))
       {
-        std::int64_t intValue = 0;
-
-        if (auto const intResult = std::from_chars(first, last, intValue);
-            intResult.ec == std::errc{} && intResult.ptr == last)
-        {
-          value.data = intValue;
-          return true;
-        }
+        return LayoutValue{integer};
       }
 
+      if (double real = 0.0; yaml::tryParseScalar(scalar, real))
       {
-        double doubleValue = 0.0;
-
-        if (auto const doubleResult = std::from_chars(first, last, doubleValue);
-            doubleResult.ec == std::errc{} && doubleResult.ptr == last)
-        {
-          value.data = doubleValue;
-          return true;
-        }
-
-        value.data = std::string{scalar};
-        return true;
+        return LayoutValue{real};
       }
+
+      return LayoutValue{std::string{scalar}};
     }
 
     if (node.is_seq())
     {
-      auto sequence = std::vector<std::string>{};
+      auto sequence = yaml::readScalarSequence<std::string>(node, context);
 
-      for (auto const& item : node.children())
+      if (!sequence)
       {
-        if (item.has_val())
-        {
-          sequence.emplace_back(scalarView(item));
-        }
+        return std::unexpected{sequence.error()};
       }
 
-      value.data = std::move(sequence);
-      return true;
+      return LayoutValue{std::move(*sequence)};
     }
 
-    return false;
+    return makeError(Error::Code::FormatRejected,
+                     yaml::boundedErrorContext(context) + " must be null, a scalar, or a scalar sequence");
   }
 
-  void write(ryml::NodeRef node, LayoutNode const& value)
+  Result<> writeLayoutNode(ryml::NodeRef node, LayoutNode const& value)
   {
-    node |= ryml::MAP;
+    if (value.type.empty())
+    {
+      return makeError(Error::Code::InvalidState, "Layout node type must not be empty");
+    }
+
+    auto writer = yaml::MapWriter{node};
 
     if (!value.id.empty())
     {
-      node.append_child() << ryml::key("id") << value.id;
+      writer.scalar("id", value.id);
     }
 
-    node.append_child() << ryml::key("type") << value.type;
+    writer.scalar("type", value.type);
 
     if (!value.props.empty())
     {
-      auto child = node.append_child();
-      child << ryml::key("props");
-      write(child, value.props);
+      writer.value("props", value.props, writeLayoutValueMap);
     }
 
     if (!value.layout.empty())
     {
-      auto child = node.append_child();
-      child << ryml::key("layout");
-      write(child, value.layout);
+      writer.value("layout", value.layout, writeLayoutValueMap);
     }
 
     if (!value.children.empty())
     {
-      auto child = node.append_child();
-      child << ryml::key("children");
-      write(child, value.children);
+      writer.sequence("children", value.children, writeLayoutNode);
     }
 
     if (value.optTooltip && value.optTooltip->nodePtr)
     {
-      auto child = node.append_child();
-      child << ryml::key("tooltip");
-      write(child, *value.optTooltip->nodePtr);
+      writer.value("tooltip", *value.optTooltip->nodePtr, writeLayoutNode);
     }
+
+    return std::move(writer).finish();
   }
 
-  bool read(ryml::ConstNodeRef node, LayoutNode& value)
+  Result<LayoutNode> readLayoutNode(ryml::ConstNodeRef node, std::string_view context)
   {
-    if (!node.is_map())
+    constexpr auto kKeys = std::to_array<std::string_view>({"id", "type", "props", "layout", "children", "tooltip"});
+
+    auto value = LayoutNode{};
+    auto reader = yaml::MapReader{node, kKeys, context};
+    reader.requiredScalar("type", value.type)
+      .optionalScalar("id", value.id)
+      .optionalValue("props", value.props, readLayoutValueMap)
+      .optionalValue("layout", value.layout, readLayoutValueMap)
+      .optionalSequence("children", value.children, readLayoutNode);
+
+    if (!reader.result())
     {
-      return false;
+      return std::unexpected{reader.result().error()};
     }
 
-    if (auto const idNode = findChild(node, "id"); idNode.readable())
+    if (value.type.empty())
     {
-      value.id = scalarView(idNode);
+      return makeError(Error::Code::FormatRejected, yaml::fieldContext(context, "type") + " must not be empty");
     }
 
-    if (auto const typeNode = findChild(node, "type"); typeNode.readable())
+    if (auto const tooltipNode = yaml::findChild(node, "tooltip"); tooltipNode.readable())
     {
-      value.type = scalarView(typeNode);
-    }
+      auto tooltip = readLayoutNode(tooltipNode, yaml::fieldContext(context, "tooltip"));
 
-    if (auto const propsNode = findChild(node, "props"); propsNode.readable())
-    {
-      read(propsNode, value.props);
-    }
-
-    if (auto const layoutNode = findChild(node, "layout"); layoutNode.readable())
-    {
-      read(layoutNode, value.layout);
-    }
-
-    if (auto const childrenNode = findChild(node, "children"); childrenNode.readable())
-    {
-      read(childrenNode, value.children);
-    }
-
-    if (auto const tooltipNode = findChild(node, "tooltip"); tooltipNode.readable())
-    {
-      if (auto tooltipValue = LayoutNode{}; read(tooltipNode, tooltipValue))
+      if (!tooltip)
       {
-        value.optTooltip = BoxedLayoutNode{std::move(tooltipValue)};
+        return std::unexpected{tooltip.error()};
       }
+
+      value.optTooltip = BoxedLayoutNode{std::move(*tooltip)};
     }
 
-    return true;
+    return value;
   }
 
-  void write(ryml::NodeRef node, LayoutDocument const& value)
+  Result<> LayoutDocumentYamlSchema::serialize(ryml::NodeRef node, LayoutDocument const& document) const
   {
-    node |= ryml::MAP;
-    node.append_child() << ryml::key("version") << static_cast<std::int32_t>(value.version);
-    write(node.append_child() << ryml::key("root"), value.root);
-
-    if (!value.templates.empty())
+    if (document.version != kLayoutDocumentVersion)
     {
-      auto child = node.append_child();
-      child << ryml::key("templates");
-      write(child, value.templates);
+      return makeError(
+        Error::Code::NotSupported, std::format("Unsupported layout document version {}", document.version));
     }
+
+    auto writer = yaml::MapWriter{node};
+    writer.scalar("version", document.version).value("root", document.root, writeLayoutNode);
+
+    if (!document.templates.empty())
+    {
+      writer.value("templates", document.templates, writeLayoutNodeMap);
+    }
+
+    return std::move(writer).finish();
   }
 
-  bool read(ryml::ConstNodeRef node, LayoutDocument& value)
+  Result<LayoutDocument> LayoutDocumentYamlSchema::deserialize(ryml::ConstNodeRef node,
+                                                               LayoutDocument const& /*seed*/) const
   {
-    if (!node.is_map())
+    constexpr auto kContext = std::string_view{"layout document"};
+
+    if (auto const result = yaml::requireMap(node, kContext); !result)
     {
-      return false;
+      return std::unexpected{result.error()};
     }
 
-    auto const versionNode = findChild(node, "version");
-    auto const rootNode = findChild(node, "root");
+    auto version = yaml::requireScalar<std::uint32_t>(node, "version", kContext);
 
-    if (!versionNode.readable() || !rootNode.readable())
+    if (!version)
     {
-      return false;
+      return std::unexpected{version.error()};
     }
 
-    read(versionNode, value.version);
-    read(rootNode, value.root);
-
-    if (auto const templatesNode = findChild(node, "templates"); templatesNode.readable())
+    if (*version != kLayoutDocumentVersion)
     {
-      read(templatesNode, value.templates);
+      return makeError(Error::Code::NotSupported, std::format("Unsupported layout document version {}", *version));
     }
 
-    return true;
+    constexpr auto kKeys = std::to_array<std::string_view>({"version", "root", "templates"});
+
+    auto document = LayoutDocument{.version = *version};
+    auto reader = yaml::MapReader{node, kKeys, kContext};
+    reader.requiredValue("root", document.root, readLayoutNode)
+      .optionalValue("templates", document.templates, readLayoutNodeMap);
+    return std::move(reader).finish(std::move(document));
   }
-} // namespace ao::yaml
 
-namespace ao::uimodel
-{
-  Result<> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc)
+  Result<bool> loadLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument& doc)
   {
-    return store.load(group, doc);
+    return store.load(group, doc, LayoutDocumentYamlSchema{});
   }
 
   Result<> saveLayout(rt::ConfigStore& store, std::string_view group, LayoutDocument const& doc)
   {
-    return store.save(group, doc);
+    return store.save(group, doc, LayoutDocumentYamlSchema{});
   }
 } // namespace ao::uimodel
