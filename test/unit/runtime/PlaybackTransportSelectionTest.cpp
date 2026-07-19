@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/runtime/PlaybackServiceTestSupport.h"
+#include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/RenderTarget.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewIds.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,35 +16,35 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackService selection - reveal track requests", "[runtime][unit][playback][selection]")
+  TEST_CASE("PlaybackTransport selection - reveal track requests", "[runtime][unit][playback][selection]")
   {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    auto revealRequests = std::vector<PlaybackService::RevealTrackRequested>{};
-    auto sub = fixture.playbackService.onRevealTrackRequested([&](auto const& ev) { revealRequests.push_back(ev); });
-    fixture.playbackService.revealTrack(TrackId{42});
+    auto revealRequests = std::vector<PlaybackTransport::RevealTrackRequested>{};
+    auto sub = fixture.playbackTransport.onRevealTrackRequested([&](auto const& ev) { revealRequests.push_back(ev); });
+    fixture.playbackTransport.revealTrack(TrackId{42});
     REQUIRE(revealRequests.size() == 1);
     CHECK(revealRequests[0].trackId == TrackId{42});
     CHECK(revealRequests[0].preferredListId == kInvalidListId);
     CHECK(revealRequests[0].preferredViewId == kInvalidViewId);
   }
 
-  TEST_CASE("PlaybackService selection - teardown is deferred after pending engine notification",
+  TEST_CASE("PlaybackTransport selection - teardown is deferred after pending engine notification",
             "[runtime][regression][playback][concurrency]")
   {
-    auto fixturePtr = std::make_unique<PlaybackFixture<QueuedExecutor>>();
+    auto fixturePtr = std::make_unique<PlaybackTransportFixture<QueuedExecutor>>();
     fixturePtr->onDevicesChangedCb(fixturePtr->status.devices);
     fixturePtr->executor.drain();
 
     auto const fixtureUri = fixturePtr->installAudioFixture();
     auto const trackId = fixturePtr->libraryFixture.addTrack({.title = "A Track", .uri = fixtureUri});
-    REQUIRE(fixturePtr->playbackService.playTrack(trackId, ListId{1}));
+    REQUIRE(fixturePtr->playbackTransport.playTrack(trackId, ListId{1}));
     REQUIRE(fixturePtr->renderTarget != nullptr);
 
     bool callbackEntered = false;
     auto subscription = async::Subscription{};
-    subscription = fixturePtr->playbackService.onQualityChanged(
-      [&subscription, &callbackEntered](PlaybackService::QualityChanged const&)
+    subscription = fixturePtr->playbackTransport.onQualityChanged(
+      [&subscription, &callbackEntered](PlaybackTransport::QualityChanged const&)
       {
         subscription.reset();
         callbackEntered = true;
@@ -60,14 +60,14 @@ namespace ao::rt::test
     CHECK_FALSE(fixturePtr);
   }
 
-  TEST_CASE("PlaybackService selection - revealPlayingTrack works", "[runtime][unit][playback][selection]")
+  TEST_CASE("PlaybackTransport selection - revealPlayingTrack works", "[runtime][unit][playback][selection]")
   {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
-    auto revealRequests = std::vector<PlaybackService::RevealTrackRequested>{};
-    auto sub = fixture.playbackService.onRevealTrackRequested([&](PlaybackService::RevealTrackRequested const& ev)
-                                                              { revealRequests.push_back(ev); });
-    fixture.playbackService.revealPlayingTrack();
+    auto revealRequests = std::vector<PlaybackTransport::RevealTrackRequested>{};
+    auto sub = fixture.playbackTransport.onRevealTrackRequested([&](PlaybackTransport::RevealTrackRequested const& ev)
+                                                                { revealRequests.push_back(ev); });
+    fixture.playbackTransport.revealPlayingTrack();
     REQUIRE(revealRequests.size() == 1);
     CHECK(revealRequests[0].trackId == kInvalidTrackId);
     CHECK(revealRequests[0].preferredListId == kInvalidListId);

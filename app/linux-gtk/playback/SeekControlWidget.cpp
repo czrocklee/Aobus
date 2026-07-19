@@ -3,7 +3,7 @@
 
 #include "playback/SeekControlWidget.h"
 
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
@@ -29,8 +29,8 @@ namespace ao::gtk
     constexpr auto kSeekDebounceInterval = std::chrono::milliseconds{50};
   } // namespace
 
-  SeekControlWidget::SeekControlWidget(rt::PlaybackService& playbackService)
-    : _seekViewModel{playbackService, [this](ao::uimodel::SeekViewState const& view) { applyState(view); }}
+  SeekControlWidget::SeekControlWidget(rt::PlaybackService& playback)
+    : _seekViewModel{playback, [this](ao::uimodel::SeekViewState const& view) { applyState(view); }}
   {
     _scale.set_halign(Gtk::Align::FILL);
     _scale.set_hexpand(true);

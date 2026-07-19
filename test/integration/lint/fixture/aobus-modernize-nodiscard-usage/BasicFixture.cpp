@@ -186,11 +186,11 @@ public:
 };
 
 // NEGATIVE
-class GlobalPlaybackService
+class GlobalPlaybackTransport
 {
 public:
-  ~GlobalPlaybackService() {}
-  GlobalPlaybackService(GlobalPlaybackService const&) = delete;
+  ~GlobalPlaybackTransport() {}
+  GlobalPlaybackTransport(GlobalPlaybackTransport const&) = delete;
 };
 
 // NEGATIVE

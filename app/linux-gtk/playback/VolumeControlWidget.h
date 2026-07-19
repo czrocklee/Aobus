@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <gtkmm/button.h>
@@ -16,6 +15,11 @@
 #include <gtkmm/widget.h>
 #include <sigc++/connection.h>
 
+namespace ao::rt
+{
+  class PlaybackService;
+}
+
 namespace ao::gtk
 {
   /**
@@ -24,7 +28,7 @@ namespace ao::gtk
   class VolumeControlWidget final
   {
   public:
-    explicit VolumeControlWidget(rt::PlaybackService& playbackService);
+    explicit VolumeControlWidget(rt::PlaybackService& playback);
     ~VolumeControlWidget();
 
     VolumeControlWidget(VolumeControlWidget const&) = delete;

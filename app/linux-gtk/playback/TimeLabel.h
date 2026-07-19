@@ -25,7 +25,7 @@ namespace ao::gtk
   public:
     using Mode = uimodel::PlaybackTimeMode;
 
-    TimeLabel(rt::PlaybackService& playbackService, Mode mode);
+    TimeLabel(rt::PlaybackService& playback, Mode mode);
 
     TimeLabel(TimeLabel const&) = delete;
     TimeLabel& operator=(TimeLabel const&) = delete;

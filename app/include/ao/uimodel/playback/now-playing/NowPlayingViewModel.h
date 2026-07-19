@@ -5,7 +5,6 @@
 
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
@@ -14,6 +13,11 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+
+namespace ao::rt
+{
+  class PlaybackService;
+}
 
 namespace ao::uimodel
 {
@@ -90,12 +94,6 @@ namespace ao::uimodel
     std::function<void(NowPlayingViewState const&)> _onRender;
     PresentationTextCatalog _textCatalog;
 
-    async::Subscription _startedSub;
-    async::Subscription _pausedSub;
-    async::Subscription _idleSub;
-    async::Subscription _stoppedSub;
-    async::Subscription _outputDeviceChangedSub;
-    async::Subscription _qualityChangedSub;
-    async::Subscription _nowPlayingSub;
+    async::Subscription _snapshotSub;
   };
 } // namespace ao::uimodel

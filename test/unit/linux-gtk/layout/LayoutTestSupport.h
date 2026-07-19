@@ -10,10 +10,11 @@
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
+#include "runtime/playback/PlaybackSuccession.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackSequenceService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -70,9 +71,7 @@ namespace ao::gtk::layout::test
                                   std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {})
       : _appPtr{Gtk::Application::create(std::string{applicationId})}
       , _runtime{gtk::test::makeRuntime(_tempDir, std::move(initializeLibrary))}
-      , _playbackCommandSurface{_runtime.playback(),
-                                _runtime.playbackSequence(),
-                                [this] { std::ignore = _runtime.playSelectionInFocusedView(); }}
+      , _playbackCommandSurface{_runtime.playback(), [this] { std::ignore = _runtime.playSelectionInFocusedView(); }}
       , _ctx{.registry = _components,
              .actionRegistry = _actions,
              .runtime = _runtime,
@@ -83,7 +82,6 @@ namespace ao::gtk::layout::test
       , _layoutRuntime{_components}
     {
       LayoutRuntime::registerStandardComponents(_components);
-      _dependencies.playbackSequence = &_runtime.playbackSequence();
       _dependencies.playbackCommandSurface = &_playbackCommandSurface;
     }
 

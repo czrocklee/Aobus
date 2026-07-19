@@ -168,7 +168,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto fixture = GtkRuntimeFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime().playback());
+    rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto optPersisted = std::optional<rt::AppPrefsState>{};
     auto window = PreferencesWindow{PreferencesWindow::Callbacks{
@@ -209,7 +209,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto fixture = GtkRuntimeFixture{};
-    rt::test::addReadyAudioProvider(fixture.runtime().playback());
+    rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto target = Gtk::Window{};
     auto window = PreferencesWindow{{}};

@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
-#include <ao/rt/PlaybackService.h>
 
 #include <cstdint>
 #include <functional>
@@ -12,7 +11,7 @@
 
 namespace ao::rt
 {
-  class PlaybackSequenceService;
+  class PlaybackService;
 }
 
 namespace ao::uimodel
@@ -58,7 +57,6 @@ namespace ao::uimodel
   {
   public:
     TransportViewModel(rt::PlaybackService& playback,
-                       rt::PlaybackSequenceService& sequence,
                        PlaybackCommandSurface& commands,
                        TransportAction action,
                        bool showLabel,
@@ -76,7 +74,6 @@ namespace ao::uimodel
 
   private:
     rt::PlaybackService& _playback;
-    rt::PlaybackSequenceService& _sequence;
     PlaybackCommandSurface& _commands;
     TransportAction _action;
     bool _showLabel;

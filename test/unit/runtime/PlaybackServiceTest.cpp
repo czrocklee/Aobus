@@ -1,411 +1,222 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2026 Aobus Contributors
+// Copyright (c) 2026 Aobus Contributors
 
-#include "test/unit/FilesystemTestSupport.h"
+#include "runtime/playback/PlaybackBootstrap.h"
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/runtime/PlaybackServiceTestSupport.h"
-#include <ao/audio/RenderTarget.h>
+#include <ao/AudioCodec.h>
+#include <ao/CoreIds.h>
+#include <ao/async/Runtime.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/NotificationIds.h>
-#include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackFailure.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
-#include <chrono>
-#include <cstddef>
+#include <concepts>
 #include <cstdint>
-#include <filesystem>
+#include <format>
+#include <memory>
 #include <string>
-#include <variant>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackService playback - playTrack fails when track does not exist", "[runtime][unit][playback][play]")
+  namespace
   {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    template<typename T>
+    concept HasTrackOnlyStart = requires(T& target) { target.playTrack(kInvalidTrackId, kInvalidListId); };
 
-    auto const result = fixture.playbackService.playTrack(TrackId{99999}, ListId{7});
+    template<typename T>
+    concept HasTrackOnlyPreparation = requires(T& target) { target.prepareNext(kInvalidTrackId, kInvalidListId); };
 
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::NotFound);
-  }
+    template<typename T>
+    concept HasPreparedNextClear = requires(T& target) { target.clearPreparedNext(); };
 
-  TEST_CASE("PlaybackService playback - playTrack resolves track metadata", "[runtime][unit][playback][play]")
-  {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    template<typename T>
+    concept HasLegacySuccessionAccessor = requires(T& target) { target.playbackSequence(); };
 
-    // Prime the device list. The first notification auto-selects the default
-    // output; the duplicate exercises the "already selected" early return, and the
-    // empty list exercises the no-devices guard.
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto emptyStatus = fixture.status;
-    emptyStatus.devices.clear();
-    fixture.onDevicesChangedCb(emptyStatus.devices);
-
-    auto spec = library::test::TrackSpec{};
-    spec.title = "Playable Track";
-    spec.artist = "Queue Artist";
-    spec.album = "Queue Album";
-    spec.uri = fixture.installAudioFixture();
-    spec.duration = std::chrono::minutes{3};
-    auto const trackId = fixture.libraryFixture.addTrack(spec);
-
-    CHECK(fixture.playbackService.playTrack(trackId, ListId{7}));
-    CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{.trackId = trackId,
-                                                                       .sourceListId = ListId{7},
-                                                                       .title = "Playable Track",
-                                                                       .artist = "Queue Artist",
-                                                                       .album = "Queue Album"});
-    CHECK(fixture.playbackService.state().duration > std::chrono::milliseconds{0});
-
-    fixture.playbackService.stop();
-    CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{});
-  }
-
-  TEST_CASE("PlaybackService playback - playTrack rejects a URI escaping through a symlink",
-            "[runtime][regression][playback][uri]")
-  {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
-    auto const outside = ao::test::TempDir{};
-    auto const outsideFile = outside.path() / "song.flac";
-    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), outsideFile);
-    auto const symlink = ao::test::SymlinkFixture{
-      outside.path(), fixture.libraryFixture.root() / "alias", ao::test::SymlinkType::Directory};
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Outside", .uri = "alias/song.flac"});
-
-    auto const result = fixture.playbackService.playTrack(trackId, ListId{7});
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(result.error().message.contains("outside the library root"));
-    CHECK(fixture.playbackService.state().nowPlaying == NowPlayingInfo{});
-  }
-
-  TEST_CASE("PlaybackService playback - prepareNext does not replace current state", "[runtime][unit][playback]")
-  {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    auto const fixtureUri = fixture.installAudioFixture();
-
-    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = fixtureUri});
-    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixtureUri});
-
-    REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
-    auto const preparedTokenResult = fixture.playbackService.prepareNext(nextTrack, ListId{7});
-    REQUIRE(preparedTokenResult);
-    auto const preparedToken = *preparedTokenResult;
-
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == currentTrack);
-    CHECK(fixture.playbackService.state().nowPlaying.title == "Current Track");
-    CHECK_FALSE(fixture.playbackService.prepareNext(TrackId{99999}, ListId{7}));
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == currentTrack);
-    CHECK(fixture.playbackService.clearPreparedNext() == preparedToken);
-  }
-
-  TEST_CASE("PlaybackService playback - drain emits idle when playback is actually idle",
-            "[runtime][unit][playback][drain]")
-  {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
-
-    auto const fixtureUri = fixture.installAudioFixture();
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Terminal Track", .uri = fixtureUri});
-
-    std::size_t idleCount = 0;
-    auto idleSub = fixture.playbackService.onIdle([&] { ++idleCount; });
-
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.renderTarget != nullptr);
-
-    auto buffer = std::array<std::byte, 4096>{};
-    bool isDrained = false;
-
-    for (std::int32_t i = 0; i < 100000 && !isDrained; ++i)
+    struct PlaybackServiceFixture final
     {
-      isDrained = fixture.renderTarget->renderPcm(buffer).drained;
-    }
+      PlaybackServiceFixture() = default;
 
-    REQUIRE(isDrained);
-    fixture.renderTarget->handleDrainComplete();
+      PlaybackServiceFixture(PlaybackServiceFixture const&) = delete;
+      PlaybackServiceFixture& operator=(PlaybackServiceFixture const&) = delete;
+      PlaybackServiceFixture(PlaybackServiceFixture&&) = delete;
+      PlaybackServiceFixture& operator=(PlaybackServiceFixture&&) = delete;
+      ~PlaybackServiceFixture() = default;
 
-    for (std::int32_t i = 0; i < 100000 && idleCount == 0; ++i)
-    {
-      fixture.executor.drain();
-    }
+      LibraryWriter& writer() { return writerFixture.writer(); }
 
-    REQUIRE(idleCount > 0);
-    CHECK(idleCount == 1);
-    CHECK(fixture.playbackService.state().transport == audio::Transport::Idle);
+      TrackId addPlayableTrack(std::string title)
+      {
+        auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
+        audio::test::installAudioFixture(libraryFixture.root(), "basic_metadata.flac", playableUri);
+        return libraryFixture.addTrack(
+          library::test::TrackSpec{.title = std::move(title), .uri = playableUri, .codec = AudioCodec::Flac});
+      }
+
+      void buildThreeTrackManualView()
+      {
+        firstTrackId = addPlayableTrack("First");
+        secondTrackId = addPlayableTrack("Second");
+        thirdTrackId = addPlayableTrack("Third");
+        sources.reloadAllTracks();
+        listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
+          .kind = LibraryWriter::ListKind::Manual,
+          .name = "Playback order",
+          .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
+        }));
+        viewId = ao::test::requireValue(views.createView({.listId = listId}, true)).viewId;
+        successionPtr = std::make_unique<PlaybackSuccession>(
+          executor, views, sources, libraryFixture.library(), playbackTransport, notifications, asyncRuntime);
+        playbackBootstrapPtr = std::make_unique<PlaybackBootstrap>(playbackTransport);
+        playbackBootstrapPtr->addProvider(makeReadyAudioProvider());
+        playbackPtr = playbackBootstrapPtr->createPlaybackService(executor, *successionPtr);
+      }
+
+      PlaybackCommands& commands() const { return playbackPtr->commands(); }
+      PlaybackService& playback() const { return *playbackPtr; }
+
+      MusicLibraryFixture libraryFixture;
+      ControlledSleeper sleeper;
+      InlineExecutor executor;
+      async::Runtime asyncRuntime{executor, 1, {}, &sleeper};
+      LibraryChanges changes;
+      LibraryWriterFixture writerFixture{libraryFixture.library(), changes};
+      TrackSourceCache sources{libraryFixture.library(), changes};
+      ViewService views{executor, libraryFixture.library(), sources};
+      NotificationService notifications{asyncRuntime};
+      PlaybackTransport playbackTransport{makePlaybackTransport(executor, libraryFixture.library(), notifications)};
+      std::unique_ptr<PlaybackSuccession> successionPtr;
+      std::unique_ptr<PlaybackBootstrap> playbackBootstrapPtr;
+      std::unique_ptr<PlaybackService> playbackPtr;
+
+      TrackId firstTrackId = kInvalidTrackId;
+      TrackId secondTrackId = kInvalidTrackId;
+      TrackId thirdTrackId = kInvalidTrackId;
+      ListId listId = kInvalidListId;
+      ViewId viewId = kInvalidViewId;
+      std::uint32_t nextPlayableFile = 0;
+    };
+  } // namespace
+
+  TEST_CASE("PlaybackService - public commands cannot bypass succession", "[runtime][unit][playback][boundary]")
+  {
+    // The internal transport still supports focused collaborator tests, while
+    // neither public entry point can create a transport-only playback subject.
+    STATIC_REQUIRE(HasTrackOnlyStart<PlaybackTransport>);
+    STATIC_REQUIRE(HasTrackOnlyPreparation<PlaybackTransport>);
+    STATIC_REQUIRE(HasPreparedNextClear<PlaybackTransport>);
+    STATIC_REQUIRE(!HasTrackOnlyStart<PlaybackService>);
+    STATIC_REQUIRE(!HasTrackOnlyStart<PlaybackCommands>);
+    STATIC_REQUIRE(!HasTrackOnlyPreparation<PlaybackService>);
+    STATIC_REQUIRE(!HasTrackOnlyPreparation<PlaybackCommands>);
+    STATIC_REQUIRE(!HasPreparedNextClear<PlaybackService>);
+    STATIC_REQUIRE(!HasPreparedNextClear<PlaybackCommands>);
+    STATIC_REQUIRE(!HasLegacySuccessionAccessor<AppRuntime>);
+    STATIC_REQUIRE(std::same_as<decltype(std::declval<AppRuntime&>().playback()), PlaybackService&>);
   }
 
-  TEST_CASE("PlaybackService playback - natural advance commits prepared track without idle",
-            "[runtime][unit][playback][gapless]")
+  TEST_CASE("PlaybackService - a view start publishes one coherent snapshot", "[runtime][unit][playback][coherence]")
   {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
+    auto fixture = PlaybackServiceFixture{};
+    fixture.buildThreeTrackManualView();
 
-    auto const fixtureUri = fixture.installAudioFixture();
-    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = fixtureUri});
-    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixtureUri});
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                     { snapshots.push_back(snapshot); });
 
-    auto nowPlaying = std::vector<PlaybackService::NowPlayingChanged>{};
-    std::size_t idleCount = 0;
-    auto nowPlayingSub = fixture.playbackService.onNowPlayingChanged([&](PlaybackService::NowPlayingChanged const& ev)
-                                                                     { nowPlaying.push_back(ev); });
-    auto idleSub = fixture.playbackService.onIdle([&] { ++idleCount; });
+    auto const started = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
+    REQUIRE(started);
 
-    REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
-    auto const preparedTokenResult = fixture.playbackService.prepareNext(nextTrack, ListId{7});
-    REQUIRE(preparedTokenResult);
-    auto const preparedToken = *preparedTokenResult;
-    REQUIRE(fixture.renderTarget != nullptr);
+    // One accepted command publishes exactly one snapshot even though it drives
+    // several lower transport and succession signals.
+    REQUIRE(snapshots.size() == 1);
 
-    // Only observe the natural advance below, not playTrack's own emission.
-    nowPlaying.clear();
+    auto const& published = snapshots.front();
+    CHECK(published.revision.value == 1);
+    // The transport subject and the succession subject describe one track.
+    CHECK(published.transport.nowPlaying.trackId == fixture.firstTrackId);
+    CHECK(published.succession.currentTrackId == fixture.firstTrackId);
+    CHECK(published.succession.sourceState == PlaybackSourceState::Live);
+    CHECK(published.transport.transport != audio::Transport::Idle);
+    // Output readiness and quality are captured inside the same revisioned
+    // value rather than arriving as independently correlated public state.
+    CHECK(published.transport.output == fixture.playbackTransport.state().output);
+    CHECK(published.transport.ready == fixture.playbackTransport.state().ready);
+    CHECK(published.transport.quality == fixture.playbackTransport.state().quality);
 
-    // Drive the render side to the end of the current track. Both tracks are
-    // the same lossless FLAC, so the engine splices into the prepared successor
-    // and reports the advance with the caller-supplied item id; the player
-    // marshals it onto the executor, which drain() runs on this thread.
-    auto buffer = std::array<std::byte, 4096>{};
-
-    for (std::int32_t i = 0; i < 100000 && nowPlaying.empty(); ++i)
-    {
-      fixture.renderTarget->renderPcm(buffer);
-      fixture.executor.drain();
-    }
-
-    REQUIRE_FALSE(nowPlaying.empty());
-
-    // Item-id match: the prepared request is committed as now-playing, exactly
-    // once, without an idle in between (idle would send playback down the
-    // explicit-restart fallback).
-    REQUIRE(nowPlaying.size() == 1);
-    CHECK(nowPlaying[0].trackId == nextTrack);
-    CHECK(nowPlaying[0].sourceListId == ListId{7});
-    CHECK(nowPlaying[0].optPreparedNextToken == preparedToken);
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
-    CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
-    CHECK(idleCount == 0);
+    // snapshot() reflects the same coherent state on demand.
+    auto const observed = fixture.playback().snapshot();
+    CHECK(observed.revision.value == 1);
+    CHECK(observed.sameContentAs(published));
   }
 
-  TEST_CASE("PlaybackService playback - final seek before advanced callback keeps prepared metadata",
-            "[runtime][unit][playback][gapless]")
+  TEST_CASE("PlaybackService - revisions advance monotonically on real change", "[runtime][unit][playback][coherence]")
   {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
+    auto fixture = PlaybackServiceFixture{};
+    fixture.buildThreeTrackManualView();
 
-    auto const fixtureUri = fixture.installAudioFixture();
-    auto const currentTrack = fixture.libraryFixture.addTrack({.title = "Current Track", .uri = fixtureUri});
-    auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixtureUri});
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                     { snapshots.push_back(snapshot); });
 
-    auto nowPlaying = std::vector<PlaybackService::NowPlayingChanged>{};
-    auto nowPlayingSub = fixture.playbackService.onNowPlayingChanged([&](PlaybackService::NowPlayingChanged const& ev)
-                                                                     { nowPlaying.push_back(ev); });
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.back().revision.value == 1);
 
-    REQUIRE(fixture.playbackService.playTrack(currentTrack, ListId{7}));
-    auto const preparedTokenResult = fixture.playbackService.prepareNext(nextTrack, ListId{7});
-    REQUIRE(preparedTokenResult);
-    auto const preparedToken = *preparedTokenResult;
-    REQUIRE(fixture.renderTarget != nullptr);
-    fixture.executor.drain();
-    nowPlaying.clear();
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    REQUIRE(snapshots.size() == 2);
+    CHECK(snapshots.back().revision.value == 2);
+    CHECK(snapshots.back().succession.shuffle == ShuffleMode::On);
 
-    auto buffer = std::array<std::byte, 4096>{};
-    REQUIRE(driveRenderUntilTaskQueued(*fixture.renderTarget, fixture.executor, buffer));
+    // Re-issuing the same shuffle mode changes no content and must not publish
+    // or advance the revision.
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    CHECK(snapshots.size() == 2);
+    CHECK(fixture.playback().snapshot().revision.value == 2);
 
-    fixture.playbackService.seek(std::chrono::milliseconds{0}, PlaybackService::SeekMode::Final);
-    fixture.executor.drain();
-
-    REQUIRE(nowPlaying.size() == 1);
-    CHECK(nowPlaying[0].trackId == nextTrack);
-    CHECK(nowPlaying[0].sourceListId == ListId{7});
-    CHECK(nowPlaying[0].optPreparedNextToken == preparedToken);
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == nextTrack);
-    CHECK(fixture.playbackService.state().nowPlaying.title == "Prepared Track");
+    fixture.commands().stop();
+    REQUIRE(snapshots.size() == 3);
+    CHECK(snapshots.back().revision.value == 3);
+    CHECK(snapshots.back().transport.transport == audio::Transport::Idle);
+    CHECK(snapshots.back().succession.sourceState == PlaybackSourceState::Inactive);
   }
 
-  TEST_CASE("PlaybackService playback - rejected preflight reports synchronously without an engine failure event",
-            "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackService - spontaneous lower changes coalesce at the end of one executor turn",
+            "[runtime][unit][playback][coherence]")
   {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback.events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                   { snapshots.push_back(snapshot); });
 
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
+    // These calls intentionally bypass PlaybackService to model independent lower-layer
+    // observations arriving within one callback-executor turn.
+    fixture.succession.setShuffleMode(ShuffleMode::On);
+    fixture.succession.setRepeatMode(RepeatMode::All);
 
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
-
-    auto const result = fixture.playbackService.playTrack(trackId, ListId{7});
-
-    REQUIRE_FALSE(result);
-    CHECK(result.error().message.contains("Unsupported audio file extension"));
-    fixture.executor.drain();
-    CHECK(failures.empty());
-    auto const feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
-    CHECK(
-      std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
-  }
-
-  TEST_CASE("PlaybackService playback - rejected preflight bypasses asynchronous failure observers",
-            "[runtime][unit][playback][error]")
-  {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
-
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
-    auto firstFailures = std::vector<PlaybackFailure>{};
-    auto secondFailures = std::vector<PlaybackFailure>{};
-    auto firstSub = fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure)
-                                                              { firstFailures.push_back(failure); });
-    auto secondSub = fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure)
-                                                               { secondFailures.push_back(failure); });
-
-    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    fixture.executor.drain();
-
-    CHECK(firstFailures.empty());
-    CHECK(secondFailures.empty());
-    REQUIRE(fixture.notificationService.feed().entries.size() == 1);
-  }
-
-  TEST_CASE(
-    "PlaybackService playback - rejected preflight report suppresses identical updates and renews after dismissal",
-    "[runtime][unit][playback][error]")
-  {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
-
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
-
-    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
-
-    auto feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
-    CHECK(
-      std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
-
-    auto const revisionBeforeDuplicate = feed.revision;
-    std::int32_t mutationCount = 0;
-    auto updateSub = fixture.notificationService.onFeedUpdated([&](NotificationFeedUpdate const&) { ++mutationCount; });
-
-    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    CHECK(mutationCount == 0);
-
-    feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.revision == revisionBeforeDuplicate);
-
-    auto const dismissedId = feed.entries.front().id;
-    fixture.notificationService.dismiss(dismissedId);
-    CHECK(fixture.notificationService.feed().entries.empty());
-
-    REQUIRE_FALSE(fixture.playbackService.playTrack(trackId, ListId{7}));
-
-    feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().id != dismissedId);
-  }
-
-  TEST_CASE("PlaybackService playback - rejected preflight preserves accepted playback",
-            "[runtime][unit][playback][error]")
-  {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
-
-    auto const fixtureUri = fixture.installAudioFixture();
-    auto const brokenTrack = fixture.libraryFixture.addTrack({.title = "Stale Broken Track", .uri = "broken.txt"});
-    auto const replacementTrack = fixture.libraryFixture.addTrack({.title = "Replacement Track", .uri = fixtureUri});
-
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
-
-    REQUIRE(fixture.playbackService.playTrack(replacementTrack, ListId{7}));
-    REQUIRE_FALSE(fixture.playbackService.playTrack(brokenTrack, ListId{7}));
+    CHECK(snapshots.empty());
 
     fixture.executor.drain();
 
-    CHECK(failures.empty());
-    CHECK(fixture.notificationService.feed().entries.size() == 1);
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == replacementTrack);
-  }
-
-  TEST_CASE("PlaybackService playback - route activation failures dedupe by kind", "[runtime][unit][playback][error]")
-  {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
-
-    auto const fixtureUri = fixture.installAudioFixture();
-    auto const track1 = fixture.libraryFixture.addTrack({.title = "Track 1", .uri = fixtureUri});
-    auto const track2 = fixture.libraryFixture.addTrack({.title = "Track 2", .uri = fixtureUri});
-
-    CHECK_FALSE(fixture.playbackService.playTrack(track1, ListId{7}));
-    CHECK_FALSE(fixture.playbackService.playTrack(track2, ListId{7}));
-
-    auto const feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
-    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
-          NotificationReportTemplate::PlaybackRouteActivationFailed);
-  }
-
-  TEST_CASE("PlaybackService playback - backend error publishes until-dismissed device failure",
-            "[runtime][unit][playback][error]")
-  {
-    auto fixture = PlaybackFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
-
-    auto const fixtureUri = fixture.installAudioFixture();
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Playing Track", .uri = fixtureUri});
-
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      fixture.playbackService.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
-
-    REQUIRE(fixture.playbackService.playTrack(trackId, ListId{7}));
-    REQUIRE(fixture.renderTarget != nullptr);
-
-    fixture.renderTarget->handleBackendError("device lost");
-    REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
-
-    REQUIRE(failures.size() == 1);
-    CHECK(failures.front().kind == PlaybackFailureKind::DeviceLost);
-    CHECK(failures.front().trackId == trackId);
-    CHECK(failures.front().sourceListId == ListId{7});
-    CHECK(failures.front().title == "Playing Track");
-    CHECK_FALSE(failures.front().recoverable);
-    CHECK(failures.front().error.message == "device lost");
-
-    auto const feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
-    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
-    CHECK(report.templateId == NotificationReportTemplate::PlaybackDeviceLost);
-    CHECK(report.detail == "device lost");
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.front().revision.value == 1);
+    CHECK(snapshots.front().succession.shuffle == ShuffleMode::On);
+    CHECK(snapshots.front().succession.repeat == RepeatMode::All);
   }
 } // namespace ao::rt::test

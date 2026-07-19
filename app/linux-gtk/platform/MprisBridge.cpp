@@ -10,9 +10,8 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -167,7 +166,6 @@ namespace ao::gtk::platform
   struct MprisBridge::Impl final
   {
     rt::PlaybackService& playback;
-    rt::PlaybackSequenceService& sequence;
     uimodel::PlaybackCommandSurface& commands;
     Callbacks callbacks;
     MprisPlaybackEndpoint endpoint;
@@ -178,16 +176,14 @@ namespace ao::gtk::platform
     utility::ScopedRegistration playerObjectRegistration{};
     bool nameAcquired = false;
     std::vector<async::Subscription> subscriptions{};
+    rt::PlaybackSnapshot lastSnapshot{};
 
-    Impl(rt::PlaybackService& playbackRef,
-         rt::PlaybackSequenceService& sequenceRef,
-         uimodel::PlaybackCommandSurface& commandsRef,
-         Callbacks callbacksIn)
+    Impl(rt::PlaybackService& playbackRef, uimodel::PlaybackCommandSurface& commandsRef, Callbacks callbacksIn)
       : playback{playbackRef}
-      , sequence{sequenceRef}
       , commands{commandsRef}
       , callbacks{std::move(callbacksIn)}
-      , endpoint{playback, sequence, commands, callbacks}
+      , endpoint{playback, commands, callbacks}
+      , lastSnapshot{playback.snapshot()}
     {
     }
 
@@ -235,31 +231,45 @@ namespace ao::gtk::platform
 
     void subscribePlayback()
     {
-      auto const notifyTransport = [this] { emitPlayerPropertiesChanged({"PlaybackStatus"}); };
       subscriptions.push_back(commands.onAvailabilityChanged(
         [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
-      subscriptions.push_back(playback.onPreparing(notifyTransport));
-      subscriptions.push_back(playback.onStarted(notifyTransport));
-      subscriptions.push_back(playback.onPaused(notifyTransport));
-      subscriptions.push_back(playback.onIdle(notifyTransport));
-      subscriptions.push_back(playback.onStopped(notifyTransport));
-      subscriptions.push_back(playback.onNowPlayingChanged([this](rt::PlaybackService::NowPlayingChanged const&)
-                                                           { emitPlayerPropertiesChanged({"Metadata", "CanSeek"}); }));
-      subscriptions.push_back(playback.onSeekUpdate(
-        [this](rt::PlaybackService::SeekUpdate const& event)
+      lastSnapshot = playback.snapshot();
+      subscriptions.push_back(playback.events().onSnapshot(
+        [this](rt::PlaybackSnapshot const& snapshot)
         {
-          if (event.mode == rt::PlaybackService::SeekMode::Preview)
+          if (snapshot.transport.transport != lastSnapshot.transport.transport)
           {
-            return;
+            emitPlayerPropertiesChanged({"PlaybackStatus"});
           }
 
-          emitSeeked(event.elapsed);
+          if (snapshot.transport.nowPlaying != lastSnapshot.transport.nowPlaying ||
+              snapshot.transport.duration != lastSnapshot.transport.duration)
+          {
+            emitPlayerPropertiesChanged({"Metadata", "CanSeek"});
+          }
+
+          if (snapshot.transport.elapsed != lastSnapshot.transport.elapsed)
+          {
+            emitSeeked(snapshot.transport.elapsed);
+          }
+
+          if (snapshot.transport.volume != lastSnapshot.transport.volume)
+          {
+            emitPlayerPropertiesChanged({"Volume"});
+          }
+
+          if (snapshot.succession.shuffle != lastSnapshot.succession.shuffle)
+          {
+            emitPlayerPropertiesChanged({"Shuffle"});
+          }
+
+          if (snapshot.succession.repeat != lastSnapshot.succession.repeat)
+          {
+            emitPlayerPropertiesChanged({"LoopStatus"});
+          }
+
+          lastSnapshot = snapshot;
         }));
-      subscriptions.push_back(playback.onVolumeChanged([this](float) { emitPlayerPropertiesChanged({"Volume"}); }));
-      subscriptions.push_back(sequence.onShuffleModeChanged(
-        [this](rt::PlaybackSequenceService::ShuffleModeChanged const&) { emitPlayerPropertiesChanged({"Shuffle"}); }));
-      subscriptions.push_back(sequence.onRepeatModeChanged([this](rt::PlaybackSequenceService::RepeatModeChanged const&)
-                                                           { emitPlayerPropertiesChanged({"LoopStatus"}); }));
     }
 
     bool dispatchPlayerMethod(std::string_view const methodName) const
@@ -289,7 +299,7 @@ namespace ao::gtk::platform
       return endpoint.playerCapabilityProperty(propertyName);
     }
 
-    std::string artUrlForState(rt::PlaybackState const& state) const
+    std::string artUrlForState(rt::PlaybackTransportSnapshot const& state) const
     {
       if (state.nowPlaying.coverArtId == kInvalidResourceId || !callbacks.artUrlForResource)
       {
@@ -371,7 +381,8 @@ namespace ao::gtk::platform
 
     Glib::VariantBase playerProperty(std::string_view const propertyName) const
     {
-      auto const& state = playback.state();
+      auto const snapshot = playback.snapshot();
+      auto const& state = snapshot.transport;
 
       if (propertyName == "PlaybackStatus")
       {
@@ -380,7 +391,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "LoopStatus")
       {
-        return Glib::Variant<Glib::ustring>::create(toUString(MprisBridge::loopStatus(sequence.state().repeat)));
+        return Glib::Variant<Glib::ustring>::create(toUString(MprisBridge::loopStatus(snapshot.succession.repeat)));
       }
 
       if (propertyName == "Rate" || propertyName == "MinimumRate" || propertyName == "MaximumRate")
@@ -395,7 +406,7 @@ namespace ao::gtk::platform
 
       if (propertyName == "Shuffle")
       {
-        return Glib::Variant<bool>::create(sequence.state().shuffle == rt::ShuffleMode::On);
+        return Glib::Variant<bool>::create(snapshot.succession.shuffle == rt::ShuffleMode::On);
       }
 
       if (propertyName == "CanSeek")
@@ -737,10 +748,9 @@ namespace ao::gtk::platform
   };
 
   MprisBridge::MprisBridge(rt::PlaybackService& playback,
-                           rt::PlaybackSequenceService& sequence,
                            uimodel::PlaybackCommandSurface& commands,
                            Callbacks callbacks)
-    : _implPtr{std::make_unique<Impl>(playback, sequence, commands, std::move(callbacks))}
+    : _implPtr{std::make_unique<Impl>(playback, commands, std::move(callbacks))}
   {
   }
 
@@ -828,7 +838,7 @@ namespace ao::gtk::platform
     return std::chrono::milliseconds{value / 1000};
   }
 
-  std::chrono::milliseconds MprisBridge::clampElapsed(rt::PlaybackState const& state,
+  std::chrono::milliseconds MprisBridge::clampElapsed(rt::PlaybackTransportSnapshot const& state,
                                                       std::chrono::milliseconds const elapsed) noexcept
   {
     if (elapsed < std::chrono::milliseconds{0})
@@ -844,7 +854,7 @@ namespace ao::gtk::platform
     return elapsed;
   }
 
-  std::chrono::milliseconds MprisBridge::seekTargetElapsed(rt::PlaybackState const& state,
+  std::chrono::milliseconds MprisBridge::seekTargetElapsed(rt::PlaybackTransportSnapshot const& state,
                                                            std::int64_t const offsetUs) noexcept
   {
     auto const offset = fromMprisMicroseconds(offsetUs).count();
@@ -877,7 +887,8 @@ namespace ao::gtk::platform
     return std::string{kTrackObjectPathPrefix} + std::to_string(trackId.raw());
   }
 
-  MprisBridge::MetadataSnapshot MprisBridge::metadataForState(rt::PlaybackState const& state, std::string artUrl)
+  MprisBridge::MetadataSnapshot MprisBridge::metadataForState(rt::PlaybackTransportSnapshot const& state,
+                                                              std::string artUrl)
   {
     if (state.nowPlaying.trackId == kInvalidTrackId)
     {

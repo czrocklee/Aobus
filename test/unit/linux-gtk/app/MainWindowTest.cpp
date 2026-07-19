@@ -142,12 +142,12 @@ namespace ao::gtk::test
     prefs.lastOutputProfileId = audio::kProfileShared.raw();
     configStorePtr->saveAppPrefs(prefs);
 
-    rt::test::addReadyAudioProvider(fixture.runtime().playback());
+    rt::test::addReadyAudioProvider(fixture.runtime());
 
     auto window = MainWindow{fixture.runtime(), configStorePtr, nullptr};
     drainGtkEvents();
 
-    auto const& output = fixture.runtime().playback().state().output.selectedDevice;
+    auto const output = fixture.runtime().playback().snapshot().transport.output.selectedDevice;
     CHECK(output.backendId == audio::BackendId{"test_backend"});
     CHECK(output.deviceId == audio::DeviceId{"test_device"});
     CHECK(output.profileId == audio::kProfileShared);

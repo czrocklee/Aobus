@@ -6,6 +6,8 @@
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackCursorSession.h"
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -15,11 +17,11 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <algorithm>
 #include <chrono>
@@ -89,8 +91,8 @@ namespace ao::rt
     PlaybackSessionState snapshotState(PlaybackLaunchSpec launchSpec,
                                        TrackId const currentTrackId,
                                        std::size_t const anchorIndex,
-                                       PlaybackTransportSessionState const& transport,
-                                       PlaybackSequenceState const& sequence)
+                                       std::chrono::milliseconds const elapsed,
+                                       PlaybackSnapshot const& snapshot)
     {
       return PlaybackSessionState{
         .sourceListId = launchSpec.sourceListId,
@@ -98,74 +100,40 @@ namespace ao::rt
         .sortBy = std::move(launchSpec.order.sortBy),
         .currentTrackId = currentTrackId,
         .anchorIndex = static_cast<std::uint64_t>(anchorIndex),
-        .positionMs = transport.positionMs,
-        .shuffleMode = sequence.shuffle,
-        .repeatMode = sequence.repeat,
-        .volume = transport.volume,
-        .muted = transport.muted,
+        .positionMs = static_cast<std::uint64_t>(std::max(elapsed, std::chrono::milliseconds{0}).count()),
+        .shuffleMode = snapshot.succession.shuffle,
+        .repeatMode = snapshot.succession.repeat,
+        .volume = snapshot.transport.volume.level,
+        .muted = snapshot.transport.volume.muted,
       };
     }
   } // namespace
 
   PlaybackSessionPersistence::PlaybackSessionPersistence(ConfigStore& config,
                                                          Library& library,
-                                                         PlaybackSequenceService& sequence,
+                                                         PlaybackSuccession& succession,
+                                                         PlaybackTransport& playbackTransport,
                                                          PlaybackService& playback,
                                                          async::Runtime& asyncRuntime)
     : _config{config}
     , _library{library}
-    , _sequence{sequence}
+    , _succession{succession}
+    , _playbackTransport{playbackTransport}
     , _playback{playback}
     , _asyncRuntime{asyncRuntime}
-    , _intentPosition{_playback.elapsed()}
-    , _volumeIntent{_playback.state().volume.level}
-    , _mutedIntent{_playback.state().volume.muted}
+    , _lastSnapshot{_playback.snapshot()}
+    , _intentPosition{_lastSnapshot.transport.elapsed}
+    , _volumeIntent{_lastSnapshot.transport.volume.level}
+    , _mutedIntent{_lastSnapshot.transport.volume.muted}
   {
-    _sequenceIntentSubscription = _sequence.onPersistenceIntentChanged(
+    _successionIntentSubscription = _succession.onPersistenceIntentChanged(
       [this]
       {
-        _intentPosition = _playback.elapsed();
+        _intentPosition = _playbackTransport.elapsed();
         markDirty();
       });
-    _volumeSubscription = _playback.onVolumeChanged(
-      [this](float const volume)
-      {
-        if (volume == _volumeIntent)
-        {
-          return;
-        }
-
-        _volumeIntent = volume;
-        markDirty();
-      });
-    _mutedSubscription = _playback.onMutedChanged(
-      [this](bool const muted)
-      {
-        if (muted == _mutedIntent)
-        {
-          return;
-        }
-
-        _mutedIntent = muted;
-        markDirty();
-      });
-    _seekSubscription = _playback.onSeekUpdate(
-      [this](PlaybackService::SeekUpdate const& event)
-      {
-        if (event.mode == PlaybackService::SeekMode::Final)
-        {
-          if (event.elapsed != _intentPosition)
-          {
-            _intentPosition = event.elapsed;
-            markDirty();
-          }
-
-          if (_started)
-          {
-            std::ignore = checkpoint();
-          }
-        }
-      });
+    _snapshotSubscription =
+      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   PlaybackSessionPersistence::~PlaybackSessionPersistence() = default;
@@ -178,31 +146,6 @@ namespace ao::rt
     }
 
     _started = true;
-    auto const weakSelfPtr = weak_from_this();
-    _pausedSubscription = _playback.onPaused(
-      [weakSelfPtr]
-      {
-        if (auto const selfPtr = weakSelfPtr.lock(); selfPtr)
-        {
-          std::ignore = selfPtr->checkpoint();
-        }
-      });
-    _stoppedSubscription = _playback.onStopped(
-      [weakSelfPtr]
-      {
-        if (auto const selfPtr = weakSelfPtr.lock(); selfPtr)
-        {
-          std::ignore = selfPtr->checkpoint();
-        }
-      });
-    _nowPlayingSubscription = _playback.onNowPlayingChanged(
-      [weakSelfPtr](PlaybackService::NowPlayingChanged const&)
-      {
-        if (auto const selfPtr = weakSelfPtr.lock(); selfPtr)
-        {
-          std::ignore = selfPtr->checkpoint();
-        }
-      });
 
     if (_sessionRevision.dirty())
     {
@@ -240,13 +183,8 @@ namespace ao::rt
 
     auto const shouldSave = _started;
     _shuttingDown = true;
-    _sequenceIntentSubscription.reset();
-    _volumeSubscription.reset();
-    _mutedSubscription.reset();
-    _seekSubscription.reset();
-    _pausedSubscription.reset();
-    _stoppedSubscription.reset();
-    _nowPlayingSubscription.reset();
+    _successionIntentSubscription.reset();
+    _snapshotSubscription.reset();
     cancelScheduledSave();
     _periodicTask.reset();
     return shouldSave ? save() : Result<>{};
@@ -254,7 +192,52 @@ namespace ao::rt
 
   bool PlaybackSessionPersistence::hasActiveSession() const
   {
-    return _sequence.hasActivePlaybackSession();
+    return _succession.hasActivePlaybackSession();
+  }
+
+  void PlaybackSessionPersistence::handleSnapshot(PlaybackSnapshot const& snapshot)
+  {
+    auto const previous = _lastSnapshot;
+    _lastSnapshot = snapshot;
+    bool persistenceIntentChanged = false;
+    auto const hasCoherentSubject = snapshot.transport.nowPlaying.trackId != kInvalidTrackId &&
+                                    snapshot.transport.nowPlaying.trackId == snapshot.succession.currentTrackId;
+
+    if (hasCoherentSubject && snapshot.transport.elapsed != _intentPosition)
+    {
+      _intentPosition = snapshot.transport.elapsed;
+      persistenceIntentChanged = true;
+    }
+
+    if (snapshot.transport.volume.level != _volumeIntent)
+    {
+      _volumeIntent = snapshot.transport.volume.level;
+      persistenceIntentChanged = true;
+    }
+
+    if (snapshot.transport.volume.muted != _mutedIntent)
+    {
+      _mutedIntent = snapshot.transport.volume.muted;
+      persistenceIntentChanged = true;
+    }
+
+    if (persistenceIntentChanged)
+    {
+      markDirty();
+    }
+
+    auto const subjectChanged =
+      snapshot.transport.nowPlaying.trackId != previous.transport.nowPlaying.trackId ||
+      snapshot.transport.nowPlaying.sourceListId != previous.transport.nowPlaying.sourceListId;
+    auto const committedPositionChanged = snapshot.transport.elapsed != previous.transport.elapsed;
+    auto const settledTransport = snapshot.transport.transport != previous.transport.transport &&
+                                  (snapshot.transport.transport == audio::Transport::Paused ||
+                                   snapshot.transport.transport == audio::Transport::Idle);
+
+    if (_started && (subjectChanged || committedPositionChanged || settledTransport))
+    {
+      std::ignore = checkpoint();
+    }
   }
 
   bool PlaybackSessionPersistence::hasRestorableSession() const
@@ -262,7 +245,7 @@ namespace ao::rt
     auto launchSpec = PlaybackLaunchSpec{};
     auto trackId = kInvalidTrackId;
     std::size_t anchorIndex = 0;
-    return _sequence.capturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
+    return _succession.capturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
   }
 
   void PlaybackSessionPersistence::markDirty()
@@ -386,7 +369,7 @@ namespace ao::rt
           co_return;
         }
 
-        if (selfPtr->_playback.state().transport == audio::Transport::Playing)
+        if (selfPtr->_playback.snapshot().transport.transport == audio::Transport::Playing)
         {
           std::ignore = selfPtr->checkpoint();
         }
@@ -412,21 +395,26 @@ namespace ao::rt
     auto currentTrackId = kInvalidTrackId;
     std::size_t anchorIndex = 0;
 
-    if (!_sequence.capturePlaybackSessionSnapshot(launchSpec, currentTrackId, anchorIndex))
+    if (!_succession.capturePlaybackSessionSnapshot(launchSpec, currentTrackId, anchorIndex))
     {
       return {};
     }
 
-    auto const transport = _playback.playbackTransportSessionState();
+    auto const snapshot = _playback.snapshot();
+    auto const transportSession = _playbackTransport.playbackTransportSessionState();
+    auto const elapsed =
+      std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(transportSession.positionMs)};
+    auto const publicSubjectMatches =
+      snapshot.transport.nowPlaying.trackId == currentTrackId && snapshot.succession.currentTrackId == currentTrackId;
 
-    if (transport.trackId == kInvalidTrackId || transport.trackId != currentTrackId)
+    if (transportSession.trackId == kInvalidTrackId || transportSession.trackId != currentTrackId ||
+        (hasActiveSession() && !publicSubjectMatches))
     {
       return makeError(Error::Code::InvalidState, "Playback cursor and transport current tracks disagree during save");
     }
 
     auto const capturedRevision = _sessionRevision.capture();
-    auto const session =
-      snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, transport, _sequence.state());
+    auto const session = snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, elapsed, snapshot);
 
     if (auto const saved = _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{}); !saved)
     {
@@ -486,11 +474,11 @@ namespace ao::rt
 
       auto currentTrackId = loaded.currentTrackId;
       auto positionMs = loaded.positionMs;
-      auto candidate = _sequence.preparePlaybackSessionRestore(launchSpec,
-                                                               currentTrackId,
-                                                               static_cast<std::size_t>(loaded.anchorIndex),
-                                                               loaded.shuffleMode,
-                                                               loaded.repeatMode);
+      auto candidate = _succession.preparePlaybackSessionRestore(launchSpec,
+                                                                 currentTrackId,
+                                                                 static_cast<std::size_t>(loaded.anchorIndex),
+                                                                 loaded.shuffleMode,
+                                                                 loaded.repeatMode);
 
       if (!candidate)
       {
@@ -519,7 +507,7 @@ namespace ao::rt
         currentTrackId = (*candidate)->trackIdAt(*optReplacementIndex);
         positionMs = 0;
         normalized = true;
-        candidate = _sequence.preparePlaybackSessionRestore(
+        candidate = _succession.preparePlaybackSessionRestore(
           launchSpec, currentTrackId, *optReplacementIndex, loaded.shuffleMode, loaded.repeatMode);
 
         if (!candidate)
@@ -551,7 +539,7 @@ namespace ao::rt
       auto restored = [&] -> Result<>
       {
         auto const restoring = RestoreIntentTransaction{_restoring};
-        return _playback.restorePlaybackTransport(
+        return _playbackTransport.restorePlaybackTransport(
           transport,
           [this,
            sessionPtr = std::move(*candidate),
@@ -563,14 +551,14 @@ namespace ao::rt
            &loaded,
            &normalized](std::chrono::milliseconds const elapsed) mutable noexcept
           {
-            _sequence.commitPlaybackSessionRestore(std::move(sessionPtr), shuffleMode, repeatMode, elapsed);
+            _succession.commitPlaybackSessionRestore(std::move(sessionPtr), shuffleMode, repeatMode, elapsed);
 
-            auto const& sequenceState = _sequence.state();
-            auto const& playbackState = _playback.state();
+            auto const& successionState = _succession.state();
+            auto const& playbackState = _playbackTransport.state();
             restoredState.positionMs =
               static_cast<std::uint64_t>(std::max(elapsed, std::chrono::milliseconds{0}).count());
-            auto const coherentCurrent = sequenceState.currentTrackId == currentTrackId &&
-                                         sequenceState.sourceListId == sourceListId &&
+            auto const coherentCurrent = successionState.currentTrackId == currentTrackId &&
+                                         successionState.sourceListId == sourceListId &&
                                          playbackState.nowPlaying.trackId == currentTrackId &&
                                          playbackState.nowPlaying.sourceListId == sourceListId;
             normalized = normalized || !coherentCurrent || restoredState != loaded;
@@ -578,6 +566,7 @@ namespace ao::rt
             _intentPosition = elapsed;
             _volumeIntent = playbackState.volume.level;
             _mutedIntent = playbackState.volume.muted;
+            _lastSnapshot = _playback.snapshot();
             _sessionRevision.resetClean();
 
             if (normalized && _sessionRevision.markDirty())
@@ -615,8 +604,8 @@ namespace ao::rt
       return std::unexpected{removed.error()};
     }
 
-    _sequence.discardPlaybackSessionSnapshot();
-    _playback.discardPlaybackTransportSnapshot();
+    _succession.discardPlaybackSessionSnapshot();
+    _playbackTransport.discardPlaybackTransportSnapshot();
     _sessionDiscarded = true;
     _sessionRevision.resetClean();
     return {};

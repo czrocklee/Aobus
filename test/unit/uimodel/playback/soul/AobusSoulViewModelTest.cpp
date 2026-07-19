@@ -4,8 +4,6 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/audio/Quality.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -21,14 +19,10 @@ namespace ao::uimodel::test
 
   TEST_CASE("AobusSoulViewModel - view state generation", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<AobusSoulViewState>{};
-    auto const viewModel = AobusSoulViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = AobusSoulViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial render when idle")
     {

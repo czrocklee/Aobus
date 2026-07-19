@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include "runtime/playback/PlaybackBootstrap.h"
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -22,12 +25,16 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
@@ -160,11 +167,11 @@ namespace ao::rt::test
     return {};
   }
 
-  inline PlaybackService makePlaybackService(async::Executor& executor,
-                                             library::MusicLibrary& library,
-                                             NotificationService& notifications)
+  inline PlaybackTransport makePlaybackTransport(async::Executor& executor,
+                                                 library::MusicLibrary& library,
+                                                 NotificationService& notifications)
   {
-    return PlaybackService{executor, library, notifications, std::make_unique<audio::Player>(executor)};
+    return PlaybackTransport{executor, library, notifications, std::make_unique<audio::Player>(executor)};
   }
 
   // Injectable delay strategy for tests: pass a pointer to one into the Runtime
@@ -615,14 +622,24 @@ namespace ao::rt::test
     return std::make_unique<detail::ReadyAudioProvider>(std::move(status));
   }
 
-  inline void addReadyAudioProvider(PlaybackService& playback)
+  inline void addReadyAudioProvider(PlaybackTransport& transport)
   {
-    playback.addProvider(makeReadyAudioProvider());
+    PlaybackBootstrap{transport}.addProvider(makeReadyAudioProvider());
   }
 
-  inline void addReadyAudioProvider(PlaybackService& playback, audio::BackendProvider::Status status)
+  inline void addReadyAudioProvider(PlaybackTransport& transport, audio::BackendProvider::Status status)
   {
-    playback.addProvider(makeReadyAudioProvider(std::move(status)));
+    PlaybackBootstrap{transport}.addProvider(makeReadyAudioProvider(std::move(status)));
+  }
+
+  inline void addReadyAudioProvider(AppRuntime& runtime)
+  {
+    runtime.addAudioProvider(makeReadyAudioProvider());
+  }
+
+  inline void addReadyAudioProvider(AppRuntime& runtime, audio::BackendProvider::Status status)
+  {
+    runtime.addAudioProvider(makeReadyAudioProvider(std::move(status)));
   }
 
   inline MetadataPatch metadataPatch(library::test::TrackSpec const& spec)
@@ -1225,4 +1242,52 @@ namespace ao::rt::test
   {
     return makeRuntime(tempDir, std::make_unique<InlineExecutor>(), playbackSessionConfigStore, sleeper);
   }
+
+  /**
+   * @brief Composes PlaybackService over the real transport and succession owners for
+   *        consumer and view-model tests.
+   *
+   * The @p ExecutorT parameter selects the dispatch model. The default
+   * InlineExecutor settles a command and the coherent snapshot it publishes within
+   * the same call, which suits state-only view-model tests. Tests that play real
+   * audio through the succession owner must use QueuedExecutor and drain
+   * explicitly, because the succession owner reacts to transport transitions and
+   * would otherwise re-enter the audio Player synchronously. No audio provider is
+   * installed by default; call @ref addReadyProvider when a test needs playable
+   * output availability.
+   */
+  template<typename ExecutorT = InlineExecutor>
+  struct ApplicationPlaybackFixtureT final
+  {
+    ApplicationPlaybackFixtureT() = default;
+
+    ApplicationPlaybackFixtureT(ApplicationPlaybackFixtureT const&) = delete;
+    ApplicationPlaybackFixtureT& operator=(ApplicationPlaybackFixtureT const&) = delete;
+    ApplicationPlaybackFixtureT(ApplicationPlaybackFixtureT&&) = delete;
+    ApplicationPlaybackFixtureT& operator=(ApplicationPlaybackFixtureT&&) = delete;
+    ~ApplicationPlaybackFixtureT() = default;
+
+    void addReadyProvider() { playbackBootstrap.addProvider(makeReadyAudioProvider()); }
+
+    PlaybackCommands& commands() { return playback.commands(); }
+    LibraryWriter& writer() { return writerFixture.writer(); }
+
+    MusicLibraryFixture libraryFixture;
+    ControlledSleeper sleeper;
+    ExecutorT executor;
+    async::Runtime asyncRuntime{executor, 1, {}, &sleeper};
+    LibraryChanges changes;
+    LibraryWriterFixture writerFixture{libraryFixture.library(), changes};
+    TrackSourceCache sources{libraryFixture.library(), changes};
+    ViewService views{executor, libraryFixture.library(), sources};
+    NotificationService notifications{asyncRuntime};
+    PlaybackTransport playbackTransport{makePlaybackTransport(executor, libraryFixture.library(), notifications)};
+    PlaybackSuccession
+      succession{executor, views, sources, libraryFixture.library(), playbackTransport, notifications, asyncRuntime};
+    PlaybackBootstrap playbackBootstrap{playbackTransport};
+    std::unique_ptr<PlaybackService> playbackPtr{playbackBootstrap.createPlaybackService(executor, succession)};
+    PlaybackService& playback{*playbackPtr};
+  };
+
+  using ApplicationPlaybackFixture = ApplicationPlaybackFixtureT<>;
 } // namespace ao::rt::test

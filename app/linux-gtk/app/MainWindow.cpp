@@ -81,7 +81,6 @@ namespace ao::gtk
     auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.library());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
-      _runtime.playbackSequence(),
       *_mainWindowCoordinatorPtr->playbackCommandSurface(),
       platform::MprisBridge::Callbacks{
         .raise =
@@ -254,7 +253,7 @@ namespace ao::gtk
     }
   }
 
-  rt::PlaybackService& MainWindow::playbackService()
+  rt::PlaybackService& MainWindow::playback()
   {
     return _runtime.playback();
   }

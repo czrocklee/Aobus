@@ -2,7 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <algorithm>
@@ -23,46 +26,49 @@ namespace ao::uimodel
   } // namespace
 
   SeekViewModel::SeekViewModel(rt::PlaybackService& playback, std::function<void(SeekViewState const&)> onRender)
-    : _playback{playback}, _onRender{std::move(onRender)}
+    : _playback{playback}, _commands{playback.commands()}, _onRender{std::move(onRender)}
   {
-    auto const refreshImmediate = [this] { refresh(true); };
+    auto const transport = _playback.snapshot().transport;
+    _lastTransport = transport.transport;
+    _lastElapsed = transport.elapsed;
+    _lastDuration = transport.duration;
 
-    _startedSub = _playback.onStarted(refreshImmediate);
-    _pausedSub = _playback.onPaused(refreshImmediate);
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { onSnapshotChanged(); });
+    _seekPreviewSub = _playback.events().onSeekPreview([this](rt::PlaybackSeekPreview const& preview)
+                                                       { refresh(false, preview.elapsed); });
 
-    _idleSub = _playback.onIdle(refreshImmediate);
-    _stoppedSub = _playback.onStopped(refreshImmediate);
-    _preparingSub = _playback.onPreparing(refreshImmediate);
+    refresh(true);
+  }
 
-    _seekUpdateSub = _playback.onSeekUpdate(
-      [this](rt::PlaybackService::SeekUpdate const& ev)
-      {
-        if (ev.mode == rt::PlaybackService::SeekMode::Final)
-        {
-          refresh(true, ev.elapsed);
-        }
-        else if (ev.mode == rt::PlaybackService::SeekMode::Preview)
-        {
-          refresh(false, ev.elapsed);
-        }
-      });
+  void SeekViewModel::onSnapshotChanged()
+  {
+    auto const transport = _playback.snapshot().transport;
 
+    if (transport.transport == _lastTransport && transport.elapsed == _lastElapsed &&
+        transport.duration == _lastDuration)
+    {
+      return;
+    }
+
+    _lastTransport = transport.transport;
+    _lastElapsed = transport.elapsed;
+    _lastDuration = transport.duration;
     refresh(true);
   }
 
   void SeekViewModel::seekPreview(std::chrono::milliseconds elapsed)
   {
-    _playback.seek(elapsed, rt::PlaybackService::SeekMode::Preview);
+    _commands.seek(elapsed, rt::PlaybackSeekMode::Preview);
   }
 
   void SeekViewModel::seekFinal(std::chrono::milliseconds elapsed)
   {
-    _playback.seek(elapsed, rt::PlaybackService::SeekMode::Final);
+    _commands.seek(elapsed, rt::PlaybackSeekMode::Final);
   }
 
   void SeekViewModel::seekBy(std::chrono::milliseconds const delta)
   {
-    auto const& state = _playback.state();
+    auto const state = _playback.snapshot().transport;
 
     if (state.duration <= std::chrono::milliseconds{0})
     {
@@ -76,7 +82,7 @@ namespace ao::uimodel
 
   void SeekViewModel::refresh(bool immediateUpdate, std::optional<std::chrono::milliseconds> optOverrideElapsed)
   {
-    auto const& state = _playback.state();
+    auto const state = _playback.snapshot().transport;
 
     auto view = SeekViewState{};
     view.duration = state.duration;

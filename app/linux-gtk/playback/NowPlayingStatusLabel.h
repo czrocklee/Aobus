@@ -11,6 +11,7 @@
 namespace ao::rt
 {
   class PlaybackService;
+  class PlaybackCommands;
 }
 
 namespace ao::gtk
@@ -22,7 +23,7 @@ namespace ao::gtk
   class NowPlayingStatusLabel final
   {
   public:
-    explicit NowPlayingStatusLabel(rt::PlaybackService& playbackService);
+    explicit NowPlayingStatusLabel(rt::PlaybackService& playback);
     ~NowPlayingStatusLabel();
 
     // Not copyable or movable
@@ -36,7 +37,7 @@ namespace ao::gtk
   private:
     void applyState(uimodel::NowPlayingViewState const& view);
 
-    rt::PlaybackService& _playbackService;
+    rt::PlaybackCommands& _commands;
     Gtk::Label _label;
 
     uimodel::NowPlayingViewModel _nowPlayingViewModel;

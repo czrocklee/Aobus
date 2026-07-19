@@ -10,13 +10,15 @@
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -167,7 +169,9 @@ namespace ao::gtk::layout
           _button.signal_clicked().connect([this] { handleImageClicked(); });
         }
 
-        _sub = _runtime.playback().onNowPlayingChanged([this](auto const&) { syncNowPlaying(); });
+        auto& playback = _runtime.playback();
+        _snapshotSub =
+          playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { syncSnapshot(snapshot); });
         _tracksMutatedSub = _runtime.library().changes().onChanged(
           [this](rt::LibraryChangeSet const& changeSet)
           {
@@ -179,23 +183,7 @@ namespace ao::gtk::layout
             }
           });
 
-        _stoppedSub = _runtime.playback().onStopped(
-          [this]
-          {
-            _currentTrackId = kInvalidTrackId;
-            _currentCoverArtId = kInvalidResourceId;
-            updateImage();
-          });
-
-        _idleSub = _runtime.playback().onIdle(
-          [this]
-          {
-            _currentTrackId = kInvalidTrackId;
-            _currentCoverArtId = kInvalidResourceId;
-            updateImage();
-          });
-
-        syncNowPlaying();
+        syncSnapshot(playback.snapshot());
       }
 
       Gtk::Widget& widget() override
@@ -229,17 +217,21 @@ namespace ao::gtk::layout
         }
       }
 
-      void syncNowPlaying()
+      void syncSnapshot(rt::PlaybackSnapshot const& snapshot)
       {
-        auto const& nowPlaying = _runtime.playback().state().nowPlaying;
+        auto const& transport = snapshot.transport;
+        auto const trackId =
+          transport.transport == audio::Transport::Idle ? kInvalidTrackId : transport.nowPlaying.trackId;
+        auto const coverArtId =
+          transport.transport == audio::Transport::Idle ? kInvalidResourceId : transport.nowPlaying.coverArtId;
 
-        if (nowPlaying.trackId == _currentTrackId && nowPlaying.coverArtId == _currentCoverArtId)
+        if (trackId == _currentTrackId && coverArtId == _currentCoverArtId)
         {
           return;
         }
 
-        _currentTrackId = nowPlaying.trackId;
-        _currentCoverArtId = nowPlaying.coverArtId;
+        _currentTrackId = trackId;
+        _currentCoverArtId = coverArtId;
         updateImage();
       }
 
@@ -291,10 +283,8 @@ namespace ao::gtk::layout
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
       ResourceId _currentCoverArtId = kInvalidResourceId;
-      async::Subscription _sub;
+      async::Subscription _snapshotSub;
       async::Subscription _tracksMutatedSub;
-      async::Subscription _stoppedSub;
-      async::Subscription _idleSub;
     };
 
     std::unique_ptr<LayoutComponent> createPlaybackImage(LayoutBuildContext& ctx, LayoutNode const& node)

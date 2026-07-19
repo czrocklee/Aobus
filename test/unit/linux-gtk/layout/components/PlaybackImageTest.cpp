@@ -14,9 +14,10 @@
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/utility/Base64.h>
 
@@ -43,7 +44,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -98,6 +98,14 @@ namespace ao::gtk::layout::test
 
       output << "  lists: []\n";
       REQUIRE(output.good());
+    }
+
+    void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
+    {
+      runtime.reloadAllTracks();
+      auto const view = runtime.views().createView({.listId = rt::kAllTracksListId}, true);
+      REQUIRE(view);
+      REQUIRE(runtime.playback().commands().startFromView(view->viewId, trackId));
     }
   } // namespace
 
@@ -207,15 +215,14 @@ namespace ao::gtk::layout::test
 
     SECTION("now playing cover art drives the image resource")
     {
-      rt::test::addReadyAudioProvider(fixture.runtime().playback());
+      rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
 
       auto const coverArtId = ResourceId{42};
       imageCachePtr->put(ImageCacheKey::full(coverArtId), ao::gtk::test::makePixbuf(80, 80));
 
-      auto const throwingSubscription = fixture.runtime().playback().onNowPlayingChanged(
-        [](rt::PlaybackService::NowPlayingChanged const&)
-        { throwException<Exception>("scripted observer failure before cover art"); });
+      auto const throwingSubscription = fixture.runtime().playback().events().onSnapshot(
+        [](rt::PlaybackSnapshot const&) { throwException<Exception>("scripted observer failure before cover art"); });
 
       auto const node = LayoutNode{.type = "playback.image"};
       auto const compPtr = fixture.components().create(ctx, node);
@@ -226,7 +233,7 @@ namespace ao::gtk::layout::test
       auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
       REQUIRE(picture != nullptr);
 
-      REQUIRE(fixture.runtime().playback().playTrack(coverTrackId, rt::kAllTracksListId));
+      startPlayback(fixture.runtime(), coverTrackId);
       ao::gtk::test::drainGtkEvents();
 
       auto const paintablePtr = picture->get_paintable();
@@ -234,7 +241,7 @@ namespace ao::gtk::layout::test
       CHECK(paintablePtr->get_intrinsic_width() == 64 * picture->get_scale_factor());
       CHECK(paintablePtr->get_intrinsic_height() == 64 * picture->get_scale_factor());
 
-      std::ignore = fixture.runtime().playback().stop();
+      fixture.runtime().playback().commands().stop();
       ao::gtk::test::drainGtkEvents();
 
       CHECK_FALSE(button->get_visible());
@@ -243,7 +250,7 @@ namespace ao::gtk::layout::test
 
     SECTION("current track cover art follows library mutations")
     {
-      rt::test::addReadyAudioProvider(fixture.runtime().playback());
+      rt::test::addReadyAudioProvider(fixture.runtime());
       ao::gtk::test::drainGtkEvents();
 
       auto const firstCoverArtId = ResourceId{42};
@@ -261,7 +268,7 @@ namespace ao::gtk::layout::test
       REQUIRE(picture != nullptr);
       CHECK_FALSE(button->get_visible());
 
-      REQUIRE(fixture.runtime().playback().playTrack(mutableCoverTrackId, rt::kAllTracksListId));
+      startPlayback(fixture.runtime(), mutableCoverTrackId);
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(button->get_visible());

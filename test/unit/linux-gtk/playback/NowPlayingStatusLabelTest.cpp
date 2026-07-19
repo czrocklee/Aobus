@@ -6,8 +6,9 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
@@ -22,7 +23,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto& playback = fixture.runtime().playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(fixture.runtime());
     drainGtkEvents();
 
     auto statusLabel = NowPlayingStatusLabel{playback};
@@ -35,12 +36,15 @@ namespace ao::gtk::test
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(fixture.runtime(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
-    REQUIRE(playback.playTrack(trackId, rt::kAllTracksListId));
+    fixture.runtime().reloadAllTracks();
+    auto const view = fixture.runtime().views().createView({.listId = rt::kAllTracksListId}, true);
+    REQUIRE(view);
+    REQUIRE(playback.commands().startFromView(view->viewId, trackId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());
 
-    auto optRequest = std::optional<rt::PlaybackService::RevealTrackRequested>{};
-    auto sub = playback.onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
+    auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
+    auto sub = playback.events().onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
 
     REQUIRE(emitGesturePressed(*gtkLabel));
     drainGtkEvents();

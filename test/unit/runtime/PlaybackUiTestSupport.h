@@ -9,23 +9,23 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <string>
 #include <string_view>
 
 namespace ao::rt::test
 {
-  struct PlaybackSequenceUiFixture final
+  struct PlaybackUiFixture final
   {
-    PlaybackSequenceUiFixture()
+    PlaybackUiFixture()
       : runtime{makeRuntime(tempDir)}
       , viewId{ao::test::requireValue(runtime.workspace().navigateTo(GlobalViewKind::AllTracks)).activeViewId}
     {
     }
 
-    void makePlaybackReady() { addReadyAudioProvider(runtime.playback()); }
+    void makePlaybackReady() { addReadyAudioProvider(runtime); }
 
     TrackId addPlayableTrack(std::string_view title)
     {
@@ -36,7 +36,7 @@ namespace ao::rt::test
       return trackId;
     }
 
-    Result<> playFromView(TrackId trackId) { return runtime.playbackSequence().playFromView(viewId, trackId); }
+    Result<> playFromView(TrackId trackId) { return runtime.playback().commands().startFromView(viewId, trackId); }
 
     // These fixture values are intentionally public as the tests' assertion surface.
     ao::test::TempDir tempDir;

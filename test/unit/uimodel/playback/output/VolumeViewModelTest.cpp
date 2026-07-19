@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <catch2/catch_approx.hpp>
@@ -17,11 +16,9 @@ namespace ao::uimodel::test
 
   TEST_CASE("VolumeViewModel - view state generation", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
 
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto viewModel = VolumeViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -34,13 +31,13 @@ namespace ao::uimodel::test
     SECTION("handleVolumeChanged delegates to playback")
     {
       viewModel.handleVolumeChanged(0.35F);
-      CHECK(playback.state().volume.level == 0.35F);
+      CHECK(playbackTransport.state().volume.level == 0.35F);
       CHECK(log.last().isHardwareAssisted == false); // Initially false in mock
     }
 
     SECTION("volume and mute changes render button icon and tooltip state")
     {
-      addReadyAudioProvider(playback);
+      addReadyAudioProvider(playbackTransport);
       viewModel.handleVolumeChanged(0.5F);
 
       CHECK(log.last().visible == true);
@@ -61,11 +58,11 @@ namespace ao::uimodel::test
     SECTION("Mute controls")
     {
       viewModel.handleMutedChanged(true);
-      CHECK(playback.state().volume.muted == true);
+      CHECK(playbackTransport.state().volume.muted == true);
       CHECK(log.last().muted == true);
 
       viewModel.toggleMuted();
-      CHECK(playback.state().volume.muted == false);
+      CHECK(playbackTransport.state().volume.muted == false);
       CHECK(log.last().muted == false);
     }
 
@@ -75,11 +72,11 @@ namespace ao::uimodel::test
       viewModel.handleMutedChanged(true);
 
       viewModel.handleScroll(-1.0); // scroll up
-      CHECK(playback.state().volume.level == Catch::Approx{0.52F}.margin(0.001F));
-      CHECK(playback.state().volume.muted == false); // Clears mute
+      CHECK(playbackTransport.state().volume.level == Catch::Approx{0.52F}.margin(0.001F));
+      CHECK(playbackTransport.state().volume.muted == false); // Clears mute
 
       viewModel.handleScroll(1.0); // scroll down
-      CHECK(playback.state().volume.level == Catch::Approx{0.50F}.margin(0.001F));
+      CHECK(playbackTransport.state().volume.level == Catch::Approx{0.50F}.margin(0.001F));
     }
 
     SECTION("relative adjustment clamps and follows shared mute policy")
@@ -88,15 +85,15 @@ namespace ao::uimodel::test
       viewModel.handleMutedChanged(true);
 
       viewModel.adjustVolume(-1.0F);
-      CHECK(playback.state().volume.level == 0.0F);
-      CHECK(playback.state().volume.muted == true);
+      CHECK(playbackTransport.state().volume.level == 0.0F);
+      CHECK(playbackTransport.state().volume.muted == true);
 
       viewModel.adjustVolume(0.05F);
-      CHECK(playback.state().volume.level == Catch::Approx{0.05F}.margin(0.001F));
-      CHECK(playback.state().volume.muted == false);
+      CHECK(playbackTransport.state().volume.level == Catch::Approx{0.05F}.margin(0.001F));
+      CHECK(playbackTransport.state().volume.muted == false);
 
       viewModel.adjustVolume(2.0F);
-      CHECK(playback.state().volume.level == 1.0F);
+      CHECK(playbackTransport.state().volume.level == 1.0F);
     }
   }
 

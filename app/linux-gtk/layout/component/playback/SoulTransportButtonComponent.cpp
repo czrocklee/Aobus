@@ -9,7 +9,7 @@
 #include "playback/TransportButton.h"
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackSequenceService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -43,16 +43,6 @@ namespace ao::gtk::layout
       return *ctx.dependencies.playbackCommandSurface;
     }
 
-    rt::PlaybackSequenceService& playbackSequence(LayoutBuildContext& ctx)
-    {
-      if (ctx.dependencies.playbackSequence == nullptr)
-      {
-        throwException<Exception>("SoulTransportButtonComponent: playback sequence is not bound");
-      }
-
-      return *ctx.dependencies.playbackSequence;
-    }
-
     /**
      * @brief playback.soulPlayPauseButton
      */
@@ -62,7 +52,6 @@ namespace ao::gtk::layout
       SoulTransportButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _hasComplexTooltip{node.optTooltip.has_value()}
         , _transportViewModel{ctx.runtime.playback(),
-                              playbackSequence(ctx),
                               commandSurface(ctx),
                               TransportButton::Action::PlayPause,
                               false,

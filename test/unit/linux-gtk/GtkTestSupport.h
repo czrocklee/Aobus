@@ -4,13 +4,13 @@
 #pragma once
 
 #include "linux-gtk/app/GtkMainContextExecutor.h"
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -705,7 +705,7 @@ namespace ao::gtk::test
       return async::Subscription{[this] { _preparing = nullptr; }};
     }
 
-    async::Subscription onSeekUpdate(std::move_only_function<void(rt::PlaybackService::SeekUpdate const&)> handler)
+    async::Subscription onSeekUpdate(std::move_only_function<void(rt::PlaybackTransport::SeekUpdate const&)> handler)
     {
       _seekUpdate = std::move(handler);
       return async::Subscription{[this] { _seekUpdate = nullptr; }};
@@ -718,21 +718,21 @@ namespace ao::gtk::test
     }
 
     async::Subscription onQualityChanged(
-      std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> handler)
+      std::move_only_function<void(rt::PlaybackTransport::QualityChanged const&)> handler)
     {
       _qualityChanged = std::move(handler);
       return async::Subscription{[this] { _qualityChanged = nullptr; }};
     }
 
     async::Subscription onShuffleModeChanged(
-      std::move_only_function<void(rt::PlaybackSequenceService::ShuffleModeChanged const&)> handler)
+      std::move_only_function<void(rt::PlaybackSuccession::ShuffleModeChanged const&)> handler)
     {
       _shuffleModeChanged = std::move(handler);
       return async::Subscription{[this] { _shuffleModeChanged = nullptr; }};
     }
 
     async::Subscription onRepeatModeChanged(
-      std::move_only_function<void(rt::PlaybackSequenceService::RepeatModeChanged const&)> handler)
+      std::move_only_function<void(rt::PlaybackSuccession::RepeatModeChanged const&)> handler)
     {
       _repeatModeChanged = std::move(handler);
       return async::Subscription{[this] { _repeatModeChanged = nullptr; }};
@@ -784,7 +784,7 @@ namespace ao::gtk::test
       }
     }
 
-    void emitSeekUpdate(rt::PlaybackService::SeekUpdate const& update)
+    void emitSeekUpdate(rt::PlaybackTransport::SeekUpdate const& update)
     {
       if (_seekUpdate)
       {
@@ -800,7 +800,7 @@ namespace ao::gtk::test
       }
     }
 
-    void emitQualityChanged(rt::PlaybackService::QualityChanged const& q)
+    void emitQualityChanged(rt::PlaybackTransport::QualityChanged const& q)
     {
       if (_qualityChanged)
       {
@@ -808,7 +808,7 @@ namespace ao::gtk::test
       }
     }
 
-    void emitShuffleModeChanged(rt::PlaybackSequenceService::ShuffleModeChanged const& m)
+    void emitShuffleModeChanged(rt::PlaybackSuccession::ShuffleModeChanged const& m)
     {
       if (_shuffleModeChanged)
       {
@@ -816,7 +816,7 @@ namespace ao::gtk::test
       }
     }
 
-    void emitRepeatModeChanged(rt::PlaybackSequenceService::RepeatModeChanged const& m)
+    void emitRepeatModeChanged(rt::PlaybackSuccession::RepeatModeChanged const& m)
     {
       if (_repeatModeChanged)
       {
@@ -839,11 +839,11 @@ namespace ao::gtk::test
     std::move_only_function<void()> _stopped;
     std::move_only_function<void()> _idle;
     std::move_only_function<void()> _preparing;
-    std::move_only_function<void(rt::PlaybackService::SeekUpdate const&)> _seekUpdate;
+    std::move_only_function<void(rt::PlaybackTransport::SeekUpdate const&)> _seekUpdate;
     std::move_only_function<void(rt::OutputDeviceSelection const&)> _outputDeviceChanged;
-    std::move_only_function<void(rt::PlaybackService::QualityChanged const&)> _qualityChanged;
-    std::move_only_function<void(rt::PlaybackSequenceService::ShuffleModeChanged const&)> _shuffleModeChanged;
-    std::move_only_function<void(rt::PlaybackSequenceService::RepeatModeChanged const&)> _repeatModeChanged;
+    std::move_only_function<void(rt::PlaybackTransport::QualityChanged const&)> _qualityChanged;
+    std::move_only_function<void(rt::PlaybackSuccession::ShuffleModeChanged const&)> _shuffleModeChanged;
+    std::move_only_function<void(rt::PlaybackSuccession::RepeatModeChanged const&)> _repeatModeChanged;
     std::move_only_function<void(float)> _volumeChanged;
   };
 

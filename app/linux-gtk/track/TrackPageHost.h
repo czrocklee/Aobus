@@ -10,7 +10,6 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
@@ -20,6 +19,11 @@
 namespace Gtk
 {
   class Stack;
+}
+
+namespace ao::rt
+{
+  struct PlaybackRevealTrackRequest;
 }
 
 namespace ao::gtk
@@ -83,7 +87,7 @@ namespace ao::gtk
     void bindTrackPage(TrackPageEntry& entry);
     void handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId viewId);
     void syncLayout();
-    void handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev);
+    void handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev);
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;
@@ -92,7 +96,7 @@ namespace ao::gtk
     ListNavigationController& _listNavigation;
     uimodel::TrackColumnLayoutStore& _layoutStore;
     async::Subscription _revealSub;
-    async::Subscription _nowPlayingSub;
+    async::Subscription _snapshotSub;
     async::Subscription _focusSub;
     async::Subscription _viewDestroyedSub;
     async::Subscription _projectionChangedSub;

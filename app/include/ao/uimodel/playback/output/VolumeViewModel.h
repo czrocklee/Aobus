@@ -4,11 +4,16 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 
 #include <cstdint>
 #include <functional>
 #include <string>
+
+namespace ao::rt
+{
+  class PlaybackService;
+}
 
 namespace ao::uimodel
 {
@@ -58,11 +63,9 @@ namespace ao::uimodel
     void refresh();
 
     rt::PlaybackService& _playback;
+    rt::PlaybackCommands& _commands;
     std::function<void(VolumeViewState const&)> _onRender;
 
-    async::Subscription _outputDeviceSub;
-    async::Subscription _startedSub;
-    async::Subscription _volumeSub;
-    async::Subscription _mutedSub;
+    async::Subscription _snapshotSub;
   };
 } // namespace ao::uimodel

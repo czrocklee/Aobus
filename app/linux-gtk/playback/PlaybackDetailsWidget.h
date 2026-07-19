@@ -25,7 +25,7 @@ namespace ao::gtk
   class PlaybackDetailsWidget final
   {
   public:
-    explicit PlaybackDetailsWidget(rt::PlaybackService& playbackService);
+    explicit PlaybackDetailsWidget(rt::PlaybackService& playback);
     ~PlaybackDetailsWidget();
 
     // Not copyable or movable

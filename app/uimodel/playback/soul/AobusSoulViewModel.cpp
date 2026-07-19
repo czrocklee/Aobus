@@ -3,8 +3,9 @@
 
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <algorithm>
@@ -208,21 +209,14 @@ namespace ao::uimodel
                                          std::function<void(AobusSoulViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}
   {
-    auto const refreshCallback = [this] { refresh(); };
-
-    _qualitySub = _playback.onQualityChanged([refreshCallback](auto const&) { refreshCallback(); });
-    _outputDeviceSub = _playback.onOutputDeviceChanged([refreshCallback](auto const&) { refreshCallback(); });
-    _startedSub = _playback.onStarted(refreshCallback);
-
-    _stoppedSub = _playback.onStopped(refreshCallback);
-    _idleSub = _playback.onIdle(refreshCallback);
-
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
     refresh();
   }
 
   void AobusSoulViewModel::refresh()
   {
-    auto const& state = _playback.state();
+    auto const snapshot = _playback.snapshot();
+    auto const& state = snapshot.transport;
     bool const playing = (state.transport == audio::Transport::Playing);
 
     auto view = AobusSoulViewState{};

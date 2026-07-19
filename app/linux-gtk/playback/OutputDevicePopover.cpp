@@ -6,8 +6,9 @@
 #include "OutputDeviceListItems.h"
 #include "layout/LayoutConstants.h"
 #include <ao/audio/Device.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <giomm/liststore.h>
@@ -43,7 +44,7 @@ namespace ao::gtk
                                            std::function<void(rt::OutputDeviceSelection const&)> onSelected)
     : _playback{playback}
     , _onSelected{std::move(onSelected)}
-    , _outputDeviceViewModel{_playback,
+    , _outputDeviceViewModel{playback,
                              [this](ao::uimodel::OutputDeviceViewState const& view)
                              {
                                _storePtr->remove_all();
@@ -106,7 +107,7 @@ namespace ao::gtk
 
             if (_onSelected)
             {
-              _onSelected(_playback.state().output.selectedDevice);
+              _onSelected(_playback.snapshot().transport.output.selectedDevice);
             }
 
             popdown();

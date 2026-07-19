@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -23,14 +22,10 @@ namespace ao::uimodel::test
 
   TEST_CASE("OutputDeviceViewModel - state generation", "[uimodel][unit][playback][output]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
-    auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto viewModel = OutputDeviceViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("Initial state is empty when no outputs registered")
     {
@@ -51,18 +46,16 @@ namespace ao::uimodel::test
 
   TEST_CASE("OutputDeviceViewModel - refresh with fake provider", "[uimodel][unit][playback][output]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
 
     auto log = ao::test::RenderLog<OutputDeviceViewState>{};
     auto viewModel = OutputDeviceViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
     SECTION("refresh shows backend header and device×profile rows")
     {
-      addReadyAudioProvider(playback, makePipeWireOutputStatus());
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
       viewModel.refresh();
 
       REQUIRE(!log.empty());
@@ -103,7 +96,7 @@ namespace ao::uimodel::test
                       .backendId = audio::BackendId{"pipewire"}},
       };
 
-      addReadyAudioProvider(playback, std::move(status));
+      addReadyAudioProvider(playbackTransport, std::move(status));
       viewModel.refresh();
 
       REQUIRE(!log.empty());
@@ -117,8 +110,9 @@ namespace ao::uimodel::test
 
     SECTION("active device is highlighted after setOutputDevice")
     {
-      addReadyAudioProvider(playback, makePipeWireOutputStatus());
-      playback.setOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      playbackTransport.setOutputDevice(
+        audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
       viewModel.refresh();
 
       auto const& rows = log.last().rows;
@@ -131,10 +125,10 @@ namespace ao::uimodel::test
 
     SECTION("selectOutputDevice triggers playback state change")
     {
-      addReadyAudioProvider(playback, makePipeWireOutputStatus());
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
       viewModel.selectOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
 
-      auto const& sel = playback.state().output.selectedDevice;
+      auto const& sel = playbackTransport.state().output.selectedDevice;
       CHECK(sel.backendId == audio::BackendId{"pipewire"});
       CHECK(sel.deviceId == audio::DeviceId{"device1"});
       CHECK(sel.profileId == audio::kProfileShared);
@@ -147,8 +141,8 @@ namespace ao::uimodel::test
       status2.devices[0].backendId = audio::BackendId{"alsa"};
       status2.devices[0].id = audio::DeviceId{"alsa-device1"};
 
-      addReadyAudioProvider(playback, makePipeWireOutputStatus());
-      addReadyAudioProvider(playback, std::move(status2));
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      addReadyAudioProvider(playbackTransport, std::move(status2));
       viewModel.refresh();
 
       auto const& rows = log.last().rows;
@@ -163,8 +157,9 @@ namespace ao::uimodel::test
 
     SECTION("summary fields for PipeWire shared output")
     {
-      addReadyAudioProvider(playback, makePipeWireOutputStatus());
-      playback.setOutputDevice(audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
+      addReadyAudioProvider(playbackTransport, makePipeWireOutputStatus());
+      playbackTransport.setOutputDevice(
+        audio::BackendId{"pipewire"}, audio::DeviceId{"device1"}, audio::kProfileShared);
       viewModel.refresh();
 
       auto const& view = log.last();
@@ -180,8 +175,8 @@ namespace ao::uimodel::test
       status.devices[0].backendId = audio::BackendId{"alsa"};
       status.devices[0].displayName = "USB DAC";
 
-      addReadyAudioProvider(playback, std::move(status));
-      playback.setOutputDevice(audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
+      addReadyAudioProvider(playbackTransport, std::move(status));
+      playbackTransport.setOutputDevice(audio::BackendId{"alsa"}, audio::DeviceId{"device1"}, audio::kProfileExclusive);
       viewModel.refresh();
 
       auto const& view = log.last();

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
 
@@ -22,14 +22,10 @@ namespace ao::uimodel::test
 
   TEST_CASE("PlaybackTimeViewModel - initial view state", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
-    auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = PlaybackTimeViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
     CHECK(log.last().elapsed == std::chrono::milliseconds{0});
@@ -38,50 +34,55 @@ namespace ao::uimodel::test
 
   TEST_CASE("PlaybackTimeViewModel - seek updates render preview and final modes", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
-    addReadyAudioProvider(playback);
-    REQUIRE(executor.drainUntil([&] { return playback.state().ready; }));
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+    fixture.addReadyProvider();
+    REQUIRE(fixture.executor.drainUntil([&] { return playbackTransport.state().ready; }));
 
     auto log = ao::test::RenderLog<PlaybackTimeViewState>{};
     auto const viewModel = PlaybackTimeViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
-    auto const trackId = libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto desc = PlaybackService::PlaybackRequest{
+    auto desc = PlaybackTransport::PlaybackRequest{
       .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
       .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
     };
     log.clear();
-    REQUIRE(playback.play(desc, kInvalidListId));
-    auto const expectedDuration = playback.state().duration;
+    REQUIRE(playbackTransport.play(desc, kInvalidListId));
+    REQUIRE(
+      fixture.executor.drainUntil([&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
+    fixture.executor.drain();
+    auto const expectedDuration = playbackTransport.state().duration;
     REQUIRE(expectedDuration > std::chrono::milliseconds{0});
-    REQUIRE(log.states.size() >= 2);
-    CHECK_FALSE(log.states.front().isPlaying);
+    // Playback coalesces the preparing and started transitions into one
+    // coherent snapshot, so the view model settles on the playing state rather
+    // than observing each intermediate transport signal.
+    REQUIRE(!log.empty());
     CHECK(log.last().isPlaying);
 
     log.clear();
-    playback.seek(std::chrono::milliseconds{500}, PlaybackService::SeekMode::Final);
+    playbackTransport.seek(std::chrono::milliseconds{500}, PlaybackTransport::SeekMode::Final);
+    fixture.executor.drain();
     REQUIRE(!log.empty());
     CHECK(log.last().duration == expectedDuration);
     CHECK(log.last().elapsed == std::chrono::milliseconds{500});
     CHECK(log.last().isPlaying == true);
     CHECK(log.last().isPreviewing == false);
     CHECK(log.last().immediateUpdate == true);
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{500});
+    CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{500});
 
     log.clear();
-    playback.seek(std::chrono::milliseconds{250}, PlaybackService::SeekMode::Preview);
+    playbackTransport.seek(std::chrono::milliseconds{250}, PlaybackTransport::SeekMode::Preview);
+    fixture.executor.drain();
     REQUIRE(!log.empty());
     CHECK(log.last().duration == expectedDuration);
     CHECK(log.last().elapsed == std::chrono::milliseconds{250});
     CHECK(log.last().isPlaying == true);
     CHECK(log.last().isPreviewing == true);
     CHECK(log.last().immediateUpdate == false);
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{500});
+    CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{500});
   }
 
   TEST_CASE("PlaybackTimeViewModel - formats display text for each label mode", "[uimodel][unit][playback]")

@@ -5,10 +5,11 @@
 
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
@@ -76,13 +77,13 @@ namespace ao::gtk
 
     using Type = uimodel::NowPlayingActionCommand::Type;
 
-    switch (cmd.type)
+    switch (auto& commands = _runtime.playback().commands(); cmd.type)
     {
-      case Type::Reveal: _runtime.playback().revealPlayingTrack(); break;
+      case Type::Reveal: commands.revealPlayingTrack(); break;
 
-      case Type::Pause: _runtime.playback().pause(); break;
+      case Type::Pause: commands.pause(); break;
 
-      case Type::Resume: _runtime.playback().resume(); break;
+      case Type::Resume: commands.resume(); break;
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);

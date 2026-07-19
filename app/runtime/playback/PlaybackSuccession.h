@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include "PlaybackMode.h"
-#include "ViewIds.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/PlaybackMode.h>
+#include <ao/rt/ViewIds.h>
 
 #include <chrono>
 #include <cstddef>
@@ -36,21 +36,21 @@ namespace ao::rt
   class NotificationService;
   class PlaybackCursorSession;
   class PlaybackSessionPersistence;
-  class PlaybackService;
+  class PlaybackTransport;
   struct PlaybackLaunchSpec;
   class TrackSourceCache;
   class ViewService;
 
-  enum class PlaybackSequenceSourceState : std::uint8_t
+  enum class PlaybackSuccessionSourceState : std::uint8_t
   {
     Inactive,
     Live,
     Invalidated,
   };
 
-  struct PlaybackSequenceState final
+  struct PlaybackSuccessionState final
   {
-    PlaybackSequenceSourceState sourceState = PlaybackSequenceSourceState::Inactive;
+    PlaybackSuccessionSourceState sourceState = PlaybackSuccessionSourceState::Inactive;
     TrackId currentTrackId = kInvalidTrackId;
     ListId sourceListId = kInvalidListId;
     bool hasNext = false;
@@ -60,11 +60,11 @@ namespace ao::rt
     RepeatMode repeat = RepeatMode::Off;
     std::uint64_t semanticRevision = 0;
 
-    bool operator==(PlaybackSequenceState const&) const = default;
+    bool operator==(PlaybackSuccessionState const&) const = default;
   };
 
   /** Executor-affine live-list playback succession boundary. */
-  class PlaybackSequenceService final
+  class PlaybackSuccession final
   {
   public:
     struct ShuffleModeChanged final
@@ -77,19 +77,19 @@ namespace ao::rt
       RepeatMode mode = RepeatMode::Off;
     };
 
-    PlaybackSequenceService(async::Executor& executor,
-                            ViewService& views,
-                            TrackSourceCache& sources,
-                            library::MusicLibrary const& library,
-                            PlaybackService& playback,
-                            NotificationService& notifications,
-                            async::Runtime& asyncRuntime);
-    ~PlaybackSequenceService();
+    PlaybackSuccession(async::Executor& executor,
+                       ViewService& views,
+                       TrackSourceCache& sources,
+                       library::MusicLibrary const& library,
+                       PlaybackTransport& transport,
+                       NotificationService& notifications,
+                       async::Runtime& asyncRuntime);
+    ~PlaybackSuccession();
 
-    PlaybackSequenceService(PlaybackSequenceService const&) = delete;
-    PlaybackSequenceService& operator=(PlaybackSequenceService const&) = delete;
-    PlaybackSequenceService(PlaybackSequenceService&&) = delete;
-    PlaybackSequenceService& operator=(PlaybackSequenceService&&) = delete;
+    PlaybackSuccession(PlaybackSuccession const&) = delete;
+    PlaybackSuccession& operator=(PlaybackSuccession const&) = delete;
+    PlaybackSuccession(PlaybackSuccession&&) = delete;
+    PlaybackSuccession& operator=(PlaybackSuccession&&) = delete;
 
     Result<> playFromView(ViewId viewId, TrackId startTrackId);
     bool hasNext() const;
@@ -100,12 +100,12 @@ namespace ao::rt
     void setShuffleMode(ShuffleMode mode);
     void setRepeatMode(RepeatMode mode);
 
-    PlaybackSequenceState const& state() const;
+    PlaybackSuccessionState const& state() const;
 
     // Handlers run synchronously on the executor thread. They must defer owner
     // teardown to a later executor turn; Debug contracts reject destruction
-    // while a sequence transition or observer publication is still on the stack.
-    async::Subscription onChanged(std::move_only_function<void(PlaybackSequenceState const&)> handler);
+    // while a succession transition or observer publication is still on the stack.
+    async::Subscription onChanged(std::move_only_function<void(PlaybackSuccessionState const&)> handler);
     async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
     async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
 

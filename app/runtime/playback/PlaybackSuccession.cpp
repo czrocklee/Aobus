@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackSuccession.h"
+
 #include "runtime/playback/PlaybackCursorSession.h"
 #include "runtime/playback/PlaybackRestartDeadline.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "runtime/playback/ProjectionAnchor.h"
 #include "runtime/playback/ShuffleHistory.h"
 #include <ao/CoreIds.h>
@@ -23,8 +26,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -59,8 +60,8 @@ namespace ao::rt
   {
     constexpr std::size_t kMaxConsecutivePlaybackFailures = 3;
 
-    Result<PlaybackService::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
-                                                                     TrackId const trackId)
+    Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                       TrackId const trackId)
     {
       auto const transaction = library.readTransaction();
       auto reader = library.tracks().reader(transaction);
@@ -97,7 +98,7 @@ namespace ao::rt
         optFilePath = std::move(*resolved);
       }
 
-      auto request = PlaybackService::PlaybackRequest{
+      auto request = PlaybackTransport::PlaybackRequest{
         .item =
           NowPlayingInfo{
             .trackId = trackId,
@@ -134,7 +135,7 @@ namespace ao::rt
 
     [[noreturn]] void failExecutorAffinity(std::source_location const& location)
     {
-      APP_LOG_CRITICAL("PlaybackSequenceService thread-affinity violation: '{}' invoked off the executor thread "
+      APP_LOG_CRITICAL("PlaybackSuccession thread-affinity violation: '{}' invoked off the executor thread "
                        "({}:{})",
                        location.function_name(),
                        location.file_name(),
@@ -207,7 +208,7 @@ namespace ao::rt
     }
   } // namespace
 
-  struct PlaybackSequenceService::Impl final
+  struct PlaybackSuccession::Impl final
   {
     enum class NavigationDirection : std::uint8_t
     {
@@ -306,17 +307,17 @@ namespace ao::rt
          ViewService& views,
          TrackSourceCache& sources,
          library::MusicLibrary const& library,
-         PlaybackService& playback,
+         PlaybackTransport& transport,
          NotificationService& notifications,
          async::Runtime& asyncRuntime)
       : executor{executor}
       , views{views}
       , sources{sources}
       , library{library}
-      , playback{playback}
+      , transport{transport}
       , notifications{notifications}
       , restartDeadline{asyncRuntime,
-                        [this] { return this->playback.elapsed(); },
+                        [this] { return this->transport.elapsed(); },
                         [this](bool const available) { handleRestartAvailabilityChanged(available); }}
     {
     }
@@ -354,21 +355,21 @@ namespace ao::rt
     bool isAcceptingStart() const noexcept { return acceptanceDepth.load(std::memory_order_acquire) != 0; }
     bool isInstallingSession() const noexcept { return sessionInstallationDepth.load(std::memory_order_acquire) != 0; }
     bool isRestoringSession() const noexcept { return restoreDepth.load(std::memory_order_acquire) != 0; }
-    bool blocksSequenceCommand() const { return isAcceptingStart() || playback.isPublishingAcceptedStart(); }
+    bool blocksSuccessionCommand() const { return isAcceptingStart() || transport.isPublishingAcceptedStart(); }
 
-    static PlaybackSequenceSourceState sourceStateFor(PlaybackCursorSession const* session) noexcept
+    static PlaybackSuccessionSourceState sourceStateFor(PlaybackCursorSession const* session) noexcept
     {
       if (session == nullptr)
       {
-        return PlaybackSequenceSourceState::Inactive;
+        return PlaybackSuccessionSourceState::Inactive;
       }
 
       return session->cursor().sourceState() == PlaybackCursor::SourceState::Live
-               ? PlaybackSequenceSourceState::Live
-               : PlaybackSequenceSourceState::Invalidated;
+               ? PlaybackSuccessionSourceState::Live
+               : PlaybackSuccessionSourceState::Invalidated;
     }
 
-    static bool sameSemanticTuple(PlaybackSequenceState const& lhs, PlaybackSequenceState const& rhs) noexcept
+    static bool sameSemanticTuple(PlaybackSuccessionState const& lhs, PlaybackSuccessionState const& rhs) noexcept
     {
       return lhs.sourceState == rhs.sourceState && lhs.currentTrackId == rhs.currentTrackId &&
              lhs.hasNext == rhs.hasNext && lhs.hasPrevious == rhs.hasPrevious &&
@@ -377,7 +378,7 @@ namespace ao::rt
 
     void synchronizeState(bool const containObserverExceptions = false)
     {
-      auto next = PlaybackSequenceState{
+      auto next = PlaybackSuccessionState{
         .sourceState = sourceStateFor(sessionPtr.get()),
         .shuffle = shuffleMode,
         .repeat = repeatMode,
@@ -460,7 +461,7 @@ namespace ao::rt
       }
 
       captureRestorableSnapshot();
-      auto const optDisarmedToken = playback.clearSequencePreparedNext();
+      auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
       sessionPtr->invalidatePreparedNext(optDisarmedToken);
       sessionPtr.reset();
       restartDeadline.clearSession();
@@ -478,7 +479,7 @@ namespace ao::rt
       captureRestorableSnapshot();
       stoppingTransport = true;
 
-      if (auto const barrier = playback.stopSequence(); sessionPtr)
+      if (auto const barrier = transport.stopSuccession(); sessionPtr)
       {
         sessionPtr->clearPreparedCoveredBy(barrier);
       }
@@ -577,7 +578,7 @@ namespace ao::rt
 
       if (sourceInvalidated)
       {
-        auto const optDisarmedToken = playback.clearSequencePreparedNext();
+        auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
         sessionPtr->invalidatePreparedNext(optDisarmedToken);
         captureRestorableSnapshot();
       }
@@ -601,7 +602,7 @@ namespace ao::rt
     {
       if (!sessionPtr)
       {
-        std::ignore = playback.clearSequencePreparedNext();
+        std::ignore = transport.clearSuccessionPreparedNext();
         return false;
       }
 
@@ -621,13 +622,13 @@ namespace ao::rt
         }
       }
 
-      auto const optDisarmedToken = playback.clearSequencePreparedNext();
+      auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
       registry.invalidate(optDisarmedToken);
 
       for (std::size_t attempt = 0; optSuccessor && attempt < kMaxConsecutivePlaybackFailures; ++attempt)
       {
         auto const successor = *optSuccessor;
-        auto prepared = playback.prepareSequenceNext(successor, session.cursor().launchSpec().sourceListId);
+        auto prepared = transport.prepareSuccessionNext(successor, session.cursor().launchSpec().sourceListId);
 
         if (prepared)
         {
@@ -645,7 +646,7 @@ namespace ao::rt
 
         if (auto const effect = session.refreshSemanticState(); effect.semanticChanged)
         {
-          synchronizeState(blocksSequenceCommand());
+          synchronizeState(blocksSuccessionCommand());
         }
 
         optSuccessor = session.cursor().semanticTuple().optResolvedSuccessor;
@@ -667,7 +668,7 @@ namespace ao::rt
       }
 
       auto const acceptance = AcceptanceTransaction{*this};
-      auto receipt = playback.playSequenceTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
+      auto receipt = transport.playSuccessionTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
 
       if (!receipt)
       {
@@ -907,7 +908,7 @@ namespace ao::rt
                                       true);
     }
 
-    void handleNowPlayingChanged(PlaybackService::NowPlayingChanged const& event)
+    void handleNowPlayingChanged(PlaybackTransport::NowPlayingChanged const& event)
     {
       if (isAcceptingStart() || !sessionPtr || event.trackId == kInvalidTrackId)
       {
@@ -935,8 +936,8 @@ namespace ao::rt
       resetFailureState();
       restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
-      synchronizeState(blocksSequenceCommand());
-      notifyPersistenceIntentChanged(blocksSequenceCommand());
+      synchronizeState(blocksSuccessionCommand());
+      notifyPersistenceIntentChanged(blocksSuccessionCommand());
     }
 
     PlaybackFailureDisposition handlePlaybackFailure(PlaybackFailure const& failure)
@@ -1008,13 +1009,13 @@ namespace ao::rt
 
       if (effect.semanticChanged)
       {
-        synchronizeState(blocksSequenceCommand());
+        synchronizeState(blocksSuccessionCommand());
       }
     }
 
     void start()
     {
-      playback.bindPlaybackFailureRecovery(
+      transport.bindPlaybackFailureRecovery(
         [this](PlaybackFailure const& failure)
         {
           if (!isClosing())
@@ -1024,23 +1025,23 @@ namespace ao::rt
 
           return PlaybackFailureDisposition::Unhandled;
         });
-      idleSubscription = playback.onIdle(
+      idleSubscription = transport.onIdle(
         [this]
         {
-          if (!isClosing() && sessionPtr && !stoppingTransport && playback.state().transport == audio::Transport::Idle)
+          if (!isClosing() && sessionPtr && !stoppingTransport && transport.state().transport == audio::Transport::Idle)
           {
             advanceNatural();
           }
         });
-      nowPlayingSubscription = playback.onNowPlayingChanged(
-        [this](PlaybackService::NowPlayingChanged const& event)
+      nowPlayingSubscription = transport.onNowPlayingChanged(
+        [this](PlaybackTransport::NowPlayingChanged const& event)
         {
           if (!isClosing())
           {
             handleNowPlayingChanged(event);
           }
         });
-      outputSubscription = playback.onOutputDeviceChanged(
+      outputSubscription = transport.onOutputDeviceChanged(
         [this](OutputDeviceSelection const&)
         {
           if (!isClosing())
@@ -1048,32 +1049,32 @@ namespace ao::rt
             reprepareNext(true);
           }
         });
-      seekSubscription = playback.onSeekUpdate(
-        [this](PlaybackService::SeekUpdate const& event)
+      seekSubscription = transport.onSeekUpdate(
+        [this](PlaybackTransport::SeekUpdate const& event)
         {
-          if (!isClosing() && sessionPtr && event.mode == PlaybackService::SeekMode::Final)
+          if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
-            restartDeadline.seek(playback.elapsed());
+            restartDeadline.seek(transport.elapsed());
             reprepareNext(true);
           }
         });
-      startedSubscription = playback.onStarted(
+      startedSubscription = transport.onStarted(
         [this]
         {
           if (!isClosing() && sessionPtr && !isAcceptingStart())
           {
-            restartDeadline.resume(playback.elapsed());
+            restartDeadline.resume(transport.elapsed());
           }
         });
-      pausedSubscription = playback.onPaused(
+      pausedSubscription = transport.onPaused(
         [this]
         {
           if (!isClosing() && sessionPtr)
           {
-            restartDeadline.pause(playback.elapsed());
+            restartDeadline.pause(transport.elapsed());
           }
         });
-      stoppedSubscription = playback.onStopped(
+      stoppedSubscription = transport.onStopped(
         [this]
         {
           if (!isClosing() && !stoppingTransport)
@@ -1090,7 +1091,7 @@ namespace ao::rt
         return;
       }
 
-      playback.unbindPlaybackFailureRecovery();
+      transport.unbindPlaybackFailureRecovery();
       idleSubscription.reset();
       nowPlayingSubscription.reset();
       outputSubscription.reset();
@@ -1110,16 +1111,16 @@ namespace ao::rt
     ViewService& views;
     TrackSourceCache& sources;
     library::MusicLibrary const& library;
-    PlaybackService& playback;
+    PlaybackTransport& transport;
     NotificationService& notifications;
-    PlaybackSequenceState state{};
+    PlaybackSuccessionState state{};
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
     std::unique_ptr<PlaybackCursorSession> sessionPtr;
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
-    async::Signal<PlaybackSequenceState const&> changedSignal;
-    async::Signal<PlaybackSequenceService::ShuffleModeChanged const&> shuffleModeChangedSignal;
-    async::Signal<PlaybackSequenceService::RepeatModeChanged const&> repeatModeChangedSignal;
+    async::Signal<PlaybackSuccessionState const&> changedSignal;
+    async::Signal<PlaybackSuccession::ShuffleModeChanged const&> shuffleModeChangedSignal;
+    async::Signal<PlaybackSuccession::RepeatModeChanged const&> repeatModeChangedSignal;
     async::Signal<> persistenceIntentChangedSignal;
     PlaybackRestartDeadline restartDeadline;
     async::Subscription idleSubscription;
@@ -1140,31 +1141,31 @@ namespace ao::rt
     std::atomic_size_t restoreDepth{0};
   };
 
-  PlaybackSequenceService::PlaybackSequenceService(async::Executor& executor,
-                                                   ViewService& views,
-                                                   TrackSourceCache& sources,
-                                                   library::MusicLibrary const& library,
-                                                   PlaybackService& playback,
-                                                   NotificationService& notifications,
-                                                   async::Runtime& asyncRuntime)
-    : _implPtr{std::make_unique<Impl>(executor, views, sources, library, playback, notifications, asyncRuntime)}
+  PlaybackSuccession::PlaybackSuccession(async::Executor& executor,
+                                         ViewService& views,
+                                         TrackSourceCache& sources,
+                                         library::MusicLibrary const& library,
+                                         PlaybackTransport& transport,
+                                         NotificationService& notifications,
+                                         async::Runtime& asyncRuntime)
+    : _implPtr{std::make_unique<Impl>(executor, views, sources, library, transport, notifications, asyncRuntime)}
   {
     _implPtr->start();
   }
 
-  PlaybackSequenceService::~PlaybackSequenceService()
+  PlaybackSuccession::~PlaybackSuccession()
   {
     gsl_Expects(_implPtr != nullptr);
     gsl_Expects(_implPtr->acceptanceDepth.load(std::memory_order_acquire) == 0);
     gsl_Expects(_implPtr->observerPublicationDepth.load(std::memory_order_acquire) == 0);
   }
 
-  Result<> PlaybackSequenceService::playFromView(ViewId const viewId, TrackId const startTrackId)
+  Result<> PlaybackSuccession::playFromView(ViewId const viewId, TrackId const startTrackId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSequenceCommand())
+    if (impl->blocksSuccessionCommand())
     {
       return makeError(Error::Code::InvalidState, "Playback sequence is accepting another start");
     }
@@ -1198,7 +1199,7 @@ namespace ao::rt
       return std::unexpected{request.error()};
     }
 
-    auto preparedStart = impl->playback.stagePlayback(*request, launchSpec->sourceListId);
+    auto preparedStart = impl->transport.stagePlayback(*request, launchSpec->sourceListId);
 
     if (!preparedStart)
     {
@@ -1210,7 +1211,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback sequence closed during preparation");
     }
 
-    auto receipt = impl->playback.commitPlayback(std::move(*preparedStart));
+    auto receipt = impl->transport.commitPlayback(std::move(*preparedStart));
 
     if (!receipt)
     {
@@ -1243,26 +1244,26 @@ namespace ao::rt
     return {};
   }
 
-  bool PlaybackSequenceService::hasNext() const
+  bool PlaybackSuccession::hasNext() const
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->state.hasNext;
   }
 
-  bool PlaybackSequenceService::hasPrevious() const
+  bool PlaybackSuccession::hasPrevious() const
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->state.hasPrevious;
   }
 
-  void PlaybackSequenceService::next()
+  void PlaybackSuccession::next()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSequenceCommand() || !impl->sessionPtr)
+    if (impl->blocksSuccessionCommand() || !impl->sessionPtr)
     {
       return;
     }
@@ -1274,12 +1275,12 @@ namespace ao::rt
                                           true);
   }
 
-  void PlaybackSequenceService::previous()
+  void PlaybackSuccession::previous()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSequenceCommand() || !impl->sessionPtr)
+    if (impl->blocksSuccessionCommand() || !impl->sessionPtr)
     {
       return;
     }
@@ -1304,12 +1305,12 @@ namespace ao::rt
                                           false);
   }
 
-  void PlaybackSequenceService::clear()
+  void PlaybackSuccession::clear()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSequenceCommand())
+    if (impl->blocksSuccessionCommand())
     {
       return;
     }
@@ -1317,12 +1318,12 @@ namespace ao::rt
     impl->deactivateSession();
   }
 
-  void PlaybackSequenceService::setShuffleMode(ShuffleMode const mode)
+  void PlaybackSuccession::setShuffleMode(ShuffleMode const mode)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSequenceCommand() || impl->shuffleMode == mode)
+    if (impl->blocksSuccessionCommand() || impl->shuffleMode == mode)
     {
       return;
     }
@@ -1345,12 +1346,12 @@ namespace ao::rt
     impl->notifyPersistenceIntentChanged();
   }
 
-  void PlaybackSequenceService::setRepeatMode(RepeatMode const mode)
+  void PlaybackSuccession::setRepeatMode(RepeatMode const mode)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSequenceCommand() || impl->repeatMode == mode)
+    if (impl->blocksSuccessionCommand() || impl->repeatMode == mode)
     {
       return;
     }
@@ -1373,22 +1374,22 @@ namespace ao::rt
     impl->notifyPersistenceIntentChanged();
   }
 
-  PlaybackSequenceState const& PlaybackSequenceService::state() const
+  PlaybackSuccessionState const& PlaybackSuccession::state() const
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->state;
   }
 
-  async::Subscription PlaybackSequenceService::onChanged(
-    std::move_only_function<void(PlaybackSequenceState const&)> handler)
+  async::Subscription PlaybackSuccession::onChanged(
+    std::move_only_function<void(PlaybackSuccessionState const&)> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->changedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackSequenceService::onShuffleModeChanged(
+  async::Subscription PlaybackSuccession::onShuffleModeChanged(
     std::move_only_function<void(ShuffleModeChanged const&)> handler)
   {
     auto* const impl = _implPtr.get();
@@ -1396,7 +1397,7 @@ namespace ao::rt
     return impl->shuffleModeChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackSequenceService::onRepeatModeChanged(
+  async::Subscription PlaybackSuccession::onRepeatModeChanged(
     std::move_only_function<void(RepeatModeChanged const&)> handler)
   {
     auto* const impl = _implPtr.get();
@@ -1404,16 +1405,16 @@ namespace ao::rt
     return impl->repeatModeChangedSignal.connect(std::move(handler));
   }
 
-  bool PlaybackSequenceService::hasActivePlaybackSession() const
+  bool PlaybackSuccession::hasActivePlaybackSession() const
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->sessionPtr != nullptr;
   }
 
-  bool PlaybackSequenceService::capturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
-                                                               TrackId& currentTrackId,
-                                                               std::size_t& anchorIndex) const
+  bool PlaybackSuccession::capturePlaybackSessionSnapshot(PlaybackLaunchSpec& launchSpec,
+                                                          TrackId& currentTrackId,
+                                                          std::size_t& anchorIndex) const
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1438,7 +1439,7 @@ namespace ao::rt
     return true;
   }
 
-  Result<std::unique_ptr<PlaybackCursorSession>> PlaybackSequenceService::preparePlaybackSessionRestore(
+  Result<std::unique_ptr<PlaybackCursorSession>> PlaybackSuccession::preparePlaybackSessionRestore(
     PlaybackLaunchSpec launchSpec,
     TrackId const currentTrackId,
     std::size_t const anchorIndex,
@@ -1458,10 +1459,10 @@ namespace ao::rt
   }
 
   // Executor-affinity failure deliberately terminates this otherwise contained noexcept commit.
-  void PlaybackSequenceService::commitPlaybackSessionRestore(std::unique_ptr<PlaybackCursorSession> sessionPtr,
-                                                             ShuffleMode const restoredShuffleMode,
-                                                             RepeatMode const restoredRepeatMode,
-                                                             std::chrono::milliseconds const elapsed) noexcept
+  void PlaybackSuccession::commitPlaybackSessionRestore(std::unique_ptr<PlaybackCursorSession> sessionPtr,
+                                                        ShuffleMode const restoredShuffleMode,
+                                                        RepeatMode const restoredRepeatMode,
+                                                        std::chrono::milliseconds const elapsed) noexcept
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1506,14 +1507,14 @@ namespace ao::rt
     }
   }
 
-  void PlaybackSequenceService::discardPlaybackSessionSnapshot()
+  void PlaybackSuccession::discardPlaybackSessionSnapshot()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     impl->optLastRestorableSnapshot.reset();
   }
 
-  async::Subscription PlaybackSequenceService::onPersistenceIntentChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSuccession::onPersistenceIntentChanged(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();

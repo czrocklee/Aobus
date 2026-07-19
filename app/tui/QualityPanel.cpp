@@ -9,7 +9,7 @@
 #include "TextCell.h"
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -30,7 +30,7 @@ namespace ao::tui
       return ftxui::text("●") | ftxui::color(ftxui::Color::RGB(style.red, style.green, style.blue));
     }
 
-    std::string selectedDeviceName(rt::PlaybackState const& state)
+    std::string selectedDeviceName(rt::PlaybackTransportSnapshot const& state)
     {
       auto deviceName = std::string{};
 
@@ -76,7 +76,7 @@ namespace ao::tui
     }
   } // namespace
 
-  std::int32_t qualityPanelColumns(rt::PlaybackState const& state, std::int32_t const terminalColumns)
+  std::int32_t qualityPanelColumns(rt::PlaybackTransportSnapshot const& state, std::int32_t const terminalColumns)
   {
     auto const deviceName = selectedDeviceName(state);
     auto contentColumns = std::max(cellWidth(deviceName), cellWidth(overlayHint(Overlay::QualityPanel)));
@@ -109,7 +109,7 @@ namespace ao::tui
     return style::popupPanelColumnsForContent(contentColumns, terminalColumns);
   }
 
-  ftxui::Element qualityPanel(rt::PlaybackState const& state, std::int32_t columns)
+  ftxui::Element qualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t columns)
   {
     using namespace ftxui;
 

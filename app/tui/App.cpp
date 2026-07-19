@@ -35,12 +35,12 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
 #include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
@@ -401,7 +401,7 @@ namespace ao::tui
                                                  reflect(hitRegions.coverBox)
                                              : renderCoverArtPreview(optCoverArtPreview) | reflect(hitRegions.coverBox);
         auto const currentListTitle = library.currentListTitle();
-        auto const state = playback.state();
+        auto const state = playback.snapshot().transport;
         hitRegions.clearFrameLocalRows();
         auto const frameTime = monotonicFrameTime();
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
@@ -627,35 +627,35 @@ namespace ao::tui
 
     auto& playback = runtime.playback();
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
-    auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.state().transport)};
+    auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
     auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
-    auto playbackTime =
-      uimodel::PlaybackTimeViewModel{playback,
-                                     [&](uimodel::PlaybackTimeViewState const& view)
-                                     {
-                                       clockTickActive.store(shouldTickTransportClock(playback.state().transport));
+    auto playbackTime = uimodel::PlaybackTimeViewModel{
+      playback,
+      [&](uimodel::PlaybackTimeViewState const& view)
+      {
+        clockTickActive.store(shouldTickTransportClock(playback.snapshot().transport.transport));
 
-                                       if (view.duration == std::chrono::milliseconds{0})
-                                       {
-                                         optPreviewElapsed.reset();
-                                         playbackClock.reset();
-                                         requestRefresh();
-                                         return;
-                                       }
+        if (view.duration == std::chrono::milliseconds{0})
+        {
+          optPreviewElapsed.reset();
+          playbackClock.reset();
+          requestRefresh();
+          return;
+        }
 
-                                       if (view.isPreviewing)
-                                       {
-                                         optPreviewElapsed = view.elapsed;
-                                         requestRefresh();
-                                         return;
-                                       }
+        if (view.isPreviewing)
+        {
+          optPreviewElapsed = view.elapsed;
+          requestRefresh();
+          return;
+        }
 
-                                       optPreviewElapsed.reset();
-                                       playbackClock.updateState(view.elapsed, view.duration, view.isPlaying);
-                                       requestRefresh();
-                                     }};
+        optPreviewElapsed.reset();
+        playbackClock.updateState(view.elapsed, view.duration, view.isPlaying);
+        requestRefresh();
+      }};
     auto activityStatusViewModel = uimodel::ActivityStatusViewModel{
       runtime.notifications(),
       [&](uimodel::ActivityStatusViewState const& view)
@@ -666,10 +666,8 @@ namespace ao::tui
       uimodel::ActivityStatusViewModelOptions{.libraryChanges = &runtime.library().changes()}};
     runtime.notifications().post(rt::NotificationSeverity::Info, "Ready", rt::NotificationLifetime::transient());
 
-    auto nowPlayingSub = playback.onNowPlayingChanged([requestRefresh](auto const&) { requestRefresh(); });
-    auto qualitySub = playback.onQualityChanged([requestRefresh](auto const&) { requestRefresh(); });
-    auto volumeSub = playback.onVolumeChanged([requestRefresh](float) { requestRefresh(); });
-    auto mutedSub = playback.onMutedChanged([requestRefresh](bool) { requestRefresh(); });
+    auto playbackSub =
+      playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) { requestRefresh(); });
     auto outputDevices = OutputDeviceController{playback, requestRefresh};
     auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
     auto events = EventController{screen,
@@ -739,7 +737,7 @@ namespace ao::tui
       std::fflush(stdout);
     }
 
-    playback.stop();
+    playback.commands().stop();
     runtime.async().requestStop();
     runtime.async().join();
     frameTimer.flush();

@@ -6,13 +6,18 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
+
+namespace ao::rt
+{
+  class PlaybackService;
+}
 
 namespace ao::uimodel
 {
@@ -62,9 +67,10 @@ namespace ao::uimodel
 
   private:
     rt::PlaybackService& _playback;
+    rt::PlaybackCommands& _commands;
     std::function<void(OutputDeviceViewState const&)> _onRender;
     PresentationTextCatalog _textCatalog;
 
-    async::Subscription _outputDeviceChangedSub;
+    async::Subscription _snapshotSub;
   };
 } // namespace ao::uimodel

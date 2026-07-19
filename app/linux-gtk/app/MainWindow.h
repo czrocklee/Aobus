@@ -64,7 +64,7 @@ namespace ao::gtk
     void saveCurrentPanelSizesAsLayoutDefaults();
     void applyKeymap(uimodel::KeymapModel const& keymap);
     void applyTheme(uimodel::ThemePreset theme);
-    rt::PlaybackService& playbackService();
+    rt::PlaybackService& playback();
     uimodel::LayoutActionCatalog const& layoutActionCatalog() const;
 
   protected:

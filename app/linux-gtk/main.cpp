@@ -496,7 +496,7 @@ namespace
     preferencesWindowPtr->set_transient_for(*targetWindow);
     auto prefs = rt::AppPrefsState{};
     appConfigStorePtr->loadAppPrefs(prefs);
-    preferencesWindowPtr->refreshPreferences(prefs, &targetWindow->playbackService(), targetWindow);
+    preferencesWindowPtr->refreshPreferences(prefs, &targetWindow->playback(), targetWindow);
     preferencesWindowPtr->refreshKeyboardPage(targetWindow->layoutActionCatalog(),
                                               appConfigStorePtr->loadKeymap(uimodel::defaultKeymap()),
                                               [appPtr](uimodel::KeymapModel const& keymap)

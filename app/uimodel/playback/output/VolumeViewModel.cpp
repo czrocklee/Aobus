@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <algorithm>
@@ -15,40 +16,36 @@
 namespace ao::uimodel
 {
   VolumeViewModel::VolumeViewModel(rt::PlaybackService& playback, std::function<void(VolumeViewState const&)> onRender)
-    : _playback{playback}, _onRender{std::move(onRender)}
+    : _playback{playback}, _commands{playback.commands()}, _onRender{std::move(onRender)}
   {
-    auto const refreshCallback = [this] { refresh(); };
-    _outputDeviceSub = _playback.onOutputDeviceChanged([refreshCallback](auto const&) { refreshCallback(); });
-    _startedSub = _playback.onStarted(refreshCallback);
-    _volumeSub = _playback.onVolumeChanged([refreshCallback](float) { refreshCallback(); });
-    _mutedSub = _playback.onMutedChanged([refreshCallback](bool) { refreshCallback(); });
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
     refresh();
   }
 
   void VolumeViewModel::handleVolumeChanged(float volume)
   {
-    _playback.setVolume(volume);
+    _commands.setVolume(volume);
   }
 
   void VolumeViewModel::handleMutedChanged(bool muted)
   {
-    _playback.setMuted(muted);
+    _commands.setMuted(muted);
   }
 
   void VolumeViewModel::toggleMuted()
   {
-    _playback.setMuted(!_playback.state().volume.muted);
+    _commands.setMuted(!_playback.snapshot().transport.volume.muted);
   }
 
   void VolumeViewModel::handleScroll(double scrollDy)
   {
-    auto const volume = _playback.state().volume;
+    auto const volume = _playback.snapshot().transport.volume;
     applyVolumeTarget(volume.level, volume.muted, resolveVolumeScroll(volume.level, scrollDy));
   }
 
   void VolumeViewModel::adjustVolume(float const delta)
   {
-    auto const volume = _playback.state().volume;
+    auto const volume = _playback.snapshot().transport.volume;
     applyVolumeTarget(volume.level, volume.muted, volume.level + delta);
   }
 
@@ -58,23 +55,23 @@ namespace ao::uimodel
 
     if (muted && newVolume > currentVolume)
     {
-      _playback.setMuted(false);
+      _commands.setMuted(false);
     }
 
-    _playback.setVolume(newVolume);
+    _commands.setVolume(newVolume);
   }
 
   void VolumeViewModel::refresh()
   {
-    auto const& state = _playback.state();
+    auto const volume = _playback.snapshot().transport.volume;
 
     auto view = VolumeViewState{
-      .visible = state.volume.available,
-      .volume = state.volume.level,
-      .isHardwareAssisted = state.volume.hardwareAssisted,
-      .muted = state.volume.muted,
-      .indicatorKind = resolveIndicatorKind(state.volume.level, state.volume.muted),
-      .tooltip = resolveTooltip(state.volume.level, state.volume.muted, state.volume.hardwareAssisted),
+      .visible = volume.available,
+      .volume = volume.level,
+      .isHardwareAssisted = volume.hardwareAssisted,
+      .muted = volume.muted,
+      .indicatorKind = resolveIndicatorKind(volume.level, volume.muted),
+      .tooltip = resolveTooltip(volume.level, volume.muted, volume.hardwareAssisted),
     };
 
     if (_onRender)

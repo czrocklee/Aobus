@@ -6,11 +6,10 @@
 #include <ao/CoreIds.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::rt
 {
-  /** Opaque service-lifetime identity for one prepared-next request. */
+  /** Opaque transport-owner-lifetime identity for one prepared-next request. */
   struct PreparedNextToken final
   {
     std::uint64_t value = 0;
@@ -28,27 +27,6 @@ namespace ao::rt
 
     bool covers(std::uint64_t issuedGeneration) const noexcept { return issuedGeneration < generation; }
     bool operator==(PreparedCancellationBarrier const&) const = default;
-  };
-
-  /** Move-only, non-published explicit playback candidate. */
-  class PreparedPlaybackStart final
-  {
-  public:
-    ~PreparedPlaybackStart();
-
-    PreparedPlaybackStart(PreparedPlaybackStart const&) = delete;
-    PreparedPlaybackStart& operator=(PreparedPlaybackStart const&) = delete;
-    PreparedPlaybackStart(PreparedPlaybackStart&&) noexcept;
-    PreparedPlaybackStart& operator=(PreparedPlaybackStart&&) noexcept;
-
-  private:
-    struct Impl;
-
-    explicit PreparedPlaybackStart(std::unique_ptr<Impl> implPtr);
-
-    std::unique_ptr<Impl> _implPtr;
-
-    friend class PlaybackService;
   };
 
   struct PlaybackStartReceipt final

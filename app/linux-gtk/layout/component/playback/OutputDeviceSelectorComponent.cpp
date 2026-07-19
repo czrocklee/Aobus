@@ -8,6 +8,7 @@
 #include "layout/runtime/LayoutComponent.h"
 #include "playback/OutputDevicePopover.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>

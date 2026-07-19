@@ -18,12 +18,13 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
@@ -113,7 +114,7 @@ namespace ao::gtk::platform::test
 
   TEST_CASE("MprisBridge - metadata snapshot maps playback state to MPRIS fields", "[gtk][unit][mpris]")
   {
-    auto const state = rt::PlaybackState{
+    auto const state = rt::PlaybackTransportSnapshot{
       .duration = std::chrono::seconds{125},
       .nowPlaying =
         rt::NowPlayingInfo{
@@ -133,7 +134,7 @@ namespace ao::gtk::platform::test
     CHECK(metadata.album == "Partitas");
     CHECK(metadata.artUrl == "file:///tmp/aobus-cover.png");
     CHECK(metadata.lengthUs == 125'000'000);
-    CHECK(MprisBridge::metadataForState(rt::PlaybackState{}).trackObjectPath.empty());
+    CHECK(MprisBridge::metadataForState(rt::PlaybackTransportSnapshot{}).trackObjectPath.empty());
   }
 
   TEST_CASE("toUString - UTF-8 conversion preserves multibyte metadata", "[gtk][regression][mpris]")
@@ -174,7 +175,8 @@ namespace ao::gtk::platform::test
           musicLibrary, library::test::TrackSpec{.title = "Cover Track", .uri = fixtureUri, .coverArtId = resourceId});
       }};
     auto& runtime = fixture.runtime();
-    rt::test::addReadyAudioProvider(runtime.playback());
+    rt::test::addReadyAudioProvider(runtime);
+    auto& playback = runtime.playback();
     auto const cacheDir = fixture.tempDir().path() / "mpris-art";
     std::filesystem::create_directories(cacheDir);
     auto const stalePath = cacheDir / (std::to_string(resourceId.raw()) + ".img");
@@ -187,10 +189,11 @@ namespace ao::gtk::platform::test
 
     auto cache = MprisArtUrlCache{runtime.library(), cacheDir};
 
-    REQUIRE(runtime.playback().playTrack(trackId, ListId{5}));
-    CHECK(runtime.playback().state().nowPlaying.coverArtId == resourceId);
+    auto const viewId = prepareAllTracksView(runtime);
+    REQUIRE(playback.commands().startFromView(viewId, trackId));
+    CHECK(playback.snapshot().transport.nowPlaying.coverArtId == resourceId);
 
-    auto const url = cache.urlForResource(runtime.playback().state().nowPlaying.coverArtId);
+    auto const url = cache.urlForResource(playback.snapshot().transport.nowPlaying.coverArtId);
     REQUIRE(url.starts_with("file://"));
 
     auto const exportedPath = pathFromFileUrl(url);
@@ -218,7 +221,7 @@ namespace ao::gtk::platform::test
     CHECK(cache.urlForResource(resourceId) == url);
     CHECK(fileBytesEqual(exportedPath, kPngBytes));
 
-    auto const metadata = MprisBridge::metadataForState(runtime.playback().state(), url);
+    auto const metadata = MprisBridge::metadataForState(playback.snapshot().transport, url);
     CHECK(metadata.artUrl == url);
     CHECK(cache.urlForResource(kInvalidResourceId).empty());
     CHECK(cache.urlForResource(ResourceId{999999}).empty());
@@ -226,9 +229,9 @@ namespace ao::gtk::platform::test
 
   TEST_CASE("MprisBridge - elapsed helpers convert and clamp MPRIS time", "[gtk][unit][mpris]")
   {
-    auto state = rt::PlaybackState{.elapsed = std::chrono::milliseconds{5'000},
-                                   .duration = std::chrono::milliseconds{10'000},
-                                   .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{7}}};
+    auto state = rt::PlaybackTransportSnapshot{.elapsed = std::chrono::milliseconds{5'000},
+                                               .duration = std::chrono::milliseconds{10'000},
+                                               .nowPlaying = rt::NowPlayingInfo{.trackId = TrackId{7}}};
 
     CHECK(MprisBridge::microsecondsFromMilliseconds(std::chrono::milliseconds{1234}) == 1'234'000);
     CHECK(MprisBridge::fromMprisMicroseconds(1'234'567) == std::chrono::milliseconds{1234});
@@ -264,42 +267,40 @@ namespace ao::gtk::platform::test
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(runtime);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    auto& sequence = runtime.playbackSequence();
     std::int32_t playSelectionCount = 0;
-    auto commands =
-      uimodel::PlaybackCommandSurface{playback, sequence, [&playSelectionCount] { ++playSelectionCount; }};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [&playSelectionCount] { ++playSelectionCount; }};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchPlayerMethod("PlayPause"));
     CHECK(endpoint.dispatchPlayerMethod("Play"));
     CHECK(playSelectionCount == 2);
 
-    REQUIRE(sequence.playFromView(viewId, firstTrack));
+    REQUIRE(playback.commands().startFromView(viewId, firstTrack));
     CHECK(endpoint.dispatchPlayerMethod("Next"));
-    CHECK(sequence.state().currentTrackId == secondTrack);
+    CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
     CHECK(endpoint.dispatchPlayerMethod("Previous"));
-    CHECK(sequence.state().currentTrackId == firstTrack);
+    CHECK(playback.snapshot().succession.currentTrackId == firstTrack);
 
     CHECK(endpoint.dispatchPlayerMethod("Pause"));
-    CHECK(playback.state().transport == audio::Transport::Paused);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
     CHECK(endpoint.dispatchPlayerMethod("Stop"));
-    CHECK(playback.state().transport == audio::Transport::Idle);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
     CHECK_FALSE(endpoint.dispatchPlayerMethod("Seek"));
   }
 
   TEST_CASE("MprisBridge - root methods dispatch to injected GTK lifecycle callbacks", "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
-    auto& sequence = fixture.runtime().playbackSequence();
-    auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), sequence, [] {}};
+    auto& playback = fixture.runtime().playback();
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     std::int32_t raiseCount = 0;
     std::int32_t quitCount = 0;
     auto callbacks = MprisBridge::Callbacks{
@@ -316,7 +317,7 @@ namespace ao::gtk::platform::test
         return true;
       },
     };
-    auto endpoint = MprisPlaybackEndpoint{fixture.runtime().playback(), sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchRootMethod("Raise"));
     CHECK(endpoint.dispatchRootMethod("Quit"));
@@ -328,10 +329,10 @@ namespace ao::gtk::platform::test
   TEST_CASE("MprisBridge - unsupported player methods are rejected", "[gtk][unit][mpris]")
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
-    auto& sequence = fixture.runtime().playbackSequence();
-    auto commands = uimodel::PlaybackCommandSurface{fixture.runtime().playback(), sequence, [] {}};
+    auto& playback = fixture.runtime().playback();
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{fixture.runtime().playback(), sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK_FALSE(endpoint.dispatchPlayerMethod("Seek"));
   }
@@ -341,17 +342,16 @@ namespace ao::gtk::platform::test
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(runtime);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const firstTrack =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "First", .uri = fixturePath});
     auto const secondTrack =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Second", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    auto& sequence = runtime.playbackSequence();
-    auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     auto const checkCapability = [&endpoint, &commands](
                                    std::string_view const propertyName, uimodel::PlaybackCommand const command)
@@ -361,7 +361,7 @@ namespace ao::gtk::platform::test
       CHECK(*optCapability == commands.isCapable(command));
     };
 
-    REQUIRE(sequence.playFromView(viewId, firstTrack));
+    REQUIRE(playback.commands().startFromView(viewId, firstTrack));
 
     checkCapability("CanPlay", uimodel::PlaybackCommand::Play);
     checkCapability("CanPause", uimodel::PlaybackCommand::Pause);
@@ -369,10 +369,10 @@ namespace ao::gtk::platform::test
     checkCapability("CanGoPrevious", uimodel::PlaybackCommand::Previous);
 
     REQUIRE(endpoint.dispatchPlayerMethod("Next"));
-    CHECK(sequence.state().currentTrackId == secondTrack);
+    CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
     REQUIRE(endpoint.dispatchPlayerMethod("Next"));
-    CHECK(sequence.state().currentTrackId == secondTrack);
-    CHECK(playback.state().nowPlaying.trackId == secondTrack);
+    CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == secondTrack);
 
     checkCapability("CanGoNext", uimodel::PlaybackCommand::Next);
     checkCapability("CanGoPrevious", uimodel::PlaybackCommand::Previous);
@@ -384,19 +384,18 @@ namespace ao::gtk::platform::test
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
-    auto& sequence = fixture.runtime().playbackSequence();
-    auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSetVolume(0.42));
-    CHECK(playback.state().volume.level == Catch::Approx{0.42F});
+    CHECK(playback.snapshot().transport.volume.level == Catch::Approx{0.42F});
 
     CHECK(endpoint.dispatchSetVolume(5.0));
-    CHECK(playback.state().volume.level == 1.0F);
+    CHECK(playback.snapshot().transport.volume.level == 1.0F);
 
     CHECK(endpoint.dispatchSetVolume(-1.0));
-    CHECK(playback.state().volume.level == 0.0F);
+    CHECK(playback.snapshot().transport.volume.level == 0.0F);
   }
 
   TEST_CASE("MprisBridge - rate setter keeps fixed rate and pauses on zero", "[gtk][unit][mpris]")
@@ -404,30 +403,29 @@ namespace ao::gtk::platform::test
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(runtime);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Rate Track", .uri = fixturePath});
     auto const viewId = prepareAllTracksView(runtime);
-    auto& sequence = runtime.playbackSequence();
-    auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
-    REQUIRE(sequence.playFromView(viewId, trackId));
-    REQUIRE(playback.state().transport == audio::Transport::Playing);
+    REQUIRE(playback.commands().startFromView(viewId, trackId));
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
 
     CHECK(endpoint.dispatchSetRate(2.0));
-    CHECK(playback.state().transport == audio::Transport::Playing);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
 
     CHECK(endpoint.dispatchSetRate(-1.0));
-    CHECK(playback.state().transport == audio::Transport::Playing);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
 
     CHECK(endpoint.dispatchSetRate(0.0));
-    CHECK(playback.state().transport == audio::Transport::Paused);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
 
     CHECK(endpoint.dispatchSetRate(1.0));
-    CHECK(playback.state().transport == audio::Transport::Paused);
+    CHECK(playback.snapshot().transport.transport == audio::Transport::Paused);
 
     CHECK_FALSE(endpoint.dispatchSetRate(std::numeric_limits<double>::infinity()));
     CHECK_FALSE(endpoint.dispatchSetRate(std::numeric_limits<double>::quiet_NaN()));
@@ -437,25 +435,24 @@ namespace ao::gtk::platform::test
   {
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
-    auto& sequence = fixture.runtime().playbackSequence();
-    auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSetShuffle(true));
-    CHECK(sequence.state().shuffle == rt::ShuffleMode::On);
+    CHECK(playback.snapshot().succession.shuffle == rt::ShuffleMode::On);
 
     CHECK(endpoint.dispatchSetLoopStatus("Track"));
-    CHECK(sequence.state().repeat == rt::RepeatMode::One);
+    CHECK(playback.snapshot().succession.repeat == rt::RepeatMode::One);
 
     CHECK(endpoint.dispatchSetLoopStatus("Playlist"));
-    CHECK(sequence.state().repeat == rt::RepeatMode::All);
+    CHECK(playback.snapshot().succession.repeat == rt::RepeatMode::All);
 
     CHECK(endpoint.dispatchSetLoopStatus("None"));
-    CHECK(sequence.state().repeat == rt::RepeatMode::Off);
+    CHECK(playback.snapshot().succession.repeat == rt::RepeatMode::Off);
 
     CHECK_FALSE(endpoint.dispatchSetLoopStatus("Album"));
-    CHECK(sequence.state().repeat == rt::RepeatMode::Off);
+    CHECK(playback.snapshot().succession.repeat == rt::RepeatMode::Off);
   }
 
   TEST_CASE("MprisBridge - shuffle and loop status setters update an active sequence", "[gtk][unit][mpris]")
@@ -463,35 +460,30 @@ namespace ao::gtk::platform::test
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(runtime);
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const track1 =
+    [[maybe_unused]] auto const track1 =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Queue 1", .uri = fixturePath});
     auto const track2 =
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Queue 2", .uri = fixturePath});
 
     auto const viewId = prepareAllTracksView(runtime);
-    auto& sequence = runtime.playbackSequence();
-    REQUIRE(sequence.playFromView(viewId, track2));
-    REQUIRE_FALSE(sequence.state().hasNext);
-    REQUIRE_FALSE(sequence.state().optResolvedSuccessor);
+    REQUIRE(playback.commands().startFromView(viewId, track2));
+    REQUIRE_FALSE(playback.snapshot().succession.hasNext);
 
-    auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSetLoopStatus("Playlist"));
-    CHECK(sequence.state().hasNext);
-    CHECK(sequence.state().optResolvedSuccessor == track1);
+    CHECK(playback.snapshot().succession.hasNext);
 
     CHECK(endpoint.dispatchSetLoopStatus("None"));
-    REQUIRE_FALSE(sequence.state().hasNext);
-    REQUIRE_FALSE(sequence.state().optResolvedSuccessor);
+    REQUIRE_FALSE(playback.snapshot().succession.hasNext);
 
     CHECK(endpoint.dispatchSetShuffle(true));
-    CHECK(sequence.state().hasNext);
-    CHECK(sequence.state().optResolvedSuccessor == track1);
+    CHECK(playback.snapshot().succession.hasNext);
   }
 
   TEST_CASE("MprisBridge - seek methods update playback service position", "[gtk][unit][mpris]")
@@ -499,7 +491,7 @@ namespace ao::gtk::platform::test
     auto fixture = ao::gtk::test::GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
     auto& playback = runtime.playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(runtime);
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = ao::gtk::test::addRuntimeTrack(runtime,
                                                         library::test::TrackSpec{.title = "MPRIS Seek",
@@ -511,35 +503,34 @@ namespace ao::gtk::platform::test
       ao::gtk::test::addRuntimeTrack(runtime, library::test::TrackSpec{.title = "MPRIS Next", .uri = fixturePath});
 
     auto const viewId = prepareAllTracksView(runtime);
-    auto& sequence = runtime.playbackSequence();
-    REQUIRE(sequence.playFromView(viewId, trackId));
-    playback.seek(std::chrono::milliseconds{500});
+    REQUIRE(playback.commands().startFromView(viewId, trackId));
+    playback.commands().seek(std::chrono::milliseconds{500});
 
-    auto commands = uimodel::PlaybackCommandSurface{playback, sequence, [] {}};
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
     auto callbacks = MprisBridge::Callbacks{};
-    auto endpoint = MprisPlaybackEndpoint{playback, sequence, commands, callbacks};
+    auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     CHECK(endpoint.dispatchSeek(200'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{700});
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{700});
 
     CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), 150'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{150});
 
     CHECK(endpoint.dispatchSetPosition("/org/mpris/MediaPlayer2/Track/999", 4'000'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{150});
 
     CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), -1));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{150});
 
     CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), 99'000'000));
-    CHECK(playback.state().elapsed == std::chrono::milliseconds{150});
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{150});
 
-    REQUIRE(sequence.playFromView(viewId, trackId));
+    REQUIRE(playback.commands().startFromView(viewId, trackId));
     CHECK(endpoint.dispatchSeek(99'000'000));
-    CHECK(sequence.state().currentTrackId == nextTrackId);
-    CHECK(playback.state().nowPlaying.trackId == nextTrackId);
+    CHECK(playback.snapshot().succession.currentTrackId == nextTrackId);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == nextTrackId);
 
-    playback.stop();
+    playback.commands().stop();
     CHECK(endpoint.dispatchSeek(1'000'000));
     CHECK(endpoint.dispatchSetPosition(MprisBridge::trackObjectPath(trackId), 1'000'000));
   }

@@ -3,7 +3,7 @@
 
 #include "playback/TimeLabel.h"
 
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
 
@@ -16,9 +16,9 @@
 
 namespace ao::gtk
 {
-  TimeLabel::TimeLabel(rt::PlaybackService& playbackService, Mode mode)
+  TimeLabel::TimeLabel(rt::PlaybackService& playback, Mode mode)
     : _mode{mode}
-    , _timeViewModel{playbackService, [this](ao::uimodel::PlaybackTimeViewState const& view) { applyState(view); }}
+    , _timeViewModel{playback, [this](ao::uimodel::PlaybackTimeViewState const& view) { applyState(view); }}
   {
     _label.set_halign(Gtk::Align::CENTER);
     _label.set_valign(Gtk::Align::CENTER);

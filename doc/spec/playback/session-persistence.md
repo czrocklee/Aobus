@@ -17,7 +17,7 @@ It does not persist a materialized queue, workspace selection, prepared-next tok
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md), under the [playback](../../architecture/playback.md), [persistence](../../architecture/persistence-and-managed-state.md), and [interactive session lifecycle](../../architecture/interactive-session-lifecycle.md) architectures.
-`PlaybackSessionPersistence` coordinates `PlaybackSequenceService`, `PlaybackService`, runtime library reads, the explicit `PlaybackSessionYamlSchema`, `ConfigStore`, and the async runtime.
+`PlaybackSessionPersistence` coordinates internal `PlaybackSuccession` and `PlaybackTransport`, the public `PlaybackService` snapshot, runtime library reads, the explicit `PlaybackSessionYamlSchema`, `ConfigStore`, and the async runtime.
 
 ## Terminology
 

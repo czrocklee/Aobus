@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/rt/PlaybackService.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
@@ -16,6 +15,11 @@
 #include <chrono>
 #include <cstdint>
 
+namespace ao::rt
+{
+  class PlaybackService;
+}
+
 namespace ao::gtk
 {
   /**
@@ -24,7 +28,7 @@ namespace ao::gtk
   class SeekControlWidget final
   {
   public:
-    explicit SeekControlWidget(rt::PlaybackService& playbackService);
+    explicit SeekControlWidget(rt::PlaybackService& playback);
     ~SeekControlWidget();
 
     SeekControlWidget(SeekControlWidget const&) = delete;

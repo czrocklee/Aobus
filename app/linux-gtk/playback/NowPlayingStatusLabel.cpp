@@ -3,7 +3,8 @@
 
 #include "playback/NowPlayingStatusLabel.h"
 
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gdkmm/cursor.h>
@@ -14,17 +15,16 @@
 
 namespace ao::gtk
 {
-  NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playbackService)
-    : _playbackService{playbackService}
-    , _nowPlayingViewModel{_playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
+  NowPlayingStatusLabel::NowPlayingStatusLabel(rt::PlaybackService& playback)
+    : _commands{playback.commands()}
+    , _nowPlayingViewModel{playback, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _label.add_css_class("ao-nowplaying");
     _label.add_css_class("ao-clickable");
     _label.set_tooltip_text("Click to show playing list");
 
     auto const clickGesturePtr = Gtk::GestureClick::create();
-    clickGesturePtr->signal_pressed().connect([this](std::int32_t, double, double)
-                                              { _playbackService.revealPlayingTrack(); });
+    clickGesturePtr->signal_pressed().connect([this](std::int32_t, double, double) { _commands.revealPlayingTrack(); });
 
     _label.add_controller(clickGesturePtr);
     _label.set_cursor(Gdk::Cursor::create("pointer"));

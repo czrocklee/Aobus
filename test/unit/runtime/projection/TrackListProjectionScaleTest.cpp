@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include "runtime/playback/PlaybackSuccession.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -8,7 +9,6 @@
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -34,7 +34,7 @@ namespace ao::rt::test
     template<typename State>
     concept OwnsMaterializedTrackIds = requires(State const& state) { state.trackIds; };
 
-    static_assert(!OwnsMaterializedTrackIds<PlaybackSequenceState>);
+    static_assert(!OwnsMaterializedTrackIds<PlaybackSuccessionState>);
   } // namespace
 
   TEST_CASE("TrackListProjection - 10k scale operations preserve indices and deltas",

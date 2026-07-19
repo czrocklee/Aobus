@@ -3,9 +3,8 @@
 
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
@@ -58,13 +57,13 @@ namespace ao::uimodel
     }
 
     TransportViewState describeTransportButton(TransportAction action,
-                                               rt::PlaybackState const& state,
-                                               rt::PlaybackSequenceState const& sequenceState,
+                                               rt::PlaybackTransportSnapshot const& transport,
+                                               rt::PlaybackSuccessionSnapshot const& succession,
                                                bool enabled,
                                                bool showLabel)
     {
       auto view = TransportViewState{};
-      bool const isPlaying = isPresentedAsPlaying(state.transport);
+      bool const isPlaying = isPresentedAsPlaying(transport.transport);
 
       view.icon = iconForAction(action);
       view.tooltip = labelForAction(action);
@@ -88,16 +87,16 @@ namespace ao::uimodel
       }
       else if (action == TransportAction::Shuffle)
       {
-        view.engaged = (sequenceState.shuffle == rt::ShuffleMode::On);
+        view.engaged = (succession.shuffle == rt::ShuffleMode::On);
       }
       else if (action == TransportAction::Repeat)
       {
-        if (sequenceState.repeat == rt::RepeatMode::All)
+        if (succession.repeat == rt::RepeatMode::All)
         {
           view.icon = TransportIcon::Repeat;
           view.engaged = true;
         }
-        else if (sequenceState.repeat == rt::RepeatMode::One)
+        else if (succession.repeat == rt::RepeatMode::One)
         {
           view.icon = TransportIcon::RepeatOne;
           view.engaged = true;
@@ -131,17 +130,11 @@ namespace ao::uimodel
   } // namespace
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
-                                         rt::PlaybackSequenceService& sequence,
                                          PlaybackCommandSurface& commands,
                                          TransportAction action,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)
-    : _playback{playback}
-    , _sequence{sequence}
-    , _commands{commands}
-    , _action{action}
-    , _showLabel{showLabel}
-    , _onRender{std::move(onRender)}
+    : _playback{playback}, _commands{commands}, _action{action}, _showLabel{showLabel}, _onRender{std::move(onRender)}
   {
     _availabilitySub = _commands.onAvailabilityChanged(commandForAction(_action), [this] { refresh(); });
     refresh();
@@ -155,8 +148,9 @@ namespace ao::uimodel
   void TransportViewModel::refresh()
   {
     auto const command = commandForAction(_action);
-    auto const view =
-      describeTransportButton(_action, _playback.state(), _sequence.state(), _commands.isEnabled(command), _showLabel);
+    auto const snapshot = _playback.snapshot();
+    auto const view = describeTransportButton(
+      _action, snapshot.transport, snapshot.succession, _commands.isEnabled(command), _showLabel);
 
     if (_onRender)
     {

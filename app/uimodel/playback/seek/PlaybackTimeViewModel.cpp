@@ -2,7 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
 
 #include <chrono>
@@ -27,30 +29,31 @@ namespace ao::uimodel
                                                std::function<void(PlaybackTimeViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}
   {
-    auto const refreshImmediate = [this] { refresh(true, false); };
+    auto const transport = _playback.snapshot().transport;
+    _lastTransport = transport.transport;
+    _lastElapsed = transport.elapsed;
+    _lastDuration = transport.duration;
 
-    _startedSub = _playback.onStarted(refreshImmediate);
-    _pausedSub = _playback.onPaused(refreshImmediate);
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { onSnapshotChanged(); });
+    _seekPreviewSub = _playback.events().onSeekPreview([this](rt::PlaybackSeekPreview const& preview)
+                                                       { refresh(false, true, preview.elapsed); });
 
-    _idleSub = _playback.onIdle(refreshImmediate);
-    _stoppedSub = _playback.onStopped(refreshImmediate);
-    _preparingSub = _playback.onPreparing(refreshImmediate);
+    refresh(true, false);
+  }
 
-    _seekUpdateSub = _playback.onSeekUpdate(
-      [this](rt::PlaybackService::SeekUpdate const& ev)
-      {
-        bool const isPreview = ev.mode == rt::PlaybackService::SeekMode::Preview;
+  void PlaybackTimeViewModel::onSnapshotChanged()
+  {
+    auto const transport = _playback.snapshot().transport;
 
-        if (!isPreview)
-        {
-          refresh(true, false, ev.elapsed);
-        }
-        else
-        {
-          refresh(false, true, ev.elapsed);
-        }
-      });
+    if (transport.transport == _lastTransport && transport.elapsed == _lastElapsed &&
+        transport.duration == _lastDuration)
+    {
+      return;
+    }
 
+    _lastTransport = transport.transport;
+    _lastElapsed = transport.elapsed;
+    _lastDuration = transport.duration;
     refresh(true, false);
   }
 
@@ -58,7 +61,7 @@ namespace ao::uimodel
                                       bool isPreviewing,
                                       std::optional<std::chrono::milliseconds> optOverrideElapsed)
   {
-    auto const& state = _playback.state();
+    auto const state = _playback.snapshot().transport;
 
     auto view = PlaybackTimeViewState{};
     view.duration = state.duration;

@@ -7,9 +7,10 @@
 #include <ao/audio/flow/Graph.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -87,17 +88,7 @@ namespace ao::uimodel
                                            std::function<void(NowPlayingViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}
   {
-    auto const refreshCallback = [this] { refresh(); };
-    auto const refreshIgnoringPayload = [this](auto const&) { refresh(); };
-
-    _startedSub = _playback.onStarted(refreshCallback);
-    _pausedSub = _playback.onPaused(refreshCallback);
-    _idleSub = _playback.onIdle(refreshCallback);
-    _stoppedSub = _playback.onStopped(refreshCallback);
-    _outputDeviceChangedSub = _playback.onOutputDeviceChanged(refreshIgnoringPayload);
-    _qualityChangedSub = _playback.onQualityChanged(refreshIgnoringPayload);
-    _nowPlayingSub = _playback.onNowPlayingChanged(refreshIgnoringPayload);
-
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
     refresh();
   }
 
@@ -109,7 +100,8 @@ namespace ao::uimodel
 
   void NowPlayingViewModel::refresh()
   {
-    auto const& state = _playback.state();
+    auto const snapshot = _playback.snapshot();
+    auto const& state = snapshot.transport;
     auto view = NowPlayingViewState{};
 
     if (state.nowPlaying.title.empty())
@@ -161,7 +153,8 @@ namespace ao::uimodel
 
   NowPlayingActionCommand NowPlayingViewModel::resolveAction(NowPlayingFieldAction action, rt::TrackField field) const
   {
-    auto const& state = _playback.state();
+    auto const snapshot = _playback.snapshot();
+    auto const& state = snapshot.transport;
     auto cmd = NowPlayingActionCommand{};
 
     switch (action)

@@ -68,7 +68,7 @@ namespace ao::gtk::test
 
     SECTION("row activation reports the engine-confirmed selection")
     {
-      rt::test::addReadyAudioProvider(playback, rt::test::makePipeWireOutputStatus());
+      rt::test::addReadyAudioProvider(fixture.runtime(), rt::test::makePipeWireOutputStatus());
 
       auto optSelected = std::optional<rt::OutputDeviceSelection>{};
       auto selector = OutputDevicePopover{
@@ -89,7 +89,7 @@ namespace ao::gtk::test
 
       emitRowActivated(*listBox, *exclusiveRow);
 
-      auto const& selected = playback.state().output.selectedDevice;
+      auto const selected = playback.snapshot().transport.output.selectedDevice;
       CHECK(selected.backendId == audio::BackendId{"pipewire"});
       CHECK(selected.deviceId == audio::DeviceId{"device1"});
       CHECK(selected.profileId == audio::kProfileExclusive);

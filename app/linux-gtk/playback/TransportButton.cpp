@@ -3,8 +3,7 @@
 
 #include "playback/TransportButton.h"
 
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
@@ -48,14 +47,12 @@ namespace ao::gtk
     }
   } // namespace
 
-  TransportButton::TransportButton(rt::PlaybackService& playbackService,
-                                   rt::PlaybackSequenceService& playbackSequence,
+  TransportButton::TransportButton(rt::PlaybackService& playback,
                                    ao::uimodel::PlaybackCommandSurface& commands,
                                    Action action,
                                    bool showLabel,
                                    std::string const& size)
-    : _transportViewModel{playbackService,
-                          playbackSequence,
+    : _transportViewModel{playback,
                           commands,
                           action,
                           showLabel,

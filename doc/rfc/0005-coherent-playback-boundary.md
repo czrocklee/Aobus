@@ -1,25 +1,32 @@
 ---
 id: rfc.0005.coherent-playback-boundary
 type: rfc
-status: draft
+status: accepted
 domain: playback
 summary: Proposes one compositional playback boundary, coherent application transactions, and non-blocking preparation and persistence.
 depends-on: none
 ---
 # RFC 0005: Coherent playback application boundary
 
+## Disposition
+
+Accepted on 2026-07-19 with the open questions resolved below.
+Implementation proceeds in the staged order of the compatibility and migration section; execution detail lives in the local plan tree.
+Stages 1 and 2 are complete: consumers use the public `PlaybackService`, and
+the renamed `PlaybackTransport` and `PlaybackSuccession` owners are runtime-internal.
+
 ## Problem
 
-The current playback implementation has sound separation between application semantics and Core audio execution, but its application boundary exposes the internal split instead of containing it.
-[`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) returns `PlaybackService` and `PlaybackSequenceService` independently.
+At acceptance, the playback implementation had sound separation between application semantics and Core audio execution, but its application boundary exposed the internal split instead of containing it.
+[`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) returned the former transport `PlaybackService` (now internal `PlaybackTransport`) and `PlaybackSequenceService` (now internal `PlaybackSuccession`) independently.
 UIModel, GTK, TUI, MPRIS, workspace restore, and session persistence therefore assemble transport state and succession state themselves or subscribe to only one half of a logical playback change.
 
 This creates six related problems.
 
 ### Normal callers can bypass the succession authority
 
-`PlaybackService` publicly exposes direct `playTrack`, `play`, `stagePlayback`, `commitPlayback`, and prepared-next operations even though a normal view-based start must also establish a source lease, live projection, cursor, and succession policy.
-The production view-start path goes through `PlaybackSequenceService`, but the type system does not make that route authoritative.
+The former transport service publicly exposed direct `playTrack`, `play`, `stagePlayback`, `commitPlayback`, and prepared-next operations even though a normal view-based start must also establish a source lease, live projection, cursor, and succession policy.
+The production view-start path went through the former sequence service, but the type system did not make that route authoritative.
 
 The mismatch is observable rather than theoretical.
 [`PlaybackSessionTest`](../../test/unit/runtime/PlaybackSessionTest.cpp) starts one track through the sequence service, starts a different track through the transport service, and verifies that session save fails with `InvalidState` because the cursor and transport subjects disagree.
@@ -35,14 +42,14 @@ Together they are evidence that the application transaction boundary is missing:
 
 ### Observers have no coherent application snapshot
 
-`PlaybackService::state()` and `PlaybackSequenceService::state()` have independent publication paths.
+The former transport and sequence `state()` methods had independent publication paths.
 A consumer that needs now-playing, transport, cursor, next/previous availability, shuffle, and repeat reads and subscribes across both services.
 The callback executor serializes execution, but serialization alone does not identify which pair of snapshots belongs to one committed application transition.
 
 ### Quality and route observations lack application correlation
 
 The [audio quality architecture](../architecture/audio-quality.md) correctly rejects stale provider callbacks with internal Player generations before publishing runtime state.
-However, the public `PlaybackService::QualityChanged` payload contains only quality and readiness.
+However, the former public transport `QualityChanged` payload contained only quality and readiness.
 It carries no application revision or selected-output identity even though route settlement may publish several intermediate results.
 
 A consumer can reread the latest mutable playback state, but it cannot prove that an event, output selection, readiness value, and quality graph describe the same accepted application snapshot.
@@ -65,7 +72,7 @@ Moving only one caller's save to a worker while other clients continue accessing
 
 ### Responsibilities and evidence leak across domains
 
-`PlaybackService` combines transport, library resolution, route and quality state, notifications, prepared-item correlation, restore state, persistence snapshots, and reveal-track navigation signals.
+The former transport service combined transport, library resolution, route and quality state, notifications, prepared-item correlation, restore state, persistence snapshots, and reveal-track navigation signals.
 The navigation signal is presentation policy, not playback transport.
 
 Playback transitions also carry several legitimate but distinct identities: `TrackId`/`ListId`, `PreparedNextToken`, `Engine::PlaybackItemId`, playback generation and cancellation barrier, and persistence revision.
@@ -93,7 +100,7 @@ Local code can accidentally treat proximity between these values as equivalence 
 
 ## Non-goals
 
-- Merge `PlaybackSequenceService`, `PlaybackService`, `PlaybackSessionPersistence`, `Player`, and `Engine` into one implementation class.
+- Merge `PlaybackSuccession`, `PlaybackTransport`, `PlaybackSessionPersistence`, `Player`, and `Engine` into one implementation class.
 - Move shuffle, repeat, live-source recovery, or cursor policy into Core audio.
 - Make `Engine` aware of library, view, list, or persistence identities.
 - Replace the Engine event worker, decoder workers, backend render model, or PCM data plane.
@@ -107,14 +114,15 @@ Local code can accidentally treat proximity between these values as equivalence 
 
 ### Target ownership
 
-`AppRuntime` owns one compositional `Playback` facade.
-The facade owns lifetime and exposes narrow roles; it does not implement every playback responsibility.
+`AppRuntime` owns one compositional `PlaybackService` object.
+`PlaybackService` exposes narrow roles; it does not implement every playback responsibility.
 
 ```text
 AppRuntime
-  |-- Playback                         public composition boundary
+  |-- PlaybackService                  public composition boundary
+  |     |-- snapshot()                 current coherent value
   |     |-- PlaybackCommands           public mutation port
-  |     |-- PlaybackStateView          public snapshot/event port
+  |     |-- PlaybackEvents             public subscription port
   |     `-- PlaybackCoordinator        sole application commit authority
   |           |-- PlaybackSuccession   source lease, projection, cursor, policy
   |           |-- PlaybackTransport    now-playing, transport, output, quality
@@ -126,22 +134,23 @@ AppRuntime
   `-- navigation/presentation routing
 ```
 
-`AppRuntime::playback()` returns `Playback&` and no longer exposes `playbackSequence()`.
+`AppRuntime::playback()` returns `PlaybackService&` and no longer exposes `playbackSequence()`.
 Composition roots may obtain a private bootstrap role for provider registration and shutdown, but frontend and UIModel code cannot obtain the transport or succession implementations.
 
 Consumers receive the narrowest stable role they need:
 
 - `PlaybackCommands` accepts user and platform intents.
-- `PlaybackStateView` returns snapshots and subscriptions.
-- UIModel may compose both roles into reusable command and presentation models.
+- `PlaybackService::snapshot()` returns the current coherent value.
+- `PlaybackEvents` owns snapshot-publication and transient-event subscriptions.
+- UIModel may compose the value, command, and event surfaces into reusable command and presentation models.
 - `AppRuntime` lifecycle code alone uses bootstrap, restore, and shutdown collaboration.
 
-This is a facade in the ownership and access sense, not a god object.
-Adding a new internal playback responsibility does not automatically add methods to `Playback`; a method belongs there only when it is part of a public command, state, or lifecycle role.
+This is a composition and access point, not a god object.
+Adding a new internal playback responsibility does not automatically add methods to `PlaybackService`; a method belongs there only when it is part of a public command, state, or lifecycle role.
 
 ### Coherent state and publication
 
-`PlaybackStateView` exposes one immutable value with a monotonically increasing application revision:
+`PlaybackService::snapshot()` exposes one immutable value with a monotonically increasing application revision:
 
 ```cpp
 struct PlaybackSnapshot final
@@ -325,9 +334,9 @@ It does not redraw the top-level Core/runtime/UIModel/frontend layers.
 This preserves the smallest code diff, but callers can still create a state that persistence rejects.
 Documentation cannot provide atomic publication, one revision, cancellation ownership, or a uniform reentrancy rule.
 
-### Add only a thin facade over the existing services
+### Add only a thin forwarding object over the existing services
 
-A facade that forwards calls while internal services continue to publish independently improves discoverability but not correctness.
+A forwarding object that leaves the internal services publishing independently improves discoverability but not correctness.
 It also risks becoming a third API beside the two old ones.
 The selected design removes public access to collaborators and moves commit authority to the coordinator.
 
@@ -367,13 +376,13 @@ Existing valid playback sessions continue to restore, and malformed or cursor/tr
 
 Implementation proceeds in boundary-preserving phases:
 
-1. Introduce `Playback`, `PlaybackCommands`, and `PlaybackStateView` as adapters over the current services, add a combined revisioned snapshot including output/readiness/quality, and migrate all production consumers.
-2. Remove `AppRuntime::playbackSequence()` and public low-level start/prepare access; keep temporary collaborator methods private to the new coordinator.
+1. Introduce the combined revisioned snapshot, `PlaybackCommands`, and `PlaybackEvents`, migrate all production consumers, and make `AppRuntime::playback()` the sole public playback accessor.
+2. Name that public business boundary `PlaybackService`; rename and relocate the legacy owners as internal `PlaybackTransport` and `PlaybackSuccession`, remove public low-level start/prepare access, and reserve bootstrap access for composition and lifecycle.
 3. Move explicit start, natural advance, restore, stop, and publication into the coordinator intent pump, then remove redundant cross-service transaction guards.
 4. Introduce detached Core audio preparation, adoption revalidation, worker disposal, and shutdown quiescence.
 5. Introduce the serialized configuration writer and migrate every client of a shared store before enabling asynchronous playback autosave on it.
 6. Move reveal navigation to the application/UIModel navigation boundary and narrow the transport collaborator.
-7. Rename or split the internal legacy services only after their resulting responsibilities are stable; names are not a prerequisite for correctness.
+7. Reassess the internal owners after coordination is stable and split them only if their remaining responsibilities require smaller boundaries.
 
 During phases one and two, adapters may preserve existing synchronous behavior internally, but no new production caller may depend on the legacy services.
 Tests may retain direct collaborator fixtures for unit coverage after those types become implementation details.
@@ -385,7 +394,7 @@ Acceptance requires evidence at the boundary, behavior, concurrency, and fronten
 ### Boundary checks
 
 - Repository checks prove that production code outside runtime implementation cannot include or name the internal transport and succession services.
-- `AppRuntime` exposes one playback facade and no independent succession accessor.
+- `AppRuntime` exposes one `PlaybackService` object and no independent succession accessor.
 - Public command and state roles contain no Engine, decoder, backend, or persistence implementation types.
 - Reveal-track events no longer originate from playback transport.
 
@@ -419,20 +428,24 @@ Acceptance requires evidence at the boundary, behavior, concurrency, and fronten
 - GTK controls, MPRIS, TUI, and UIModel consume the new command/state roles without rebuilding succession policy.
 - Documentation checks pass after every promotion step, and the completed implementation passes the normal full `./ao check` gate.
 
-## Open questions
+## Resolved questions
 
-- Should the serialized configuration writer become a general runtime service immediately, or should playback first require an exclusive session store and migrate shared-store users in a follow-up RFC?
-- Which route changes should automatically retry a still-current preparation, and which should complete the user intent with a stale-route error?
-- Should all public commands return asynchronous completion, or only commands whose acceptance crosses worker preparation or restore?
-- Does any supported frontend require an explicit detached-playback origin, or can all starts require a captured source context?
-- Which non-state diagnostics need typed event streams in addition to the combined snapshot?
+The following decisions closed acceptance; none changes the selected ownership and transaction model.
 
-These questions affect API shape or rollout, but they do not change the selected ownership and transaction model.
+- The serialized configuration writer is a general runtime-layer type from the start, but its first migration wave covers only the two genuinely shared store instances (the GTK global configuration store and the TUI/workspace store that doubles as the playback-session store).
+  Stores backed by their own file, such as the shell layout store, keep synchronous saves and are not part of this proposal.
+- A route or output change invalidates an in-flight preparation; the coordinator retries preparation exactly once under the new route while the originating intent is still current, and otherwise completes the intent with a deterministic stale-route error.
+  This is a fixed single retry, not a general retry-policy framework.
+- Public commands do not adopt a uniform asynchronous completion surface.
+  Restore, save, and discard keep call-level results; explicit start returns a synchronous admission result and reports its asynchronous outcome through the revisioned failure event once worker preparation is introduced; small transport commands return no completion token.
+- No supported frontend requires a detached-playback origin.
+  The CLI has no playback stack and every frontend starts playback from a captured view context, so all starts require a source context and no transport-only public start exists.
+- Beyond the combined snapshot, the retained typed event streams are playback failure and seek preview; the specialized quality notification is not an independent state authority and carries the same application revision as the snapshot it matches.
 
 ## Promotion plan
 
-If accepted, implementation updates the [playback architecture](../architecture/playback.md) from the current dual-service model to the facade/coordinator ownership model and records the accepted rationale in a playback decision.
-Update the [interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md) where the new facade changes `AppRuntime` composition, startup restore coordination, or teardown ownership.
+Implementation updates the [playback architecture](../architecture/playback.md) from the former dual-service model to the `PlaybackService`/coordinator ownership model and records the accepted rationale in current documentation.
+Update the [interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md) where `PlaybackService` changes `AppRuntime` composition, startup restore coordination, or teardown ownership.
 The [persistence and managed-state architecture](../architecture/persistence-and-managed-state.md) is updated when the serialized writer replaces the current executor-confined shared-store boundary.
 
 Behavioral contracts discovered during implementation move into focused playback specifications for application transactions, snapshot publication, cancellation, and persistence.

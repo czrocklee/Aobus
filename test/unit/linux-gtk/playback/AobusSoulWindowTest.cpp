@@ -15,15 +15,13 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto& playback = fixture.runtime().playback();
-
     auto window = AobusSoulWindow{};
 
     CHECK(window.get_title() == "Aobus Soul");
     CHECK(window.get_name() == "AobusSoul");
     CHECK(hasCssClass(window, "ao-soul-window"));
 
-    window.bind(playback);
+    window.bind(fixture.runtime().playback());
     window.show();
     drainGtkEvents();
     window.hide();

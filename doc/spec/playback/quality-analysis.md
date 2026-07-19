@@ -162,7 +162,7 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [`QualityAnalyzer.cpp`](../../../lib/audio/QualityAnalyzer.cpp) owns graph traversal, evidence classification, proof, and severity aggregation.
 - [`Player.cpp`](../../../lib/audio/Player.cpp) builds the merged graph, gates route generations, and publishes accepted quality results.
 - Backend graph adapters under [`lib/audio/backend/`](../../../lib/audio/backend/) provide platform route evidence.
-- [`PlaybackState.h`](../../../app/include/ao/rt/PlaybackState.h) and [`PlaybackService.cpp`](../../../app/runtime/PlaybackService.cpp) own runtime snapshot and event publication.
+- [`PlaybackState.h`](../../../app/include/ao/rt/PlaybackState.h) and [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) own internal runtime transport state; [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h) and [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) own coherent public publication.
 - [`AudioQualityFormatter`](../../../app/include/ao/uimodel/playback/quality/AudioQualityFormatter.h) owns shared presentation derivation.
 
 ## Test map
@@ -170,7 +170,7 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) proves axes, findings, attribution, precision, verification, float conversion, and proof invalidation.
 - [`PlayerTest.cpp`](../../../test/unit/audio/PlayerTest.cpp) proves merged-graph handling, generation gating, incomplete provider evidence, callback marshalling, and readiness.
 - [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication.
-- [`PlaybackServiceOutputTest.cpp`](../../../test/unit/runtime/PlaybackServiceOutputTest.cpp) proves snapshot/event agreement and route-ready publication.
+- [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.
 - [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) and [`QualityIndicatorStyleTest.cpp`](../../../test/unit/tui/QualityIndicatorStyleTest.cpp) prove frontend consumption of shared presentation state.
 

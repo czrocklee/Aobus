@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -10,8 +11,6 @@
 #include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
@@ -31,10 +30,10 @@ namespace ao::uimodel::test
 
   namespace
   {
-    PlaybackService::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
+    PlaybackTransport::PlaybackRequest playbackRequest(TrackId trackId, std::string title, std::string artist = {})
     {
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      return PlaybackService::PlaybackRequest{
+      return PlaybackTransport::PlaybackRequest{
         .item = NowPlayingInfo{.trackId = trackId, .title = std::move(title), .artist = std::move(artist)},
         .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{1}},
       };
@@ -43,12 +42,10 @@ namespace ao::uimodel::test
 
   TEST_CASE("NowPlayingViewModel - view state generation", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
-    addReadyAudioProvider(playback);
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+    fixture.addReadyProvider();
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
@@ -65,7 +62,7 @@ namespace ao::uimodel::test
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
 
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
       REQUIRE(!log.empty());
       CHECK(log.last().title == "Song");
       CHECK(log.last().artist == "Artist");
@@ -78,7 +75,7 @@ namespace ao::uimodel::test
     SECTION("Metadata with empty artist shows Unknown Artist")
     {
       auto desc = playbackRequest(TrackId{1}, "Instrumental");
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
       CHECK(log.last().title == "Instrumental");
       CHECK(log.last().artist == "Unknown Artist");
       CHECK(log.last().combinedStatus == "Instrumental");
@@ -87,7 +84,7 @@ namespace ao::uimodel::test
     SECTION("fieldText returns empty for unrelated field")
     {
       auto desc = playbackRequest(TrackId{1}, "Song");
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Year).empty());
     }
 
@@ -113,7 +110,7 @@ namespace ao::uimodel::test
     SECTION("FilterByField with Title")
     {
       auto desc = playbackRequest(TrackId{1}, "Song");
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
@@ -129,7 +126,7 @@ namespace ao::uimodel::test
     SECTION("FilterByField preserves titles containing both quote types")
     {
       auto desc = playbackRequest(TrackId{1}, "A \"Song\" 'Name'");
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
@@ -142,7 +139,7 @@ namespace ao::uimodel::test
     SECTION("Action resolution")
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Artist);
       CHECK(cmd.type == NowPlayingActionCommand::Type::Navigate);
@@ -152,7 +149,7 @@ namespace ao::uimodel::test
     SECTION("Quoting and escaping in actions")
     {
       auto desc = playbackRequest(TrackId{1}, "A \"Song\"");
-      REQUIRE(playback.play(desc, ListId{1}));
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
 
       auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::FilterByField, rt::TrackField::Title);
       CHECK(cmd.navigateQuery == R"($title = "A \"Song\"")");
@@ -162,14 +159,10 @@ namespace ao::uimodel::test
   TEST_CASE("NowPlayingViewModel - reports connecting stream info when audio engine is not ready",
             "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
-    auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    auto const viewModel = NowPlayingViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
 
     REQUIRE(!log.empty());
     CHECK(log.last().streamInfo == "Connecting to audio engine...");
@@ -178,13 +171,11 @@ namespace ao::uimodel::test
   TEST_CASE("NowPlayingViewModel - presents an unnamed system-default output through the catalog",
             "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
     addReadyAudioProvider(
-      playback,
+      playbackTransport,
       audio::BackendProvider::Status{
         .descriptor = {.id = audio::kBackendPipeWire, .supportedProfiles = {{.id = audio::kProfileShared}}},
         .devices = {{.id = audio::DeviceId{}, .isDefault = true, .backendId = audio::kBackendPipeWire}},
@@ -193,7 +184,7 @@ namespace ao::uimodel::test
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
 
-    REQUIRE(playback.play(playbackRequest(TrackId{1}, "Song"), ListId{1}));
+    REQUIRE(playbackTransport.play(playbackRequest(TrackId{1}, "Song"), ListId{1}));
     REQUIRE(!log.empty());
     CHECK(log.last().audioPipeline.deviceName == "System Default");
     CHECK(log.last().audioPipeline.deviceIconKind == AudioIconKind::AudioServer);
@@ -201,12 +192,10 @@ namespace ao::uimodel::test
 
   TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = InlineExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
-    addReadyAudioProvider(playback);
+    auto fixture = ApplicationPlaybackFixture{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+    fixture.addReadyProvider();
 
     auto log = ao::test::RenderLog<NowPlayingViewState>{};
     auto viewModelPtr = std::make_unique<NowPlayingViewModel>(playback, [&log](auto const& view) { log.render(view); });
@@ -215,8 +204,8 @@ namespace ao::uimodel::test
     log.clear();
 
     auto const trackId =
-      libraryFixture.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});
-    REQUIRE(playback.play(playbackRequest(trackId, "Event Song", "Event Artist"), ListId{1}));
+      fixture.libraryFixture.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});
+    REQUIRE(playbackTransport.play(playbackRequest(trackId, "Event Song", "Event Artist"), ListId{1}));
 
     REQUIRE(!log.empty());
     CHECK(log.last().title == "Event Song");
@@ -225,7 +214,7 @@ namespace ao::uimodel::test
     log.clear();
     viewModelPtr.reset();
 
-    REQUIRE(playback.play(playbackRequest(trackId, "After Destroy", "Event Artist"), ListId{1}));
+    REQUIRE(playbackTransport.play(playbackRequest(trackId, "After Destroy", "Event Artist"), ListId{1}));
     CHECK(log.empty());
   }
 } // namespace ao::uimodel::test

@@ -9,10 +9,9 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/audio/PlaybackInput.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>
@@ -38,16 +37,16 @@ namespace ao::gtk::test
 
     void startPlayback(rt::AppRuntime& runtime)
     {
-      auto const trackId =
-        addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Tick Test", .duration = std::chrono::seconds{5}});
-
-      auto const request = rt::PlaybackService::PlaybackRequest{
-        .item = rt::NowPlayingInfo{.trackId = trackId, .title = "Tick Test", .artist = "Artist"},
-        .input = audio::PlaybackInput{.filePath = audio::test::requireAudioFixture("basic_metadata.flac"),
-                                      .duration = std::chrono::seconds{5}},
-      };
-
-      REQUIRE(runtime.playback().play(request, kInvalidListId));
+      auto const trackId = addRuntimeTrack(
+        runtime,
+        library::test::TrackSpec{.title = "Tick Test",
+                                 .artist = "Artist",
+                                 .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
+                                 .duration = std::chrono::seconds{5}});
+      runtime.reloadAllTracks();
+      auto const view = runtime.views().createView({.listId = rt::kAllTracksListId}, true);
+      REQUIRE(view);
+      REQUIRE(runtime.playback().commands().startFromView(view->viewId, trackId));
       drainGtkEvents();
     }
   } // namespace
@@ -57,7 +56,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = PlaybackUiComponentsFixture{};
     auto& playback = env.runtime.playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(env.runtime);
     drainGtkEvents();
 
     SECTION("SeekControlWidget renders a disabled seek scale before playback starts")
@@ -96,7 +95,7 @@ namespace ao::gtk::test
       windowFixture.present();
       CHECK(timeLabel.isTickActive());
 
-      playback.pause();
+      playback.commands().pause();
       drainGtkEvents();
       CHECK_FALSE(timeLabel.isTickActive());
     }
@@ -114,7 +113,7 @@ namespace ao::gtk::test
       windowFixture.present();
       CHECK(seekControl.isTickActive());
 
-      playback.pause();
+      playback.commands().pause();
       drainGtkEvents();
       CHECK_FALSE(seekControl.isTickActive());
     }

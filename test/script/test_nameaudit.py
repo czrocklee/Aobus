@@ -81,7 +81,7 @@ class NameAuditTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             files = {
-                "include/ao/PlaybackService.h": "struct PlaybackServiceTestAccess;",
+                "include/ao/PlaybackTransport.h": "struct PlaybackTransportTestAccess;",
                 "app/runtime/TestAccess.cpp": "class TestAccess final {};",
                 "test/unit/RuntimeTestSupport.h": "class RuntimeTestAccess final {};",
             }

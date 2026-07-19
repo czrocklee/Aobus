@@ -14,6 +14,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -104,7 +105,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar renders idle fallback state", "[tui][unit][playback]")
   {
-    auto const state = rt::PlaybackState{};
+    auto const state = rt::PlaybackTransportSnapshot{};
 
     auto const text = renderPlaybackText(playbackBar(PlaybackBarViewState{.playbackState = &state}));
 
@@ -121,11 +122,12 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar renders current track timing and volume", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
-                                   .duration = std::chrono::seconds{125},
-                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path", .artist = "Artist"},
-                                   .volume = rt::VolumeState{.level = 0.42F},
-                                   .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
+    auto state =
+      rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
+                                    .duration = std::chrono::seconds{125},
+                                    .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path", .artist = "Artist"},
+                                    .volume = rt::VolumeState{.level = 0.42F},
+                                    .quality = rt::QualityState{.overall = audio::Quality::LosslessFloat}};
 
     auto const text = renderPlaybackText(
       playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{65}}));
@@ -142,7 +144,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar anchors the soul button at the far left", "[tui][unit][playback]")
   {
-    auto const state = rt::PlaybackState{};
+    auto const state = rt::PlaybackTransportSnapshot{};
     auto soulButtonBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
@@ -156,9 +158,9 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar previews seek position without percent text", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
-                                   .duration = std::chrono::seconds{100},
-                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
+                                               .duration = std::chrono::seconds{100},
+                                               .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
 
     auto const text = renderPlaybackText(
       playbackBar(PlaybackBarViewState{.playbackState = &state, .displayElapsed = std::chrono::seconds{50}}));
@@ -170,9 +172,9 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar reflects only the seek rail", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
-                                   .duration = std::chrono::seconds{100},
-                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
+                                               .duration = std::chrono::seconds{100},
+                                               .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
     auto seekRailBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
@@ -189,7 +191,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar places output selector before elapsed time", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{
+    auto state = rt::PlaybackTransportSnapshot{
       .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
     auto output = uimodel::OutputDeviceViewState{
       .outputBackendSummary = "PW",
@@ -216,7 +218,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar expands seek rail on wide terminals", "[tui][unit][playback]")
   {
-    auto const state = rt::PlaybackState{
+    auto const state = rt::PlaybackTransportSnapshot{
       .duration = std::chrono::seconds{100}, .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
     auto narrowRailBox = ftxui::Box{};
     auto wideRailBox = ftxui::Box{};
@@ -237,9 +239,9 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback dock stays on one row", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.transport = audio::Transport::Playing,
-                                   .duration = std::chrono::seconds{100},
-                                   .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
+    auto state = rt::PlaybackTransportSnapshot{.transport = audio::Transport::Playing,
+                                               .duration = std::chrono::seconds{100},
+                                               .nowPlaying = rt::NowPlayingInfo{.title = "Signal Path"}};
     auto seekRailBox = ftxui::Box{};
 
     auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(120), ftxui::Dimension::Fixed(1));
@@ -258,7 +260,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - playback bar renders output backend badge", "[tui][unit][playback]")
   {
-    auto const state = rt::PlaybackState{};
+    auto const state = rt::PlaybackTransportSnapshot{};
     auto const output = uimodel::OutputDeviceViewState{
       .outputBackendSummary = "PW",
       .outputDeviceStatus = "PipeWire: Studio DAC",
@@ -274,7 +276,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - hovered output selector uses the interactive surface", "[tui][unit][playback]")
   {
-    auto const state = rt::PlaybackState{};
+    auto const state = rt::PlaybackTransportSnapshot{};
     auto const output = uimodel::OutputDeviceViewState{
       .outputBackendSummary = "PW",
       .outputDeviceStatus = "PipeWire: Studio DAC",
@@ -295,7 +297,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - quality panel renders empty pipeline state", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
+    auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
 
     auto const text = renderPlaybackText(qualityPanel(state));
 
@@ -309,7 +311,7 @@ namespace ao::tui::test
   TEST_CASE("PlaybackPanel - quality panel renders selected device pipeline and findings", "[tui][unit][playback]")
   {
     auto state =
-      rt::PlaybackState{
+      rt::PlaybackTransportSnapshot{
         .output =
           rt::OutputState{
             .selectedDevice = rt::OutputDeviceSelection{.backendId = audio::BackendId{"mock_backend"},
@@ -375,7 +377,7 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackPanel - quality panel width follows content and terminal bounds", "[tui][unit][playback]")
   {
-    auto state = rt::PlaybackState{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
+    auto state = rt::PlaybackTransportSnapshot{.quality = rt::QualityState{.overall = audio::Quality::Unknown}};
     auto const narrowColumns = qualityPanelColumns(state, 120);
 
     state.quality.assessments = std::vector{

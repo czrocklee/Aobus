@@ -7,7 +7,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -17,6 +16,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -151,8 +151,8 @@ namespace ao::rt::test
       TrackId{100}; // jumpToAlbum doesn't validate if track exists in library, it just passes the ID to playback
 
     bool revealCalled = false;
-    auto const sub = runtime.playback().onRevealTrackRequested(
-      [&](PlaybackService::RevealTrackRequested const& req)
+    auto const sub = runtime.playback().events().onRevealTrackRequested(
+      [&](PlaybackRevealTrackRequest const& req)
       {
         if (req.trackId == trackId)
         {

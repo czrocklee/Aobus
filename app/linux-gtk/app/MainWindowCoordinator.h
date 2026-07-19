@@ -11,11 +11,6 @@
 #include <memory>
 #include <optional>
 
-namespace ao::rt
-{
-  class PlaybackSequenceService;
-}
-
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
@@ -65,7 +60,6 @@ namespace ao::gtk
 
     TrackRowCache* trackRowCache();
     ImageCache* imageCache();
-    rt::PlaybackSequenceService* playbackSequence();
     uimodel::PlaybackCommandSurface* playbackCommandSurface();
     TagEditController* tagEditController();
     portal::ImportExportCoordinator* importExportCoordinator();

@@ -7,8 +7,8 @@
 #include "playback/OutputDevicePopover.h"
 #include "preference/ShortcutEditorWidget.h"
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
@@ -268,7 +268,7 @@ namespace ao::gtk
                                              rt::PlaybackService* playback,
                                              Gtk::Window* targetWindow)
   {
-    // The output popover applies through PlaybackService.
+    // The output popover applies through Playback.
     // This model only persists the confirmed selection.
     _modelPtr =
       std::make_unique<uimodel::PreferencesEditorModel>(std::move(prefs),

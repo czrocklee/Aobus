@@ -139,7 +139,7 @@ The cache observes `LibraryChanges` and turns committed storage changes into sou
 ### Projections and views
 
 Live projections combine a source lease with library reads and presentation structure.
-They own frontend-neutral row/detail snapshots and publish projection deltas to consumers such as `ViewService` and `PlaybackSequenceService`.
+They own frontend-neutral row/detail snapshots and publish projection deltas to consumers such as `ViewService` and the internal `PlaybackSuccession` owner.
 
 `LiveTrackListProjection` resolves each dictionary ID into one cached pair: raw presentation text borrowed from `DictionaryStore` and a normalized sort/group key owned by its `StringArena`.
 The cache is projection-local and owner-thread confined; a full rebuild releases every dependent row and section view, clears the cache, and then reclaims the arena.

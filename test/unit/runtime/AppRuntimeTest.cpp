@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -20,14 +22,13 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -218,15 +219,15 @@ namespace ao::rt::test
       .trackIds = {firstTrackId, secondTrackId},
     }));
     auto const viewId = ao::test::requireValue(appPtr->views().createView({.listId = listId}, true)).viewId;
-    REQUIRE(appPtr->playbackSequence().playFromView(viewId, firstTrackId));
+    REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 
     bool callbackEntered = false;
     bool callbackCompleted = false;
-    auto const sequenceSubscription = appPtr->playbackSequence().onChanged(
-      [&](PlaybackSequenceState const& state)
+    auto const sequenceSubscription = appPtr->playback().events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
       {
-        callbackEntered = state.currentTrackId == secondTrackId;
+        callbackEntered = snapshot.succession.currentTrackId == secondTrackId;
         callbackCompleted = true;
       });
 

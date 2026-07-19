@@ -5,18 +5,17 @@
 
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #include <array>
 #include <cstddef>
 #include <functional>
-#include <initializer_list>
-#include <vector>
 
 namespace ao::rt
 {
-  class PlaybackSequenceService;
+  class PlaybackService;
 }
 
 namespace ao::uimodel
@@ -24,9 +23,7 @@ namespace ao::uimodel
   class PlaybackCommandSurface final
   {
   public:
-    PlaybackCommandSurface(rt::PlaybackService& playback,
-                           rt::PlaybackSequenceService& sequence,
-                           std::function<void()> playSelection);
+    PlaybackCommandSurface(rt::PlaybackService& playback, std::function<void()> playSelection);
     ~PlaybackCommandSurface() = default;
 
     PlaybackCommandSurface(PlaybackCommandSurface const&) = delete;
@@ -44,14 +41,16 @@ namespace ao::uimodel
   private:
     static constexpr std::size_t kCommandCount = 8;
 
-    void subscribeAvailabilityEvents();
-    void emitAvailabilityChanged(std::initializer_list<PlaybackCommand> commands);
+    // Re-derives command availability from a newly published snapshot and emits
+    // only the per-command signals whose backing state actually changed.
+    void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
 
     rt::PlaybackService& _playback;
-    rt::PlaybackSequenceService& _sequence;
+    rt::PlaybackCommands& _commands;
     std::function<void()> _playSelection;
+    rt::PlaybackSnapshot _lastSnapshot{};
     async::Signal<> _availabilityChangedSignal;
     std::array<async::Signal<>, kCommandCount> _commandAvailabilityChangedSignals;
-    std::vector<async::Subscription> _availabilitySubs;
+    async::Subscription _snapshotSub;
   };
 } // namespace ao::uimodel

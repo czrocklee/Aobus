@@ -241,7 +241,7 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - Audio detail timeline and track-session code under [`lib/audio/detail/`](../../../lib/audio/detail/) owns nodes and decode lifetime; [`StreamingSource`](../../../include/ao/audio/StreamingSource.h), [`PcmRingBuffer`](../../../include/ao/audio/PcmRingBuffer.h), and [`StreamingBufferPolicy`](../../../lib/audio/detail/StreamingBufferPolicy.h) own PCM production, bounded storage, and producer admission.
 - [`Player.h`](../../../include/ao/audio/Player.h) and [`Player.cpp`](../../../lib/audio/Player.cpp) own provider composition, executor marshalling, graph epochs, and teardown gate.
 - [`Backend.h`](../../../include/ao/audio/Backend.h) and concrete backends under [`lib/audio/backend/`](../../../lib/audio/backend/) own native lifetime.
-- [`PlaybackService.cpp`](../../../app/runtime/PlaybackService.cpp) owns executor-affine application publication and prepared metadata.
+- [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) owns executor-affine transport adaptation and prepared metadata; [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) publishes the coherent application snapshot.
 
 ## Test map
 

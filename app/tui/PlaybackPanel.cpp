@@ -8,7 +8,7 @@
 #include "SoulButton.h"
 #include "Style.h"
 #include <ao/audio/Transport.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -110,7 +110,7 @@ namespace ao::tui
   {
     using namespace ftxui;
 
-    auto fallbackState = rt::PlaybackState{};
+    auto fallbackState = rt::PlaybackTransportSnapshot{};
     auto const& state = view.playbackState == nullptr ? fallbackState : *view.playbackState;
     auto const title = state.nowPlaying.title.empty() ? std::string{"No active track"} : state.nowPlaying.title;
     auto const artist = state.nowPlaying.artist;

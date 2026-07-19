@@ -10,6 +10,7 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
 #include <cstdint>
@@ -21,7 +22,8 @@ namespace ao::rt
 {
   class ConfigStore;
   class Library;
-  class PlaybackSequenceService;
+  class PlaybackSuccession;
+  class PlaybackTransport;
   class PlaybackService;
 
   struct PlaybackSessionPersistenceRestoreResult final
@@ -37,7 +39,8 @@ namespace ao::rt
   public:
     PlaybackSessionPersistence(ConfigStore& config,
                                Library& library,
-                               PlaybackSequenceService& sequence,
+                               PlaybackSuccession& succession,
+                               PlaybackTransport& playbackTransport,
                                PlaybackService& playback,
                                async::Runtime& asyncRuntime);
     ~PlaybackSessionPersistence();
@@ -70,6 +73,7 @@ namespace ao::rt
     static constexpr Delay kPeriodicSaveInterval = std::chrono::seconds{10};
 
     Result<> save();
+    void handleSnapshot(PlaybackSnapshot const& snapshot);
     void markDirty();
     bool hasActiveSession() const;
     bool hasRestorableSession() const;
@@ -91,17 +95,14 @@ namespace ao::rt
 
     ConfigStore& _config;
     Library& _library;
-    PlaybackSequenceService& _sequence;
+    PlaybackSuccession& _succession;
+    PlaybackTransport& _playbackTransport;
     PlaybackService& _playback;
     async::Runtime& _asyncRuntime;
     async::Signal<> _dirtySignal;
-    async::Subscription _sequenceIntentSubscription;
-    async::Subscription _volumeSubscription;
-    async::Subscription _mutedSubscription;
-    async::Subscription _seekSubscription;
-    async::Subscription _pausedSubscription;
-    async::Subscription _stoppedSubscription;
-    async::Subscription _nowPlayingSubscription;
+    async::Subscription _successionIntentSubscription;
+    async::Subscription _snapshotSubscription;
+    PlaybackSnapshot _lastSnapshot{};
     PlaybackSessionRevision _sessionRevision;
     async::TaskHandle _scheduledTask;
     async::TaskHandle _periodicTask;

@@ -5,7 +5,7 @@
 
 #include "app/AobusSoul.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <gdkmm/monitor.h>

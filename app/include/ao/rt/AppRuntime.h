@@ -28,7 +28,6 @@ namespace ao::async
 namespace ao::rt
 {
   class ConfigStore;
-  class PlaybackSequenceService;
   class PlaybackService;
   class WorkspaceService;
   class ViewService;
@@ -64,7 +63,6 @@ namespace ao::rt
     AppRuntime& operator=(AppRuntime&&) = delete;
 
     PlaybackService& playback() noexcept;
-    PlaybackSequenceService& playbackSequence() noexcept;
     WorkspaceService& workspace() noexcept;
     ViewService& views() noexcept;
     ConfigStore& workspaceConfigStore() noexcept;

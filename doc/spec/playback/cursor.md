@@ -14,12 +14,12 @@ It owns launch capture, cursor and anchor behavior, next/previous resolution, re
 
 Playback ownership and execution domains belong to the [playback architecture](../../architecture/playback.md).
 Ordered source membership belongs to [track sources](../library/source/track-source.md), projection delta production belongs to the [track-list projection](../library/projection/track-list.md), presentation ordering belongs to [track-list presentation](../presentation/track-presentation.md), and persisted payload and restore behavior belong to [playback session persistence](session-persistence.md).
-The proposed application facade and coordinator in [RFC 0005](../../rfc/0005-coherent-playback-boundary.md) do not describe current behavior and do not override this specification.
+The public application boundary from [RFC 0005](../../rfc/0005-coherent-playback-boundary.md) does not replace the succession behavior owned here; its later coordinator stage must preserve or explicitly update this specification.
 
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../architecture/system-overview.md) and refines the succession authority in the [playback architecture](../../architecture/playback.md).
-Its public values and current service surface live in [`app/include/ao/rt/`](../../../app/include/ao/rt/), while its implementation lives in [`PlaybackSequenceService.cpp`](../../../app/runtime/PlaybackSequenceService.cpp) and [`app/runtime/playback/`](../../../app/runtime/playback/).
+Its public snapshot and command values live in [`app/include/ao/rt/playback/`](../../../app/include/ao/rt/playback/), while the `PlaybackSuccession` owner and its implementation live entirely under [`app/runtime/playback/`](../../../app/runtime/playback/).
 It consumes `ViewService`, source leases, live projections, library reads, and the private application-transport collaboration surface; it does not depend on UIModel, frontend types, or Core audio policy.
 
 ## Terminology
@@ -253,7 +253,7 @@ RFC 0005 proposes changing coordination and persistence execution, but it does n
 
 ## Frontend observations
 
-`PlaybackSequenceState` exposes source state, current and source identities, next/previous availability, resolved successor, modes, and semantic revision without exposing projection rows or prepared tokens.
+Internal `PlaybackSuccessionState` exposes source state, current and source identities, next/previous availability, resolved successor, modes, and semantic revision without exposing projection rows or prepared tokens.
 
 `onChanged` publishes synchronously on the callback executor only when the semantic tuple changes.
 Anchor movement, membership churn, or preparation replacement that leaves the tuple unchanged is not a semantic event.
@@ -265,9 +265,9 @@ Observers are observational and do not choose succession policy.
 
 ## Implementation map
 
-- [`PlaybackSequenceService.h`](../../../app/include/ao/rt/PlaybackSequenceService.h) defines the current public state, commands, and subscriptions.
+- [`PlaybackSuccession.h`](../../../app/runtime/playback/PlaybackSuccession.h) defines the internal succession owner, state, commands, and subscriptions; [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h) defines its public read-only projection.
 - [`PlaybackLaunchSpec.h`](../../../app/include/ao/rt/PlaybackLaunchSpec.h) defines captured launch context.
-- [`PlaybackSequenceService.cpp`](../../../app/runtime/PlaybackSequenceService.cpp) coordinates launch, commands, failure walking, transport collaboration, and publication.
+- [`PlaybackSuccession.cpp`](../../../app/runtime/playback/PlaybackSuccession.cpp) coordinates launch, commands, failure walking, transport collaboration, and internal publication.
 - [`PlaybackCursor`](../../../app/runtime/playback/PlaybackCursor.h) owns the pure source/anchor/mode state machine and semantic tuple.
 - [`PlaybackCursorSession`](../../../app/runtime/playback/PlaybackCursorSession.h) owns the lease, detached projection, cursor policy, and observation lifetime.
 - [`ProjectionAnchor`](../../../app/runtime/playback/ProjectionAnchor.h), [`ShuffleHistory`](../../../app/runtime/playback/ShuffleHistory.h), [`PreparedNextRegistry`](../../../app/runtime/playback/PreparedNextRegistry.h), and [`PlaybackRestartDeadline`](../../../app/runtime/playback/PlaybackRestartDeadline.h) own the focused policy mechanisms.
@@ -279,7 +279,7 @@ Observers are observational and do not choose succession policy.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
 - [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, timer generations, pause/resume/seek control, session replacement, and shutdown.
-- [`PlaybackSequenceServiceTest.cpp`](../../../test/unit/runtime/PlaybackSequenceServiceTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, reentrancy containment, and public observations.
+- [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, reentrancy containment, and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects the public projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 
 ## Related documents

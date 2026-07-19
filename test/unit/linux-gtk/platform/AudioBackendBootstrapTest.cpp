@@ -7,8 +7,9 @@
 #include <ao/audio/BackendConfig.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -18,7 +19,7 @@ namespace ao::gtk::test
 {
   namespace
   {
-    bool hasBackend(rt::PlaybackState const& state, audio::BackendId const& id)
+    bool hasBackend(rt::PlaybackTransportSnapshot const& state, audio::BackendId const& id)
     {
       return std::ranges::any_of(
         state.output.availableBackends, [&id](rt::OutputBackendSnapshot const& backend) { return backend.id == id; });
@@ -34,16 +35,16 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& playback = fixture.runtime().playback();
 
-    REQUIRE(playback.state().output.availableBackends.empty());
+    REQUIRE(playback.snapshot().transport.output.availableBackends.empty());
 
     registerPlatformAudioBackends(fixture.runtime());
     drainGtkEvents();
 
 #if AOBUS_HAS_PIPEWIRE
-    CHECK(hasBackend(playback.state(), audio::kBackendPipeWire));
+    CHECK(hasBackend(playback.snapshot().transport, audio::kBackendPipeWire));
 #endif
 #if AOBUS_HAS_ALSA
-    CHECK(hasBackend(playback.state(), audio::kBackendAlsa));
+    CHECK(hasBackend(playback.snapshot().transport, audio::kBackendAlsa));
 #endif
   }
 } // namespace ao::gtk::test

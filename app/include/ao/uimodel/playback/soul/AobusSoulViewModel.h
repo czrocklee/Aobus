@@ -4,13 +4,17 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <numbers>
+
+namespace ao::rt
+{
+  class PlaybackService;
+}
 
 namespace ao::uimodel
 {
@@ -97,10 +101,6 @@ namespace ao::uimodel
     rt::PlaybackService& _playback;
     std::function<void(AobusSoulViewState const&)> _onRender;
 
-    async::Subscription _qualitySub;
-    async::Subscription _outputDeviceSub;
-    async::Subscription _startedSub;
-    async::Subscription _stoppedSub;
-    async::Subscription _idleSub;
+    async::Subscription _snapshotSub;
   };
 } // namespace ao::uimodel

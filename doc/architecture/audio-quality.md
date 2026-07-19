@@ -44,7 +44,7 @@ The relevant boundaries are:
 | Boundary | System layer | Public surface | Implementation |
 |---|---|---|---|
 | Graph evidence and analysis | Core libraries | `include/ao/audio/` | `lib/audio/` and `lib/audio/backend/` |
-| Accepted application snapshot and event | Application runtime | `app/include/ao/rt/PlaybackState.h`, `PlaybackService.h` | `app/runtime/PlaybackService.cpp` |
+| Accepted application snapshot and event | Application runtime | `app/include/ao/rt/playback/PlaybackService.h`, `PlaybackSnapshot.h` | `app/runtime/playback/PlaybackService.cpp`, `PlaybackTransport.cpp` |
 | Shared presentation policy | UIModel | `app/include/ao/uimodel/playback/quality/` and `soul/` | `app/uimodel/playback/quality/` and `soul/` |
 | Toolkit/terminal adaptation | Frontends | Frontend-local | `app/linux-gtk/playback/`, `app/linux-gtk/css/`, and `app/tui/` |
 
@@ -152,7 +152,7 @@ Every provider callback is gated by Player lifetime and the route/playback gener
 Callbacks from a superseded route are ignored before graph replacement.
 Foreign-thread graph callbacks marshal to the runtime callback executor before Player status or PlaybackService state changes.
 
-During shutdown, PlaybackService closes runtime publication before Player releases provider graph subscriptions and Engine activity.
+During shutdown, the internal playback bootstrap closes transport publication before Player releases provider graph subscriptions and Engine activity.
 The Player callback gate makes queued work a no-op after shutdown begins, so no quality update addresses destroyed runtime or UIModel state.
 Frontend subscriptions are released before their runtime owner.
 
@@ -163,7 +163,7 @@ Frontend subscriptions are released before their runtime owner.
 - [`Graph.h`](../../include/ao/audio/flow/Graph.h) is the cross-provider evidence value.
 - [`Player.cpp`](../../lib/audio/Player.cpp) owns graph merge, provider subscription, generation acceptance, analysis invocation, and callback marshalling.
 - [`QualityAnalyzer.cpp`](../../lib/audio/QualityAnalyzer.cpp) is the pure classification boundary.
-- [`PlaybackService.cpp`](../../app/runtime/PlaybackService.cpp) adapts Player status into runtime state and events.
+- [`PlaybackTransport.cpp`](../../app/runtime/playback/PlaybackTransport.cpp) adapts Player status into internal runtime state; [`PlaybackService.cpp`](../../app/runtime/playback/PlaybackService.cpp) carries accepted output, readiness, and quality in the coherent public snapshot.
 - [`AudioQualityFormatter.cpp`](../../app/uimodel/playback/quality/AudioQualityFormatter.cpp) and [`AobusSoulViewModel.cpp`](../../app/uimodel/playback/soul/AobusSoulViewModel.cpp) own shared presentation.
 - [`AudioPipelinePanel.cpp`](../../app/linux-gtk/playback/AudioPipelinePanel.cpp), [`AudioQualityCss.cpp`](../../app/linux-gtk/playback/AudioQualityCss.cpp), and [`QualityPanel.cpp`](../../app/tui/QualityPanel.cpp) are frontend adapters.
 
@@ -171,7 +171,7 @@ Frontend subscriptions are released before their runtime owner.
 
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects graph composition, route-generation rejection, provider callback marshalling, and incomplete evidence.
 - Backend tests under [`test/unit/audio/backend/`](../../test/unit/audio/backend/) protect provider graph ownership and publication.
-- [`PlaybackServiceOutputTest.cpp`](../../test/unit/runtime/PlaybackServiceOutputTest.cpp) protects runtime snapshot/event adaptation.
+- [`PlaybackTransportOutputTest.cpp`](../../test/unit/runtime/PlaybackTransportOutputTest.cpp) protects lower runtime snapshot/event adaptation, while [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) protects coherent public correlation.
 - [`AudioQualityFormatterTest.cpp`](../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) and [`AobusSoulViewModelTest.cpp`](../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protect the UIModel boundary.
 - [`AudioPipelinePanelTest.cpp`](../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) and [`QualityIndicatorStyleTest.cpp`](../../test/unit/tui/QualityIndicatorStyleTest.cpp) protect frontend consumption of shared UIModel values.
 

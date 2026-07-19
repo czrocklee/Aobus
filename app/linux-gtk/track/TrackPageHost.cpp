@@ -12,8 +12,6 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
@@ -21,6 +19,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 
@@ -50,9 +49,13 @@ namespace ao::gtk
     , _listNavigation{listNavigation}
     , _layoutStore{layoutStore}
   {
-    _revealSub = _runtime.playback().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
+    _revealSub =
+      _runtime.playback().events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));
 
-    _nowPlayingSub = _runtime.playback().onNowPlayingChanged([this](auto const& ev) { setPlayingTrack(ev.trackId); });
+    auto& playback = _runtime.playback();
+    setPlayingTrack(playback.snapshot().transport.nowPlaying.trackId);
+    _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
+                                                { setPlayingTrack(snapshot.transport.nowPlaying.trackId); });
 
     _focusSub = _runtime.workspace().onChanged(
       [this](rt::WorkspaceChanged const& changed)
@@ -139,7 +142,7 @@ namespace ao::gtk
     entry->pagePtr->selectionController().selectTrack(trackId);
   }
 
-  void TrackPageHost::handleRevealTrack(rt::PlaybackService::RevealTrackRequested const& ev)
+  void TrackPageHost::handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev)
   {
     auto viewId = rt::ViewId{ev.preferredViewId};
 
@@ -385,7 +388,7 @@ namespace ao::gtk
       });
 
     page->signalTrackActivated().connect([this, viewId](TrackId id)
-                                         { std::ignore = _runtime.playbackSequence().playFromView(viewId, id); });
+                                         { std::ignore = _runtime.playback().commands().startFromView(viewId, id); });
 
     page->signalCreateSmartListRequested().connect(
       [this, page](std::string const& expression)

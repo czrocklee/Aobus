@@ -14,11 +14,11 @@ namespace ftxui
 
 namespace ao::rt
 {
-  struct PlaybackState;
+  struct PlaybackTransportSnapshot;
 } // namespace ao::rt
 
 namespace ao::tui
 {
-  std::int32_t qualityPanelColumns(rt::PlaybackState const& state, std::int32_t terminalColumns);
-  ftxui::Element qualityPanel(rt::PlaybackState const& state, std::int32_t columns = 0);
+  std::int32_t qualityPanelColumns(rt::PlaybackTransportSnapshot const& state, std::int32_t terminalColumns);
+  ftxui::Element qualityPanel(rt::PlaybackTransportSnapshot const& state, std::int32_t columns = 0);
 } // namespace ao::tui

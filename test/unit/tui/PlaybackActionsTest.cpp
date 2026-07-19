@@ -3,12 +3,11 @@
 
 #include "tui/PlaybackActions.h"
 
-#include "test/unit/runtime/PlaybackSequenceUiTestSupport.h"
+#include "test/unit/runtime/PlaybackUiTestSupport.h"
 #include "tui/TrackListEntry.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackState.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,33 +25,37 @@ namespace ao::tui::test
 
   TEST_CASE("PlaybackActions - playSelected starts the bounded selected track", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackSequenceUiFixture{};
+    auto fixture = rt::test::PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto const firstId = fixture.addPlayableTrack("First");
     auto const secondId = fixture.addPlayableTrack("Second");
     auto const tracks = std::vector{trackEntry(firstId), trackEntry(secondId)};
-    auto& sequence = fixture.runtime.playbackSequence();
     auto& playback = fixture.runtime.playback();
+    auto& commands = playback.commands();
 
-    CHECK(playSelected(sequence, tracks, -4, fixture.viewId));
-    CHECK(playback.state().nowPlaying.trackId == firstId);
-    CHECK(playback.state().nowPlaying.sourceListId == rt::kAllTracksListId);
-    CHECK(playback.state().nowPlaying.title == "First");
-    CHECK(sequence.state().currentTrackId == firstId);
+    CHECK(playSelected(commands, tracks, -4, fixture.viewId));
+    auto snapshot = playback.snapshot();
+    CHECK(snapshot.transport.nowPlaying.trackId == firstId);
+    CHECK(snapshot.transport.nowPlaying.sourceListId == rt::kAllTracksListId);
+    CHECK(snapshot.transport.nowPlaying.title == "First");
+    CHECK(snapshot.succession.currentTrackId == firstId);
 
-    CHECK(playSelected(sequence, tracks, 12, fixture.viewId));
-    CHECK(playback.state().nowPlaying.trackId == secondId);
-    CHECK(playback.state().nowPlaying.sourceListId == rt::kAllTracksListId);
-    CHECK(playback.state().nowPlaying.title == "Second");
-    CHECK(sequence.state().currentTrackId == secondId);
+    CHECK(playSelected(commands, tracks, 12, fixture.viewId));
+    snapshot = playback.snapshot();
+    CHECK(snapshot.transport.nowPlaying.trackId == secondId);
+    CHECK(snapshot.transport.nowPlaying.sourceListId == rt::kAllTracksListId);
+    CHECK(snapshot.transport.nowPlaying.title == "Second");
+    CHECK(snapshot.succession.currentTrackId == secondId);
   }
 
   TEST_CASE("PlaybackActions - playSelected rejects an empty track list", "[tui][unit][playback]")
   {
-    auto fixture = rt::test::PlaybackSequenceUiFixture{};
+    auto fixture = rt::test::PlaybackUiFixture{};
+    auto& playback = fixture.runtime.playback();
 
-    CHECK_FALSE(playSelected(fixture.runtime.playbackSequence(), {}, 0, fixture.viewId));
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == kInvalidTrackId);
-    CHECK(fixture.runtime.playbackSequence().state().currentTrackId == kInvalidTrackId);
+    CHECK_FALSE(playSelected(playback.commands(), {}, 0, fixture.viewId));
+    auto const snapshot = playback.snapshot();
+    CHECK(snapshot.transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(snapshot.succession.currentTrackId == kInvalidTrackId);
   }
 } // namespace ao::tui::test

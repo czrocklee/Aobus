@@ -3,7 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/runtime/PlaybackServiceTestSupport.h"
+#include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
@@ -19,10 +19,10 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("PlaybackService output device - devices output and quality signal subscriptions",
+  TEST_CASE("PlaybackTransport output device - devices output and quality signal subscriptions",
             "[runtime][unit][playback][output]")
   {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
     // Prime the device list. The first notification auto-selects the default
     // output; the duplicate exercises the "already selected" early return, and the
@@ -34,21 +34,21 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(emptyStatus.devices);
 
     bool devicesChangedFired = false;
-    auto sub1 = fixture.playbackService.onOutputDevicesChanged([&] { devicesChangedFired = true; });
+    auto sub1 = fixture.playbackTransport.onOutputDevicesChanged([&] { devicesChangedFired = true; });
 
     bool outputChangedFired = false;
     auto lastOutputDevice = OutputDeviceSelection{};
-    auto sub2 = fixture.playbackService.onOutputDeviceChanged(
+    auto sub2 = fixture.playbackTransport.onOutputDeviceChanged(
       [&](auto const& ev)
       {
         outputChangedFired = true;
         lastOutputDevice = ev;
       });
 
-    auto qualityEvents = std::vector<PlaybackService::QualityChanged>{};
-    auto sub3 = fixture.playbackService.onQualityChanged([&](auto const& ev) { qualityEvents.push_back(ev); });
+    auto qualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
+    auto sub3 = fixture.playbackTransport.onQualityChanged([&](auto const& ev) { qualityEvents.push_back(ev); });
 
-    fixture.playbackService.setOutputDevice(
+    fixture.playbackTransport.setOutputDevice(
       audio::BackendId{"mock_backend"}, audio::DeviceId{"mock_device"}, audio::ProfileId{audio::kProfileShared});
     CHECK(outputChangedFired);
     // setOutputDevice publishes the engine-confirmed selection taken from the
@@ -58,13 +58,13 @@ namespace ao::rt::test
     CHECK(lastOutputDevice.backendId == audio::BackendId{"mock_backend"});
     CHECK(lastOutputDevice.deviceId == audio::DeviceId{"mock_device"});
     CHECK(lastOutputDevice.profileId == audio::ProfileId{audio::kProfileShared});
-    CHECK(lastOutputDevice == fixture.playbackService.state().output.selectedDevice);
+    CHECK(lastOutputDevice == fixture.playbackTransport.state().output.selectedDevice);
     CHECK(qualityEvents.empty());
 
-    auto qualityFixture = PlaybackFixture<QueuedExecutor>{};
-    auto routedQualityEvents = std::vector<PlaybackService::QualityChanged>{};
+    auto qualityFixture = PlaybackTransportFixture<QueuedExecutor>{};
+    auto routedQualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
     auto qualitySub =
-      qualityFixture.playbackService.onQualityChanged([&](auto const& ev) { routedQualityEvents.push_back(ev); });
+      qualityFixture.playbackTransport.onQualityChanged([&](auto const& ev) { routedQualityEvents.push_back(ev); });
 
     qualityFixture.onDevicesChangedCb(qualityFixture.status.devices);
     qualityFixture.executor.drain();
@@ -73,7 +73,7 @@ namespace ao::rt::test
     auto const testFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const desc =
       playbackRequest(TrackId{1}, testFile.string(), "Fake Track", "Fake Artist", std::chrono::minutes{2});
-    CHECK(qualityFixture.playbackService.play(desc, ListId{1}));
+    CHECK(qualityFixture.playbackTransport.play(desc, ListId{1}));
     REQUIRE(qualityFixture.renderTarget != nullptr);
 
     qualityFixture.renderTarget->handleRouteReady("mock_anchor");
@@ -84,48 +84,48 @@ namespace ao::rt::test
     // The service contract is the final ready payload, not an exact event count.
     auto const& qualityEvent = routedQualityEvents.back();
     CHECK(qualityEvent.quality.overall == audio::Quality::BitwisePerfect);
-    CHECK(qualityEvent.quality.sourceQuality == qualityFixture.playbackService.state().quality.sourceQuality);
-    CHECK(qualityEvent.quality.pipelineQuality == qualityFixture.playbackService.state().quality.pipelineQuality);
-    CHECK(qualityEvent.quality.fullyVerified == qualityFixture.playbackService.state().quality.fullyVerified);
+    CHECK(qualityEvent.quality.sourceQuality == qualityFixture.playbackTransport.state().quality.sourceQuality);
+    CHECK(qualityEvent.quality.pipelineQuality == qualityFixture.playbackTransport.state().quality.pipelineQuality);
+    CHECK(qualityEvent.quality.fullyVerified == qualityFixture.playbackTransport.state().quality.fullyVerified);
     CHECK(qualityEvent.ready == true);
-    CHECK(qualityEvent.quality.overall == qualityFixture.playbackService.state().quality.overall);
-    CHECK(qualityEvent.ready == qualityFixture.playbackService.state().ready);
+    CHECK(qualityEvent.quality.overall == qualityFixture.playbackTransport.state().quality.overall);
+    CHECK(qualityEvent.ready == qualityFixture.playbackTransport.state().ready);
   }
 
-  TEST_CASE("PlaybackService output device - device notification auto-configures output device before first play",
+  TEST_CASE("PlaybackTransport output device - device notification auto-configures output device before first play",
             "[runtime][unit][playback][output]")
   {
     // A fixture receives its first device notification just before the play
     // request; the notification auto-selects the first available output device.
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const desc = playbackRequest(TrackId{1}, fixturePath, "Fake Track", "Fake Artist", std::chrono::minutes{2});
 
-    CHECK(fixture.playbackService.play(desc, ListId{1}));
-    CHECK(fixture.playbackService.state().nowPlaying.trackId == TrackId{1});
+    CHECK(fixture.playbackTransport.play(desc, ListId{1}));
+    CHECK(fixture.playbackTransport.state().nowPlaying.trackId == TrackId{1});
   }
 
-  TEST_CASE("PlaybackService output device - auto-select notifies device list subscribers",
+  TEST_CASE("PlaybackTransport output device - auto-select notifies device list subscribers",
             "[runtime][unit][playback][output]")
   {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     bool devicesChangedFired = false;
-    auto sub = fixture.playbackService.onOutputDevicesChanged([&] { devicesChangedFired = true; });
+    auto sub = fixture.playbackTransport.onOutputDevicesChanged([&] { devicesChangedFired = true; });
 
     fixture.onDevicesChangedCb(fixture.status.devices);
 
     CHECK(devicesChangedFired);
-    CHECK(fixture.playbackService.state().output.selectedDevice.backendId == audio::BackendId{"mock_backend"});
-    REQUIRE(fixture.playbackService.state().output.availableBackends.size() == 1);
-    REQUIRE(fixture.playbackService.state().output.availableBackends.front().devices.size() == 1);
+    CHECK(fixture.playbackTransport.state().output.selectedDevice.backendId == audio::BackendId{"mock_backend"});
+    REQUIRE(fixture.playbackTransport.state().output.availableBackends.size() == 1);
+    REQUIRE(fixture.playbackTransport.state().output.availableBackends.front().devices.size() == 1);
   }
 
-  TEST_CASE("PlaybackService output device - auto-select skips unsupported default exclusive profile",
+  TEST_CASE("PlaybackTransport output device - auto-select skips unsupported default exclusive profile",
             "[runtime][unit][playback][output]")
   {
-    auto fixture = PlaybackFixture<InlineExecutor>{};
+    auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     fixture.status.devices = {
       audio::Device{.id = audio::DeviceId{},
                     .displayName = "System Default",
@@ -141,7 +141,7 @@ namespace ao::rt::test
 
     fixture.onDevicesChangedCb(fixture.status.devices);
 
-    auto const& selection = fixture.playbackService.state().output.selectedDevice;
+    auto const& selection = fixture.playbackTransport.state().output.selectedDevice;
     CHECK(selection.backendId == audio::BackendId{"mock_backend"});
     CHECK(selection.deviceId == audio::DeviceId{});
     CHECK(selection.profileId == audio::kProfileShared);

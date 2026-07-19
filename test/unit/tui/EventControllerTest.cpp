@@ -26,11 +26,13 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/rt/playback/PlaybackEvents.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -86,16 +88,21 @@ namespace ao::tui::test
 
       void addReadyAudioProvider()
       {
-        rt::test::addReadyAudioProvider(runtime.playback());
+        rt::test::addReadyAudioProvider(runtime);
         executor->drain();
       }
 
       void addReadyAudioProvider(audio::BackendProvider::Status status)
       {
-        rt::test::addReadyAudioProvider(runtime.playback(), std::move(status));
+        rt::test::addReadyAudioProvider(runtime, std::move(status));
         executor->drain();
       }
     };
+
+    rt::PlaybackSnapshot currentPlayback(EventControllerFixture& fixture)
+    {
+      return fixture.runtime.playback().snapshot();
+    }
 
     std::int32_t presentationIndex(LibraryController const& library, std::string_view const presentationId)
     {
@@ -109,8 +116,9 @@ namespace ao::tui::test
       REQUIRE_FALSE(library.tracks().empty());
       fixture.addReadyAudioProvider();
       auto const startTrackId = library.tracks()[0].id;
-      REQUIRE(fixture.runtime.playbackSequence().playFromView(library.activeViewId(), startTrackId));
-      REQUIRE(fixture.runtime.playback().state().duration > std::chrono::milliseconds{0});
+      auto& playback = fixture.runtime.playback();
+      REQUIRE(playback.commands().startFromView(library.activeViewId(), startTrackId));
+      REQUIRE(playback.snapshot().transport.duration > std::chrono::milliseconds{0});
     }
 
     void enterCommand(EventController& controller, std::string_view text)
@@ -461,13 +469,13 @@ namespace ao::tui::test
     CHECK(library.tracks().size() == 2);
 
     enterCommand(controller, "play");
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
 
     enterCommand(controller, "toggle");
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
 
     enterCommand(controller, "stop");
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == kInvalidTrackId);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
   TEST_CASE("EventController - output commands and mouse clicks select devices", "[tui][unit][event]")
@@ -505,14 +513,14 @@ namespace ao::tui::test
     auto clickRow = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 10, .y = 3};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickRow)));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtime.playback().state().output.selectedDevice.backendId == audio::BackendId{"test_backend"});
+    CHECK(currentPlayback(fixture).transport.output.selectedDevice.backendId == audio::BackendId{"test_backend"});
 
     enterCommand(controller, "output");
     CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
 
     CHECK(controller.handleEvent(ftxui::Event::Return));
     CHECK(fixture.shell.overlay() == Overlay::None);
-    CHECK(fixture.runtime.playback().state().output.selectedDevice.backendId == audio::BackendId{"test_backend"});
+    CHECK(currentPlayback(fixture).transport.output.selectedDevice.backendId == audio::BackendId{"test_backend"});
   }
 
   TEST_CASE("EventController - stale output row clicks keep the picker open", "[tui][regression][event]")
@@ -542,7 +550,7 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickRow)));
 
     CHECK(fixture.shell.overlay() == Overlay::OutputDevices);
-    CHECK(fixture.runtime.playback().state().output.selectedDevice.backendId == audio::BackendId{"test_backend"});
+    CHECK(currentPlayback(fixture).transport.output.selectedDevice.backendId == audio::BackendId{"test_backend"});
   }
 
   TEST_CASE("EventController - output selector handles page and boundary navigation keys", "[tui][unit][event]")
@@ -577,8 +585,9 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto hitRegions = TuiHitRegions{};
     auto renderScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(80), ftxui::Dimension::Fixed(1));
+    auto const playbackSnapshot = currentPlayback(fixture);
     ftxui::Render(renderScreen,
-                  playbackBar(PlaybackBarViewState{.playbackState = &fixture.runtime.playback().state(),
+                  playbackBar(PlaybackBarViewState{.playbackState = &playbackSnapshot.transport,
                                                    .soulButtonBox = &hitRegions.soulButtonBox,
                                                    .terminalColumns = 80}));
     auto controller = EventController{
@@ -641,8 +650,9 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto hitRegions = TuiHitRegions{};
     auto renderScreen = ftxui::Screen::Create(ftxui::Dimension::Fixed(80), ftxui::Dimension::Fixed(1));
+    auto const playbackSnapshot = currentPlayback(fixture);
     ftxui::Render(renderScreen,
-                  playbackBar(PlaybackBarViewState{.playbackState = &fixture.runtime.playback().state(),
+                  playbackBar(PlaybackBarViewState{.playbackState = &playbackSnapshot.transport,
                                                    .soulButtonBox = &hitRegions.soulButtonBox,
                                                    .terminalColumns = 80}));
     auto controller = EventController{
@@ -655,15 +665,15 @@ namespace ao::tui::test
                                         .x = hitRegions.soulButtonBox.x_min,
                                         .y = hitRegions.soulButtonBox.y_min};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickSoulButton)));
-    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Playing);
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
 
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickSoulButton)));
-    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Paused);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Paused);
 
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickSoulButton)));
-    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Playing);
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
+    CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
   }
 
   TEST_CASE("EventController - unavailable transport command is gated and reported", "[tui][unit][event]")
@@ -680,7 +690,7 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character(" ")));
 
-    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Idle);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
     auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
@@ -701,7 +711,7 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Character("s")));
 
-    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Idle);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
     CHECK(fixture.runtime.notifications().feed().entries.empty());
   }
 
@@ -711,7 +721,9 @@ namespace ao::tui::test
     fixture.addReadyAudioProvider();
     auto library = fixture.makeLibrary();
     REQUIRE_FALSE(library.tracks().empty());
-    REQUIRE(fixture.runtime.playbackSequence().playFromView(library.activeViewId(), library.tracks()[0].id));
+    auto& playback = fixture.runtime.playback();
+    auto& commands = playback.commands();
+    REQUIRE(commands.startFromView(library.activeViewId(), library.tracks()[0].id));
     auto controller = EventController{
       fixture.screen,
       fixture.shell,
@@ -719,18 +731,19 @@ namespace ao::tui::test
       fixture.runtime,
       EventControllerBindings{.notifications = &fixture.runtime.notifications()},
     };
-    auto& playback = fixture.runtime.playback();
-    auto const selected = playback.state().output.selectedDevice;
+    auto const selected = playback.snapshot().transport.output.selectedDevice;
 
-    playback.setOutputDevice(selected.backendId, audio::DeviceId{"pending-device"}, selected.profileId);
+    commands.setOutputDevice(selected.backendId, audio::DeviceId{"pending-device"}, selected.profileId);
 
-    REQUIRE_FALSE(playback.state().ready);
-    REQUIRE(playback.state().transport == audio::Transport::Playing);
+    auto transport = playback.snapshot().transport;
+    REQUIRE_FALSE(transport.ready);
+    REQUIRE(transport.transport == audio::Transport::Playing);
     auto const notificationCount = fixture.runtime.notifications().feed().entries.size();
 
     CHECK(controller.handleEvent(ftxui::Event::Character(" ")));
 
-    CHECK(playback.state().transport == audio::Transport::Paused);
+    transport = playback.snapshot().transport;
+    CHECK(transport.transport == audio::Transport::Paused);
     CHECK(fixture.runtime.notifications().feed().entries.size() == notificationCount);
   }
 
@@ -1126,29 +1139,30 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
-    auto seekEvents = std::vector<std::chrono::milliseconds>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event.elapsed); });
+    auto& playback = fixture.runtime.playback();
+    auto& commands = playback.commands();
 
-    fixture.runtime.playback().setVolume(0.50F);
-    fixture.runtime.playback().setMuted(true);
+    commands.setVolume(0.50F);
+    commands.setMuted(true);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("[")));
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
     CHECK(controller.handleEvent(ftxui::Event::Character("]")));
-    REQUIRE(seekEvents.size() == 2);
-    CHECK(seekEvents[0] == std::chrono::milliseconds{0});
-    CHECK(seekEvents[1] == fixture.runtime.playback().state().duration);
+    auto transport = playback.snapshot().transport;
+    CHECK(transport.elapsed == transport.duration);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("-")));
-    CHECK(fixture.runtime.playback().state().volume.level < 0.50F);
-    CHECK(fixture.runtime.playback().state().volume.muted);
+    transport = playback.snapshot().transport;
+    CHECK(transport.volume.level < 0.50F);
+    CHECK(transport.volume.muted);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("+")));
-    CHECK(fixture.runtime.playback().state().volume.level > 0.49F);
-    CHECK_FALSE(fixture.runtime.playback().state().volume.muted);
+    transport = playback.snapshot().transport;
+    CHECK(transport.volume.level > 0.49F);
+    CHECK_FALSE(transport.volume.muted);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("s")));
-    CHECK(fixture.runtime.playback().state().nowPlaying.trackId == kInvalidTrackId);
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
   }
 
   TEST_CASE("EventController - relative seek is inert without a known duration", "[tui][unit][event]")
@@ -1156,14 +1170,16 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&seekEvents](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto& playback = fixture.runtime.playback();
+    auto snapshots = std::vector<rt::PlaybackSnapshot>{};
+    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
+                                                    { snapshots.push_back(snapshot); });
 
     CHECK(controller.handleEvent(ftxui::Event::Character("[")));
     CHECK(controller.handleEvent(ftxui::Event::Character("]")));
 
-    CHECK(seekEvents.empty());
+    CHECK(snapshots.empty());
+    CHECK(playback.snapshot().transport.duration == std::chrono::milliseconds{0});
   }
 
   TEST_CASE("EventController - mouse click on seek rail previews then commits the target position",
@@ -1172,13 +1188,17 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto const duration = fixture.runtime.playback().state().duration;
+    auto& playback = fixture.runtime.playback();
+    auto const duration = playback.snapshot().transport.duration;
 
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto snapshots = std::vector<rt::PlaybackSnapshot>{};
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](rt::PlaybackSeekPreview const& preview)
+                                                      { seekPreviews.push_back(preview); });
+    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
+                                                    { snapshots.push_back(snapshot); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1188,11 +1208,10 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", press)));
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", release)));
 
-    REQUIRE(seekEvents.size() == 2);
-    CHECK(seekEvents[0].mode == rt::PlaybackService::SeekMode::Preview);
-    CHECK(seekEvents[0].elapsed == duration / 2);
-    CHECK(seekEvents[1].mode == rt::PlaybackService::SeekMode::Final);
-    CHECK(seekEvents[1].elapsed == duration / 2);
+    REQUIRE(seekPreviews.size() == 1);
+    CHECK(seekPreviews[0].elapsed == duration / 2);
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots[0].transport.elapsed == duration / 2);
   }
 
   TEST_CASE("EventController - mouse drag on seek rail clamps release outside the rail", "[tui][unit][event]")
@@ -1200,13 +1219,17 @@ namespace ao::tui::test
     auto fixture = EventControllerFixture{};
     auto library = fixture.makeLibrary();
     prepareSeekablePlayback(fixture, library);
-    auto const duration = fixture.runtime.playback().state().duration;
+    auto& playback = fixture.runtime.playback();
+    auto const duration = playback.snapshot().transport.duration;
 
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto snapshots = std::vector<rt::PlaybackSnapshot>{};
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](rt::PlaybackSeekPreview const& preview)
+                                                      { seekPreviews.push_back(preview); });
+    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
+                                                    { snapshots.push_back(snapshot); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1218,13 +1241,11 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", dragOutside)));
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", releaseOutside)));
 
-    REQUIRE(seekEvents.size() == 3);
-    CHECK(seekEvents[0].mode == rt::PlaybackService::SeekMode::Preview);
-    CHECK(seekEvents[0].elapsed == std::chrono::milliseconds{0});
-    CHECK(seekEvents[1].mode == rt::PlaybackService::SeekMode::Preview);
-    CHECK(seekEvents[1].elapsed == duration);
-    CHECK(seekEvents[2].mode == rt::PlaybackService::SeekMode::Final);
-    CHECK(seekEvents[2].elapsed == duration);
+    REQUIRE(seekPreviews.size() == 2);
+    CHECK(seekPreviews[0].elapsed == std::chrono::milliseconds{0});
+    CHECK(seekPreviews[1].elapsed == duration);
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots[0].transport.elapsed == duration);
   }
 
   TEST_CASE("EventController - disabled seek rail ignores mouse clicks", "[tui][unit][event]")
@@ -1233,16 +1254,16 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto previewSub = fixture.runtime.playback().events().onSeekPreview(
+      [&seekPreviews](rt::PlaybackSeekPreview const& preview) { seekPreviews.push_back(preview); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
     auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1};
 
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", press)));
-    CHECK(seekEvents.empty());
+    CHECK(seekPreviews.empty());
   }
 
   TEST_CASE("EventController - modal overlays block seek rail mouse clicks", "[tui][regression][event]")
@@ -1252,9 +1273,9 @@ namespace ao::tui::test
     prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto previewSub = fixture.runtime.playback().events().onSeekPreview(
+      [&seekPreviews](rt::PlaybackSeekPreview const& preview) { seekPreviews.push_back(preview); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1262,7 +1283,7 @@ namespace ao::tui::test
     auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1};
 
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", press)));
-    CHECK(seekEvents.empty());
+    CHECK(seekPreviews.empty());
   }
 
   TEST_CASE("EventController - command mode blocks seek rail mouse clicks", "[tui][regression][event]")
@@ -1272,9 +1293,9 @@ namespace ao::tui::test
     prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto previewSub = fixture.runtime.playback().events().onSeekPreview(
+      [&seekPreviews](rt::PlaybackSeekPreview const& preview) { seekPreviews.push_back(preview); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1282,7 +1303,7 @@ namespace ao::tui::test
     auto press = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Pressed, .x = 20, .y = 1};
 
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", press)));
-    CHECK(seekEvents.empty());
+    CHECK(seekPreviews.empty());
   }
 
   TEST_CASE("EventController - command mode blocks workspace mouse controls", "[tui][regression][event]")
@@ -1338,7 +1359,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
     CHECK(library.selectedTrack() == 0);
     CHECK(widthOverrides.empty());
-    CHECK(fixture.runtime.playback().state().transport == audio::Transport::Idle);
+    CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Idle);
   }
 
   TEST_CASE("EventController - modal overlays cancel active seek rail drags", "[tui][regression][event]")
@@ -1348,9 +1369,10 @@ namespace ao::tui::test
     prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekEvents = std::vector<rt::PlaybackService::SeekUpdate>{};
-    auto sub = fixture.runtime.playback().onSeekUpdate([&](rt::PlaybackService::SeekUpdate const& event)
-                                                       { seekEvents.push_back(event); });
+    auto& playback = fixture.runtime.playback();
+    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](rt::PlaybackSeekPreview const& preview)
+                                                      { seekPreviews.push_back(preview); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1359,17 +1381,17 @@ namespace ao::tui::test
     auto release = ftxui::Mouse{.button = ftxui::Mouse::Left, .motion = ftxui::Mouse::Released, .x = 30, .y = 1};
 
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", press)));
-    REQUIRE(seekEvents.size() == 1);
+    REQUIRE(seekPreviews.size() == 1);
+    CHECK(seekPreviews[0].elapsed == std::chrono::milliseconds{0});
 
     fixture.shell.openOverlay(Overlay::ListChooser);
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", drag)));
-    REQUIRE(seekEvents.size() == 2);
-    CHECK(seekEvents[1].mode == rt::PlaybackService::SeekMode::Final);
-    CHECK(seekEvents[1].elapsed == std::chrono::milliseconds{0});
+    CHECK(seekPreviews.size() == 1);
+    CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{0});
 
     fixture.shell.closeOverlay();
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", release)));
-    CHECK(seekEvents.size() == 2);
+    CHECK(seekPreviews.size() == 1);
   }
 
   TEST_CASE("EventController - current track shortcut reveals playback selection", "[tui][unit][event]")
@@ -1383,7 +1405,7 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
     REQUIRE(library.selectedTrack() == 1);
     CHECK(controller.handleEvent(ftxui::Event::Character("p")));
-    REQUIRE(fixture.runtime.playback().state().nowPlaying.trackId == library.tracks()[1].id);
+    REQUIRE(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[1].id);
 
     CHECK(controller.handleEvent(ftxui::Event::Home));
     REQUIRE(library.selectedTrack() == 0);

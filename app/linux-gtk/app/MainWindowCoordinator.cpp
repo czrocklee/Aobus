@@ -25,8 +25,6 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -36,6 +34,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -63,9 +62,7 @@ namespace ao::gtk
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library()}
       , imageCache{100}
-      , playbackCommandSurface{runtime.playback(),
-                               runtime.playbackSequence(),
-                               [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
+      , playbackCommandSurface{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
       , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeCoordinator}
@@ -174,7 +171,7 @@ namespace ao::gtk
 
       auto const spec = presentationForList(restored->sourceListId, runtime);
       std::ignore = runtime.workspace().navigateTo(restored->sourceListId, {.optPresentation = spec});
-      runtime.playback().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
+      runtime.playback().commands().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
     }
 
     GtkLayoutStateStore layoutStateStore;
@@ -323,7 +320,7 @@ namespace ao::gtk
     _configStorePtr->loadAppSession(session);
 
     session.lastLibraryPath = _runtime.musicRoot().string();
-    auto const& pb = _runtime.playback().state();
+    auto const& pb = _runtime.playback().snapshot().transport;
     session.lastOutputBackendId = pb.output.selectedDevice.backendId.raw();
     session.lastOutputDeviceId = pb.output.selectedDevice.deviceId.raw();
     session.lastOutputProfileId = pb.output.selectedDevice.profileId.raw();
@@ -372,7 +369,7 @@ namespace ao::gtk
 
     if (!outputBackendId.empty())
     {
-      _runtime.playback().setOutputDevice(
+      _runtime.playback().commands().setOutputDevice(
         audio::BackendId{outputBackendId}, audio::DeviceId{outputDeviceId}, audio::ProfileId{outputProfileId});
     }
 
@@ -385,7 +382,6 @@ namespace ao::gtk
     return GtkUiDependencies{
       .trackRowCache = &_implPtr->trackRowCache,
       .imageCache = &_implPtr->imageCache,
-      .playbackSequence = &_runtime.playbackSequence(),
       .playbackCommandSurface = &_implPtr->playbackCommandSurface,
       .tagEditController = &_implPtr->tagEditController,
       .importExportActions = &_implPtr->importExportCoordinator,
@@ -433,10 +429,6 @@ namespace ao::gtk
   ImageCache* MainWindowCoordinator::imageCache()
   {
     return &_implPtr->imageCache;
-  }
-  rt::PlaybackSequenceService* MainWindowCoordinator::playbackSequence()
-  {
-    return &_runtime.playbackSequence();
   }
   uimodel::PlaybackCommandSurface* MainWindowCoordinator::playbackCommandSurface()
   {

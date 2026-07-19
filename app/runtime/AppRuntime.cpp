@@ -2,6 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/PlaybackSessionPersistence.h"
+#include "runtime/playback/PlaybackBootstrap.h"
+#include "runtime/playback/PlaybackSuccession.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
@@ -12,8 +15,6 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -21,6 +22,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <exception>
@@ -34,8 +36,10 @@ namespace ao::rt
   struct AppRuntime::Impl final
   {
     ViewService viewService;
-    PlaybackService playbackService;
-    PlaybackSequenceService playbackSequenceService;
+    PlaybackTransport playbackTransport;
+    PlaybackSuccession playbackSuccession;
+    PlaybackBootstrap playbackBootstrap;
+    std::unique_ptr<PlaybackService> playbackPtr;
     WorkspaceService workspaceService;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
     ConfigStore* playbackSessionConfigStore = nullptr;
@@ -45,25 +49,28 @@ namespace ao::rt
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
          ConfigStore* playbackSessionConfigStoreValue)
       : viewService{runtime.async().callbackExecutor(), runtime.musicLibrary(), runtime.sources()}
-      , playbackService{runtime.async().callbackExecutor(),
-                        runtime.musicLibrary(),
-                        runtime.notifications(),
-                        std::make_unique<audio::Player>(runtime.async().callbackExecutor())}
-      , playbackSequenceService{runtime.async().callbackExecutor(),
-                                viewService,
-                                runtime.sources(),
-                                runtime.musicLibrary(),
-                                playbackService,
-                                runtime.notifications(),
-                                runtime.async()}
+      , playbackTransport{runtime.async().callbackExecutor(),
+                          runtime.musicLibrary(),
+                          runtime.notifications(),
+                          std::make_unique<audio::Player>(runtime.async().callbackExecutor())}
+      , playbackSuccession{runtime.async().callbackExecutor(),
+                           viewService,
+                           runtime.sources(),
+                           runtime.musicLibrary(),
+                           playbackTransport,
+                           runtime.notifications(),
+                           runtime.async()}
+      , playbackBootstrap{playbackTransport}
+      , playbackPtr{playbackBootstrap.createPlaybackService(runtime.async().callbackExecutor(), playbackSuccession)}
       , workspaceService{runtime.async().callbackExecutor(), viewService, runtime.library().changes()}
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
       , playbackSessionConfigStore{playbackSessionConfigStoreValue != nullptr ? playbackSessionConfigStoreValue
                                                                               : workspaceConfigStorePtr.get()}
       , playbackSessionPersistencePtr{std::make_shared<PlaybackSessionPersistence>(*playbackSessionConfigStore,
                                                                                    runtime.library(),
-                                                                                   playbackSequenceService,
-                                                                                   playbackService,
+                                                                                   playbackSuccession,
+                                                                                   playbackTransport,
+                                                                                   *playbackPtr,
                                                                                    runtime.async())}
     {
     }
@@ -77,7 +84,7 @@ namespace ao::rt
     {
       std::ignore = playbackSessionPersistencePtr->shutdown();
       // Join playback callback producers while every consumer is still alive.
-      playbackService.shutdown();
+      playbackBootstrap.shutdown();
     }
   };
 
@@ -98,12 +105,7 @@ namespace ao::rt
 
   PlaybackService& AppRuntime::playback() noexcept
   {
-    return _implPtr->playbackService;
-  }
-
-  PlaybackSequenceService& AppRuntime::playbackSequence() noexcept
-  {
-    return _implPtr->playbackSequenceService;
+    return *_implPtr->playbackPtr;
   }
 
   WorkspaceService& AppRuntime::workspace() noexcept
@@ -133,6 +135,7 @@ namespace ao::rt
 
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
+    auto const commandBracket = PlaybackService::CommandBracket{*_implPtr->playbackPtr};
     _implPtr->playbackSessionPersistencePtr->start();
     auto restored = _implPtr->playbackSessionPersistencePtr->restore();
 
@@ -183,7 +186,7 @@ namespace ao::rt
 
       auto const trackId = state.selection.front();
 
-      if (auto const played = _implPtr->playbackSequenceService.playFromView(focus.activeViewId, trackId); !played)
+      if (auto const played = _implPtr->playbackPtr->commands().startFromView(focus.activeViewId, trackId); !played)
       {
         return std::unexpected{played.error()};
       }
@@ -218,12 +221,12 @@ namespace ao::rt
       return std::unexpected{navigation.error()};
     }
 
-    _implPtr->playbackService.revealTrack(trackId, navigation->activeViewId);
+    _implPtr->playbackPtr->commands().revealTrack(trackId, navigation->activeViewId);
     return *navigation;
   }
 
   void AppRuntime::addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr)
   {
-    _implPtr->playbackService.addProvider(std::move(providerPtr));
+    _implPtr->playbackBootstrap.addProvider(std::move(providerPtr));
   }
 } // namespace ao::rt

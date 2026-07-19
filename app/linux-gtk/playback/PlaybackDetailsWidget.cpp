@@ -5,7 +5,7 @@
 
 #include "layout/LayoutConstants.h"
 #include "playback/AudioQualityCss.h"
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
 #include <gtkmm/image.h>
@@ -17,8 +17,8 @@ namespace ao::gtk
   {
   }
 
-  PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playbackService)
-    : _nowPlayingViewModel{playbackService, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
+  PlaybackDetailsWidget::PlaybackDetailsWidget(rt::PlaybackService& playback)
+    : _nowPlayingViewModel{playback, [this](ao::uimodel::NowPlayingViewState const& view) { applyState(view); }}
   {
     _container.set_spacing(layout::kSpacingLarge);
     _container.add_css_class("ao-playback-details");

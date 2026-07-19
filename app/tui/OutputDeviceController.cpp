@@ -3,7 +3,7 @@
 
 #include "OutputDeviceController.h"
 
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <algorithm>
@@ -29,7 +29,6 @@ namespace ao::tui
                    }
                  }}
   {
-    _outputDevicesChangedSub = playback.onOutputDevicesChanged([this] { refresh(); });
     refresh();
   }
 

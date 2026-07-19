@@ -17,7 +17,7 @@ namespace ftxui
 
 namespace ao::rt
 {
-  struct PlaybackState;
+  struct PlaybackTransportSnapshot;
 } // namespace ao::rt
 
 namespace ao::uimodel
@@ -29,7 +29,7 @@ namespace ao::tui
 {
   struct PlaybackBarViewState final
   {
-    rt::PlaybackState const* playbackState = nullptr;
+    rt::PlaybackTransportSnapshot const* playbackState = nullptr;
     std::chrono::milliseconds displayElapsed{};
     std::chrono::milliseconds animationElapsed{};
     uimodel::OutputDeviceViewState const* outputView = nullptr;

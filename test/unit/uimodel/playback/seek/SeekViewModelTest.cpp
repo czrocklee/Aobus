@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/seek/SeekViewModel.h>
 
@@ -22,13 +22,11 @@ namespace ao::uimodel::test
 
   TEST_CASE("SeekViewModel - reactive updates", "[uimodel][unit][playback]")
   {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = QueuedExecutor{};
-    auto runtime = async::Runtime{executor, 1};
-    auto notificationService = NotificationService{runtime};
-    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
-    addReadyAudioProvider(playback);
-    REQUIRE(executor.drainUntil([&] { return playback.state().ready; }));
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+    fixture.addReadyProvider();
+    REQUIRE(fixture.executor.drainUntil([&] { return playbackTransport.state().ready; }));
 
     auto log = ao::test::RenderLog<SeekViewState>{};
     auto viewModel = SeekViewModel{playback, [&log](auto const& state) { log.render(state); }};
@@ -52,14 +50,18 @@ namespace ao::uimodel::test
 
     SECTION("seek commands")
     {
-      auto const trackId = libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+      auto const trackId =
+        fixture.libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      auto const desc = PlaybackService::PlaybackRequest{
+      auto const desc = PlaybackTransport::PlaybackRequest{
         .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
         .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{1}},
       };
-      REQUIRE(playback.play(desc, kInvalidListId));
-      auto const expectedDuration = playback.state().duration;
+      REQUIRE(playbackTransport.play(desc, kInvalidListId));
+      REQUIRE(
+        fixture.executor.drainUntil([&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
+      fixture.executor.drain();
+      auto const expectedDuration = playbackTransport.state().duration;
       REQUIRE(expectedDuration > std::chrono::milliseconds{0});
 
       log.clear();
@@ -71,29 +73,30 @@ namespace ao::uimodel::test
       CHECK(log.last().isPlaying == true);
       CHECK(log.last().enabled == true);
       CHECK(log.last().immediateUpdate == false);
-      CHECK(playback.state().elapsed == std::chrono::milliseconds{0});
+      CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{0});
 
       viewModel.seekFinal(std::chrono::milliseconds{500});
+      fixture.executor.drain();
 
       CHECK(log.last().duration == expectedDuration);
       CHECK(log.last().elapsed == std::chrono::milliseconds{500});
       CHECK(log.last().isPlaying == true);
       CHECK(log.last().enabled == true);
       CHECK(log.last().immediateUpdate == true);
-      CHECK(playback.state().duration == expectedDuration);
+      CHECK(playbackTransport.state().duration == expectedDuration);
 
-      auto seekEvents = std::vector<PlaybackService::SeekUpdate>{};
-      auto seekSub =
-        playback.onSeekUpdate([&seekEvents](PlaybackService::SeekUpdate const& event) { seekEvents.push_back(event); });
+      auto seekEvents = std::vector<PlaybackTransport::SeekUpdate>{};
+      auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event)
+                                                    { seekEvents.push_back(event); });
 
       viewModel.seekBy(std::chrono::milliseconds{200});
       REQUIRE(seekEvents.size() == 1);
-      CHECK(seekEvents.back().mode == PlaybackService::SeekMode::Final);
+      CHECK(seekEvents.back().mode == PlaybackTransport::SeekMode::Final);
       CHECK(seekEvents.back().elapsed == std::chrono::milliseconds{700});
 
       viewModel.seekBy(-std::chrono::seconds{1});
       REQUIRE(seekEvents.size() == 2);
-      CHECK(seekEvents.back().mode == PlaybackService::SeekMode::Final);
+      CHECK(seekEvents.back().mode == PlaybackTransport::SeekMode::Final);
       CHECK(seekEvents.back().elapsed == std::chrono::milliseconds{0});
 
       viewModel.seekBy(expectedDuration + std::chrono::seconds{1});
@@ -111,9 +114,9 @@ namespace ao::uimodel::test
 
     SECTION("relative seek is unavailable without a known duration")
     {
-      auto seekEvents = std::vector<PlaybackService::SeekUpdate>{};
-      auto seekSub =
-        playback.onSeekUpdate([&seekEvents](PlaybackService::SeekUpdate const& event) { seekEvents.push_back(event); });
+      auto seekEvents = std::vector<PlaybackTransport::SeekUpdate>{};
+      auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event)
+                                                    { seekEvents.push_back(event); });
 
       viewModel.seekBy(std::chrono::seconds{5});
 

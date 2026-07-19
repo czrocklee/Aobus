@@ -9,7 +9,6 @@
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -35,7 +34,7 @@ namespace ao::rt
 {
   class AppRuntime;
   class NotificationService;
-  class PlaybackSequenceService;
+  class PlaybackService;
 }
 
 namespace ao::tui
@@ -119,7 +118,6 @@ namespace ao::tui
     ShellInteractionModel& _shell;
     LibraryController& _library;
     rt::PlaybackService& _playback;
-    rt::PlaybackSequenceService& _playbackSequence;
     uimodel::PlaybackCommandSurface _playbackCommands;
     uimodel::SeekViewModel _seekViewModel;
     uimodel::VolumeViewModel _volumeViewModel;

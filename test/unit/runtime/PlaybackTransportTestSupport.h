@@ -4,6 +4,8 @@
 #pragma once
 
 #include "runtime/PlaybackSessionState.h"
+#include "runtime/playback/PlaybackBootstrap.h"
+#include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/BackendTestSupport.h"
 #include <ao/CoreIds.h>
@@ -16,7 +18,6 @@
 #include <ao/audio/Player.h>
 #include <ao/audio/Property.h>
 #include <ao/rt/NotificationService.h>
-#include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
 
@@ -37,16 +38,16 @@ namespace ao::audio
 
 namespace ao::rt::test
 {
-  inline PlaybackService::PlaybackRequest playbackRequest(TrackId trackId,
-                                                          std::string_view filePath,
-                                                          std::string title,
-                                                          std::string artist,
-                                                          std::chrono::milliseconds duration,
-                                                          std::string album = {},
-                                                          ResourceId coverArtId = kInvalidResourceId,
-                                                          ViewId sourceViewId = kInvalidViewId)
+  inline PlaybackTransport::PlaybackRequest playbackRequest(TrackId trackId,
+                                                            std::string_view filePath,
+                                                            std::string title,
+                                                            std::string artist,
+                                                            std::chrono::milliseconds duration,
+                                                            std::string album = {},
+                                                            ResourceId coverArtId = kInvalidResourceId,
+                                                            ViewId sourceViewId = kInvalidViewId)
   {
-    return PlaybackService::PlaybackRequest{
+    return PlaybackTransport::PlaybackRequest{
       .item = NowPlayingInfo{.trackId = trackId,
                              .sourceViewId = sourceViewId,
                              .coverArtId = coverArtId,
@@ -76,7 +77,7 @@ namespace ao::rt::test
 
   using rt::test::QueuedExecutor;
 
-  // Shared wiring for the PlaybackService tests: a music library, a spy backend,
+  // Shared wiring for the PlaybackTransport tests: a music library, a spy backend,
   // and a mocked BackendProvider that hands out that backend.
   // ExecutorT selects the dispatch model (InlineExecutor runs inline; QueuedExecutor
   // defers until drain()). The provider's devices/graph callbacks and the render
@@ -87,9 +88,9 @@ namespace ao::rt::test
   // sites need different priming (auto-select-and-edge-cases, a single
   // notify-then-drain, or no notify at all to exercise ensureReady()).
   template<typename ExecutorT>
-  struct PlaybackFixture final
+  struct PlaybackTransportFixture final
   {
-    PlaybackFixture()
+    PlaybackTransportFixture()
     {
       fakeit::Fake(Method(mockProvider, shutdown));
 
@@ -147,14 +148,15 @@ namespace ao::rt::test
       fakeit::When(Method(mockProvider, createBackend))
         .AlwaysDo([this](audio::Device const&, audio::ProfileId const&) { return spyBackendPtr->makeProxy(); });
 
-      playbackService.addProvider(std::make_unique<audio::test::MockProviderProxy>(mockProvider.get()));
+      PlaybackBootstrap{playbackTransport}.addProvider(
+        std::make_unique<audio::test::MockProviderProxy>(mockProvider.get()));
     }
 
-    PlaybackFixture(PlaybackFixture const&) = delete;
-    PlaybackFixture& operator=(PlaybackFixture const&) = delete;
-    PlaybackFixture(PlaybackFixture&&) = delete;
-    PlaybackFixture& operator=(PlaybackFixture&&) = delete;
-    ~PlaybackFixture() = default;
+    PlaybackTransportFixture(PlaybackTransportFixture const&) = delete;
+    PlaybackTransportFixture& operator=(PlaybackTransportFixture const&) = delete;
+    PlaybackTransportFixture(PlaybackTransportFixture&&) = delete;
+    PlaybackTransportFixture& operator=(PlaybackTransportFixture&&) = delete;
+    ~PlaybackTransportFixture() = default;
 
     std::string installAudioFixture(std::string_view const fileName = "basic_metadata.flac",
                                     std::string_view const libraryUri = "playable.flac")
@@ -163,7 +165,7 @@ namespace ao::rt::test
     }
 
     // Declaration order matters: the executor and async runtime must outlive
-    // NotificationService and PlaybackService, and playbackService (destroyed
+    // NotificationService and PlaybackTransport, and playbackTransport (destroyed
     // first) tears down its Player while the provider mock is still alive.
     MusicLibraryFixture libraryFixture;
     ExecutorT executor;
@@ -178,9 +180,9 @@ namespace ao::rt::test
     audio::BackendProvider::OnGraphChangedCallback onGraphChangedCb;
     audio::RenderTarget* renderTarget = nullptr;
 
-    PlaybackService playbackService{executor,
-                                    libraryFixture.library(),
-                                    notificationService,
-                                    std::make_unique<audio::Player>(executor)};
+    PlaybackTransport playbackTransport{executor,
+                                        libraryFixture.library(),
+                                        notificationService,
+                                        std::make_unique<audio::Player>(executor)};
   };
 } // namespace ao::rt::test

@@ -19,9 +19,9 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
 
     auto& playback = fixture.runtime().playback();
-    rt::test::addReadyAudioProvider(playback);
+    rt::test::addReadyAudioProvider(fixture.runtime());
     drainGtkEvents();
-    playback.setVolume(0.5F);
+    playback.commands().setVolume(0.5F);
 
     auto control = VolumeControlWidget{playback};
     auto* btn = dynamic_cast<Gtk::Button*>(&control.widget());
@@ -39,18 +39,18 @@ namespace ao::gtk::test
     CHECK(btn->get_tooltip_text() == "Volume: 50%");
     CHECK(icon->get_icon_name() == "audio-volume-medium-symbolic");
 
-    playback.setMuted(true);
+    playback.commands().setMuted(true);
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-muted-symbolic");
 
-    playback.setMuted(false);
-    playback.setVolume(0.25F);
+    playback.commands().setMuted(false);
+    playback.commands().setVolume(0.25F);
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-low-symbolic");
 
-    playback.setVolume(1.0F);
+    playback.commands().setVolume(1.0F);
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-high-symbolic");

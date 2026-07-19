@@ -19,6 +19,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
@@ -129,8 +130,7 @@ namespace ao::tui
     , _shell{shell}
     , _library{library}
     , _playback{runtime.playback()}
-    , _playbackSequence{runtime.playbackSequence()}
-    , _playbackCommands{_playback, _playbackSequence, [this] { playSelectedTrack(); }}
+    , _playbackCommands{_playback, [this] { playSelectedTrack(); }}
     , _seekViewModel{_playback, {}}
     , _volumeViewModel{_playback, {}}
     , _outputDevices{bindings.outputDevices}
@@ -287,12 +287,12 @@ namespace ao::tui
 
   void EventController::revealCurrentTrack()
   {
-    _library.revealTrack(_playback.state().nowPlaying.trackId);
+    _library.revealTrack(_playback.snapshot().transport.nowPlaying.trackId);
   }
 
   void EventController::playSelectedTrack()
   {
-    if (!playSelected(_playbackSequence, _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
+    if (!playSelected(_playback.commands(), _library.tracks(), _library.selectedTrack(), _library.activeViewId()))
     {
       postActivityNotification(
         rt::NotificationSeverity::Warning, "Playback did not start. Check output device, file path, and logs.");
@@ -340,7 +340,7 @@ namespace ao::tui
       case CommandAction::TogglePlayback: executePlaybackCommand(uimodel::PlaybackCommand::PlayPause); break;
       case CommandAction::Stop: executePlaybackCommand(uimodel::PlaybackCommand::Stop); break;
       case CommandAction::Quit:
-        _playback.stop();
+        _playback.commands().stop();
         _screen.ExitLoopClosure()();
         break;
     }
@@ -372,7 +372,7 @@ namespace ao::tui
 
   void EventController::syncSeekSlider()
   {
-    auto const duration = _playback.state().duration;
+    auto const duration = _playback.snapshot().transport.duration;
     _seekSlider.applyViewState(duration, duration > std::chrono::milliseconds{0});
   }
 
@@ -383,7 +383,7 @@ namespace ao::tui
       return std::chrono::milliseconds{0};
     }
 
-    auto const duration = _playback.state().duration;
+    auto const duration = _playback.snapshot().transport.duration;
 
     if (duration <= std::chrono::milliseconds{0})
     {
@@ -419,7 +419,7 @@ namespace ao::tui
 
     if (_seekSlider.hasPendingFinalSeek())
     {
-      _seekViewModel.seekFinal(_playback.state().elapsed);
+      _seekViewModel.seekFinal(_playback.snapshot().transport.elapsed);
     }
 
     _optSeekRailDrag.reset();
@@ -973,7 +973,7 @@ namespace ao::tui
   {
     if (event == ftxui::Event::Character("q"))
     {
-      _playback.stop();
+      _playback.commands().stop();
       _screen.ExitLoopClosure()();
       return true;
     }
@@ -1124,7 +1124,7 @@ namespace ao::tui
 
     if (event == ftxui::Event::CtrlC)
     {
-      _playback.stop();
+      _playback.commands().stop();
       _screen.ExitLoopClosure()();
       return true;
     }

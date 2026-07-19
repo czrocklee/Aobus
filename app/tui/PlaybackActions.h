@@ -11,12 +11,12 @@
 
 namespace ao::rt
 {
-  class PlaybackSequenceService;
+  class PlaybackCommands;
 } // namespace ao::rt
 
 namespace ao::tui
 {
-  bool playSelected(rt::PlaybackSequenceService& sequence,
+  bool playSelected(rt::PlaybackCommands& commands,
                     std::vector<TrackListEntry> const& tracks,
                     std::int32_t selected,
                     rt::ViewId sourceViewId);

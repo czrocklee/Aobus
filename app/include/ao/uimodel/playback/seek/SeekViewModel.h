@@ -4,11 +4,17 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
-#include <ao/rt/PlaybackService.h>
+#include <ao/audio/Transport.h>
+#include <ao/rt/playback/PlaybackCommands.h>
 
 #include <chrono>
 #include <functional>
 #include <optional>
+
+namespace ao::rt
+{
+  class PlaybackService;
+}
 
 namespace ao::uimodel
 {
@@ -40,14 +46,19 @@ namespace ao::uimodel
     void refresh(bool immediateUpdate, std::optional<std::chrono::milliseconds> optOverrideElapsed = std::nullopt);
 
   private:
+    // Refreshes only when the transport-relevant subset of the snapshot changes,
+    // so unrelated publications (volume, quality) do not reset the seek clock.
+    void onSnapshotChanged();
+
     rt::PlaybackService& _playback;
+    rt::PlaybackCommands& _commands;
     std::function<void(SeekViewState const&)> _onRender;
 
-    async::Subscription _startedSub;
-    async::Subscription _pausedSub;
-    async::Subscription _idleSub;
-    async::Subscription _stoppedSub;
-    async::Subscription _preparingSub;
-    async::Subscription _seekUpdateSub;
+    audio::Transport _lastTransport = audio::Transport::Idle;
+    std::chrono::milliseconds _lastElapsed{0};
+    std::chrono::milliseconds _lastDuration{0};
+
+    async::Subscription _snapshotSub;
+    async::Subscription _seekPreviewSub;
   };
 } // namespace ao::uimodel

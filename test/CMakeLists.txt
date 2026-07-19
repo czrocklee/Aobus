@@ -270,12 +270,13 @@ add_executable(ao_core_test
     unit/runtime/playback/PreparedNextRegistryTest.cpp
     unit/runtime/playback/ProjectionAnchorTest.cpp
     unit/runtime/playback/ShuffleHistoryTest.cpp
-    unit/runtime/PlaybackServiceControlTest.cpp
-    unit/runtime/PlaybackServiceOutputTest.cpp
-    unit/runtime/PlaybackServiceSelectionTest.cpp
     unit/runtime/PlaybackServiceTest.cpp
-    unit/runtime/PlaybackServiceTokenTest.cpp
-    unit/runtime/PlaybackSequenceServiceTest.cpp
+    unit/runtime/PlaybackTransportControlTest.cpp
+    unit/runtime/PlaybackTransportOutputTest.cpp
+    unit/runtime/PlaybackTransportSelectionTest.cpp
+    unit/runtime/PlaybackTransportTest.cpp
+    unit/runtime/PlaybackTransportTokenTest.cpp
+    unit/runtime/PlaybackSuccessionTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp

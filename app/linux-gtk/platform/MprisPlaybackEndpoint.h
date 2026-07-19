@@ -5,9 +5,9 @@
 
 #include "platform/MprisBridge.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/PlaybackSequenceService.h>
-#include <ao/rt/PlaybackService.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
@@ -23,10 +23,9 @@ namespace ao::gtk::platform
   {
   public:
     MprisPlaybackEndpoint(rt::PlaybackService& playback,
-                          rt::PlaybackSequenceService& sequence,
                           uimodel::PlaybackCommandSurface& commands,
                           MprisBridge::Callbacks& callbacks)
-      : _playback{playback}, _sequence{sequence}, _commands{commands}, _callbacks{callbacks}
+      : _playback{playback}, _playbackCommands{playback.commands()}, _commands{commands}, _callbacks{callbacks}
     {
     }
 
@@ -60,7 +59,7 @@ namespace ao::gtk::platform
 
     bool dispatchSeek(std::int64_t const offsetUs)
     {
-      auto const state = _playback.state();
+      auto const state = _playback.snapshot().transport;
 
       if (state.nowPlaying.trackId == kInvalidTrackId)
       {
@@ -73,13 +72,13 @@ namespace ao::gtk::platform
         return true;
       }
 
-      _playback.seek(MprisBridge::seekTargetElapsed(state, offsetUs));
+      _playbackCommands.seek(MprisBridge::seekTargetElapsed(state, offsetUs));
       return true;
     }
 
     bool dispatchSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
     {
-      auto const state = _playback.state();
+      auto const state = _playback.snapshot().transport;
 
       if (state.nowPlaying.trackId == kInvalidTrackId)
       {
@@ -103,7 +102,7 @@ namespace ao::gtk::platform
         return true;
       }
 
-      _playback.seek(elapsed);
+      _playbackCommands.seek(elapsed);
       return true;
     }
 
@@ -124,13 +123,13 @@ namespace ao::gtk::platform
 
     bool dispatchSetVolume(double const volume)
     {
-      _playback.setVolume(static_cast<float>(volume));
+      _playbackCommands.setVolume(static_cast<float>(volume));
       return true;
     }
 
     bool dispatchSetShuffle(bool const shuffle)
     {
-      _sequence.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
+      _playbackCommands.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
       return true;
     }
 
@@ -143,7 +142,7 @@ namespace ao::gtk::platform
         return false;
       }
 
-      _sequence.setRepeatMode(*optMode);
+      _playbackCommands.setRepeatMode(*optMode);
       return true;
     }
 
@@ -178,7 +177,7 @@ namespace ao::gtk::platform
     }
 
   private:
-    static bool isRelativeSeekPastEnd(rt::PlaybackState const& state, std::int64_t const offsetUs) noexcept
+    static bool isRelativeSeekPastEnd(rt::PlaybackTransportSnapshot const& state, std::int64_t const offsetUs) noexcept
     {
       if (state.duration <= std::chrono::milliseconds{0} || offsetUs <= 0)
       {
@@ -241,7 +240,7 @@ namespace ao::gtk::platform
     }
 
     rt::PlaybackService& _playback;
-    rt::PlaybackSequenceService& _sequence;
+    rt::PlaybackCommands& _playbackCommands;
     uimodel::PlaybackCommandSurface& _commands;
     MprisBridge::Callbacks& _callbacks;
   };

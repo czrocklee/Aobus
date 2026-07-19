@@ -3,7 +3,7 @@
 
 #include "playback/VolumeControlWidget.h"
 
-#include <ao/rt/PlaybackService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <gdk/gdk.h>
@@ -37,8 +37,8 @@ namespace ao::gtk
     }
   } // namespace
 
-  VolumeControlWidget::VolumeControlWidget(rt::PlaybackService& playbackService)
-    : _volumeViewModel{playbackService, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
+  VolumeControlWidget::VolumeControlWidget(rt::PlaybackService& playback)
+    : _volumeViewModel{playback, [this](ao::uimodel::VolumeViewState const& state) { applyState(state); }}
   {
     _button.set_child(_icon);
     _button.set_valign(Gtk::Align::CENTER);

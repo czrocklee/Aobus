@@ -29,10 +29,10 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
@@ -177,7 +177,6 @@ namespace ao::gtk
     , _actionRegistry{}
     , _trackRowCache{dependencies.trackRowCache}
     , _imageCache{dependencies.imageCache}
-    , _playbackSequence{dependencies.playbackSequence}
     , _playbackCommandSurface{dependencies.playbackCommandSurface}
     , _tagEditController{dependencies.tagEditController}
     , _importExportActions{dependencies.importExportActions}
@@ -213,13 +212,8 @@ namespace ao::gtk
 
     auto const hasActiveSequence = [this](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
     {
-      if (_playbackSequence != nullptr)
-      {
-        return uimodel::LayoutActionAvailability{
-          .enabled = _playbackSequence->state().currentTrackId != kInvalidTrackId, .disabledReason = ""};
-      }
-
-      return uimodel::LayoutActionAvailability{.enabled = false, .disabledReason = ""};
+      return uimodel::LayoutActionAvailability{
+        .enabled = _runtime.playback().snapshot().succession.currentTrackId != kInvalidTrackId, .disabledReason = ""};
     };
 
     registerPlaybackActions(registerAction);
@@ -416,7 +410,7 @@ namespace ao::gtk
       "Reveal Track",
       "Workspace",
       uimodel::LayoutActionCapability::None,
-      [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().revealPlayingTrack(); },
+      [](layout::ActionActivationContext& ctx) { ctx.runtime.playback().commands().revealPlayingTrack(); },
       hasActiveSequence);
   }
 
@@ -510,7 +504,6 @@ namespace ao::gtk
     auto const dependencies = GtkUiDependencies{
       .trackRowCache = _trackRowCache,
       .imageCache = _imageCache,
-      .playbackSequence = _playbackSequence,
       .playbackCommandSurface = _playbackCommandSurface,
       .tagEditController = _tagEditController,
       .importExportActions = _importExportActions,

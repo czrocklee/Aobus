@@ -18,10 +18,11 @@ add_library(ao_app_runtime STATIC
   runtime/source/IndexedTrackSequence.cpp
     runtime/source/CachedListSource.cpp
     runtime/ConfigStore.cpp
-    runtime/PlaybackService.cpp
-    runtime/PlaybackSequenceService.cpp
+    runtime/playback/PlaybackTransport.cpp
+    runtime/playback/PlaybackSuccession.cpp
     runtime/PlaybackSessionYamlSchema.cpp
     runtime/PlaybackSessionPersistence.cpp
+    runtime/playback/PlaybackService.cpp
     runtime/playback/PlaybackCursor.cpp
     runtime/playback/PlaybackCursorSession.cpp
     runtime/playback/PlaybackRestartDeadline.cpp
@@ -173,6 +174,8 @@ set(AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX "\"([.]aobus|data[.]mdb)")
 # vocabulary without rejecting adjacent type or namespace names.
 set(AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX
   "#[ \t]*include[ \t]*[<\\\"]ao/rt/(Signal|Subscription)[.]h[>\\\"]|(^|[^A-Za-z0-9_:])((::)?ao::rt::|rt::)(Signal|Subscription)([^A-Za-z0-9_]|$)")
+set(AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX
+  "(^|[^A-Za-z0-9_])(PlaybackTransport|PlaybackSuccession)([^A-Za-z0-9_]|$)")
 
 foreach(AO_LEGACY_SIGNAL_SPELLING IN ITEMS "rt::Signal" "ao::rt::Subscription" "::ao::rt::Signal")
   if(NOT "${AO_LEGACY_SIGNAL_SPELLING}" MATCHES "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}")
@@ -189,6 +192,23 @@ foreach(AO_ADJACENT_SIGNAL_SPELLING IN ITEMS
     "other::ao::rt::Signal")
   if("${AO_ADJACENT_SIGNAL_SPELLING}" MATCHES "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}")
     message(FATAL_ERROR "Signal guardrail rejects adjacent vocabulary '${AO_ADJACENT_SIGNAL_SPELLING}'")
+  endif()
+endforeach()
+
+foreach(AO_INTERNAL_PLAYBACK_SPELLING IN ITEMS
+    "PlaybackTransport"
+    "ao::rt::PlaybackSuccession"
+    "runtime/playback/PlaybackTransport.h")
+  if(NOT "${AO_INTERNAL_PLAYBACK_SPELLING}" MATCHES "${AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX}")
+    message(FATAL_ERROR "Playback boundary guardrail does not reject '${AO_INTERNAL_PLAYBACK_SPELLING}'")
+  endif()
+endforeach()
+
+foreach(AO_PUBLIC_PLAYBACK_SPELLING IN ITEMS
+    "PlaybackTransportSnapshot"
+    "PlaybackSuccessionSnapshot")
+  if("${AO_PUBLIC_PLAYBACK_SPELLING}" MATCHES "${AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX}")
+    message(FATAL_ERROR "Playback boundary guardrail rejects public value '${AO_PUBLIC_PLAYBACK_SPELLING}'")
   endif()
 endforeach()
 set(AO_FORBIDDEN_PLATFORM_UI_INCLUDE_REGEX
@@ -228,6 +248,11 @@ ao_write_guardrail_regex(
   AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX_FILE
   "application-signal-primitive"
   "${AO_FORBIDDEN_APPLICATION_SIGNAL_PRIMITIVE_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX_FILE
+  "internal-playback"
+  "${AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX}"
 )
 ao_write_guardrail_regex(
   AO_FORBIDDEN_MANAGED_STATE_MECHANISM_REGEX_FILE
@@ -276,6 +301,13 @@ foreach(AO_LEGACY_SIGNAL_HEADER IN ITEMS Signal.h Subscription.h)
   endif()
 endforeach()
 
+foreach(AO_LEGACY_PLAYBACK_HEADER IN ITEMS PlaybackService.h PlaybackSequenceService.h)
+  if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/ao/rt/${AO_LEGACY_PLAYBACK_HEADER}")
+    message(FATAL_ERROR
+      "Internal playback owners must not be public headers; remove app/include/ao/rt/${AO_LEGACY_PLAYBACK_HEADER}")
+  endif()
+endforeach()
+
 add_custom_target(ao_shared_signal_boundary_check
   COMMAND ${CMAKE_COMMAND}
           "-DROOTS=${CMAKE_SOURCE_DIR}/app;${CMAKE_SOURCE_DIR}/test"
@@ -287,6 +319,18 @@ add_custom_target(ao_shared_signal_boundary_check
 )
 
 add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
+
+add_custom_target(ao_playback_internal_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/include/ao/uimodel;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking internal playback owners do not leak into public or consumer layers"
+  VERBATIM
+)
+
+add_dependencies(ao_app_runtime ao_playback_internal_boundary_check)
 
 add_custom_target(ao_presentation_vocabulary_boundary_check
   COMMAND ${CMAKE_COMMAND}
@@ -426,6 +470,7 @@ add_custom_target(ao_layering_boundary_report
     ao_core_yaml_domain_boundary_check
     ao_frontend_library_path_boundary_check
     ao_managed_state_schema_boundary_check
+    ao_playback_internal_boundary_check
     ao_presentation_vocabulary_boundary_check
     ao_rt_public_boundary_report
     ao_shared_signal_boundary_check

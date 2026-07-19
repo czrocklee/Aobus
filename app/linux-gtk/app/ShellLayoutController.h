@@ -41,7 +41,6 @@
 namespace ao::rt
 {
   class AppRuntime;
-  class PlaybackSequenceService;
 }
 
 namespace ao::uimodel
@@ -163,7 +162,6 @@ namespace ao::gtk
     layout::LayoutRuntimeState _runtimeState;
     TrackRowCache* _trackRowCache;
     ImageCache* _imageCache;
-    rt::PlaybackSequenceService* _playbackSequence;
     uimodel::PlaybackCommandSurface* _playbackCommandSurface;
     TagEditController* _tagEditController;
     portal::ImportExportActions* _importExportActions;

@@ -10,12 +10,12 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -65,7 +65,7 @@ namespace ao::gtk::test
 
     SECTION("track activation starts from the owning view identity")
     {
-      rt::test::addReadyAudioProvider(runtime.playback());
+      rt::test::addReadyAudioProvider(runtime);
       auto const trackId = addRuntimeTrack(
         runtime, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       runtime.reloadAllTracks();
@@ -80,9 +80,10 @@ namespace ao::gtk::test
       REQUIRE(context != nullptr);
       context->pagePtr->signalTrackActivated().emit(trackId);
 
-      CHECK(runtime.playbackSequence().state().currentTrackId == trackId);
-      CHECK(runtime.playbackSequence().state().sourceListId == rt::kAllTracksListId);
-      CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
+      auto const snapshot = runtime.playback().snapshot();
+      CHECK(snapshot.succession.currentTrackId == trackId);
+      CHECK(snapshot.succession.sourceListId == rt::kAllTracksListId);
+      CHECK(snapshot.transport.nowPlaying.trackId == trackId);
     }
 
     SECTION("reveal synchronizes a missing workspace page before selecting the track")

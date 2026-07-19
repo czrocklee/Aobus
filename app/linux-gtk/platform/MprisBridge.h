@@ -6,7 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PlaybackState.h>
+#include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
 #include <cstdint>
@@ -18,7 +18,6 @@
 
 namespace ao::rt
 {
-  class PlaybackSequenceService;
   class PlaybackService;
 }
 
@@ -52,10 +51,7 @@ namespace ao::gtk::platform
       std::int64_t lengthUs = 0;
     };
 
-    MprisBridge(rt::PlaybackService& playback,
-                rt::PlaybackSequenceService& sequence,
-                uimodel::PlaybackCommandSurface& commands,
-                Callbacks callbacks);
+    MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands, Callbacks callbacks);
     ~MprisBridge();
 
     MprisBridge(MprisBridge const&) = delete;
@@ -72,11 +68,12 @@ namespace ao::gtk::platform
     static std::optional<rt::RepeatMode> repeatModeForLoopStatus(std::string_view loopStatus) noexcept;
     static std::int64_t microsecondsFromMilliseconds(std::chrono::milliseconds duration) noexcept;
     static std::chrono::milliseconds fromMprisMicroseconds(std::int64_t value) noexcept;
-    static std::chrono::milliseconds clampElapsed(rt::PlaybackState const& state,
+    static std::chrono::milliseconds clampElapsed(rt::PlaybackTransportSnapshot const& state,
                                                   std::chrono::milliseconds elapsed) noexcept;
-    static std::chrono::milliseconds seekTargetElapsed(rt::PlaybackState const& state, std::int64_t offsetUs) noexcept;
+    static std::chrono::milliseconds seekTargetElapsed(rt::PlaybackTransportSnapshot const& state,
+                                                       std::int64_t offsetUs) noexcept;
     static std::string trackObjectPath(TrackId trackId);
-    static MetadataSnapshot metadataForState(rt::PlaybackState const& state, std::string artUrl = {});
+    static MetadataSnapshot metadataForState(rt::PlaybackTransportSnapshot const& state, std::string artUrl = {});
 
   private:
     struct Impl;

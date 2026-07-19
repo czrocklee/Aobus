@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include "PlaybackFailure.h"
-#include "PlaybackState.h"
-#include "PreparedPlayback.h"
-#include "ViewIds.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/rt/PlaybackFailure.h>
+#include <ao/rt/PlaybackState.h>
+#include <ao/rt/PreparedPlayback.h>
+#include <ao/rt/ViewIds.h>
 
 #include <chrono>
 #include <cstdint>
@@ -38,13 +38,34 @@ namespace ao::audio
 
 namespace ao::rt
 {
+  class PlaybackBootstrap;
   class PlaybackSessionPersistence;
-  class PlaybackSequenceService;
-  class AppRuntime;
+  class PlaybackSuccession;
   class NotificationService;
   struct PlaybackTransportSessionState;
 
-  class PlaybackService final
+  /** Move-only, non-published explicit playback candidate. */
+  class PreparedPlaybackStart final
+  {
+  public:
+    ~PreparedPlaybackStart();
+
+    PreparedPlaybackStart(PreparedPlaybackStart const&) = delete;
+    PreparedPlaybackStart& operator=(PreparedPlaybackStart const&) = delete;
+    PreparedPlaybackStart(PreparedPlaybackStart&&) noexcept;
+    PreparedPlaybackStart& operator=(PreparedPlaybackStart&&) noexcept;
+
+  private:
+    struct Impl;
+
+    explicit PreparedPlaybackStart(std::unique_ptr<Impl> implPtr);
+
+    std::unique_ptr<Impl> _implPtr;
+
+    friend class PlaybackTransport;
+  };
+
+  class PlaybackTransport final
   {
   public:
     struct NowPlayingChanged final
@@ -85,18 +106,18 @@ namespace ao::rt
       audio::PlaybackInput input{};
     };
 
-    // PlaybackService takes exclusive ownership of its direct audio collaborator.
+    // PlaybackTransport takes exclusive ownership of its direct audio collaborator.
     // The composition root configures Player before transferring ownership.
-    PlaybackService(async::Executor& executor,
-                    library::MusicLibrary const& library,
-                    NotificationService& notifications,
-                    std::unique_ptr<audio::Player> playerPtr);
-    ~PlaybackService();
+    PlaybackTransport(async::Executor& executor,
+                      library::MusicLibrary const& library,
+                      NotificationService& notifications,
+                      std::unique_ptr<audio::Player> playerPtr);
+    ~PlaybackTransport();
 
-    PlaybackService(PlaybackService const&) = delete;
-    PlaybackService& operator=(PlaybackService const&) = delete;
-    PlaybackService(PlaybackService&&) = delete;
-    PlaybackService& operator=(PlaybackService&&) = delete;
+    PlaybackTransport(PlaybackTransport const&) = delete;
+    PlaybackTransport& operator=(PlaybackTransport const&) = delete;
+    PlaybackTransport(PlaybackTransport&&) = delete;
+    PlaybackTransport& operator=(PlaybackTransport&&) = delete;
 
     // Returns the latest published state. Control methods refresh this snapshot
     // synchronously before they return, so after a control call returns state()
@@ -111,7 +132,7 @@ namespace ao::rt
     // onXxx() methods must be called on the executor's owning thread, and the
     // returned subscription must likewise be reset on that thread. Handlers are
     // invoked on the executor thread when the matching signal is emitted. A
-    // handler must not synchronously destroy this service; Debug contracts
+    // handler must not synchronously destroy this transport; Debug contracts
     // require teardown to be deferred to a later executor turn.
 
     async::Subscription onPreparing(std::move_only_function<void()> handler);
@@ -146,9 +167,6 @@ namespace ao::rt
     Result<PreparedNextToken> prepareNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearPreparedNext();
 
-    // Register an audio backend provider. Called by the composition root
-    // (via AppRuntime::addAudioProvider) during bootstrap.
-    void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void pause();
     void resume();
     PreparedCancellationBarrier stop();
@@ -162,25 +180,26 @@ namespace ao::rt
     void revealTrack(TrackId trackId, ViewId preferredViewId = kInvalidViewId, ListId preferredListId = kInvalidListId);
 
   private:
-    friend class AppRuntime;
+    friend class PlaybackBootstrap;
     friend class PlaybackSessionPersistence;
-    friend class PlaybackSequenceService;
+    friend class PlaybackSuccession;
 
-    struct SequencePreparedNextReceipt final
+    struct SuccessionPreparedNextReceipt final
     {
       PreparedNextToken token{};
       std::uint64_t issuedGeneration = 0;
     };
 
     void shutdown() noexcept;
+    void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
     bool isPublishingAcceptedStart() const;
-    Result<SequencePreparedNextReceipt> prepareNextWithReceipt(PlaybackRequest const& request, ListId sourceListId);
-    Result<PlaybackStartReceipt> playSequenceTrack(TrackId trackId, ListId sourceListId);
-    Result<SequencePreparedNextReceipt> prepareSequenceNext(TrackId trackId, ListId sourceListId);
-    std::optional<PreparedNextToken> clearSequencePreparedNext();
-    PreparedCancellationBarrier stopSequence();
+    Result<SuccessionPreparedNextReceipt> prepareNextWithReceipt(PlaybackRequest const& request, ListId sourceListId);
+    Result<PlaybackStartReceipt> playSuccessionTrack(TrackId trackId, ListId sourceListId);
+    Result<SuccessionPreparedNextReceipt> prepareSuccessionNext(TrackId trackId, ListId sourceListId);
+    std::optional<PreparedNextToken> clearSuccessionPreparedNext();
+    PreparedCancellationBarrier stopSuccession();
     PlaybackTransportSessionState playbackTransportSessionState();
     Result<> restorePlaybackTransport(PlaybackTransportSessionState const& session,
                                       std::move_only_function<void(std::chrono::milliseconds) noexcept> beforePublish);

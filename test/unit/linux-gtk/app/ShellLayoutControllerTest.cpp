@@ -15,7 +15,6 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/layout/action/LayoutActionActivation.h>
@@ -122,18 +121,16 @@ namespace ao::gtk::test
     auto const storePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
     auto const componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(tempDir / "layout-state");
     auto themeCoordinator = ThemeCoordinator{};
+    auto& playback = runtime.playback();
     auto commandSurface =
-      uimodel::PlaybackCommandSurface{runtime.playback(),
-                                      runtime.playbackSequence(),
-                                      [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
-    auto controller = ShellLayoutController{runtime,
-                                            window,
-                                            configStorePtr,
-                                            storePtr,
-                                            componentStateStorePtr,
-                                            GtkUiDependencies{.playbackSequence = &runtime.playbackSequence(),
-                                                              .playbackCommandSurface = &commandSurface,
-                                                              .themeCoordinator = &themeCoordinator}};
+      uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+    auto controller = ShellLayoutController{
+      runtime,
+      window,
+      configStorePtr,
+      storePtr,
+      componentStateStorePtr,
+      GtkUiDependencies{.playbackCommandSurface = &commandSurface, .themeCoordinator = &themeCoordinator}};
 
     SECTION("attachToWindow sets child")
     {
@@ -390,16 +387,16 @@ namespace ao::gtk::test
 
     SECTION("playPause resumes restored idle now-playing and stop is transport-gated")
     {
-      rt::test::addReadyAudioProvider(runtime.playback());
+      rt::test::addReadyAudioProvider(runtime);
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
       runtime.reloadAllTracks();
       auto const view = runtime.workspace().navigateTo(rt::kAllTracksListId);
       REQUIRE(view);
-      REQUIRE(runtime.playbackSequence().playFromView(view->activeViewId, trackId));
-      runtime.playback().seek(std::chrono::milliseconds{50});
+      REQUIRE(playback.commands().startFromView(view->activeViewId, trackId));
+      playback.commands().seek(std::chrono::milliseconds{50});
       REQUIRE(runtime.savePlaybackSession());
-      runtime.playback().stop();
+      playback.commands().stop();
       auto const restored = runtime.restorePlaybackSession();
       REQUIRE(restored);
       REQUIRE(restored->restored);
@@ -414,15 +411,15 @@ namespace ao::gtk::test
 
       auto const playPauseResult = controller.activateAction("playback.playPause");
       CHECK(playPauseResult.outcome == uimodel::LayoutActionActivationOutcome::Activated);
-      CHECK(runtime.playback().state().transport == audio::Transport::Playing);
-      CHECK(runtime.playback().state().nowPlaying.trackId == trackId);
+      CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
+      CHECK(playback.snapshot().transport.nowPlaying.trackId == trackId);
 
       controller.refreshExportedActions();
       CHECK(stopActionPtr->property_enabled() == true);
 
       auto const stopResult = controller.activateAction("playback.stop");
       CHECK(stopResult.outcome == uimodel::LayoutActionActivationOutcome::Activated);
-      CHECK(runtime.playback().state().transport == audio::Transport::Idle);
+      CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
     }
 
     SECTION("resetRuntimeLayoutState clears preset state without removing customized layout")
@@ -563,10 +560,9 @@ namespace ao::gtk::test
     auto window = Gtk::ApplicationWindow{};
     window.set_application(appPtr);
     auto themeCoordinator = ThemeCoordinator{};
+    auto& playback = runtime.playback();
     auto commandSurface =
-      uimodel::PlaybackCommandSurface{runtime.playback(),
-                                      runtime.playbackSequence(),
-                                      [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
+      uimodel::PlaybackCommandSurface{playback, [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }};
 
     auto const tempDir = fixture.tempDir().path();
     auto const componentStateDir = tempDir / "layout-state";
@@ -580,14 +576,13 @@ namespace ao::gtk::test
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(componentStateDir);
 
     {
-      auto controller = ShellLayoutController{runtime,
-                                              window,
-                                              std::move(configStorePtr),
-                                              std::move(layoutStorePtr),
-                                              std::move(componentStateStorePtr),
-                                              GtkUiDependencies{.playbackSequence = &runtime.playbackSequence(),
-                                                                .playbackCommandSurface = &commandSurface,
-                                                                .themeCoordinator = &themeCoordinator}};
+      auto controller = ShellLayoutController{
+        runtime,
+        window,
+        std::move(configStorePtr),
+        std::move(layoutStorePtr),
+        std::move(componentStateStorePtr),
+        GtkUiDependencies{.playbackCommandSurface = &commandSurface, .themeCoordinator = &themeCoordinator}};
       controller.loadLayout(*configStore);
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
