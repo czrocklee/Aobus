@@ -8,11 +8,13 @@
 #include <ao/yaml/Serialization.h>
 
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -58,7 +60,10 @@ namespace ao::rt
     ConfigStore(ConfigStore&&) = delete;
     ConfigStore& operator=(ConfigStore&&) = delete;
 
-    explicit ConfigStore(std::filesystem::path filePath, OpenMode mode = OpenMode::ReadWrite);
+    /// @param optMaxFileBytes Optional ceiling applied before parsing and before replacement.
+    explicit ConfigStore(std::filesystem::path filePath,
+                         OpenMode mode = OpenMode::ReadWrite,
+                         std::optional<std::size_t> optMaxFileBytes = std::nullopt);
 
     Result<bool> contains(std::string_view group);
     Result<> removeGroup(std::string_view group);
@@ -201,6 +206,7 @@ namespace ao::rt
     OpenMode _mode = OpenMode::ReadWrite;
     ryml::Tree _root;
     std::vector<char> _inputBuffer;
+    std::optional<std::size_t> _optMaxFileBytes;
     bool _loaded = false;
   };
 } // namespace ao::rt

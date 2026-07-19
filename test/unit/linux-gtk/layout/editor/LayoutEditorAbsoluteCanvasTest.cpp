@@ -9,9 +9,11 @@
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
+#include "test/unit/TestUtils.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -46,6 +48,7 @@ namespace ao::gtk::layout::editor::test
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     SECTION("absoluteCanvas descriptor is registered as container")
@@ -64,7 +67,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "absoluteCanvas";
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, ao::test::requireValue(prepareLayout(doc)));
 
       CHECK(compPtr != nullptr);
     }
@@ -85,7 +88,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.children.push_back(std::move(child));
 
       auto layoutRuntime = LayoutRuntime{registry};
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, ao::test::requireValue(prepareLayout(doc)));
 
       CHECK(compPtr != nullptr);
     }
@@ -110,6 +113,7 @@ namespace ao::gtk::layout::editor::test
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     auto doc = LayoutDocument{};
@@ -125,7 +129,7 @@ namespace ao::gtk::layout::editor::test
     doc.root.children.push_back(std::move(child));
 
     auto layoutRuntime = LayoutRuntime{registry};
-    auto const compPtr = layoutRuntime.build(ctx, doc);
+    auto const compPtr = layoutRuntime.build(ctx, ao::test::requireValue(prepareLayout(doc)));
 
     REQUIRE(compPtr != nullptr);
 

@@ -5,7 +5,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
-#include <ao/uimodel/layout/document/LayoutTemplateExpansion.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/utility/TransparentStringHash.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -157,19 +157,18 @@ namespace ao::uimodel
     }
   }
 
-  void visitExpandedLayoutNodes(LayoutDocument const& doc, LayoutNodeVisitor const& visitor)
+  void visitExpandedLayoutNodes(PreparedLayout const& layout, LayoutNodeVisitor const& visitor)
   {
-    auto const expandedRoot = expandLayoutTemplates(doc);
-    visitNodeRecursive(expandedRoot, visitor);
+    visitNodeRecursive(layout.effectiveRoot(), visitor);
   }
 
-  std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(LayoutDocument const& doc)
+  std::vector<LayoutNodeIdDiagnostic> validateStatefulLayoutNodeIds(PreparedLayout const& layout)
   {
     auto diagnostics = std::vector<LayoutNodeIdDiagnostic>{};
     auto seenNodeTypesById = LayoutNodeTypesById{};
 
     visitExpandedLayoutNodes(
-      doc,
+      layout,
       [&diagnostics, &seenNodeTypesById](LayoutNode const& node)
       {
         if (!isStatefulLayoutComponentType(node.type))

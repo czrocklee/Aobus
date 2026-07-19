@@ -64,7 +64,7 @@ Different-root selection prepares the current pair, removes it, records the new 
 The layout editor uses:
 
 - `Apply` to preview the current draft;
-- `Save` to persist the draft and then restore the persisted application theme;
+- `Save` to request persistence, close only after that workflow succeeds, and then restore the persisted application theme;
 - `Cancel` to abandon the draft and restore the theme active when the editor opened.
 
 Its theme selector is preview-only; theme persistence belongs to Preferences.
@@ -74,7 +74,8 @@ Its theme selector is preview-only; theme persistence belongs to Preferences.
 Native file-dialog cancellation or dismissal is silent and creates no replacement.
 Other native file-dialog `Glib::Error` values are logged by the frontend owner.
 Active-library preparation failure leaves the old pair visible, as specified by the active-library lifecycle.
-Dialog validation failure retains the draft and keeps the editor open.
+Layout-editor validation or persistence failure retains the draft and keeps the editor open.
+A persistence failure presents a transient error message; partial multi-preset persistence and retry behavior belong to the [shell layout lifecycle](../shell/layout-lifecycle.md).
 
 Destroying a parent window also destroys its application-owned child dialogs and releases their signal connections; a native file dialog can retain its GTK-owned async state until the toolkit completion runs.
 Object-editor cancellation is explicit draft abandonment, not runtime cancellation of an already committed command.
@@ -108,6 +109,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`MainContextCallbackScopeTest.cpp`](../../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects callback invalidation before the configured close action.
 - [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects chooser handoff, scan policy, and export-mode response invalidation.
 - Layout-editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect draft, preview, and action behavior.
+- [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects persistence-failure feedback and editor retention.
 
 ## Related documents
 

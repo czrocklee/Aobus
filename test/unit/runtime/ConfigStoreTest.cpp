@@ -158,6 +158,38 @@ namespace ao::rt::test
     }
   }
 
+  TEST_CASE("ConfigStore - enforces an optional backing-file byte limit", "[runtime][unit][config]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const configPath = tempDir.path() / "config.yaml";
+
+    SECTION("An oversized backing file is rejected before parsing")
+    {
+      auto const original = std::string(128, 'x');
+      writeFile(configPath, original);
+      auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly, 64};
+      auto target = State{.count = 99};
+      auto const loaded = store.load("owned", target, StateYamlSchema{});
+
+      REQUIRE_FALSE(loaded);
+      CHECK(loaded.error().code == Error::Code::ValueTooLarge);
+      CHECK(target.count == 99);
+      CHECK(ao::test::readFile(configPath) == original);
+    }
+
+    SECTION("An oversized serialized candidate does not replace the backing file")
+    {
+      auto const original = std::string{"owned:\n  count: 1\n  name: ok\n  enabled: true\n"};
+      writeFile(configPath, original);
+      auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadWrite, original.size()};
+      auto const saved = store.save("added", State{.name = std::string(128, 'x')}, StateYamlSchema{});
+
+      REQUIRE_FALSE(saved);
+      CHECK(saved.error().code == Error::Code::ValueTooLarge);
+      CHECK(ao::test::readFile(configPath) == original);
+    }
+  }
+
   TEST_CASE("ConfigStore - passes the caller seed only to the selected schema", "[runtime][unit][config]")
   {
     auto const tempDir = ao::test::TempDir{};

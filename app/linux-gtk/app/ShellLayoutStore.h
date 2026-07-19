@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
+
 #include <filesystem>
 #include <optional>
 #include <string_view>
@@ -20,11 +23,13 @@ namespace ao::gtk
    * Exclusively owns the layouts/ directory next to the global config.
    * One file per preset: layouts/<presetId>.yaml. Absence of a file means
    * "not customized" — callers fall back to the built-in preset.
+   * Existing rejected files are preserved instead of being rewritten.
    */
   class ShellLayoutStore final
   {
   public:
-    explicit ShellLayoutStore(std::filesystem::path layoutsDir);
+    explicit ShellLayoutStore(std::filesystem::path layoutsDir,
+                              uimodel::LayoutDocumentLimits limits = uimodel::LayoutDocumentLimits{});
     ~ShellLayoutStore();
 
     ShellLayoutStore(ShellLayoutStore const&) = delete;
@@ -32,13 +37,16 @@ namespace ao::gtk
     ShellLayoutStore(ShellLayoutStore&&) noexcept;
     ShellLayoutStore& operator=(ShellLayoutStore&&) noexcept;
 
-    std::optional<uimodel::LayoutDocument> load(std::string_view presetId) const;
-    void save(uimodel::LayoutDocument const& doc, std::string_view presetId);
-    void remove(std::string_view presetId);
+    Result<std::optional<uimodel::LayoutDocument>> load(std::string_view presetId) const;
+    Result<> save(uimodel::LayoutDocument const& doc, std::string_view presetId);
+    Result<> remove(std::string_view presetId);
+
+    uimodel::LayoutDocumentLimits const& limits() const noexcept { return _limits; }
 
   private:
     std::filesystem::path filePath(std::string_view presetId) const;
 
     std::filesystem::path _layoutsDir;
+    uimodel::LayoutDocumentLimits _limits;
   };
 } // namespace ao::gtk

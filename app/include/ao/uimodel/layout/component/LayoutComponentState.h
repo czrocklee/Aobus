@@ -15,6 +15,7 @@
 namespace ao::uimodel
 {
   struct LayoutDocument;
+  class PreparedLayout;
   inline constexpr std::uint32_t kStateFileVersion = 1;
   inline constexpr std::uint32_t kStateEntryVersion = 1;
 
@@ -43,5 +44,5 @@ namespace ao::uimodel
   std::optional<LayoutComponentStateEntry> resolveComponentState(LayoutComponentStateDocument const& stateDoc,
                                                                  LayoutNode const& node);
 
-  void pruneComponentState(LayoutComponentStateDocument& stateDoc, LayoutDocument const& effectiveDoc);
+  void pruneComponentState(LayoutComponentStateDocument& stateDoc, PreparedLayout const& layout);
 } // namespace ao::uimodel

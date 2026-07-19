@@ -7,6 +7,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
+#include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -133,6 +134,7 @@ namespace ao::gtk::layout::editor::test
       {
         saveResult = res;
         ++saveCount;
+        return Result<>{};
       });
 
     dialog.response(Gtk::ResponseType::OK);
@@ -169,6 +171,7 @@ namespace ao::gtk::layout::editor::test
       {
         saveResult = res;
         ++saveCount;
+        return Result<>{};
       });
 
     dialog.response(Gtk::ResponseType::OK);
@@ -221,6 +224,7 @@ namespace ao::gtk::layout::editor::test
       {
         saveResult = res;
         ++saveCount;
+        return Result<>{};
       });
 
     dialog.response(Gtk::ResponseType::OK);
@@ -247,6 +251,7 @@ namespace ao::gtk::layout::editor::test
       {
         saveResult = res;
         ++saveCount;
+        return Result<>{};
       });
 
     dialog.response(Gtk::ResponseType::OK);
@@ -276,6 +281,7 @@ namespace ao::gtk::layout::editor::test
       {
         saveResult = res;
         ++saveCount;
+        return Result<>{};
       });
 
     dialog.response(Gtk::ResponseType::OK);

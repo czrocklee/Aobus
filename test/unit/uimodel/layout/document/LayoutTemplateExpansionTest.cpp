@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/TestUtils.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/document/LayoutTemplateExpansion.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -13,6 +14,15 @@
 
 namespace ao::uimodel::test
 {
+  namespace
+  {
+    LayoutNode expandedRoot(LayoutDocument const& document)
+    {
+      auto prepared = ao::test::requireValue(prepareLayout(document));
+      return prepared.effectiveRoot();
+    }
+  } // namespace
+
   TEST_CASE("LayoutTemplateExpansion - expands registered templates", "[uimodel][unit][layout][document]")
   {
     auto doc = LayoutDocument{};
@@ -24,7 +34,7 @@ namespace ao::uimodel::test
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"playback.transportGroup"}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "box");
     CHECK(expanded.children.size() == 2);
@@ -41,7 +51,7 @@ namespace ao::uimodel::test
     doc.root.id = "my-override-id";
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "spacer");
     CHECK(expanded.id == "my-override-id");
@@ -56,7 +66,7 @@ namespace ao::uimodel::test
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
     doc.root.layout["vexpand"] = LayoutValue{true};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "box");
     CHECK(expanded.layout.at("hexpand").asBool() == true);
@@ -74,7 +84,7 @@ namespace ao::uimodel::test
     doc.root.props["label"] = LayoutValue{std::string{"Override"}};
     doc.root.props["icon"] = LayoutValue{std::string{"emblem-system"}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.props.at("label").asString() == "Override");
     CHECK(expanded.props.at("icon").asString() == "emblem-system");
@@ -91,7 +101,7 @@ namespace ao::uimodel::test
     doc.root.props["templateId"] = LayoutValue{std::string{"my.template"}};
     doc.root.children = {LayoutNode{.type = "playback.playPauseButton"}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     REQUIRE(expanded.children.size() == 2);
     CHECK(expanded.children[0].type == "spacer");
@@ -107,7 +117,7 @@ namespace ao::uimodel::test
     doc.root.children = {
       LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"inner.template"}}}}}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     REQUIRE(expanded.children.size() == 1);
     CHECK(expanded.children[0].type == "spacer");
@@ -126,7 +136,7 @@ namespace ao::uimodel::test
     auto useSiteTooltip = LayoutNode{.type = "my.useSiteTooltip"};
     doc.root.optTooltip = BoxedLayoutNode{std::move(useSiteTooltip)};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "app.actionButton");
     REQUIRE(expanded.optTooltip);
@@ -144,7 +154,7 @@ namespace ao::uimodel::test
       LayoutNode{.type = "template", .props = {{"templateId", LayoutValue{std::string{"inner.template"}}}}};
     doc.root.optTooltip = BoxedLayoutNode{std::move(tooltipNode)};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "box");
     REQUIRE(expanded.optTooltip);
@@ -159,7 +169,7 @@ namespace ao::uimodel::test
     doc.root.type = "template";
     // No templateId prop
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "[TemplateError] Missing templateId");
   }
@@ -171,7 +181,7 @@ namespace ao::uimodel::test
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"nonexistent"}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "[TemplateError] Unknown template: nonexistent");
   }
@@ -186,7 +196,7 @@ namespace ao::uimodel::test
     doc.root.type = "template";
     doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
 
-    auto const expanded = expandLayoutTemplates(doc);
+    auto const expanded = expandedRoot(doc);
 
     CHECK(expanded.type == "[TemplateError] Recursive template loop: selfRef -> selfRef");
   }

@@ -16,6 +16,9 @@ namespace ao::uimodel
 
 namespace ao::gtk::layout
 {
+  using LayoutNodeMovedFn =
+    std::function<void(std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)>;
+
   /**
    * @brief Mutable layout runtime state shared across a shell's whole lifetime.
    *
@@ -43,6 +46,6 @@ namespace ao::gtk::layout
     std::uint64_t componentStateGeneration = 1;
 
     bool editMode = false;
-    std::function<void(std::string const& nodeId, std::int32_t xPosition, std::int32_t yPosition)> onNodeMoved{};
+    LayoutNodeMovedFn onNodeMoved{};
   };
 } // namespace ao::gtk::layout

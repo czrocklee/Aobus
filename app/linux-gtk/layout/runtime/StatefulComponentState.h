@@ -35,12 +35,12 @@ namespace ao::gtk::layout
       : _state{&ctx.runtimeState}
       , _componentId{node.id}
       , _type{type}
-      , _presetId{ctx.runtimeState.activePresetId}
+      , _presetId{ctx.buildState.presetId()}
       , _baselineHash{uimodel::componentBaselineHash(node)}
-      , _capturedGeneration{ctx.runtimeState.componentStateGeneration}
-      , _persistable{!ctx.runtimeState.editMode && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
-                     !ctx.runtimeState.activePresetId.empty() && ctx.runtimeState.componentStateStore != nullptr}
-      , _optRestored{uimodel::resolveComponentState(ctx.runtimeState.componentState, node)}
+      , _capturedGeneration{ctx.buildState.generation()}
+      , _persistable{!ctx.buildState.isEditMode() && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
+                     !ctx.buildState.presetId().empty() && ctx.runtimeState.componentStateStore != nullptr}
+      , _optRestored{uimodel::resolveComponentState(ctx.buildState.document(), node)}
     {
     }
 

@@ -13,7 +13,7 @@
 namespace ao::uimodel
 {
   struct LayoutComponentStateDocument;
-  struct LayoutDocument;
+  class PreparedLayout;
 }
 
 namespace ao::gtk
@@ -31,7 +31,7 @@ namespace ao::gtk
 
     std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override;
     void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override;
-    bool prune(std::string_view presetId, uimodel::LayoutDocument const& effectiveDoc) override;
+    bool prune(std::string_view presetId, uimodel::PreparedLayout const& layout) override;
     bool removePreset(std::string_view presetId) override;
 
   private:

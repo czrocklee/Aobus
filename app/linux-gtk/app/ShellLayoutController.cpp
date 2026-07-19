@@ -21,6 +21,7 @@
 #include "playback/OutputDevicePopover.h"
 #include "tag/TagEditController.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
@@ -40,6 +41,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
@@ -50,9 +52,13 @@
 #include <gtkmm/popovermenu.h>
 #include <gtkmm/window.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <exception>
+#include <expected>
+#include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -68,6 +74,7 @@ namespace ao::gtk
     {
       std::string presetId;
       uimodel::LayoutDocument document;
+      uimodel::PreparedLayout preparedLayout;
       uimodel::LayoutComponentStateDocument componentState;
     };
 
@@ -89,14 +96,53 @@ namespace ao::gtk
       }
 
       auto const presetId = layout::presetIdFromString(selection.presetId);
-      auto optDoc = store.load(selection.presetId);
-      auto doc = optDoc ? std::move(*optDoc) : layout::makeBuiltInLayout(presetId);
+      auto loaded = store.load(selection.presetId);
+      bool usingCustomLayout = false;
+      auto doc = uimodel::LayoutDocument{};
+
+      if (!loaded)
+      {
+        APP_LOG_WARN("ShellLayoutController: Rejected custom layout for preset '{}': {}",
+                     selection.presetId,
+                     loaded.error().message);
+        doc = layout::makeBuiltInLayout(presetId);
+      }
+      else if (*loaded)
+      {
+        usingCustomLayout = true;
+        doc = std::move(**loaded);
+      }
+      else
+      {
+        doc = layout::makeBuiltInLayout(presetId);
+      }
+
+      auto prepared = uimodel::prepareLayout(doc, store.limits());
+
+      if (!prepared && usingCustomLayout)
+      {
+        APP_LOG_WARN("ShellLayoutController: Rejected custom layout for preset '{}': {}",
+                     selection.presetId,
+                     prepared.error().message);
+        doc = layout::makeBuiltInLayout(presetId);
+        prepared = uimodel::prepareLayout(doc, store.limits());
+      }
+
+      if (!prepared)
+      {
+        throwException<Exception>(
+          "Built-in shell layout '{}' is invalid: {}", selection.presetId, prepared.error().message);
+      }
+
       auto stateDoc = componentStateStore == nullptr
                         ? uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId)
                         : componentStateStore->load(selection.presetId)
                             .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(selection.presetId));
 
-      return {.presetId = selection.presetId, .document = std::move(doc), .componentState = std::move(stateDoc)};
+      return {.presetId = selection.presetId,
+              .document = std::move(doc),
+              .preparedLayout = std::move(*prepared),
+              .componentState = std::move(stateDoc)};
     }
 
     uimodel::PlaybackCommandSurface& commandSurface(uimodel::PlaybackCommandSurface* surface)
@@ -457,7 +503,9 @@ namespace ao::gtk
     }
   }
 
-  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc)
+  Result<layout::LayoutHost::PreparedTree> ShellLayoutController::prepareHost(
+    uimodel::PreparedLayout const& preparedLayout,
+    layout::LayoutBuildStateView buildState)
   {
     auto const dependencies = GtkUiDependencies{
       .trackRowCache = _trackRowCache,
@@ -479,8 +527,41 @@ namespace ao::gtk
                                           .runtime = _runtime,
                                           .parentWindow = _parentWindow,
                                           .runtimeState = _runtimeState,
+                                          .buildState = std::move(buildState),
                                           .dependencies = dependencies};
-    _host.setLayout(ctx, doc);
+    return _host.prepare(ctx, preparedLayout);
+  }
+
+  uimodel::LayoutDocumentLimits const& ShellLayoutController::layoutLimits() const noexcept
+  {
+    static auto const kDefaultLimits = uimodel::LayoutDocumentLimits{};
+    return _layoutStorePtr ? _layoutStorePtr->limits() : kDefaultLimits;
+  }
+
+  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc)
+  {
+    rebuildHost(doc, layout::LayoutBuildStateView{_runtimeState});
+  }
+
+  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc, layout::LayoutBuildStateView buildState)
+  {
+    auto prepared = uimodel::prepareLayout(doc, layoutLimits());
+
+    if (!prepared)
+    {
+      APP_LOG_WARN("ShellLayoutController: Rejected layout rebuild: {}", prepared.error().message);
+      return;
+    }
+
+    auto pending = prepareHost(*prepared, std::move(buildState));
+
+    if (!pending)
+    {
+      APP_LOG_ERROR("ShellLayoutController: Failed to prepare layout rebuild: {}", pending.error().message);
+      return;
+    }
+
+    _host.commit(_runtimeState, std::move(*pending));
   }
 
   void ShellLayoutController::loadLayout(AppConfigStore& /*configStore*/)
@@ -540,17 +621,20 @@ namespace ao::gtk
     }
 
     APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-    applyLoadedLayoutWithFaultReporting(
-      std::move(optResult->presetId), std::move(optResult->document), std::move(optResult->componentState));
+    applyLoadedLayoutWithFaultReporting(std::move(optResult->presetId),
+                                        std::move(optResult->document),
+                                        std::move(optResult->preparedLayout),
+                                        std::move(optResult->componentState));
   }
 
   void ShellLayoutController::applyLoadedLayoutWithFaultReporting(std::string presetId,
                                                                   uimodel::LayoutDocument document,
+                                                                  uimodel::PreparedLayout preparedLayout,
                                                                   uimodel::LayoutComponentStateDocument componentState)
   {
     try
     {
-      applyLoadedLayout(std::move(presetId), std::move(document), std::move(componentState));
+      applyLoadedLayout(std::move(presetId), std::move(document), std::move(preparedLayout), std::move(componentState));
     }
     catch (...)
     {
@@ -561,19 +645,25 @@ namespace ao::gtk
 
   void ShellLayoutController::applyLoadedLayout(std::string presetId,
                                                 uimodel::LayoutDocument document,
+                                                uimodel::PreparedLayout preparedLayout,
                                                 uimodel::LayoutComponentStateDocument componentState)
   {
-    _session.applyLoadedLayout(std::move(presetId), std::move(document));
-    auto const snapshot = _session.snapshot();
-    _runtimeState.activePresetId = snapshot.presetId;
-    _runtimeState.componentState = std::move(componentState);
+    auto pending = prepareHost(
+      preparedLayout, layout::LayoutBuildStateView{presetId, componentState, _runtimeState.componentStateGeneration});
 
-    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(snapshot.layout))
+    if (!pending)
+    {
+      APP_LOG_ERROR(
+        "ShellLayoutController: Failed to prepare loaded layout '{}': {}", presetId, pending.error().message);
+      return;
+    }
+
+    for (auto const& diagnostic : uimodel::validateStatefulLayoutNodeIds(preparedLayout))
     {
       if (diagnostic.severity == uimodel::LayoutNodeIdDiagnosticSeverity::Error)
       {
         APP_LOG_ERROR("ShellLayoutController: Layout id error in preset '{}' component '{}' ({}): {}",
-                      snapshot.presetId,
+                      presetId,
                       diagnostic.componentId,
                       diagnostic.componentType,
                       diagnostic.message);
@@ -581,14 +671,20 @@ namespace ao::gtk
       else
       {
         APP_LOG_WARN("ShellLayoutController: Layout id warning in preset '{}' component '{}' ({}): {}",
-                     snapshot.presetId,
+                     presetId,
                      diagnostic.componentId,
                      diagnostic.componentType,
                      diagnostic.message);
       }
     }
 
-    rebuildHost(snapshot.layout);
+    // Invalidate the old generation before replacing the shared component-state document.
+    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    _session.applyLoadedLayout(std::move(presetId), std::move(document));
+    auto const snapshot = _session.snapshot();
+    _runtimeState.activePresetId = snapshot.presetId;
+    _runtimeState.componentState = std::move(componentState);
+    _host.commit(_runtimeState, std::move(*pending));
   }
 
   void ShellLayoutController::openEditor(AppConfigStore& configStore)
@@ -604,9 +700,17 @@ namespace ao::gtk
     {
       if (storePtr)
       {
-        if (auto optDoc = storePtr->load(id); optDoc)
+        auto loaded = storePtr->load(id);
+
+        if (loaded && *loaded)
         {
-          return std::move(*optDoc);
+          return std::move(**loaded);
+        }
+
+        if (!loaded)
+        {
+          APP_LOG_WARN(
+            "ShellLayoutController: Editor rejected custom layout for preset '{}': {}", id, loaded.error().message);
         }
       }
 
@@ -619,7 +723,9 @@ namespace ao::gtk
                                                                             _session.snapshot().layout,
                                                                             initialPresetId,
                                                                             initialThemeId,
-                                                                            std::move(loader));
+                                                                            std::move(loader),
+                                                                            layout::editor::PreviewSchedulerFn{},
+                                                                            layoutLimits());
     auto* const dialogRaw = _editorDialogPtr.get();
 
     _optEditorThemeToken = _themeCoordinator.registerToplevel(*dialogRaw);
@@ -642,7 +748,7 @@ namespace ao::gtk
                                             { _themeCoordinator.setTheme(uimodel::themePresetFromId(themeId)); });
 
     dialogRaw->signalSaveRequest().connect([this](layout::editor::LayoutSaveResult const& result)
-                                           { this->handleEditorSaveRequested(result); });
+                                           { return this->handleEditorSaveRequested(result); });
 
     dialogRaw->signal_hide().connect(
       [this]
@@ -658,7 +764,10 @@ namespace ao::gtk
       {
         if (responseId == Gtk::ResponseType::CANCEL)
         {
-          rebuildHost(_session.snapshot().layout);
+          auto const snapshot = _session.snapshot();
+          rebuildHost(snapshot.layout,
+                      layout::LayoutBuildStateView{
+                        snapshot.presetId, _runtimeState.componentState, _runtimeState.componentStateGeneration});
           _themeCoordinator.setTheme(oldTheme);
         }
       });
@@ -666,26 +775,81 @@ namespace ao::gtk
     dialogRaw->present();
   }
 
-  void ShellLayoutController::handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result)
+  Result<> ShellLayoutController::handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result)
   {
+    auto preparedModified = std::map<std::string, uimodel::PreparedLayout, std::less<>>{};
+
+    for (auto const& [id, doc] : result.modified)
+    {
+      auto prepared = uimodel::prepareLayout(doc, layoutLimits());
+
+      if (!prepared)
+      {
+        APP_LOG_WARN("ShellLayoutController: Rejected editor save for preset '{}': {}", id, prepared.error().message);
+        return std::unexpected{prepared.error()};
+      }
+
+      preparedModified.emplace(id, std::move(*prepared));
+    }
+
+    auto activePrepared = uimodel::prepareLayout(result.activeDocument, layoutLimits());
+
+    if (!activePrepared)
+    {
+      APP_LOG_WARN("ShellLayoutController: Rejected active editor layout '{}': {}",
+                   result.activePresetId,
+                   activePrepared.error().message);
+      return std::unexpected{activePrepared.error()};
+    }
+
+    auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId);
+    auto const activeReset = std::ranges::contains(result.resets, result.activePresetId);
+
+    if (_componentStateStorePtr && !activeReset)
+    {
+      nextComponentState = _componentStateStorePtr->load(result.activePresetId)
+                             .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(result.activePresetId));
+      uimodel::pruneComponentState(nextComponentState, *activePrepared);
+    }
+
+    auto pending = prepareHost(
+      *activePrepared,
+      layout::LayoutBuildStateView{result.activePresetId, nextComponentState, _runtimeState.componentStateGeneration});
+
+    if (!pending)
+    {
+      APP_LOG_ERROR("ShellLayoutController: Failed to prepare editor save for preset '{}': {}",
+                    result.activePresetId,
+                    pending.error().message);
+      return std::unexpected{pending.error()};
+    }
+
     if (_layoutStorePtr)
     {
       for (auto const& [id, doc] : result.modified)
       {
-        _layoutStorePtr->save(doc, id);
+        if (auto saved = _layoutStorePtr->save(doc, id); !saved)
+        {
+          APP_LOG_ERROR("ShellLayoutController: Failed to save layout preset '{}': {}", id, saved.error().message);
+          return std::unexpected{saved.error()};
+        }
       }
 
       for (auto const& id : result.resets)
       {
-        _layoutStorePtr->remove(id);
+        if (auto removed = _layoutStorePtr->remove(id); !removed)
+        {
+          APP_LOG_ERROR("ShellLayoutController: Failed to reset layout preset '{}': {}", id, removed.error().message);
+          return std::unexpected{removed.error()};
+        }
       }
     }
 
     if (_componentStateStorePtr)
     {
-      for (auto const& [id, doc] : result.modified)
+      for (auto const& item : result.modified)
       {
-        if (!_componentStateStorePtr->prune(id, doc))
+        if (auto const& id = item.first; !_componentStateStorePtr->prune(id, preparedModified.at(id)))
         {
           APP_LOG_WARN("ShellLayoutController: Failed to prune runtime state for preset '{}'", id);
         }
@@ -700,42 +864,61 @@ namespace ao::gtk
       }
     }
 
-    _session.applyEditorSave(result.activePresetId, result.activeDocument);
-    auto const snapshot = _session.snapshot();
-    _runtimeState.activePresetId = snapshot.presetId;
-    _runtimeState.componentState =
-      _componentStateStorePtr == nullptr
-        ? uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId)
-        : _componentStateStorePtr->load(snapshot.presetId)
-            .value_or(uimodel::ShellLayoutSessionModel::emptyComponentState(snapshot.presetId));
-
     if (_configStorePtr)
     {
       auto prefsUpdate = rt::AppPrefsState{};
       _configStorePtr->loadAppPrefs(prefsUpdate);
-      prefsUpdate.lastLayoutPreset = snapshot.presetId;
+      prefsUpdate.lastLayoutPreset = result.activePresetId;
       _configStorePtr->saveAppPrefs(prefsUpdate);
       _themeCoordinator.setTheme(uimodel::themePresetFromId(prefsUpdate.lastThemePreset));
     }
 
-    rebuildHost(snapshot.layout);
+    // Invalidate the retiring generation before replacing its shared state document.
+    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    _session.applyEditorSave(result.activePresetId, result.activeDocument);
+    auto const snapshot = _session.snapshot();
+    _runtimeState.activePresetId = snapshot.presetId;
+    _runtimeState.componentState = std::move(nextComponentState);
+    _host.commit(_runtimeState, std::move(*pending));
+    return {};
   }
 
   void ShellLayoutController::resetRuntimeLayoutState()
   {
-    auto reset = _session.resetRuntimeLayoutState();
+    auto const presetId = uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
+    auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(presetId);
+    auto prepared = uimodel::prepareLayout(_session.snapshot().layout, layoutLimits());
+
+    if (!prepared)
+    {
+      APP_LOG_WARN(
+        "ShellLayoutController: Rejected runtime-state reset layout '{}': {}", presetId, prepared.error().message);
+      return;
+    }
+
+    auto pending = prepareHost(
+      *prepared, layout::LayoutBuildStateView{presetId, nextComponentState, _runtimeState.componentStateGeneration});
+
+    if (!pending)
+    {
+      APP_LOG_ERROR(
+        "ShellLayoutController: Failed to prepare runtime-state reset '{}': {}", presetId, pending.error().message);
+      return;
+    }
 
     if (_componentStateStorePtr)
     {
-      if (!_componentStateStorePtr->removePreset(reset.presetId))
+      if (!_componentStateStorePtr->removePreset(presetId))
       {
-        APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", reset.presetId);
+        APP_LOG_WARN("ShellLayoutController: Failed to remove runtime state for preset '{}'", presetId);
       }
     }
 
+    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
+    auto reset = _session.resetRuntimeLayoutState();
     _runtimeState.activePresetId = reset.presetId;
     _runtimeState.componentState = std::move(reset.componentState);
-    rebuildHost(_session.snapshot().layout);
+    _host.commit(_runtimeState, std::move(*pending));
     refreshExportedActions();
   }
 
@@ -776,9 +959,33 @@ namespace ao::gtk
                                                       uimodel::LayoutDocument promotedLayout,
                                                       uimodel::LayoutComponentStateDocument promotedState)
   {
+    auto prepared = uimodel::prepareLayout(promotedLayout, layoutLimits());
+
+    if (!prepared)
+    {
+      APP_LOG_WARN("ShellLayoutController: Rejected promoted layout '{}': {}", presetId, prepared.error().message);
+      return;
+    }
+
+    auto pending = prepareHost(
+      *prepared, layout::LayoutBuildStateView{presetId, promotedState, _runtimeState.componentStateGeneration});
+
+    if (!pending)
+    {
+      APP_LOG_ERROR(
+        "ShellLayoutController: Failed to prepare promoted layout '{}': {}", presetId, pending.error().message);
+      return;
+    }
+
     if (_layoutStorePtr)
     {
-      _layoutStorePtr->save(promotedLayout, presetId);
+      if (auto saved = _layoutStorePtr->save(promotedLayout, presetId); !saved)
+      {
+        APP_LOG_ERROR(
+          "ShellLayoutController: Failed to save promoted layout '{}': {}", presetId, saved.error().message);
+        return;
+      }
+
       APP_LOG_INFO("ShellLayoutController: Promoted panel sizes to layout defaults for preset '{}'", presetId);
     }
 
@@ -800,9 +1007,10 @@ namespace ao::gtk
     _session.applyPanelSizePromotion(uimodel::ShellLayoutPanelSizePromotion{
       .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState});
     auto const snapshot = _session.snapshot();
+    _runtimeState.componentStateGeneration = pending->componentStateGeneration();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(promotedState);
-    rebuildHost(snapshot.layout);
+    _host.commit(_runtimeState, std::move(*pending));
     refreshExportedActions();
   }
 

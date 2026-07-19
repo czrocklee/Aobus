@@ -72,7 +72,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/component/LayoutStatePromoter.cpp
     uimodel/layout/document/LayoutDocument.cpp
     uimodel/layout/document/LayoutNodeId.cpp
-    uimodel/layout/document/LayoutTemplateExpansion.cpp
+    uimodel/layout/document/LayoutPreparation.cpp
     uimodel/layout/document/LayoutValue.cpp
     uimodel/layout/shell/ShellLayoutSessionModel.cpp
     uimodel/input/KeyChord.cpp

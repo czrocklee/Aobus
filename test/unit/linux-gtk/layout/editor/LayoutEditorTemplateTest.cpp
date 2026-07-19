@@ -21,6 +21,7 @@
 namespace ao::gtk::layout::editor::test
 {
   using namespace uimodel;
+  using ao::gtk::layout::test::preparedLayout;
 
   TEST_CASE("LayoutEditorTemplate - built-in layout templates expose expected component structure",
             "[gtk][unit][layout][editor]")
@@ -177,7 +178,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
-      auto const compPtr = fixture.layoutRuntime().build(fixture.context(), doc);
+      auto const compPtr = fixture.layoutRuntime().build(fixture.context(), preparedLayout(doc));
 
       REQUIRE(compPtr != nullptr);
 
@@ -196,7 +197,7 @@ namespace ao::gtk::layout::editor::test
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"selfRef"}};
 
-      auto const compPtr = fixture.layoutRuntime().build(fixture.context(), doc);
+      auto const compPtr = fixture.layoutRuntime().build(fixture.context(), preparedLayout(doc));
 
       REQUIRE(compPtr != nullptr);
       CHECK(dynamic_cast<Gtk::Widget*>(&compPtr->widget()) != nullptr);

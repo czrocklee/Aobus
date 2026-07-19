@@ -5,6 +5,7 @@
 #include "app/linux-gtk/app/GtkStyleRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
 #include "layout/document/LayoutDocument.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -19,6 +20,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -35,7 +37,7 @@ namespace ao::gtk::layout::test
     SECTION("default layout builds a box root")
     {
       auto const doc = makeDefaultLayout();
-      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, preparedLayout(doc));
 
       REQUIRE(rootComponentPtr != nullptr);
 
@@ -58,7 +60,7 @@ namespace ao::gtk::layout::test
       child2.props["orientation"] = LayoutValue{std::string{"vertical"}};
       doc.root.children.push_back(child2);
 
-      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, preparedLayout(doc));
 
       REQUIRE(rootComponentPtr != nullptr);
 
@@ -73,7 +75,7 @@ namespace ao::gtk::layout::test
       auto doc = LayoutDocument{};
       doc.root.type = "nonexistent.component";
 
-      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, preparedLayout(doc));
 
       REQUIRE(rootComponentPtr != nullptr);
 
@@ -90,7 +92,7 @@ namespace ao::gtk::layout::test
       doc.root.type = "box";
       doc.root.layout["cssClasses"] = LayoutValue{std::string{"ao-test-class"}};
 
-      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, preparedLayout(doc));
 
       REQUIRE(rootComponentPtr != nullptr);
       auto* const box = dynamic_cast<Gtk::Box*>(&rootComponentPtr->widget());
@@ -123,7 +125,7 @@ namespace ao::gtk::layout::test
       // template reference node, expanded through LayoutRuntime::build().
       auto doc = makeDefaultLayout();
       doc.templates = builtInTemplates();
-      auto const fullLayoutPtr = layoutRuntime.build(ctx, doc);
+      auto const fullLayoutPtr = layoutRuntime.build(ctx, preparedLayout(doc));
 
       REQUIRE(fullLayoutPtr != nullptr);
       // Find the playback row child within the root box.
@@ -152,7 +154,8 @@ namespace ao::gtk::layout::test
       doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
 
       auto host = LayoutHost{registry};
-      host.setLayout(ctx, doc);
+      auto pending = ao::test::requireValue(host.prepare(ctx, preparedLayout(doc)));
+      host.commit(ctx.runtimeState, std::move(pending));
 
       auto* const activeRoot = host.get_first_child();
       REQUIRE(activeRoot != nullptr);
@@ -171,7 +174,7 @@ namespace ao::gtk::layout::test
       GtkStyleRuntime::instance().initialize();
 
       auto const doc = makeBuiltInLayout(LayoutPresetId::Modern);
-      auto const rootComponentPtr = layoutRuntime.build(ctx, doc);
+      auto const rootComponentPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       REQUIRE(rootComponentPtr != nullptr);
 
       window.add_css_class("ao-theme-modern");

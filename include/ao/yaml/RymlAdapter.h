@@ -18,6 +18,7 @@
 #include <fstream>
 #include <ios>
 #include <limits>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -169,7 +170,8 @@ namespace ao::yaml
   /**
    * @brief Reads a file into a buffer suitable for ryml::parse_in_place.
    */
-  inline Result<std::vector<char>> readFileResult(std::filesystem::path const& path)
+  inline Result<std::vector<char>> readFileResult(std::filesystem::path const& path,
+                                                  std::optional<std::size_t> optMaxBytes = std::nullopt)
   {
     auto ifs = std::ifstream{path, std::ios::binary | std::ios::ate};
 
@@ -180,10 +182,21 @@ namespace ao::yaml
 
     auto const end = ifs.tellg();
 
-    if (end == std::streampos{-1})
+    auto const endOffset = static_cast<std::streamoff>(end);
+
+    if (endOffset < 0)
     {
       return makeError(Error::Code::IoError, "Failed to inspect file size: " + path.string());
     }
+
+    auto const unsignedSize = static_cast<std::uintmax_t>(endOffset);
+
+    if (!std::in_range<std::size_t>(unsignedSize) || !std::in_range<std::streamsize>(unsignedSize))
+    {
+      return makeError(Error::Code::ValueTooLarge, "File is too large to read: " + path.string());
+    }
+
+    auto const size = static_cast<std::size_t>(unsignedSize);
 
     ifs.seekg(0, std::ios::beg);
 
@@ -192,7 +205,13 @@ namespace ao::yaml
       return makeError(Error::Code::IoError, "Failed to seek file: " + path.string());
     }
 
-    auto const size = static_cast<std::size_t>(end);
+    if (optMaxBytes && size > *optMaxBytes)
+    {
+      return makeError(Error::Code::ValueTooLarge,
+                       "File '" + path.string() + "' is " + std::to_string(size) + " bytes; maximum allowed is " +
+                         std::to_string(*optMaxBytes));
+    }
+
     auto buffer = std::vector<char>(size);
 
     if (!ifs.read(buffer.data(), static_cast<std::streamsize>(size)))

@@ -9,6 +9,7 @@
 #include "app/ShellLayoutStore.h"
 #include "app/ThemeCoordinator.h"
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
@@ -22,15 +23,23 @@
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/applicationwindow.h>
+#include <gtkmm/dialog.h>
 #include <gtkmm/paned.h>
+#include <gtkmm/window.h>
 
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <ios>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -150,6 +159,144 @@ namespace ao::gtk::test
       drainGtkEvents();
       CHECK(controller.runtimeState().componentStateStore ==
             static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
+    }
+
+    SECTION("loadLayout falls back from an oversized custom layout without changing its file")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      configStorePtr->saveAppPrefs(prefs);
+
+      auto const layoutsDir = tempDir / "layouts";
+      std::filesystem::create_directories(layoutsDir);
+      auto const layoutPath = layoutsDir / "classic.yaml";
+      auto const original = std::string(uimodel::LayoutDocumentLimits::kDefaultMaxFileBytes + 1, 'x');
+      std::ofstream{layoutPath, std::ios::binary} << original;
+
+      controller.loadLayout(*configStorePtr);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+      CHECK(ao::test::readFile(layoutPath) == original);
+    }
+
+    SECTION("an over-budget editor preview preserves the active GTK tree")
+    {
+      controller.loadLayout(*configStorePtr);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+      controller.openEditor(*configStorePtr);
+      drainGtkEvents();
+
+      auto* const dialog = controller.editorDialog();
+      REQUIRE(dialog != nullptr);
+      auto* const activeChild = controller.host().get_first_child();
+      REQUIRE(activeChild != nullptr);
+
+      auto overBudget = LayoutDocument{};
+      overBudget.root.type = "box";
+      overBudget.root.children.reserve(LayoutDocumentLimits::kDefaultMaxEffectiveEntries);
+
+      for (std::size_t i = 0; i < LayoutDocumentLimits::kDefaultMaxEffectiveEntries; ++i)
+      {
+        overBudget.root.children.push_back(LayoutNode{.type = "spacer"});
+      }
+
+      dialog->signalApplyPreview().emit(overBudget);
+
+      CHECK(controller.host().get_first_child() == activeChild);
+
+      dialog->response(Gtk::ResponseType::CANCEL);
+      drainGtkEvents();
+    }
+
+    SECTION("layout editor save failure keeps the draft open and reports the error")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      configStorePtr->saveAppPrefs(prefs);
+
+      auto const layoutsDir = tempDir / "layouts";
+      std::filesystem::create_directories(layoutsDir);
+      auto const layoutPath = layoutsDir / "classic.yaml";
+      auto const original = std::string{"layout:\n  version: 99\n  root: future-layout\n"};
+      std::ofstream{layoutPath, std::ios::binary} << original;
+
+      controller.loadLayout(*configStorePtr);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+      controller.openEditor(*configStorePtr);
+      drainGtkEvents();
+
+      auto* const dialog = controller.editorDialog();
+      REQUIRE(dialog != nullptr);
+      dialog->updateNodePosition("main-paned", 37, 53);
+      auto const* const draftSplit = findNodeById(dialog->document().root, "main-paned");
+      REQUIRE(draftSplit != nullptr);
+      CHECK(draftSplit->layout.at("x").asInt() == 37);
+
+      dialog->response(Gtk::ResponseType::OK);
+      drainGtkEvents();
+
+      REQUIRE(controller.editorDialog() == dialog);
+      CHECK(dialog->get_visible());
+      auto const* const activeSplit = findNodeById(controller.activeLayout().root, "main-paned");
+      REQUIRE(activeSplit != nullptr);
+      CHECK_FALSE(activeSplit->layout.contains("x"));
+      CHECK(ao::test::readFile(layoutPath) == original);
+
+      Gtk::Window* errorDialog = nullptr;
+
+      for (auto* const toplevel : Gtk::Window::list_toplevels())
+      {
+        if (toplevel->get_title() == "Unable to Save Layout")
+        {
+          errorDialog = toplevel;
+          break;
+        }
+      }
+
+      REQUIRE(errorDialog != nullptr);
+      CHECK(errorDialog->get_visible());
+      CHECK(errorDialog->get_transient_for() == dialog);
+      errorDialog->close();
+      drainGtkEvents();
+
+      dialog->response(Gtk::ResponseType::CANCEL);
+      drainGtkEvents();
+    }
+
+    SECTION("layout editor cancel restores a persistable shell generation")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      configStorePtr->saveAppPrefs(prefs);
+      REQUIRE(storePtr->save(panelLayoutDocument(), "classic"));
+
+      controller.loadLayout(*configStorePtr);
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+      controller.openEditor(*configStorePtr);
+      drainGtkEvents();
+
+      auto* const dialog = controller.editorDialog();
+      REQUIRE(dialog != nullptr);
+      dialog->response(Gtk::ResponseType::CANCEL);
+      drainGtkEvents();
+
+      auto allocationHost = AllocationHost{controller.host()};
+      allocationHost.allocateChild(1000, 400);
+      auto* const paned = findWidget<Gtk::Paned>(controller.host());
+      REQUIRE(paned != nullptr);
+      paned->set_position(400);
+
+      REQUIRE(pumpGtkEventsUntil(
+        [&controller] { return controller.runtimeState().componentState.components.contains("main-paned"); }));
+      auto const optPersisted = componentStateStorePtr->load("classic");
+      REQUIRE(optPersisted);
+      REQUIRE(optPersisted->components.contains("main-paned"));
+      CHECK(optPersisted->components.at("main-paned").type == "split");
+      CHECK(optPersisted->components.at("main-paned").state.contains("positionPercent"));
     }
 
     SECTION("layout editor cancel rolls back theme preview without changing persisted theme")
@@ -281,7 +428,7 @@ namespace ao::gtk::test
     SECTION("resetRuntimeLayoutState clears preset state without removing customized layout")
     {
       auto doc = panelLayoutDocument();
-      storePtr->save(doc, "classic");
+      REQUIRE(storePtr->save(doc, "classic"));
 
       auto stateDoc = uimodel::LayoutComponentStateDocument{.preset = "classic"};
       auto const* split = findNodeById(doc.root, "main-paned");
@@ -303,13 +450,15 @@ namespace ao::gtk::test
 
       CHECK(controller.runtimeState().componentState.components.empty());
       CHECK_FALSE(componentStateStorePtr->load("classic").has_value());
-      CHECK(storePtr->load("classic").has_value());
+      auto const loadedLayout = storePtr->load("classic");
+      REQUIRE(loadedLayout);
+      CHECK((*loadedLayout).has_value());
     }
 
     SECTION("saveCurrentPanelSizesAsLayoutDefaults cancels when the user declines")
     {
       auto doc = panelLayoutDocument();
-      storePtr->save(doc, "classic");
+      REQUIRE(storePtr->save(doc, "classic"));
 
       auto const* split = findNodeById(doc.root, "main-paned");
       REQUIRE(split != nullptr);
@@ -331,10 +480,12 @@ namespace ao::gtk::test
         [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(false); });
       controller.saveCurrentPanelSizesAsLayoutDefaults();
 
-      auto optSavedDoc = storePtr->load("classic");
-      REQUIRE(optSavedDoc);
+      auto saved = storePtr->load("classic");
+      REQUIRE(saved);
+      REQUIRE(*saved);
+      auto const& savedDoc = **saved;
 
-      auto const* savedSplit = findNodeById(optSavedDoc->root, "main-paned");
+      auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
       REQUIRE(savedSplit != nullptr);
       CHECK(savedSplit->props.at("position").asInt() == 200);
 
@@ -346,7 +497,7 @@ namespace ao::gtk::test
     SECTION("saveCurrentPanelSizesAsLayoutDefaults promotes runtime panel state")
     {
       auto doc = panelLayoutDocument();
-      storePtr->save(doc, "classic");
+      REQUIRE(storePtr->save(doc, "classic"));
 
       auto const* split = findNodeById(doc.root, "main-paned");
       auto const* collapsible = findNodeById(doc.root, "detail-split");
@@ -377,11 +528,13 @@ namespace ao::gtk::test
         [](std::string const& /*presetId*/, ShellLayoutController::ConfirmPromotionAnswer answer) { answer(true); });
       controller.saveCurrentPanelSizesAsLayoutDefaults();
 
-      auto optSavedDoc = storePtr->load("classic");
-      REQUIRE(optSavedDoc);
+      auto saved = storePtr->load("classic");
+      REQUIRE(saved);
+      REQUIRE(*saved);
+      auto const& savedDoc = **saved;
 
-      auto const* savedSplit = findNodeById(optSavedDoc->root, "main-paned");
-      auto const* savedCollapsible = findNodeById(optSavedDoc->root, "detail-split");
+      auto const* savedSplit = findNodeById(savedDoc.root, "main-paned");
+      auto const* savedCollapsible = findNodeById(savedDoc.root, "detail-split");
       REQUIRE(savedSplit != nullptr);
       REQUIRE(savedCollapsible != nullptr);
 
@@ -423,7 +576,7 @@ namespace ao::gtk::test
     prefs.lastLayoutPreset = "classic";
     configStore->saveAppPrefs(prefs);
     auto layoutStorePtr = std::make_shared<ShellLayoutStore>(tempDir / "layouts");
-    layoutStorePtr->save(panelLayoutDocument(), "classic");
+    REQUIRE(layoutStorePtr->save(panelLayoutDocument(), "classic"));
     auto componentStateStorePtr = std::make_shared<ShellLayoutComponentStateStore>(componentStateDir);
 
     {

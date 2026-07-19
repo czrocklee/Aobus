@@ -9,7 +9,7 @@
 namespace ao::uimodel
 {
   struct LayoutComponentStateDocument;
-  struct LayoutDocument;
+  class PreparedLayout;
 
   /**
    * @brief Storage backend for per-preset layout component runtime state.
@@ -27,7 +27,7 @@ namespace ao::uimodel
 
     virtual std::optional<LayoutComponentStateDocument> load(std::string_view presetId) const = 0;
     virtual void save(std::string_view presetId, LayoutComponentStateDocument const& doc) = 0;
-    virtual bool prune(std::string_view presetId, LayoutDocument const& effectiveDoc) = 0;
+    virtual bool prune(std::string_view presetId, PreparedLayout const& layout) = 0;
     virtual bool removePreset(std::string_view presetId) = 0;
   };
 } // namespace ao::uimodel

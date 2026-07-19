@@ -38,7 +38,7 @@ namespace ao::gtk::layout::test
     c3.layout["slot"] = LayoutValue{std::string{"end"}};
     doc.root.children.push_back(c3);
 
-    auto const compPtr = layoutRuntime.build(ctx, doc);
+    auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
     auto* const cb = dynamic_cast<Gtk::CenterBox*>(&compPtr->widget());
 
     REQUIRE(cb != nullptr);

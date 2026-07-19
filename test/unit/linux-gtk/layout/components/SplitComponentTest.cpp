@@ -36,7 +36,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
 
       REQUIRE(paned != nullptr);
@@ -57,7 +57,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
 
       REQUIRE(paned != nullptr);
@@ -88,7 +88,7 @@ namespace ao::gtk::layout::test
         .state = {{"positionPercent", LayoutValue{0.6}}},
       };
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
 
       REQUIRE(paned != nullptr);
@@ -119,7 +119,7 @@ namespace ao::gtk::layout::test
         .state = {{"positionPercent", LayoutValue{0.6}}},
       };
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
 
       REQUIRE(paned != nullptr);
@@ -147,7 +147,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
       {
-        auto const compPtr = layoutRuntime.build(ctx, doc);
+        auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
         auto* const paned = splitPaned(*compPtr);
 
         REQUIRE(paned != nullptr);
@@ -163,7 +163,7 @@ namespace ao::gtk::layout::test
 
       ctx.runtimeState.componentState = stateStore.document();
 
-      auto const rebuiltPtr = layoutRuntime.build(ctx, doc);
+      auto const rebuiltPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const rebuiltPaned = splitPaned(*rebuiltPtr);
 
       REQUIRE(rebuiltPaned != nullptr);
@@ -189,7 +189,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
 
       REQUIRE(paned != nullptr);
@@ -219,7 +219,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
       {
-        auto const compPtr = layoutRuntime.build(ctx, doc);
+        auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
         auto* const paned = splitPaned(*compPtr);
         REQUIRE(paned != nullptr);
 
@@ -255,7 +255,7 @@ namespace ao::gtk::layout::test
         .state = {{"positionPercent", LayoutValue{1.5}}},
       };
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const paned = splitPaned(*compPtr);
       REQUIRE(paned != nullptr);
 
@@ -267,7 +267,7 @@ namespace ao::gtk::layout::test
 
       ctx.runtimeState.componentState.components["main-paned"].state["positionPercent"] = LayoutValue{-0.5};
 
-      auto const lowPtr = layoutRuntime.build(ctx, doc);
+      auto const lowPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const lowPaned = splitPaned(*lowPtr);
       REQUIRE(lowPaned != nullptr);
 

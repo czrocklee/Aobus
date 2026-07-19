@@ -77,6 +77,7 @@ namespace ao::gtk::layout::test
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
     auto const node = LayoutNode{.id = "activity-slot", .type = "status.activityStatus"};
     auto const compPtr = registry.create(ctx, node);
@@ -141,6 +142,7 @@ namespace ao::gtk::layout::test
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
     auto const node = LayoutNode{.id = "", .type = "status.activityStatus"};
     auto const compPtr = registry.create(ctx, node);

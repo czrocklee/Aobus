@@ -4,6 +4,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -238,7 +239,9 @@ namespace ao::uimodel::test
     };
     doc.root.children.push_back(LayoutNode{.id = "wrong-type", .type = "split"});
 
-    pruneComponentState(stateDoc, doc);
+    auto const prepared = prepareLayout(doc);
+    REQUIRE(prepared);
+    pruneComponentState(stateDoc, *prepared);
 
     CHECK(stateDoc.components.size() == 1);
     CHECK(stateDoc.components.contains("live-split"));

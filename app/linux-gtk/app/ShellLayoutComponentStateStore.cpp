@@ -7,6 +7,7 @@
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -155,13 +156,13 @@ namespace ao::gtk
     }
   }
 
-  bool ShellLayoutComponentStateStore::prune(std::string_view presetId, uimodel::LayoutDocument const& effectiveDoc)
+  bool ShellLayoutComponentStateStore::prune(std::string_view presetId, uimodel::PreparedLayout const& layout)
   {
     auto const lock = std::scoped_lock{_mutex};
 
     auto doc = loadUnlocked(presetId).value_or(uimodel::LayoutComponentStateDocument{.preset = std::string{presetId}});
     auto const beforeCount = doc.components.size();
-    uimodel::pruneComponentState(doc, effectiveDoc);
+    uimodel::pruneComponentState(doc, layout);
     auto const changed =
       doc.components.size() != beforeCount || (doc.components.empty() && std::filesystem::exists(filePath(presetId)));
 

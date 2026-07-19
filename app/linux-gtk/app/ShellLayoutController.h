@@ -14,6 +14,7 @@
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntimeState.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
@@ -23,6 +24,7 @@
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 
 #include <gtkmm/window.h>
@@ -132,6 +134,7 @@ namespace ao::gtk
 
     void applyLoadedLayout(std::string presetId,
                            uimodel::LayoutDocument document,
+                           uimodel::PreparedLayout preparedLayout,
                            uimodel::LayoutComponentStateDocument componentState);
     async::Task<void> loadLayoutWorkflow(std::shared_ptr<ShellLayoutStore> layoutStorePtr,
                                          std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
@@ -139,12 +142,19 @@ namespace ao::gtk
                                          std::stop_token stopToken);
     void applyLoadedLayoutWithFaultReporting(std::string presetId,
                                              uimodel::LayoutDocument document,
+                                             uimodel::PreparedLayout preparedLayout,
                                              uimodel::LayoutComponentStateDocument componentState);
 
-    void handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
+    Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
-    /// Assembles a fresh per-build carrier from the owned pieces and (re)builds the host.
+    Result<layout::LayoutHost::PreparedTree> prepareHost(uimodel::PreparedLayout const& layout,
+                                                         layout::LayoutBuildStateView buildState);
+
+    uimodel::LayoutDocumentLimits const& layoutLimits() const noexcept;
+
+    /// Prepares and commits a replacement against the current shell state, retaining the old tree on rejection.
     void rebuildHost(uimodel::LayoutDocument const& doc);
+    void rebuildHost(uimodel::LayoutDocument const& doc, layout::LayoutBuildStateView buildState);
 
     rt::AppRuntime& _runtime;
     Gtk::Window& _parentWindow;

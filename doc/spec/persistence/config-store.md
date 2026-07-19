@@ -3,13 +3,13 @@ id: persistence.config-store
 type: spec
 status: current
 domain: persistence
-summary: Defines schema-explicit grouped managed-file loading, atomic group saves and removals, failure, and concurrency behavior.
+summary: Defines schema-explicit grouped managed-file loading, optional byte ceilings, atomic group saves and removals, failure, and concurrency behavior.
 ---
 # Grouped configuration store
 
 ## Scope
 
-This specification owns the current behavior of `ao::rt::ConfigStore`: lazy whole-file loading, named top-level groups, explicit schema invocation, presence-aware candidate loading, one-shot multi-group saves and removals, open modes, failure translation, and access serialization.
+This specification owns the current behavior of `ao::rt::ConfigStore`: lazy whole-file loading, an optional whole-file byte ceiling, named top-level groups, explicit schema invocation, presence-aware candidate loading, one-shot multi-group saves and removals, open modes, failure translation, and access serialization.
 
 It does not own a payload schema, field name, default, identifier serialization, enum mapping, version, unknown-field policy, migration, semantic validation, restore policy, save trigger, retry policy, or reporting policy.
 Those decisions remain with the runtime, UIModel, or frontend owner whose live behavior depends on the value.
@@ -34,6 +34,7 @@ It does not transitively select or export an application serialization trait.
 - A **deserialized value** is the isolated value returned by a schema after complete acceptance.
 - A **config write** is a short-lived `configWrite(group, value, schema)` descriptor used to assemble one atomic multi-group operation.
 - A **write candidate** is an isolated copy of the complete live document into which every schema for one save operation serializes its group.
+- The optional **file-byte ceiling** is a caller-selected maximum for both an existing backing file and emitted replacement bytes.
 
 For a value type `T`, a conforming schema provides these const operations:
 
@@ -49,6 +50,7 @@ The payload owner decides whether `deserialize()` uses the seed, requires every 
 - One non-copyable, non-movable store owns one backing path, live tree, parser input buffer, and parser callback state.
 - A successfully established document is cached for the rest of the instance lifetime; the store does not merge or reload later external changes.
 - An existing file is established only after complete reading, YAML parsing, top-level mapping validation, and rejection of duplicate or keyless group entries.
+- When configured, the file-byte ceiling is checked from the existing file size before allocating its input buffer or parsing it.
 - Failed inspection, reading, parsing, or root validation installs no parser output and leaves initialization retryable.
 - Loading never writes, and destruction never saves.
 - A present group is installed into the caller's value only after its schema returns a complete deserialized value.
@@ -56,6 +58,7 @@ The payload owner decides whether `deserialize()` uses the seed, requires every 
 - Every group in a save is serialized directly into one private complete-document candidate; any schema failure discards that candidate.
 - Schema-written dynamic keys and values are copied into the candidate tree's arena; no committed node borrows schema or caller storage.
 - Serialization, candidate assembly, emission, replacement, or removal failure leaves both the live document and backing file unchanged under the atomic-replacement contract.
+- When configured, emitted replacement bytes must fit the same file-byte ceiling before atomic replacement.
 - Successful save or effective removal replaces the complete backing file and only then installs the matching candidate as the live document.
 - One save may replace several groups in one whole-document commit; untouched sibling groups remain present.
 - The API exposes no reflection-derived schema, implicit schema selection, staged mutable tree, flush, dirty bit, revision, receipt, reload, retry, or recovery operation.
@@ -82,12 +85,12 @@ The same condition returns `NotFound` and leaves a `ReadOnly` store Unloaded.
 Construction captures the backing path and an owned diagnostic filename but performs no file access.
 `ReadWrite` is the default and permits a missing file to become an empty document on first initialization.
 `ReadOnly` requires the file to exist when initialization is attempted.
-The mode is fixed for the store lifetime.
+The mode and optional file-byte ceiling are fixed for the store lifetime.
 
 ### Lazy initialization
 
 The first initializing operation inspects the backing path.
-For an existing file, it reads all bytes into a candidate buffer, parses into a candidate tree, requires a top-level mapping, and rejects duplicate or keyless group entries while retaining unknown unique groups.
+For an existing file, it rejects a configured byte-ceiling violation before allocating the candidate buffer, then reads all bytes, parses into a candidate tree, requires a top-level mapping, and rejects duplicate or keyless group entries while retaining unknown unique groups.
 Only complete success installs the buffer and tree.
 An existing empty file is rejected as a non-mapping document; only an absent `ReadWrite` file establishes an empty mapping.
 
@@ -127,8 +130,9 @@ The operation proceeds in this order:
 2. For each descriptor in call order, remove that candidate group, create a replacement child, and call its schema exactly once.
 3. Stop and discard the complete candidate if any schema fails; the private candidate may be partially assembled but is never externally visible.
 4. Retain every unmentioned sibling and every earlier successfully serialized group on the candidate.
-5. Emit the complete candidate and atomically replace the backing file.
-6. Move the candidate into the live document only after replacement succeeds.
+5. Emit the complete candidate and, when configured, reject bytes beyond the file-byte ceiling.
+6. Atomically replace the backing file.
+7. Move the candidate into the live document only after replacement succeeds.
 
 Repeated group names in one `saveTogether()` call follow descriptor order, so the last supplied replacement is the resulting group.
 There is no public operation that persists a partially serialized live tree.
@@ -150,6 +154,7 @@ Repeated removal is idempotent.
 | Backing-path inspection or complete-file read fails | `Result` with `IoError`. |
 | Backing file is missing in `ReadWrite` mode | Successful initialization of an empty document. |
 | Backing file is missing in `ReadOnly` mode | `Result` with `NotFound`. |
+| Existing or emitted complete file exceeds the configured byte ceiling | `Result` with `ValueTooLarge`; the live document and backing file remain unchanged. |
 | YAML syntax parsing throws or the root is not a mapping | `Result` with `FormatRejected` and backing-file context. |
 | A schema returns an error | That error code with bounded group/operation context. |
 | A standard exception escapes deserialization | `Result` with `FormatRejected`; the seeded value remains unchanged. |
@@ -184,7 +189,7 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 
 ## Test map
 
-- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, failed-deserialize isolation, multi-group atomicity, exception translation, replacement failure, temporary-string ownership, removal, and read-only behavior.
+- [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects explicit schema round trips, presence results, seeded values, byte ceilings, failed-deserialize isolation, multi-group atomicity, exception translation, replacement failure, temporary-string ownership, removal, and read-only behavior.
 - [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects strict scalar parsing and parser diagnostics; [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects node-kind and key validation, duplicate detection, unknown-key policy, bounded context, failure order, and arena-owned writes.
 - Payload schema tests protect field vocabulary, versions, unknown and missing fields, enum membership, semantic rejection, and representative documents at their owning layers.
 - [`AtomicFileTest.cpp`](../../../test/unit/utility/AtomicFileTest.cpp) protects replacement, owner-only permissions, and lower write-failure behavior.

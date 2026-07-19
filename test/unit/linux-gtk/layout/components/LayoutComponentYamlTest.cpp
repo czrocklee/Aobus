@@ -47,6 +47,7 @@ namespace ao::gtk::layout::test
                                           .runtime = fixture.runtime(),
                                           .parentWindow = fixture.window(),
                                           .runtimeState = runtimeState,
+                                          .buildState = LayoutBuildStateView{runtimeState},
                                           .dependencies = dependencies};
       auto const* const yaml = R"(
       type: app.actionButton
@@ -198,7 +199,7 @@ namespace ao::gtk::layout::test
       CHECK(doc.version == 1);
       CHECK(doc.root.children.size() == 4);
 
-      auto const compPtr = fixture.layoutRuntime().build(ctx, doc);
+      auto const compPtr = fixture.layoutRuntime().build(ctx, preparedLayout(doc));
 
       CHECK(compPtr != nullptr);
     }
@@ -220,7 +221,7 @@ namespace ao::gtk::layout::test
       auto doc = std::move(*decoded);
       doc.templates = builtInTemplates();
 
-      auto const compPtr = fixture.layoutRuntime().build(ctx, doc);
+      auto const compPtr = fixture.layoutRuntime().build(ctx, preparedLayout(doc));
 
       CHECK(compPtr != nullptr);
     }

@@ -34,7 +34,7 @@ namespace ao::gtk::layout::test
       child.layout["vexpand"] = LayoutValue{false};
       doc.root.children.push_back(child);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
@@ -56,7 +56,7 @@ namespace ao::gtk::layout::test
       child.layout["valign"] = LayoutValue{std::string{"end"}};
       doc.root.children.push_back(child);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
@@ -77,7 +77,7 @@ namespace ao::gtk::layout::test
       child.layout["visible"] = LayoutValue{false};
       doc.root.children.push_back(child);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
@@ -97,7 +97,7 @@ namespace ao::gtk::layout::test
       child.layout["cssClasses"] = LayoutValue{std::vector<std::string>{"my-class", "another"}};
       doc.root.children.push_back(child);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
@@ -119,7 +119,7 @@ namespace ao::gtk::layout::test
       child.layout["heightRequest"] = LayoutValue{static_cast<std::int64_t>(100)};
       doc.root.children.push_back(child);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);

@@ -793,6 +793,7 @@ namespace ao::gtk::layout::test
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
     dependencies.trackPageHost = &pageHost;
     auto pendingDebounce = sigc::slot<bool()>{};

@@ -1,41 +1,21 @@
 ---
 id: rfc.0025.bounded-shell-layout-documents
 type: rfc
-status: draft
+status: implemented
 domain: application-shell
-summary: Proposes strict version gates and resource budgets for shell layout deserialization, validation, template expansion, installation, and persistence.
+summary: Records the bounded layout-preparation gate, preserved-file fallback, and staged GTK tree replacement implemented for shell layout documents.
 depends-on: none
 ---
 # RFC 0025: Bounded shell layout documents
 
 ## Problem
 
-Shell layout documents are user-controlled YAML that can drive recursive model construction and GTK widget creation, but the current loading boundary is permissive and effectively unbounded.
+Customized shell layouts are user-controlled YAML that can allocate a recursive model, expand reusable templates, and create a complete GTK widget tree.
+The original path had strict schema parsing and template-cycle diagnostics, but no product limit on file size, authored model cost, acyclic template depth, repeated expansion, or GTK construction size.
+Different load, preview, save, reset, and promotion paths could also reach rebuilding with different checks.
 
-The serialized document contains a required `version` field and currently emits version `1`.
-The reader accepts any numeric version into `LayoutDocument`, and `ShellLayoutStoreTest` explicitly proves that version `42` round-trips.
-Component-state documents reject unsupported versions, while authored layout documents do not.
-An older application can therefore interpret and later rewrite a future layout using version-1 assumptions.
-
-The file path is constrained by preset id, but the content has no product limits for:
-
-- input bytes read before YAML parsing;
-- YAML/model node count and nesting depth;
-- templates, children, properties, string lengths, or string-list entries;
-- tooltip recursion;
-- template expansion depth or expanded output size; and
-- GTK components created by one build.
-
-Cycle detection prevents a direct recursive template loop from recursing forever, but it does not bound a long acyclic chain or multiplicative expansion.
-A small authored template graph can produce a much larger effective tree when referenced repeatedly.
-Large values also flow through generic `ConfigStore`/RapidYAML deserialization before the shell catalog has an opportunity to validate component semantics.
-
-Malformed custom layouts currently fall back to the built-in preset, which is a useful availability policy.
-However, parse failure, unsupported version, resource rejection, schema rejection, template-budget rejection, and component validation are not one typed candidate boundary.
-Save is log-only, and an invalid or oversized candidate can be previewed or installed through paths whose validation obligations differ.
-
-This is not a generic YAML policy problem.
-Layout budgets must account for template expansion and widget construction, concepts that belong to the application shell format owner.
+A malformed custom file already fell back to the matching built-in layout, which was the right availability policy.
+The missing contract was a small shared safety boundary that preserved both the last live tree and the rejected file.
 
 ## Dependencies
 
@@ -43,209 +23,121 @@ Layout budgets must account for template expansion and widget construction, conc
 - Conditional: None.
 - Integration: [RFC 0010](0010-versioned-presentation-state.md), [RFC 0032](0032-explicit-managed-state-schemas.md).
 
-RFC 0010 supplies the implemented stable presentation-state pattern; this RFC should align component, action, and node identifiers with its explicit-version and strict-candidate principles where the shell model shares those risks.
-RFC 0032 proposes replacing reflected aggregate persistence with owner-local explicit schemas; joint implementations use that schema boundary while this RFC remains the authority for shell-specific versions, limits, fallback, and preservation.
-The current [atomic replacement contract](../spec/persistence/atomic-replacement.md) provides complete private-file replacement for saved custom documents.
-The current [grouped configuration store](../spec/persistence/config-store.md) already isolates candidate serialization and reports whole-document replacement; this RFC must expose and classify that result at the shell workflow boundary.
+RFC 0010 supplies the stable-id and explicit-version precedent.
+RFC 0032 supplies the implemented owner-local layout schema and fail-closed grouped-store boundary.
+This RFC owns only shell-layout resource limits, preparation, fallback, and GTK replacement.
 
 ## Goals
 
-- Reject unsupported layout document versions before semantic interpretation or live installation.
-- Bound input bytes, deserialized model cost, nesting, template expansion, and effective GTK construction.
-- Use one candidate deserialization/validation/expansion pipeline for startup, editor preview, save, and programmatic installation.
-- Preserve the last valid live shell when a candidate fails.
-- Preserve unsupported or rejected custom files for recovery instead of rewriting them through an older model.
-- Produce typed diagnostics that distinguish absence, parse, schema, version, budget, template, catalog, and I/O outcomes.
-- Keep built-in fallback available and deterministic.
-- Keep product budgets owned by the shell document contract rather than the generic YAML adapter.
+- Bound customized files before parsing and replacement.
+- Bound authored structure and template-expanded output with one shell-owned policy.
+- Require a prepared proof at the GTK construction boundary.
+- Keep the previous live tree and rejected customization when preparation fails.
+- Preserve existing diagnostic components and error codes where they remain safe.
+- Close those risks without introducing migration, quarantine, or a general candidate framework.
 
-## Non-goals
+## Decision
 
-- Make the current GTK layout document the authority for the TUI shell.
-- Add arbitrary scripting, loops, conditionals, includes, or network resources to layout YAML.
-- Define exact component properties or action ids; those remain catalog/reference facts.
-- Replace RapidYAML or `ConfigStore` solely for this feature.
-- Make every visible unknown component fatal; diagnostic components can remain a deliberate compatibility behavior.
-- Redesign the generic grouped-store candidate-save contract.
+Implement one compact layout safety kernel rather than the original broad candidate framework.
 
-## Proposed design
+Every live GTK layout is derived from `uimodel::prepareLayout()`.
+That function validates the current version, meters the complete authored document, performs bounded template expansion, meters the effective tree, and returns `PreparedLayout`.
+`LayoutRuntime` and `LayoutHost` accept `PreparedLayout`, so raw `LayoutDocument` cannot enter GTK construction directly.
 
-### Shell-owned deserialize limits
+Raw documents remain the appropriate values for editor working copies, persistence, and `ShellLayoutSessionModel` authority.
+This avoids making preparation a second application-session model or duplicating the authored document inside a large candidate object.
 
-Define a `LayoutDocumentLimits` product value with conservative defaults and injectable test values.
-It covers at least:
+## Implemented limits
 
-```text
-maximum file bytes before parse
-maximum authored nodes and nesting depth
-maximum templates and references
-maximum children per node
-maximum properties/layout entries per node
-maximum key, scalar string, tooltip, and string-list sizes
-maximum total deserialized string bytes
-maximum template expansion depth
-maximum effective nodes and effective total value cost
-maximum GTK components admitted for one build
-```
+`LayoutDocumentLimits` owns the product defaults and remains injectable for tests.
 
-Exact defaults become reference facts and are chosen from built-in-layout measurements plus a documented safety margin.
-Budgets use checked arithmetic and report the observed/allowed dimension without echoing unbounded input.
+| Dimension | Default |
+|---|---:|
+| Serialized custom-layout file | 256 KiB |
+| Authored entries | 4,096 |
+| Authored depth | 64 |
+| Authored owned string bytes | 256 KiB |
+| Effective entries | 2,048 |
+| Effective depth | 64 |
+| Effective owned string bytes | 512 KiB |
 
-The generic YAML reader may expose a byte-limited read primitive, but the shell owns the configured limit and the interpretation of rejection.
+The file limit applies before parsing an existing file and before replacing it with newly serialized bytes.
+The generic YAML file reader and `ConfigStore` expose an optional byte ceiling, while `ShellLayoutStore` owns the selected value.
 
-### Candidate pipeline
+Entry accounting charges each layout node, template-map entry, `props`/`layout` map entry, and string-list element.
+String accounting charges owned ids, types, template keys, property/layout keys, string values, and string-list values.
+Depth includes child and tooltip edges; effective depth also includes template-reference traversal.
+All arithmetic is checked before incrementing a meter.
 
-All authored layouts pass through one platform-neutral candidate pipeline:
+Authored accounting includes every template, including unused templates.
+Effective accounting charges every produced copy, so repeated references cannot multiply a small authored template without limit.
+It also charges reference overlays even when they replace a value copied from the template, bounding transient expansion work rather than only the final retained shape.
+Missing template ids, unknown template ids, and cycles retain the existing bounded diagnostic-node behavior; exhausting any budget rejects the whole preparation.
 
-```text
-bounded bytes
-  -> YAML parse with contained diagnostics
-  -> strict root/schema deserialize
-  -> supported-version dispatch
-  -> authored-tree budget validation
-  -> component/action/node-id semantic validation
-  -> bounded template expansion
-  -> effective-tree budget/catalog validation
-  -> ValidatedLayoutCandidate
-```
+## Persistence and fallback
 
-`ValidatedLayoutCandidate` is the only value accepted by `ShellLayoutSessionModel` installation and GTK `LayoutHost` build entry points.
-Raw `LayoutDocument` remains useful for editor working copies and model tests but cannot bypass validation at a live boundary.
+`ShellLayoutStore::load()` distinguishes absence from rejection with `Result<optional<LayoutDocument>>`:
 
-Startup, editor Apply, Save, reset, promotion, and built-in preset loading use the same validator with an explicit source classification.
-Built-in documents are validated in tests and may fail fast as a packaging invariant; user documents produce recoverable outcomes.
+- absence returns a successful empty optional and selects the built-in preset;
+- malformed, unsupported, or over-budget custom content returns an error;
+- startup logs the bounded error, selects and prepares the matching built-in document, and leaves the custom file byte-identical.
 
-### Strict version dispatch
+`ShellLayoutStore::save()` prepares the candidate before serialization.
+When a custom file already exists, the store also requires that existing document to load and prepare before replacement.
+An older application therefore does not overwrite an unsupported, malformed, or over-budget customization through the structured save path.
+Each successful write still uses the existing atomic complete-file replacement mechanism.
 
-Version `1` deserialization validates the documented version-1 surface.
-An absent, malformed, zero, or unsupported version yields a typed version/schema rejection before node interpretation.
+The implementation reuses existing `Error::Code` values instead of adding a parallel layout error taxonomy.
+In particular, schema failures use `FormatRejected`, unsupported versions use `NotSupported`, size and tree limits use `ValueTooLarge`, allocation failure uses `ResourceExhausted`, and storage/construction failures retain their existing I/O or state codes.
 
-The store retains the original custom file untouched on unsupported version.
-It must not load the value into a permissive version-1 model and later overwrite unknown keys.
-If a future version has a registered migrator, migration produces a separate candidate and persists only after validation and explicit commit success.
+## Staged GTK replacement
 
-Version gates apply independently to authored layout and component-state documents because they have different schemas and lifecycle owners.
+`LayoutHost::prepare()` builds a detached candidate component tree against a candidate view of preset, component state, edit mode, callbacks, and the next component-state generation.
+It does not remove the active child or advance the active generation.
 
-### Bounded model deserialize
+`LayoutHost::commit()` first advances the generation, then destroys the retiring tree and installs the prepared tree.
+The generation ordering prevents retiring components from writing state into the replacement document.
+A failed or discarded preparation leaves the active tree, session, runtime state, and generation unchanged.
 
-Deserialize into a fresh candidate, never into the active document.
-Traversal accounts for every root, child, tooltip, template root, property entry, sequence item, and owned string.
+Startup load, editor preview/save, runtime-state reset, and panel-size promotion all prepare before committing a replacement.
+Editor Save also applies the same document limits before emitting a save request.
 
-Reject wrong node kinds and missing required `type`/root structure rather than relying on empty defaults to become unknown components.
-Unknown top-level or node keys follow an explicit version-1 policy: either reject them for fail-closed authoring or preserve them in an extension map.
-Silently dropping them during re-serialize is not acceptable for a document that the application claims to edit losslessly.
+## Deliberately omitted
 
-The initial proposal recommends strict rejection for unknown structural keys and catalog-governed handling for unknown component types/properties.
+The following parts of the initial proposal were not needed to close the verified risks:
 
-### Bounded template expansion
+- no migration registry, legacy reader, automatic rewrite, or quarantine/rename policy;
+- no generic YAML-wide product budget or parser redesign;
+- no separate limits for every property kind, child collection, template reference, or component family;
+- no new diagnostic hierarchy, recovery UI, or durable workflow receipt;
+- no requirement that unknown components or bounded template mistakes become fatal; and
+- no large `ValidatedLayoutCandidate` spanning persistence, catalogs, session authority, and GTK.
 
-Template expansion receives a budget object and returns `Result<ExpandedLayout>` rather than representing every failure as an ordinary diagnostic node.
-It tracks:
+Catalog/action validation remains owned by the editor and existing catalog policies.
+Unknown component types remain visible GTK diagnostic components.
+The safety proof required by GTK is intentionally only `PreparedLayout`.
 
-- the current reference stack for cycle diagnostics;
-- expansion depth;
-- produced node count;
-- copied/appended child and value cost; and
-- tooltip expansion under the same budget.
+## Compatibility
 
-Missing and unknown template ids may remain visible authoring diagnostics when within budget.
-Cycles and budget exhaustion reject the candidate as a whole because a partial effective tree would not represent the authored structure reliably.
+Version `1` documents within the limits keep their existing template merge and rendering behavior.
+Unsupported versions, malformed structures, and over-budget documents are rejected and preserved rather than normalized or overwritten.
+There is no compatibility or migration path beyond deterministic built-in fallback.
 
-The budget is charged on produced output, so repeated references cannot multiply without limit even when the template graph is acyclic.
-
-### Live installation and fallback
-
-Build a new GTK component tree from a validated effective candidate before replacing the active host where toolkit constraints permit.
-If validation or construction fails, retain the previous active session and tree.
-
-At first startup with no previous tree:
-
-- missing custom layout selects the built-in preset normally;
-- rejected custom layout records a typed diagnostic and selects the matching validated built-in preset; and
-- a packaged built-in validation failure is an application invariant failure, not a fallback to unbounded user input.
-
-Fallback does not delete, truncate, normalize, or resave the rejected custom file.
-The editor can expose recovery actions such as open raw location, reset customization, or duplicate-and-migrate, subject to platform policy.
-
-### Save and preview
-
-Apply validates and builds the working candidate but does not persist it.
-Save validates once more against the exact document to be written, obtains a durable replacement result, then installs/acknowledges the saved candidate according to the shell transaction policy.
-
-An over-budget or unsupported document cannot be saved through the structured editor.
-Panel-size promotion and node-id regeneration must also preserve the limits and fail before changing the live session.
-
-Diagnostics use the reporting architecture and identify preset, document version, failure class, and bounded location/evidence.
-They do not place full untrusted YAML in notifications or logs.
-
-## Alternatives
-
-### Rely on file-size limits only
-
-A byte limit bounds parser input but not recursive stack depth, semantic collection counts, template multiplication, or widget construction.
-It is necessary but insufficient.
-
-### Trust the component catalog to reject bad layouts
-
-Catalog validation occurs after YAML/model allocation and does not own template expansion cost.
-It also cannot distinguish unsupported document versions from unknown components.
-
-### Truncate oversized documents
-
-Truncation creates a different layout with ambiguous structure and may accidentally authorize a partial save.
-Rejecting the candidate preserves user data and live state.
-
-### Render error nodes for every failure
-
-Visible unknown-component/template diagnostics are useful for bounded semantic mistakes.
-Version, parse, cycle, and resource-budget failures cannot safely produce a partial tree and should trigger whole-candidate fallback.
-
-### Put global limits in the YAML adapter
-
-Reusable parser safety may provide absolute ceilings, but layout-specific output and widget budgets remain the shell format owner's responsibility.
-
-## Compatibility and migration
-
-Valid version-1 layouts within the selected budgets retain their current structure and rendering.
-Documents with unsupported versions, missing required structure, silently ignored keys, or excessive cost will now be rejected and preserved instead of permissively loaded.
-
-The version-1 unknown-key policy may expose files that previously appeared to work while losing data on save.
-Before rollout, repository fixtures and representative user customizations should be audited and migration diagnostics made actionable.
-
-No automatic rewrite occurs merely because a version-1 file loads.
-Future migrations operate on a separate candidate and use observable atomic replacement.
-
-Built-in presets must remain well below every default budget; CI records their measured authored/effective cost to detect accidental growth.
+Built-in `classic` and `modern` layouts must prepare under the default limits in CI.
 
 ## Validation
 
-- Version tests cover missing, malformed, zero, current, and unsupported future versions; future files remain byte-identical after fallback.
-- Boundary tests cover exactly-at-limit and limit-plus-one for every configured byte/count/depth/string/sequence budget.
-- Template tests cover cycles, long chains, repeated expansion, tooltip recursion, appended children, and output multiplication.
-- Candidate tests prove wrong node kinds, missing root/type, unknown structural keys, and catalog failures do not alter the active session.
-- Startup tests prove deterministic custom-to-built-in fallback with one bounded diagnostic.
-- Editor tests prove Apply and Save share the candidate validator and cannot bypass it through promotion or regenerated ids.
-- Fault-injection tests preserve the last live tree and custom file on parse, validation, build, and persistence failure.
-- Built-in layout budget measurements and catalog validation run in CI.
-- Parser/validator fuzzing exercises arbitrary bounded YAML without unbounded recursion, allocation, or crash.
-- GTK tests assert that one build cannot create more than the admitted effective component count.
-- A full `./ao check` passes after implementation.
+Implemented coverage includes:
 
-## Open questions
+- exactly-at-limit and limit-plus-one entry, depth, and string-byte cases;
+- unused templates, long acyclic chains, and repeated template expansion;
+- built-in preset preparation under default limits;
+- oversized file rejection before parsing and oversized serialized-candidate rejection;
+- byte-identical preservation of oversized and unsupported existing custom files;
+- startup fallback from an oversized customization without changing it;
+- preservation of the active GTK tree when an editor preview exceeds the effective budget;
+- editor rejection of an over-budget save;
+- staged-host construction failure and discarded-candidate preservation; and
+- generation invalidation before retiring stateful components.
 
-- What measured defaults provide enough customization headroom while bounding memory and GTK build latency?
-- Should unknown structural keys be rejected or preserved through an explicit extension map in version 1?
-- Can GTK component construction be made fully candidate-first before host replacement for every component with side effects?
-- Should rejected custom layouts be quarantined/renamed automatically, or only preserved in place with explicit recovery actions?
-- Which absolute parser ceilings belong in `ao::yaml` in addition to the shell-owned product limits?
-
-## Promotion plan
-
-If accepted and implemented:
-
-- update the [application shell architecture](../architecture/application-shell.md) with the validated-candidate and bounded-expansion boundary;
-- update the [persistence and managed-state architecture](../architecture/persistence-and-managed-state.md) with strict version dispatch and preservation of unsupported authored documents;
-- update the [shell layout lifecycle specification](../spec/shell/layout-lifecycle.md) with candidate, fallback, preview, save, and failure transitions;
-- update the [layout document reference](../reference/shell/layout-document.md) with supported versions, exact limits, unknown-key policy, and typed rejection surface;
-- update shell editor/user guidance with recovery and reset behavior; and
-- record the selected limits and unknown-key compatibility policy in a decision when accepted.
+Current authority is documented in the [application shell architecture](../architecture/application-shell.md), [persistence architecture](../architecture/persistence-and-managed-state.md), [layout lifecycle specification](../spec/shell/layout-lifecycle.md), and [layout document reference](../reference/shell/layout-document.md).

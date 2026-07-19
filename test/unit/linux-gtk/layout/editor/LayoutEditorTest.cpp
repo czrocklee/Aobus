@@ -7,9 +7,10 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutDocument.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
+#include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/document/LayoutYaml.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -85,7 +86,36 @@ namespace ao::gtk::layout::editor::test
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, invalidDoc, "classic", "modern", stubLoader};
 
       std::int32_t saveCount = 0;
-      dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const&)
+        {
+          ++saveCount;
+          return Result<>{};
+        });
+
+      dialog.response(Gtk::ResponseType::OK);
+
+      CHECK(saveCount == 0);
+      dialog.close();
+    }
+
+    SECTION("over-budget save does not emit save request")
+    {
+      auto overBudget = LayoutDocument{};
+      overBudget.root.type = "box";
+      overBudget.root.children.push_back(LayoutNode{.type = "spacer"});
+      auto limits = LayoutDocumentLimits{};
+      limits.authored.maxEntries = 1;
+
+      auto dialog = LayoutEditorDialog{
+        window, registry, actionRegistry, overBudget, "classic", "modern", stubLoader, PreviewSchedulerFn{}, limits};
+      std::int32_t saveCount = 0;
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const&)
+        {
+          ++saveCount;
+          return Result<>{};
+        });
 
       dialog.response(Gtk::ResponseType::OK);
 
@@ -192,7 +222,12 @@ namespace ao::gtk::layout::editor::test
       auto dialog = LayoutEditorDialog{window, registry, actionRegistry, duplicateDoc, "classic", "modern", stubLoader};
 
       std::int32_t saveCount = 0;
-      dialog.signalSaveRequest().connect([&](LayoutSaveResult const&) { ++saveCount; });
+      dialog.signalSaveRequest().connect(
+        [&](LayoutSaveResult const&)
+        {
+          ++saveCount;
+          return Result<>{};
+        });
 
       dialog.response(Gtk::ResponseType::OK);
 

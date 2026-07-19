@@ -57,6 +57,7 @@ namespace ao::gtk::layout::test
                                   .runtime = fixture.runtime(),
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     SECTION("attaches primary click to Gtk::Button")

@@ -40,7 +40,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
 
       REQUIRE(box != nullptr);
@@ -91,7 +91,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(workspaceNode);
       doc.root.children.push_back(detailNode);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
 
       REQUIRE(box != nullptr);
@@ -127,7 +127,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
 
       REQUIRE(box != nullptr);
@@ -169,7 +169,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
 
       REQUIRE(box != nullptr);
@@ -202,7 +202,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
 
       REQUIRE(box != nullptr);
@@ -254,7 +254,7 @@ namespace ao::gtk::layout::test
         .state = {{"size", LayoutValue{static_cast<std::int64_t>(900)}}, {"revealed", LayoutValue{true}}},
       };
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
 
       REQUIRE(box != nullptr);
@@ -294,7 +294,7 @@ namespace ao::gtk::layout::test
         .state = {{"size", LayoutValue{static_cast<std::int64_t>(180)}}, {"revealed", LayoutValue{false}}},
       };
 
-      auto const restoredPtr = layoutRuntime.build(ctx, doc);
+      auto const restoredPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const restoredBox = collapsibleSplitBox(*restoredPtr);
       REQUIRE(restoredBox != nullptr);
 
@@ -304,7 +304,7 @@ namespace ao::gtk::layout::test
 
       ctx.runtimeState.componentState.components["detail-split"].baselineHash = "stale";
 
-      auto const fallbackPtr = layoutRuntime.build(ctx, doc);
+      auto const fallbackPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const fallbackBox = collapsibleSplitBox(*fallbackPtr);
       REQUIRE(fallbackBox != nullptr);
 
@@ -330,7 +330,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
       REQUIRE(box != nullptr);
 
@@ -366,7 +366,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = collapsibleSplitBox(*compPtr);
       REQUIRE(box != nullptr);
 
@@ -397,7 +397,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
       {
-        auto const compPtr = layoutRuntime.build(ctx, doc);
+        auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
         auto* const box = collapsibleSplitBox(*compPtr);
         REQUIRE(box != nullptr);
 

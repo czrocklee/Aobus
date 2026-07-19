@@ -26,7 +26,7 @@ namespace ao::gtk::layout::test
     doc.root.props["regularMax"] = LayoutValue{static_cast<std::int64_t>(900)};
     doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-    auto const compPtr = layoutRuntime.build(ctx, doc);
+    auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
     REQUIRE(compPtr != nullptr);
 
     auto& widget = compPtr->widget();

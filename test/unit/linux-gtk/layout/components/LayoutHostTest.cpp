@@ -7,6 +7,7 @@
 #include "app/linux-gtk/layout/component/container/ContainerRegistry.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "layout/document/LayoutDocument.h"
@@ -16,6 +17,7 @@
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -23,10 +25,21 @@
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
+#include <memory>
+#include <utility>
+
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
   using ao::gtk::test::makeRuntime;
+
+  namespace
+  {
+    std::unique_ptr<LayoutComponent> makeNullComponent(LayoutBuildContext& /*context*/, LayoutNode const& /*node*/)
+    {
+      return nullptr;
+    }
+  } // namespace
 
   TEST_CASE("LayoutHost - rebuilds widget trees after layout updates", "[gtk][unit][layout][container]")
   {
@@ -37,6 +50,7 @@ namespace ao::gtk::layout::test
 
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry);
+    registry.registerComponent({.type = "test.null", .displayName = "Null"}, makeNullComponent);
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
@@ -47,18 +61,25 @@ namespace ao::gtk::layout::test
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
+                                  .buildState = LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     auto host = LayoutHost{registry};
+    auto install = [&](LayoutDocument const& document)
+    {
+      auto prepared = ao::test::requireValue(prepareLayout(document));
+      auto tree = ao::test::requireValue(host.prepare(ctx, prepared));
+      host.commit(runtimeState, std::move(tree));
+    };
 
-    SECTION("Initial layout is empty before setLayout")
+    SECTION("Initial layout is empty before commit")
     {
       CHECK(host.get_first_child() == nullptr);
     }
 
-    SECTION("setLayout with default document populates widget")
+    SECTION("committing a prepared default document populates widget")
     {
-      host.setLayout(ctx, makeDefaultLayout());
+      install(makeDefaultLayout());
 
       auto* const child = host.get_first_child();
 
@@ -66,23 +87,23 @@ namespace ao::gtk::layout::test
       CHECK(dynamic_cast<Gtk::Widget*>(child) != nullptr);
     }
 
-    SECTION("setLayout replaces previous layout")
+    SECTION("commit replaces the previous layout")
     {
-      host.setLayout(ctx, makeDefaultLayout());
+      install(makeDefaultLayout());
 
       auto* const first = host.get_first_child();
       CHECK(first != nullptr);
 
       auto newDoc = LayoutDocument{};
       newDoc.root.type = "spacer";
-      host.setLayout(ctx, newDoc);
+      install(newDoc);
 
       auto* const second = host.get_first_child();
       CHECK(second != nullptr);
       CHECK(second != first);
     }
 
-    SECTION("setLayout invalidates pending state writes before destroying the previous tree")
+    SECTION("commit invalidates pending state writes before destroying the previous tree")
     {
       auto stateStore = FakeLayoutComponentStateStore{};
       runtimeState.activePresetId = "classic";
@@ -96,7 +117,7 @@ namespace ao::gtk::layout::test
       splitDoc.root.props["initialPositionPercent"] = LayoutValue{0.25};
       splitDoc.root.children.push_back(LayoutNode{.type = "spacer"});
       splitDoc.root.children.push_back(LayoutNode{.type = "spacer"});
-      host.setLayout(ctx, splitDoc);
+      install(splitDoc);
 
       auto allocationHost = AllocationHost{host};
       allocationHost.allocateChild(1000, 400);
@@ -106,13 +127,47 @@ namespace ao::gtk::layout::test
 
       auto replacement = LayoutDocument{};
       replacement.root.type = "spacer";
-      host.setLayout(ctx, replacement);
+      install(replacement);
 
       CHECK(stateStore.saveCount() == 0);
       CHECK(runtimeState.componentState.components.empty());
     }
 
-    SECTION("setLayout renders registered semantic components")
+    SECTION("failed preparation preserves the active tree and generation")
+    {
+      install(makeDefaultLayout());
+
+      auto* const activeChild = host.get_first_child();
+      auto const activeGeneration = runtimeState.componentStateGeneration;
+
+      auto rejected = LayoutDocument{};
+      rejected.root.type = "test.null";
+      auto prepared = ao::test::requireValue(prepareLayout(rejected));
+      auto const result = host.prepare(ctx, prepared);
+
+      CHECK_FALSE(result);
+      CHECK(host.get_first_child() == activeChild);
+      CHECK(runtimeState.componentStateGeneration == activeGeneration);
+    }
+
+    SECTION("discarding a prepared tree preserves the active tree and generation")
+    {
+      install(makeDefaultLayout());
+
+      auto* const activeChild = host.get_first_child();
+      auto const activeGeneration = runtimeState.componentStateGeneration;
+
+      auto replacement = LayoutDocument{};
+      replacement.root.type = "spacer";
+      auto prepared = ao::test::requireValue(prepareLayout(replacement));
+      auto pending = ao::test::requireValue(host.prepare(ctx, prepared));
+
+      CHECK(pending.componentStateGeneration() == activeGeneration + 1);
+      CHECK(host.get_first_child() == activeChild);
+      CHECK(runtimeState.componentStateGeneration == activeGeneration);
+    }
+
+    SECTION("commit renders registered semantic components")
     {
       auto registry2 = ComponentRegistry{};
       LayoutRuntime::registerStandardComponents(registry2);
@@ -128,13 +183,16 @@ namespace ao::gtk::layout::test
                                      .runtime = runtime2,
                                      .parentWindow = window2,
                                      .runtimeState = runtimeState2,
+                                     .buildState = LayoutBuildStateView{runtimeState2},
                                      .dependencies = dependencies2};
 
       auto doc = LayoutDocument{};
       doc.root.type = "status.messageLabel";
 
       auto host2 = LayoutHost{registry2};
-      host2.setLayout(ctx2, doc);
+      auto prepared = ao::test::requireValue(prepareLayout(doc));
+      auto tree = ao::test::requireValue(host2.prepare(ctx2, prepared));
+      host2.commit(runtimeState2, std::move(tree));
 
       auto* const label = dynamic_cast<Gtk::Label*>(host2.get_first_child());
       REQUIRE(label != nullptr);

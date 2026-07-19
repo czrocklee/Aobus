@@ -38,10 +38,7 @@ namespace ao::gtk::layout::test
       ++_saveCount;
     }
 
-    bool prune(std::string_view /*presetId*/, uimodel::LayoutDocument const& /*effectiveDoc*/) override
-    {
-      return false;
-    }
+    bool prune(std::string_view /*presetId*/, uimodel::PreparedLayout const& /*layout*/) override { return false; }
 
     bool removePreset(std::string_view presetId) override
     {

@@ -3,7 +3,7 @@ id: shell.layout-document
 type: reference
 status: current
 domain: application-shell
-summary: Enumerates the version 1 shell layout document, node, value, template, tooltip, and managed-file surface.
+summary: Enumerates the version 1 shell layout document, node, value, template, tooltip, resource-limit, and managed-file surface.
 ---
 # Shell layout document
 
@@ -125,6 +125,36 @@ layout:
 - Component type, property, child-count, surface, and action-binding validation uses the live catalog from the [catalog reference](layout-catalog.md).
 - Preset ids used as file names reject empty values, `/`, `\`, and `..`.
 
+## Resource limits
+
+`LayoutDocumentLimits` owns the defaults below.
+`ShellLayoutStore` applies the file ceiling, and every document used by the GTK shell must pass the authored/effective ceilings through `prepareLayout()`:
+
+| Dimension | Limit |
+|---|---:|
+| Serialized custom-layout file | 256 KiB |
+| Authored entries | 4,096 |
+| Authored depth | 64 |
+| Authored owned string bytes | 256 KiB |
+| Effective entries after template expansion | 2,048 |
+| Effective depth, including template traversal | 64 |
+| Effective owned string bytes | 512 KiB |
+
+Root depth is `1`.
+Child and tooltip edges increase depth by one; following a template reference also increases effective depth by one.
+
+An entry is one layout node, template-map entry, `props`/`layout` map entry, or string-list element.
+Owned string bytes include node ids and types, template keys, property/layout keys, string values, and string-list values.
+Numeric, Boolean, and null values consume their containing map entry but no owned string bytes.
+
+Authored limits cover the root and every template, including unused templates.
+Effective limits cover the expanded root and charge each repeated expansion separately.
+Reference id, property, layout, and tooltip overlays are charged when applied even when they replace a value already copied from the template; this bounds transient expansion work as well as the retained tree.
+Missing, unknown, and recursive template references may produce diagnostic nodes only while the resulting diagnostic tree remains within the same effective limits.
+
+The file ceiling is checked before YAML parsing and before atomic replacement with serialized output.
+Tree-limit exhaustion returns `ValueTooLarge`; an allocation failure during preparation returns `ResourceExhausted`.
+
 ## Compatibility and versioning
 
 There is no migration table; only version `1` is accepted and there is no legacy or permissive fallback.
@@ -132,21 +162,25 @@ Because fixed mappings reject unknown keys, extending the version-1 root or node
 Changing a component type, prop name, template id, or action id can invalidate customized layouts and requires an explicit compatibility policy.
 
 Built-in preset changes alter fallback/default structure but do not overwrite an existing customized preset file.
-[RFC 0025](../../rfc/0025-bounded-shell-layout-documents.md) still proposes exact file/model/template-expansion budgets and broader preservation policy; explicit schema dispatch and strict version rejection are current behavior.
+A rejected customized file remains in place and byte-identical during startup fallback.
+The structured save path also refuses to replace an existing customized file that is malformed, unsupported, or over budget.
+There is no automatic migration, quarantine, or normalization policy.
 
 ## Implementation authority
 
 - [`LayoutDocument.h`](../../../app/include/ao/uimodel/layout/document/LayoutDocument.h) and [`LayoutNode.h`](../../../app/include/ao/uimodel/layout/document/LayoutNode.h) define values.
 - [`LayoutYaml.h`](../../../app/include/ao/uimodel/layout/document/LayoutYaml.h) declares the owner-local value, node, and document schema boundary.
 - [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) defines explicit YAML mapping and validation.
-- [`LayoutTemplateExpansion.cpp`](../../../app/uimodel/layout/document/LayoutTemplateExpansion.cpp) defines template merge behavior.
+- [`LayoutPreparation.h`](../../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) defines the limits and prepared proof type.
+- [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) defines authored metering and bounded template expansion.
 - [`GtkLayoutPresets.cpp`](../../../app/linux-gtk/layout/document/GtkLayoutPresets.cpp) and GTK layout YAML resources own built-in presets.
 
 ## Test authority
 
 - [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects fields, value classification, tooltips, strict node/list validation, version dispatch, unknown-key rejection, and round trip.
 - [`LayoutTemplateExpansionTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp) protects template success and error nodes.
-- [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects the group and per-preset file boundary.
+- [`LayoutPreparationTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutPreparationTest.cpp) protects tree-limit boundaries and expansion multiplication.
+- [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects the group, file ceiling, and rejected-file preservation boundary.
 
 ## Related documents
 

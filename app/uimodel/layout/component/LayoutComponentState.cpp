@@ -5,9 +5,9 @@
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateYaml.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
-#include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/utility/Xxh3.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -201,11 +201,11 @@ namespace ao::uimodel
       return canonical;
     }
 
-    std::map<std::string, LayoutNode, std::less<>> statefulNodeIndex(LayoutDocument const& doc)
+    std::map<std::string, LayoutNode, std::less<>> statefulNodeIndex(PreparedLayout const& layout)
     {
       auto result = std::map<std::string, LayoutNode, std::less<>>{};
 
-      visitExpandedLayoutNodes(doc,
+      visitExpandedLayoutNodes(layout,
                                [&result](LayoutNode const& node)
                                {
                                  if (!node.id.empty() && isStatefulLayoutComponentType(node.type))
@@ -256,7 +256,7 @@ namespace ao::uimodel
     return resolveComponentState(stateDoc, node.id, node.type, componentBaselineHash(node));
   }
 
-  void pruneComponentState(LayoutComponentStateDocument& stateDoc, LayoutDocument const& effectiveDoc)
+  void pruneComponentState(LayoutComponentStateDocument& stateDoc, PreparedLayout const& layout)
   {
     if (stateDoc.version != kStateFileVersion)
     {
@@ -264,7 +264,7 @@ namespace ao::uimodel
       return;
     }
 
-    auto const nodesById = statefulNodeIndex(effectiveDoc);
+    auto const nodesById = statefulNodeIndex(layout);
 
     std::erase_if(stateDoc.components,
                   [&nodesById](auto const& item)

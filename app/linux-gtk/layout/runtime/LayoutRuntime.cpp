@@ -11,7 +11,7 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/document/LayoutTemplateExpansion.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <memory>
 
@@ -33,9 +33,8 @@ namespace ao::gtk::layout
     registerStatusComponents(registry);
   }
 
-  std::unique_ptr<LayoutComponent> LayoutRuntime::build(LayoutBuildContext& ctx, uimodel::LayoutDocument const& doc)
+  std::unique_ptr<LayoutComponent> LayoutRuntime::build(LayoutBuildContext& ctx, uimodel::PreparedLayout const& layout)
   {
-    auto const expandedRoot = uimodel::expandLayoutTemplates(doc);
-    return _registry.create(ctx, expandedRoot);
+    return _registry.create(ctx, layout.effectiveRoot());
   }
 } // namespace ao::gtk::layout

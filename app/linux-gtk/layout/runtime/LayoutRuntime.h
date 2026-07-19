@@ -11,7 +11,7 @@
 
 namespace ao::uimodel
 {
-  struct LayoutDocument;
+  class PreparedLayout;
 }
 
 namespace ao::gtk::layout
@@ -28,9 +28,9 @@ namespace ao::gtk::layout
     explicit LayoutRuntime(ComponentRegistry const& registry);
 
     /**
-     * @brief Build a GTK widget tree from a layout document.
+     * @brief Build a GTK widget tree from a bounded prepared layout.
      */
-    std::unique_ptr<LayoutComponent> build(LayoutBuildContext& ctx, uimodel::LayoutDocument const& doc);
+    std::unique_ptr<LayoutComponent> build(LayoutBuildContext& ctx, uimodel::PreparedLayout const& layout);
 
     /**
      * @brief Register all built-in components (containers, playback, semantic) to the registry.

@@ -15,6 +15,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <giomm/menu.h>
 #include <giomm/simpleactiongroup.h>
@@ -75,7 +76,8 @@ namespace ao::gtk::layout::editor
                                          std::string initialPresetId,
                                          std::string initialThemeId,
                                          LayoutLoaderFn layoutLoader,
-                                         PreviewSchedulerFn previewScheduler)
+                                         PreviewSchedulerFn previewScheduler,
+                                         LayoutDocumentLimits limits)
     : AppDialog{}
     , _registry{registry}
     , _actionRegistry{actionRegistry}
@@ -85,6 +87,7 @@ namespace ao::gtk::layout::editor
     , _actionGroupPtr{Gio::SimpleActionGroup::create()}
     , _layoutLoader{std::move(layoutLoader)}
     , _previewScheduler{std::move(previewScheduler)}
+    , _limits{limits}
     , _currentPresetId{initialPresetId}
   {
     if (!_previewScheduler)
@@ -138,7 +141,12 @@ namespace ao::gtk::layout::editor
             result.activePresetId = _comboPresets.get_active_id().raw();
             result.activeDocument = _document;
 
-            _signalSaveRequest.emit(result);
+            if (auto saved = _signalSaveRequest.emit(result); !saved)
+            {
+              presentErrorDialog("Unable to Save Layout", saved.error().message);
+              return;
+            }
+
             close();
           }
         }
@@ -668,7 +676,17 @@ namespace ao::gtk::layout::editor
     {
       if (entry.dirty || presetId == _currentPresetId)
       {
-        auto const idDiagnostics = uimodel::validateStatefulLayoutNodeIds(entry.doc);
+        auto prepared = uimodel::prepareLayout(entry.doc, _limits);
+
+        if (!prepared)
+        {
+          presentErrorDialog(
+            "Invalid Layout Document",
+            std::format("Validation failed on preset '{}':\n\n{}", presetId, prepared.error().message));
+          return false;
+        }
+
+        auto const idDiagnostics = uimodel::validateStatefulLayoutNodeIds(*prepared);
 
         if (uimodel::hasLayoutNodeIdErrors(idDiagnostics))
         {

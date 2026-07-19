@@ -34,7 +34,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "split";
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "2 children");
     }
 
@@ -43,7 +43,7 @@ namespace ao::gtk::layout::test
       auto doc = LayoutDocument{};
       doc.root.type = "split";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "2 children");
     }
 
@@ -54,7 +54,7 @@ namespace ao::gtk::layout::test
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "2 children");
     }
 
@@ -62,7 +62,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "scroll";
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "1 child");
     }
 
@@ -72,7 +72,7 @@ namespace ao::gtk::layout::test
       doc.root.type = "scroll";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "1 child");
     }
 
@@ -80,7 +80,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "tabs";
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "at least 1 child");
     }
 
@@ -88,7 +88,7 @@ namespace ao::gtk::layout::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "responsiveClass";
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       checkError(*compPtr, "1 child");
     }
   }

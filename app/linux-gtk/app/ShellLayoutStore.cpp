@@ -3,11 +3,13 @@
 
 #include "ShellLayoutStore.h"
 
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/rt/ConfigStore.h>
-#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <optional>
@@ -17,8 +19,8 @@
 
 namespace ao::gtk
 {
-  ShellLayoutStore::ShellLayoutStore(std::filesystem::path layoutsDir)
-    : _layoutsDir{std::move(layoutsDir)}
+  ShellLayoutStore::ShellLayoutStore(std::filesystem::path layoutsDir, uimodel::LayoutDocumentLimits limits)
+    : _layoutsDir{std::move(layoutsDir)}, _limits{limits}
   {
   }
 
@@ -36,52 +38,104 @@ namespace ao::gtk
     return _layoutsDir / std::format("{}.yaml", presetId);
   }
 
-  std::optional<uimodel::LayoutDocument> ShellLayoutStore::load(std::string_view presetId) const
+  Result<std::optional<uimodel::LayoutDocument>> ShellLayoutStore::load(std::string_view presetId) const
   {
     auto const path = filePath(presetId);
+    auto ec = std::error_code{};
+    auto const exists = std::filesystem::exists(path, ec);
 
-    if (!std::filesystem::exists(path))
+    if (ec)
+    {
+      return makeError(
+        Error::Code::IoError, std::format("Failed to inspect shell layout file '{}': {}", path.string(), ec.message()));
+    }
+
+    if (!exists)
     {
       return std::nullopt;
     }
 
-    auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly};
+    auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadOnly, _limits.maxFileBytes};
     auto doc = uimodel::LayoutDocument{};
 
     auto const loaded = uimodel::loadLayout(store, "layout", doc);
 
     if (!loaded)
     {
-      APP_LOG_WARN("ShellLayoutStore: Failed to load layout ({}): {}", path.string(), loaded.error().message);
-      return std::nullopt;
+      return std::unexpected{loaded.error()};
     }
 
     if (!*loaded)
     {
-      APP_LOG_WARN("ShellLayoutStore: Layout file ({}) has no 'layout' group", path.string());
-      return std::nullopt;
+      return makeError(
+        Error::Code::FormatRejected, std::format("Shell layout file '{}' has no 'layout' group", path.string()));
     }
 
-    return doc;
-  }
-
-  void ShellLayoutStore::save(uimodel::LayoutDocument const& doc, std::string_view presetId)
-  {
-    auto const path = filePath(presetId);
-
-    auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadWrite};
-
-    if (auto const res = uimodel::saveLayout(store, "layout", doc); !res)
+    if (auto prepared = uimodel::prepareLayout(doc, _limits); !prepared)
     {
-      APP_LOG_ERROR("ShellLayoutStore: Failed to save layout ({}): {}", path.string(), res.error().message);
+      return std::unexpected{prepared.error()};
     }
+
+    return std::optional<uimodel::LayoutDocument>{std::move(doc)};
   }
 
-  void ShellLayoutStore::remove(std::string_view presetId)
+  Result<> ShellLayoutStore::save(uimodel::LayoutDocument const& doc, std::string_view presetId)
+  {
+    if (auto prepared = uimodel::prepareLayout(doc, _limits); !prepared)
+    {
+      return std::unexpected{prepared.error()};
+    }
+
+    auto const path = filePath(presetId);
+    auto ec = std::error_code{};
+    auto const existed = std::filesystem::exists(path, ec);
+
+    if (ec)
+    {
+      return makeError(
+        Error::Code::IoError, std::format("Failed to inspect shell layout file '{}': {}", path.string(), ec.message()));
+    }
+
+    auto store = rt::ConfigStore{path, rt::ConfigStore::OpenMode::ReadWrite, _limits.maxFileBytes};
+
+    if (existed)
+    {
+      auto previous = uimodel::LayoutDocument{};
+      auto const loaded = uimodel::loadLayout(store, "layout", previous);
+
+      if (!loaded)
+      {
+        return std::unexpected{loaded.error()};
+      }
+
+      if (!*loaded)
+      {
+        return makeError(
+          Error::Code::FormatRejected, std::format("Shell layout file '{}' has no 'layout' group", path.string()));
+      }
+
+      if (auto prepared = uimodel::prepareLayout(previous, _limits); !prepared)
+      {
+        return std::unexpected{prepared.error()};
+      }
+    }
+
+    return uimodel::saveLayout(store, "layout", doc);
+  }
+
+  Result<> ShellLayoutStore::remove(std::string_view presetId)
   {
     auto const path = filePath(presetId);
     auto ec = std::error_code{};
 
     std::filesystem::remove(path, ec);
+
+    if (ec)
+    {
+      return makeError(
+        Error::Code::IoError, std::format("Failed to remove shell layout file '{}': {}", path.string(), ec.message()));
+    }
+
+    return {};
   }
 } // namespace ao::gtk

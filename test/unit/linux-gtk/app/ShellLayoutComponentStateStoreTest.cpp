@@ -8,6 +8,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -119,8 +120,10 @@ namespace ao::gtk::test
       auto layoutDoc = uimodel::LayoutDocument{};
       layoutDoc.root.type = "box";
       layoutDoc.root.children = {liveNode, uimodel::LayoutNode{.id = "wrong-type", .type = "split"}, staleNode};
+      auto const prepared = uimodel::prepareLayout(layoutDoc);
+      REQUIRE(prepared);
 
-      store.prune("classic", layoutDoc);
+      store.prune("classic", *prepared);
 
       auto const optLoaded = store.load("classic");
       REQUIRE(optLoaded);
@@ -150,11 +153,15 @@ namespace ao::gtk::test
       auto layoutDoc = uimodel::LayoutDocument{};
       layoutDoc.root.type = "box";
       layoutDoc.root.children = {node};
+      auto prepared = uimodel::prepareLayout(layoutDoc);
+      REQUIRE(prepared);
 
-      CHECK_FALSE(store.prune("classic", layoutDoc));
+      CHECK_FALSE(store.prune("classic", *prepared));
 
       layoutDoc.root.children.clear();
-      CHECK(store.prune("classic", layoutDoc));
+      prepared = uimodel::prepareLayout(layoutDoc);
+      REQUIRE(prepared);
+      CHECK(store.prune("classic", *prepared));
     }
 
     SECTION("preset validation rejects path traversal, empty ids, and null bytes")

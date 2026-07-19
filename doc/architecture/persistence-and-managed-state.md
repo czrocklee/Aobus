@@ -113,7 +113,8 @@ Workspace and playback keep their schemas in runtime; presentation and shell-lay
 GTK presentation paths remain adapters over UIModel-owned schemas rather than becoming schema owners.
 
 Authored shell-layout and component-state schemas reject unsupported versions before interpreting version-specific payload fields.
-[RFC 0025](../rfc/0025-bounded-shell-layout-documents.md) still proposes shell-specific file, model, and template-expansion budgets; those resource limits are distinct from the explicit schema boundary.
+Shell-layout preparation additionally enforces shell-owned file, authored-tree, and effective-tree budgets after schema dispatch and before live GTK construction.
+Those resource limits are distinct from the explicit schema boundary and do not become a global YAML policy.
 
 The schema owner decides whether absence retains seeded defaults, whether unknown fields are tolerated, whether malformed nested data rejects the whole candidate, and whether an older representation can be migrated.
 No compatibility or migration path exists merely because an earlier implementation reflected a C++ aggregate.
@@ -126,6 +127,7 @@ The semantic owner above the store remains responsible for dirty state, scheduli
 
 A specialized store may bypass `ConfigStore` when its document boundary, synchronization, or pruning behavior differs from grouped application configuration.
 `ShellLayoutComponentStateStore`, for example, reads and emits one complete component-state document directly, protects its operations with a mutex, and still uses the shared YAML and atomic-file mechanisms.
+`ShellLayoutStore` instead configures `ConfigStore` with the shell's file-byte ceiling, prepares loaded and saved documents, and refuses to replace a malformed, unsupported, or over-budget existing customization.
 
 `LibraryPaths` derives the canonical managed-data base, database, and log locations from a supplied music root and recognizes whether the canonical database already exists.
 It does not discover XDG, GLib, terminal, or command-line locations.

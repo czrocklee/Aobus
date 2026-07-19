@@ -10,6 +10,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <ios>
 #include <string>
 #include <string_view>
 
@@ -86,6 +88,21 @@ namespace ao::test
       auto result = yaml::readFileResult(missing);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::IoError);
+    }
+
+    SECTION("readFileResult applies its optional byte ceiling before reading")
+    {
+      auto const tempDir = TempDir{};
+      auto const path = std::filesystem::path{tempDir.path()} / "bounded.yaml";
+      std::ofstream{path, std::ios::binary} << "12345";
+
+      auto exact = yaml::readFileResult(path, 5);
+      REQUIRE(exact);
+      CHECK(exact->size() == 5);
+
+      auto const rejected = yaml::readFileResult(path, 4);
+      REQUIRE_FALSE(rejected);
+      CHECK(rejected.error().code == Error::Code::ValueTooLarge);
     }
 
     SECTION("scalarAs reports malformed scalars as FormatRejected")

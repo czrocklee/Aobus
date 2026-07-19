@@ -6,6 +6,7 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -92,7 +93,10 @@ namespace ao::gtk::layout::test
       for (auto const presetId : {LayoutPresetId::Classic, LayoutPresetId::Modern})
       {
         auto const doc = makeBuiltInLayout(presetId);
+        auto const prepared = prepareLayout(doc);
         auto missingStatefulIds = std::vector<std::string>{};
+
+        REQUIRE(prepared);
 
         visitLayoutDocumentNodes(doc,
                                  [&](LayoutNode const& node)
@@ -104,7 +108,7 @@ namespace ao::gtk::layout::test
                                  });
 
         CHECK(missingStatefulIds.empty());
-        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(doc)));
+        CHECK_FALSE(hasLayoutNodeIdErrors(validateStatefulLayoutNodeIds(*prepared)));
       }
     }
 

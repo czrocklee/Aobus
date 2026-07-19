@@ -173,6 +173,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/component/LayoutComponentStateTest.cpp
     unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
     unit/uimodel/layout/document/LayoutModelTest.cpp
+    unit/uimodel/layout/document/LayoutPreparationTest.cpp
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataWorkflowTest.cpp

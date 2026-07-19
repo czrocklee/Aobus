@@ -539,8 +539,8 @@ namespace ao::gtk::layout
     {
     public:
       AbsoluteCanvasComponent(LayoutBuildContext& ctx, uimodel::LayoutNode const& node)
-        : _canvas{ctx.runtimeState.editMode,
-                  ctx.runtimeState.onNodeMoved,
+        : _canvas{ctx.buildState.isEditMode(),
+                  ctx.buildState.onNodeMoved(),
                   node.propertyOr<bool>("snapToGrid", true),
                   static_cast<std::int32_t>(node.propertyOr<std::int64_t>("gridSize", 8))}
       {

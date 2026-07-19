@@ -108,15 +108,17 @@ The tree's exact partial state after a thrown parser exception is not a usable d
 
 ### File reading
 
-`readFileResult(path)` opens the file in binary mode at end, obtains its size, seeks to the beginning, allocates one exact-size `std::vector<char>`, and reads that byte count.
+`readFileResult(path, optMaxBytes)` opens the file in binary mode at end, obtains its size, applies an optional caller-owned ceiling, seeks to the beginning, allocates one exact-size `std::vector<char>`, and reads that byte count.
 It returns:
 
 | Condition | Result |
 |---|---|
 | Open, size inspection, seek, or complete read fails | `IoError` with path context. |
+| The inspected size exceeds `optMaxBytes` or the stream-size representation | `ValueTooLarge` before buffer allocation. |
 | Complete read succeeds, including a zero-length file | The byte vector. |
 
-The helper does not impose a document-size limit, text serialization, terminator, newline, or YAML validation.
+The ceiling defaults to absent; the adapter does not select a document-size policy.
+The helper does not impose text serialization, terminator, newline, or YAML validation.
 Allocation, path-string conversion, and unrelated standard-library exceptions are not broadly converted to `IoError`.
 
 `readFile(path)` is a throwing compatibility wrapper.
@@ -200,7 +202,7 @@ The low-level channel depends on the operation:
 | Operation family | Failure channel |
 |---|---|
 | RapidYAML parsing or tree callback | `ao::Exception` thrown by the configured callback. |
-| Complete-file read | `Result` with `IoError`. |
+| Complete-file read | `Result` with `IoError`, or `ValueTooLarge` for a configured/representational size violation. |
 | `readFile()` compatibility wrapper | `ao::Exception`. |
 | Strict `tryParseScalar` or `tryReadScalar` | `false`, with destination retained. |
 | Node-kind, key, child, `MapReader`, sequence, or `scalarAs` validation | `Result` with `FormatRejected` and bounded caller context. |
@@ -239,7 +241,7 @@ A frontend file adapter may log or fall back only according to the specification
 
 ## Test map
 
-- [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, missing-file `IoError`, and callback filename ownership.
+- [`RymlAdapterTest.cpp`](../../../test/unit/utility/RymlAdapterTest.cpp) protects complete scalar consumption, numeric range, unsigned-negative rejection, canonical booleans, null-string rejection, bounded context, file-byte ceiling boundaries, missing-file `IoError`, and callback filename ownership.
 - [`YamlSerializationTest.cpp`](../../../test/unit/utility/YamlSerializationTest.cpp) protects quoted string type preservation, node kinds, required children, duplicate and unknown keys, map-reader assignment, explicit-null rejection, failure order, map-writer failure order and arena ownership, sequence index context, bounded field context, and dynamic string-map boundary classification.
 - [`ConfigStoreTest.cpp`](../../../test/unit/runtime/ConfigStoreTest.cpp) protects translation of malformed YAML through a containing store and retry after initialization failure.
 - Library transfer, layout model, and component-state tests protect their domain-specific use of the adapter without making those schemas part of this contract.

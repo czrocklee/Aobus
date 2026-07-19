@@ -24,7 +24,7 @@ The [system architecture](system-overview.md) places reusable layout values and 
 
 ```text
 UIModel
-  LayoutDocument + template expansion
+  LayoutDocument -> bounded preparation -> PreparedLayout
   LayoutComponentCatalog + LayoutActionCatalog
   ShellLayoutSessionModel + component-state policy + keymap model
            |
@@ -44,7 +44,7 @@ This document refines the shell-specific composition inside that split and does 
 
 ### Platform-neutral shell language
 
-UIModel owns `LayoutDocument`, `LayoutNode`, `LayoutValue`, template expansion, node-id validation, component and action descriptor types, the platform-neutral component/action catalogs, component-state documents and promotion policy, `ShellLayoutSessionModel`, and keymap values and policy.
+UIModel owns `LayoutDocument`, `LayoutNode`, `LayoutValue`, shell-owned preparation limits, bounded template expansion, `PreparedLayout`, node-id validation, component and action descriptor types, the platform-neutral component/action catalogs, component-state documents and promotion policy, `ShellLayoutSessionModel`, and keymap values and policy.
 
 These values describe structure, stable command identity, validation metadata, and UI-local state without naming GTK widget classes, GDK key symbols, or runtime storage objects beyond narrow managed-state adapters.
 
@@ -54,8 +54,8 @@ These values describe structure, stable command identity, validation metadata, a
 The controller is the current GTK shell composition owner: it selects and loads a preset, owns the active layout session, component and action registries, runtime component state, layout host, editor workflow, stores, action export, and the borrowed collaborators used by factories.
 
 This is a broad current responsibility set, not a general-purpose runtime facade.
-Persistence calls in several editor and panel-size paths remain log-only or void, so a rebuild can proceed without workflow-level durable acknowledgement.
-The underlying grouped store now provides a fail-closed one-shot replacement result; [RFC 0015](../rfc/0015-fail-closed-config-store.md) records why broader generic receipts and recovery were rejected.
+Customized-layout load/save/remove operations and candidate preparation return typed results; component-state persistence retains its narrower optional/Boolean contract.
+The underlying grouped store provides fail-closed one-shot replacement; [RFC 0015](../rfc/0015-fail-closed-config-store.md) records why broader generic receipts and recovery were rejected.
 
 ### Component and action registries
 
@@ -67,11 +67,12 @@ It remains the live command authority; layout nodes, keyboard maps, notification
 
 ### Layout construction
 
-`LayoutRuntime` expands document templates and recursively requests GTK components from the registry.
-`LayoutHost` owns the active component tree and replaces it as a unit on load, editor preview, save, reset, or panel-size promotion.
+`prepareLayout()` meters the authored document, performs bounded template expansion, and produces the only value accepted by `LayoutRuntime` and `LayoutHost`.
+`LayoutRuntime` recursively requests GTK components from that prepared effective root.
+`LayoutHost` owns the active component tree and exposes a staged `prepare`/`commit` boundary for load, editor preview/save, reset, and panel-size promotion.
 
 Factories receive one `LayoutBuildContext` assembled for the build.
-They borrow `AppRuntime`, the parent window, registries, shell-lifetime runtime state, and an explicit `GtkUiDependencies` view; they do not reach through a global service locator.
+They borrow `AppRuntime`, the parent window, registries, shell-lifetime runtime state, an explicit candidate-state view, and `GtkUiDependencies`; they do not reach through a global service locator.
 
 ### State and input adaptation
 
@@ -98,13 +99,13 @@ GTK translates those chords to native accelerator syntax and applies eligible wi
 
 ```text
 global application preference selects classic or modern
-  -> worker loads customized layout or built-in preset
+  -> worker bounded-loads customized layout or preserves/rejects it and selects built-in
+  -> worker prepares authored/effective layout
   -> worker loads matching component-state document or empty state
-  -> callback executor installs ShellLayoutSessionModel state
+  -> callback executor builds a detached GTK candidate against candidate state
   -> stateful node ids are diagnosed
-  -> controller assembles a fresh LayoutBuildContext
-  -> LayoutHost replaces the component tree
-  -> template expansion + registry factories create GTK widgets
+  -> controller installs ShellLayoutSessionModel and runtime state
+  -> LayoutHost commits the prepared tree
 ```
 
 ### Action route
@@ -124,10 +125,10 @@ The bridge refreshes enabled state from the live registry.
 
 ```text
 editor working document
-  -> preview rebuild without committing layout or runtime component state
-  -> Save writes modified presets and prunes matching runtime state
+  -> bounded preview prepare/build without committing layout or runtime component state
+  -> Save prepares the active tree before writing modified presets and pruning runtime state
   -> session installs active preset/document/state
-  -> host rebuild
+  -> host commit
 
 component interaction
   -> state entry keyed by node id
@@ -142,11 +143,14 @@ Panel-size promotion moves eligible splitter size values into authored defaults 
 
 - One `ShellLayoutController` and one active `LayoutHost` belong to one GTK `MainWindow`.
 - `ShellLayoutSessionModel` is the active preset/document authority; editor working copies and preview trees are not authoritative.
+- Raw `LayoutDocument` values remain authored/session/persistence values; only `PreparedLayout` may enter GTK construction.
 - `LayoutBuildContext` is created for one recursive build and cannot be retained as shell wiring.
+- Candidate construction reads preset, component state, edit mode, callbacks, and generation from its explicit build-state view.
 - `LayoutRuntimeState` outlives every component that can write component state.
 - Stateful component identity is a stable expanded node id, never tree position.
 - Anonymous stateful nodes remain usable but non-persistent; duplicate stateful ids are invalid for save.
 - Component-state generation prevents an old tree from writing into a newly installed state document.
+- A detached tree captures the next generation; commit advances that generation before destroying the retiring tree.
 - Authored layouts, component runtime state, global preset selection, and keyboard overrides remain separate persistence classes.
 - Unknown component and template references become visible diagnostic components rather than undefined factory calls.
 
@@ -157,10 +161,13 @@ Layout load runs on the shared worker pool and returns to the frontend callback 
 
 Unknown or recursive templates become error nodes.
 Unknown component types become visible layout-error widgets.
-Malformed custom layout or component-state files currently fall back or log according to their store; several save/remove operations do not return a complete commit outcome to the shell coordinator.
-Those current best-effort workflow boundaries are documented by the shell specifications and persistence architecture.
+Malformed, unsupported, or over-budget customized layouts fall back to the matching built-in document without rewriting the rejected file.
+Missing customization is normal absence rather than rejection.
 The grouped store preserves the previous document on returned failure, while [RFC 0015](../rfc/0015-fail-closed-config-store.md) records the rejected broader transaction and receipt design.
-Authored layout version values are currently decoded without a supported-version gate, and file/model/template/widget construction has no shared product budget; [RFC 0025](../rfc/0025-bounded-shell-layout-documents.md) proposes one strict bounded candidate pipeline.
+
+Document preparation and detached GTK construction happen before active session/tree replacement.
+A failed preparation keeps the old generation live.
+[RFC 0025](../rfc/0025-bounded-shell-layout-documents.md) records the implemented narrow safety kernel and the broader migration/candidate mechanisms that were deliberately omitted.
 
 During teardown the controller clears the host while runtime state, stores, registries, and borrowed dependencies are still alive.
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
@@ -168,7 +175,7 @@ Editor theme and callback tokens are released before the controller's collaborat
 
 ## Implementation map
 
-- [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), [`LayoutNode`](../../app/include/ao/uimodel/layout/document/LayoutNode.h), and [`LayoutTemplateExpansion.cpp`](../../app/uimodel/layout/document/LayoutTemplateExpansion.cpp) own the platform-neutral document.
+- [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), [`LayoutNode`](../../app/include/ao/uimodel/layout/document/LayoutNode.h), and [`LayoutPreparation`](../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) own the platform-neutral document and preparation proof.
 - UIModel layout action, component, document, and shell types live under [`app/include/ao/uimodel/layout/`](../../app/include/ao/uimodel/layout/) and [`app/uimodel/layout/`](../../app/uimodel/layout/).
 - [`ShellLayoutController`](../../app/linux-gtk/app/ShellLayoutController.h) is the current GTK shell owner.
 - [`ComponentRegistry`](../../app/linux-gtk/layout/runtime/ComponentRegistry.h), [`ActionRegistry`](../../app/linux-gtk/layout/runtime/ActionRegistry.h), [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h), and [`LayoutHost`](../../app/linux-gtk/layout/runtime/LayoutHost.h) own GTK construction and activation.
@@ -177,7 +184,7 @@ Editor theme and callback tokens are released before the controller's collaborat
 
 ## Test map
 
-- UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, template, catalog, action, component-state, promotion, and session policy.
+- UIModel layout tests under [`test/unit/uimodel/layout/`](../../test/unit/uimodel/layout/) protect document, bounded preparation, templates, catalogs, actions, component-state, promotion, and session policy.
 - GTK layout runtime and component tests under [`test/unit/linux-gtk/layout/`](../../test/unit/linux-gtk/layout/) protect construction, registry injection, actions, surfaces, editor behavior, and component state.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects shell ownership by the window.
 - Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/) and [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protect neutral and GTK shortcut boundaries.

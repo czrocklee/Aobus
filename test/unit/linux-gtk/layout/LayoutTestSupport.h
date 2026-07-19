@@ -16,6 +16,7 @@
 #include <ao/rt/PlaybackSequenceService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <gtkmm/application.h>
@@ -31,6 +32,11 @@
 
 namespace ao::gtk::layout::test
 {
+  inline uimodel::PreparedLayout preparedLayout(uimodel::LayoutDocument const& document)
+  {
+    return ao::test::requireValue(uimodel::prepareLayout(document));
+  }
+
   class [[nodiscard]] FakeTrackDetailScope final : public TrackDetailScope
   {
   public:
@@ -72,6 +78,7 @@ namespace ao::gtk::layout::test
              .runtime = _runtime,
              .parentWindow = _window,
              .runtimeState = _runtimeState,
+             .buildState = LayoutBuildStateView{_runtimeState},
              .dependencies = _dependencies}
       , _layoutRuntime{_components}
     {
@@ -104,6 +111,7 @@ namespace ao::gtk::layout::test
                                     .runtime = _runtime,
                                     .parentWindow = _window,
                                     .runtimeState = _runtimeState,
+                                    .buildState = LayoutBuildStateView{_runtimeState},
                                     .dependencies = _dependencies,
                                     .detailScope = _trackDetailScopePtr.get()};
       return _components.create(ctx, node);

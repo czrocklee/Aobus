@@ -39,7 +39,7 @@ namespace ao::gtk::layout::test
 
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&compPtr->widget());
 
       REQUIRE(sw != nullptr);
@@ -65,7 +65,7 @@ namespace ao::gtk::layout::test
       doc.root.type = "scroll";
       doc.root.children.push_back(LayoutNode{.type = "spacer"});
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const sw = dynamic_cast<Gtk::ScrolledWindow*>(&compPtr->widget());
 
       REQUIRE(sw != nullptr);
@@ -84,7 +84,7 @@ namespace ao::gtk::layout::test
       doc.root.type = "separator";
       doc.root.props["orientation"] = LayoutValue{std::string{"vertical"}};
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const sep = dynamic_cast<Gtk::Separator*>(&compPtr->widget());
 
       REQUIRE(sep != nullptr);
@@ -108,7 +108,7 @@ namespace ao::gtk::layout::test
       c2.layout["title"] = LayoutValue{std::string{"Second Tab"}};
       doc.root.children.push_back(c2);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
       auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
 
       REQUIRE(box != nullptr);
@@ -136,7 +136,7 @@ namespace ao::gtk::layout::test
       c1.layout["title"] = LayoutValue{std::string{"Spacer Tab"}};
       doc.root.children.push_back(c1);
 
-      auto const compPtr = layoutRuntime.build(ctx, doc);
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
 
       REQUIRE(compPtr != nullptr);
 

@@ -4,9 +4,11 @@
 #pragma once
 
 #include "app/AppDialog.h"
+#include <ao/Error.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <giomm/simpleactiongroup.h>
 #include <glibmm/refptr.h>
@@ -65,7 +67,8 @@ namespace ao::gtk::layout::editor
                        std::string initialPresetId,
                        std::string initialThemeId,
                        LayoutLoaderFn layoutLoader,
-                       PreviewSchedulerFn previewScheduler = {});
+                       PreviewSchedulerFn previewScheduler = {},
+                       uimodel::LayoutDocumentLimits limits = uimodel::LayoutDocumentLimits{});
     ~LayoutEditorDialog() override;
 
     LayoutEditorDialog(LayoutEditorDialog const&) = delete;
@@ -80,7 +83,7 @@ namespace ao::gtk::layout::editor
 
     sigc::signal<void(uimodel::LayoutDocument const&)>& signalApplyPreview() { return _signalApplyPreview; }
     sigc::signal<void(std::string_view)>& signalThemePreview() { return _signalThemePreview; }
-    sigc::signal<void(LayoutSaveResult const&)>& signalSaveRequest() { return _signalSaveRequest; }
+    sigc::signal<Result<>(LayoutSaveResult const&)>& signalSaveRequest() { return _signalSaveRequest; }
 
     void updateNodePosition(std::string_view nodeId, std::int32_t xPosition, std::int32_t yPosition);
 
@@ -196,12 +199,13 @@ namespace ao::gtk::layout::editor
 
     LayoutLoaderFn _layoutLoader;
     PreviewSchedulerFn _previewScheduler;
+    uimodel::LayoutDocumentLimits _limits;
     std::map<std::string, SessionEntry, std::less<>> _session;
     std::string _currentPresetId;
     sigc::scoped_connection _previewDebounceConn;
 
     sigc::signal<void(uimodel::LayoutDocument const&)> _signalApplyPreview;
     sigc::signal<void(std::string_view)> _signalThemePreview;
-    sigc::signal<void(LayoutSaveResult const&)> _signalSaveRequest;
+    sigc::signal<Result<>(LayoutSaveResult const&)> _signalSaveRequest;
   };
 } // namespace ao::gtk::layout::editor

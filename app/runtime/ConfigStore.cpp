@@ -11,10 +11,12 @@
 
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -23,8 +25,11 @@
 
 namespace ao::rt
 {
-  ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode)
-    : _filePath{std::move(filePath)}, _yamlErrorState{_filePath.string()}, _mode{mode}
+  ConfigStore::ConfigStore(std::filesystem::path filePath, OpenMode mode, std::optional<std::size_t> optMaxFileBytes)
+    : _filePath{std::move(filePath)}
+    , _yamlErrorState{_filePath.string()}
+    , _mode{mode}
+    , _optMaxFileBytes{optMaxFileBytes}
   {
   }
 
@@ -88,7 +93,7 @@ namespace ao::rt
       return {};
     }
 
-    auto bufferResult = yaml::readFileResult(_filePath);
+    auto bufferResult = yaml::readFileResult(_filePath, _optMaxFileBytes);
 
     if (!bufferResult)
     {
@@ -155,6 +160,15 @@ namespace ao::rt
     APP_LOG_INFO("Saving config to: {}", _filePath.string());
 
     auto const yaml = ryml::emitrs_yaml<std::string>(candidate);
+
+    if (_optMaxFileBytes && yaml.size() > *_optMaxFileBytes)
+    {
+      return makeError(Error::Code::ValueTooLarge,
+                       std::format("Serialized config file '{}' is {} bytes; maximum allowed is {}",
+                                   _filePath.string(),
+                                   yaml.size(),
+                                   *_optMaxFileBytes));
+    }
 
     if (auto const written = utility::writeAtomically(_filePath, yaml); !written)
     {
