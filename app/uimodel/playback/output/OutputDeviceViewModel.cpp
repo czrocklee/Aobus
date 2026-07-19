@@ -6,6 +6,7 @@
 #include <ao/rt/PlaybackService.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <format>
 #include <functional>
@@ -23,7 +24,8 @@ namespace ao::uimodel
       std::string device;
     };
 
-    BackendDeviceNames resolveBackendDeviceNames(rt::PlaybackState const& state)
+    BackendDeviceNames resolveBackendDeviceNames(rt::PlaybackState const& state,
+                                                 PresentationTextCatalog const& textCatalog)
     {
       auto result = BackendDeviceNames{};
 
@@ -34,13 +36,19 @@ namespace ao::uimodel
           continue;
         }
 
-        result.backend = backend.name;
+        result.backend = textCatalog.audioBackend(backend.id).label;
 
         for (auto const& device : backend.devices)
         {
           if (device.id == state.output.selectedDevice.deviceId)
           {
             result.device = device.displayName;
+
+            if (device.isDefault && device.id.empty() && result.device.empty())
+            {
+              result.device = textCatalog.systemDefaultOutputDeviceLabel();
+            }
+
             break;
           }
         }
@@ -83,13 +91,14 @@ namespace ao::uimodel
 
     for (auto const& backend : state.output.availableBackends)
     {
+      auto const backendPresentation = _textCatalog.audioBackend(backend.id);
       view.rows.push_back(OutputDeviceRow{
         .kind = OutputDeviceRow::Kind::BackendHeader,
         .backendId = backend.id,
         .deviceId = audio::DeviceId{},
         .profileId = audio::kProfileShared,
-        .title = backend.name,
-        .description = std::string{},
+        .title = backendPresentation.label,
+        .description = backendPresentation.description,
         .isActive = false,
       });
 
@@ -105,6 +114,12 @@ namespace ao::uimodel
           }
 
           bool const isExclusive = (profile == audio::kProfileExclusive);
+          auto deviceTitle = device.displayName;
+
+          if (device.isDefault && device.id.empty() && deviceTitle.empty())
+          {
+            deviceTitle = _textCatalog.systemDefaultOutputDeviceLabel();
+          }
 
           bool const isActive =
             (backend.id == state.output.selectedDevice.backendId && profile == state.output.selectedDevice.profileId &&
@@ -115,8 +130,9 @@ namespace ao::uimodel
             .backendId = backend.id,
             .deviceId = device.id,
             .profileId = profile,
-            .title = device.displayName,
-            .description = device.description,
+            .title = std::move(deviceTitle),
+            .description =
+              device.description.empty() ? backendPresentation.outputDeviceDescriptionFallback : device.description,
             .isActive = isActive,
             .isExclusive = isExclusive,
           });
@@ -132,39 +148,16 @@ namespace ao::uimodel
     {
       view.hasActiveOutputDevice = true;
 
-      if (state.output.selectedDevice.backendId == audio::kBackendPipeWire)
-      {
-        view.outputBackendSummary = "PW";
-      }
-      else if (state.output.selectedDevice.backendId == audio::kBackendAlsa)
-      {
-        view.outputBackendSummary = "ALSA";
-      }
-      else
-      {
-        for (auto const& backend : state.output.availableBackends)
-        {
-          if (backend.id == state.output.selectedDevice.backendId)
-          {
-            view.outputBackendSummary = backend.name;
-            break;
-          }
-        }
+      view.outputBackendSummary = _textCatalog.audioBackend(state.output.selectedDevice.backendId).shortLabel;
 
-        if (view.outputBackendSummary.empty())
-        {
-          view.outputBackendSummary = state.output.selectedDevice.backendId.raw();
-        }
-      }
-
-      auto const names = resolveBackendDeviceNames(state);
+      auto const names = resolveBackendDeviceNames(state, _textCatalog);
       bool const isExclusive = (state.output.selectedDevice.profileId == audio::kProfileExclusive);
 
       view.outputDeviceStatus = std::format("{}: {}", names.backend, names.device);
 
       if (isExclusive)
       {
-        view.outputDeviceStatus += " (Exclusive Mode)";
+        view.outputDeviceStatus += " (" + _textCatalog.audioProfile(audio::kProfileExclusive).label + ")";
       }
     }
 

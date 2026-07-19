@@ -74,7 +74,7 @@ namespace ao::rt::test
     CHECK(optAlbum->replaceBegin == 0);
     CHECK(optAlbum->replaceEnd == 3);
     CHECK(insertTexts(optAlbum->items) == std::vector<std::string>{"$album", "$albumArtist"});
-    CHECK(optAlbum->items[0].detail == "alias");
+    CHECK(optAlbum->items[0].detail.kind == CompletionDetailKind::Alias);
 
     auto optTrackNumber = completer.complete("$tn", 3);
     REQUIRE(optTrackNumber);

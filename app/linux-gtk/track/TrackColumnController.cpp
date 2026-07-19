@@ -10,6 +10,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <giomm/listmodel.h>
 #include <glib.h>
@@ -91,7 +92,7 @@ namespace ao::gtk
         continue;
       }
 
-      auto const title = toUString(rtDef.label);
+      auto const title = toUString(uimodel::PresentationTextCatalog{}.trackFieldLabel(rtDef.field));
       auto const columnPtr = Gtk::ColumnViewColumn::create(title, factoryProvider(rtDef.field));
 
       columnPtr->set_id(toUString(rtDef.id));

@@ -161,7 +161,9 @@ namespace ao::tui::test
           return rt::CompletionResult{
             .replaceBegin = 0,
             .replaceEnd = 2,
-            .items = {rt::CompletionItem{.displayText = "/detail", .insertText = "detail", .detail = "track detail"}},
+            .items = {rt::CompletionItem{.displayText = "/detail",
+                                         .insertText = "detail",
+                                         .detail = rt::CompletionDetail::makeResolvedText("track detail")}},
           };
         }}};
 
@@ -682,7 +684,7 @@ namespace ao::tui::test
     auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
-    CHECK(feed.entries.back().message == "Playback control unavailable");
+    CHECK(rt::resolvedNotificationText(feed.entries.back().message) == "Playback control unavailable");
   }
 
   TEST_CASE("EventController - idle stop is a silent no-op", "[tui][unit][event]")
@@ -792,7 +794,11 @@ namespace ao::tui::test
                                       fixture.runtime,
                                       EventControllerBindings{.activityStatusViewModel = &activityStatusViewModel}};
 
-    activityStatusViewModel.handleLibraryTaskProgress("Updating: status-progress.flac", 0.625);
+    activityStatusViewModel.handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated{
+      .kind = rt::LibraryChanges::LibraryTaskProgressKind::Updating,
+      .fraction = 0.625,
+      .subject = "status-progress.flac",
+    });
     REQUIRE(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Processing);
     REQUIRE_FALSE(activityStatusViewModel.viewState().compact.dismissible);
 

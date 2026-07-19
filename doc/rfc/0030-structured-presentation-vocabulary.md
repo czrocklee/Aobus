@@ -1,12 +1,36 @@
 ---
 id: rfc.0030.structured-presentation-vocabulary
 type: rfc
-status: draft
+status: implemented
 domain: presentation
-summary: Proposes stable semantic presentation values and typed UIModel text catalogs instead of authored display strings in core and runtime.
+summary: Replaced shared authored display strings in Core/runtime with stable semantic values, structured arguments, and one typed UIModel English catalog.
 depends-on: none
 ---
 # RFC 0030: Structured presentation vocabulary
+
+## Disposition
+
+Implemented on 2026-07-19.
+
+The implementation:
+
+- adds a zero-state immutable `PresentationTextCatalog` as the single owner of the initial shared English vocabulary, without selecting a locale service, registry, or localization-file format;
+- removes field labels and built-in preset labels/descriptions from runtime structural catalogs while preserving every stable id and persisted presentation shape;
+- keeps runtime group-heading slots as raw text, numeric years, absence, or exhaustive missing-value kinds until UIModel resolves them;
+- reduces Core backend/profile descriptors to machine ids and supported-profile structure, preserves operating-system device facts as external data, and maps known ids plus unknown-id fallback in UIModel;
+- replaces native audio icon names below GTK with `AudioIconKind` and maps that semantic value at the GTK adapter;
+- replaces completion detail prose with typed roles, frequency arguments, and an explicit resolved-text escape hatch for frontend-local completion sources;
+- removes the inert notification template field, carries shared playback reports as closed templates plus typed arguments through immutable feed snapshots, and resolves them once in the activity projection;
+- replaces library-progress prefix parsing with `LibraryTaskProgressKind`, a raw subject, and catalog-selected compact/detail text;
+- adds a current [presentation text catalog reference](../reference/presentation/text-catalog.md), authored-copy classification guidance, and focused closed-set/fallback tests; and
+- preserves stable ids, query syntax, user-authored text, metadata, paths, external device facts, diagnostics, and CLI contracts under their existing owners.
+
+The concrete catalog is deliberately default-constructible and stateless while one vocabulary exists.
+View models may own that value without synchronization or lifetime coupling; a future second vocabulary must preserve the typed coverage before introducing injection or storage machinery.
+Unknown backend/profile ids use id-only fallback, and the initial English formatter needs only singular/other plural selection.
+
+The [presentation architecture](../architecture/presentation.md), [playback architecture](../architecture/playback.md), [track expression architecture](../architecture/track-expression.md), [failure and reporting architecture](../architecture/failure-and-reporting.md), and linked specifications/references own current behavior and supersede the proposal language below.
+No separate decision record was needed because implementation followed the RFC's semantic-value/catalog boundary without choosing a localization technology.
 
 ## Problem
 
@@ -252,18 +276,16 @@ No migration reader is required because the proposal does not change a durable d
 - Repository guardrails reject known toolkit icon suffixes and designated authored-copy fields in core/runtime surfaces after each migration slice.
 - The implementation passes `./ao check` and `./ao docs check`.
 
-## Open questions
+## Resolved questions
 
-- What catalog construction API best supports a future locale source without coupling UIModel to one localization library?
-- Should unknown extension backends provide an explicitly classified human name in addition to their stable id, or is the id-only fallback sufficient?
-- Which formatted values require plural categories beyond singular/other before a second locale is supported?
+- The first catalog is a concrete zero-state English value; localization injection is deferred until a second vocabulary provides evidence for the required construction API.
+- Unknown extension backends and profiles use id-only fallback. Operating-system device names remain external facts, while unclassified provider marketing names do not enter Core descriptors.
+- The current English playback summaries require singular/other only. A future locale source must expand the typed formatting contract before claiming more plural categories.
 
 ## Promotion plan
 
-If accepted, update the [presentation architecture](../architecture/presentation.md) with the catalog, structured group-heading, audio-presentation, and completion-role boundaries.
-Update the [system architecture](../architecture/system-overview.md), [audio-quality architecture](../architecture/audio-quality.md), [track-expression architecture](../architecture/track-expression.md), and [failure and reporting architecture](../architecture/failure-and-reporting.md) only where their dependency or data-flow maps change.
+The [presentation architecture](../architecture/presentation.md) now owns the catalog, structured group-heading, audio-presentation, and completion-role boundaries.
+The [playback architecture](../architecture/playback.md), [track-expression architecture](../architecture/track-expression.md), and [failure and reporting architecture](../architecture/failure-and-reporting.md) record the data-flow changes; system and audio-quality dependency maps did not change.
 
-Update the track-field, track-presentation, activity-status, completion, and playback-output specifications and references with implemented semantic kinds, fallback behavior, and exact public surfaces.
-Update reporting specifications and references with consumed template ids and typed arguments when RFC 0013 integration lands.
-Add development guidance for classifying authored copy versus user/external/protocol/diagnostic text, and preserve executable boundary checks for platform vocabulary.
-Record a decision if the selected catalog injection or localization representation has durable alternatives worth preserving.
+The track-field, track-presentation, activity-status, completion, notification, and catalog specifications/references now record implemented semantic kinds, fallback behavior, and exact public surfaces.
+The UIModel organization guide classifies authored copy versus user, external, protocol, and diagnostic text, while executable boundary checks preserve platform-vocabulary constraints.

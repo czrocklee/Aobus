@@ -56,7 +56,7 @@ Evaluation that needs dictionary data receives an explicit bounded read context 
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
 During one membership rebuild, `SmartListEvaluator` creates one dictionary read cache/context, binds each plan once, and reuses those bindings across track evaluations; cache presence and eviction do not change predicate results.
 
-The runtime `TrackFieldDefinition` catalog bridges application fields to those core descriptors with typed `query::Field` identities.
+The runtime `TrackFieldDefinition` catalog bridges application fields to those core descriptors with typed `query::Field` identities and carries no authored field labels.
 `CompletionService` derives its value-completable fields and dictionary extraction from that bridge, and `QueryExpressionCompleter` combines the live vocabularies with core completion analysis through the reverse mapping.
 The service captures titles, tags, custom keys, and dictionary-backed track fields in one source-preserving live frequency snapshot after invalidation.
 Single-field completion and a caller-selected cross-field aggregate materialize from that snapshot without additional track-store scans; runtime owns storage access and invalidation but not the aggregate field choice.
@@ -69,6 +69,7 @@ It may parse or serialize a core expression, but it cannot implement a second gr
 
 Quick-search policy retains a typed runtime-field list, obtains canonical expression variables through the bridge, and delegates system-variable source text to the core variable formatter and constants and dynamic variables to the core serializer.
 `TrackFilterCompleter` reuses that field list and the resolver's explicit-expression boundary, ranks matching aggregate values, and otherwise delegates structured input to the runtime query completer.
+Completion items retain typed field/alias/operator/logical-operator roles or frequency arguments until UIModel's presentation catalog resolves their secondary text.
 Presentation recommendation resolves parsed names and aliases to typed query fields before applying its UIModel-local signal priority.
 That inspection selects a view shape only; it never changes membership or expression meaning.
 
@@ -147,7 +148,8 @@ cursor + incomplete expression
   -> runtime query completer
        + core variable/operator catalog
        + live tag/custom/value vocabulary
-  -> frontend-neutral replacement range and items
+  -> frontend-neutral replacement range, syntax, typed detail, and rank
+  -> UIModel presentation-text resolution
   -> GTK/TUI adapter
 ```
 
@@ -214,6 +216,7 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.
 - [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
 - [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) own shared quick-filter authoring and completion policy.
+- [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) resolves completion roles and counts without changing query syntax.
 - [`TrackCommand.cpp`](../../app/cli/TrackCommand.cpp) is the current format-expression consumer.
 
 ## Test map

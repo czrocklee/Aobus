@@ -39,7 +39,7 @@ namespace ao::rt
     NotificationMutationReply post(NotificationRequest request);
     NotificationMutationReply createOrUpdate(NotificationReportKey reportKey, NotificationRequest request);
 
-    NotificationMutationReply updateMessage(NotificationId id, std::string message);
+    NotificationMutationReply updateMessage(NotificationId id, NotificationMessage message);
     NotificationMutationReply updateContent(NotificationId id, NotificationContentState content);
     NotificationMutationReply updateProgress(NotificationId id, NotificationProgressState progress);
     NotificationMutationReply clearProgress(NotificationId id);

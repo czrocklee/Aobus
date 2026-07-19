@@ -27,7 +27,8 @@ namespace ao::uimodel::test
 
     SECTION("library progress owns the compact readout")
     {
-      feedProjection.handleLibraryTaskProgress("Scanning: long-file-name.flac", 0.625);
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "long-file-name.flac", 0.625));
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Processing);
@@ -38,7 +39,8 @@ namespace ao::uimodel::test
 
     SECTION("library completion is a transient success")
     {
-      feedProjection.handleLibraryTaskProgress("Updating: track.flac", 0.8);
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Updating, "track.flac", 0.8));
       feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(17), feed({}));
 
       auto const& compact = feedProjection.viewState().compact;
@@ -57,7 +59,8 @@ namespace ao::uimodel::test
 
     SECTION("notification during task is deferred and errors beat completion")
     {
-      feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
       auto const error = entry(rt::NotificationId{4},
                                rt::NotificationSeverity::Error,
@@ -78,7 +81,8 @@ namespace ao::uimodel::test
 
     SECTION("deferred persistent notification is ignored when removed before task completion")
     {
-      feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
       auto const error = entry(rt::NotificationId{15},
                                rt::NotificationSeverity::Error,
@@ -99,7 +103,8 @@ namespace ao::uimodel::test
                                 rt::LibraryChanges::LibraryTaskCompletionStatus::Cancelled,
                                 rt::LibraryChanges::LibraryTaskCompletionStatus::Failed})
       {
-        feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
+        feedProjection.handleLibraryTaskProgress(
+          libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
         feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(0, status), feed({}));
 
         CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);

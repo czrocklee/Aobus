@@ -6,6 +6,7 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <cstddef>
@@ -20,7 +21,7 @@ namespace ao::uimodel
   public:
     void initialize(rt::NotificationFeedState const& feed);
     void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
-    void handleLibraryTaskProgress(std::string message, double fraction);
+    void handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event);
     void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
                                     rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
@@ -33,7 +34,8 @@ namespace ao::uimodel
   private:
     struct LibraryProgressState final
     {
-      std::string message{};
+      rt::LibraryChanges::LibraryTaskProgressKind kind = rt::LibraryChanges::LibraryTaskProgressKind::Scanning;
+      std::string subject{};
       double fraction = 0.0;
     };
 
@@ -51,6 +53,7 @@ namespace ao::uimodel
     void pruneDismissedSources(rt::NotificationFeedState const& feed);
 
     ActivityStatusViewState _state{};
+    PresentationTextCatalog _textCatalog{};
     bool _taskActive = false;
     std::optional<LibraryProgressState> _optLibraryProgress{};
     std::vector<rt::NotificationId> _compactDismissedNotificationIds{};

@@ -7,6 +7,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <algorithm>
@@ -95,24 +96,9 @@ namespace ao::uimodel
              !entry.content.optProgress;
     }
 
-    std::string compactProgressText(std::string message)
+    std::string primaryText(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
     {
-      if (message.starts_with("Scanning:"))
-      {
-        return "Scanning library";
-      }
-
-      if (message.starts_with("Updating:"))
-      {
-        return "Updating library";
-      }
-
-      return message;
-    }
-
-    std::string primaryText(rt::NotificationEntry const& entry)
-    {
-      return entry.content.title.empty() ? entry.message : entry.content.title;
+      return entry.content.title.empty() ? textCatalog.notificationMessage(entry.message) : entry.content.title;
     }
 
     std::string groupedText(rt::NotificationSeverity const severity, std::size_t const count)
@@ -132,13 +118,13 @@ namespace ao::uimodel
       return std::format("{} notifications", count);
     }
 
-    ActivityDetailItem detailItem(rt::NotificationEntry const& entry)
+    ActivityDetailItem detailItem(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
     {
       auto item = ActivityDetailItem{
         .id = entry.id,
         .severity = entry.severity,
         .title = entry.content.title,
-        .message = entry.message,
+        .message = textCatalog.notificationMessage(entry.message),
         .iconName = entry.content.iconName,
         .dismissible = isDetailClearable(entry),
       };
@@ -335,17 +321,21 @@ namespace ao::uimodel
     return false;
   }
 
-  void ActivityStatusFeedProjection::handleLibraryTaskProgress(std::string message, double const fraction)
+  void ActivityStatusFeedProjection::handleLibraryTaskProgress(
+    rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
   {
     _taskActive = true;
-    _optLibraryProgress = LibraryProgressState{.message = std::move(message), .fraction = fraction};
+    _optLibraryProgress =
+      LibraryProgressState{.kind = event.kind, .subject = event.subject, .fraction = event.fraction};
     _state.compact = ActivityCompactState{
       .kind = ActivityStatusKind::Processing,
-      .text = compactProgressText(_optLibraryProgress->message),
-      .optProgressFraction = fraction,
+      .text = _textCatalog.libraryTaskProgressCompact(event.kind, event.subject),
+      .optProgressFraction = event.fraction,
     };
-    _state.detail.optLibraryTask =
-      ActivityTaskDetail{.message = _optLibraryProgress->message, .progressFraction = fraction};
+    _state.detail.optLibraryTask = ActivityTaskDetail{
+      .message = _textCatalog.libraryTaskProgressDetail(event.kind, event.subject),
+      .progressFraction = event.fraction,
+    };
     _state.detail.hasActiveProgress = true;
   }
 
@@ -447,7 +437,7 @@ namespace ao::uimodel
         hasActiveProgress = true;
       }
 
-      items.push_back(detailItem(entry));
+      items.push_back(detailItem(_textCatalog, entry));
     }
 
     std::ranges::sort(
@@ -467,8 +457,10 @@ namespace ao::uimodel
 
     if (_optLibraryProgress)
     {
-      optLibraryTask =
-        ActivityTaskDetail{.message = _optLibraryProgress->message, .progressFraction = _optLibraryProgress->fraction};
+      optLibraryTask = ActivityTaskDetail{
+        .message = _textCatalog.libraryTaskProgressDetail(_optLibraryProgress->kind, _optLibraryProgress->subject),
+        .progressFraction = _optLibraryProgress->fraction,
+      };
     }
 
     _state.detail = ActivityDetailState{
@@ -526,7 +518,7 @@ namespace ao::uimodel
 
     if (text.empty())
     {
-      text = primaryText(*latestEntry);
+      text = primaryText(_textCatalog, *latestEntry);
     }
 
     _state.compact = ActivityCompactState{
@@ -544,7 +536,7 @@ namespace ao::uimodel
   {
     _state.compact = ActivityCompactState{
       .kind = kindForSeverity(entry.severity),
-      .text = primaryText(entry),
+      .text = primaryText(_textCatalog, entry),
       .groupedCount = 1,
       .persistent = isPersistentSeverity(entry.severity),
       .dismissible = true,

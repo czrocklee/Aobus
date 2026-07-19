@@ -34,6 +34,7 @@
 #include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
 #include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/main.h>
 #include <gtkmm/box.h>
@@ -466,7 +467,8 @@ namespace ao::gtk::layout
       void configureBuiltInRow(BuiltInRow& row, bool isTechnical = false)
       {
         auto const* def = rt::trackFieldDefinition(row.field);
-        row.label.set_text(std::string{def != nullptr ? def->label : ""});
+        row.label.set_text(
+          std::string{def != nullptr ? uimodel::PresentationTextCatalog{}.trackFieldLabel(def->field) : ""});
         configureKeyLabel(row.label);
 
         row.label.set_opacity(kLabelOpacity);
@@ -517,7 +519,8 @@ namespace ao::gtk::layout
       void configureCompositeRow(CompositeBuiltInRow& row)
       {
         auto const* def = rt::trackFieldDefinition(row.primaryField);
-        row.label.set_text(std::string{def != nullptr ? def->label : ""});
+        row.label.set_text(
+          std::string{def != nullptr ? uimodel::PresentationTextCatalog{}.trackFieldLabel(def->field) : ""});
         configureKeyLabel(row.label);
 
         row.label.set_opacity(kLabelOpacity);

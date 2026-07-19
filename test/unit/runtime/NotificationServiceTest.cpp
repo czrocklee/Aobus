@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -57,7 +58,7 @@ namespace ao::rt::test
     CHECK(update.feedPtr->revision == update.revision);
     REQUIRE(update.feedPtr->entries.size() == 1);
     CHECK(update.feedPtr->entries.front().id == id);
-    CHECK(update.feedPtr->entries.front().message == "test message");
+    CHECK(resolvedNotificationText(update.feedPtr->entries.front().message) == "test message");
   }
 
   TEST_CASE("NotificationService - multiple posts assign distinct ids", "[runtime][unit][notification]")
@@ -85,7 +86,6 @@ namespace ao::rt::test
       .activityPresentation = NotificationActivityPresentation::DetailOnly,
       .content =
         NotificationContentState{
-          .templateId = "notification.import-progress",
           .title = "Library import",
           .iconName = "document-open-symbolic",
           .actions = {{.id = "cancel", .label = "Cancel"}},
@@ -105,11 +105,10 @@ namespace ao::rt::test
 
     auto const& entry = feed.entries.front();
     CHECK(entry.id == id);
-    CHECK(entry.message == "Importing library");
+    CHECK(resolvedNotificationText(entry.message) == "Importing library");
     CHECK(entry.lifetime == NotificationLifetime::untilDismissed());
     CHECK(entry.lifetimeGeneration == 0);
     CHECK(entry.activityPresentation == NotificationActivityPresentation::DetailOnly);
-    CHECK(entry.content.templateId == "notification.import-progress");
     CHECK(entry.content.title == "Library import");
     CHECK(entry.content.iconName == "document-open-symbolic");
     REQUIRE(entry.content.actions.size() == 1);
@@ -158,7 +157,7 @@ namespace ao::rt::test
 
     auto const feed = service.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message == "new message");
+    CHECK(resolvedNotificationText(feed.entries.front().message) == "new message");
     CHECK(feed.entries.front().content.title == "new title");
     CHECK_FALSE(feed.entries.front().content.optProgress);
   }
@@ -252,7 +251,75 @@ namespace ao::rt::test
     CHECK(accepted.id == NotificationId{1});
     CHECK(service.updateMessage(accepted.id, std::string(33, 'x')).outcome == NotificationMutationOutcome::Rejected);
     CHECK(service.feed().revision == 1);
-    CHECK(service.feed().entries.front().message == "accepted");
+    CHECK(resolvedNotificationText(service.feed().entries.front().message) == "accepted");
+  }
+
+  TEST_CASE("NotificationService - structured report bounds are enforced on subject and detail",
+            "[runtime][unit][notification]")
+  {
+    auto limits = NotificationFeedLimits{};
+    limits.maxTextBytes = 32;
+    auto fixture = NotificationServiceFixture{{}, limits};
+    auto& service = fixture.service;
+    std::int32_t updateCount = 0;
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++updateCount; });
+
+    CHECK(service
+            .post(NotificationRequest{
+              .message =
+                NotificationReport{
+                  .templateId = NotificationReportTemplate::PlaybackDecodeFailed,
+                  .subject = std::string(33, 's'),
+                  .detail = "short",
+                },
+              .lifetime = NotificationLifetime::sessionHistory(),
+            })
+            .outcome == NotificationMutationOutcome::Rejected);
+    CHECK(service
+            .post(NotificationRequest{
+              .message =
+                NotificationReport{
+                  .templateId = NotificationReportTemplate::PlaybackDecodeFailed,
+                  .subject = "short",
+                  .detail = std::string(33, 'd'),
+                },
+              .lifetime = NotificationLifetime::sessionHistory(),
+            })
+            .outcome == NotificationMutationOutcome::Rejected);
+
+    // Rejection consumes neither identity nor a revision.
+    CHECK(service.feed().entries.empty());
+    CHECK(service.feed().revision == 0);
+    CHECK(updateCount == 0);
+
+    // A legal structured report is retained verbatim, not flattened to text.
+    auto const report = NotificationReport{
+      .templateId = NotificationReportTemplate::PlaybackDecodeFailed,
+      .trackId = TrackId{7},
+      .subject = "Song",
+      .detail = "bad frame",
+    };
+    auto const accepted = service.post(NotificationRequest{
+      .message = report,
+      .lifetime = NotificationLifetime::sessionHistory(),
+    });
+    REQUIRE(accepted.outcome == NotificationMutationOutcome::Applied);
+    CHECK(accepted.id == NotificationId{1});
+    REQUIRE(service.feed().entries.size() == 1);
+    REQUIRE(std::holds_alternative<NotificationReport>(service.feed().entries.front().message));
+    CHECK(std::get<NotificationReport>(service.feed().entries.front().message) == report);
+    CHECK(service.feed().revision == 1);
+
+    // A rejected update leaves the stored report and revision untouched.
+    CHECK(service
+            .updateMessage(accepted.id,
+                           NotificationReport{
+                             .templateId = NotificationReportTemplate::PlaybackDecodeFailed,
+                             .detail = std::string(33, 'x'),
+                           })
+            .outcome == NotificationMutationOutcome::Rejected);
+    CHECK(service.feed().revision == 1);
+    CHECK(std::get<NotificationReport>(service.feed().entries.front().message) == report);
   }
 
   TEST_CASE("NotificationService - history eviction is atomic and pinned exhaustion rejects",
@@ -320,12 +387,10 @@ namespace ao::rt::test
     auto const history = service.post(NotificationRequest{
       .message = "12345",
       .lifetime = NotificationLifetime::sessionHistory(),
-      .content = NotificationContentState{.templateId = ""},
     });
     auto const pinned = service.post(NotificationRequest{
       .message = "123456",
       .lifetime = NotificationLifetime::untilDismissed(),
-      .content = NotificationContentState{.templateId = ""},
     });
 
     REQUIRE(history.outcome == NotificationMutationOutcome::Applied);
@@ -337,7 +402,6 @@ namespace ao::rt::test
     auto const rejected = service.post(NotificationRequest{
       .message = "12345",
       .lifetime = NotificationLifetime::untilDismissed(),
-      .content = NotificationContentState{.templateId = ""},
     });
     CHECK(rejected.outcome == NotificationMutationOutcome::Rejected);
     CHECK(service.feed().revision == 2);
@@ -376,7 +440,7 @@ namespace ao::rt::test
     REQUIRE(service.feed().entries.size() == 1);
     REQUIRE(service.feed().entries.front().optReportKey);
     CHECK(*service.feed().entries.front().optReportKey == key);
-    CHECK(service.feed().entries.front().message == "Skipped 2 files");
+    CHECK(resolvedNotificationText(service.feed().entries.front().message) == "Skipped 2 files");
 
     REQUIRE(service.dismiss(created.id).outcome == NotificationMutationOutcome::Applied);
     auto const recreated = service.createOrUpdate(key, request);
@@ -449,14 +513,14 @@ namespace ao::rt::test
           return;
         }
 
-        observedMessages.push_back(update.feedPtr->entries.front().message);
+        observedMessages.emplace_back(resolvedNotificationText(update.feedPtr->entries.front().message));
       });
 
     service.post(NotificationSeverity::Info, "initial", NotificationLifetime::sessionHistory());
 
     CHECK(observedRevisions == std::vector<std::uint64_t>{1, 2});
     CHECK(observedMessages == std::vector<std::string>{"initial", "updated"});
-    CHECK(service.feed().entries.front().message == "updated");
+    CHECK(resolvedNotificationText(service.feed().entries.front().message) == "updated");
   }
 
   TEST_CASE("NotificationService - reentrant post advances the id watermark before publication",

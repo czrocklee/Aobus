@@ -31,8 +31,10 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 
 ## Grouping and sorting
 
-Group headers contain primary text and, for compound album/work keys, secondary album-artist or composer text.
-Unknown group values produce the field's unknown label rather than merging with an unrelated concrete value.
+Runtime group headers contain three structured slots.
+Each slot retains absence, raw text, a numeric year, or a typed `MissingTrackValueKind`; compound album/work keys retain the secondary album-artist or composer value independently.
+Unknown group values remain distinct semantic keys rather than merging with an unrelated concrete value or becoming English inside runtime.
+UIModel resolves the slots through `PresentationTextCatalog`, and frontend adapters own only markup and geometry.
 
 Only `TrackSortField` values resident in projection snapshots are sortable.
 Manifest-backed file size and modified time remain display-only.
@@ -89,6 +91,7 @@ Now-playing row style is driven by the current playing id in `TrackListModel`; v
 
 - [`TrackPresentation.h`](../../../app/include/ao/rt/TrackPresentation.h) defines the spec and preset values.
 - [`TrackPresentation.cpp`](../../../app/runtime/TrackPresentation.cpp) owns built-ins and normalization.
+- [`TrackGroupHeadingPresentation.cpp`](../../../app/uimodel/library/presentation/TrackGroupHeadingPresentation.cpp) resolves runtime heading values through the shared catalog.
 - UIModel presentation code under [`app/uimodel/library/presentation/`](../../../app/uimodel/library/presentation/) owns catalog and recommendation adaptation.
 
 ## Test map
@@ -101,6 +104,7 @@ Now-playing row style is driven by the current playing id in `TrackListModel`; v
 ## Related documents
 
 - [Track preset reference](../../reference/presentation/track-preset.md)
+- [Presentation text catalog](../../reference/presentation/text-catalog.md)
 - [Track model](../../reference/library/model/track.md)
 - [Track field catalog](../../reference/library/model/track-field.md)
 - [Presentation architecture](../../architecture/presentation.md)

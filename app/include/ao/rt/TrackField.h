@@ -135,7 +135,6 @@ namespace ao::rt
   {
     TrackField field;
     std::string_view id;
-    std::string_view label;
     TrackFieldCategory category;
     TrackFieldValueKind valueKind;
 

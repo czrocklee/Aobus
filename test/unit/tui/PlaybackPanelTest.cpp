@@ -318,7 +318,6 @@ namespace ao::tui::test
               std::vector{
                 rt::OutputBackendSnapshot{
                   .id = audio::BackendId{"mock_backend"},
-                  .name = "Mock Backend",
                   .devices =
                     std::vector{
                       rt::OutputDeviceSnapshot{.id = audio::DeviceId{"dac"}, .displayName = "Studio DAC"},

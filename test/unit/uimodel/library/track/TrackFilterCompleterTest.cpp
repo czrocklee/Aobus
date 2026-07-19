@@ -6,6 +6,7 @@
 #include <ao/query/Expression.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -100,9 +101,11 @@ namespace ao::uimodel::test
 
     REQUIRE(optResult);
     CHECK(displayTexts(*optResult) == std::vector<std::string>{"Alpha", "Albatross"});
-    CHECK(optResult->items[0].detail == "3");
+    CHECK(optResult->items[0].detail.kind == rt::CompletionDetailKind::Frequency);
+    CHECK(optResult->items[0].detail.frequency == 3);
     CHECK(optResult->items[0].rank == 0);
-    CHECK(optResult->items[1].detail == "1");
+    CHECK(optResult->items[1].detail.kind == rt::CompletionDetailKind::Frequency);
+    CHECK(optResult->items[1].detail.frequency == 1);
     CHECK(optResult->items[1].rank == 1);
   }
 

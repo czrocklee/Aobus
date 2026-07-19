@@ -66,7 +66,10 @@ namespace ao::uimodel
   {
     if (auto const* builtin = rt::builtinTrackPresentationPreset(id); builtin != nullptr)
     {
-      return std::string{builtin->label};
+      if (auto const optText = _textCatalog.builtinTrackPresentation(builtin->spec.id); optText)
+      {
+        return std::string{optText->label};
+      }
     }
 
     if (auto const* custom = findCustomPresetById(id); custom != nullptr)
@@ -83,10 +86,12 @@ namespace ao::uimodel
 
     for (auto const& preset : builtinPresets())
     {
+      auto const optText = _textCatalog.builtinTrackPresentation(preset.spec.id);
+
       items.push_back(TrackPresentationMenuItem{
         .type = TrackPresentationMenuItemType::Preset,
         .id = std::string{preset.spec.id},
-        .label = std::string{preset.label},
+        .label = optText ? std::string{optText->label} : preset.spec.id,
       });
     }
 
@@ -111,7 +116,7 @@ namespace ao::uimodel
     });
     items.push_back(TrackPresentationMenuItem{
       .type = TrackPresentationMenuItemType::CreateCustomView,
-      .label = "Create Custom View...",
+      .label = std::string{_textCatalog.createCustomTrackPresentationLabel()},
     });
 
     return items;

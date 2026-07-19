@@ -73,7 +73,7 @@ namespace ao::rt
 
     OutputProfileSnapshot toOutputProfileSnapshot(audio::BackendProvider::ProfileDescriptor const& source)
     {
-      return OutputProfileSnapshot{.id = source.id, .name = source.name, .description = source.description};
+      return OutputProfileSnapshot{.id = source.id};
     }
 
     OutputDeviceSnapshot toOutputDeviceSnapshot(audio::Device const& source)
@@ -104,12 +104,8 @@ namespace ao::rt
         devices.push_back(toOutputDeviceSnapshot(dev));
       }
 
-      return OutputBackendSnapshot{.id = source.descriptor.id,
-                                   .name = source.descriptor.name,
-                                   .description = source.descriptor.description,
-                                   .iconName = source.descriptor.iconName,
-                                   .supportedProfiles = std::move(profiles),
-                                   .devices = std::move(devices)};
+      return OutputBackendSnapshot{
+        .id = source.descriptor.id, .supportedProfiles = std::move(profiles), .devices = std::move(devices)};
     }
 
     PlaybackState buildPlaybackState(audio::Player::Status const& status)
@@ -239,36 +235,26 @@ namespace ao::rt
       return error.message.empty() ? std::string{"unknown error"} : error.message;
     }
 
-    std::string playbackFailureTrackLabel(PlaybackFailure const& failure)
+    NotificationReport playbackFailureNotificationReport(PlaybackFailure const& failure)
     {
-      if (!failure.title.empty())
-      {
-        return failure.title;
-      }
-
-      if (failure.trackId != kInvalidTrackId)
-      {
-        return "track " + std::to_string(failure.trackId.raw());
-      }
-
-      return "playback";
-    }
-
-    std::string playbackFailureNotificationMessage(PlaybackFailure const& failure)
-    {
-      auto const reason = playbackFailureReason(failure.error);
+      auto templateId = NotificationReportTemplate::PlaybackDecodeFailed;
 
       switch (failure.kind)
       {
-        case PlaybackFailureKind::TrackOpen:
-          return "Could not play " + playbackFailureTrackLabel(failure) + ": " + reason;
-        case PlaybackFailureKind::Decode:
-          return "Playback failed for " + playbackFailureTrackLabel(failure) + ": " + reason;
-        case PlaybackFailureKind::RouteActivation: return "Could not start playback: " + reason;
-        case PlaybackFailureKind::DeviceLost: return "Playback device failed: " + reason;
+        case PlaybackFailureKind::TrackOpen: templateId = NotificationReportTemplate::PlaybackTrackOpenFailed; break;
+        case PlaybackFailureKind::Decode: templateId = NotificationReportTemplate::PlaybackDecodeFailed; break;
+        case PlaybackFailureKind::RouteActivation:
+          templateId = NotificationReportTemplate::PlaybackRouteActivationFailed;
+          break;
+        case PlaybackFailureKind::DeviceLost: templateId = NotificationReportTemplate::PlaybackDeviceLost; break;
       }
 
-      return "Playback failed: " + reason;
+      return NotificationReport{
+        .templateId = templateId,
+        .trackId = failure.trackId,
+        .subject = failure.title,
+        .detail = failure.error.message,
+      };
     }
 
     void logOutputDeviceSelected(OutputDeviceSelection const& outputDevice)
@@ -1102,7 +1088,7 @@ namespace ao::rt
 
     void postOrUpdateFailureNotification(PlaybackFailure const& failure)
     {
-      auto const message = playbackFailureNotificationMessage(failure);
+      auto const report = playbackFailureNotificationReport(failure);
       auto const continuesExistingReport =
         optLastPlaybackFailureReport && optLastPlaybackFailureReport->kind == failure.kind &&
         (isOutputFailureKind(failure.kind) || optLastPlaybackFailureReport->trackId == failure.trackId);
@@ -1122,7 +1108,7 @@ namespace ao::rt
         notifications.createOrUpdate(optLastPlaybackFailureReport->reportKey,
                                      NotificationRequest{
                                        .severity = NotificationSeverity::Error,
-                                       .message = message,
+                                       .message = report,
                                        .lifetime = failure.recoverable ? NotificationLifetime::sessionHistory()
                                                                        : NotificationLifetime::untilDismissed(),
                                        .content = NotificationContentState{.topic = NotificationTopic::PlaybackError},
@@ -2201,10 +2187,8 @@ namespace ao::rt
     if (providerPtr != nullptr)
     {
       auto const status = providerPtr->status();
-      APP_LOG_INFO("Audio backend provider registered: backend={} name='{}' devices={}",
-                   status.descriptor.id,
-                   status.descriptor.name,
-                   status.devices.size());
+      APP_LOG_INFO(
+        "Audio backend provider registered: backend={} devices={}", status.descriptor.id, status.devices.size());
     }
 
     impl->playerPtr->addProvider(std::move(providerPtr));

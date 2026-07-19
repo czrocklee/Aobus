@@ -120,7 +120,7 @@ namespace ao::gtk::test
 
         return {
           .rows = {.start = 0, .count = _trackIds.size()},
-          .primaryText = "Group",
+          .heading = {.primary = std::string{"Group"}},
         };
       }
 

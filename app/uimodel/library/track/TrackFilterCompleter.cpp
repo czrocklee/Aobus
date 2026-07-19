@@ -108,7 +108,7 @@ namespace ao::uimodel
       items.push_back(rt::CompletionItem{
         .displayText = entry->value,
         .insertText = query::serialize(query::ConstantExpression{entry->value}),
-        .detail = rt::completionFrequencyDetail(entry->frequency),
+        .detail = rt::CompletionDetail::makeUsageFrequency(entry->frequency),
         .rank = static_cast<std::uint32_t>(items.size()),
       });
     }

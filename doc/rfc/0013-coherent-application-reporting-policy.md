@@ -8,6 +8,9 @@ depends-on: none
 ---
 # RFC 0013: Coherent application reporting policy
 
+RFC 0030 has implemented this proposal's structured-presentation slice: library progress no longer uses English prefix matching, playback reports retain typed templates/counts through the feed, and UIModel owns shared copy and pluralization.
+The operation inventory, disposition matrices, unique reporting-owner migration, and remaining frontend/runtime reporting alignment proposed here are not implemented.
+
 ## Problem
 
 The current architecture correctly states that recovery and reporting are separate decisions and that no global manager should convert every failed `Result` into a notification.
@@ -34,10 +37,9 @@ Message strings are also doing too much work.
 Several callers choose severity, aggregation, or displayed context at the same site that formats a diagnostic log.
 That makes cross-frontend equivalence and localization difficult and encourages policy to follow text rather than typed operation outcomes.
 
-Concrete shared paths already depend on this accidental text protocol.
-Library activity projection recognizes scans and metadata updates by matching the English prefixes `Scanning:` and `Updating:`.
-Playback sequence recovery formats `1 unplayable track` versus `N unplayable tracks` inside runtime, while notification `templateId` survives service state without being consumed by UIModel.
-Scan/task outcomes retain structured counts elsewhere, but presentation paths collapse those facts into prose before the shared reporting boundary.
+Concrete shared paths previously depended on this accidental text protocol.
+RFC 0030 replaced library activity prefix matching, runtime playback pluralization, and the inert notification template field with typed progress/report inputs and UIModel resolution.
+The broader problem remains wherever an operation's reporting disposition or unique semantic owner is implicit in call-site code.
 
 ## Dependencies
 

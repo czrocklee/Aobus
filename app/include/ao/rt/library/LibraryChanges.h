@@ -87,10 +87,19 @@ namespace ao::rt
   class [[nodiscard]] LibraryChanges final
   {
   public:
+    enum class LibraryTaskProgressKind : std::uint8_t
+    {
+      Scanning,
+      Updating,
+      Fingerprinting,
+      IndexingAudioIdentity,
+    };
+
     struct LibraryTaskProgressUpdated final
     {
+      LibraryTaskProgressKind kind = LibraryTaskProgressKind::Scanning;
       double fraction = 0.0;
-      std::string message{};
+      std::string subject{};
     };
 
     enum class LibraryTaskCompletionStatus : std::uint8_t

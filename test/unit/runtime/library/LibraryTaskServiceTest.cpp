@@ -624,16 +624,18 @@ namespace ao::rt::test
     CHECK(result->failureCount == 2);
 
     REQUIRE(progressEvents.size() == 2);
-    CHECK(progressEvents[0].message == "Updating: " + expectedNames[0]);
+    CHECK(progressEvents[0].kind == LibraryChanges::LibraryTaskProgressKind::Updating);
+    CHECK(progressEvents[0].subject == expectedNames[0]);
     CHECK(progressEvents[0].fraction == 0.0);
-    CHECK(progressEvents[1].message == "Updating: " + expectedNames[1]);
+    CHECK(progressEvents[1].kind == LibraryChanges::LibraryTaskProgressKind::Updating);
+    CHECK(progressEvents[1].subject == expectedNames[1]);
     CHECK(progressEvents[1].fraction == 0.5);
 
     for (auto const& event : progressEvents)
     {
       CHECK(event.fraction >= 0.0);
       CHECK(event.fraction <= 1.0);
-      CHECK_FALSE(event.message.empty());
+      CHECK_FALSE(event.subject.empty());
     }
   }
 
@@ -661,7 +663,8 @@ namespace ao::rt::test
     auto sub = changes.onLibraryTaskProgress(
       [&](LibraryChanges::LibraryTaskProgressUpdated const& event)
       {
-        if (event.message == "Fingerprinting: song.flac" && !sawFingerprinting.load())
+        if (event.kind == LibraryChanges::LibraryTaskProgressKind::Fingerprinting && event.subject == "song.flac" &&
+            !sawFingerprinting.load())
         {
           sawFingerprinting.set(true);
         }

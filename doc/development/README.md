@@ -43,7 +43,7 @@ Use the [development guide template](../template/development.md) for a new contr
 ## Application layers
 
 - [Application-layer review](application-layer-review.md) turns runtime, UIModel, and frontend ownership into a contributor review workflow.
-- [UIModel organization](uimodel-organization.md) defines namespaces, feature capsules, role names, dependencies, and mirrored tests.
+- [UIModel organization](uimodel-organization.md) defines namespaces, feature capsules, role names, dependencies, authored-copy classification, and mirrored tests.
 
 ## Linux GTK
 

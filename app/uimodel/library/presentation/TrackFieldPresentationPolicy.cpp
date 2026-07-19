@@ -4,6 +4,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -154,12 +155,7 @@ namespace ao::uimodel
 
   std::string_view trackFieldColumnTitle(rt::TrackField field)
   {
-    if (auto const* rtDef = rt::trackFieldDefinition(field); rtDef != nullptr)
-    {
-      return rtDef->label;
-    }
-
-    return {};
+    return PresentationTextCatalog{}.trackFieldLabel(field);
   }
 
   std::optional<rt::TrackField> redundantSortFieldColumn(rt::TrackSortField sortField)

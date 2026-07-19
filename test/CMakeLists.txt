@@ -176,6 +176,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/document/LayoutPreparationTest.cpp
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
+    unit/uimodel/presentation/PresentationTextCatalogTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataWorkflowTest.cpp
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp

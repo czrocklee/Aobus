@@ -66,7 +66,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "",
+          .detail = {},
           .rank = 0,
         });
         return rt::CompletionResult{
@@ -105,7 +105,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "",
+          .detail = {},
           .rank = 0,
         });
         return rt::CompletionResult{
@@ -140,7 +140,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "",
+          .detail = {},
           .rank = 0,
         });
         return rt::CompletionResult{
@@ -183,7 +183,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "field",
+          .detail = {.kind = rt::CompletionDetailKind::Field},
           .rank = 0,
         });
         return rt::CompletionResult{
@@ -227,13 +227,13 @@ namespace ao::gtk::test
         if (providerCalls == 1)
         {
           items.push_back(
-            rt::CompletionItem{.displayText = "$artist", .insertText = "$artist", .detail = "", .rank = 0});
-          items.push_back(rt::CompletionItem{.displayText = "$album", .insertText = "$album", .detail = "", .rank = 0});
+            rt::CompletionItem{.displayText = "$artist", .insertText = "$artist", .detail = {}, .rank = 0});
+          items.push_back(rt::CompletionItem{.displayText = "$album", .insertText = "$album", .detail = {}, .rank = 0});
         }
         else
         {
           items.push_back(
-            rt::CompletionItem{.displayText = "$composer", .insertText = "$composer", .detail = "", .rank = 0});
+            rt::CompletionItem{.displayText = "$composer", .insertText = "$composer", .detail = {}, .rank = 0});
         }
 
         return rt::CompletionResult{
@@ -268,7 +268,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "",
+          .detail = {},
           .rank = 0,
         });
         return rt::CompletionResult{
@@ -301,7 +301,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "",
+          .detail = {},
           .rank = 0,
         });
         return rt::CompletionResult{
@@ -340,7 +340,7 @@ namespace ao::gtk::test
         items.push_back(rt::CompletionItem{
           .displayText = "$album",
           .insertText = "$album",
-          .detail = "",
+          .detail = {},
           .rank = 0,
         });
         return rt::CompletionResult{

@@ -13,7 +13,8 @@ This reference defines the application-runtime `TrackFieldDefinition` catalog an
 The persisted logical values behind these fields belong to the [track model](track.md), while expression variables belong to the [predicate language](../../query/predicate-language.md).
 
 The catalog is an application-facing adaptation of library data.
-It is not a second persistence model and does not define query truth or presentation behavior.
+It is not a second persistence model and does not define query truth or authored labels.
+The Label columns below cross-reference the current UIModel English catalog for lookup convenience; the [presentation text catalog](../../presentation/text-catalog.md) is their authority.
 
 ## Code boundary
 
@@ -158,7 +159,8 @@ Adding a field requires coordinated decisions about persistence source, projecti
 
 ## Test authority
 
-- [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks catalog completeness, ids, labels, capabilities, exhaustive typed mappings, and invalid lookup behavior.
+- [`TrackFieldTest.cpp`](../../../../test/unit/runtime/TrackFieldTest.cpp) locks runtime catalog completeness, ids, capabilities, exhaustive typed mappings, and invalid lookup behavior.
+- [`PresentationTextCatalogTest.cpp`](../../../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) locks exhaustive UIModel field labels.
 - [`TrackFieldPresentationPolicyTest.cpp`](../../../../test/unit/uimodel/library/presentation/TrackFieldPresentationPolicyTest.cpp) ensures every presentable field has UIModel column policy.
 - [`CompletionServiceTest.cpp`](../../../../test/unit/runtime/completion/CompletionServiceTest.cpp) locks vocabulary support.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) and [`GtkLayoutStateStoreTest.cpp`](../../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect stable presentation tokens at persistence boundaries.
@@ -171,3 +173,4 @@ Adding a field requires coordinated decisions about persistence source, projecti
 - [Track-field value completion](../../../spec/presentation/field-completion.md)
 - [Track-list projection](../../../spec/library/projection/track-list.md)
 - [Persisted presentation state](../../presentation/persisted-state.md)
+- [Presentation text catalog](../../presentation/text-catalog.md)

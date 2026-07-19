@@ -24,27 +24,16 @@ namespace ao::audio
   class BackendProvider
   {
   public:
-    /**
-     * @brief Human-readable description of an audio profile.
-     */
     struct ProfileDescriptor final
     {
       ProfileId id{};
-      std::string name{};
-      std::string description{};
 
       bool operator==(ProfileDescriptor const&) const = default;
     };
 
-    /**
-     * @brief Static description of an audio backend.
-     */
     struct BackendDescriptor final
     {
       BackendId id{};
-      std::string name{};
-      std::string description{};
-      std::string iconName{};
       std::vector<ProfileDescriptor> supportedProfiles{};
 
       bool operator==(BackendDescriptor const&) const = default;

@@ -10,7 +10,6 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/completion/CompletionText.h>
 #include <ao/rt/completion/QueryExpressionCompleter.h>
 
 #include <algorithm>
@@ -48,7 +47,9 @@ namespace ao::rt
         items.push_back(CompletionItem{
           .displayText = text,
           .insertText = text,
-          .detail = match.kind == query::QueryVariableCompletionMatchKind::ExactAlias ? "alias" : "field",
+          .detail = {.kind = match.kind == query::QueryVariableCompletionMatchKind::ExactAlias
+                               ? CompletionDetailKind::Alias
+                               : CompletionDetailKind::Field},
           .rank = static_cast<std::uint32_t>(items.size()),
         });
       }
@@ -72,7 +73,7 @@ namespace ao::rt
           return CompletionItem{
             .displayText = insertText,
             .insertText = insertText,
-            .detail = completionFrequencyDetail(entry.frequency),
+            .detail = CompletionDetail::makeUsageFrequency(entry.frequency),
           };
         });
     }
@@ -110,7 +111,7 @@ namespace ao::rt
         items.push_back(CompletionItem{
           .displayText = std::string{op},
           .insertText = insertionForOperator(op),
-          .detail = "operator",
+          .detail = {.kind = CompletionDetailKind::Operator},
           .rank = static_cast<std::uint32_t>(items.size()),
         });
       }
@@ -128,7 +129,7 @@ namespace ao::rt
         items.push_back(CompletionItem{
           .displayText = std::string{op},
           .insertText = insertionForOperator(op),
-          .detail = "logical operator",
+          .detail = {.kind = CompletionDetailKind::LogicalOperator},
           .rank = static_cast<std::uint32_t>(items.size()),
         });
       }
@@ -156,7 +157,7 @@ namespace ao::rt
                                         return CompletionItem{
                                           .displayText = entry.value,
                                           .insertText = insertionForStringConstant(entry.value),
-                                          .detail = completionFrequencyDetail(entry.frequency),
+                                          .detail = CompletionDetail::makeUsageFrequency(entry.frequency),
                                         };
                                       });
     }

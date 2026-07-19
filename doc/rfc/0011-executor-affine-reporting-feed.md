@@ -8,25 +8,24 @@ depends-on: none
 ---
 # RFC 0011: Executor-affine reporting feed
 
-Migration stages 1 through 4 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, owns typed transient lifetime and generation-checked expiry, bounds retained state, exposes typed command outcomes, and correlates producer-owned report keys.
-Structured content and detail discoverability remain proposal work in this RFC.
+Migration stages 1 through 5 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md), [activity-status specification](../spec/presentation/activity-status.md), and [RFC 0030 disposition](0030-structured-presentation-vocabulary.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, owns typed transient lifetime and generation-checked expiry, bounds retained state, exposes typed command outcomes, correlates producer-owned report keys, retains structured playback reports, and no longer uses English progress prefixes.
+Cross-frontend detail discoverability and the remaining generic-content policy remain proposal work in this RFC.
 
 ## Problem
 
 The runtime notification model has useful semantic separation from logging and recovery, and its feed mechanics now form the bounded executor-affine state machine proposed here.
 The remaining gaps are content authority and cross-frontend discoverability.
 
-The first four migration stages replaced the previous mutable four-signal publication boundary with an executor-affine immutable update stream and one-revision UIModel projection, added authoritative transient expiry, and bounded retained history and content.
+The first five migration stages replaced the previous mutable four-signal publication boundary with an executor-affine immutable update stream and one-revision UIModel projection, added authoritative transient expiry, bounded retained history and content, and adopted typed shared report/progress presentation.
 `SessionHistory` now yields oldest-first under capacity pressure, actionable entries are rejected rather than silently removed, and keyed producers no longer retain raw feed ids.
 
 Finally, `DetailOnly` can create detail state without a compact state.
 GTK currently opens detail only through a visible compact readout, making that entry unreachable in an idle-hidden layout, while TUI has a direct notification-center command.
 The shared model exposes the state but does not define a cross-frontend discoverability contract.
 
-The content contract is also internally inconsistent.
-`NotificationContentState` retains a `templateId` that defaults to `notification.message`, but `ActivityStatusFeedProjection` never reads it; the projection copies already-formatted title, message, action labels, progress labels, and icon names instead.
-The projection then infers library activity by testing whether English text starts with `Scanning:` or `Updating:`.
-The template id is therefore inert metadata, while user-visible text has become an undocumented control-flow input.
+The former inert `NotificationContentState::templateId` and English library-progress prefix tests were removed by RFC 0030.
+Shared playback reports now retain one closed template plus typed arguments, and library progress retains a typed operation kind plus subject until UIModel resolves the catalog text.
+The remaining generic title, action, progress-label, and icon fields still require an explicit future policy if shared runtime producers begin using them.
 
 ## Dependencies
 
@@ -216,7 +215,7 @@ Migration occurs in stages:
 2. Completed: migrate UIModel to one revision stream and add regression tests for post/update and one-render-per-revision.
 3. Completed: introduce typed lifetime and service-owned expiry, generation-check stale timers, and restrict UIModel deadlines to presentation-only state.
 4. Completed: add typed mutation outcomes, bounds, atomic history eviction, keyed update, and playback producer migration.
-5. Remove the inert template field and English prefix parsing, then add structured content atomically with its UIModel resolver when RFCs 0013 and 0030 are implemented.
+5. Completed: remove the inert template field and English prefix parsing, then add structured playback reports and library-progress kinds atomically with RFC 0030's UIModel resolver.
 6. Remove the remaining ambiguous fields after all consumers move.
 
 Playback producer migration coordinates with RFC 0005 if that proposal is active.

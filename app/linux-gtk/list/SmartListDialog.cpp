@@ -30,6 +30,7 @@
 #include <ao/uimodel/library/list/SmartListExpression.h>
 #include <ao/uimodel/library/list/SmartListPreview.h>
 #include <ao/uimodel/library/list/SmartListTrackPresentationResolver.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
@@ -196,7 +197,8 @@ namespace ao::gtk
 
     for (auto const& preset : rt::builtinTrackPresentationPresets())
     {
-      stringListPtr->append(std::string{preset.label});
+      auto const optText = uimodel::PresentationTextCatalog{}.builtinTrackPresentation(preset.spec.id);
+      stringListPtr->append(optText ? std::string{optText->label} : preset.spec.id);
     }
 
     _presentationDropDown.set_model(stringListPtr);

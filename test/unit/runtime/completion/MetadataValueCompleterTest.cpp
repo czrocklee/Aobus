@@ -59,7 +59,8 @@ namespace ao::rt::test
     CHECK(insertTexts(artistItems) == std::vector<std::string>{"Massive Attack", "Mazzy Star"});
     REQUIRE_FALSE(artistItems.empty());
     CHECK(artistItems[0].displayText == "Massive Attack");
-    CHECK(artistItems[0].detail == "2");
+    CHECK(artistItems[0].detail.kind == CompletionDetailKind::Frequency);
+    CHECK(artistItems[0].detail.frequency == 2);
 
     auto albumCompleter = MetadataValueCompleter{service, TrackField::Album};
     CHECK(insertTexts(albumCompleter.complete("pro")) == std::vector<std::string>{"Protection"});

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -73,6 +74,21 @@ class BuildResult:
     preset: str = ""
 
 
+def _windows_extended_path(path: str) -> str:
+    if path.startswith("\\\\?\\"):
+        return path
+    if path.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + path[2:]
+    return "\\\\?\\" + path
+
+
+def _remove_build_directory(path: Path, profile: builddir.PlatformProfile) -> None:
+    if profile.name == "windows":
+        shutil.rmtree(_windows_extended_path(str(path.resolve())))
+        return
+    shutil.rmtree(path)
+
+
 def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile:
     """Reject build modes that the native platform cannot provide."""
     profile = builddir.platform_profile()
@@ -103,9 +119,7 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
 
     if args.clean and build_dir.exists():
         print(f"Cleaning build directory ({build_dir})...")
-        import shutil
-
-        shutil.rmtree(build_dir)
+        _remove_build_directory(build_dir, profile)
 
     build_dir.mkdir(parents=True, exist_ok=True)
     log = build_dir / "build.log"

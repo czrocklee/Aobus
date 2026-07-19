@@ -98,7 +98,8 @@ Live vocabulary access is confined to the `CompletionService` owner thread as de
 
 ## Frontend observations
 
-Runtime returns frontend-neutral display text, insertion text, detail text, rank, and one replacement range.
+Runtime returns frontend-neutral display syntax, insertion syntax, a typed detail role or argument, rank, and one replacement range.
+Field, alias, operator, logical-operator, and frequency details resolve through the UIModel presentation catalog.
 GTK's entry adapter owns popover, keyboard, pointer, and borrowed-entry lifetime behavior.
 UIModel's `TrackFilterCompleter` delegates text with an explicit leading query variable to `QueryExpressionCompleter` and otherwise applies Quick-filter completion policy.
 GTK's Quick-filter entry and TUI command completion both consume that composition; TUI offsets its nested replacement range into the command line before applying it.
@@ -112,6 +113,7 @@ Frontends cannot invent additional query fields or operators that the core compl
 - [`Completion.cpp`](../../../lib/query/Completion.cpp) owns tolerant analysis and core suggestions.
 - [`CompletionTokenizer.cpp`](../../../lib/query/detail/CompletionTokenizer.cpp) adapts shared lexical rules.
 - [`QueryExpressionCompleter.cpp`](../../../app/runtime/completion/QueryExpressionCompleter.cpp) composes core analysis with live vocabularies.
+- [`PresentationTextCatalog`](../../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) resolves semantic completion details into shared interactive copy.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) composes expression completion into the interactive filter surface.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK adapter.
 - [`CommandCompletionProvider`](../../../app/tui/CommandCompletionProvider.h) is the TUI command adapter.

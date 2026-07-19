@@ -428,7 +428,8 @@ namespace ao::tui::test
       .replaceEnd = 1,
       .items = {rt::CompletionItem{.displayText = "a very long completion label that should not resize the panel",
                                    .insertText = "a very long completion label that should not resize the panel",
-                                   .detail = "a long detail that should also stay inside the fixed ratio frame"}},
+                                   .detail = rt::CompletionDetail::makeResolvedText(
+                                     "a long detail that should also stay inside the fixed ratio frame")}},
     });
 
     CHECK(commandPalettePanelColumns(180) == wideColumns);
@@ -443,7 +444,8 @@ namespace ao::tui::test
     for (std::int32_t index = 0; index < 8; ++index)
     {
       auto value = std::format("Option {}", index);
-      items.push_back(rt::CompletionItem{.displayText = value, .insertText = value, .detail = "item"});
+      items.push_back(rt::CompletionItem{
+        .displayText = value, .insertText = value, .detail = rt::CompletionDetail::makeResolvedText("item")});
     }
 
     shell.beginCommand("o");
@@ -468,7 +470,8 @@ namespace ao::tui::test
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
       .replaceEnd = 1,
-      .items = {rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer", .detail = "artist"}},
+      .items = {rt::CompletionItem{
+        .displayText = "Aimer", .insertText = "Aimer", .detail = rt::CompletionDetail::makeResolvedText("artist")}},
     });
 
     auto const rendered = renderText(commandPalettePanel(shell));
@@ -499,7 +502,9 @@ namespace ao::tui::test
     shell.setCommandCompletion(rt::CompletionResult{
       .replaceBegin = 0,
       .replaceEnd = 0,
-      .items = {rt::CompletionItem{.displayText = "/output", .insertText = "output", .detail = "output device"}},
+      .items = {rt::CompletionItem{.displayText = "/output",
+                                   .insertText = "output",
+                                   .detail = rt::CompletionDetail::makeResolvedText("output device")}},
     });
 
     auto const rendered = renderText(commandPalettePanel(shell));
@@ -516,8 +521,11 @@ namespace ao::tui::test
     shell.setCommandCompletion(rt::CompletionResult{
       .items =
         {
-          rt::CompletionItem{.displayText = "/view", .insertText = "view ", .detail = "track view"},
-          rt::CompletionItem{.displayText = "Aimer", .insertText = "Aimer", .detail = "artist"},
+          rt::CompletionItem{.displayText = "/view",
+                             .insertText = "view ",
+                             .detail = rt::CompletionDetail::makeResolvedText("track view")},
+          rt::CompletionItem{
+            .displayText = "Aimer", .insertText = "Aimer", .detail = rt::CompletionDetail::makeResolvedText("artist")},
         },
     });
     REQUIRE(shell.moveCommandCompletion(1));
@@ -541,7 +549,8 @@ namespace ao::tui::test
     auto shell = ShellInteractionModel{};
     shell.beginCommand();
     shell.setCommandCompletion(rt::CompletionResult{
-      .items = {rt::CompletionItem{.displayText = "v", .insertText = "v", .detail = "artist"}},
+      .items = {rt::CompletionItem{
+        .displayText = "v", .insertText = "v", .detail = rt::CompletionDetail::makeResolvedText("artist")}},
     });
 
     auto const rendered = renderElement(commandPalettePanel(shell, 32), 32, 8);

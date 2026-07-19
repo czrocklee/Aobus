@@ -49,13 +49,25 @@ For track-list views, runtime keeps content and shape as separate state axes.
 `listId` and `filterExpression` select a source, while `TrackPresentationSpec` selects sorting, grouping, visible fields, and redundant-field suppression.
 `LiveTrackListProjection` is their composition point, not a second authority for either concern.
 
-Runtime also owns the stable textual vocabulary for persisted `TrackField`, `TrackSortField`, and `TrackGroupKey` choices.
-That vocabulary is shared by runtime workspace persistence and UIModel presentation schemas without making either layer own the other's document shape.
+Runtime owns the stable ids for persisted `TrackField`, `TrackSortField`, and `TrackGroupKey` choices.
+Those ids are shared by runtime workspace persistence and UIModel presentation schemas without making either layer own the other's document shape.
+Authored labels are not part of the runtime definitions.
 
 ### UIModel
 
 UIModel owns deterministic platform-neutral presentation behavior.
 Its feature capsules contain view models, editor/form models, interaction models, policies, projections, formatters, catalogs, resolvers, and UI-local stores.
+
+Shared authored copy is owned by the immutable `PresentationTextCatalog`.
+The first implementation is a zero-state English value: it establishes a typed ownership seam without selecting a locale service or localization-file format.
+Closed inputs such as track fields, missing-value kinds, completion roles, progress kinds, and report templates resolve exhaustively.
+Open backend/profile ids use their stable id as the documented fallback.
+Catalog output is never persisted or parsed for recovery, ordering, grouping, aggregation, or navigation.
+
+Runtime track-group snapshots retain raw text, numeric years, empty slots, and typed missing-value kinds until UIModel resolves the three heading slots.
+Runtime completion items retain query syntax, rank, and typed detail roles or frequency counts.
+Core audio descriptors retain backend/profile ids and external device facts; UIModel supplies built-in backend/profile copy and semantic audio icon kinds.
+Shared playback reports retain a closed template and typed arguments in the notification feed, and library-task progress retains a typed operation kind plus raw subject.
 
 The shared activity-status model consumes one immutable notification-feed update per accepted revision.
 It derives compact and detail state from that same snapshot and emits at most one render for the revision; frontend adapters do not combine parallel notification signals into their own refresh policy.
@@ -124,6 +136,8 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 - GTK and TUI cannot call `LibraryWriter` directly; mutation events cross a UIModel workflow or another narrow semantic runtime surface.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
+- Core and runtime expose machine identities, structured absence, typed report/progress intent, and raw external data; shared authored copy resolves only after crossing into UIModel.
+- Query syntax, persisted ids, user-authored names, metadata, paths, operating-system device descriptions, diagnostics, and command-scoped CLI output remain source data rather than catalog copy.
 - Equivalent cross-frontend behavior uses the same runtime/UIModel authority instead of parallel frontend policy.
 - Shared reporting presentation consumes the canonical runtime feed-update stream; GTK and TUI do not reconstruct mutation ordering from independent event types.
 - List-navigation effective parents and sibling order come from one UIModel projection; GTK and TUI only adapt that tree to their native row models.
@@ -137,8 +151,8 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 Presentation state flows outward:
 
 ```text
-runtime snapshot/event
-  -> UIModel projection when shared presentation policy is needed
+runtime semantic snapshot/event + raw arguments
+  -> UIModel projection + PresentationTextCatalog when shared copy is needed
   -> GTK widget binding or TUI render function
 ```
 
@@ -188,6 +202,8 @@ A quick filter narrows the active membership while retaining the active presenta
 - A UIModel object can be unit-tested without a display server, terminal, storage environment, or audio backend unless it deliberately wraps a narrow runtime service.
 - Frontends retain subscriptions and view models for no longer than the runtime services they observe.
 - Runtime snapshots remain the source of truth after a frontend rebuilds its widget tree or terminal frame.
+- Runtime/Core values never carry GTK symbolic-icon names or built-in backend marketing copy.
+- Runtime grouping, completion, progress, and shared report behavior never switches on resolved catalog text.
 - A UIModel notification projection ignores duplicate, older, empty, or revision-mismatched updates rather than regressing its accepted state.
 - UI-local persisted preferences influence presentation but do not replace canonical runtime state.
 - Persisted presentation documents use explicit version gates and runtime-owned stable tokens rather than C++ enum ordinals.
@@ -218,6 +234,8 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 
 - [`app/CMakeLists.txt`](../../app/CMakeLists.txt) defines and guards the runtime-to-UIModel dependency edge.
 - [`app/include/ao/uimodel/`](../../app/include/ao/uimodel) and [`app/uimodel/`](../../app/uimodel) contain platform-neutral presentation capsules.
+- [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared authored copy and open-id fallback.
+- [`TrackGroupHeadingPresentation`](../../app/include/ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h) resolves structured runtime group headings.
 - [`TrackAuthoringSession`](../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns revision-bound metadata/tag interaction lifetime.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) owns stable field, sort, and group token conversion.
 - [`TrackColumnLayoutYamlSchema`](../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`ListPresentationPreferenceYamlSchema`](../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) own versioned UIModel presentation documents.
@@ -235,6 +253,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
 - [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding, stale-state, all-or-none outcomes, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
+- [`PresentationTextCatalogTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
 - [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.
 - [`ThemePresetTest.cpp`](../../test/unit/uimodel/preference/ThemePresetTest.cpp) protects theme-id resolution and fallback.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) and [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protect GTK composition.
@@ -258,6 +277,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [Resource delivery architecture](resource-delivery.md)
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Activity-status specification](../spec/presentation/activity-status.md) and [surface reference](../reference/presentation/activity-status.md)
+- [Presentation text catalog reference](../reference/presentation/text-catalog.md)
 - [Track-list presentation](../spec/presentation/track-presentation.md)
 - [List-navigation tree](../spec/presentation/list-tree.md)
 - [Track-column layout](../spec/presentation/track-column-layout.md)

@@ -17,6 +17,7 @@
 #include <array>
 #include <charconv>
 #include <chrono>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -34,6 +35,7 @@
 #include <system_error>
 #include <unordered_map>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -70,9 +72,26 @@ namespace ao::rt
       canonicalizeStorage(progress.label);
     }
 
+    void canonicalizeStorage(NotificationMessage& message)
+    {
+      std::visit(
+        []<typename Message>(Message& value)
+        {
+          if constexpr (std::same_as<Message, std::string>)
+          {
+            canonicalizeStorage(value);
+          }
+          else
+          {
+            canonicalizeStorage(value.subject);
+            canonicalizeStorage(value.detail);
+          }
+        },
+        message);
+    }
+
     void canonicalizeStorage(NotificationContentState& content)
     {
-      canonicalizeStorage(content.templateId);
       canonicalizeStorage(content.title);
       canonicalizeStorage(content.iconName);
 
@@ -111,8 +130,8 @@ namespace ao::rt
 
     bool contentFits(NotificationContentState const& content, NotificationFeedLimits const& limits) noexcept
     {
-      if (!textFits(content.templateId, limits) || !textFits(content.title, limits) ||
-          !textFits(content.iconName, limits) || content.actions.size() > limits.maxActionsPerEntry)
+      if (!textFits(content.title, limits) || !textFits(content.iconName, limits) ||
+          content.actions.size() > limits.maxActionsPerEntry)
       {
         return false;
       }
@@ -127,6 +146,23 @@ namespace ao::rt
                                  { return textFits(action.id, limits) && textFits(action.label, limits); });
     }
 
+    bool messageFits(NotificationMessage const& message, NotificationFeedLimits const& limits) noexcept
+    {
+      return std::visit(
+        [&limits]<typename Message>(Message const& value)
+        {
+          if constexpr (std::same_as<Message, std::string>)
+          {
+            return textFits(value, limits);
+          }
+          else
+          {
+            return textFits(value.subject, limits) && textFits(value.detail, limits);
+          }
+        },
+        message);
+    }
+
     bool lifetimeFits(NotificationLifetime const lifetime) noexcept
     {
       auto const optDuration = lifetime.optTransientDuration();
@@ -136,7 +172,7 @@ namespace ao::rt
     bool entryFits(NotificationEntry const& entry, NotificationFeedLimits const& limits) noexcept
     {
       return (!entry.optReportKey || (!entry.optReportKey->empty() && textFits(entry.optReportKey->raw(), limits))) &&
-             textFits(entry.message, limits) && contentFits(entry.content, limits) && lifetimeFits(entry.lifetime);
+             messageFits(entry.message, limits) && contentFits(entry.content, limits) && lifetimeFits(entry.lifetime);
     }
 
     bool consumeText(std::string_view const text, std::size_t& remainingBytes) noexcept
@@ -152,9 +188,26 @@ namespace ao::rt
 
     bool consumeEntryText(NotificationEntry const& entry, std::size_t& remainingBytes) noexcept
     {
+      auto const consumeMessage = [&remainingBytes](NotificationMessage const& message)
+      {
+        return std::visit(
+          [&remainingBytes]<typename Message>(Message const& value)
+          {
+            if constexpr (std::same_as<Message, std::string>)
+            {
+              return consumeText(value, remainingBytes);
+            }
+            else
+            {
+              return consumeText(value.subject, remainingBytes) && consumeText(value.detail, remainingBytes);
+            }
+          },
+          message);
+      };
+
       if ((entry.optReportKey && !consumeText(entry.optReportKey->raw(), remainingBytes)) ||
-          !consumeText(entry.message, remainingBytes) || !consumeText(entry.content.templateId, remainingBytes) ||
-          !consumeText(entry.content.title, remainingBytes) || !consumeText(entry.content.iconName, remainingBytes))
+          !consumeMessage(entry.message) || !consumeText(entry.content.title, remainingBytes) ||
+          !consumeText(entry.content.iconName, remainingBytes))
       {
         return false;
       }
@@ -673,7 +726,7 @@ namespace ao::rt
     return _implPtr->commitCandidateMutation(std::move(candidatePtr), id, NotificationFeedMutationKind::ReportUpdated);
   }
 
-  NotificationMutationReply NotificationService::updateMessage(NotificationId const id, std::string message)
+  NotificationMutationReply NotificationService::updateMessage(NotificationId const id, NotificationMessage message)
   {
     return _implPtr->replaceEntryValue(id,
                                        NotificationFeedMutationKind::MessageUpdated,

@@ -154,7 +154,9 @@ namespace ao::rt::test
       for (auto const& item : optResult->items)
       {
         checksum += item.displayText.size();
-        checksum += item.detail.size();
+        checksum += std::to_underlying(item.detail.kind);
+        checksum += item.detail.resolvedText.size();
+        checksum += item.detail.frequency;
         checksum += item.rank;
       }
 

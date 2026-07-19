@@ -28,7 +28,7 @@ app/uimodel/<feature>/
 test/unit/uimodel/<feature>/
 ```
 
-The current top-level capsules are `input`, `field`, `layout`, `library`, `playback`, `preference`, and `status`, plus deliberately reviewed root utilities.
+The current top-level capsules are `input`, `field`, `layout`, `library`, `playback`, `preference`, `presentation`, and `status`, plus deliberately reviewed root utilities.
 Nested capsules remain singular, such as `library/presentation`, `playback/now-playing`, and `status/activity`.
 Adding a feature path requires updating `cmake/AssertUimodelOrganization.cmake`.
 
@@ -67,12 +67,29 @@ Inputs arrive through stable core/runtime values, narrow runtime services, DTO s
 - `input` owns neutral chords and keymap state.
 - `field` owns shared track-field formatting, edit codecs, patch policy, and inline-edit workflow.
 - `layout` owns the neutral layout document, action/component catalogs, component state, and shell session.
+- `presentation` owns the cross-feature immutable authored-copy catalog; feature-specific projections still live with their feature capsule.
 - `library/list` owns list-tree and Smart List authoring policy.
 - `library/presentation` owns track presentation catalogs, preferences, editors, recommendation, and column policy.
 - `library/track`, `library/detail`, and `library/property` own their corresponding list, detail, and properties presentation behavior.
 - `playback` owns published playback presentation and interaction, never succession or session-save coordination.
 - `preference` maps user choices to persisted deltas and platform-supplied appliers without owning GTK or config storage.
 - `status/activity` owns the platform-neutral activity projection.
+
+### Authored-copy classification
+
+Before adding a user-visible string below a frontend, classify it by authority:
+
+- **shared Aobus copy** is a label, description, placeholder, report template, or pluralized summary authored by the application and consumed by more than one interactive frontend; represent its input semantically and resolve it through `PresentationTextCatalog`;
+- **user or external data** includes metadata, user-authored preset/list names, paths, and operating-system device names or descriptions; preserve it as data and escape it only at the frontend rendering boundary;
+- **language or protocol text** includes query syntax, stable ids, persisted tokens, and CLI machine output; keep it with the owning grammar or format and never translate it as presentation copy;
+- **diagnostic text** explains a failure to logs or typed errors and remains with the failure owner; UI control flow must not parse it; and
+- **frontend-local copy** with no shared semantic consumer remains in that frontend rather than expanding the shared catalog.
+
+Do not store both a shared semantic input and its resolved English form in runtime state.
+Do not compare catalog output to select recovery, severity, grouping, ordering, aggregation, or persistence behavior.
+Shared catalog-owned icon values are semantic kinds; GTK symbolic names and TUI glyphs stay in their adapters.
+An explicitly frontend-local notification/content escape hatch must be named and reviewed as resolved presentation rather than reused by shared runtime producers.
+An open extension id must have an explicit fallback, while a closed enum lookup must be exhaustive.
 
 ## Workflow
 
@@ -83,6 +100,7 @@ When adding UIModel behavior:
 3. Mirror public header, implementation, and test paths.
 4. Keep platform mapping in the consuming frontend.
 5. Update the organization guardrail only when introducing a justified new capsule.
+6. For shared authored copy, add or extend a typed semantic input and lock its catalog coverage and fallback in focused tests.
 
 Tests use the `ao::uimodel::test` namespace and tags shaped as `[uimodel][unit][feature][component]`.
 
@@ -102,3 +120,4 @@ If a name is generic only because the folder supplies context, add the domain pr
 - [Application-layer review](application-layer-review.md)
 - [Application shell architecture](../architecture/application-shell.md)
 - [Activity-status specification](../spec/presentation/activity-status.md)
+- [Presentation text catalog reference](../reference/presentation/text-catalog.md)

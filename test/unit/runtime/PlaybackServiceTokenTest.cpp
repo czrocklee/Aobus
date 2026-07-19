@@ -41,6 +41,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -229,8 +230,7 @@ namespace ao::rt::test
           .descriptor =
             {
               .id = kProbeBackendId,
-              .name = "Playback service token probe",
-              .supportedProfiles = {{.id = audio::kProfileShared, .name = "Shared"}},
+              .supportedProfiles = {{.id = audio::kProfileShared}},
             },
           .devices = devices(),
         };
@@ -420,7 +420,8 @@ namespace ao::rt::test
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().message.contains("gated staged decode failure"));
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).detail.contains("gated staged decode failure"));
   }
 
   TEST_CASE("PlaybackService token - drain fallback returns exact disarm acknowledgement",

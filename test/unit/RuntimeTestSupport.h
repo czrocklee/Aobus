@@ -509,10 +509,9 @@ namespace ao::rt::test
     return {.descriptor =
               {
                 .id = audio::BackendId{"test_backend"},
-                .name = "Test Backend",
                 .supportedProfiles =
                   {
-                    {.id = audio::kProfileShared, .name = "Shared", .description = "Shared profile"},
+                    {.id = audio::kProfileShared},
                   },
               },
             .devices = {
@@ -530,13 +529,10 @@ namespace ao::rt::test
       .descriptor =
         {
           .id = audio::BackendId{"pipewire"},
-          .name = "PipeWire",
-          .description = "PipeWire Sound Server",
-          .iconName = "pipewire",
           .supportedProfiles =
             {
-              {.id = audio::kProfileShared, .name = "Shared", .description = "Shared mode"},
-              {.id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive mode"},
+              {.id = audio::kProfileShared},
+              {.id = audio::kProfileExclusive},
             },
         },
       .devices =

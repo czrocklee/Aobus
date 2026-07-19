@@ -37,8 +37,6 @@ namespace ao::rt
                     },
                   .visibleFields = {F::DisplayTrackNumber, F::Title, F::Artist, F::Album, F::Year, F::Duration},
                 },
-              .label = "Library",
-              .description = "All tracks in album-artist and album order.",
             },
             TrackPresentationPreset{
               .spec =
@@ -47,8 +45,6 @@ namespace ao::rt
                   .groupBy = TrackGroupKey::None,
                   .visibleFields = {F::DisplayTrackNumber, F::Title, F::Artist, F::Album, F::Year, F::Duration},
                 },
-              .label = "List Order",
-              .description = "Flat list preserving source order.",
             },
             TrackPresentationPreset{
               .spec =
@@ -63,8 +59,6 @@ namespace ao::rt
                     },
                   .visibleFields = {F::Title, F::Artist, F::Album, F::Duration, F::Year},
                 },
-              .label = "Songs",
-              .description = "Flat list of every track ordered by title.",
             },
             TrackPresentationPreset{
               .spec =
@@ -82,8 +76,6 @@ namespace ao::rt
                   .visibleFields = {F::DisplayTrackNumber, F::Title, F::Artist, F::Duration},
                   .redundantFields = {F::Album, F::AlbumArtist},
                 },
-              .label = "Albums",
-              .description = "Grouped by album with track-oriented columns.",
             },
             TrackPresentationPreset{
               .spec =
@@ -102,8 +94,6 @@ namespace ao::rt
                   .visibleFields = {F::Year, F::Album, F::DisplayTrackNumber, F::Title, F::Artist, F::Duration},
                   .redundantFields = {F::AlbumArtist},
                 },
-              .label = "Artists",
-              .description = "Grouped by album artist with discography ordering.",
             },
             // --- Browsing and discovery ---
             TrackPresentationPreset{
@@ -123,8 +113,6 @@ namespace ao::rt
                   .visibleFields = {F::Year, F::Album, F::DisplayTrackNumber, F::Title, F::Duration},
                   .redundantFields = {F::Artist},
                 },
-              .label = "Performers",
-              .description = "Grouped by track artist, including featured guests.",
             },
             TrackPresentationPreset{
               .spec =
@@ -144,8 +132,6 @@ namespace ao::rt
                   .visibleFields = {F::Artist, F::Album, F::DisplayTrackNumber, F::Title, F::Year, F::Duration},
                   .redundantFields = {F::Genre},
                 },
-              .label = "Genres",
-              .description = "Grouped by genre.",
             },
             TrackPresentationPreset{
               .spec =
@@ -164,8 +150,6 @@ namespace ao::rt
                   .visibleFields = {F::Artist, F::Album, F::DisplayTrackNumber, F::Title, F::Genre, F::Duration},
                   .redundantFields = {F::Year},
                 },
-              .label = "Years",
-              .description = "Grouped by year.",
             },
             // --- Classical ---
             TrackPresentationPreset{
@@ -188,8 +172,6 @@ namespace ao::rt
                     {F::Work, F::Movement, F::Artist, F::Album, F::Year, F::Duration, F::DisplayTrackNumber},
                   .redundantFields = {F::Composer},
                 },
-              .label = "Classical: Composers",
-              .description = "Grouped by composer with work-oriented columns.",
             },
             TrackPresentationPreset{
               .spec =
@@ -211,8 +193,6 @@ namespace ao::rt
                   .visibleFields = {F::Work, F::Movement, F::Composer, F::Ensemble, F::Album, F::Year, F::Duration},
                   .redundantFields = {F::Conductor},
                 },
-              .label = "Classical: Conductors",
-              .description = "Grouped by conductor with work and ensemble columns.",
             },
             TrackPresentationPreset{
               .spec =
@@ -233,8 +213,6 @@ namespace ao::rt
                   .visibleFields = {F::DisplayTrackNumber, F::Movement, F::Artist, F::Album, F::Year, F::Duration},
                   .redundantFields = {F::Composer, F::Work},
                 },
-              .label = "Classical: Works",
-              .description = "Grouped by work with composer-oriented columns.",
             },
             // --- Maintenance ---
             TrackPresentationPreset{
@@ -260,8 +238,6 @@ namespace ao::rt
                                     F::Duration,
                                     F::Tags},
                 },
-              .label = "Tagging",
-              .description = "Flat list with raw disc/track, genre, year, and tags for curation.",
             },
             TrackPresentationPreset{
               .spec =
@@ -278,8 +254,6 @@ namespace ao::rt
                     },
                   .visibleFields = {F::Title, F::Artist, F::Album, F::TechnicalSummary, F::FileSize, F::FilePath},
                 },
-              .label = "Technical",
-              .description = "Flat list of codec, bitrate, size, and path for file inspection.",
             },
           };
 

@@ -11,6 +11,7 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/library/track/TrackFilterCompleter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -48,7 +49,7 @@ namespace ao::tui::test
     CHECK(optResult->replaceEnd == 2);
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"output", "outputs"});
     CHECK(optResult->items[0].displayText == "/output");
-    CHECK(optResult->items[0].detail == "output device");
+    CHECK(uimodel::PresentationTextCatalog{}.completionDetail(optResult->items[0].detail) == "output device");
   }
 
   TEST_CASE("CommandCompletion - completes presentation ids after view commands", "[tui][unit][completion]")
@@ -60,7 +61,7 @@ namespace ao::tui::test
     CHECK(optResult->replaceBegin == 5);
     CHECK(optResult->replaceEnd == 7);
     CHECK(optResult->items[0].insertText == "albums");
-    CHECK(optResult->items[0].detail == "Albums");
+    CHECK(uimodel::PresentationTextCatalog{}.completionDetail(optResult->items[0].detail) == "Albums");
   }
 
   TEST_CASE("CommandCompletion - returns no filter result without a filter completion provider",
@@ -116,7 +117,7 @@ namespace ao::tui::test
     CHECK(optResult->replaceBegin == 7);
     CHECK(optResult->replaceEnd == 10);
     CHECK(insertTexts(*optResult) == std::vector<std::string>{"$artist"});
-    CHECK(optResult->items[0].detail == "field");
+    CHECK(uimodel::PresentationTextCatalog{}.completionDetail(optResult->items[0].detail) == "field");
 
     optResult = completeCommandDraft("filter $artist = Ai", context);
 

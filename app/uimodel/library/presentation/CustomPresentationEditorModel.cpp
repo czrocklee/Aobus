@@ -4,6 +4,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -16,28 +17,6 @@
 
 namespace ao::uimodel
 {
-  namespace
-  {
-    std::string_view groupKeyName(rt::TrackGroupKey key)
-    {
-      switch (key)
-      {
-        case rt::TrackGroupKey::None: return "None";
-        case rt::TrackGroupKey::Artist: return "Artist";
-        case rt::TrackGroupKey::Album: return "Album";
-        case rt::TrackGroupKey::AlbumArtist: return "Album Artist";
-        case rt::TrackGroupKey::Genre: return "Genre";
-        case rt::TrackGroupKey::Composer: return "Composer";
-        case rt::TrackGroupKey::Conductor: return "Conductor";
-        case rt::TrackGroupKey::Ensemble: return "Ensemble";
-        case rt::TrackGroupKey::Work: return "Work";
-        case rt::TrackGroupKey::Year: return "Year";
-      }
-
-      return "None";
-    }
-  } // namespace
-
   CustomPresentationEditorModel::CustomPresentationEditorModel()
     : _groupOptions{makeGroupOptions()}
     , _sortFieldOptions{makeSortFieldOptions()}
@@ -257,7 +236,7 @@ namespace ao::uimodel
 
     for (auto const key : keys)
     {
-      options.push_back({.key = key, .label = std::string{groupKeyName(key)}});
+      options.push_back({.key = key, .label = std::string{PresentationTextCatalog{}.trackGroupKeyLabel(key)}});
     }
 
     return options;
@@ -276,7 +255,8 @@ namespace ao::uimodel
       {
         if (def.optSortField == sortField)
         {
-          options.push_back({.field = sortField, .label = std::string{def.label}});
+          options.push_back(
+            {.field = sortField, .label = std::string{PresentationTextCatalog{}.trackFieldLabel(def.field)}});
           break;
         }
       }
@@ -293,7 +273,8 @@ namespace ao::uimodel
     {
       if (def.presentable)
       {
-        options.push_back({.field = def.field, .label = std::string{def.label}});
+        options.push_back(
+          {.field = def.field, .label = std::string{PresentationTextCatalog{}.trackFieldLabel(def.field)}});
       }
     }
 

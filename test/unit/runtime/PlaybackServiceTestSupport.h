@@ -64,14 +64,13 @@ namespace ao::rt::test
   {
     auto status = audio::BackendProvider::Status{};
     status.descriptor.id = audio::BackendId{"mock_backend"};
-    status.descriptor.name = "Mock Backend";
     status.devices.push_back(audio::Device{.id = audio::DeviceId{"mock_device"},
                                            .displayName = "Mock Device",
                                            .description = "A mock audio device",
                                            .isDefault = true,
                                            .backendId = audio::BackendId{"mock_backend"}});
-    status.descriptor.supportedProfiles.push_back(audio::BackendProvider::ProfileDescriptor{
-      .id = audio::ProfileId{audio::kProfileShared}, .name = "Shared", .description = "Shared profile"});
+    status.descriptor.supportedProfiles.push_back(
+      audio::BackendProvider::ProfileDescriptor{.id = audio::ProfileId{audio::kProfileShared}});
     return status;
   }
 

@@ -64,6 +64,7 @@ target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
+    uimodel/presentation/PresentationTextCatalog.cpp
     uimodel/layout/action/LayoutActionCatalog.cpp
     uimodel/layout/action/LayoutActionValidator.cpp
     uimodel/layout/component/AbsoluteCanvasGeometry.cpp
@@ -98,6 +99,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/presentation/TrackColumnLayoutStore.cpp
     uimodel/library/presentation/TrackColumnWidthSolver.cpp
     uimodel/library/presentation/CustomPresentationEditorModel.cpp
+    uimodel/library/presentation/TrackGroupHeadingPresentation.cpp
     uimodel/library/presentation/TrackFieldPresentationPolicy.cpp
     uimodel/library/presentation/TrackPresentationCatalog.cpp
     uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp
@@ -195,6 +197,12 @@ set(AO_FORBIDDEN_UIMODEL_PLATFORM_VOCABULARY_REGEX
   "\"(ao-activity-status[A-Za-z0-9_.-]*|[A-Za-z0-9_.-]+-symbolic)\"")
 set(AO_FORBIDDEN_UIMODEL_PLATFORM_REGEX
   "(${AO_FORBIDDEN_PLATFORM_UI_INCLUDE_REGEX})|(${AO_FORBIDDEN_UIMODEL_PLATFORM_VOCABULARY_REGEX})")
+set(AO_FORBIDDEN_LOWER_PRESENTATION_VOCABULARY_REGEX
+  "\"(ao-activity-status[A-Za-z0-9_.-]*|[A-Za-z0-9_.-]+-symbolic|Unknown (Artist|Album|Year|Genre|Composer|Conductor|Ensemble|Work)|Modern Linux audio server with low latency|Advanced Linux Sound Architecture [(]Direct Hardware Access[)]|Windows Audio Session API|WASAPI render endpoint|Shared Mode|Exclusive Mode|logical operator)\"")
+set(AO_FORBIDDEN_TRACK_FIELD_COPY_REGEX "std::string_view[ \t]+label[ \t]*[;{]")
+set(AO_FORBIDDEN_TRACK_PRESET_COPY_REGEX "std::string_view[ \t]+(label|description)[ \t]*[;{]")
+set(AO_FORBIDDEN_BACKEND_DESCRIPTOR_COPY_REGEX "std::string[ \t]+(name|description|iconName)[ \t]*[;{]")
+set(AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX "std::string[ \t]+detail[ \t]*[;{]")
 set(AO_FORBIDDEN_RT_PUBLIC_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](runtime/|ao/(lmdb/|library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)|audio/(Player|Backend\\.h|BackendProvider\\.h|Engine|NullBackend|backend/|detail/))))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_UIMODEL_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/(lmdb/|library/)|${AO_FORBIDDEN_AUDIO_CONTROL_INCLUDE_REGEX}))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}")
 set(AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX "(#[ \t]*include[ \t]*[<\\\"](ao/lmdb/|ao/library/(MusicLibrary|TrackStore|ListStore|ResourceStore|DictionaryStore|FileManifestStore|TrackView|ListView)))|${AO_FORBIDDEN_WRITE_AUTHORITY_REGEX}|(^|[^A-Za-z0-9_])LibraryWriter([^A-Za-z0-9_]|$)|\\.writer[ \t\r\n]*\\(")
@@ -231,6 +239,31 @@ ao_write_guardrail_regex(
   "core-yaml-domain"
   "${AO_FORBIDDEN_CORE_YAML_DOMAIN_REGEX}"
 )
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_LOWER_PRESENTATION_VOCABULARY_REGEX_FILE
+  "lower-presentation-vocabulary"
+  "${AO_FORBIDDEN_LOWER_PRESENTATION_VOCABULARY_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_TRACK_FIELD_COPY_REGEX_FILE
+  "track-field-copy"
+  "${AO_FORBIDDEN_TRACK_FIELD_COPY_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_TRACK_PRESET_COPY_REGEX_FILE
+  "track-preset-copy"
+  "${AO_FORBIDDEN_TRACK_PRESET_COPY_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_BACKEND_DESCRIPTOR_COPY_REGEX_FILE
+  "backend-descriptor-copy"
+  "${AO_FORBIDDEN_BACKEND_DESCRIPTOR_COPY_REGEX}"
+)
+ao_write_guardrail_regex(
+  AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX_FILE
+  "completion-detail-copy"
+  "${AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX}"
+)
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include/ao/yaml/ConfigTraits.h")
   message(FATAL_ERROR "Managed state must use owner-local explicit schemas; remove ConfigTraits.h")
@@ -254,6 +287,38 @@ add_custom_target(ao_shared_signal_boundary_check
 )
 
 add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
+
+add_custom_target(ao_presentation_vocabulary_boundary_check
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/include;${CMAKE_SOURCE_DIR}/lib;${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/runtime"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_LOWER_PRESENTATION_VOCABULARY_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt/TrackField.h"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_TRACK_FIELD_COPY_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt/TrackPresentation.h"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_TRACK_PRESET_COPY_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/include/ao/audio/BackendProvider.h"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_BACKEND_DESCRIPTOR_COPY_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt/completion/CompletionItem.h"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_COMPLETION_DETAIL_COPY_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking shared presentation copy stays out of Core and runtime"
+  VERBATIM
+)
+
+add_dependencies(ao_app_runtime ao_presentation_vocabulary_boundary_check)
 
 add_custom_target(ao_managed_state_schema_boundary_check
   COMMAND ${CMAKE_COMMAND}
@@ -361,6 +426,7 @@ add_custom_target(ao_layering_boundary_report
     ao_core_yaml_domain_boundary_check
     ao_frontend_library_path_boundary_check
     ao_managed_state_schema_boundary_check
+    ao_presentation_vocabulary_boundary_check
     ao_rt_public_boundary_report
     ao_shared_signal_boundary_check
     ao_uimodel_platform_boundary_report

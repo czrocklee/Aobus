@@ -32,7 +32,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <charconv>
 #include <chrono>
 #include <concepts>
 #include <cstddef>
@@ -47,7 +46,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -85,20 +83,38 @@ namespace ao::rt
     {
       TrackRowRange rows{};
       std::string_view groupKey{};
-      std::string_view primaryText{};
-      std::string_view secondaryText{};
-      std::string_view tertiaryText{};
+      using HeadingValue = std::variant<std::monostate, std::string_view, std::uint16_t, MissingTrackValueKind>;
+      HeadingValue primary{};
+      HeadingValue secondary{};
+      HeadingValue tertiary{};
       ResourceId imageId{kInvalidResourceId};
     };
+
+    TrackGroupHeadingValue ownHeadingValue(GroupSection::HeadingValue const& value)
+    {
+      return std::visit(
+        []<typename Value>(Value const& item) -> TrackGroupHeadingValue
+        {
+          if constexpr (std::same_as<Value, std::string_view>)
+          {
+            return std::string{item};
+          }
+          else
+          {
+            return item;
+          }
+        },
+        value);
+    }
 
     struct OrderEntry final
     {
       TrackId trackId{};
       SortKeys keys{};
       std::string_view groupKey{};
-      std::string_view primaryText{};
-      std::string_view secondaryText{};
-      std::string_view tertiaryText{};
+      GroupSection::HeadingValue primary{};
+      GroupSection::HeadingValue secondary{};
+      GroupSection::HeadingValue tertiary{};
       ResourceId imageId{kInvalidResourceId};
     };
 
@@ -448,14 +464,6 @@ namespace ao::rt
       return arena.intern(std::string_view{buf.data(), static_cast<std::size_t>(res.out - buf.data())});
     }
 
-    std::string_view internYearText(utility::StringArena& arena, std::uint16_t year)
-    {
-      auto buf = std::array<char, kYearStrLen>{};
-      auto const [ptr, ec] = std::to_chars(buf.data(), buf.data() + buf.size(), year);
-      std::ignore = ec;
-      return arena.intern(std::string_view{buf.data(), static_cast<std::size_t>(ptr - buf.data())});
-    }
-
     void fillGroupMetadata(OrderEntry& entry,
                            library::TrackView const& view,
                            library::DictionaryStore const& dictionary,
@@ -474,7 +482,8 @@ namespace ao::rt
         {
           auto const text = dictionaryText(view.metadata().artistId());
           entry.groupKey = entry.keys.artistKey;
-          entry.primaryText = text.raw.empty() ? "Unknown Artist" : text.raw;
+          entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Artist}
+                                           : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Album:
@@ -491,29 +500,29 @@ namespace ao::rt
 
             if (entry.keys.albumKey.empty())
             {
-              entry.primaryText = "Unknown Album";
+              entry.primary = MissingTrackValueKind::Album;
             }
             else
             {
-              entry.primaryText = album.raw;
+              entry.primary = album.raw;
             }
 
             if (entry.keys.albumArtistKey.empty())
             {
-              entry.secondaryText = "Unknown Artist";
+              entry.secondary = MissingTrackValueKind::Artist;
             }
             else
             {
-              entry.secondaryText = albumArtist.raw;
+              entry.secondary = albumArtist.raw;
             }
 
             if (auto year = view.metadata().year(); year != 0)
             {
-              entry.tertiaryText = internYearText(arena, year);
+              entry.tertiary = year;
             }
             else
             {
-              entry.tertiaryText = "Unknown Year";
+              entry.tertiary = MissingTrackValueKind::Year;
             }
           }
 
@@ -522,35 +531,40 @@ namespace ao::rt
         {
           auto const text = dictionaryText(view.metadata().albumArtistId());
           entry.groupKey = entry.keys.albumArtistKey;
-          entry.primaryText = text.raw.empty() ? "Unknown Artist" : text.raw;
+          entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Artist}
+                                           : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Genre:
         {
           auto const text = dictionaryText(view.metadata().genreId());
           entry.groupKey = entry.keys.genreKey;
-          entry.primaryText = text.raw.empty() ? "Unknown Genre" : text.raw;
+          entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Genre}
+                                           : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Composer:
         {
           auto const text = dictionaryText(view.metadata().composerId());
           entry.groupKey = entry.keys.composerKey;
-          entry.primaryText = text.raw.empty() ? "Unknown Composer" : text.raw;
+          entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Composer}
+                                           : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Conductor:
         {
           auto const text = dictionaryText(view.classical().conductorId());
           entry.groupKey = entry.keys.conductorKey;
-          entry.primaryText = text.raw.empty() ? "Unknown Conductor" : text.raw;
+          entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Conductor}
+                                           : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Ensemble:
         {
           auto const text = dictionaryText(view.classical().ensembleId());
           entry.groupKey = entry.keys.ensembleKey;
-          entry.primaryText = text.raw.empty() ? "Unknown Ensemble" : text.raw;
+          entry.primary = text.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Ensemble}
+                                           : GroupSection::HeadingValue{text.raw};
         }
         break;
         case TrackGroupKey::Work:
@@ -558,15 +572,18 @@ namespace ao::rt
           auto const work = dictionaryText(view.classical().workId());
           auto const composer = dictionaryText(view.metadata().composerId());
           entry.groupKey = internCompoundKey(arena, scratch, entry.keys.composerKey, entry.keys.workKey);
-          entry.primaryText = work.raw.empty() ? "Unknown Work" : work.raw;
-          entry.secondaryText = composer.raw.empty() ? "Unknown Composer" : composer.raw;
+          entry.primary = work.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Work}
+                                           : GroupSection::HeadingValue{work.raw};
+          entry.secondary = composer.raw.empty() ? GroupSection::HeadingValue{MissingTrackValueKind::Composer}
+                                                 : GroupSection::HeadingValue{composer.raw};
         }
         break;
         case TrackGroupKey::Year:
         {
           std::uint16_t const year = entry.keys.year;
           entry.groupKey = internPaddedYearKey(arena, year);
-          entry.primaryText = (year == 0) ? "Unknown Year" : internYearText(arena, year);
+          entry.primary =
+            (year == 0) ? GroupSection::HeadingValue{MissingTrackValueKind::Year} : GroupSection::HeadingValue{year};
         }
 
         break;
@@ -680,9 +697,9 @@ namespace ao::rt
       sections.push_back(GroupSection{
         .rows = {.start = 0, .count = 1},
         .groupKey = orderIndex[0].groupKey,
-        .primaryText = orderIndex[0].primaryText,
-        .secondaryText = orderIndex[0].secondaryText,
-        .tertiaryText = orderIndex[0].tertiaryText,
+        .primary = orderIndex[0].primary,
+        .secondary = orderIndex[0].secondary,
+        .tertiary = orderIndex[0].tertiary,
         .imageId = orderIndex[0].imageId,
       });
 
@@ -693,9 +710,9 @@ namespace ao::rt
           sections.push_back(GroupSection{
             .rows = {.start = index, .count = 1},
             .groupKey = orderIndex[index].groupKey,
-            .primaryText = orderIndex[index].primaryText,
-            .secondaryText = orderIndex[index].secondaryText,
-            .tertiaryText = orderIndex[index].tertiaryText,
+            .primary = orderIndex[index].primary,
+            .secondary = orderIndex[index].secondary,
+            .tertiary = orderIndex[index].tertiary,
             .imageId = orderIndex[index].imageId,
           });
         }
@@ -1099,9 +1116,7 @@ namespace ao::rt
     struct SectionDescriptor final
     {
       std::string groupKey;
-      std::string primaryText;
-      std::string secondaryText;
-      std::string tertiaryText;
+      TrackGroupHeading heading;
       ResourceId imageId{kInvalidResourceId};
 
       bool operator==(SectionDescriptor const&) const = default;
@@ -1131,9 +1146,12 @@ namespace ao::rt
       {
         descriptors.push_back(SectionDescriptor{
           .groupKey = std::string{section.groupKey},
-          .primaryText = std::string{section.primaryText},
-          .secondaryText = std::string{section.secondaryText},
-          .tertiaryText = std::string{section.tertiaryText},
+          .heading =
+            TrackGroupHeading{
+              .primary = ownHeadingValue(section.primary),
+              .secondary = ownHeadingValue(section.secondary),
+              .tertiary = ownHeadingValue(section.tertiary),
+            },
           .imageId = section.imageId,
         });
       }
@@ -1491,9 +1509,12 @@ namespace ao::rt
     auto const& section = _implPtr->sections[groupIndex];
     return TrackGroupSectionSnapshot{
       .rows = section.rows,
-      .primaryText = (section.primaryText.data() != nullptr) ? std::string{section.primaryText} : std::string{},
-      .secondaryText = (section.secondaryText.data() != nullptr) ? std::string{section.secondaryText} : std::string{},
-      .tertiaryText = (section.tertiaryText.data() != nullptr) ? std::string{section.tertiaryText} : std::string{},
+      .heading =
+        TrackGroupHeading{
+          .primary = ownHeadingValue(section.primary),
+          .secondary = ownHeadingValue(section.secondary),
+          .tertiary = ownHeadingValue(section.tertiary),
+        },
       .imageId = section.imageId,
     };
   }

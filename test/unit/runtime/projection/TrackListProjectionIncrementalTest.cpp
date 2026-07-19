@@ -48,9 +48,7 @@ namespace ao::rt::test
         auto const expectedGroup = expected.groupAt(groupIndex);
         CHECK(actualGroup.rows.start == expectedGroup.rows.start);
         CHECK(actualGroup.rows.count == expectedGroup.rows.count);
-        CHECK(actualGroup.primaryText == expectedGroup.primaryText);
-        CHECK(actualGroup.secondaryText == expectedGroup.secondaryText);
-        CHECK(actualGroup.tertiaryText == expectedGroup.tertiaryText);
+        CHECK(actualGroup.heading == expectedGroup.heading);
         CHECK(actualGroup.imageId == expectedGroup.imageId);
       }
     }

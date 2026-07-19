@@ -10,7 +10,6 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <string>
 
 namespace ao::rt
 {
@@ -48,7 +47,7 @@ namespace ao::uimodel
     void expireTransient();
     void dismissCompact();
     void dismissDetailNotificationFromActivity(rt::NotificationId id);
-    void handleLibraryTaskProgress(std::string message, double fraction);
+    void handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event);
     void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event);
 
   private:

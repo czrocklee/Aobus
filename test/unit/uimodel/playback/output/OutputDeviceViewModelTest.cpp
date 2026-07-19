@@ -144,7 +144,6 @@ namespace ao::uimodel::test
     {
       auto status2 = makePipeWireOutputStatus();
       status2.descriptor.id = audio::BackendId{"alsa"};
-      status2.descriptor.name = "ALSA";
       status2.devices[0].backendId = audio::BackendId{"alsa"};
       status2.devices[0].id = audio::DeviceId{"alsa-device1"};
 
@@ -178,7 +177,6 @@ namespace ao::uimodel::test
     {
       auto status = makePipeWireOutputStatus();
       status.descriptor.id = audio::BackendId{"alsa"};
-      status.descriptor.name = "ALSA";
       status.devices[0].backendId = audio::BackendId{"alsa"};
       status.devices[0].displayName = "USB DAC";
 

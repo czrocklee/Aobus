@@ -20,8 +20,8 @@ namespace ao::tui::test
   TEST_CASE("OutputDeviceController - tracks selectable output rows", "[tui][unit][output]")
   {
     auto fixture = rt::test::PlaybackFixture<rt::test::InlineExecutor>{};
-    fixture.status.descriptor.supportedProfiles.push_back(audio::BackendProvider::ProfileDescriptor{
-      .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"});
+    fixture.status.descriptor.supportedProfiles.push_back(
+      audio::BackendProvider::ProfileDescriptor{.id = audio::kProfileExclusive});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
     fixture.onDevicesChangedCb(fixture.status.devices);
     std::int32_t refreshCount = 0;
@@ -29,7 +29,7 @@ namespace ao::tui::test
 
     REQUIRE(refreshCount > 0);
     REQUIRE(controller.viewState().rows.size() == 3);
-    CHECK(controller.viewState().outputBackendSummary == "Mock Backend");
+    CHECK(controller.viewState().outputBackendSummary == "mock_backend");
     CHECK(controller.selectedRow() == 1);
 
     CHECK(controller.moveSelection(1));
@@ -51,8 +51,8 @@ namespace ao::tui::test
   TEST_CASE("OutputDeviceController - selecting a row updates playback output", "[tui][unit][output]")
   {
     auto fixture = rt::test::PlaybackFixture<rt::test::InlineExecutor>{};
-    fixture.status.descriptor.supportedProfiles.push_back(audio::BackendProvider::ProfileDescriptor{
-      .id = audio::kProfileExclusive, .name = "Exclusive", .description = "Exclusive profile"});
+    fixture.status.descriptor.supportedProfiles.push_back(
+      audio::BackendProvider::ProfileDescriptor{.id = audio::kProfileExclusive});
     fakeit::When(Method(fixture.mockProvider, status)).AlwaysReturn(fixture.status);
     fixture.onDevicesChangedCb(fixture.status.devices);
     auto controller = OutputDeviceController{fixture.playbackService};

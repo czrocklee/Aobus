@@ -85,18 +85,18 @@ namespace ao::rt
   namespace
   {
     using LibraryTaskCompletionStatus = LibraryChanges::LibraryTaskCompletionStatus;
-    using LibraryTaskProgressPublisher = std::move_only_function<void(double fraction, std::string message)>;
+    using LibraryTaskProgressKind = LibraryChanges::LibraryTaskProgressKind;
+    using LibraryTaskProgressPublisher =
+      std::move_only_function<void(LibraryTaskProgressKind kind, double fraction, std::string subject)>;
 
-    std::string scanApplyProgressMessage(ScanApplyProgress const& progress)
+    LibraryTaskProgressKind scanApplyProgressKind(ScanApplyProgress const& progress)
     {
-      auto prefix = std::string_view{"Updating"};
-
       if (progress.stage == ScanApplyProgressStage::Fingerprinting)
       {
-        prefix = "Fingerprinting";
+        return LibraryTaskProgressKind::Fingerprinting;
       }
 
-      return std::string{prefix} + ": " + progress.path.filename().string();
+      return LibraryTaskProgressKind::Updating;
     }
 
     bool shouldPublishBackfillProgress(AudioIdentityIndexProgress const& progress)
@@ -221,8 +221,7 @@ namespace ao::rt
         auto const itemBase = static_cast<double>(progress.itemIndex);
         auto const fraction =
           totalItems > 0 ? (itemBase + progress.itemFraction) / static_cast<double>(totalItems) : 0.0;
-        auto message = scanApplyProgressMessage(progress);
-        publish(fraction, std::move(message));
+        publish(scanApplyProgressKind(progress), fraction, progress.path.filename().string());
 
         if (callback)
         {
@@ -288,8 +287,7 @@ namespace ao::rt
         if (shouldPublishBackfillProgress(progress))
         {
           auto const fraction = backfillProgressFraction(progress);
-          auto message = "Indexing audio identity: " + progress.path.filename().string();
-          publish(fraction, std::move(message));
+          publish(LibraryTaskProgressKind::IndexingAudioIdentity, fraction, progress.path.filename().string());
         }
 
         if (callback)
@@ -333,15 +331,16 @@ namespace ao::rt
   {
     LibraryTaskProgressPublisher makeProgressPublisher()
     {
-      return [this](double fraction, std::string message)
+      return [this](LibraryTaskProgressKind kind, double fraction, std::string subject)
       {
         auto* const changesRaw = &changes;
         asyncRuntime.callbackExecutor().dispatch(
-          [changesRaw, fraction, message = std::move(message)]
+          [changesRaw, kind, fraction, subject = std::move(subject)]
           {
             changesRaw->notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+              .kind = kind,
               .fraction = fraction,
-              .message = std::move(message),
+              .subject = std::move(subject),
             });
           });
       };
@@ -554,13 +553,14 @@ namespace ao::rt
     auto planResult = scanService.buildPlan(
       [this](std::filesystem::path const& path)
       {
-        auto message = "Scanning: " + path.filename().string();
+        auto subject = path.filename().string();
         _implPtr->asyncRuntime.callbackExecutor().dispatch(
-          [this, message = std::move(message)]
+          [this, subject = std::move(subject)]
           {
             _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
+              .kind = LibraryChanges::LibraryTaskProgressKind::Scanning,
               .fraction = 0.0,
-              .message = std::move(message),
+              .subject = std::move(subject),
             });
           });
       });

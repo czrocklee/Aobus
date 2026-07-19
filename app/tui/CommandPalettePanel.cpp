@@ -9,6 +9,7 @@
 #include "TextCell.h"
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionText.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <ftxui/dom/elements.hpp>
 
@@ -80,15 +81,15 @@ namespace ao::tui
       return std::nullopt;
     }
 
-    std::string_view commandPaletteTrailingText(rt::CompletionItem const& item)
+    std::string commandPaletteTrailingText(rt::CompletionItem const& item)
     {
       if (auto const optDescriptor = commandPaletteEntryDescriptor(item);
           optDescriptor && !optDescriptor->shortcut.empty())
       {
-        return optDescriptor->shortcut;
+        return std::string{optDescriptor->shortcut};
       }
 
-      return item.detail;
+      return uimodel::PresentationTextCatalog{}.completionDetail(item.detail);
     }
 
     std::string commandCompletionSuffix(ShellInteractionModel const& shell)

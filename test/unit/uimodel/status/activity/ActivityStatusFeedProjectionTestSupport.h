@@ -72,4 +72,10 @@ namespace ao::uimodel::test
   {
     return {.status = status, .affectedCount = affectedCount};
   }
+
+  inline rt::LibraryChanges::LibraryTaskProgressUpdated
+  libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind kind, std::string subject, double fraction)
+  {
+    return {.kind = kind, .fraction = fraction, .subject = std::move(subject)};
+  }
 } // namespace ao::uimodel::test

@@ -162,6 +162,21 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(result.preset, "windows-debug")
         self.assertEqual(result.compiler, "msvc")
 
+    def test_windows_clean_uses_extended_length_path(self):
+        build_path = mock.MagicMock(spec=Path)
+        build_path.resolve.return_value = Path(r"C:\local\aobus-build")
+
+        with mock.patch.object(build_command.shutil, "rmtree") as remove_tree:
+            build_command._remove_build_directory(build_path, builddir.WINDOWS_PROFILE)
+
+        remove_tree.assert_called_once_with(r"\\?\C:\local\aobus-build")
+
+    def test_windows_extended_length_path_preserves_unc_semantics(self):
+        self.assertEqual(
+            build_command._windows_extended_path(r"\\server\share\aobus-build"),
+            r"\\?\UNC\server\share\aobus-build",
+        )
+
     def test_windows_asan_build_enables_instrumentation(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "--asan", "-p", temp_dir])

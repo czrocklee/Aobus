@@ -21,8 +21,6 @@ namespace ao::rt
   struct OutputProfileSnapshot final
   {
     audio::ProfileId id{};
-    std::string name{};
-    std::string description{};
 
     bool operator==(OutputProfileSnapshot const&) const = default;
   };
@@ -42,9 +40,6 @@ namespace ao::rt
   struct OutputBackendSnapshot final
   {
     audio::BackendId id{};
-    std::string name{};
-    std::string description{};
-    std::string iconName{};
     std::vector<OutputProfileSnapshot> supportedProfiles{};
     std::vector<OutputDeviceSnapshot> devices{};
 

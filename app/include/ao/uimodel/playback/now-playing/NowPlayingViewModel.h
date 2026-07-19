@@ -9,6 +9,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
@@ -50,7 +51,7 @@ namespace ao::uimodel
   {
     rt::QualityState quality{};
     std::string deviceName{};
-    std::string deviceIconName{};
+    AudioIconKind deviceIconKind = AudioIconKind::OutputDevice;
     std::string plainTextFallback{};
   };
 
@@ -87,6 +88,7 @@ namespace ao::uimodel
 
     rt::PlaybackService& _playback;
     std::function<void(NowPlayingViewState const&)> _onRender;
+    PresentationTextCatalog _textCatalog;
 
     async::Subscription _startedSub;
     async::Subscription _pausedSub;

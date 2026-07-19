@@ -4,6 +4,7 @@
 #pragma once
 
 #include "NotificationIds.h"
+#include <ao/CoreIds.h>
 
 #include <chrono>
 #include <cstddef>
@@ -12,6 +13,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace ao::rt
@@ -30,7 +32,40 @@ namespace ao::rt
     PlaybackError,
   };
 
-  inline constexpr std::string_view kDefaultNotificationTemplate = "notification.message";
+  enum class NotificationReportTemplate : std::uint8_t
+  {
+    PlaybackTrackOpenFailed,
+    PlaybackDecodeFailed,
+    PlaybackRouteActivationFailed,
+    PlaybackDeviceLost,
+    PlaybackSequenceFinished,
+    PlaybackTracksSkipped,
+    PlaybackStoppedAfterFailures,
+    PlaybackStoppedForTrack,
+  };
+
+  struct NotificationReport final
+  {
+    NotificationReportTemplate templateId = NotificationReportTemplate::PlaybackSequenceFinished;
+    TrackId trackId = kInvalidTrackId;
+    std::string subject{};
+    std::string detail{};
+    std::size_t count = 0;
+
+    bool operator==(NotificationReport const&) const = default;
+  };
+
+  using NotificationMessage = std::variant<std::string, NotificationReport>;
+
+  inline std::string_view resolvedNotificationText(NotificationMessage const& message) noexcept
+  {
+    if (auto const* text = std::get_if<std::string>(&message); text != nullptr)
+    {
+      return *text;
+    }
+
+    return {};
+  }
 
   enum class NotificationProgressMode : std::uint8_t
   {
@@ -58,7 +93,6 @@ namespace ao::rt
   struct NotificationContentState final
   {
     NotificationTopic topic = NotificationTopic::General;
-    std::string templateId = std::string{kDefaultNotificationTemplate};
     std::string title{};
     std::string iconName{};
     std::vector<NotificationAction> actions{};
@@ -130,7 +164,7 @@ namespace ao::rt
   struct NotificationRequest final
   {
     NotificationSeverity severity = NotificationSeverity::Info;
-    std::string message{};
+    NotificationMessage message{};
     NotificationLifetime lifetime;
     NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
     NotificationContentState content{};
@@ -141,7 +175,7 @@ namespace ao::rt
     NotificationId id{};
     std::optional<NotificationReportKey> optReportKey{};
     NotificationSeverity severity = NotificationSeverity::Info;
-    std::string message{};
+    NotificationMessage message{};
     NotificationLifetime lifetime = NotificationLifetime::sessionHistory();
     std::uint64_t lifetimeGeneration = 0;
     NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;

@@ -4,6 +4,7 @@
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -47,7 +48,8 @@ namespace ao::uimodel::test
 
     SECTION("non-compact presentations do not interrupt library progress")
     {
-      feedProjection.handleLibraryTaskProgress("Scanning: album.flac", 0.4);
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
       auto currentFeed = feed({entry(rt::NotificationId{25},
                                      rt::NotificationSeverity::Info,
@@ -69,7 +71,8 @@ namespace ao::uimodel::test
 
     SECTION("hidden presentation does not interrupt library progress")
     {
-      feedProjection.handleLibraryTaskProgress("Updating: album.flac", 0.7);
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Updating, "album.flac", 0.7));
 
       auto currentFeed = feed({entry(rt::NotificationId{26},
                                      rt::NotificationSeverity::Info,

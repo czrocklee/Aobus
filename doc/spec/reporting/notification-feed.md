@@ -73,7 +73,8 @@ The first accepted post returns id `1` for a newly constructed service.
 Ids are never reused during that service lifetime, including after dismissal.
 Rejected creation does not advance the id counter.
 
-The bounded logical text payload is the sum of `std::string::size()` for report keys, messages, template ids, titles, icon names, action ids and labels, and progress labels.
+The bounded logical text payload is the sum of `std::string::size()` for report keys, resolved message strings or structured-report subject/detail arguments, titles, icon names, action ids and labels, and progress labels.
+The feed retains a structured report without resolving or duplicating its catalog message.
 The service canonicalizes accepted strings and action vectors instead of retaining producer-reserved spare capacity.
 
 ## Commands and transitions

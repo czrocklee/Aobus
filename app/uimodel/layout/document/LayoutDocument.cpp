@@ -59,6 +59,7 @@ namespace ao::uimodel
         if constexpr (std::is_same_v<T, std::monostate>)
         {
           node << nullptr;
+          return {};
         }
         else if constexpr (std::is_same_v<T, std::vector<std::string>>)
         {
@@ -67,9 +68,8 @@ namespace ao::uimodel
         else
         {
           yaml::writeScalar(node, nodeValue);
+          return {};
         }
-
-        return {};
       },
       value.data);
   }

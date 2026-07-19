@@ -194,7 +194,6 @@ namespace ao::audio::backend
 
         devices.push_back({.id = DeviceId{std::move(utf8Id)},
                            .displayName = std::move(name),
-                           .description = "WASAPI render endpoint",
                            .isDefault = (wideId == defaultId),
                            .backendId = kBackendWasapi,
                            .capabilities = sharedModeCapabilities()});
@@ -768,13 +767,7 @@ namespace ao::audio::backend
   {
     auto const statePtr = _implPtr->monitorStatePtr;
     auto const lock = std::scoped_lock{statePtr->mutex};
-    return {.descriptor = {.id = kBackendWasapi,
-                           .name = "WASAPI",
-                           .description = "Windows Audio Session API",
-                           .iconName = "audio-card-symbolic",
-                           .supportedProfiles = {{.id = kProfileShared,
-                                                  .name = "Shared Mode",
-                                                  .description = "System-level mixing with other applications"}}},
+    return {.descriptor = {.id = kBackendWasapi, .supportedProfiles = {{.id = kProfileShared}}},
             .devices = statePtr->cachedDevices};
   }
 

@@ -30,8 +30,10 @@
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackInlineEdit.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/rectangle.h>
 #include <glib/gtypes.h>
@@ -185,12 +187,13 @@ namespace ao::gtk
 
       void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count, bool reserveCoverSlot)
       {
-        _primaryLabel.set_text(snap.primaryText);
-        _secondaryLabel.set_text(snap.secondaryText);
-        _tertiaryLabel.set_text(snap.tertiaryText);
+        auto const heading = uimodel::formatTrackGroupHeading(uimodel::PresentationTextCatalog{}, snap.heading);
+        _primaryLabel.set_text(heading.primaryText);
+        _secondaryLabel.set_text(heading.secondaryText);
+        _tertiaryLabel.set_text(heading.tertiaryText);
 
         if (auto const countText = "(" + uimodel::formatTrackCount(count) + ")";
-            snap.secondaryText.empty() && snap.tertiaryText.empty())
+            heading.secondaryText.empty() && heading.tertiaryText.empty())
         {
           _countLabel.set_text(countText);
         }
@@ -199,9 +202,9 @@ namespace ao::gtk
           _countLabel.set_text("• " + countText);
         }
 
-        _secondaryLabel.set_visible(!snap.secondaryText.empty());
-        _tertiaryLabel.set_visible(!snap.tertiaryText.empty());
-        _separatorLabel.set_visible(!snap.secondaryText.empty() && !snap.tertiaryText.empty());
+        _secondaryLabel.set_visible(!heading.secondaryText.empty());
+        _tertiaryLabel.set_visible(!heading.tertiaryText.empty());
+        _separatorLabel.set_visible(!heading.secondaryText.empty() && !heading.tertiaryText.empty());
         _coverArtSlot.set_visible(reserveCoverSlot);
 
         if (reserveCoverSlot && snap.imageId != kInvalidResourceId)

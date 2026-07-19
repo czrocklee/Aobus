@@ -28,7 +28,6 @@ namespace ao::rt
       {
         .field = F::Title,
         .id = "title",
-        .label = "Title",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -40,7 +39,6 @@ namespace ao::rt
       {
         .field = F::Artist,
         .id = "artist",
-        .label = "Artist",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -55,7 +53,6 @@ namespace ao::rt
       {
         .field = F::Album,
         .id = "album",
-        .label = "Album",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -70,7 +67,6 @@ namespace ao::rt
       {
         .field = F::AlbumArtist,
         .id = "album-artist",
-        .label = "Album Artist",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -85,7 +81,6 @@ namespace ao::rt
       {
         .field = F::Genre,
         .id = "genre",
-        .label = "Genre",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -100,7 +95,6 @@ namespace ao::rt
       {
         .field = F::Composer,
         .id = "composer",
-        .label = "Composer",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -115,7 +109,6 @@ namespace ao::rt
       {
         .field = F::Conductor,
         .id = "conductor",
-        .label = "Conductor",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -130,7 +123,6 @@ namespace ao::rt
       {
         .field = F::Ensemble,
         .id = "ensemble",
-        .label = "Ensemble",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -145,7 +137,6 @@ namespace ao::rt
       {
         .field = F::Work,
         .id = "work",
-        .label = "Work",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -160,7 +151,6 @@ namespace ao::rt
       {
         .field = F::Movement,
         .id = "movement",
-        .label = "Movement",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -174,7 +164,6 @@ namespace ao::rt
       {
         .field = F::Soloist,
         .id = "soloist",
-        .label = "Soloist",
         .category = Cat::Metadata,
         .valueKind = Vk::Text,
         .presentable = true,
@@ -189,7 +178,6 @@ namespace ao::rt
       {
         .field = F::Year,
         .id = "year",
-        .label = "Year",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -203,7 +191,6 @@ namespace ao::rt
       {
         .field = F::DiscNumber,
         .id = "disc-number",
-        .label = "Disc",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -215,7 +202,6 @@ namespace ao::rt
       {
         .field = F::DiscTotal,
         .id = "disc-total",
-        .label = "Total Discs",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -225,7 +211,6 @@ namespace ao::rt
       {
         .field = F::TrackNumber,
         .id = "track-number",
-        .label = "Track",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -237,7 +222,6 @@ namespace ao::rt
       {
         .field = F::TrackTotal,
         .id = "track-total",
-        .label = "Total Tracks",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -247,7 +231,6 @@ namespace ao::rt
       {
         .field = F::MovementNumber,
         .id = "movement-number",
-        .label = "Movement No.",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -259,7 +242,6 @@ namespace ao::rt
       {
         .field = F::MovementTotal,
         .id = "movement-total",
-        .label = "Total Movements",
         .category = Cat::Metadata,
         .valueKind = Vk::Number,
         .presentable = true,
@@ -270,7 +252,6 @@ namespace ao::rt
       {
         .field = F::Duration,
         .id = "duration",
-        .label = "Duration",
         .category = Cat::Technical,
         .valueKind = Vk::Duration,
         .presentable = true,
@@ -282,7 +263,6 @@ namespace ao::rt
       {
         .field = F::Tags,
         .id = "tags",
-        .label = "Tags",
         .category = Cat::Tag,
         .valueKind = Vk::TagList,
         .presentable = true,
@@ -291,7 +271,6 @@ namespace ao::rt
       {
         .field = F::FilePath,
         .id = "file-path",
-        .label = "File Path",
         .category = Cat::Technical,
         .valueKind = Vk::FilePath,
         .presentable = true,
@@ -299,7 +278,6 @@ namespace ao::rt
       {
         .field = F::Codec,
         .id = "codec",
-        .label = "Codec",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -308,7 +286,6 @@ namespace ao::rt
       {
         .field = F::SampleRate,
         .id = "sample-rate",
-        .label = "Sample Rate",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -317,7 +294,6 @@ namespace ao::rt
       {
         .field = F::Channels,
         .id = "channels",
-        .label = "Channels",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -326,7 +302,6 @@ namespace ao::rt
       {
         .field = F::BitDepth,
         .id = "bit-depth",
-        .label = "Bit Depth",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -335,7 +310,6 @@ namespace ao::rt
       {
         .field = F::Bitrate,
         .id = "bitrate",
-        .label = "Bitrate",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -344,7 +318,6 @@ namespace ao::rt
       {
         .field = F::FileSize,
         .id = "file-size",
-        .label = "File Size",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -352,7 +325,6 @@ namespace ao::rt
       {
         .field = F::ModifiedTime,
         .id = "modified-time",
-        .label = "Modified",
         .category = Cat::Technical,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -361,7 +333,6 @@ namespace ao::rt
       {
         .field = F::DisplayTrackNumber,
         .id = "display-track-number",
-        .label = "Track #",
         .category = Cat::Synthetic,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -370,7 +341,6 @@ namespace ao::rt
       {
         .field = F::TechnicalSummary,
         .id = "technical-summary",
-        .label = "Technical",
         .category = Cat::Synthetic,
         .valueKind = Vk::TechnicalText,
         .presentable = true,
@@ -379,7 +349,6 @@ namespace ao::rt
       {
         .field = F::Quality,
         .id = "quality",
-        .label = "Quality",
         .category = Cat::Synthetic,
         .valueKind = Vk::TechnicalText,
         .presentable = true,

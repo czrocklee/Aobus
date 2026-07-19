@@ -107,12 +107,15 @@ Revision queuing, immutable update ownership, and observer-exception containment
 
 Domain services and application workflow coordinators decide when a semantic outcome becomes a notification and provide the frontend-neutral content.
 They own deduplication and aggregation policy when reporting every low-level failure would produce noise or misrepresent one higher-level operation; the feed supplies typed report-key correlation and create-or-update mechanics without inventing that policy.
+Shared playback reports enter the feed as a closed template plus typed track, subject, detail, and count arguments rather than preformatted shared copy.
+The feed validates and bounds the retained arguments but does not expand them or retain a second resolved message.
 Typed domain events remain available when consumers need structured recovery or correlation beyond a notification summary.
 
 ### UIModel reporting projection
 
 UIModel adapts runtime reporting state into reusable platform-neutral presentation state.
 The activity-status feature accepts each canonical feed revision once, combines its immutable snapshot with library-task progress, and selects compact and detail representations.
+It resolves structured notification reports and typed library-progress kinds through the immutable `PresentationTextCatalog`; neither report nor task behavior depends on the resulting English text.
 It owns presentation-local timeout only for retained info or synthetic completion state; it observes runtime-transient expiry rather than starting a competing authoritative timer.
 It also owns presentation-local suppression policy.
 
@@ -181,8 +184,8 @@ accepted command
   -> callback executor
   -> runtime state owner applies recovery
   -> state snapshot / typed failure event
-  -> optional notification summary
-  -> UIModel and frontend observation
+  -> optional structured notification report
+  -> UIModel text resolution and frontend observation
 ```
 
 The original synchronous result cannot describe a failure that happens after acceptance.
@@ -230,6 +233,7 @@ They do not invent domain recovery or silently continue mutation from a partiall
 - One higher-level operation reports once at the owner-selected granularity instead of allowing every lower layer to post independently.
 - UI-local validation and fallback state remain local unless the outcome must survive editor dismissal or be visible across application surfaces.
 - Runtime reporting values are frontend-neutral and contain no widget, terminal, or platform exception object.
+- Shared report and progress copy resolves in UIModel from typed intent; runtime does not parse or duplicate resolved catalog text.
 - Expected cancellation is silent at generic exception-reporting leaves and cannot be swallowed before the lifetime boundary has made captured state safe.
 - A future-returning task has one explicit exception owner and is not also diagnosed as an unobserved coroutine.
 - An injected async exception handler is diagnostic-only, may run concurrently, and cannot mutate executor-affine application state.
@@ -262,6 +266,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) composes the notification owner with library, source, completion, async, and diagnostic collaborators.
 - [`PlaybackFailure`](../../app/include/ao/rt/PlaybackFailure.h), [`PlaybackService.cpp`](../../app/runtime/PlaybackService.cpp), and [`PlaybackSequenceService.cpp`](../../app/runtime/PlaybackSequenceService.cpp) are the principal typed asynchronous failure, recovery, and summary-reporting path.
 - [`ActivityStatusViewModel`](../../app/include/ao/uimodel/status/activity/ActivityStatusViewModel.h) and [`ActivityStatusFeedProjection`](../../app/uimodel/status/activity/ActivityStatusFeedProjection.cpp) define the platform-neutral reporting projection.
+- [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) owns shared report expansion and typed library-progress copy.
 - GTK [`UiWorkflow`](../../app/linux-gtk/common/UiWorkflow.h), TUI [`Executor.cpp`](../../app/tui/Executor.cpp), and CLI [`CommandError`](../../app/cli/CommandError.h) plus [`Run.cpp`](../../app/cli/Run.cpp) define representative application-leaf containment and presentation boundaries.
 - [`Log.h`](../../app/include/ao/rt/Log.h) exposes the application logging surface used by runtime and frontend boundary adapters.
 - [`Log.cpp`](../../app/runtime/Log.cpp) supplies the application adapter for injected async exceptions.
@@ -288,6 +293,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [Workspace architecture](workspace.md)
 - [Interactive session lifecycle architecture](interactive-session-lifecycle.md)
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
+- [Presentation text catalog reference](../reference/presentation/text-catalog.md)
 - [Outcome channel specification](../spec/failure/outcome-channel.md)
 - [Signal delivery specification](../spec/async/signal.md)
 - [Error value reference](../reference/failure/error.md)

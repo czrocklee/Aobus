@@ -99,7 +99,7 @@ Later duplicate, older, empty, or revision-mismatched feed updates do not invoke
 | `expireTransient()` | `void` |
 | `dismissCompact()` | `void` |
 | `dismissDetailNotificationFromActivity(NotificationId)` | `void` |
-| `handleLibraryTaskProgress(std::string, double)` | `void` |
+| `handleLibraryTaskProgress(LibraryTaskProgressUpdated const&)` | `void` |
 | `handleLibraryTaskCompleted(LibraryTaskCompleted const&)` | `void` |
 
 `expireTransientIfDue()` returns `true` only when it performs a presentation-local expiry transition.
@@ -112,12 +112,15 @@ Runtime-transient notification expiry arrives through `NotificationFeedUpdate` a
 | Multiple selected info notifications | `<N> notifications` |
 | Multiple selected warnings | `<N> warnings` |
 | Multiple selected errors | `<N> errors` |
-| Library progress beginning `Scanning:` | `Scanning library` |
-| Library progress beginning `Updating:` | `Updating library` |
+| Library progress kind `Scanning` | `Scanning library` |
+| Library progress kind `Updating` | `Updating library` |
+| Library progress kind `Fingerprinting` | `Fingerprinting` plus optional subject |
+| Library progress kind `IndexingAudioIdentity` | `Indexing audio identity` plus optional subject |
 | Successful completion with zero affected tracks | `Library is up to date` |
 | Successful completion with nonzero affected tracks | `Scan complete: <N> tracks added` |
 
 These strings are current UIModel output and are not localization keys.
+They are resolved by the [presentation text catalog](text-catalog.md); progress subjects never select behavior by prefix.
 `CompletedWithIssues`, `Failed`, and `Cancelled` clear task progress without synthesizing a success message; notification projection may then surface an owning warning or error.
 
 ## Validation rules
@@ -158,3 +161,4 @@ auto options = ao::uimodel::ActivityStatusViewModelOptions{
 - [Activity-status specification](../../spec/presentation/activity-status.md)
 - [Notification model reference](../reporting/notification.md)
 - [Presentation architecture](../../architecture/presentation.md)
+- [Presentation text catalog](text-catalog.md)

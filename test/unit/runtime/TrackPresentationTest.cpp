@@ -100,8 +100,6 @@ namespace ao::rt::test
     CHECK(spec.visibleFields[4] == TrackField::Year);
     CHECK(spec.visibleFields[5] == TrackField::Duration);
     CHECK(spec.redundantFields.empty());
-    CHECK(preset->label == "List Order");
-    CHECK(preset->description == "Flat list preserving source order.");
   }
 
   TEST_CASE("songs preset is a flat title-ordered list", "[runtime][unit][presentation]")

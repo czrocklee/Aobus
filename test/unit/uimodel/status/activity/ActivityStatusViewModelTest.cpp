@@ -113,7 +113,11 @@ namespace ao::uimodel::test
 
     SECTION("library task runtime events reuse activity projection")
     {
-      viewModel.handleLibraryTaskProgress("Updating: status-progress.flac", 0.625);
+      viewModel.handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated{
+        .kind = rt::LibraryChanges::LibraryTaskProgressKind::Updating,
+        .fraction = 0.625,
+        .subject = "status-progress.flac",
+      });
 
       CHECK(latest.compact.kind == ActivityStatusKind::Processing);
       CHECK(latest.compact.text == "Updating library");

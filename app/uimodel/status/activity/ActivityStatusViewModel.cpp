@@ -15,7 +15,6 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
 #include <utility>
 
 namespace ao::uimodel
@@ -72,8 +71,7 @@ namespace ao::uimodel
       if (options.libraryChanges != nullptr)
       {
         libraryProgressSub = options.libraryChanges->onLibraryTaskProgress(
-          [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
-          { handleLibraryTaskProgress(event.message, event.fraction); });
+          [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event) { handleLibraryTaskProgress(event); });
         libraryCompletedSub = options.libraryChanges->onLibraryTaskCompleted(
           [this](rt::LibraryChanges::LibraryTaskCompleted const& event) { handleLibraryTaskCompleted(event); });
       }
@@ -130,9 +128,9 @@ namespace ao::uimodel
       publish();
     }
 
-    void handleLibraryTaskProgress(std::string message, double const fraction)
+    void handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
     {
-      feedProjection.handleLibraryTaskProgress(std::move(message), fraction);
+      feedProjection.handleLibraryTaskProgress(event);
       publish();
     }
 
@@ -188,9 +186,9 @@ namespace ao::uimodel
     _implPtr->dismissDetailNotificationFromActivity(id);
   }
 
-  void ActivityStatusViewModel::handleLibraryTaskProgress(std::string message, double const fraction)
+  void ActivityStatusViewModel::handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
   {
-    _implPtr->handleLibraryTaskProgress(std::move(message), fraction);
+    _implPtr->handleLibraryTaskProgress(event);
   }
 
   void ActivityStatusViewModel::handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event)

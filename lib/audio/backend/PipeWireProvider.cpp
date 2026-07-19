@@ -45,15 +45,10 @@ namespace ao::audio::backend
 
   Subscription PipeWireProvider::subscribeDevices(OnDevicesChangedCallback callback)
   {
-    // Wrap the callback to add the "System Default" virtual device
+    // Wrap the callback to prepend the virtual default-route device
     auto wrappedCallback = [callback = std::move(callback)](std::vector<Device> devices)
     {
-      devices.insert(devices.begin(),
-                     {.id = DeviceId{""},
-                      .displayName = "System Default",
-                      .description = "PipeWire",
-                      .isDefault = true,
-                      .backendId = kBackendPipeWire});
+      devices.insert(devices.begin(), {.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire});
       callback(devices);
     };
 
@@ -67,17 +62,9 @@ namespace ao::audio::backend
 
   BackendProvider::Status PipeWireProvider::status() const
   {
-    return {.descriptor = {.id = kBackendPipeWire,
-                           .name = "PipeWire",
-                           .description = "Modern Linux audio server with low latency",
-                           .iconName = "media-playback-start-symbolic",
-                           .supportedProfiles = {{.id = kProfileShared,
-                                                  .name = "Shared Mode",
-                                                  .description = "System-level mixing with other applications"},
-                                                 {.id = kProfileExclusive,
-                                                  .name = "Exclusive Mode",
-                                                  .description = "Direct access to the hardware device"}}},
-            .devices = _implPtr->monitor.enumerateSinks()};
+    return {
+      .descriptor = {.id = kBackendPipeWire, .supportedProfiles = {{.id = kProfileShared}, {.id = kProfileExclusive}}},
+      .devices = _implPtr->monitor.enumerateSinks()};
   }
 
   Subscription PipeWireProvider::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)

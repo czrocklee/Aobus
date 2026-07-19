@@ -56,8 +56,7 @@ It does not dismiss the runtime feed, mutate library work, choose recovery, or d
 The projection retains:
 
 - current compact and detail view state;
-- whether a library task is active and its most recent progress;
-- a notification posted while task progress owns compact state;
+- whether a library task is active and its most recent typed progress kind, subject, and fraction;
 - locally suppressed compact notification ids;
 - locally suppressed detail notification ids;
 - in `ActivityStatusViewModel`, the last accepted notification-feed revision;
@@ -86,13 +85,16 @@ An `Expired` mutation follows the same source-removal path as explicit dismissal
 
 The projection selects the highest severity present among unsuppressed compact-eligible warning and error entries.
 With one selected entry it uses that entry's title when non-empty, otherwise its message.
+Structured notification messages are resolved through `PresentationTextCatalog` before entering compact or detail view state.
 With multiple selected entries it reports the severity group count.
 The compact state retains every selected source id so later suppression or feed removal can reproject correctly.
 
 ### Library task progress and completion
 
 Task progress produces processing compact state, exposes the supplied fraction, and adds task detail.
-Compact display normalizes messages beginning with `Scanning:` or `Updating:` to a stable library-level summary while detail retains the full message.
+The runtime event carries `LibraryTaskProgressKind` plus a raw subject.
+UIModel selects the stable library-level compact summary for `Scanning` and `Updating` by kind and formats complete detail text without parsing the subject.
+`Fingerprinting` and `IndexingAudioIdentity` use their complete detail text in compact state.
 
 Completion removes task progress and first reprojects persistent notifications.
 Only when no persistent compact remains does it show a transient success summary; zero additions and nonzero additions have distinct summary text.
@@ -108,7 +110,7 @@ A notification is detail-eligible when it is not `Hidden` and one of these condi
 - it has a non-empty title or icon name;
 - it has at least one action.
 
-Detail copies notification severity, title, message, icon, progress, actions, and derived dismissibility into frontend-neutral activity values.
+Detail resolves structured notification messages once, then copies severity, title, resolved message, icon, progress, actions, and derived dismissibility into frontend-neutral activity values.
 It also exposes whether any notification or library-task progress is active.
 
 ### Local dismissal

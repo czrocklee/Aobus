@@ -7,6 +7,7 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionText.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -44,7 +45,7 @@ namespace ao::tui
       items.push_back(rt::CompletionItem{
         .displayText = std::move(displayText),
         .insertText = std::move(insertText),
-        .detail = std::move(detail),
+        .detail = rt::CompletionDetail::makeResolvedText(std::move(detail)),
         .rank = static_cast<std::uint32_t>(items.size()),
       });
       return true;
@@ -93,6 +94,8 @@ namespace ao::tui
                                  std::string_view const prefix,
                                  std::size_t const limit)
     {
+      auto const textCatalog = uimodel::PresentationTextCatalog{};
+
       for (auto const& preset : context.builtinPresentations)
       {
         if (items.size() >= limit)
@@ -102,7 +105,10 @@ namespace ao::tui
 
         if (rt::startsWithCompletionPrefixInsensitive(preset.spec.id, prefix))
         {
-          if (!appendItem(items, limit, preset.spec.id, preset.spec.id, std::string{preset.label}))
+          auto const optText = textCatalog.builtinTrackPresentation(preset.spec.id);
+
+          if (!appendItem(
+                items, limit, preset.spec.id, preset.spec.id, optText ? std::string{optText->label} : preset.spec.id))
           {
             return;
           }

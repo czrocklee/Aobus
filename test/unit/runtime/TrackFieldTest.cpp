@@ -360,41 +360,6 @@ namespace ao::rt::test
     CHECK(trackFieldDefinition(TrackField::Year)->optGroupKey == TrackGroupKey::Year);
   }
 
-  TEST_CASE("TrackField - definitions expose stable labels", "[runtime][unit][trackfield]")
-  {
-    CHECK(trackFieldDefinition(TrackField::Title)->label == "Title");
-    CHECK(trackFieldDefinition(TrackField::Artist)->label == "Artist");
-    CHECK(trackFieldDefinition(TrackField::Album)->label == "Album");
-    CHECK(trackFieldDefinition(TrackField::AlbumArtist)->label == "Album Artist");
-    CHECK(trackFieldDefinition(TrackField::Genre)->label == "Genre");
-    CHECK(trackFieldDefinition(TrackField::Composer)->label == "Composer");
-    CHECK(trackFieldDefinition(TrackField::Conductor)->label == "Conductor");
-    CHECK(trackFieldDefinition(TrackField::Ensemble)->label == "Ensemble");
-    CHECK(trackFieldDefinition(TrackField::Work)->label == "Work");
-    CHECK(trackFieldDefinition(TrackField::Movement)->label == "Movement");
-    CHECK(trackFieldDefinition(TrackField::Soloist)->label == "Soloist");
-    CHECK(trackFieldDefinition(TrackField::MovementNumber)->label == "Movement No.");
-    CHECK(trackFieldDefinition(TrackField::MovementTotal)->label == "Total Movements");
-    CHECK(trackFieldDefinition(TrackField::Year)->label == "Year");
-    CHECK(trackFieldDefinition(TrackField::DiscNumber)->label == "Disc");
-    CHECK(trackFieldDefinition(TrackField::DiscTotal)->label == "Total Discs");
-    CHECK(trackFieldDefinition(TrackField::TrackNumber)->label == "Track");
-    CHECK(trackFieldDefinition(TrackField::TrackTotal)->label == "Total Tracks");
-    CHECK(trackFieldDefinition(TrackField::Duration)->label == "Duration");
-    CHECK(trackFieldDefinition(TrackField::Tags)->label == "Tags");
-    CHECK(trackFieldDefinition(TrackField::FilePath)->label == "File Path");
-    CHECK(trackFieldDefinition(TrackField::Codec)->label == "Codec");
-    CHECK(trackFieldDefinition(TrackField::SampleRate)->label == "Sample Rate");
-    CHECK(trackFieldDefinition(TrackField::Channels)->label == "Channels");
-    CHECK(trackFieldDefinition(TrackField::BitDepth)->label == "Bit Depth");
-    CHECK(trackFieldDefinition(TrackField::Bitrate)->label == "Bitrate");
-    CHECK(trackFieldDefinition(TrackField::FileSize)->label == "File Size");
-    CHECK(trackFieldDefinition(TrackField::ModifiedTime)->label == "Modified");
-    CHECK(trackFieldDefinition(TrackField::DisplayTrackNumber)->label == "Track #");
-    CHECK(trackFieldDefinition(TrackField::TechnicalSummary)->label == "Technical");
-    CHECK(trackFieldDefinition(TrackField::Quality)->label == "Quality");
-  }
-
   TEST_CASE("TrackField - definitions expose filter expression variables", "[runtime][unit][trackfield]")
   {
     CHECK(trackFieldFilterExpressionVariable(TrackField::Title) == "$title");

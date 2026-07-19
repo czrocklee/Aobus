@@ -22,8 +22,11 @@ namespace ao::tui::test
         .replaceEnd = 7,
         .items =
           {
-            rt::CompletionItem{.displayText = "songs", .insertText = "songs", .detail = "view"},
-            rt::CompletionItem{.displayText = "albums", .insertText = "albums", .detail = "view"},
+            rt::CompletionItem{
+              .displayText = "songs", .insertText = "songs", .detail = rt::CompletionDetail::makeResolvedText("view")},
+            rt::CompletionItem{.displayText = "albums",
+                               .insertText = "albums",
+                               .detail = rt::CompletionDetail::makeResolvedText("view")},
           },
       };
     }

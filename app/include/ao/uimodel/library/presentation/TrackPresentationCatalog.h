@@ -6,6 +6,7 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <optional>
@@ -60,5 +61,6 @@ namespace ao::uimodel
     rt::WorkspaceService& _workspace;
     async::Subscription _customPresetsSub;
     async::Signal<> _changed;
+    PresentationTextCatalog _textCatalog;
   };
 } // namespace ao::uimodel

@@ -12,6 +12,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <format>
@@ -42,6 +43,43 @@ namespace ao::uimodel
       // resolution (valid bits) rather than a padded transport container width.
       return (it != quality.assessments.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true)
                                                                 : std::string{};
+    }
+
+    struct SelectedDevicePresentation final
+    {
+      std::string name{};
+      AudioIconKind iconKind = AudioIconKind::OutputDevice;
+    };
+
+    SelectedDevicePresentation resolveSelectedDevicePresentation(PresentationTextCatalog const& textCatalog,
+                                                                 rt::OutputState const& output)
+    {
+      for (auto const& backend : output.availableBackends)
+      {
+        if (backend.id != output.selectedDevice.backendId)
+        {
+          continue;
+        }
+
+        for (auto const& device : backend.devices)
+        {
+          if (device.id != output.selectedDevice.deviceId)
+          {
+            continue;
+          }
+
+          auto name = device.displayName;
+
+          if (device.isDefault && device.id.empty() && name.empty())
+          {
+            name = textCatalog.systemDefaultOutputDeviceLabel();
+          }
+
+          return {.name = std::move(name), .iconKind = textCatalog.audioBackend(backend.id).iconKind};
+        }
+      }
+
+      return {};
     }
   } // namespace
 
@@ -104,30 +142,11 @@ namespace ao::uimodel
         std::format_to(std::back_inserter(plainTextFallback), "\n{}", presentation.headline);
       }
 
-      auto deviceName = std::string{};
-      auto deviceIconName = std::string{};
-
-      for (auto const& backend : state.output.availableBackends)
-      {
-        for (auto const& device : backend.devices)
-        {
-          if (device.id == state.output.selectedDevice.deviceId)
-          {
-            deviceName = device.displayName;
-            deviceIconName = backend.iconName;
-            break;
-          }
-        }
-
-        if (!deviceName.empty())
-        {
-          break;
-        }
-      }
+      auto devicePresentation = resolveSelectedDevicePresentation(_textCatalog, state.output);
 
       view.audioPipeline = AudioPipelineViewState{.quality = state.quality,
-                                                  .deviceName = std::move(deviceName),
-                                                  .deviceIconName = std::move(deviceIconName),
+                                                  .deviceName = std::move(devicePresentation.name),
+                                                  .deviceIconKind = devicePresentation.iconKind,
                                                   .plainTextFallback = plainTextFallback};
 
       view.isActive = (state.quality.overall != audio::Quality::Unknown);

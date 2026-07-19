@@ -32,8 +32,6 @@ namespace ao::audio::backend::test
     auto const status = provider.status();
 
     CHECK(status.descriptor.id == kBackendWasapi);
-    CHECK(status.descriptor.name == "WASAPI");
-    CHECK(status.descriptor.description == "Windows Audio Session API");
     REQUIRE(status.descriptor.supportedProfiles.size() == 1);
     CHECK(status.descriptor.supportedProfiles.front().id == kProfileShared);
 

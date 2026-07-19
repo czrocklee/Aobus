@@ -47,7 +47,9 @@ namespace ao::gtk::test
       auto const feed = fixture.runtime().notifications().feed();
 
       return std::ranges::any_of(
-        feed.entries, [&](auto const& entry) { return entry.severity == severity && entry.message == message; });
+        feed.entries,
+        [&](auto const& entry)
+        { return entry.severity == severity && rt::resolvedNotificationText(entry.message) == message; });
     }
 
     bool hasNotificationContaining(GtkRuntimeFixture& fixture,
@@ -56,10 +58,12 @@ namespace ao::gtk::test
     {
       auto const feed = fixture.runtime().notifications().feed();
 
-      return std::ranges::any_of(
-        feed.entries,
-        [&](auto const& entry)
-        { return entry.severity == severity && std::string_view{entry.message}.contains(messageFragment); });
+      return std::ranges::any_of(feed.entries,
+                                 [&](auto const& entry)
+                                 {
+                                   return entry.severity == severity &&
+                                          rt::resolvedNotificationText(entry.message).contains(messageFragment);
+                                 });
     }
 
     portal::ImportExportCallbacks callbacksWithMutationCounter(std::int32_t& mutationCallbackCount)
@@ -155,7 +159,7 @@ namespace ao::gtk::test
     auto const feed = fixture.runtime().notifications().feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
-    CHECK(feed.entries.back().message == "Library is up to date");
+    CHECK(rt::resolvedNotificationText(feed.entries.back().message) == "Library is up to date");
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change", "[gtk][unit][workflow][scan]")
@@ -189,13 +193,17 @@ namespace ao::gtk::test
     CHECK(optCompletedCount == 1U);
     CHECK(mutationCallbackCount == 1);
     REQUIRE(progressEvents.size() == 4);
-    CHECK(progressEvents[0].message == "Scanning: song.flac");
+    CHECK(progressEvents[0].kind == rt::LibraryChanges::LibraryTaskProgressKind::Scanning);
+    CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
-    CHECK(progressEvents[1].message == "Updating: song.flac");
+    CHECK(progressEvents[1].kind == rt::LibraryChanges::LibraryTaskProgressKind::Updating);
+    CHECK(progressEvents[1].subject == "song.flac");
     CHECK(progressEvents[1].fraction == 0.0);
-    CHECK(progressEvents[2].message == "Fingerprinting: song.flac");
+    CHECK(progressEvents[2].kind == rt::LibraryChanges::LibraryTaskProgressKind::Fingerprinting);
+    CHECK(progressEvents[2].subject == "song.flac");
     CHECK(progressEvents[2].fraction == 0.0);
-    CHECK(progressEvents[3].message == "Fingerprinting: song.flac");
+    CHECK(progressEvents[3].kind == rt::LibraryChanges::LibraryTaskProgressKind::Fingerprinting);
+    CHECK(progressEvents[3].subject == "song.flac");
     CHECK(progressEvents[3].fraction == 1.0);
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
@@ -215,7 +223,8 @@ namespace ao::gtk::test
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 1);
     REQUIRE(progressEvents.size() == 1);
-    CHECK(progressEvents[0].message == "Scanning: song.flac");
+    CHECK(progressEvents[0].kind == rt::LibraryChanges::LibraryTaskProgressKind::Scanning);
+    CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
   }
 
@@ -611,9 +620,10 @@ library:
     executor->runUntilIdle();
 
     CHECK(mutationCallbackCount == 0);
-    CHECK_FALSE(std::ranges::any_of(runtime.notifications().feed().entries,
-                                    [](auto const& entry)
-                                    { return entry.message == "Library imported successfully"; }));
+    CHECK_FALSE(
+      std::ranges::any_of(runtime.notifications().feed().entries,
+                          [](auto const& entry)
+                          { return rt::resolvedNotificationText(entry.message) == "Library imported successfully"; }));
   }
 
   TEST_CASE("LibraryImportExportWorkflow - import reports read errors without mutation", "[gtk][unit][workflow][error]")

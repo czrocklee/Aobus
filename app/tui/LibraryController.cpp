@@ -22,8 +22,10 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -444,12 +446,13 @@ namespace ao::tui
           if (!optActiveGroupIndex || *optActiveGroupIndex != *optGroupIndex)
           {
             auto group = projectionPtr->groupAt(*optGroupIndex);
+            auto heading = uimodel::formatTrackGroupHeading(uimodel::PresentationTextCatalog{}, group.heading);
             snapshot.sections.push_back(TrackSection{
               .rowBegin = snapshot.tracks.size(),
               .rowCount = 0,
-              .primaryText = std::move(group.primaryText),
-              .secondaryText = std::move(group.secondaryText),
-              .tertiaryText = std::move(group.tertiaryText),
+              .primaryText = std::move(heading.primaryText),
+              .secondaryText = std::move(heading.secondaryText),
+              .tertiaryText = std::move(heading.tertiaryText),
               .imageId = group.imageId,
             });
             optActiveGroupIndex = optGroupIndex;

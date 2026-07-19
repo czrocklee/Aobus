@@ -114,11 +114,15 @@ Engine opens an audio item into a decoder-backed PCM source through its track-se
 Decoder implementations may reuse container primitives from `ao_media`, but the [encoded media architecture](encoded-media.md) keeps encoded-file reading and decoder consumption as independent capabilities; neither media file reading nor its visitor owns decoder-session state or PCM behavior.
 
 `BackendProvider` owns platform output discovery and creates `Backend` instances for selected devices and profiles.
+A provider descriptor carries only stable backend/profile ids and supported-profile structure.
+Device display names and descriptions discovered from the operating system remain external facts, while built-in backend/profile labels, descriptions, and icon meaning do not enter Core audio.
 A Backend owns its native output handles, render/control resources, and platform threads; its realtime callback consumes PCM through the narrow source/render boundary and reports non-realtime state back to Engine.
 
 ### UIModel and frontend adapters
 
 UIModel owns reusable command availability, transport presentation, seek interpolation, output-device presentation, and quality formatting.
+Its presentation catalog maps known backend/profile ids to shared labels and semantic `AudioIconKind` values, with stable-id fallback for unknown extensions.
+GTK maps the semantic kind to a symbolic icon and TUI remains free to select terminal presentation.
 It consumes runtime snapshots and commands and does not construct Player, Engine, decoder, backend, or library-source state.
 
 Frontend composition creates concrete providers and transfers them to `AppRuntime`.
@@ -328,6 +332,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackService`](../../app/include/ao/rt/PlaybackService.h) owns application transport, runtime-to-audio translation, and accepted observation publication.
 - [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) coordinates the composite durable session lifecycle.
 - [`PlaybackCommandSurface`](../../app/include/ao/uimodel/playback/command/PlaybackCommandSurface.h) is the reusable UIModel command boundary.
+- [`OutputDeviceViewModel`](../../app/include/ao/uimodel/playback/output/OutputDeviceViewModel.h) and [`PresentationTextCatalog`](../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) own shared output-device presentation.
 - [`Player`](../../include/ao/audio/Player.h) owns providers, Engine, route/quality state, and callback marshalling.
 - [`Engine`](../../include/ao/audio/Engine.h), [`TrackSession`](../../lib/audio/detail/TrackSession.h), and [`StreamingSource`](../../include/ao/audio/StreamingSource.h) own audio execution and source construction; [`PcmRingBuffer`](../../include/ao/audio/PcmRingBuffer.h) and [`StreamingBufferPolicy`](../../lib/audio/detail/StreamingBufferPolicy.h) own bounded PCM capacity and producer admission.
 - [`BackendProvider`](../../include/ao/audio/BackendProvider.h) and [`Backend`](../../include/ao/audio/Backend.h) define the platform output boundary.
@@ -353,6 +358,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [Encoded media architecture](encoded-media.md)
 - [Library architecture](library.md)
 - [Resource delivery architecture](resource-delivery.md)
+- [Presentation text catalog reference](../reference/presentation/text-catalog.md)
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Presentation architecture](presentation.md)
 - [Workspace architecture](workspace.md)

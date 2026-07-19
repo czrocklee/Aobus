@@ -4,6 +4,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/library/property/TrackPropertiesFormSpec.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 namespace ao::uimodel
 {
@@ -34,6 +35,7 @@ namespace ao::uimodel
   TrackPropertiesFormSpec buildTrackPropertiesFormSpec()
   {
     auto spec = TrackPropertiesFormSpec{};
+    auto const textCatalog = PresentationTextCatalog{};
 
     for (auto const& def : rt::trackFieldDefinitions())
     {
@@ -41,7 +43,7 @@ namespace ao::uimodel
       {
         spec.metadataRows.push_back(TrackPropertiesFormRow{
           .field = def.field,
-          .label = def.label,
+          .label = textCatalog.trackFieldLabel(def.field),
           .editorKind = editorKindFor(def),
         });
       }
@@ -50,7 +52,7 @@ namespace ao::uimodel
       {
         spec.propertyRows.push_back(TrackPropertiesFormRow{
           .field = def.field,
-          .label = def.label,
+          .label = textCatalog.trackFieldLabel(def.field),
           .editorKind = TrackPropertiesFormEditorKind::ReadonlyText,
         });
       }

@@ -29,8 +29,6 @@ namespace ao::rt
   struct TrackPresentationPreset final
   {
     TrackPresentationSpec spec{};
-    std::string_view label{};
-    std::string_view description{};
   };
 
   struct CustomTrackPresentationPreset final

@@ -94,14 +94,14 @@ namespace ao::rt::test
 
     auto feed = fixture.service.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message == "Updated");
+    CHECK(resolvedNotificationText(feed.entries.front().message) == "Updated");
     CHECK(feed.entries.front().lifetimeGeneration == 2);
 
     fixture.executor.drain();
 
     feed = fixture.service.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message == "Updated");
+    CHECK(resolvedNotificationText(feed.entries.front().message) == "Updated");
     CHECK(feed.revision == 2);
 
     REQUIRE(fixture.sleeper.fire(1));

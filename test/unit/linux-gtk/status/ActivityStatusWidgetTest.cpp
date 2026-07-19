@@ -404,7 +404,11 @@ namespace ao::gtk::test
     auto mounted = MountedActivityStatus{};
     auto& status = mounted.status;
 
-    status.activityStatusViewModel().handleLibraryTaskProgress("Updating: status-progress.flac", 0.625);
+    status.activityStatusViewModel().handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated{
+      .kind = rt::LibraryChanges::LibraryTaskProgressKind::Updating,
+      .fraction = 0.625,
+      .subject = "status-progress.flac",
+    });
 
     CHECK(status.widget().get_visible());
     CHECK(status.label().get_text() == "Updating library");

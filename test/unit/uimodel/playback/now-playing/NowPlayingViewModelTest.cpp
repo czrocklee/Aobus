@@ -5,6 +5,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/BackendIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
@@ -14,6 +15,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -171,6 +173,30 @@ namespace ao::uimodel::test
 
     REQUIRE(!log.empty());
     CHECK(log.last().streamInfo == "Connecting to audio engine...");
+  }
+
+  TEST_CASE("NowPlayingViewModel - presents an unnamed system-default output through the catalog",
+            "[uimodel][unit][playback]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto notificationService = NotificationService{runtime};
+    auto playback = makePlaybackService(executor, libraryFixture.library(), notificationService);
+    addReadyAudioProvider(
+      playback,
+      audio::BackendProvider::Status{
+        .descriptor = {.id = audio::kBackendPipeWire, .supportedProfiles = {{.id = audio::kProfileShared}}},
+        .devices = {{.id = audio::DeviceId{}, .isDefault = true, .backendId = audio::kBackendPipeWire}},
+      });
+
+    auto log = ao::test::RenderLog<NowPlayingViewState>{};
+    auto const viewModel = NowPlayingViewModel{playback, [&log](auto const& view) { log.render(view); }};
+
+    REQUIRE(playback.play(playbackRequest(TrackId{1}, "Song"), ListId{1}));
+    REQUIRE(!log.empty());
+    CHECK(log.last().audioPipeline.deviceName == "System Default");
+    CHECK(log.last().audioPipeline.deviceIconKind == AudioIconKind::AudioServer);
   }
 
   TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")

@@ -4,6 +4,7 @@
 #include "TrackPresentationNavigation.h"
 
 #include <ao/rt/TrackPresentation.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <format>
 #include <span>
@@ -19,13 +20,15 @@ namespace ao::tui
   {
     auto items = std::vector<TrackPresentationNavEntry>{};
     items.reserve(builtinPresets.size() + customPresets.size());
+    auto const textCatalog = uimodel::PresentationTextCatalog{};
 
     for (auto const& preset : builtinPresets)
     {
+      auto const optText = textCatalog.builtinTrackPresentation(preset.spec.id);
       items.push_back(TrackPresentationNavEntry{
         .id = preset.spec.id,
-        .label = preset.label.empty() ? preset.spec.id : std::string{preset.label},
-        .detail = std::string{preset.description},
+        .label = optText ? std::string{optText->label} : preset.spec.id,
+        .detail = optText ? std::string{optText->description} : std::string{},
       });
     }
 

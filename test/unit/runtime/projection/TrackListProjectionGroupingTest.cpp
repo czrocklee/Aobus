@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -54,17 +55,17 @@ namespace ao::rt::test
     REQUIRE(proj.groupCount() == 3);
 
     auto s0 = proj.groupAt(0);
-    CHECK(s0.primaryText == "Abba");
+    CHECK(trackGroupHeadingText(s0.heading.primary) == "Abba");
     CHECK(s0.rows.start == 0);
     CHECK(s0.rows.count == 1);
 
     auto s1 = proj.groupAt(1);
-    CHECK(s1.primaryText == "Coldplay");
+    CHECK(trackGroupHeadingText(s1.heading.primary) == "Coldplay");
     CHECK(s1.rows.start == 1);
     CHECK(s1.rows.count == 2);
 
     auto s2 = proj.groupAt(2);
-    CHECK(s2.primaryText == "Zeppelin");
+    CHECK(trackGroupHeadingText(s2.heading.primary) == "Zeppelin");
     CHECK(s2.rows.start == 3);
     CHECK(s2.rows.count == 2);
 
@@ -202,7 +203,7 @@ namespace ao::rt::test
     for (std::size_t groupIndex = 0; groupIndex < expectedGroups.size(); ++groupIndex)
     {
       auto const group = proj.groupAt(groupIndex);
-      CHECK(group.primaryText == expectedGroups.at(groupIndex).primaryText);
+      CHECK(trackGroupHeadingText(group.heading.primary) == expectedGroups.at(groupIndex).primaryText);
       CHECK(group.rows.start == expectedGroups.at(groupIndex).start);
       CHECK(group.rows.count == expectedGroups.at(groupIndex).count);
 
@@ -244,8 +245,8 @@ namespace ao::rt::test
     CHECK(proj.trackIdAt(1) == coldplay);
 
     REQUIRE(proj.groupCount() == 2);
-    CHECK(proj.groupAt(0).primaryText == "The Beatles");
-    CHECK(proj.groupAt(1).primaryText == "Coldplay");
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "The Beatles");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Coldplay");
   }
 
   TEST_CASE("TrackListProjection - group sections empty for None grouping", "[runtime][unit][projection]")
@@ -265,7 +266,7 @@ namespace ao::rt::test
     CHECK(proj.groupCount() == 0);
     auto s = proj.groupAt(0);
     CHECK(s.rows.count == 0);
-    CHECK(s.primaryText.empty());
+    CHECK(std::holds_alternative<std::monostate>(s.heading.primary));
     CHECK_FALSE(proj.groupIndexAt(0).has_value());
     CHECK_FALSE(proj.groupRangeAt(0).has_value());
   }
@@ -305,7 +306,7 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).primaryText == "Unknown Artist");
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Artist);
   }
 
   TEST_CASE("TrackListProjection - group label for unknown year", "[runtime][unit][projection]")
@@ -325,7 +326,7 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).primaryText == "Unknown Year");
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Year);
   }
 
   TEST_CASE("TrackListProjection - album groups split by album artist", "[runtime][unit][projection]")
@@ -350,12 +351,12 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 2);
     REQUIRE(proj.groupCount() == 2);
-    CHECK(proj.groupAt(0).primaryText == "Greatest Hits");
-    CHECK(proj.groupAt(0).secondaryText == "Artist One");
-    CHECK(proj.groupAt(0).tertiaryText == "2020");
-    CHECK(proj.groupAt(1).primaryText == "Greatest Hits");
-    CHECK(proj.groupAt(1).secondaryText == "Artist Two");
-    CHECK(proj.groupAt(1).tertiaryText == "2020");
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Greatest Hits");
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Artist One");
+    CHECK(trackGroupHeadingYear(proj.groupAt(0).heading.tertiary) == 2020);
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Greatest Hits");
+    CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Artist Two");
+    CHECK(trackGroupHeadingYear(proj.groupAt(1).heading.tertiary) == 2020);
   }
 
   TEST_CASE("TrackListProjection - presentation returns active grouping and redundant fields snapshot",
@@ -402,8 +403,8 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).primaryText == "Solo Album");
-    CHECK(proj.groupAt(0).secondaryText == "Unknown Artist");
+    CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Solo Album");
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.secondary) == MissingTrackValueKind::Artist);
   }
 
   TEST_CASE("TrackListProjection - unknown album label", "[runtime][unit][projection]")
@@ -424,8 +425,8 @@ namespace ao::rt::test
 
     REQUIRE(proj.size() == 1);
     REQUIRE(proj.groupCount() == 1);
-    CHECK(proj.groupAt(0).primaryText == "Unknown Album");
-    CHECK(proj.groupAt(0).secondaryText == "Unknown Artist");
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Album);
+    CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.secondary) == MissingTrackValueKind::Artist);
   }
 
   TEST_CASE("TrackListProjection - grouping labels genre composer conductor ensemble and work fields",
@@ -456,8 +457,8 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Genre, .sortBy = {TrackSortTerm{.field = TrackSortField::Genre, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Pop");
-      CHECK(proj.groupAt(1).primaryText == "Rock");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Pop");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Rock");
     }
 
     SECTION("Group by Composer")
@@ -467,8 +468,8 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Composer, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Bach");
-      CHECK(proj.groupAt(1).primaryText == "Mozart");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Bach");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Mozart");
     }
 
     SECTION("Group by Work")
@@ -477,10 +478,10 @@ namespace ao::rt::test
         .groupBy = TrackGroupKey::Work, .sortBy = {TrackSortTerm{.field = TrackSortField::Work, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Opus 1");
-      CHECK(proj.groupAt(0).secondaryText == "Mozart");
-      CHECK(proj.groupAt(1).primaryText == "Opus 2");
-      CHECK(proj.groupAt(1).secondaryText == "Bach");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Opus 1");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.secondary) == "Mozart");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Opus 2");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.secondary) == "Bach");
     }
 
     SECTION("Group by Conductor")
@@ -490,8 +491,8 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Conductor, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Carlos Kleiber");
-      CHECK(proj.groupAt(1).primaryText == "Leonard Bernstein");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Carlos Kleiber");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Leonard Bernstein");
     }
 
     SECTION("Group by Ensemble")
@@ -501,8 +502,8 @@ namespace ao::rt::test
                               .sortBy = {TrackSortTerm{.field = TrackSortField::Ensemble, .ascending = true}}});
       REQUIRE(proj.size() == 2);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "New York Philharmonic");
-      CHECK(proj.groupAt(1).primaryText == "Vienna Philharmonic");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "New York Philharmonic");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Vienna Philharmonic");
     }
   }
 } // namespace ao::rt::test

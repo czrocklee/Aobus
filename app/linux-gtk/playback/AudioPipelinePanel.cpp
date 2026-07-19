@@ -8,6 +8,7 @@
 #include <ao/audio/flow/Graph.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -78,7 +79,9 @@ namespace ao::gtk
     headerBox->set_spacing(kPanelSpacing);
     headerBox->set_margin_bottom(4);
 
-    auto const iconName = view.deviceIconName.empty() ? "audio-card-symbolic" : view.deviceIconName;
+    auto const* const iconName = view.deviceIconKind == uimodel::AudioIconKind::AudioServer
+                                   ? "media-playback-start-symbolic"
+                                   : "audio-card-symbolic";
     auto* icon = Gtk::make_managed<Gtk::Image>();
     icon->set_from_icon_name(iconName);
     icon->set_pixel_size(16);

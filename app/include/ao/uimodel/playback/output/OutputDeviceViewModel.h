@@ -7,6 +7,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/rt/PlaybackService.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
 #include <functional>
@@ -62,6 +63,7 @@ namespace ao::uimodel
   private:
     rt::PlaybackService& _playback;
     std::function<void(OutputDeviceViewState const&)> _onRender;
+    PresentationTextCatalog _textCatalog;
 
     async::Subscription _outputDeviceChangedSub;
   };

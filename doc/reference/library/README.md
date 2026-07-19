@@ -38,7 +38,7 @@ Behavioral transitions belong to [library specifications](../../spec/library/REA
 ### Model
 
 - [Track model](model/track.md) enumerates persisted metadata, technical values, cover entries, codec values, tags, and custom metadata.
-- [Runtime track field catalog](model/track-field.md) enumerates application field ids, labels, capabilities, sort/group mappings, completion flags, and query bridges.
+- [Runtime track field catalog](model/track-field.md) enumerates application field ids, capabilities, sort/group mappings, completion flags, and query bridges; the presentation catalog owns labels.
 - [List model](model/list.md) enumerates list fields, kinds, identifiers, and stored membership shape.
 
 ### Storage

@@ -34,11 +34,29 @@ The public authority is `app/include/ao/rt/`; UIModel and frontends consume thes
 | `NotificationProgressMode` | `Indeterminate`, `Fraction` |
 | `NotificationActivityPresentation` | `Default`, `DetailOnly`, `Hidden` |
 | `NotificationLifetimeKind` | `Transient`, `SessionHistory`, `UntilDismissed` |
+| `NotificationReportTemplate` | `PlaybackTrackOpenFailed`, `PlaybackDecodeFailed`, `PlaybackRouteActivationFailed`, `PlaybackDeviceLost`, `PlaybackSequenceFinished`, `PlaybackTracksSkipped`, `PlaybackStoppedAfterFailures`, `PlaybackStoppedForTrack` |
 | `NotificationFeedMutationKind` | `Posted`, `ReportUpdated`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Expired`, `Dismissed`, `Cleared` |
 | `NotificationMutationOutcome` | `Applied`, `Missing`, `Unchanged`, `Rejected` |
 
 Each notification enum is a scoped enum with underlying type `std::uint8_t`.
-`kDefaultNotificationTemplate` is `notification.message`.
+
+### Message values
+
+`NotificationMessage` is `std::variant<std::string, NotificationReport>`.
+The string alternative is already resolved text for frontend-local or otherwise explicitly classified callers.
+Shared runtime playback producers use `NotificationReport`, whose fields are:
+
+| Field | Type | Default |
+|---|---|---|
+| `templateId` | `NotificationReportTemplate` | `PlaybackSequenceFinished` |
+| `trackId` | `TrackId` | invalid `0` |
+| `subject` | `std::string` | empty |
+| `detail` | `std::string` | empty |
+| `count` | `std::size_t` | `0` |
+
+The feed stores this structured value without retaining a second resolved form.
+UIModel resolves it through the [presentation text catalog](../presentation/text-catalog.md).
+`resolvedNotificationText` returns a view only for the string alternative and an empty view for a structured report; it is intended for code that explicitly requires already resolved text, not as report rendering.
 
 ### Progress and action values
 
@@ -55,7 +73,6 @@ Each notification enum is a scoped enum with underlying type `std::uint8_t`.
 | `NotificationContentState` field | Type | Default |
 |---|---|---|
 | `topic` | `NotificationTopic` | `General` |
-| `templateId` | `std::string` | `notification.message` |
 | `title` | `std::string` | empty |
 | `iconName` | `std::string` | empty |
 | `actions` | `std::vector<NotificationAction>` | empty |
@@ -85,7 +102,7 @@ Severity and lifetime are independent.
 | Field | Type | Default |
 |---|---|---|
 | `severity` | `NotificationSeverity` | `Info` |
-| `message` | `std::string` | empty |
+| `message` | `NotificationMessage` | empty string alternative |
 | `lifetime` | `NotificationLifetime` | none; every request must select one explicitly |
 | `activityPresentation` | `NotificationActivityPresentation` | `Default` |
 | `content` | `NotificationContentState` | default content |
@@ -123,7 +140,7 @@ Every update produced by `NotificationService` has a non-empty `feedPtr`, and `r
 | `maxTextBytes` | `4096` | Maximum `std::string::size()` for each report key or text field. |
 | `maxTotalTextBytes` | `256 * 1024` | Maximum summed text bytes retained by the complete feed. |
 
-Total text includes report keys, messages, template ids, titles, icon names, action ids and labels, and progress labels.
+Total text includes report keys, resolved messages or structured-report subject/detail arguments, titles, icon names, action ids and labels, and progress labels.
 Limits are immutable for one service instance and may be reduced through constructor injection for deterministic tests.
 
 ### Service API
@@ -138,7 +155,7 @@ The runtime must outlive the service.
 | `post(NotificationSeverity, std::string, NotificationLifetime)` | `NotificationMutationReply` |
 | `post(NotificationRequest)` | `NotificationMutationReply` |
 | `createOrUpdate(NotificationReportKey, NotificationRequest)` | `NotificationMutationReply` |
-| `updateMessage(NotificationId, std::string)` | `NotificationMutationReply` |
+| `updateMessage(NotificationId, NotificationMessage)` | `NotificationMutationReply` |
 | `updateContent(NotificationId, NotificationContentState)` | `NotificationMutationReply` |
 | `updateProgress(NotificationId, NotificationProgressState)` | `NotificationMutationReply` |
 | `clearProgress(NotificationId)` | `NotificationMutationReply` |
@@ -165,7 +182,7 @@ Rejected commands also write an application-log error diagnostic identifying the
 
 `NotificationService` rejects empty report keys, non-positive transient durations, action vectors beyond the configured count, and any report key or text field beyond the configured byte count.
 It also applies total entry, recent-history, and retained-text bounds as specified by the notification feed.
-It does not clamp progress fractions, require non-empty messages, resolve action ids, or interpret template and icon names.
+It does not clamp progress fractions, require non-empty messages, resolve action ids, expand structured reports, or interpret icon names.
 Producers supply semantically valid content, and presentation adapters decide which optional fields they can render.
 
 `NotificationLifetime::transient` accepts a duration value, and `NotificationService` requires it to be greater than zero when scheduling.
@@ -184,7 +201,7 @@ auto const reply = notifications.createOrUpdate(
   ao::rt::NotificationReportKey{"library.scan.current"},
   ao::rt::NotificationRequest{
     .severity = ao::rt::NotificationSeverity::Warning,
-    .message = "Some tracks could not be imported",
+    .message = std::string{"Some tracks could not be imported"},
     .lifetime = ao::rt::NotificationLifetime::sessionHistory(),
   });
 ```
@@ -206,3 +223,4 @@ auto const reply = notifications.createOrUpdate(
 - [Notification feed specification](../../spec/reporting/notification-feed.md)
 - [Activity-status specification](../../spec/presentation/activity-status.md)
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
+- [Presentation text catalog](../presentation/text-catalog.md)

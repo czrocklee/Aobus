@@ -288,9 +288,9 @@ namespace ao::rt::test
       env.source.batchInsert(arr);
       REQUIRE(proj.size() == 4);
       REQUIRE(proj.groupCount() == 3);
-      CHECK(proj.groupAt(0).primaryText == "Unknown Genre");
-      CHECK(proj.groupAt(1).primaryText == "Pop");
-      CHECK(proj.groupAt(2).primaryText == "Rock");
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
+      CHECK(trackGroupHeadingText(proj.groupAt(2).heading.primary) == "Rock");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -375,8 +375,8 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(0) == id2);
       CHECK(proj.trackIdAt(1) == id1);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Bravo");
-      CHECK(proj.groupAt(1).primaryText == "Zulu");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Bravo");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -394,8 +394,8 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(0) == id2);
       CHECK(proj.trackIdAt(1) == id1);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Artist");
-      CHECK(proj.groupAt(1).primaryText == "Zulu");
+      CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "Artist");
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Zulu");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -430,8 +430,8 @@ namespace ao::rt::test
       env.source.singleInsert(id3);
       REQUIRE(proj.size() == 3);
       REQUIRE(proj.groupCount() == 2);
-      CHECK(proj.groupAt(0).primaryText == "Unknown Genre");
-      CHECK(proj.groupAt(1).primaryText == "Pop");
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
+      CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Pop");
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }
@@ -471,7 +471,7 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(0) == id1);
       CHECK(proj.trackIdAt(1) == id2);
       REQUIRE(proj.groupCount() == 1);
-      CHECK(proj.groupAt(0).primaryText == "Unknown Genre");
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == MissingTrackValueKind::Genre);
       REQUIRE(batches.size() == 1);
       CHECK(std::holds_alternative<ProjectionReset>(batches.back().deltas.front()));
     }

@@ -409,7 +409,7 @@ namespace ao::gtk::layout::test
     auto feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
-    CHECK(feed.entries.back().message == "Tags added 1 for 1 track");
+    CHECK(rt::resolvedNotificationText(feed.entries.back().message) == "Tags added 1 for 1 track");
 
     REQUIRE(runtime.library().writer().createList(
       rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
@@ -420,7 +420,8 @@ namespace ao::gtk::layout::test
     feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
-    CHECK(feed.entries.back().message == "Library changed while the tag editor was open. Reload and try again.");
+    CHECK(rt::resolvedNotificationText(feed.entries.back().message) ==
+          "Library changed while the tag editor was open. Reload and try again.");
   }
 
   TEST_CASE("TrackDetailUndoController - restores deleted custom metadata", "[gtk][unit][layout-component][semantic]")
@@ -600,7 +601,8 @@ namespace ao::gtk::layout::test
     auto const feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
-    CHECK(feed.entries.back().message == "Library changed while this edit was open. Reload the value and try again.");
+    CHECK(rt::resolvedNotificationText(feed.entries.back().message) ==
+          "Library changed while this edit was open. Reload the value and try again.");
 
     drainGtkEvents();
     fixture.window().unset_child();

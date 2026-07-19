@@ -132,29 +132,6 @@ namespace ao::rt
              (failure.kind == PlaybackFailureKind::TrackOpen || failure.kind == PlaybackFailureKind::Decode);
     }
 
-    std::string skippedTracksMessage(std::size_t const count)
-    {
-      return count == 1 ? std::string{"Skipped 1 unplayable track"}
-                        : "Skipped " + std::to_string(count) + " unplayable tracks";
-    }
-
-    std::string playbackStoppedMessage()
-    {
-      return "Playback stopped after " + std::to_string(kMaxConsecutivePlaybackFailures) + " unplayable tracks";
-    }
-
-    std::string terminalTrackFailureMessage(PlaybackFailure const& failure)
-    {
-      auto message = failure.title.empty() ? std::string{"Playback stopped"} : "Playback stopped for " + failure.title;
-
-      if (!failure.error.message.empty())
-      {
-        message += ": " + failure.error.message;
-      }
-
-      return message;
-    }
-
     [[noreturn]] void failExecutorAffinity(std::source_location const& location)
     {
       APP_LOG_CRITICAL("PlaybackSequenceService thread-affinity violation: '{}' invoked off the executor thread "
@@ -516,7 +493,7 @@ namespace ao::rt
       {
         notifications.post(NotificationRequest{
           .severity = NotificationSeverity::Info,
-          .message = "Playback sequence finished",
+          .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackSequenceFinished},
           .lifetime = NotificationLifetime::transient(),
           .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
         });
@@ -537,7 +514,6 @@ namespace ao::rt
     void reportSkippedTrack()
     {
       ++skippedFailureCount;
-      auto const message = skippedTracksMessage(skippedFailureCount);
 
       if (!optSkipReportKey)
       {
@@ -549,7 +525,8 @@ namespace ao::rt
         *optSkipReportKey,
         NotificationRequest{
           .severity = NotificationSeverity::Warning,
-          .message = message,
+          .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackTracksSkipped,
+                                        .count = skippedFailureCount},
           .lifetime = NotificationLifetime::sessionHistory(),
           .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
         });
@@ -559,7 +536,8 @@ namespace ao::rt
     {
       notifications.post(NotificationRequest{
         .severity = NotificationSeverity::Error,
-        .message = playbackStoppedMessage(),
+        .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackStoppedAfterFailures,
+                                      .count = kMaxConsecutivePlaybackFailures},
         .lifetime = NotificationLifetime::untilDismissed(),
         .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
       });
@@ -569,7 +547,10 @@ namespace ao::rt
     {
       notifications.post(NotificationRequest{
         .severity = NotificationSeverity::Error,
-        .message = terminalTrackFailureMessage(failure),
+        .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackStoppedForTrack,
+                                      .trackId = failure.trackId,
+                                      .subject = failure.title,
+                                      .detail = failure.error.message},
         .lifetime = NotificationLifetime::untilDismissed(),
         .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
       });

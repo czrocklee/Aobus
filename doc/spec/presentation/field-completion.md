@@ -78,7 +78,8 @@ Its frontend provider clamps the cursor to the input length and matches the text
 When matches exist, the returned replacement range covers the complete original entry, including any text after the cursor.
 When no matches exist, the provider returns no result.
 
-Bulk vocabulary ordering is retained through item creation, and the displayed frequency is carried in item detail text.
+Bulk vocabulary ordering is retained through item creation, and frequency is carried as a typed `CompletionDetailKind::Frequency` count.
+UIModel's presentation catalog formats that count; runtime does not author the secondary label.
 
 `CompletionService::aggregateValues(spec)` returns the cached live aggregate for a validated specification.
 The service does not decide which fields form a product search surface or how aggregate values are matched, ranked, or inserted.
@@ -95,7 +96,7 @@ Construction records the owner thread, and every cache access, dirty notificatio
 ## Frontend observations
 
 Metadata editors display the raw vocabulary value and insert the same value.
-Frequency detail may be rendered as secondary text.
+The typed frequency detail may be rendered as secondary text after catalog resolution.
 
 Interactive Quick filters consume aggregate values through the UIModel `TrackFilterCompleter`; frontends do not request storage fields independently.
 
@@ -110,6 +111,7 @@ The runtime provider contains no GTK types.
 - [`CompletionService.cpp`](../../../app/runtime/completion/CompletionService.cpp) owns the shared scan, source frequencies, materialization, caching, and thread confinement.
 - [`MetadataValueCompleter.cpp`](../../../app/runtime/completion/MetadataValueCompleter.cpp) adapts one field to completion items.
 - [`TrackFilterCompleter`](../../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) adapts an aggregate vocabulary according to Quick-filter policy.
+- [`PresentationTextCatalog`](../../../app/include/ao/uimodel/presentation/PresentationTextCatalog.h) resolves typed completion detail for interactive frontends.
 - [`EntryCompletionController`](../../../app/linux-gtk/completion/EntryCompletionController.h) is the GTK entry adapter.
 
 ## Test map

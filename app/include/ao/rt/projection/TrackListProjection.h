@@ -25,12 +25,33 @@ namespace ao::rt
     std::size_t count = 0;
   };
 
+  enum class MissingTrackValueKind : std::uint8_t
+  {
+    Artist,
+    Album,
+    Year,
+    Genre,
+    Composer,
+    Conductor,
+    Ensemble,
+    Work,
+  };
+
+  using TrackGroupHeadingValue = std::variant<std::monostate, std::string, std::uint16_t, MissingTrackValueKind>;
+
+  struct TrackGroupHeading final
+  {
+    TrackGroupHeadingValue primary{};
+    TrackGroupHeadingValue secondary{};
+    TrackGroupHeadingValue tertiary{};
+
+    bool operator==(TrackGroupHeading const&) const = default;
+  };
+
   struct TrackGroupSectionSnapshot final
   {
     TrackRowRange rows{};
-    std::string primaryText{};
-    std::string secondaryText{};
-    std::string tertiaryText{};
+    TrackGroupHeading heading{};
     ResourceId imageId{kInvalidResourceId};
   };
 

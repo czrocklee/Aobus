@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -256,7 +257,9 @@ namespace ao::rt::test
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(
+      std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
   }
 
   TEST_CASE("PlaybackService playback - rejected preflight bypasses asynchronous failure observers",
@@ -298,7 +301,9 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    CHECK(feed.entries.front().message.contains("Unsupported audio file extension"));
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(
+      std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
 
     auto const revisionBeforeDuplicate = feed.revision;
     std::int32_t mutationCount = 0;
@@ -361,7 +366,9 @@ namespace ao::rt::test
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    CHECK(feed.entries.front().message.contains("Could not start playback"));
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+          NotificationReportTemplate::PlaybackRouteActivationFailed);
   }
 
   TEST_CASE("PlaybackService playback - backend error publishes until-dismissed device failure",
@@ -396,7 +403,9 @@ namespace ao::rt::test
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    CHECK(feed.entries.front().message.contains("Playback device failed"));
-    CHECK(feed.entries.front().message.contains("device lost"));
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
+    CHECK(report.templateId == NotificationReportTemplate::PlaybackDeviceLost);
+    CHECK(report.detail == "device lost");
   }
 } // namespace ao::rt::test

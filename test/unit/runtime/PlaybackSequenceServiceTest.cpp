@@ -49,6 +49,7 @@
 #include <span>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::rt::test
@@ -485,7 +486,9 @@ namespace ao::rt::test
 
     auto const feed = fixture.notifications.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message == "Playback sequence finished");
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+          NotificationReportTemplate::PlaybackSequenceFinished);
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
@@ -659,7 +662,9 @@ namespace ao::rt::test
 
     auto const feed = fixture.notifications.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message == "Playback sequence finished");
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+          NotificationReportTemplate::PlaybackSequenceFinished);
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
@@ -697,7 +702,9 @@ namespace ao::rt::test
 
     auto const feed = fixture.notifications.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().message == "Playback sequence finished");
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+          NotificationReportTemplate::PlaybackSequenceFinished);
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
@@ -872,12 +879,16 @@ namespace ao::rt::test
 
     for (auto const& entry : feed.entries)
     {
-      if (entry.message == "Skipped 3 unplayable tracks")
+      auto const* report = std::get_if<NotificationReport>(&entry.message);
+
+      if (report != nullptr && report->templateId == NotificationReportTemplate::PlaybackTracksSkipped &&
+          report->count == 3)
       {
         skipSummary = &entry;
       }
 
-      if (entry.message == "Playback stopped after 3 unplayable tracks")
+      if (report != nullptr && report->templateId == NotificationReportTemplate::PlaybackStoppedAfterFailures &&
+          report->count == 3)
       {
         failureLimit = &entry;
       }
@@ -948,8 +959,11 @@ namespace ao::rt::test
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
     CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
-    CHECK(feed.entries.front().message.contains("Failing current"));
-    CHECK(feed.entries.front().message.contains("gated staged decode failure"));
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
+    CHECK(report.templateId == NotificationReportTemplate::PlaybackStoppedForTrack);
+    CHECK(report.subject == "Failing current");
+    CHECK(report.detail == "gated staged decode failure");
   }
 
   TEST_CASE("PlaybackSequenceService - previous restart uses a strict greater-than three-second final seek",

@@ -159,11 +159,8 @@ namespace ao::audio::test
 
       Status status() const override
       {
-        return {.descriptor = {.id = kBarrierBackend,
-                               .name = "Barrier test",
-                               .description = "Controlled Player callback backend",
-                               .supportedProfiles = {{.id = kProfileShared, .name = "Shared"}}},
-                .devices = devices()};
+        return {
+          .descriptor = {.id = kBarrierBackend, .supportedProfiles = {{.id = kProfileShared}}}, .devices = devices()};
       }
 
       std::unique_ptr<Backend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
@@ -217,10 +214,9 @@ namespace ao::audio::test
 
     BackendProvider::Status pipeWireStatus()
     {
-      return BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
-                                                    .name = "PipeWire",
-                                                    .description = "PipeWire Provider",
-                                                    .iconName = "audio-card-symbolic"}};
+      return BackendProvider::Status{.descriptor = {
+                                       .id = kBackendPipeWire,
+                                     }};
     }
 
     inline auto const& kSynchronousGraphBackend = kBackendAlsa;
@@ -329,13 +325,8 @@ namespace ao::audio::test
 
       Status status() const override
       {
-        return {
-          .descriptor = {.id = kSynchronousGraphBackend,
-                         .name = "Synchronous Graph",
-                         .description = "Test provider",
-                         .iconName = "audio-card-symbolic",
-                         .supportedProfiles = {{.id = kProfileShared, .name = "Shared", .description = "Shared"}}},
-          .devices = devices()};
+        return {.descriptor = {.id = kSynchronousGraphBackend, .supportedProfiles = {{.id = kProfileShared}}},
+                .devices = devices()};
       }
 
       std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& /*profile*/) override
@@ -424,9 +415,7 @@ namespace ao::audio::test
           onGraphChanged = cb;
           return Subscription{[] {}};
         });
-    When(Method(mockProvider, status))
-      .AlwaysReturn(BackendProvider::Status{
-        .descriptor = {.id = kBackendNone, .name = "Mock", .description = "Mock", .iconName = "audio-card"}});
+    When(Method(mockProvider, status)).AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendNone}});
 
     auto executor = QueuedExecutor{};
     auto player = Player{executor};
@@ -593,10 +582,9 @@ namespace ao::audio::test
     When(Method(mockProvider, createBackend))
       .AlwaysDo([&](Device const& dev, ProfileId const& p) { return std::make_unique<FakeBackend>(dev.backendId, p); });
     When(Method(mockProvider, status))
-      .AlwaysReturn(BackendProvider::Status{.descriptor = {.id = kBackendPipeWire,
-                                                           .name = "PipeWire",
-                                                           .description = "PipeWire Provider",
-                                                           .iconName = "audio-card-symbolic"}});
+      .AlwaysReturn(BackendProvider::Status{.descriptor = {
+                                              .id = kBackendPipeWire,
+                                            }});
 
     auto executor = rt::test::InlineExecutor{};
     auto player = Player{executor};
@@ -827,12 +815,7 @@ namespace ao::audio::test
 
       Status status() const override
       {
-        return {
-          .descriptor = {.id = BackendId{"reentrant"},
-                         .name = "Reentrant",
-                         .description = "Test",
-                         .iconName = "audio-card-symbolic",
-                         .supportedProfiles = {{.id = kProfileShared, .name = "Shared", .description = "Shared"}}}};
+        return {.descriptor = {.id = BackendId{"reentrant"}, .supportedProfiles = {{.id = kProfileShared}}}};
       }
 
       std::unique_ptr<Backend> createBackend(Device const& /*device*/, ProfileId const& /*profile*/) override
@@ -1519,12 +1502,7 @@ namespace ao::audio::test
 
       Status status() const override
       {
-        return {.descriptor =
-                  {.id = kBackendAlsa,
-                   .name = "ALSA",
-                   .description = "ALSA",
-                   .iconName = "audio-card-symbolic",
-                   .supportedProfiles = {{.id = kProfileExclusive, .name = "Exclusive", .description = "Exclusive"}}},
+        return {.descriptor = {.id = kBackendAlsa, .supportedProfiles = {{.id = kProfileExclusive}}},
                 .devices = {Device{.id = DeviceId{"alsa-device"},
                                    .displayName = "ALSA Device",
                                    .description = "ALSA",

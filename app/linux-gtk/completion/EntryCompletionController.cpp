@@ -5,6 +5,7 @@
 
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
@@ -141,9 +142,10 @@ namespace ao::gtk
         }
 
         auto const& item = itemPtr->item();
+        auto const detailText = uimodel::PresentationTextCatalog{}.completionDetail(item.detail);
         title->set_text(item.displayText);
-        detail->set_text(item.detail);
-        detail->set_visible(!item.detail.empty());
+        detail->set_text(detailText);
+        detail->set_visible(!detailText.empty());
       });
 
     _listView.set_factory(factoryPtr);

@@ -200,14 +200,7 @@ namespace ao::audio::backend
   BackendProvider::Status AlsaProvider::status() const
   {
     auto const lock = std::scoped_lock{_implPtr->mutex};
-    return {.descriptor = {.id = kBackendAlsa,
-                           .name = "ALSA",
-                           .description = "Advanced Linux Sound Architecture (Direct Hardware Access)",
-                           .iconName = "audio-card-symbolic",
-                           .supportedProfiles = {{.id = kProfileExclusive,
-                                                  .name = "Exclusive Mode",
-                                                  .description =
-                                                    "Direct hardware access for low-latency, bit-perfect playback"}}},
+    return {.descriptor = {.id = kBackendAlsa, .supportedProfiles = {{.id = kProfileExclusive}}},
             .devices = _implPtr->cachedDevices};
   }
 
