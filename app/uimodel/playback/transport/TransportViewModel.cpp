@@ -148,7 +148,7 @@ namespace ao::uimodel
   void TransportViewModel::refresh()
   {
     auto const command = commandForAction(_action);
-    auto const snapshot = _playback.snapshot();
+    auto const& snapshot = _playback.snapshot();
     auto const view = describeTransportButton(
       _action, snapshot.transport, snapshot.succession, _commands.isEnabled(command), _showLabel);
 

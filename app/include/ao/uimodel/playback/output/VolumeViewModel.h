@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 
 #include <cstdint>
@@ -13,6 +14,7 @@
 namespace ao::rt
 {
   class PlaybackService;
+  struct PlaybackSnapshot;
 }
 
 namespace ao::uimodel
@@ -61,10 +63,13 @@ namespace ao::uimodel
   private:
     void applyVolumeTarget(float currentVolume, bool muted, float targetVolume);
     void refresh();
+    void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
+    void render(rt::VolumeState const& volume);
 
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _commands;
     std::function<void(VolumeViewState const&)> _onRender;
+    rt::VolumeState _lastVolume{};
 
     async::Subscription _snapshotSub;
   };

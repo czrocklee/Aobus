@@ -243,6 +243,6 @@ namespace ao::uimodel::test
     CHECK(count == afterNowPlaying);
 
     playback.commands().seek(std::chrono::milliseconds{10}, PlaybackSeekMode::Final);
-    CHECK(count == afterNowPlaying + 1);
+    CHECK(count == afterNowPlaying);
   }
 } // namespace ao::uimodel::test

@@ -4,6 +4,7 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include <ao/audio/Quality.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -70,6 +71,20 @@ namespace ao::uimodel::test
                                            .overall = audio::Quality::BitwisePerfect,
                                            .fullyVerified = false}) == SoulAura::Veiled);
     CHECK(resolveSoulAura(true, true, rt::QualityState{.overall = audio::Quality::Clipped}) == SoulAura::Burning);
+  }
+
+  TEST_CASE("AobusSoulViewModel - unchanged aura snapshots do not rerender", "[uimodel][regression][playback][soul]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto log = ao::test::RenderLog<AobusSoulViewState>{};
+    auto const viewModel = AobusSoulViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    REQUIRE(log.states.size() == 1);
+    auto const revisionBefore = fixture.playback.snapshot().revision;
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+
+    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(log.states.size() == 1);
   }
 
   TEST_CASE("AobusSoul - brand tokens match the asset source of truth", "[uimodel][unit][playback][soul]")

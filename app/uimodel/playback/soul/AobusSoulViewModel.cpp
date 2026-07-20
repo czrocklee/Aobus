@@ -209,19 +209,36 @@ namespace ao::uimodel
                                          std::function<void(AobusSoulViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();
   }
 
   void AobusSoulViewModel::refresh()
   {
-    auto const snapshot = _playback.snapshot();
-    auto const& state = snapshot.transport;
+    render(_playback.snapshot().transport);
+  }
+
+  void AobusSoulViewModel::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
+  {
+    render(snapshot.transport);
+  }
+
+  void AobusSoulViewModel::render(rt::PlaybackTransportSnapshot const& state)
+  {
     bool const playing = (state.transport == audio::Transport::Playing);
 
     auto view = AobusSoulViewState{};
     view.isBreathing = playing;
     view.aura = resolveSoulAura(playing, state.ready, state.quality);
+
+    if (_hasLastView && view == _lastView)
+    {
+      return;
+    }
+
+    _lastView = view;
+    _hasLastView = true;
 
     if (_onRender)
     {

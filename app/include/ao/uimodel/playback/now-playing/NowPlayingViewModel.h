@@ -17,6 +17,8 @@
 namespace ao::rt
 {
   class PlaybackService;
+  struct PlaybackSnapshot;
+  struct PlaybackTransportSnapshot;
 }
 
 namespace ao::uimodel
@@ -89,10 +91,16 @@ namespace ao::uimodel
 
   private:
     void refresh();
+    void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
+    void render(rt::PlaybackTransportSnapshot const& state);
 
     rt::PlaybackService& _playback;
     std::function<void(NowPlayingViewState const&)> _onRender;
     PresentationTextCatalog _textCatalog;
+    rt::NowPlayingInfo _lastNowPlaying{};
+    rt::OutputState _lastOutput{};
+    rt::QualityState _lastQuality{};
+    bool _lastReady = false;
 
     async::Subscription _snapshotSub;
   };

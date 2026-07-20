@@ -27,6 +27,24 @@ namespace ao::rt
     bool operator==(PlaybackRevision const&) const = default;
   };
 
+  /** Identity of the current playback-clock anchor. */
+  struct PlaybackPositionRevision final
+  {
+    std::uint64_t value = 0;
+
+    auto operator<=>(PlaybackPositionRevision const&) const = default;
+    bool operator==(PlaybackPositionRevision const&) const = default;
+  };
+
+  /** Identity of the most recently committed final seek. */
+  struct PlaybackFinalSeekRevision final
+  {
+    std::uint64_t value = 0;
+
+    auto operator<=>(PlaybackFinalSeekRevision const&) const = default;
+    bool operator==(PlaybackFinalSeekRevision const&) const = default;
+  };
+
   /**
    * Public source-lifecycle classification for the current succession subject.
    * Mirrors the internal sequence source state so consumers do not depend on
@@ -44,6 +62,8 @@ namespace ao::rt
   {
     audio::Transport transport = audio::Transport::Idle;
     bool ready = false;
+    PlaybackPositionRevision positionRevision{};
+    PlaybackFinalSeekRevision finalSeekRevision{};
     std::chrono::milliseconds elapsed{0};
     std::chrono::milliseconds duration{0};
     NowPlayingInfo nowPlaying{};
@@ -51,7 +71,17 @@ namespace ao::rt
     OutputState output{};
     QualityState quality{};
 
-    bool operator==(PlaybackTransportSnapshot const&) const = default;
+    /**
+     * Semantic equality excludes the correlated elapsed clock sample. Position
+     * discontinuities remain content through their explicit revisions.
+     */
+    bool operator==(PlaybackTransportSnapshot const& other) const
+    {
+      return transport == other.transport && ready == other.ready && positionRevision == other.positionRevision &&
+             finalSeekRevision == other.finalSeekRevision && duration == other.duration &&
+             nowPlaying == other.nowPlaying && volume == other.volume && output == other.output &&
+             quality == other.quality;
+    }
   };
 
   /** Live-source succession portion of a coherent playback snapshot. */
@@ -92,7 +122,7 @@ namespace ao::rt
 
     bool operator==(PlaybackSnapshot const&) const = default;
 
-    /** Content equality that ignores the revision identity. */
+    /** Semantic content equality that ignores revision and elapsed clock drift. */
     bool sameContentAs(PlaybackSnapshot const& other) const
     {
       return transport == other.transport && succession == other.succession && preparation == other.preparation;

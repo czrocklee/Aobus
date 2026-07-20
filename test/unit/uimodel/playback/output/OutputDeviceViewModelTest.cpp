@@ -7,6 +7,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -195,5 +196,22 @@ namespace ao::uimodel::test
       CHECK(view.outputBackendSummary == "--");
       CHECK(view.outputDeviceStatus.empty());
     }
+  }
+
+  TEST_CASE("OutputDeviceViewModel - unrelated playback snapshots do not rebuild output rows",
+            "[uimodel][regression][playback][output]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto log = ao::test::RenderLog<OutputDeviceViewState>{};
+    auto viewModel = OutputDeviceViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    viewModel.refresh();
+    REQUIRE(log.states.size() == 1);
+    auto const revisionBefore = fixture.playback.snapshot().revision;
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    fixture.commands().setRepeatMode(RepeatMode::All);
+
+    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(log.states.size() == 1);
   }
 } // namespace ao::uimodel::test

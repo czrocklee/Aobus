@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
 
@@ -30,6 +31,12 @@ namespace ao::uimodel::test
     REQUIRE(!log.empty());
     CHECK(log.last().elapsed == std::chrono::milliseconds{0});
     CHECK(log.last().duration == std::chrono::milliseconds{0});
+
+    log.clear();
+    auto const revisionBefore = fixture.playback.snapshot().revision;
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(log.empty());
   }
 
   TEST_CASE("PlaybackTimeViewModel - seek updates render preview and final modes", "[uimodel][unit][playback]")

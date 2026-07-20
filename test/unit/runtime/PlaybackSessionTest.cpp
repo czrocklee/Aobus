@@ -14,8 +14,10 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
@@ -36,6 +38,7 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -250,6 +253,70 @@ namespace ao::rt::test
       PropertyFailArm const* _arm;
       Status _status = makeReadyAudioStatus();
     };
+
+    struct RenderCaptureState final
+    {
+      audio::RenderTarget* renderTarget = nullptr;
+    };
+
+    class RenderCaptureBackend final : public audio::NullBackend
+    {
+    public:
+      explicit RenderCaptureBackend(std::shared_ptr<RenderCaptureState> statePtr)
+        : _statePtr{std::move(statePtr)}
+      {
+      }
+
+      Result<> open(audio::Format const& /*format*/, audio::RenderTarget* renderTarget) override
+      {
+        _statePtr->renderTarget = renderTarget;
+        return {};
+      }
+
+      audio::BackendId backendId() const override { return audio::BackendId{"test_backend"}; }
+      audio::ProfileId profileId() const override { return audio::kProfileShared; }
+
+    private:
+      std::shared_ptr<RenderCaptureState> _statePtr;
+    };
+
+    class RenderCaptureProvider final : public audio::BackendProvider
+    {
+    public:
+      explicit RenderCaptureProvider(std::shared_ptr<RenderCaptureState> statePtr)
+        : _statePtr{std::move(statePtr)}
+      {
+      }
+
+      void shutdown() noexcept override {}
+
+      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        if (callback)
+        {
+          callback(_status.devices);
+        }
+
+        return {};
+      }
+
+      Status status() const override { return _status; }
+
+      std::unique_ptr<audio::Backend> createBackend(audio::Device const& /*device*/,
+                                                    audio::ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<RenderCaptureBackend>(_statePtr);
+      }
+
+      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return {};
+      }
+
+    private:
+      std::shared_ptr<RenderCaptureState> _statePtr;
+      Status _status = makeReadyAudioStatus();
+    };
   } // namespace
 
   TEST_CASE("PlaybackSession - schema v3 freezes numeric sort-field ordinals", "[runtime][unit][playback-session]")
@@ -414,6 +481,52 @@ namespace ao::rt::test
     executor->checkQueued();
     REQUIRE(executor->runOne());
     CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.6F);
+  }
+
+  TEST_CASE("PlaybackSession - latent elapsed refresh does not turn shuffle into a checkpoint",
+            "[runtime][regression][playback-session][timing]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtime = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+    REQUIRE(runtime.restorePlaybackSession());
+    REQUIRE(sleeper.waitForPendingDelay(std::chrono::seconds{10}));
+
+    auto captureStatePtr = std::make_shared<RenderCaptureState>();
+    runtime.addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
+    executor->runUntilIdle();
+    auto const trackId = addPlayableTrack(runtime, "Latent elapsed", 2020, [executor] { executor->runUntilIdle(); });
+    auto const viewId = createView(runtime);
+    REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+    executor->runUntilIdle();
+    REQUIRE(captureStatePtr->renderTarget != nullptr);
+
+    auto output = std::array<std::byte, 4096>{};
+    auto const renderResult = captureStatePtr->renderTarget->renderPcm(output);
+    REQUIRE(renderResult.bytesWritten > 0);
+    captureStatePtr->renderTarget->handlePositionAdvanced(renderResult.positionFrames);
+    REQUIRE(runtime.savePlaybackSession());
+
+    auto sentinel = storedSession(playbackSessionStore);
+    sentinel.positionMs = 0;
+    sentinel.shuffleMode = ShuffleMode::Off;
+    storeSession(runtime, sentinel);
+
+    runtime.playback().commands().setShuffleMode(ShuffleMode::On);
+
+    auto const beforeDebounce = storedSession(playbackSessionStore);
+    CHECK(beforeDebounce.positionMs == 0);
+    CHECK(beforeDebounce.shuffleMode == ShuffleMode::Off);
+
+    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    executor->checkQueued();
+    REQUIRE(executor->runOne());
+    auto const afterDebounce = storedSession(playbackSessionStore);
+    CHECK(afterDebounce.positionMs > 0);
+    CHECK(afterDebounce.shuffleMode == ShuffleMode::On);
   }
 
   TEST_CASE("PlaybackSession - persistence lifecycle retries a failed debounced save",

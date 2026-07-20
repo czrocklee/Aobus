@@ -401,7 +401,7 @@ namespace ao::tui
                                                  reflect(hitRegions.coverBox)
                                              : renderCoverArtPreview(optCoverArtPreview) | reflect(hitRegions.coverBox);
         auto const currentListTitle = library.currentListTitle();
-        auto const state = playback.snapshot().transport;
+        auto const& state = playback.snapshot().transport;
         hitRegions.clearFrameLocalRows();
         auto const frameTime = monotonicFrameTime();
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));

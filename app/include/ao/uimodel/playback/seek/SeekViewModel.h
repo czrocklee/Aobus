@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
-#include <ao/audio/Transport.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/uimodel/playback/seek/PlaybackClockChangeFilter.h>
 
 #include <chrono>
 #include <functional>
@@ -14,6 +14,8 @@
 namespace ao::rt
 {
   class PlaybackService;
+  struct PlaybackSnapshot;
+  struct PlaybackTransportSnapshot;
 }
 
 namespace ao::uimodel
@@ -48,15 +50,16 @@ namespace ao::uimodel
   private:
     // Refreshes only when the transport-relevant subset of the snapshot changes,
     // so unrelated publications (volume, quality) do not reset the seek clock.
-    void onSnapshotChanged();
+    void onSnapshotChanged(rt::PlaybackSnapshot const& snapshot);
+    void render(rt::PlaybackTransportSnapshot const& state,
+                bool immediateUpdate,
+                std::optional<std::chrono::milliseconds> optOverrideElapsed = std::nullopt);
 
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _commands;
     std::function<void(SeekViewState const&)> _onRender;
 
-    audio::Transport _lastTransport = audio::Transport::Idle;
-    std::chrono::milliseconds _lastElapsed{0};
-    std::chrono::milliseconds _lastDuration{0};
+    detail::PlaybackClockChangeFilter _clockChangeFilter;
 
     async::Subscription _snapshotSub;
     async::Subscription _seekPreviewSub;

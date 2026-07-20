@@ -59,7 +59,7 @@ namespace ao::gtk::platform
 
     bool dispatchSeek(std::int64_t const offsetUs)
     {
-      auto const state = _playback.snapshot().transport;
+      auto const& state = _playback.snapshot().transport;
 
       if (state.nowPlaying.trackId == kInvalidTrackId)
       {
@@ -78,7 +78,7 @@ namespace ao::gtk::platform
 
     bool dispatchSetPosition(std::string_view const requestedTrackObjectPath, std::int64_t const positionUs)
     {
-      auto const state = _playback.snapshot().transport;
+      auto const& state = _playback.snapshot().transport;
 
       if (state.nowPlaying.trackId == kInvalidTrackId)
       {

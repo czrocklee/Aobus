@@ -74,9 +74,13 @@ namespace ao::uimodel
 
   OutputDeviceViewModel::OutputDeviceViewModel(rt::PlaybackService& playback,
                                                std::function<void(OutputDeviceViewState const&)> onRender)
-    : _playback{playback}, _commands{playback.commands()}, _onRender{std::move(onRender)}
+    : _playback{playback}
+    , _commands{playback.commands()}
+    , _onRender{std::move(onRender)}
+    , _lastOutput{playback.snapshot().transport.output}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   void OutputDeviceViewModel::selectOutputDevice(audio::BackendId const& backendId,
@@ -88,11 +92,27 @@ namespace ao::uimodel
 
   void OutputDeviceViewModel::refresh()
   {
-    auto const snapshot = _playback.snapshot();
-    auto const& state = snapshot.transport;
+    auto const& output = _playback.snapshot().transport.output;
+    _lastOutput = output;
+    render(output);
+  }
+
+  void OutputDeviceViewModel::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
+  {
+    if (snapshot.transport.output == _lastOutput)
+    {
+      return;
+    }
+
+    _lastOutput = snapshot.transport.output;
+    render(snapshot.transport.output);
+  }
+
+  void OutputDeviceViewModel::render(rt::OutputState const& output)
+  {
     auto view = OutputDeviceViewState{};
 
-    for (auto const& backend : state.output.availableBackends)
+    for (auto const& backend : output.availableBackends)
     {
       auto const backendPresentation = _textCatalog.audioBackend(backend.id);
       view.rows.push_back(OutputDeviceRow{
@@ -125,8 +145,8 @@ namespace ao::uimodel
           }
 
           bool const isActive =
-            (backend.id == state.output.selectedDevice.backendId && profile == state.output.selectedDevice.profileId &&
-             device.id == state.output.selectedDevice.deviceId);
+            (backend.id == output.selectedDevice.backendId && profile == output.selectedDevice.profileId &&
+             device.id == output.selectedDevice.deviceId);
 
           view.rows.push_back(OutputDeviceRow{
             .kind = OutputDeviceRow::Kind::DeviceProfile,
@@ -143,7 +163,7 @@ namespace ao::uimodel
       }
     }
 
-    if (state.output.selectedDevice.backendId == audio::kBackendNone)
+    if (output.selectedDevice.backendId == audio::kBackendNone)
     {
       view.outputBackendSummary = "--";
     }
@@ -151,10 +171,10 @@ namespace ao::uimodel
     {
       view.hasActiveOutputDevice = true;
 
-      view.outputBackendSummary = _textCatalog.audioBackend(state.output.selectedDevice.backendId).shortLabel;
+      view.outputBackendSummary = _textCatalog.audioBackend(output.selectedDevice.backendId).shortLabel;
 
-      auto const names = resolveBackendDeviceNames(state.output, _textCatalog);
-      bool const isExclusive = (state.output.selectedDevice.profileId == audio::kProfileExclusive);
+      auto const names = resolveBackendDeviceNames(output, _textCatalog);
+      bool const isExclusive = (output.selectedDevice.profileId == audio::kProfileExclusive);
 
       view.outputDeviceStatus = std::format("{}: {}", names.backend, names.device);
 

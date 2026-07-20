@@ -122,16 +122,11 @@ namespace ao::rt
     , _playback{playback}
     , _asyncRuntime{asyncRuntime}
     , _lastSnapshot{_playback.snapshot()}
-    , _intentPosition{_lastSnapshot.transport.elapsed}
+    , _committedIntentPosition{_lastSnapshot.transport.elapsed}
     , _volumeIntent{_lastSnapshot.transport.volume.level}
     , _mutedIntent{_lastSnapshot.transport.volume.muted}
   {
-    _successionIntentSubscription = _succession.onPersistenceIntentChanged(
-      [this]
-      {
-        _intentPosition = _playbackTransport.elapsed();
-        markDirty();
-      });
+    _successionIntentSubscription = _succession.onPersistenceIntentChanged([this] { markDirty(); });
     _snapshotSubscription =
       _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
@@ -199,19 +194,36 @@ namespace ao::rt
   {
     auto const previous = _lastSnapshot;
     _lastSnapshot = snapshot;
-    bool persistenceIntentChanged = false;
-    auto const hasCoherentSubject = snapshot.transport.nowPlaying.trackId != kInvalidTrackId &&
-                                    snapshot.transport.nowPlaying.trackId == snapshot.succession.currentTrackId;
 
-    if (hasCoherentSubject && snapshot.transport.elapsed != _intentPosition)
+    if (_restorePublicationPending)
     {
-      _intentPosition = snapshot.transport.elapsed;
-      persistenceIntentChanged = true;
+      // AppRuntime commits the lower-layer restore as one bracketed snapshot
+      // after the restore transaction returns. Adopt that publication as the
+      // restored baseline without treating it as a new persistence intent.
+      _restorePublicationPending = false;
+      _committedIntentPosition = snapshot.transport.elapsed;
+      return;
     }
+
+    bool persistenceIntentChanged = false;
+    auto const subjectChanged =
+      snapshot.transport.nowPlaying.trackId != previous.transport.nowPlaying.trackId ||
+      snapshot.transport.nowPlaying.sourceListId != previous.transport.nowPlaying.sourceListId;
+    auto const committedPositionChanged = snapshot.transport.finalSeekRevision != previous.transport.finalSeekRevision;
 
     if (snapshot.transport.volume.level != _volumeIntent)
     {
       _volumeIntent = snapshot.transport.volume.level;
+      persistenceIntentChanged = true;
+    }
+
+    if (subjectChanged)
+    {
+      _committedIntentPosition = snapshot.transport.elapsed;
+    }
+    else if (committedPositionChanged && snapshot.transport.elapsed != _committedIntentPosition)
+    {
+      _committedIntentPosition = snapshot.transport.elapsed;
       persistenceIntentChanged = true;
     }
 
@@ -226,10 +238,6 @@ namespace ao::rt
       markDirty();
     }
 
-    auto const subjectChanged =
-      snapshot.transport.nowPlaying.trackId != previous.transport.nowPlaying.trackId ||
-      snapshot.transport.nowPlaying.sourceListId != previous.transport.nowPlaying.sourceListId;
-    auto const committedPositionChanged = snapshot.transport.elapsed != previous.transport.elapsed;
     auto const settledTransport = snapshot.transport.transport != previous.transport.transport &&
                                   (snapshot.transport.transport == audio::Transport::Paused ||
                                    snapshot.transport.transport == audio::Transport::Idle);
@@ -400,7 +408,7 @@ namespace ao::rt
       return {};
     }
 
-    auto const snapshot = _playback.snapshot();
+    auto const& snapshot = _playback.snapshot();
     auto const transportSession = _playbackTransport.playbackTransportSessionState();
     auto const elapsed =
       std::chrono::milliseconds{static_cast<std::chrono::milliseconds::rep>(transportSession.positionMs)};
@@ -421,6 +429,7 @@ namespace ao::rt
       return saved;
     }
 
+    _committedIntentPosition = elapsed;
     _sessionRevision.acknowledge(capturedRevision);
 
     return {};
@@ -551,6 +560,8 @@ namespace ao::rt
            &loaded,
            &normalized](std::chrono::milliseconds const elapsed) mutable noexcept
           {
+            _restorePublicationPending = true;
+            _committedIntentPosition = elapsed;
             _succession.commitPlaybackSessionRestore(std::move(sessionPtr), shuffleMode, repeatMode, elapsed);
 
             auto const& successionState = _succession.state();
@@ -563,10 +574,8 @@ namespace ao::rt
                                          playbackState.nowPlaying.sourceListId == sourceListId;
             normalized = normalized || !coherentCurrent || restoredState != loaded;
             _sessionDiscarded = false;
-            _intentPosition = elapsed;
             _volumeIntent = playbackState.volume.level;
             _mutedIntent = playbackState.volume.muted;
-            _lastSnapshot = _playback.snapshot();
             _sessionRevision.resetClean();
 
             if (normalized && _sessionRevision.markDirty())

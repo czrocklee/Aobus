@@ -72,6 +72,8 @@ namespace ao::gtk::platform
                                                   std::chrono::milliseconds elapsed) noexcept;
     static std::chrono::milliseconds seekTargetElapsed(rt::PlaybackTransportSnapshot const& state,
                                                        std::int64_t offsetUs) noexcept;
+    static bool shouldEmitSeeked(rt::PlaybackTransportSnapshot const& before,
+                                 rt::PlaybackTransportSnapshot const& after) noexcept;
     static std::string trackObjectPath(TrackId trackId);
     static MetadataSnapshot metadataForState(rt::PlaybackTransportSnapshot const& state, std::string artUrl = {});
 

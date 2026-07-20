@@ -32,6 +32,7 @@ namespace ao::gtk::test
     SECTION("Play action routes clicks to selection playback callback")
     {
       rt::test::addReadyAudioProvider(fixture.runtime());
+      drainGtkEvents();
       bool playSelectionCalled = false;
       auto commands = uimodel::PlaybackCommandSurface{playback, [&playSelectionCalled] { playSelectionCalled = true; }};
       auto button = TransportButton{playback, commands, TransportButton::Action::Play, false};

@@ -62,6 +62,7 @@ namespace ao::rt
       , succession{successionRef}
       , deferredPublicationControlPtr{std::make_shared<DeferredPublicationControl>(this)}
     {
+      lastSnapshot = composeContent();
     }
 
     Impl(Impl const&) = delete;
@@ -100,21 +101,15 @@ namespace ao::rt
 
     // Playback snapshot and events -------------------------------------------
 
-    PlaybackSnapshot snapshot() const
+    PlaybackSnapshot const& snapshot()
     {
-      auto composed = composeContent();
-      composed.revision = lastSnapshot.revision;
-      return composed;
+      observed = true;
+      return lastSnapshot;
     }
 
     async::Subscription onSnapshot(PlaybackSnapshotObserver observer) override
     {
-      if (!snapshotSignal.hasConnectedHandlers())
-      {
-        lastSnapshot = composeContent();
-        lastSnapshot.revision = PlaybackRevision{.value = revisionCounter};
-      }
-
+      observed = true;
       return snapshotSignal.connect(std::move(observer));
     }
 
@@ -237,7 +232,7 @@ namespace ao::rt
       subscriptions.push_back(transport.onIdle(markChanged));
       subscriptions.push_back(transport.onStopped(markChanged));
       subscriptions.push_back(transport.onOutputDevicesChanged(markChanged));
-      subscriptions.push_back(transport.onNowPlayingChanged([this](auto const&) { onSourceChanged(); }));
+      subscriptions.push_back(transport.onNowPlayingChanged([this](auto const&) { onPositionAnchorChanged(); }));
       subscriptions.push_back(transport.onOutputDeviceChanged([this](auto const&) { onSourceChanged(); }));
       subscriptions.push_back(transport.onQualityChanged([this](auto const&) { onSourceChanged(); }));
       subscriptions.push_back(transport.onVolumeChanged([this](float) { onSourceChanged(); }));
@@ -270,6 +265,12 @@ namespace ao::rt
         return;
       }
 
+      if (!observed)
+      {
+        lastSnapshot = composeContent();
+        return;
+      }
+
       scheduleDeferredPublish();
     }
 
@@ -282,8 +283,14 @@ namespace ao::rt
         return;
       }
 
-      // A final seek commits the transport position; publish it like any other
-      // state change.
+      ++positionRevisionCounter;
+      ++finalSeekRevisionCounter;
+      onSourceChanged();
+    }
+
+    void onPositionAnchorChanged()
+    {
+      ++positionRevisionCounter;
       onSourceChanged();
     }
 
@@ -296,10 +303,7 @@ namespace ao::rt
 
     void scheduleDeferredPublish()
     {
-      // The adapter is inert until observed: with no snapshot subscriber it
-      // enqueues no executor work and advances no revision, so it never
-      // perturbs the scheduling that unmigrated callers still depend on.
-      if (publishScheduled || !snapshotSignal.hasConnectedHandlers())
+      if (publishScheduled)
       {
         return;
       }
@@ -334,12 +338,13 @@ namespace ao::rt
 
     void publishNow()
     {
-      if (!snapshotSignal.hasConnectedHandlers())
+      auto content = composeContent();
+
+      if (!observed)
       {
+        lastSnapshot = std::move(content);
         return;
       }
-
-      auto content = composeContent();
 
       if (content.sameContentAs(lastSnapshot))
       {
@@ -348,7 +353,7 @@ namespace ao::rt
 
       content.revision = PlaybackRevision{.value = ++revisionCounter};
       lastSnapshot = content;
-      emitSafely(snapshotSignal, lastSnapshot);
+      emitSafely(snapshotSignal, content);
     }
 
     template<typename Event>
@@ -378,6 +383,8 @@ namespace ao::rt
           PlaybackTransportSnapshot{
             .transport = transportState.transport,
             .ready = transportState.ready,
+            .positionRevision = PlaybackPositionRevision{.value = positionRevisionCounter},
+            .finalSeekRevision = PlaybackFinalSeekRevision{.value = finalSeekRevisionCounter},
             .elapsed = transportState.elapsed,
             .duration = transportState.duration,
             .nowPlaying = transportState.nowPlaying,
@@ -415,9 +422,12 @@ namespace ao::rt
     std::shared_ptr<DeferredPublicationControl> deferredPublicationControlPtr;
     PlaybackSnapshot lastSnapshot{};
     std::uint64_t revisionCounter = 0;
+    std::uint64_t positionRevisionCounter = 0;
+    std::uint64_t finalSeekRevisionCounter = 0;
     std::size_t bracketDepth = 0;
     bool bracketDirty = false;
     bool publishScheduled = false;
+    bool observed = false;
   };
 
   PlaybackBootstrap::PlaybackBootstrap(PlaybackTransport& transport) noexcept
@@ -450,7 +460,7 @@ namespace ao::rt
 
   PlaybackService::~PlaybackService() = default;
 
-  PlaybackSnapshot PlaybackService::snapshot() const
+  PlaybackSnapshot const& PlaybackService::snapshot() const
   {
     return _implPtr->snapshot();
   }

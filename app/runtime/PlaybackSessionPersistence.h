@@ -110,10 +110,11 @@ namespace ao::rt
     std::uint64_t _scheduleGeneration = 0;
     ScheduledSave _scheduledSave = ScheduledSave::None;
     bool _sessionDiscarded = false;
+    bool _restorePublicationPending = false;
     bool _restoring = false;
     bool _started = false;
     bool _shuttingDown = false;
-    std::chrono::milliseconds _intentPosition{0};
+    std::chrono::milliseconds _committedIntentPosition{0};
     float _volumeIntent = 1.0F;
     bool _mutedIntent = false;
   };

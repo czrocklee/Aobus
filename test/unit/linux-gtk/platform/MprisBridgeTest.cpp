@@ -242,6 +242,21 @@ namespace ao::gtk::platform::test
     CHECK(MprisBridge::clampElapsed(state, std::chrono::milliseconds{15'000}) == std::chrono::milliseconds{10'000});
   }
 
+  TEST_CASE("MprisBridge - Seeked follows final seek identity rather than elapsed drift", "[gtk][regression][mpris]")
+  {
+    auto before = rt::PlaybackTransportSnapshot{.elapsed = std::chrono::milliseconds{100}};
+    auto after = before;
+    after.elapsed = std::chrono::milliseconds{900};
+
+    CHECK_FALSE(MprisBridge::shouldEmitSeeked(before, after));
+
+    after.positionRevision = rt::PlaybackPositionRevision{.value = 1};
+    CHECK_FALSE(MprisBridge::shouldEmitSeeked(before, after));
+
+    after.finalSeekRevision = rt::PlaybackFinalSeekRevision{.value = 1};
+    CHECK(MprisBridge::shouldEmitSeeked(before, after));
+  }
+
   TEST_CASE("MprisBridge - loop status maps runtime repeat modes", "[gtk][unit][mpris]")
   {
     CHECK(MprisBridge::loopStatus(rt::RepeatMode::Off) == "None");

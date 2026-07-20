@@ -90,9 +90,11 @@ namespace ao::uimodel
   } // namespace
 
   PlaybackCommandSurface::PlaybackCommandSurface(rt::PlaybackService& playback, std::function<void()> playSelection)
-    : _playback{playback}, _commands{playback.commands()}, _playSelection{std::move(playSelection)}
+    : _playback{playback}
+    , _commands{playback.commands()}
+    , _playSelection{std::move(playSelection)}
+    , _lastSnapshot{playback.snapshot()}
   {
-    _lastSnapshot = _playback.snapshot();
     _snapshotSub =
       _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
@@ -104,7 +106,7 @@ namespace ao::uimodel
       return false;
     }
 
-    auto const snapshot = _playback.snapshot();
+    auto const& snapshot = _playback.snapshot();
     auto const& transport = snapshot.transport;
     auto const& succession = snapshot.succession;
     auto const resumeCurrent =
@@ -161,7 +163,7 @@ namespace ao::uimodel
 
   bool PlaybackCommandSurface::isEnabled(PlaybackCommand command) const
   {
-    auto const snapshot = _playback.snapshot();
+    auto const& snapshot = _playback.snapshot();
     auto const& transport = snapshot.transport;
 
     switch (auto const& succession = snapshot.succession; command)
@@ -250,11 +252,6 @@ namespace ao::uimodel
             PlaybackCommand::Stop,
             PlaybackCommand::Next,
             PlaybackCommand::Previous});
-    }
-
-    if (after.elapsed != before.elapsed)
-    {
-      mark({PlaybackCommand::Previous});
     }
 
     if (afterSuccession.hasNext != beforeSuccession.hasNext ||

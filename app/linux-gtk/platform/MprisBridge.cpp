@@ -248,7 +248,7 @@ namespace ao::gtk::platform
             emitPlayerPropertiesChanged({"Metadata", "CanSeek"});
           }
 
-          if (snapshot.transport.elapsed != lastSnapshot.transport.elapsed)
+          if (MprisBridge::shouldEmitSeeked(lastSnapshot.transport, snapshot.transport))
           {
             emitSeeked(snapshot.transport.elapsed);
           }
@@ -381,7 +381,7 @@ namespace ao::gtk::platform
 
     Glib::VariantBase playerProperty(std::string_view const propertyName) const
     {
-      auto const snapshot = playback.snapshot();
+      auto const& snapshot = playback.snapshot();
       auto const& state = snapshot.transport;
 
       if (propertyName == "PlaybackStatus")
@@ -875,6 +875,12 @@ namespace ao::gtk::platform
     }
 
     return clampElapsed(state, std::chrono::milliseconds{target});
+  }
+
+  bool MprisBridge::shouldEmitSeeked(rt::PlaybackTransportSnapshot const& before,
+                                     rt::PlaybackTransportSnapshot const& after) noexcept
+  {
+    return after.finalSeekRevision != before.finalSeekRevision;
   }
 
   std::string MprisBridge::trackObjectPath(TrackId const trackId)

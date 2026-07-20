@@ -6,6 +6,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
+#include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -17,6 +18,7 @@
 namespace ao::rt
 {
   class PlaybackService;
+  struct PlaybackSnapshot;
 }
 
 namespace ao::uimodel
@@ -66,10 +68,14 @@ namespace ao::uimodel
     void refresh();
 
   private:
+    void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
+    void render(rt::OutputState const& output);
+
     rt::PlaybackService& _playback;
     rt::PlaybackCommands& _commands;
     std::function<void(OutputDeviceViewState const&)> _onRender;
     PresentationTextCatalog _textCatalog;
+    rt::OutputState _lastOutput{};
 
     async::Subscription _snapshotSub;
   };

@@ -11,6 +11,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
@@ -202,6 +203,10 @@ namespace ao::uimodel::test
 
     REQUIRE(!log.empty());
     log.clear();
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    fixture.commands().setVolume(0.5F);
+    CHECK(log.empty());
 
     auto const trackId =
       fixture.libraryFixture.addTrack({.title = "Event Song", .artist = "Event Artist", .album = "Event Album"});

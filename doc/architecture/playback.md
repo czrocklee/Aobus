@@ -31,7 +31,7 @@ UIModel playback command and view models
              v
 AppRuntime
   |-- PlaybackService                  public application boundary
-  |     |-- snapshot()                 current coherent value
+  |     |-- snapshot()                 last boundary-committed coherent value
   |     |-- PlaybackCommands           mutation role
   |     |-- PlaybackEvents             publication/transient-event role
   |     `-- stage-2 adapter over the internal owners below
@@ -137,7 +137,7 @@ Frontend widgets and platform endpoints issue runtime/UIModel commands and rende
 ### Application access surfaces
 
 `AppRuntime::playback()` exposes one `PlaybackService` object.
-Consumers read the current coherent value through `PlaybackService::snapshot()` and obtain its narrow `PlaybackCommands` mutation role or `PlaybackEvents` subscription role; they cannot obtain `PlaybackTransport` or `PlaybackSuccession` from `AppRuntime`.
+Consumers borrow the last boundary-committed coherent value through `PlaybackService::snapshot()` and obtain its narrow `PlaybackCommands` mutation role or `PlaybackEvents` subscription role; they cannot obtain `PlaybackTransport` or `PlaybackSuccession` from `AppRuntime`.
 `PlaybackCommandSurface` derives availability from one coherent snapshot and delegates every transport and succession command through `PlaybackCommands`.
 
 In [RFC 0005](../rfc/0005-coherent-playback-boundary.md) Stage 2, `PlaybackService` is a publication-barrier adapter over the internal `PlaybackTransport` and `PlaybackSuccession` owners.

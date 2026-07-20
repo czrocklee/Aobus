@@ -14,6 +14,8 @@
 namespace ao::rt
 {
   class PlaybackService;
+  struct PlaybackSnapshot;
+  struct PlaybackTransportSnapshot;
 }
 
 namespace ao::uimodel
@@ -74,6 +76,8 @@ namespace ao::uimodel
   {
     SoulAura aura = SoulAura::Dormant;
     bool isBreathing = false;
+
+    bool operator==(AobusSoulViewState const&) const = default;
   };
 
   SoulAura resolveSoulAura(bool playing, bool ready, rt::QualityState const& signal) noexcept;
@@ -97,9 +101,13 @@ namespace ao::uimodel
 
   private:
     void refresh();
+    void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
+    void render(rt::PlaybackTransportSnapshot const& state);
 
     rt::PlaybackService& _playback;
     std::function<void(AobusSoulViewState const&)> _onRender;
+    AobusSoulViewState _lastView{};
+    bool _hasLastView = false;
 
     async::Subscription _snapshotSub;
   };

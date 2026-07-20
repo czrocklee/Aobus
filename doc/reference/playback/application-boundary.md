@@ -3,7 +3,7 @@ id: playback.application-boundary
 type: reference
 status: current
 domain: playback
-summary: Enumerates the coherent PlaybackService surface — its current snapshot, event subscriptions, and commands exposed by AppRuntime.
+summary: Enumerates the coherent PlaybackService surface — its committed snapshot, event subscriptions, and commands exposed by AppRuntime.
 ---
 # Playback application boundary
 
@@ -31,7 +31,7 @@ The exact fields below are current; their revision-commit semantics tighten when
 
 | Member | Type | Meaning |
 |---|---|---|
-| `snapshot()` | `PlaybackSnapshot` | Returns the current coherent state on demand. |
+| `snapshot()` | `PlaybackSnapshot const&` | Borrows the last boundary-committed coherent state. The borrowed view remains stable until the next snapshot publication or service destruction. |
 | `commands()` | `PlaybackCommands&` | The mutation port. |
 | `events()` | `PlaybackEvents&` | The publication and transient-event subscription port. |
 
@@ -40,6 +40,15 @@ The exact fields below are current; their revision-commit semantics tighten when
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `value` | `std::uint64_t` | `0` | Monotonic identity of one accepted application transition. Totally ordered; never derived from an Engine item id, audio generation, or persistence revision. |
+
+### Position identities
+
+`PlaybackPositionRevision` and `PlaybackFinalSeekRevision` each wrap a comparable `std::uint64_t value` whose default is `0`.
+
+- `PlaybackPositionRevision` identifies the playback-clock anchor. It advances when the transport subject changes and when a final seek commits a new anchor.
+- `PlaybackFinalSeekRevision` identifies the most recently committed final seek. It advances only for final seeks, so consumers such as MPRIS can distinguish a seek discontinuity from a track transition or a newly sampled clock value.
+
+Neither identity advances for seek previews or for ordinary elapsed-time progress.
 
 ### `PlaybackSourceState`
 
@@ -55,7 +64,8 @@ Public mirror of the internal succession source state.
 | `succession` | `PlaybackSuccessionSnapshot` | Live-source succession portion. |
 | `preparation` | `PlaybackPreparationSnapshot` | Prepared-successor correlation portion. |
 
-`sameContentAs(other)` compares every portion except `revision`.
+`sameContentAs(other)` compares semantic content except `revision` and the transport's correlated `elapsed` sample.
+Full snapshot equality includes `revision`, but likewise excludes `elapsed` from semantic equality.
 
 #### `PlaybackTransportSnapshot`
 
@@ -63,7 +73,9 @@ Public mirror of the internal succession source state.
 |---|---|---|
 | `transport` | `audio::Transport` | Idle, preparing, playing, or paused transport state. |
 | `ready` | `bool` | Output readiness for the current subject. |
-| `elapsed` | `std::chrono::milliseconds` | Committed position at snapshot time; UIModel interpolates between snapshots. |
+| `positionRevision` | `PlaybackPositionRevision` | Identity of the current playback-clock anchor. |
+| `finalSeekRevision` | `PlaybackFinalSeekRevision` | Identity of the most recently committed final seek. |
+| `elapsed` | `std::chrono::milliseconds` | Correlated position sample captured with this snapshot; UIModel interpolates from it. Clock progress alone is not semantic content and does not cause publication. |
 | `duration` | `std::chrono::milliseconds` | Current subject duration. |
 | `nowPlaying` | `NowPlayingInfo` | Current transport subject and its display metadata. |
 | `volume` | `VolumeState` | Level, mute, availability. |
@@ -99,6 +111,7 @@ Public mirror of the internal succession source state.
 
 `onSnapshot` is an event subscription: it announces publication of a new current `PlaybackSnapshot`.
 Reading the current value remains a direct `PlaybackService::snapshot()` operation, so consumers do not need a separate snapshot-source object.
+The borrowed reference returned by `snapshot()` must not be retained across a command or callback that can publish a newer snapshot; consumers that need an older value for comparison copy it explicitly.
 
 #### `PlaybackFailureEvent`
 
@@ -147,7 +160,9 @@ Session save, restore, and discard keep their call-level `Result` on `AppRuntime
 - Every method is callback-executor-affine; handlers run on the executor thread and must defer owner teardown to a later turn.
 - While active, `succession.currentTrackId` equals `transport.nowPlaying.trackId`; an idle transport has no active succession subject.
 - The public surface has no track/list-only start, stage, commit, or prepared-next mutation; every public start captures succession context through `startFromView`.
-- `revision` advances only when published content changes and is strictly monotonic.
+- `revision` identifies boundary-committed state, advances only when semantic content changes, and is strictly monotonic. A pending spontaneous lower-layer change is not visible through `snapshot()` until its deferred publication commits.
+- `elapsed` may be re-sampled while composing a semantic transition, but elapsed drift by itself does not advance `revision`, `positionRevision`, or `finalSeekRevision`.
+- Final seeks advance both position identities. Subject changes advance only `positionRevision`; seek previews advance neither.
 - Stage-2 publication guarantee: one command issued through `PlaybackCommands` publishes at most one snapshot, and spontaneous lower-layer changes coalesce into one publication per executor turn. The stronger "one logical commit, one revision" guarantee is delivered when the coordinator replaces this adapter.
 
 ## Compatibility and versioning
@@ -162,7 +177,7 @@ Observable behavior and its invariants are owned by the playback specifications;
 
 ## Test authority
 
-- [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) locks public-surface closure, snapshot coherence, revision monotonicity, correlated output/readiness/quality, single-publication-per-command, and end-of-turn coalescing.
+- [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) locks public-surface closure, snapshot coherence, revision and position-identity monotonicity, correlated output/readiness/quality, elapsed-insensitive semantic equality, single-publication-per-command, and end-of-turn coalescing.
 
 ## Related documents
 

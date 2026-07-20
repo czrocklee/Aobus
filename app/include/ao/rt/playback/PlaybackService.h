@@ -36,7 +36,8 @@ namespace ao::rt
     PlaybackService(PlaybackService&&) = delete;
     PlaybackService& operator=(PlaybackService&&) = delete;
 
-    PlaybackSnapshot snapshot() const;
+    /** Borrows the last committed snapshot, stable until the next publication. */
+    PlaybackSnapshot const& snapshot() const;
     PlaybackCommands& commands() noexcept;
     PlaybackEvents& events() noexcept;
 

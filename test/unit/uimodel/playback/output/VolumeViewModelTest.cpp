@@ -4,6 +4,7 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include <ao/rt/PlaybackMode.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <catch2/catch_approx.hpp>
@@ -141,5 +142,19 @@ namespace ao::uimodel::test
       CHECK(VolumeViewModel::resolveTooltip(0.64F, true, false) == "Volume: 64% (Muted)");
       CHECK(VolumeViewModel::resolveTooltip(0.64F, false, true) == "Volume: 64% (Hardware)");
     }
+  }
+
+  TEST_CASE("VolumeViewModel - unrelated playback snapshots do not rerender", "[uimodel][regression][playback][volume]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto log = ao::test::RenderLog<VolumeViewState>{};
+    auto const viewModel = VolumeViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+    REQUIRE(log.states.size() == 1);
+    auto const revisionBefore = fixture.playback.snapshot().revision;
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+
+    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(log.states.size() == 1);
   }
 } // namespace ao::uimodel::test

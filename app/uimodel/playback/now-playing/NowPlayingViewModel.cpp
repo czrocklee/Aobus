@@ -88,7 +88,13 @@ namespace ao::uimodel
                                            std::function<void(NowPlayingViewState const&)> onRender)
     : _playback{playback}, _onRender{std::move(onRender)}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
+    auto const& transport = _playback.snapshot().transport;
+    _lastNowPlaying = transport.nowPlaying;
+    _lastOutput = transport.output;
+    _lastQuality = transport.quality;
+    _lastReady = transport.ready;
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();
   }
 
@@ -100,8 +106,28 @@ namespace ao::uimodel
 
   void NowPlayingViewModel::refresh()
   {
-    auto const snapshot = _playback.snapshot();
-    auto const& state = snapshot.transport;
+    render(_playback.snapshot().transport);
+  }
+
+  void NowPlayingViewModel::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
+  {
+    auto const& transport = snapshot.transport;
+
+    if (transport.nowPlaying == _lastNowPlaying && transport.output == _lastOutput &&
+        transport.quality == _lastQuality && transport.ready == _lastReady)
+    {
+      return;
+    }
+
+    _lastNowPlaying = transport.nowPlaying;
+    _lastOutput = transport.output;
+    _lastQuality = transport.quality;
+    _lastReady = transport.ready;
+    render(transport);
+  }
+
+  void NowPlayingViewModel::render(rt::PlaybackTransportSnapshot const& state)
+  {
     auto view = NowPlayingViewState{};
 
     if (state.nowPlaying.title.empty())
@@ -153,7 +179,7 @@ namespace ao::uimodel
 
   NowPlayingActionCommand NowPlayingViewModel::resolveAction(NowPlayingFieldAction action, rt::TrackField field) const
   {
-    auto const snapshot = _playback.snapshot();
+    auto const& snapshot = _playback.snapshot();
     auto const& state = snapshot.transport;
     auto cmd = NowPlayingActionCommand{};
 

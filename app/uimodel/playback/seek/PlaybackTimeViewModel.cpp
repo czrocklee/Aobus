@@ -27,42 +27,38 @@ namespace ao::uimodel
 
   PlaybackTimeViewModel::PlaybackTimeViewModel(rt::PlaybackService& playback,
                                                std::function<void(PlaybackTimeViewState const&)> onRender)
-    : _playback{playback}, _onRender{std::move(onRender)}
+    : _playback{playback}, _onRender{std::move(onRender)}, _clockChangeFilter{playback.snapshot().transport}
   {
-    auto const transport = _playback.snapshot().transport;
-    _lastTransport = transport.transport;
-    _lastElapsed = transport.elapsed;
-    _lastDuration = transport.duration;
-
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { onSnapshotChanged(); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { onSnapshotChanged(snapshot); });
     _seekPreviewSub = _playback.events().onSeekPreview([this](rt::PlaybackSeekPreview const& preview)
                                                        { refresh(false, true, preview.elapsed); });
 
     refresh(true, false);
   }
 
-  void PlaybackTimeViewModel::onSnapshotChanged()
+  void PlaybackTimeViewModel::onSnapshotChanged(rt::PlaybackSnapshot const& snapshot)
   {
-    auto const transport = _playback.snapshot().transport;
-
-    if (transport.transport == _lastTransport && transport.elapsed == _lastElapsed &&
-        transport.duration == _lastDuration)
+    if (!_clockChangeFilter.update(snapshot.transport))
     {
       return;
     }
 
-    _lastTransport = transport.transport;
-    _lastElapsed = transport.elapsed;
-    _lastDuration = transport.duration;
-    refresh(true, false);
+    render(snapshot.transport, true, false);
   }
 
   void PlaybackTimeViewModel::refresh(bool immediateUpdate,
                                       bool isPreviewing,
                                       std::optional<std::chrono::milliseconds> optOverrideElapsed)
   {
-    auto const state = _playback.snapshot().transport;
+    render(_playback.snapshot().transport, immediateUpdate, isPreviewing, optOverrideElapsed);
+  }
 
+  void PlaybackTimeViewModel::render(rt::PlaybackTransportSnapshot const& state,
+                                     bool const immediateUpdate,
+                                     bool const isPreviewing,
+                                     std::optional<std::chrono::milliseconds> const optOverrideElapsed)
+  {
     auto view = PlaybackTimeViewState{};
     view.duration = state.duration;
     view.elapsed = optOverrideElapsed.value_or(state.elapsed);

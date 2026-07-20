@@ -16,9 +16,13 @@
 namespace ao::uimodel
 {
   VolumeViewModel::VolumeViewModel(rt::PlaybackService& playback, std::function<void(VolumeViewState const&)> onRender)
-    : _playback{playback}, _commands{playback.commands()}, _onRender{std::move(onRender)}
+    : _playback{playback}
+    , _commands{playback.commands()}
+    , _onRender{std::move(onRender)}
+    , _lastVolume{playback.snapshot().transport.volume}
   {
-    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const&) { refresh(); });
+    _snapshotSub =
+      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();
   }
 
@@ -39,13 +43,13 @@ namespace ao::uimodel
 
   void VolumeViewModel::handleScroll(double scrollDy)
   {
-    auto const volume = _playback.snapshot().transport.volume;
+    auto const& volume = _playback.snapshot().transport.volume;
     applyVolumeTarget(volume.level, volume.muted, resolveVolumeScroll(volume.level, scrollDy));
   }
 
   void VolumeViewModel::adjustVolume(float const delta)
   {
-    auto const volume = _playback.snapshot().transport.volume;
+    auto const& volume = _playback.snapshot().transport.volume;
     applyVolumeTarget(volume.level, volume.muted, volume.level + delta);
   }
 
@@ -63,8 +67,24 @@ namespace ao::uimodel
 
   void VolumeViewModel::refresh()
   {
-    auto const volume = _playback.snapshot().transport.volume;
+    auto const& volume = _playback.snapshot().transport.volume;
+    _lastVolume = volume;
+    render(volume);
+  }
 
+  void VolumeViewModel::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
+  {
+    if (snapshot.transport.volume == _lastVolume)
+    {
+      return;
+    }
+
+    _lastVolume = snapshot.transport.volume;
+    render(snapshot.transport.volume);
+  }
+
+  void VolumeViewModel::render(rt::VolumeState const& volume)
+  {
     auto view = VolumeViewState{
       .visible = volume.available,
       .volume = volume.level,
