@@ -101,6 +101,21 @@ def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile
     return profile
 
 
+def parallel_build_arguments() -> list[str]:
+    """Return an explicit CMake parallelism limit, honoring the standard environment override."""
+    configured = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
+    if configured is not None:
+        try:
+            jobs = int(configured)
+        except ValueError:
+            raise die("CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.") from None
+        if jobs < 1:
+            raise die("CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.")
+    else:
+        jobs = max(1, (os.cpu_count() or 1) - 1)
+    return ["--parallel", str(jobs)]
+
+
 def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
     profile = validate_build_options(args)
@@ -143,11 +158,7 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         raise die("configure failed.")
 
     build = ["cmake", "--build", str(build_dir)]
-    if getattr(args, "asan", False) or getattr(args, "tsan", False):
-        jobs = max(1, (os.cpu_count() or 1) // 2)
-        build += ["--parallel", str(jobs)]
-    else:
-        build.append("--parallel")
+    build += parallel_build_arguments()
     for target in targets:
         build += ["--target", target]
     if args.verbose:

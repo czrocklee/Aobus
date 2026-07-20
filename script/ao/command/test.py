@@ -392,11 +392,7 @@ def run_command(args: argparse.Namespace) -> int:
             print(f"Building {', '.join(targets)} in {build_dir}...")
             print("=====================================")
             build_cmd = ["cmake", "--build", str(build_dir)]
-            if getattr(args, "asan", False) or getattr(args, "tsan", False):
-                jobs = max(1, (os.cpu_count() or 1) // 2)
-                build_cmd += ["--parallel", str(jobs)]
-            else:
-                build_cmd.append("--parallel")
+            build_cmd += build.parallel_build_arguments()
             build_cmd += ["--target", *targets]
             if run(build_cmd) != 0:
                 raise die("test build failed.")

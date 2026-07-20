@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..core import builddir
 from ..core.proc import die, run
+from . import build
 
 HELP = "Build and run the Aobus council executable"
 NAME = "council"
@@ -49,7 +50,8 @@ def run_command(args: argparse.Namespace) -> int:
         print("=====================================")
         print(f"Building aobus-council in {build_path}...")
         print("=====================================")
-        if run(["cmake", "--build", str(build_path), "--parallel", "--target", "aobus-council"]) != 0:
+        command = ["cmake", "--build", str(build_path), *build.parallel_build_arguments(), "--target", "aobus-council"]
+        if run(command) != 0:
             raise die("council build failed.")
 
     if not executable.is_file():

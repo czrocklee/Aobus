@@ -84,6 +84,14 @@ class WindowsBatchPortalTest(unittest.TestCase):
                 self.assertTrue(binary_dir.startswith("$env{LOCALAPPDATA}/Aobus/build/"))
                 self.assertNotIn("out/build", binary_dir)
 
+    def test_linux_presets_use_ninja(self):
+        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
+        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
+        linux_presets = [preset for preset in presets if not preset["name"].startswith("windows-")]
+
+        self.assertTrue(linux_presets)
+        self.assertTrue(all(preset["generator"] == "Ninja" for preset in linux_presets))
+
 
 class CliParseTest(unittest.TestCase):
     def parse(self, argv):
@@ -131,6 +139,22 @@ class CliParseTest(unittest.TestCase):
         args = self.parse(["check"])
         self.assertEqual(args.flavor, "debug")
         self.assertFalse(args.asan)
+
+    def test_parallel_build_arguments_forward_the_environment_limit(self):
+        with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
+            self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "8"])
+
+    def test_parallel_build_arguments_reject_an_invalid_environment_limit(self):
+        for configured in ("", "all", "0", "-1"):
+            with self.subTest(configured=configured):
+                with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": configured}):
+                    with self.assertRaises(SystemExit):
+                        build_command.parallel_build_arguments()
+
+    def test_parallel_build_arguments_leave_one_cpu_available_by_default(self):
+        with mock.patch.dict(build_command.os.environ, {}, clear=True):
+            with mock.patch.object(build_command.os, "cpu_count", return_value=32):
+                self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "31"])
 
     def test_dependency_report_arguments(self):
         args = self.parse(["deps", "report", "-p", "/tmp/aobus-deps", "--json", "/tmp/aobus-deps.json"])
@@ -223,12 +247,17 @@ class CliParseTest(unittest.TestCase):
             args = self.parse(["council", "-p", str(build_dir), "validate-config", "--registry", "config.yaml"])
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-                with mock.patch.object(council_command, "run", return_value=0) as run:
-                    self.assertEqual(council_command.run_command(args), 0)
+                with mock.patch.object(
+                    council_command.build,
+                    "parallel_build_arguments",
+                    return_value=["--parallel", "8"],
+                ):
+                    with mock.patch.object(council_command, "run", return_value=0) as run:
+                        self.assertEqual(council_command.run_command(args), 0)
 
         self.assertEqual(
             run.call_args_list[0].args[0],
-            ["cmake", "--build", str(build_dir), "--parallel", "--target", "aobus-council"],
+            ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "aobus-council"],
         )
         self.assertEqual(run.call_args_list[1].args[0], [str(binary), "validate-config", "--registry", "config.yaml"])
 
@@ -431,12 +460,17 @@ class CliParseTest(unittest.TestCase):
             build_dir = Path(temp_dir)
 
             with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(test_command, "run", return_value=0) as run:
-                    with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
-                        self.assertEqual(test_command.run_command(args), 0)
+                with mock.patch.object(
+                    test_command.build,
+                    "parallel_build_arguments",
+                    return_value=["--parallel", "8"],
+                ):
+                    with mock.patch.object(test_command, "run", return_value=0) as run:
+                        with mock.patch.object(test_command, "run_suites", return_value=0) as run_suites:
+                            self.assertEqual(test_command.run_command(args), 0)
 
         run.assert_called_once_with(
-            ["cmake", "--build", str(build_dir), "--parallel", "--target", "ao_core_test", "ao_tui_test"]
+            ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "ao_core_test", "ao_tui_test"]
         )
         run_suites.assert_called_once_with(
             ("core", "tui"),

@@ -20,6 +20,7 @@ from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
 from ..core.tidyconfig import CONFIG_BASE
+from . import build
 
 HELP = "Run C++ clang-tidy and Python Ruff/mypy checks"
 NAME = "tidy"
@@ -386,7 +387,7 @@ def prepare_toolchain(
         target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
         print(f"Building {target} (incremental)...")
         tool_build = subprocess.run(
-            ["cmake", "--build", str(build_dir), "--target", target, "--parallel"],
+            ["cmake", "--build", str(build_dir), "--target", target, *build.parallel_build_arguments()],
             cwd=PROJECT_ROOT,
             stdout=subprocess.DEVNULL,
         )
