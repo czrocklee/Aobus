@@ -91,6 +91,25 @@ namespace ao::audio::test
     }
   }
 
+  TEST_CASE("FlacDecoderSession - seek to reported duration lands on the final frame", "[audio][unit][flac]")
+  {
+    // Seeking to the exact reported duration resolves to total_samples, one past
+    // the last valid sample. The session must clamp to the last decodable sample
+    // so the seek lands on the final frame rather than at end of stream; libFLAC
+    // builds otherwise disagree on out-of-range seeks and drop the position.
+    auto const testFile = requireAudioFixture("basic_metadata.flac");
+    auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+
+    REQUIRE(decoder.open(testFile));
+    auto const info = decoder.streamInfo();
+    REQUIRE(info.duration > std::chrono::milliseconds{0});
+
+    REQUIRE(decoder.seek(info.duration));
+    auto const finalBlock = decoder.readNextBlock();
+    REQUIRE(finalBlock);
+    CHECK(finalBlock->frames > 0);
+  }
+
   TEST_CASE("FlacDecoderSession - stable end of stream", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");

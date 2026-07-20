@@ -255,7 +255,16 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::SeekFailed, "Sample rate is 0");
       }
 
-      auto const targetSample = static_cast<::FLAC__uint64>(durationToSamples(offset, sampleRate));
+      auto const requestedSample = durationToSamples(offset, sampleRate);
+
+      // total_samples is one past the last valid sample index. Seeking libFLAC at
+      // or beyond it is out of range, and builds disagree on the outcome: some
+      // position at end of stream and immediately drain the source, dropping the
+      // committed seek position. Clamp to the last decodable sample so a seek to
+      // the reported duration lands on the final frame instead of past the end.
+      auto const totalFrames = _implPtr->totalFrames;
+      auto const targetSample = static_cast<::FLAC__uint64>(
+        (totalFrames != 0 && requestedSample >= totalFrames) ? totalFrames - 1 : requestedSample);
 
       if (::FLAC__stream_decoder_seek_absolute(_implPtr->decoder, targetSample) == 0)
       {
