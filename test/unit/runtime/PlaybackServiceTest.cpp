@@ -11,7 +11,15 @@
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
-#include <ao/audio/RenderTarget.h>
+#include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/NullBackend.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
@@ -19,6 +27,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackCommands.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -27,12 +36,15 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <atomic>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <format>
+#include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -52,6 +64,109 @@ namespace ao::rt::test
     template<typename T>
     concept HasLegacySuccessionAccessor = requires(T& target) { target.playbackSequence(); };
 
+    class RejectingDeferExecutor final : public async::Executor
+    {
+    public:
+      bool isCurrent() const noexcept override { return _delegate.isCurrent(); }
+      void dispatch(std::move_only_function<void()> task) override { _delegate.dispatch(std::move(task)); }
+
+      void defer(std::move_only_function<void()> task) override
+      {
+        if (_rejectNextDefer.exchange(false))
+        {
+          throwException<Exception>("scripted defer rejection");
+        }
+
+        _delegate.defer(std::move(task));
+      }
+
+      void rejectNextDefer() noexcept { _rejectNextDefer.store(true); }
+      void drain() { _delegate.drain(); }
+
+    private:
+      QueuedExecutor _delegate;
+      std::atomic_bool _rejectNextDefer{false};
+    };
+
+    class ThrowingVolumeArm final
+    {
+    public:
+      void arm() noexcept { _armed = true; }
+      bool consume() noexcept { return std::exchange(_armed, false); }
+
+    private:
+      bool _armed = false;
+    };
+
+    class ThrowingVolumeBackend final : public audio::NullBackend
+    {
+    public:
+      explicit ThrowingVolumeBackend(ThrowingVolumeArm& arm)
+        : _arm{&arm}
+      {
+      }
+
+      audio::BackendId backendId() const override { return audio::BackendId{"throwing_backend"}; }
+      audio::ProfileId profileId() const override { return audio::ProfileId{audio::kProfileShared}; }
+
+      Result<> setProperty(audio::PropertyId const id, audio::PropertyValue const& value) override
+      {
+        if (id == audio::PropertyId::Volume && _arm->consume())
+        {
+          throwException<Exception>("scripted volume exception");
+        }
+
+        return NullBackend::setProperty(id, value);
+      }
+
+    private:
+      ThrowingVolumeArm* _arm;
+    };
+
+    class ThrowingVolumeProvider final : public audio::BackendProvider
+    {
+    public:
+      explicit ThrowingVolumeProvider(ThrowingVolumeArm& arm)
+        : _arm{&arm}
+      {
+        _status.descriptor.id = audio::BackendId{"throwing_backend"};
+        _status.descriptor.supportedProfiles.push_back({.id = audio::kProfileShared});
+        _status.devices.push_back(audio::Device{
+          .id = audio::DeviceId{"throwing_device"},
+          .displayName = "Throwing Device",
+          .description = "Controlled exception output",
+          .isDefault = false,
+          .backendId = audio::BackendId{"throwing_backend"},
+        });
+      }
+
+      void shutdown() noexcept override {}
+
+      audio::Subscription subscribeDevices(OnDevicesChangedCallback callback) override
+      {
+        callback(_status.devices);
+        return {};
+      }
+
+      Status status() const override { return _status; }
+
+      std::unique_ptr<audio::Backend> createBackend(audio::Device const& /*device*/,
+                                                    audio::ProfileId const& /*profile*/) override
+      {
+        return std::make_unique<ThrowingVolumeBackend>(*_arm);
+      }
+
+      audio::Subscription subscribeGraph(std::string_view /*routeAnchor*/, OnGraphChangedCallback /*callback*/) override
+      {
+        return {};
+      }
+
+    private:
+      ThrowingVolumeArm* _arm;
+      Status _status;
+    };
+
+    template<typename ExecutorT = InlineExecutor>
     struct PlaybackServiceFixture final
     {
       PlaybackServiceFixture() = default;
@@ -90,7 +205,7 @@ namespace ao::rt::test
       PlaybackCommands& commands() { return application.commands(); }
       PlaybackService& playback() { return application.playback; }
 
-      ApplicationPlaybackFixture application;
+      ApplicationPlaybackFixtureT<ExecutorT> application;
 
       TrackId firstTrackId = kInvalidTrackId;
       TrackId secondTrackId = kInvalidTrackId;
@@ -121,12 +236,13 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService - a view start publishes one coherent snapshot", "[runtime][unit][playback][coherence]")
   {
-    auto fixture = PlaybackServiceFixture{};
+    auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
                                                                      { snapshots.push_back(snapshot); });
+    auto const revisionBeforeStart = fixture.playback().snapshot().revision.value;
 
     auto const started = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
     REQUIRE(started);
@@ -136,7 +252,7 @@ namespace ao::rt::test
     REQUIRE(snapshots.size() == 1);
 
     auto const& published = snapshots.front();
-    CHECK(published.revision.value == 1);
+    CHECK(published.revision.value == revisionBeforeStart + 1);
     // The transport subject and the succession subject describe one track.
     CHECK(published.transport.nowPlaying.trackId == fixture.firstTrackId);
     CHECK(published.succession.currentTrackId == fixture.firstTrackId);
@@ -150,37 +266,38 @@ namespace ao::rt::test
 
     // snapshot() reflects the same coherent state on demand.
     auto const observed = fixture.playback().snapshot();
-    CHECK(observed.revision.value == 1);
+    CHECK(observed.revision.value == revisionBeforeStart + 1);
     CHECK(observed.sameContentAs(published));
   }
 
   TEST_CASE("PlaybackService - revisions advance monotonically on real change", "[runtime][unit][playback][coherence]")
   {
-    auto fixture = PlaybackServiceFixture{};
+    auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
                                                                      { snapshots.push_back(snapshot); });
+    auto const revisionBeforeStart = fixture.playback().snapshot().revision.value;
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots.back().revision.value == 1);
+    CHECK(snapshots.back().revision.value == revisionBeforeStart + 1);
 
     fixture.commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(snapshots.size() == 2);
-    CHECK(snapshots.back().revision.value == 2);
+    CHECK(snapshots.back().revision.value == revisionBeforeStart + 2);
     CHECK(snapshots.back().succession.shuffle == ShuffleMode::On);
 
     // Re-issuing the same shuffle mode changes no content and must not publish
     // or advance the revision.
     fixture.commands().setShuffleMode(ShuffleMode::On);
     CHECK(snapshots.size() == 2);
-    CHECK(fixture.playback().snapshot().revision.value == 2);
+    CHECK(fixture.playback().snapshot().revision.value == revisionBeforeStart + 2);
 
     fixture.commands().stop();
     REQUIRE(snapshots.size() == 3);
-    CHECK(snapshots.back().revision.value == 3);
+    CHECK(snapshots.back().revision.value == revisionBeforeStart + 3);
     CHECK(snapshots.back().transport.transport == audio::Transport::Idle);
     CHECK(snapshots.back().succession.sourceState == PlaybackSourceState::Inactive);
   }
@@ -204,7 +321,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService - final seeks advance explicit position identities",
             "[runtime][regression][playback][seek]")
   {
-    auto fixture = PlaybackServiceFixture{};
+    auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
@@ -308,8 +425,313 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots.front().revision.value == 1);
+    CHECK(snapshots.front().revision.value == before.revision.value + 1);
     CHECK(snapshots.front().succession.shuffle == ShuffleMode::On);
     CHECK(snapshots.front().succession.repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackService - revisions advance without snapshot subscribers", "[runtime][unit][playback][coherence]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto const before = fixture.playback.snapshot();
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+
+    auto const after = fixture.playback.snapshot();
+    CHECK(after.revision.value == before.revision.value + 1);
+    CHECK(after.succession.shuffle == ShuffleMode::On);
+  }
+
+  TEST_CASE("PlaybackService - a no-op stop does not create a revision", "[runtime][unit][playback][coherence]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    // The first stop synchronizes the transport snapshot with the underlying
+    // Player. Repeating it is the semantic no-op under test.
+    fixture.commands().stop();
+
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback.events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                   { snapshots.push_back(snapshot); });
+    auto const before = fixture.playback.snapshot();
+
+    fixture.commands().stop();
+
+    CHECK(snapshots.empty());
+    CHECK(fixture.playback.snapshot() == before);
+  }
+
+  TEST_CASE("PlaybackService - same-track navigation commits a new position anchor",
+            "[runtime][regression][playback][coherence]")
+  {
+    auto fixture = PlaybackServiceFixture<>{};
+    fixture.buildThreeTrackManualView();
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    fixture.commands().setRepeatMode(RepeatMode::One);
+
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                     { snapshots.push_back(snapshot); });
+    auto const before = fixture.playback().snapshot();
+
+    fixture.commands().next();
+
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.back().transport.nowPlaying.trackId == fixture.firstTrackId);
+    CHECK(snapshots.back().transport.positionRevision.value == before.transport.positionRevision.value + 1);
+    CHECK(snapshots.back().transport.finalSeekRevision == before.transport.finalSeekRevision);
+  }
+
+  TEST_CASE("PlaybackService - silent lower navigation still commits its position anchor",
+            "[runtime][regression][playback][coherence]")
+  {
+    auto fixture = PlaybackServiceFixture<QueuedExecutor>{};
+    fixture.buildThreeTrackManualView();
+    fixture.application.executor.drain();
+    REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    fixture.application.executor.drain();
+
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                     { snapshots.push_back(snapshot); });
+    auto const before = fixture.playback().snapshot();
+
+    REQUIRE(fixture.application.succession.next());
+    fixture.application.executor.drain();
+
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.back().transport.nowPlaying.trackId == fixture.secondTrackId);
+    CHECK(snapshots.back().transport.positionRevision.value == before.transport.positionRevision.value + 1);
+    CHECK(snapshots.back().transport.finalSeekRevision == before.transport.finalSeekRevision);
+  }
+
+  TEST_CASE("PlaybackService - navigation without a session is a no-op", "[runtime][unit][playback][coherence]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback.events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
+                                                                   { snapshots.push_back(snapshot); });
+    auto const before = fixture.playback.snapshot();
+
+    fixture.commands().next();
+    fixture.commands().previous();
+
+    CHECK(snapshots.empty());
+    CHECK(fixture.playback.snapshot() == before);
+  }
+
+  TEST_CASE("PlaybackService - snapshot observer commands run in a later executor turn",
+            "[runtime][unit][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    bool requestedRepeat = false;
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        snapshots.push_back(snapshot);
+
+        if (!requestedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          requestedRepeat = true;
+          fixture.commands().setRepeatMode(RepeatMode::All);
+        }
+      });
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+
+    REQUIRE(snapshots.size() == 1);
+    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::Off);
+    CHECK(fixture.executor.queuedCount() != 0);
+
+    fixture.executor.drain();
+
+    REQUIRE(snapshots.size() == 2);
+    CHECK(snapshots.back().revision.value == snapshots.front().revision.value + 1);
+    CHECK(snapshots.back().succession.repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackService - later commands do not overtake pending observer intents",
+            "[runtime][regression][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    bool queuedRepeat = false;
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          queuedRepeat = true;
+          fixture.commands().setRepeatMode(RepeatMode::All);
+        }
+      });
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    REQUIRE(queuedRepeat);
+
+    // This later admission must remain behind the observer command that is
+    // already waiting for its deferred executor turn.
+    fixture.commands().setRepeatMode(RepeatMode::One);
+    fixture.executor.drain();
+
+    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
+  }
+
+  TEST_CASE("PlaybackService - rejected drain scheduling preserves pending intent order",
+            "[runtime][regression][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<RejectingDeferExecutor>{};
+    bool queuedRepeat = false;
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          queuedRepeat = true;
+          fixture.executor.rejectNextDefer();
+          fixture.commands().setRepeatMode(RepeatMode::All);
+        }
+      });
+
+    // Model a spontaneous lower-layer settlement. Its publication admits the
+    // observer command, then the controlled executor rejects that command's
+    // first drain request.
+    fixture.succession.setShuffleMode(ShuffleMode::On);
+    REQUIRE_THROWS_AS(fixture.executor.drain(), Exception);
+    REQUIRE(queuedRepeat);
+    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::Off);
+
+    fixture.commands().setRepeatMode(RepeatMode::One);
+    fixture.executor.drain();
+
+    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
+  }
+
+  TEST_CASE("PlaybackService - queued intent exceptions do not strand later commands",
+            "[runtime][regression][playback][concurrency]")
+  {
+    // The arm must outlive the backend that borrows it.
+    auto arm = ThrowingVolumeArm{};
+    auto fixture = PlaybackServiceFixture<QueuedExecutor>{};
+    fixture.buildThreeTrackManualView();
+    fixture.application.executor.drain();
+    fixture.application.playbackBootstrap.addProvider(std::make_unique<ThrowingVolumeProvider>(arm));
+    fixture.application.executor.drain();
+    fixture.commands().setOutputDevice(audio::BackendId{"throwing_backend"},
+                                       audio::DeviceId{"throwing_device"},
+                                       audio::ProfileId{audio::kProfileShared});
+    fixture.application.executor.drain();
+    bool queuedCommands = false;
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        if (!queuedCommands && snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          queuedCommands = true;
+          fixture.commands().setVolume(0.25F);
+          fixture.commands().setRepeatMode(RepeatMode::All);
+        }
+      });
+    arm.arm();
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    REQUIRE(queuedCommands);
+    REQUIRE_THROWS_AS(fixture.application.executor.drain(), Exception);
+
+    fixture.application.executor.drain();
+
+    CHECK(fixture.playback().snapshot().succession.repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackService - a newer stop supersedes an observer-queued start",
+            "[runtime][unit][playback][concurrency]")
+  {
+    auto fixture = PlaybackServiceFixture<QueuedExecutor>{};
+    fixture.buildThreeTrackManualView();
+    fixture.application.executor.drain();
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    bool queuedCommands = false;
+    bool startAdmitted = false;
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        snapshots.push_back(snapshot);
+
+        if (!queuedCommands && snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          queuedCommands = true;
+          startAdmitted = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId).has_value();
+          fixture.commands().stop();
+        }
+      });
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    REQUIRE(startAdmitted);
+
+    fixture.application.executor.drain();
+
+    REQUIRE_FALSE(snapshots.empty());
+
+    for (auto const& snapshot : snapshots)
+    {
+      CHECK(snapshot.transport.nowPlaying.trackId != fixture.firstTrackId);
+      CHECK(snapshot.succession.currentTrackId != fixture.firstTrackId);
+    }
+
+    CHECK(fixture.playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(fixture.playback().snapshot().succession.currentTrackId == kInvalidTrackId);
+  }
+
+  TEST_CASE("PlaybackService - queued command failures carry their command identity",
+            "[runtime][unit][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto failures = std::vector<PlaybackFailureEvent>{};
+    bool queuedInvalidStart = false;
+    auto const failureSubscription = fixture.playback.events().onPlaybackFailure(
+      [&failures](PlaybackFailureEvent const& failure) { failures.push_back(failure); });
+    auto const snapshotSubscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        if (!queuedInvalidStart && snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          queuedInvalidStart = true;
+          REQUIRE(fixture.commands().startFromView(ViewId{999}, TrackId{999}));
+        }
+      });
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    auto const committedRevision = fixture.playback.snapshot().revision;
+    fixture.executor.drain();
+
+    REQUIRE(failures.size() == 1);
+    REQUIRE(failures.front().optCommandId);
+    CHECK(failures.front().optCommandId->value != 0);
+    CHECK(failures.front().revision == committedRevision);
+  }
+
+  TEST_CASE("PlaybackService - destruction drops a pending observer command", "[runtime][unit][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    std::size_t repeatChanges = 0;
+    auto const repeatSubscription = fixture.succession.onRepeatModeChanged(
+      [&repeatChanges](PlaybackSuccession::RepeatModeChanged const&) { ++repeatChanges; });
+    auto snapshotSubscription = fixture.playback.events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot)
+      {
+        if (snapshot.succession.shuffle == ShuffleMode::On)
+        {
+          fixture.commands().setRepeatMode(RepeatMode::All);
+        }
+      });
+
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    REQUIRE(fixture.executor.queuedCount() != 0);
+
+    snapshotSubscription.reset();
+    fixture.playbackPtr.reset();
+    fixture.executor.drain();
+
+    CHECK(repeatChanges == 0);
   }
 } // namespace ao::rt::test

@@ -28,6 +28,8 @@ namespace ao::rt
    * synchronous admission result, and its asynchronous outcome is observed on
    * the failure event and the next snapshot. Session save, restore, and discard
    * keep call-level results on `AppRuntime` because their callers act on them.
+   * Once shutdown closes admission, void commands are ignored and a view start
+   * returns `InvalidState`.
    */
   class PlaybackCommands
   {

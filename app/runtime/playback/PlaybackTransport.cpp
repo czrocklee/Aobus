@@ -413,27 +413,6 @@ namespace ao::rt
 
   struct PlaybackTransport::Impl final
   {
-    class [[nodiscard]] SuccessionMutationGrantScope final
-    {
-    public:
-      explicit SuccessionMutationGrantScope(Impl& owner) noexcept
-        : _owner{owner}, _previous{owner.successionMutationGranted}
-      {
-        _owner.successionMutationGranted = true;
-      }
-
-      ~SuccessionMutationGrantScope() { _owner.successionMutationGranted = _previous; }
-
-      SuccessionMutationGrantScope(SuccessionMutationGrantScope const&) = delete;
-      SuccessionMutationGrantScope& operator=(SuccessionMutationGrantScope const&) = delete;
-      SuccessionMutationGrantScope(SuccessionMutationGrantScope&&) = delete;
-      SuccessionMutationGrantScope& operator=(SuccessionMutationGrantScope&&) = delete;
-
-    private:
-      Impl& _owner;
-      bool _previous = false;
-    };
-
     struct PreparingEvent final
     {};
     struct StartedEvent final
@@ -468,32 +447,6 @@ namespace ao::rt
                                        PlaybackTransport::RevealTrackRequested,
                                        PlaybackTransport::SeekUpdate,
                                        PlaybackFailure>;
-
-    class [[nodiscard]] OutboundEventBatchScope final
-    {
-    public:
-      explicit OutboundEventBatchScope(Impl& owner)
-        : _owner{owner}, _ownsDrain{!owner.drainingOutboundEvents}
-      {
-        owner.drainingOutboundEvents = true;
-      }
-      // All event alternatives are nothrow-movable and observer calls are contained.
-      ~OutboundEventBatchScope()
-      {
-        if (_ownsDrain)
-        {
-          _owner.drainOutboundEvents();
-        }
-      }
-      OutboundEventBatchScope(OutboundEventBatchScope const&) = delete;
-      OutboundEventBatchScope& operator=(OutboundEventBatchScope const&) = delete;
-      OutboundEventBatchScope(OutboundEventBatchScope&&) = delete;
-      OutboundEventBatchScope& operator=(OutboundEventBatchScope&&) = delete;
-
-    private:
-      Impl& _owner;
-      bool _ownsDrain = false;
-    };
 
     struct PreparedPlaybackRequest final
     {
@@ -550,8 +503,6 @@ namespace ao::rt
     std::uint64_t nextPreparedTokenValue = 1;
     std::deque<OutboundEvent> outboundEvents;
     bool drainingOutboundEvents = false;
-    std::atomic_bool outboundDrainActive{false};
-    bool successionMutationGranted = false;
     std::atomic_bool closing{false};
     async::Signal<> preparingSignal;
     async::Signal<> startedSignal;
@@ -570,7 +521,6 @@ namespace ao::rt
     std::shared_ptr<PlaybackFailureRecoveryHandler> playbackFailureRecoveryHandlerPtr;
 
     bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
-    bool blocksTransportMutation() const noexcept { return drainingOutboundEvents && !successionMutationGranted; }
 
     template<typename Publish>
     void publishObserverSafely(std::string_view const eventName, Publish&& publish) noexcept
@@ -611,7 +561,6 @@ namespace ao::rt
       }
 
       drainingOutboundEvents = true;
-      outboundDrainActive.store(true, std::memory_order_release);
       drainOutboundEvents();
     }
 
@@ -698,7 +647,6 @@ namespace ao::rt
       }
 
       drainingOutboundEvents = false;
-      outboundDrainActive.store(false, std::memory_order_release);
     }
 
     void disconnectSignals()
@@ -968,9 +916,8 @@ namespace ao::rt
       return currentSessionState();
     }
 
-    Result<> restoreDeferredPlayback(PlaybackTransport::PlaybackRequest request,
-                                     PlaybackTransportSessionState const& session,
-                                     std::move_only_function<void(std::chrono::milliseconds) noexcept> beforePublish)
+    Result<std::chrono::milliseconds> restoreDeferredPlayback(PlaybackTransport::PlaybackRequest request,
+                                                              PlaybackTransportSessionState const& session)
     {
       if (isClosing())
       {
@@ -979,7 +926,7 @@ namespace ao::rt
 
       if (auto const applied = applySessionVolumeAndMute(session); !applied)
       {
-        return applied;
+        return std::unexpected{applied.error()};
       }
 
       auto const audioBarrier = playerPtr->stopWithBarrier();
@@ -1000,20 +947,7 @@ namespace ao::rt
       state.duration = request.input.duration;
       state.transport = audio::Transport::Idle;
       rememberRestorableSession();
-
-      auto const outboundBatch = OutboundEventBatchScope{*this};
-
-      if (beforePublish)
-      {
-        beforePublish(restoredElapsed);
-      }
-
-      announceNowPlaying(request, session.sourceListId);
-      enqueueOutbound(
-        PlaybackTransport::SeekUpdate{.elapsed = restoredElapsed, .mode = PlaybackTransport::SeekMode::Final});
-      enqueueOutbound(VolumeChangedEvent{.value = state.volume.level});
-      enqueueOutbound(MutedChangedEvent{.value = state.volume.muted});
-      return {};
+      return restoredElapsed;
     }
 
     Result<> applySessionVolumeAndMute(PlaybackTransportSessionState const& session) const
@@ -1406,7 +1340,7 @@ namespace ao::rt
   {
     gsl_Expects(_implPtr != nullptr);
     shutdown();
-    gsl_Expects(!_implPtr->outboundDrainActive.load(std::memory_order_acquire));
+    gsl_Expects(!_implPtr->drainingOutboundEvents);
   }
 
   void PlaybackTransport::shutdown() noexcept
@@ -1541,19 +1475,33 @@ namespace ao::rt
     impl->playbackFailureRecoveryHandlerPtr.reset();
   }
 
-  bool PlaybackTransport::isPublishingAcceptedStart() const
-  {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-    return impl->drainingOutboundEvents;
-  }
-
   Result<PlaybackStartReceipt> PlaybackTransport::playSuccessionTrack(TrackId const trackId, ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-    auto const privilege = Impl::SuccessionMutationGrantScope{*impl};
-    return playTrack(trackId, sourceListId);
+
+    try
+    {
+      auto const requestResult = playbackRequestForTrack(impl->library, trackId);
+
+      if (!requestResult)
+      {
+        return std::unexpected{requestResult.error()};
+      }
+
+      auto preparedResult = stagePlayback(*requestResult, sourceListId);
+
+      if (!preparedResult)
+      {
+        return std::unexpected{preparedResult.error()};
+      }
+
+      return commitStagedPlayback(std::move(*preparedResult), false);
+    }
+    catch (std::exception const& ex)
+    {
+      return makeError(Error::Code::Generic, ex.what());
+    }
   }
 
   Result<PlaybackTransport::SuccessionPreparedNextReceipt> PlaybackTransport::prepareSuccessionNext(
@@ -1562,7 +1510,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-    auto const privilege = Impl::SuccessionMutationGrantScope{*impl};
 
     try
     {
@@ -1585,7 +1532,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-    auto const privilege = Impl::SuccessionMutationGrantScope{*impl};
     return clearPreparedNext();
   }
 
@@ -1593,7 +1539,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-    auto const privilege = Impl::SuccessionMutationGrantScope{*impl};
     return stop();
   }
 
@@ -1623,11 +1568,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
 
     impl->ensureReady();
 
@@ -1669,13 +1609,14 @@ namespace ao::rt
 
   Result<PlaybackStartReceipt> PlaybackTransport::commitPlayback(PreparedPlaybackStart&& preparedStart)
   {
+    return commitStagedPlayback(std::move(preparedStart), true);
+  }
+
+  Result<PlaybackStartReceipt> PlaybackTransport::commitStagedPlayback(PreparedPlaybackStart&& preparedStart,
+                                                                       bool const announce)
+  {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
 
     if (!preparedStart._implPtr)
     {
@@ -1713,9 +1654,12 @@ namespace ao::rt
     impl->publishCurrentRequest(
       preparedImplPtr->request, preparedImplPtr->sourceListId, commitResult->itemId, commitResult->generation);
     impl->refreshState();
-    auto const outboundBatch = Impl::OutboundEventBatchScope{*impl};
-    impl->enqueueOutbound(Impl::StartedEvent{});
-    impl->announceNowPlaying(preparedImplPtr->request, preparedImplPtr->sourceListId);
+
+    if (announce)
+    {
+      impl->enqueueOutbound(Impl::StartedEvent{});
+      impl->announceNowPlaying(preparedImplPtr->request, preparedImplPtr->sourceListId);
+    }
 
     return PlaybackStartReceipt{
       .trackId = preparedImplPtr->request.item.trackId,
@@ -1731,11 +1675,6 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
-
     auto preparedResult = stagePlayback(request, sourceListId, initialOffset);
 
     if (!preparedResult)
@@ -1750,11 +1689,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
 
     try
     {
@@ -1779,11 +1713,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
 
     impl->ensureReady();
 
@@ -1844,11 +1773,6 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
-
     try
     {
       auto const requestResult = playbackRequestForTrack(impl->library, trackId);
@@ -1871,11 +1795,6 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksTransportMutation())
-    {
-      return std::nullopt;
-    }
-
     return impl->clearPreparedNext();
   }
 
@@ -1883,11 +1802,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return;
-    }
 
     impl->playerPtr->pause();
 
@@ -1904,11 +1818,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return;
-    }
 
     // A deferred resume token only fires when we still own the idle state it
     // was armed against; an intervening player transition (e.g. an async
@@ -1938,11 +1847,6 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksTransportMutation())
-    {
-      return {};
-    }
-
     impl->refreshState();
     impl->rememberRestorableSession();
     auto const audioBarrier = impl->playerPtr->stopWithBarrier();
@@ -1959,7 +1863,6 @@ namespace ao::rt
     }
 
     impl->refreshState();
-    auto const outboundBatch = Impl::OutboundEventBatchScope{*impl};
     impl->enqueueOutbound(Impl::StoppedEvent{});
     impl->enqueueOutbound(Impl::IdleEvent{});
     impl->enqueueOutbound(PlaybackTransport::NowPlayingChanged{
@@ -1973,11 +1876,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return;
-    }
 
     if (mode == SeekMode::Final)
     {
@@ -2018,11 +1916,6 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksTransportMutation())
-    {
-      return;
-    }
-
     std::ignore = impl->clearPreparedNext();
 
     if (auto const result = impl->playerPtr->setOutputDevice(backendId, deviceId, profileId); !result)
@@ -2048,11 +1941,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return;
-    }
 
     auto const normalizedVolume = normalizePlaybackVolume(volume);
 
@@ -2080,11 +1968,6 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return;
-    }
 
     if (auto const result = impl->playerPtr->setMuted(muted); !result)
     {
@@ -2128,17 +2011,11 @@ namespace ao::rt
     return impl->snapshotSessionState();
   }
 
-  Result<> PlaybackTransport::restorePlaybackTransport(
-    PlaybackTransportSessionState const& session,
-    std::move_only_function<void(std::chrono::milliseconds) noexcept> beforePublish)
+  Result<std::chrono::milliseconds> PlaybackTransport::restorePlaybackTransport(
+    PlaybackTransportSessionState const& session)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksTransportMutation())
-    {
-      return makeError(Error::Code::InvalidState, "Playback start publication is in progress");
-    }
 
     impl->refreshState();
     auto normalizedSession = session;
@@ -2160,14 +2037,7 @@ namespace ao::rt
         return std::unexpected{requestResult.error()};
       }
 
-      if (auto const restored =
-            impl->restoreDeferredPlayback(std::move(*requestResult), normalizedSession, std::move(beforePublish));
-          !restored)
-      {
-        return restored;
-      }
-
-      return {};
+      return impl->restoreDeferredPlayback(std::move(*requestResult), normalizedSession);
     }
     catch (std::exception const& ex)
     {

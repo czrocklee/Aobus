@@ -11,11 +11,10 @@ summary: Enumerates the coherent PlaybackService surface — its committed snaps
 
 This reference owns the exact public types of the coherent playback boundary introduced by [RFC 0005](../../rfc/0005-coherent-playback-boundary.md): `PlaybackService`, its `PlaybackCommands` and `PlaybackEvents` roles, and the immutable `PlaybackSnapshot` plus revisioned event payloads.
 
-It is the stage-2 surface.
-`PlaybackService` currently adapts the runtime-internal `PlaybackTransport` and `PlaybackSuccession` owners, while `AppRuntime` exposes only the public service to consumers.
+It is the RFC 0005 Stage 3 surface.
+`PlaybackService` is the public commit authority over the runtime-internal `PlaybackTransport` and `PlaybackSuccession` owners, while `AppRuntime` exposes only the public service to consumers.
 Those internal headers live under `app/runtime/playback/` and repository guardrails reject their use by public runtime headers, UIModel, and frontends.
-Later RFC 0005 stages move commit authority into a coordinator.
-The exact fields below are current; their revision-commit semantics tighten when the coordinator lands, as noted in [validation rules](#validation-rules).
+The service's private implementation owns intent ordering and revision commits; there is no separate coordinator type or public snapshot-source object.
 
 ## Code boundary
 
@@ -104,7 +103,7 @@ Full snapshot equality includes `revision`, but likewise excludes `elapsed` from
 
 | Member | Signature | Meaning |
 |---|---|---|
-| `onSnapshot(handler)` | `async::Subscription` | Fires once per accepted transition with the new snapshot. |
+| `onSnapshot(handler)` | `async::Subscription` | Fires once per content-changing logical commit with the new snapshot. |
 | `onPlaybackFailure(handler)` | `async::Subscription` | Delivers `PlaybackFailureEvent`. |
 | `onSeekPreview(handler)` | `async::Subscription` | Delivers `PlaybackSeekPreview`. |
 | `onRevealTrackRequested(handler)` | `async::Subscription` | Delivers the temporary `PlaybackRevealTrackRequest` navigation intent retained until RFC 0005 stage 6. |
@@ -118,7 +117,7 @@ The borrowed reference returned by `snapshot()` must not be retained across a co
 | Field | Type | Meaning |
 |---|---|---|
 | `revision` | `PlaybackRevision` | Application revision current when the failure was observed. |
-| `optCommandId` | `std::optional<PlaybackCommandId>` | Originating command once preparation is asynchronous; absent in the stage-2 adapter. |
+| `optCommandId` | `std::optional<PlaybackCommandId>` | Originating command when the failure remains correlated to an admitted service intent; absent for an uncorrelated lower asynchronous failure. |
 | `failure` | `PlaybackFailure` | The typed failure payload. |
 
 #### `PlaybackSeekPreview`
@@ -154,16 +153,21 @@ The borrowed reference returned by `snapshot()` must not be retained across a co
 
 `PlaybackSeekMode` is `Final` or `Preview`.
 Session save, restore, and discard keep their call-level `Result` on `AppRuntime`; reveal is temporary and moves to an explicit navigation intent in RFC 0005 stage 6.
+Every accepted command receives an internal intent generation and a public command id.
+When a command is issued from a playback event handler, admission returns on that handler stack but execution occurs in a later executor turn.
 
 ## Validation rules
 
 - Every method is callback-executor-affine; handlers run on the executor thread and must defer owner teardown to a later turn.
-- While active, `succession.currentTrackId` equals `transport.nowPlaying.trackId`; an idle transport has no active succession subject.
+- While succession is active, `succession.currentTrackId` equals `transport.nowPlaying.trackId`. Idle transport may retain that coherent subject as a deferred restored session; an idle snapshot with no transport subject has no active succession subject.
 - The public surface has no track/list-only start, stage, commit, or prepared-next mutation; every public start captures succession context through `startFromView`.
 - `revision` identifies boundary-committed state, advances only when semantic content changes, and is strictly monotonic. A pending spontaneous lower-layer change is not visible through `snapshot()` until its deferred publication commits.
+- Revision state advances for semantic commits even when no snapshot observer is connected.
 - `elapsed` may be re-sampled while composing a semantic transition, but elapsed drift by itself does not advance `revision`, `positionRevision`, or `finalSeekRevision`.
 - Final seeks advance both position identities. Subject changes advance only `positionRevision`; seek previews advance neither.
-- Stage-2 publication guarantee: one command issued through `PlaybackCommands` publishes at most one snapshot, and spontaneous lower-layer changes coalesce into one publication per executor turn. The stronger "one logical commit, one revision" guarantee is delivered when the coordinator replaces this adapter.
+- One logical commit publishes at most one snapshot and advances at most one revision; a no-op publishes none. Spontaneous lower-layer changes already accepted in one executor turn coalesce into one external-settlement commit.
+- A command issued from any `PlaybackEvents` handler executes in a later service turn and cannot alter the event or snapshot currently being delivered.
+- A newer start, next, previous, restore, stop, clear, output-route change, or shutdown invalidates an older queued start/navigation intent; orthogonal quick commands remain ordered rather than being discarded.
 
 ## Compatibility and versioning
 
@@ -173,15 +177,16 @@ Observable behavior and its invariants are owned by the playback specifications;
 ## Implementation authority
 
 - [`PlaybackService.h`](../../../app/include/ao/rt/playback/PlaybackService.h), [`PlaybackCommands.h`](../../../app/include/ao/rt/playback/PlaybackCommands.h), [`PlaybackEvents.h`](../../../app/include/ao/rt/playback/PlaybackEvents.h), and [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h) declare the surface.
-- [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) implements the stage-2 adapter and composition bootstrap.
+- [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) implements intent admission, supersession, coherent commits, revisioned publication, and composition bootstrap.
 
 ## Test authority
 
-- [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) locks public-surface closure, snapshot coherence, revision and position-identity monotonicity, correlated output/readiness/quality, elapsed-insensitive semantic equality, single-publication-per-command, and end-of-turn coalescing.
+- [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) locks public-surface closure, snapshot coherence, revision and position-identity monotonicity, no-subscriber revision advancement, correlated output/readiness/quality, elapsed-insensitive semantic equality, observer deferral, supersession, failure correlation, pending-intent lifetime, and end-of-turn coalescing.
 
 ## Related documents
 
 - [Playback architecture](../../architecture/playback.md)
+- [Playback application commits](../../spec/playback/application-commit.md)
 - [RFC 0005: Coherent playback application boundary](../../rfc/0005-coherent-playback-boundary.md)
 - [Playback session state](session-state.md)
 - [Audio quality surface](quality-surface.md)

@@ -197,9 +197,9 @@ namespace ao::rt
 
     if (_restorePublicationPending)
     {
-      // AppRuntime commits the lower-layer restore as one bracketed snapshot
-      // after the restore transaction returns. Adopt that publication as the
-      // restored baseline without treating it as a new persistence intent.
+      // AppRuntime commits the lower-layer restore as one synchronous intent
+      // snapshot after the restore transaction returns. Adopt that publication
+      // as the restored baseline without treating it as a new persistence intent.
       _restorePublicationPending = false;
       _committedIntentPosition = snapshot.transport.elapsed;
       return;
@@ -548,41 +548,38 @@ namespace ao::rt
       auto restored = [&] -> Result<>
       {
         auto const restoring = RestoreIntentTransaction{_restoring};
-        return _playbackTransport.restorePlaybackTransport(
-          transport,
-          [this,
-           sessionPtr = std::move(*candidate),
-           shuffleMode = loaded.shuffleMode,
-           repeatMode = loaded.repeatMode,
-           currentTrackId,
-           sourceListId = launchSpec.sourceListId,
-           &restoredState,
-           &loaded,
-           &normalized](std::chrono::milliseconds const elapsed) mutable noexcept
-          {
-            _restorePublicationPending = true;
-            _committedIntentPosition = elapsed;
-            _succession.commitPlaybackSessionRestore(std::move(sessionPtr), shuffleMode, repeatMode, elapsed);
+        auto restoredElapsed = _playbackTransport.restorePlaybackTransport(transport);
 
-            auto const& successionState = _succession.state();
-            auto const& playbackState = _playbackTransport.state();
-            restoredState.positionMs =
-              static_cast<std::uint64_t>(std::max(elapsed, std::chrono::milliseconds{0}).count());
-            auto const coherentCurrent = successionState.currentTrackId == currentTrackId &&
-                                         successionState.sourceListId == sourceListId &&
-                                         playbackState.nowPlaying.trackId == currentTrackId &&
-                                         playbackState.nowPlaying.sourceListId == sourceListId;
-            normalized = normalized || !coherentCurrent || restoredState != loaded;
-            _sessionDiscarded = false;
-            _volumeIntent = playbackState.volume.level;
-            _mutedIntent = playbackState.volume.muted;
-            _sessionRevision.resetClean();
+        if (!restoredElapsed)
+        {
+          return std::unexpected{restoredElapsed.error()};
+        }
 
-            if (normalized && _sessionRevision.markDirty())
-            {
-              publishDirtySafely(_dirtySignal);
-            }
-          });
+        _restorePublicationPending = true;
+        _committedIntentPosition = *restoredElapsed;
+        _succession.commitPlaybackSessionRestore(
+          std::move(*candidate), loaded.shuffleMode, loaded.repeatMode, *restoredElapsed);
+
+        auto const& successionState = _succession.state();
+        auto const& playbackState = _playbackTransport.state();
+        restoredState.positionMs =
+          static_cast<std::uint64_t>(std::max(*restoredElapsed, std::chrono::milliseconds{0}).count());
+        auto const coherentCurrent = successionState.currentTrackId == currentTrackId &&
+                                     successionState.sourceListId == launchSpec.sourceListId &&
+                                     playbackState.nowPlaying.trackId == currentTrackId &&
+                                     playbackState.nowPlaying.sourceListId == launchSpec.sourceListId;
+        normalized = normalized || !coherentCurrent || restoredState != loaded;
+        _sessionDiscarded = false;
+        _volumeIntent = playbackState.volume.level;
+        _mutedIntent = playbackState.volume.muted;
+        _sessionRevision.resetClean();
+
+        if (normalized && _sessionRevision.markDirty())
+        {
+          publishDirtySafely(_dirtySignal);
+        }
+
+        return {};
       }();
 
       if (!restored)

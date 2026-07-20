@@ -28,7 +28,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackMode.h>
-#include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
@@ -380,7 +379,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSuccession - accepted launch contains synchronous reentrant commands and observer throws",
+  TEST_CASE("PlaybackSuccession - accepted launch contains observer exceptions and completes publication",
             "[runtime][regression][playback-succession][launch]")
   {
     auto fixture = PlaybackSuccessionFixture{};
@@ -389,50 +388,22 @@ namespace ao::rt::test
     auto& playbackTransport = fixture.playbackTransport;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.firstTrackId));
 
-    bool callbackEntered = false;
     bool changedObserverEntered = false;
-    bool reentrantLaunchAccepted = false;
-    auto reentrantLaunchError = Error::Code::Generic;
-    auto reentrantStopBarrier = PreparedCancellationBarrier{};
+    auto trailingObserverTrackId = kInvalidTrackId;
     auto changedSubscription = succession.onChanged(
       [&](PlaybackSuccessionState const&)
       {
         changedObserverEntered = true;
         throwException<Exception>("scripted accepted succession observer failure");
       });
-    auto const startedSubscription = playbackTransport.onStarted(
-      [&]
-      {
-        if (callbackEntered)
-        {
-          return;
-        }
-
-        callbackEntered = true;
-        succession.next();
-        auto const launch = succession.playFromView(fixture.viewId, fixture.secondTrackId);
-        reentrantLaunchAccepted = launch.has_value();
-
-        if (!launch)
-        {
-          reentrantLaunchError = launch.error().code;
-        }
-
-        reentrantStopBarrier = playbackTransport.stop();
-        succession.clear();
-        succession.setShuffleMode(ShuffleMode::On);
-        succession.setRepeatMode(RepeatMode::All);
-        throwException<Exception>("scripted accepted-launch observer failure");
-      });
+    auto trailingSubscription = succession.onChanged([&](PlaybackSuccessionState const& state)
+                                                     { trailingObserverTrackId = state.currentTrackId; });
 
     auto const launched = succession.playFromView(fixture.viewId, fixture.thirdTrackId);
 
     REQUIRE(launched);
-    CHECK(callbackEntered);
     CHECK(changedObserverEntered);
-    CHECK_FALSE(reentrantLaunchAccepted);
-    CHECK(reentrantLaunchError == Error::Code::InvalidState);
-    CHECK(reentrantStopBarrier.generation == 0);
+    CHECK(trailingObserverTrackId == fixture.thirdTrackId);
     CHECK(succession.state().sourceState == PlaybackSuccessionSourceState::Live);
     CHECK(succession.state().currentTrackId == fixture.thirdTrackId);
     CHECK(succession.state().shuffle == ShuffleMode::Off);
@@ -441,6 +412,7 @@ namespace ao::rt::test
     CHECK(playbackTransport.state().nowPlaying.trackId == succession.state().currentTrackId);
 
     changedSubscription.reset();
+    trailingSubscription.reset();
     succession.previous();
 
     CHECK(succession.state().currentTrackId == fixture.secondTrackId);

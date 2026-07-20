@@ -84,6 +84,7 @@ namespace ao::rt
     {
       std::ignore = playbackSessionPersistencePtr->shutdown();
       // Join playback callback producers while every consumer is still alive.
+      playbackPtr->shutdown();
       playbackBootstrap.shutdown();
     }
   };
@@ -135,9 +136,20 @@ namespace ao::rt
 
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
-    auto const commandBracket = PlaybackService::CommandBracket{*_implPtr->playbackPtr};
-    _implPtr->playbackSessionPersistencePtr->start();
-    auto restored = _implPtr->playbackSessionPersistencePtr->restore();
+    auto restored = Result<PlaybackSessionPersistenceRestoreResult>{};
+    auto const accepted = _implPtr->playbackPtr->runSynchronousIntent(
+      [this, &restored]
+      {
+        _implPtr->playbackSessionPersistencePtr->start();
+        restored = _implPtr->playbackSessionPersistencePtr->restore();
+        return restored && restored->restored;
+      });
+
+    if (!accepted)
+    {
+      return makeError(
+        Error::Code::InvalidState, "Cannot restore playback while another playback intent is active or pending");
+    }
 
     if (!restored)
     {

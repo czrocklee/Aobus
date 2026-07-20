@@ -31,8 +31,6 @@
 #include <ao/rt/ViewService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -223,86 +221,6 @@ namespace ao::rt
       ProjectionAnchor anchor;
     };
 
-    class [[nodiscard]] AcceptanceTransaction final
-    {
-    public:
-      explicit AcceptanceTransaction(Impl& owner) noexcept
-        : _owner{owner}
-      {
-        _owner.acceptanceDepth.fetch_add(1, std::memory_order_acq_rel);
-      }
-
-      ~AcceptanceTransaction() { _owner.acceptanceDepth.fetch_sub(1, std::memory_order_acq_rel); }
-
-      AcceptanceTransaction(AcceptanceTransaction const&) = delete;
-      AcceptanceTransaction& operator=(AcceptanceTransaction const&) = delete;
-      AcceptanceTransaction(AcceptanceTransaction&&) = delete;
-      AcceptanceTransaction& operator=(AcceptanceTransaction&&) = delete;
-
-    private:
-      Impl& _owner;
-    };
-
-    class [[nodiscard]] ObserverPublicationScope final
-    {
-    public:
-      explicit ObserverPublicationScope(Impl& owner) noexcept
-        : _owner{owner}
-      {
-        _owner.observerPublicationDepth.fetch_add(1, std::memory_order_acq_rel);
-      }
-
-      ~ObserverPublicationScope() { _owner.observerPublicationDepth.fetch_sub(1, std::memory_order_acq_rel); }
-
-      ObserverPublicationScope(ObserverPublicationScope const&) = delete;
-      ObserverPublicationScope& operator=(ObserverPublicationScope const&) = delete;
-      ObserverPublicationScope(ObserverPublicationScope&&) = delete;
-      ObserverPublicationScope& operator=(ObserverPublicationScope&&) = delete;
-
-    private:
-      Impl& _owner;
-    };
-
-    class [[nodiscard]] SessionInstallationTransaction final
-    {
-    public:
-      explicit SessionInstallationTransaction(Impl& owner) noexcept
-        : _owner{owner}
-      {
-        ++_owner.sessionInstallationDepth;
-      }
-
-      ~SessionInstallationTransaction() { --_owner.sessionInstallationDepth; }
-
-      SessionInstallationTransaction(SessionInstallationTransaction const&) = delete;
-      SessionInstallationTransaction& operator=(SessionInstallationTransaction const&) = delete;
-      SessionInstallationTransaction(SessionInstallationTransaction&&) = delete;
-      SessionInstallationTransaction& operator=(SessionInstallationTransaction&&) = delete;
-
-    private:
-      Impl& _owner;
-    };
-
-    class [[nodiscard]] RestoreTransaction final
-    {
-    public:
-      explicit RestoreTransaction(Impl& owner) noexcept
-        : _owner{owner}
-      {
-        ++_owner.restoreDepth;
-      }
-
-      ~RestoreTransaction() { --_owner.restoreDepth; }
-
-      RestoreTransaction(RestoreTransaction const&) = delete;
-      RestoreTransaction& operator=(RestoreTransaction const&) = delete;
-      RestoreTransaction(RestoreTransaction&&) = delete;
-      RestoreTransaction& operator=(RestoreTransaction&&) = delete;
-
-    private:
-      Impl& _owner;
-    };
-
     Impl(async::Executor& executor,
          ViewService& views,
          TrackSourceCache& sources,
@@ -352,10 +270,6 @@ namespace ao::rt
     }
 
     bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
-    bool isAcceptingStart() const noexcept { return acceptanceDepth.load(std::memory_order_acquire) != 0; }
-    bool isInstallingSession() const noexcept { return sessionInstallationDepth.load(std::memory_order_acquire) != 0; }
-    bool isRestoringSession() const noexcept { return restoreDepth.load(std::memory_order_acquire) != 0; }
-    bool blocksSuccessionCommand() const { return isAcceptingStart() || transport.isPublishingAcceptedStart(); }
 
     static PlaybackSuccessionSourceState sourceStateFor(PlaybackCursorSession const* session) noexcept
     {
@@ -376,7 +290,7 @@ namespace ao::rt
              lhs.optResolvedSuccessor == rhs.optResolvedSuccessor;
     }
 
-    void synchronizeState(bool const containObserverExceptions = false)
+    void synchronizeState()
     {
       auto next = PlaybackSuccessionState{
         .sourceState = sourceStateFor(sessionPtr.get()),
@@ -407,16 +321,7 @@ namespace ao::rt
 
       if (semanticChanged && !isClosing())
       {
-        auto const publication = ObserverPublicationScope{*this};
-
-        if (containObserverExceptions)
-        {
-          publishSequenceObserverSafely("state-changed", [this] { changedSignal.emit(state); });
-        }
-        else
-        {
-          changedSignal.emit(state);
-        }
+        publishSequenceObserverSafely("state-changed", [this] { changedSignal.emit(state); });
       }
     }
 
@@ -435,21 +340,11 @@ namespace ao::rt
       };
     }
 
-    void notifyPersistenceIntentChanged(bool const containObserverExceptions = false)
+    void notifyPersistenceIntentChanged()
     {
-      if (!isRestoringSession() && !isClosing())
+      if (!isClosing())
       {
-        auto const publication = ObserverPublicationScope{*this};
-
-        if (containObserverExceptions)
-        {
-          publishSequenceObserverSafely(
-            "persistence-intent-changed", [this] { persistenceIntentChangedSignal.emit(); });
-        }
-        else
-        {
-          persistenceIntentChangedSignal.emit();
-        }
+        publishSequenceObserverSafely("persistence-intent-changed", [this] { persistenceIntentChangedSignal.emit(); });
       }
     }
 
@@ -571,7 +466,7 @@ namespace ao::rt
 
     void handleProjectionBatch(PlaybackCursor::MutationEffect const effect, bool const sourceInvalidated)
     {
-      if (!sessionPtr || isInstallingSession())
+      if (!sessionPtr)
       {
         return;
       }
@@ -646,7 +541,7 @@ namespace ao::rt
 
         if (auto const effect = session.refreshSemanticState(); effect.semanticChanged)
         {
-          synchronizeState(blocksSuccessionCommand());
+          synchronizeState();
         }
 
         optSuccessor = session.cursor().semanticTuple().optResolvedSuccessor;
@@ -667,7 +562,6 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "No active playback sequence");
       }
 
-      auto const acceptance = AcceptanceTransaction{*this};
       auto receipt = transport.playSuccessionTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
 
       if (!receipt)
@@ -691,8 +585,8 @@ namespace ao::rt
       resetFailureState();
       restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
-      synchronizeState(true);
-      notifyPersistenceIntentChanged(true);
+      synchronizeState();
+      notifyPersistenceIntentChanged();
       return {};
     }
 
@@ -910,7 +804,7 @@ namespace ao::rt
 
     void handleNowPlayingChanged(PlaybackTransport::NowPlayingChanged const& event)
     {
-      if (isAcceptingStart() || !sessionPtr || event.trackId == kInvalidTrackId)
+      if (!sessionPtr || event.trackId == kInvalidTrackId)
       {
         return;
       }
@@ -936,8 +830,8 @@ namespace ao::rt
       resetFailureState();
       restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
-      synchronizeState(blocksSuccessionCommand());
-      notifyPersistenceIntentChanged(blocksSuccessionCommand());
+      synchronizeState();
+      notifyPersistenceIntentChanged();
     }
 
     PlaybackFailureDisposition handlePlaybackFailure(PlaybackFailure const& failure)
@@ -1009,7 +903,7 @@ namespace ao::rt
 
       if (effect.semanticChanged)
       {
-        synchronizeState(blocksSuccessionCommand());
+        synchronizeState();
       }
     }
 
@@ -1061,7 +955,7 @@ namespace ao::rt
       startedSubscription = transport.onStarted(
         [this]
         {
-          if (!isClosing() && sessionPtr && !isAcceptingStart())
+          if (!isClosing() && sessionPtr)
           {
             restartDeadline.resume(transport.elapsed());
           }
@@ -1134,11 +1028,7 @@ namespace ao::rt
     std::uint64_t nextSkipReportKey = 0;
     std::size_t skippedFailureCount = 0;
     std::atomic_bool closing{false};
-    std::atomic_size_t acceptanceDepth{0};
-    std::atomic_size_t observerPublicationDepth{0};
-    std::atomic_size_t sessionInstallationDepth{0};
     bool stoppingTransport = false;
-    std::atomic_size_t restoreDepth{0};
   };
 
   PlaybackSuccession::PlaybackSuccession(async::Executor& executor,
@@ -1153,24 +1043,12 @@ namespace ao::rt
     _implPtr->start();
   }
 
-  PlaybackSuccession::~PlaybackSuccession()
-  {
-    gsl_Expects(_implPtr != nullptr);
-    gsl_Expects(_implPtr->acceptanceDepth.load(std::memory_order_acquire) == 0);
-    gsl_Expects(_implPtr->observerPublicationDepth.load(std::memory_order_acquire) == 0);
-  }
+  PlaybackSuccession::~PlaybackSuccession() = default;
 
   Result<> PlaybackSuccession::playFromView(ViewId const viewId, TrackId const startTrackId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksSuccessionCommand())
-    {
-      return makeError(Error::Code::InvalidState, "Playback sequence is accepting another start");
-    }
-
-    auto const acceptance = Impl::AcceptanceTransaction{*impl};
 
     auto launchSpec = impl->views.capturePlaybackLaunchSpec(viewId);
 
@@ -1211,7 +1089,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback sequence closed during preparation");
     }
 
-    auto receipt = impl->transport.commitPlayback(std::move(*preparedStart));
+    auto receipt = impl->transport.commitStagedPlayback(std::move(*preparedStart), false);
 
     if (!receipt)
     {
@@ -1231,16 +1109,13 @@ namespace ao::rt
 
     impl->sessionPtr = std::move(*candidateSession);
 
-    {
-      auto const installation = Impl::SessionInstallationTransaction{*impl};
-      impl->startObservingCurrentSession();
-    }
+    impl->startObservingCurrentSession();
 
     impl->resetFailureState();
     impl->restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
     impl->reprepareNext(false);
-    impl->synchronizeState(true);
-    impl->notifyPersistenceIntentChanged(true);
+    impl->synchronizeState();
+    impl->notifyPersistenceIntentChanged();
     return {};
   }
 
@@ -1258,31 +1133,31 @@ namespace ao::rt
     return impl->state.hasPrevious;
   }
 
-  void PlaybackSuccession::next()
+  bool PlaybackSuccession::next()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSuccessionCommand() || !impl->sessionPtr)
+    if (!impl->sessionPtr)
     {
-      return;
+      return false;
     }
 
     impl->resetFailureState();
-    std::ignore = impl->attemptNavigation(impl->sessionPtr->cursor().resolveNext(),
-                                          ShuffleHistory::TransitionOrigin::Forward,
-                                          Impl::NavigationDirection::Forward,
-                                          true);
+    return impl->attemptNavigation(impl->sessionPtr->cursor().resolveNext(),
+                                   ShuffleHistory::TransitionOrigin::Forward,
+                                   Impl::NavigationDirection::Forward,
+                                   true);
   }
 
-  void PlaybackSuccession::previous()
+  bool PlaybackSuccession::previous()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSuccessionCommand() || !impl->sessionPtr)
+    if (!impl->sessionPtr)
     {
-      return;
+      return false;
     }
 
     impl->resetFailureState();
@@ -1298,22 +1173,17 @@ namespace ao::rt
       }
     }
 
-    std::ignore = impl->attemptNavigation(resolution,
-                                          shufflePrevious ? ShuffleHistory::TransitionOrigin::HistoryPrevious
-                                                          : ShuffleHistory::TransitionOrigin::SequentialPrevious,
-                                          Impl::NavigationDirection::Backward,
-                                          false);
+    return impl->attemptNavigation(resolution,
+                                   shufflePrevious ? ShuffleHistory::TransitionOrigin::HistoryPrevious
+                                                   : ShuffleHistory::TransitionOrigin::SequentialPrevious,
+                                   Impl::NavigationDirection::Backward,
+                                   false);
   }
 
   void PlaybackSuccession::clear()
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-
-    if (impl->blocksSuccessionCommand())
-    {
-      return;
-    }
 
     impl->deactivateSession();
   }
@@ -1323,7 +1193,7 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSuccessionCommand() || impl->shuffleMode == mode)
+    if (impl->shuffleMode == mode)
     {
       return;
     }
@@ -1338,10 +1208,8 @@ namespace ao::rt
 
     impl->synchronizeState();
 
-    {
-      auto const publication = Impl::ObserverPublicationScope{*impl};
-      impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
-    }
+    publishSequenceObserverSafely(
+      "shuffle-mode-changed", [&] { impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode}); });
 
     impl->notifyPersistenceIntentChanged();
   }
@@ -1351,7 +1219,7 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
 
-    if (impl->blocksSuccessionCommand() || impl->repeatMode == mode)
+    if (impl->repeatMode == mode)
     {
       return;
     }
@@ -1366,10 +1234,8 @@ namespace ao::rt
 
     impl->synchronizeState();
 
-    {
-      auto const publication = Impl::ObserverPublicationScope{*impl};
-      impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
-    }
+    publishSequenceObserverSafely(
+      "repeat-mode-changed", [&] { impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode}); });
 
     impl->notifyPersistenceIntentChanged();
   }
@@ -1472,38 +1338,24 @@ namespace ao::rt
       return;
     }
 
-    auto const acceptance = Impl::AcceptanceTransaction{*impl};
-    auto const restoration = Impl::RestoreTransaction{*impl};
     impl->sessionPtr = std::move(sessionPtr);
     impl->optLastRestorableSnapshot.reset();
     impl->shuffleMode = restoredShuffleMode;
     impl->repeatMode = restoredRepeatMode;
     impl->resetFailureState();
-    runAcceptedRestoreStepSafely("projection observation",
-                                 [&]
-                                 {
-                                   auto const installation = Impl::SessionInstallationTransaction{*impl};
-                                   impl->startObservingCurrentSession();
-                                 });
+    runAcceptedRestoreStepSafely("projection observation", [&] { impl->startObservingCurrentSession(); });
     runAcceptedRestoreStepSafely("restart deadline", [&] { impl->restartDeadline.replaceSession(elapsed, false); });
     runAcceptedRestoreStepSafely("prepared successor", [&] { impl->reprepareNext(false); });
-    runAcceptedRestoreStepSafely("state publication", [&] { impl->synchronizeState(true); });
+    runAcceptedRestoreStepSafely("state publication", [&] { impl->synchronizeState(); });
     publishSequenceObserverSafely(
       "shuffle-mode-changed",
-      [&]
-      {
-        auto const publication = Impl::ObserverPublicationScope{*impl};
-        impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = restoredShuffleMode});
-      });
+      [&] { impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = restoredShuffleMode}); });
 
     if (!impl->isClosing())
     {
-      publishSequenceObserverSafely("repeat-mode-changed",
-                                    [&]
-                                    {
-                                      auto const publication = Impl::ObserverPublicationScope{*impl};
-                                      impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = restoredRepeatMode});
-                                    });
+      publishSequenceObserverSafely(
+        "repeat-mode-changed",
+        [&] { impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = restoredRepeatMode}); });
     }
   }
 

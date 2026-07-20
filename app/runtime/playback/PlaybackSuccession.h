@@ -94,17 +94,18 @@ namespace ao::rt
     Result<> playFromView(ViewId viewId, TrackId startTrackId);
     bool hasNext() const;
     bool hasPrevious() const;
-    void next();
-    void previous();
+    // Returns whether navigation accepted a restart, subject transition, or
+    // terminal stop that establishes a new playback-clock anchor.
+    bool next();
+    bool previous();
     void clear();
     void setShuffleMode(ShuffleMode mode);
     void setRepeatMode(RepeatMode mode);
 
     PlaybackSuccessionState const& state() const;
 
-    // Handlers run synchronously on the executor thread. They must defer owner
-    // teardown to a later executor turn; Debug contracts reject destruction
-    // while a succession transition or observer publication is still on the stack.
+    // Handlers run synchronously on the executor thread. Callers must defer
+    // emitting-owner teardown to a later executor turn.
     async::Subscription onChanged(std::move_only_function<void(PlaybackSuccessionState const&)> handler);
     async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
     async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);

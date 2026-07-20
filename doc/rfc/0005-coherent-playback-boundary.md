@@ -12,8 +12,14 @@ depends-on: none
 
 Accepted on 2026-07-19 with the open questions resolved below.
 Implementation proceeds in the staged order of the compatibility and migration section; execution detail lives in the local plan tree.
-Stages 1 and 2 are complete: consumers use the public `PlaybackService`, and
-the renamed `PlaybackTransport` and `PlaybackSuccession` owners are runtime-internal.
+Stages 1 through 3 are complete: consumers use the public `PlaybackService`,
+the renamed `PlaybackTransport` and `PlaybackSuccession` owners are
+runtime-internal, and the service's private serial intent/commit pump is the
+sole application revision authority. Observer commands are deferred and
+superseded by intent generation, while the former cross-owner publication,
+privilege, installation, and restore guards have been removed. The resulting
+behavior is owned by the
+[playback application commit specification](../spec/playback/application-commit.md).
 
 ## Problem
 
@@ -35,7 +41,7 @@ Persistence correctly refuses to invent missing context, but the public applicat
 ### One logical transition is coordinated by local guards
 
 Accepted starts, natural advances, restore, outbound publication, and sequence installation cross two service-owned states.
-The implementation currently protects these crossings with several independent mechanisms, including `AcceptanceTransaction`, `ObserverPublicationScope`, `SessionInstallationTransaction`, `RestoreTransaction`, `SequenceMutationGrantScope`, `OutboundEventBatchScope`, and a restore `beforePublish` callback.
+The implementation at acceptance protected these crossings with several independent mechanisms, including `AcceptanceTransaction`, `ObserverPublicationScope`, `SessionInstallationTransaction`, `RestoreTransaction`, `SuccessionMutationGrantScope`, `OutboundEventBatchScope`, and a restore `beforePublish` callback.
 
 Each mechanism addresses a real local reentrancy or ordering hazard.
 Together they are evidence that the application transaction boundary is missing: no single owner defines when a combined playback revision is accepted, visible, persistable, or superseded.
@@ -87,7 +93,7 @@ Local code can accidentally treat proximity between these values as equivalence 
 ## Goals
 
 - Expose one application-level playback boundary from `AppRuntime` while keeping transport, succession, persistence, and Core audio as distinct internal responsibilities.
-- Make one coordinator the only public mutation authority for explicit start, natural advance, stop, restore, and prepared-next acceptance.
+- Make `PlaybackService` the only public mutation authority for explicit start, natural advance, stop, restore, and prepared-next acceptance.
 - Publish one immutable application snapshot and revision for every accepted logical transition.
 - Correlate every accepted output, readiness, and quality change with the application revision and selected output it describes.
 - Make cursor/transport subject disagreement unrepresentable in normal public playback commands.
@@ -123,7 +129,7 @@ AppRuntime
   |     |-- snapshot()                 current coherent value
   |     |-- PlaybackCommands           public mutation port
   |     |-- PlaybackEvents             public subscription port
-  |     `-- PlaybackCoordinator        sole application commit authority
+  |     `-- private intent/commit pump sole application commit mechanism
   |           |-- PlaybackSuccession   source lease, projection, cursor, policy
   |           |-- PlaybackTransport    now-playing, transport, output, quality
   |           |     `-- Player         Core-audio bridge
@@ -169,7 +175,7 @@ The transport portion includes selected output, output readiness, and the accept
 For every published snapshot:
 
 - an active succession subject and the transport now-playing subject are the same `TrackId` and source context;
-- idle transport has no active succession session;
+- an idle transport may retain a coherent succession subject only as deferred restored intent; an idle transport with no subject has no active succession session;
 - a prepared successor is either correlated to the current succession revision or absent;
 - the application revision advances once after the complete logical commit, not once per internal collaborator;
 - observers receive the new snapshot only after all application invariants hold.
@@ -180,7 +186,7 @@ Every state-changing event carries the application revision of its self-containe
 ### Quality and route observation
 
 An accepted quality update is a playback-state mutation even when it is an intermediate result while a route settles.
-The coordinator captures selected output, readiness, and quality together, advances `PlaybackRevision`, and publishes one `PlaybackSnapshot` for that accepted state.
+`PlaybackService` captures selected output, readiness, and quality together, advances `PlaybackRevision`, and publishes one `PlaybackSnapshot` for that accepted state.
 
 A specialized quality notification may remain for efficient subscribers, but it is not an independent state authority.
 Its conceptual payload is:
@@ -200,18 +206,19 @@ A consumer that has already observed a newer snapshot discards an older notifica
 Player playback/route generations remain internal evidence for rejecting stale provider callbacks and are not substituted for `PlaybackRevision`.
 
 Route settlement may therefore publish several monotonically revisioned quality snapshots.
-A stale provider callback rejected below the coordinator publishes no application revision.
+A stale provider callback rejected below the service commit boundary publishes no application revision.
 
 ### Command serialization and reentrancy
 
-`PlaybackCoordinator` is callback-executor-affine and owns a serial intent pump.
+`PlaybackService` is callback-executor-affine and its private implementation owns a serial intent pump.
+The pump is an implementation mechanism of the public service, not a second domain class or public role.
 Public commands do not call internal collaborators recursively through observer callbacks.
 
 Each accepted intent receives a `PlaybackIntentGeneration`.
 Long-running start and restore operations may suspend while preparation runs, but a newer start, stop, shutdown, route change, or restore can cancel or invalidate their generation.
 Only the current generation may enter the application commit step.
 
-Commands requested synchronously by an observer are posted to the next coordinator turn.
+Commands requested synchronously by an observer are posted to the next service turn.
 They never mutate the snapshot currently being published.
 This single rule replaces service-specific publication depth, privilege, and restore guards at the public boundary.
 Internal assertions may remain where they document a collaborator invariant, but they are not the transaction mechanism.
@@ -221,7 +228,7 @@ Small transport commands may still complete within one executor turn, but their 
 
 ### Explicit-start transaction
 
-A normal track start is one coordinator transaction:
+A normal track start is one service-owned transaction:
 
 1. On the callback executor, capture a view launch description and construct a candidate succession session without replacing the current session.
 2. Resolve the candidate `TrackId` into an immutable audio-preparation specification.
@@ -233,7 +240,7 @@ A normal track start is one coordinator transaction:
 
 Failure before Engine acceptance leaves the previous application snapshot and audio generation current.
 After Engine accepts, application installation must contain no fallible work; all library resolution, allocation needed by the candidate, and invariant validation happen earlier.
-Queued lower-layer callbacks remain subject to the Engine/Player generation barriers before the coordinator accepts them.
+Queued lower-layer callbacks remain subject to the Engine/Player generation barriers before `PlaybackService` accepts them.
 
 There is no generic public `playTrack(TrackId, ListId)` that silently creates transport-only state.
 If Aobus later needs detached playback, it requires an explicit `PlaybackOrigin` variant with defined succession and persistence semantics rather than an omitted cursor side effect.
@@ -244,8 +251,8 @@ Succession remains the only owner of next-track policy.
 It prepares an application successor against a specific application revision and source projection.
 Transport maps that successor to Core audio without exposing library identity below `Player`.
 
-An accepted natural transition returns a typed internal envelope to the coordinator.
-The coordinator verifies each item in its own domain, advances succession, updates transport, and publishes once.
+An accepted natural transition returns a typed internal envelope to the service commit boundary.
+`PlaybackService` verifies each item in its own domain, advances succession, updates transport, and publishes once.
 Stale, cleared, or source-invalidated preparation cannot be accepted merely because an Engine item id still matches.
 
 The design intentionally does not create one universal playback token.
@@ -257,7 +264,7 @@ It carries distinct evidence together:
 | `PreparedNextToken` | Application preparation registry | Correlate one prepared successor intent. |
 | `Engine::PlaybackItemId` | Runtime/audio bridge | Correlate one opaque Core audio item. |
 | Playback generation and cancellation barrier | Engine/Player | Reject callbacks and starts from superseded audio execution. |
-| `PlaybackRevision` | Coordinator | Correlate public snapshots and application commits. |
+| `PlaybackRevision` | PlaybackService | Correlate public snapshots and application commits. |
 | Persistence revision | Session persistence | Acknowledge one durable snapshot write. |
 
 The envelope proves that each authority agreed to the same transition; no field is derived from or substituted for another.
@@ -279,7 +286,7 @@ It then assigns source/playback generations, registers the prepared state, and c
 A route change may retry preparation under the new route when the originating intent is still current.
 
 Cancellation and failed adoption dispose of an uncommitted `PreparedTrackSession` on a worker because destroying a `StreamingSource` may stop and join its decode thread.
-Shutdown closes the coordinator gate, cancels preparations, waits for their detached ownership to quiesce, and only then destroys Player and Engine.
+Shutdown closes the service intent gate, cancels preparations, waits for their detached ownership to quiesce, and only then destroys Player and Engine.
 
 This split removes decoder I/O and preroll from both the callback executor and long Engine control-lock sections while preserving Engine as the execution authority.
 
@@ -338,7 +345,7 @@ Documentation cannot provide atomic publication, one revision, cancellation owne
 
 A forwarding object that leaves the internal services publishing independently improves discoverability but not correctness.
 It also risks becoming a third API beside the two old ones.
-The selected design removes public access to collaborators and moves commit authority to the coordinator.
+The selected design removes public access to collaborators and moves commit authority into `PlaybackService`.
 
 ### Merge all playback code into one service
 
@@ -378,7 +385,7 @@ Implementation proceeds in boundary-preserving phases:
 
 1. Introduce the combined revisioned snapshot, `PlaybackCommands`, and `PlaybackEvents`, migrate all production consumers, and make `AppRuntime::playback()` the sole public playback accessor.
 2. Name that public business boundary `PlaybackService`; rename and relocate the legacy owners as internal `PlaybackTransport` and `PlaybackSuccession`, remove public low-level start/prepare access, and reserve bootstrap access for composition and lifecycle.
-3. Move explicit start, natural advance, restore, stop, and publication into the coordinator intent pump, then remove redundant cross-service transaction guards.
+3. Move explicit start, natural advance, restore, stop, and publication into the private `PlaybackService` intent pump, then remove redundant cross-service transaction guards.
 4. Introduce detached Core audio preparation, adoption revalidation, worker disposal, and shutdown quiescence.
 5. Introduce the serialized configuration writer and migrate every client of a shared store before enabling asynchronous playback autosave on it.
 6. Move reveal navigation to the application/UIModel navigation boundary and narrow the transport collaborator.
@@ -408,7 +415,7 @@ Acceptance requires evidence at the boundary, behavior, concurrency, and fronten
 - Every accepted quality event carries a revision, output identity, readiness, and quality payload matching one published snapshot.
 - Multiple route-settling quality updates advance monotonically without allowing an older provider generation to publish a later application revision.
 - Switching output never presents quality evidence from the previous output as if it belonged to the replacement selection.
-- Observer-initiated commands execute on a later coordinator turn and never alter the snapshot being delivered.
+- Observer-initiated commands execute on a later service turn and never alter the snapshot being delivered.
 - Stop, replacement start, route change, and shutdown deterministically invalidate an in-flight preparation.
 
 ### Responsiveness and concurrency checks
@@ -434,7 +441,7 @@ The following decisions closed acceptance; none changes the selected ownership a
 
 - The serialized configuration writer is a general runtime-layer type from the start, but its first migration wave covers only the two genuinely shared store instances (the GTK global configuration store and the TUI/workspace store that doubles as the playback-session store).
   Stores backed by their own file, such as the shell layout store, keep synchronous saves and are not part of this proposal.
-- A route or output change invalidates an in-flight preparation; the coordinator retries preparation exactly once under the new route while the originating intent is still current, and otherwise completes the intent with a deterministic stale-route error.
+- A route or output change invalidates an in-flight preparation; the service intent pump retries preparation exactly once under the new route while the originating intent is still current, and otherwise completes the intent with a deterministic stale-route error.
   This is a fixed single retry, not a general retry-policy framework.
 - Public commands do not adopt a uniform asynchronous completion surface.
   Restore, save, and discard keep call-level results; explicit start returns a synchronous admission result and reports its asynchronous outcome through the revisioned failure event once worker preparation is introduced; small transport commands return no completion token.
@@ -444,13 +451,13 @@ The following decisions closed acceptance; none changes the selected ownership a
 
 ## Promotion plan
 
-Implementation updates the [playback architecture](../architecture/playback.md) from the former dual-service model to the `PlaybackService`/coordinator ownership model and records the accepted rationale in current documentation.
+Implementation updates the [playback architecture](../architecture/playback.md) from the former dual-service model to the `PlaybackService` commit-authority model and records the accepted rationale in current documentation.
 Update the [interactive session lifecycle architecture](../architecture/interactive-session-lifecycle.md) where `PlaybackService` changes `AppRuntime` composition, startup restore coordination, or teardown ownership.
 The [persistence and managed-state architecture](../architecture/persistence-and-managed-state.md) is updated when the serialized writer replaces the current executor-confined shared-store boundary.
 
 Behavioral contracts discovered during implementation move into focused playback specifications for application transactions, snapshot publication, cancellation, and persistence.
 Exact public command/state fields and any persistence-schema changes move into reference documents rather than this RFC.
-The current [playback succession cursor](../spec/playback/cursor.md) specification remains the behavioral authority unless the implemented coordinator changes one of its contracts.
+The current [playback succession cursor](../spec/playback/cursor.md) specification remains the behavioral authority unless the implemented service commit boundary changes one of its contracts.
 The current [audio quality architecture](../architecture/audio-quality.md), [quality analysis specification](../spec/playback/quality-analysis.md), and [quality surface reference](../reference/playback/quality-surface.md) remain authoritative for evidence, classification, and exact values; implementation updates them only where the new revisioned application publication surface changes their boundary.
 Current detailed evidence lives in the [playback session persistence](../spec/playback/session-persistence.md), [playback session state](../reference/playback/session-state.md), and [audio execution and concurrency](../spec/playback/audio-execution.md) contracts.
 

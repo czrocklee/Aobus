@@ -543,7 +543,7 @@ namespace ao::rt::test
     CHECK_FALSE(transportPtr->clearPreparedNext());
   }
 
-  TEST_CASE("PlaybackTransport token - accepted start contains reentrant transport mutation and observer throws",
+  TEST_CASE("PlaybackTransport token - accepted start contains observer exceptions and completes publication",
             "[runtime][regression][playback][token]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
@@ -551,55 +551,15 @@ namespace ao::rt::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const current = request(TrackId{1}, fixturePath, "Current");
     auto const replacement = request(TrackId{2}, fixturePath, "Accepted replacement");
-    auto const reentrant = request(TrackId{3}, fixturePath, "Rejected reentrant");
     REQUIRE(fixture.playbackTransport.play(current, kSourceListId));
-    auto staged = fixture.playbackTransport.stagePlayback(reentrant, ListId{8});
-    REQUIRE(staged);
 
-    auto optStageError = std::optional<Error::Code>{};
-    auto optPlayError = std::optional<Error::Code>{};
-    auto optCommitError = std::optional<Error::Code>{};
-    auto optPrepareError = std::optional<Error::Code>{};
-    auto optClearResult = std::optional<PreparedNextToken>{};
-    auto stopBarrier = PreparedCancellationBarrier{};
     bool callbackEntered = false;
-    auto const baselineVolume = fixture.playbackTransport.state().volume.level;
-    auto const baselineMuted = fixture.playbackTransport.state().volume.muted;
-    auto const baselineOutput = fixture.playbackTransport.state().output.selectedDevice;
+    auto observedTrackId = kInvalidTrackId;
     auto const startedSubscription = fixture.playbackTransport.onStarted(
       [&]
       {
         callbackEntered = true;
-
-        if (auto const result = fixture.playbackTransport.stagePlayback(reentrant, ListId{9}); !result)
-        {
-          optStageError = result.error().code;
-        }
-
-        if (auto const result = fixture.playbackTransport.play(reentrant, ListId{9}); !result)
-        {
-          optPlayError = result.error().code;
-        }
-
-        if (auto const result = fixture.playbackTransport.commitPlayback(std::move(*staged)); !result)
-        {
-          optCommitError = result.error().code;
-        }
-
-        if (auto const result = fixture.playbackTransport.prepareNext(reentrant, ListId{9}); !result)
-        {
-          optPrepareError = result.error().code;
-        }
-
-        optClearResult = fixture.playbackTransport.clearPreparedNext();
-        fixture.playbackTransport.pause();
-        fixture.playbackTransport.resume();
-        fixture.playbackTransport.seek(std::chrono::seconds{20});
-        fixture.playbackTransport.setOutputDevice(
-          audio::BackendId{"reentrant"}, audio::DeviceId{"reentrant"}, audio::ProfileId{"reentrant"});
-        fixture.playbackTransport.setVolume(0.25F);
-        fixture.playbackTransport.setMuted(!baselineMuted);
-        stopBarrier = fixture.playbackTransport.stop();
+        observedTrackId = fixture.playbackTransport.state().nowPlaying.trackId;
         throwException<Exception>("scripted accepted-start observer failure");
       });
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
@@ -610,19 +570,9 @@ namespace ao::rt::test
 
     REQUIRE(accepted);
     CHECK(callbackEntered);
-    CHECK(optStageError == Error::Code::InvalidState);
-    CHECK(optPlayError == Error::Code::InvalidState);
-    CHECK(optCommitError == Error::Code::InvalidState);
-    CHECK(optPrepareError == Error::Code::InvalidState);
-    CHECK_FALSE(optClearResult);
-    CHECK(stopBarrier.generation == 0);
-    CHECK_FALSE(stopBarrier.covers(0));
-    CHECK_FALSE(stopBarrier.covers(accepted->cancellationBarrier.generation));
+    CHECK(observedTrackId == replacement.item.trackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == replacement.item.trackId);
-    CHECK(fixture.playbackTransport.state().volume.level == baselineVolume);
-    CHECK(fixture.playbackTransport.state().volume.muted == baselineMuted);
-    CHECK(fixture.playbackTransport.state().output.selectedDevice == baselineOutput);
     REQUIRE(nowPlaying.size() == 1);
     CHECK(nowPlaying.front().trackId == replacement.item.trackId);
     CHECK(nowPlaying.front().sourceListId == ListId{10});

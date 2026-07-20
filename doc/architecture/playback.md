@@ -34,7 +34,7 @@ AppRuntime
   |     |-- snapshot()                 last boundary-committed coherent value
   |     |-- PlaybackCommands           mutation role
   |     |-- PlaybackEvents             publication/transient-event role
-  |     `-- stage-2 adapter over the internal owners below
+  |     `-- private serial intent + commit authority
   |
   |-- ViewService + TrackSourceCache
   |         |
@@ -140,10 +140,11 @@ Frontend widgets and platform endpoints issue runtime/UIModel commands and rende
 Consumers borrow the last boundary-committed coherent value through `PlaybackService::snapshot()` and obtain its narrow `PlaybackCommands` mutation role or `PlaybackEvents` subscription role; they cannot obtain `PlaybackTransport` or `PlaybackSuccession` from `AppRuntime`.
 `PlaybackCommandSurface` derives availability from one coherent snapshot and delegates every transport and succession command through `PlaybackCommands`.
 
-In [RFC 0005](../rfc/0005-coherent-playback-boundary.md) Stage 2, `PlaybackService` is a publication-barrier adapter over the internal `PlaybackTransport` and `PlaybackSuccession` owners.
-Commands routed through `PlaybackService` are bracketed into at most one snapshot publication, while independent lower-layer observations are coalesced at the end of the callback-executor turn.
+Since [RFC 0005](../rfc/0005-coherent-playback-boundary.md) Stage 3, `PlaybackService` is the application commit authority over the internal `PlaybackTransport` and `PlaybackSuccession` owners.
+Its private implementation assigns intent generations and command identities, serializes commands requested by observers, and composes at most one revision after each logical mutation settles.
+Independent lower-layer observations are coalesced at the end of the callback-executor turn, and revisions advance even when no public observer is connected.
 The internal headers live under `app/runtime/playback/`; build guardrails reject those owner names in public runtime headers, UIModel, and frontend sources.
-The [playback application boundary reference](../reference/playback/application-boundary.md) owns the exact public surface; a later stage replaces the adapter with a single commit coordinator.
+The [playback application boundary reference](../reference/playback/application-boundary.md) owns the exact public surface, while the [application commit specification](../spec/playback/application-commit.md) owns intent and publication behavior.
 
 `PlaybackTransport` retains lower-level direct start and prepare operations solely for internal collaboration and focused lower-layer tests.
 No public command can create transport-only playback state or bypass succession capture.
@@ -176,8 +177,9 @@ ViewId + TrackId
   -> PlaybackTransport resolves runtime metadata and PlaybackInput
   -> Player/Engine stage decoder, source, route, and initial position
   -> Engine commit returns item generation + cancellation barrier
-  -> PlaybackTransport publishes the accepted current request
+  -> PlaybackTransport installs the accepted current request silently
   -> Sequence installs the candidate and prepares its successor
+  -> PlaybackService publishes the settled coherent snapshot
 ```
 
 The candidate session remains separate during staging.
@@ -245,9 +247,9 @@ Sequence persistence intent + transport persistence intent
 stored payload
   -> validate against storage and format
   -> prepare source/projection/cursor candidate
-  -> prepare deferred transport state
-  -> install cursor inside transport restore publication
-  -> publish one coherent restored application state
+  -> install deferred transport state without lower publication
+  -> install the prepared cursor session
+  -> PlaybackService commits one coherent restored application state
 ```
 
 The persistence coordinator owns validation and installation order; it does not serialize projection rows, prepared audio, thread generations, or other regenerable execution state.
@@ -295,9 +297,9 @@ The Engine control domain is a synchronization domain, not a dedicated control t
 Through Player the caller is normally the runtime callback executor, so current track opening, source construction, preroll, and route activation performed during staging remain on that synchronous call path; only later event delivery, streaming decode, and rendering use dedicated threads.
 Playback-session timers sleep outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
 
-Runtime playback signals are delivered synchronously within the callback domain.
-PlaybackTransport batches outbound events and rejects ordinary transport mutation while a batch is draining; succession-owned collaboration uses a narrow grant, while PlaybackSuccession separately guards accepted starts, session installation, restore, and observer publication.
-These guards contain reentrant commands but do not create a third transaction executor.
+Runtime lower-layer signals are delivered synchronously within the callback domain and are exception-contained by their owner.
+Public playback observation is delivered only by `PlaybackService`; a command requested from one of its observers enters the service FIFO and executes on a later executor turn.
+Explicit start and restore use silent lower-owner installation, so succession never has to react to the transport publication of its own command and no publication-depth, privileged-mutation, installation, or restore guard is required.
 
 ## Structural constraints
 
@@ -308,6 +310,7 @@ These guards contain reentrant commands but do not create a third transaction ex
 - A playback session owns its source/projection lifetime and cannot borrow the originating view's lifetime.
 - Player exclusively owns providers and Engine; PlaybackTransport exclusively owns Player.
 - PlaybackBootstrap is composition-only: it registers providers, constructs PlaybackService over the two internal owners, and initiates transport shutdown. It is not a command or state authority.
+- PlaybackService owns public intent admission, supersession, coherent revision commits, and the deferred-task shutdown gate; its private implementation is not a second domain service.
 - Runtime-visible state and public playback observations are accepted on the callback executor.
 - Engine callbacks carry generation evidence; application prepared transitions additionally carry a token that can be correlated without leaking application identity into core audio.
 - Realtime render performs no UI, storage, notification, list policy, blocking join, or general application work.
@@ -331,10 +334,11 @@ None of these mechanisms substitutes for another layer's lifetime proof.
 Shutdown proceeds from callback producers toward their dependencies:
 
 1. `PlaybackSessionPersistence::shutdown` cancels scheduled work, releases subscriptions, and performs its final checkpoint policy while sequence, transport, ConfigStore, and async runtime remain alive.
-2. `PlaybackBootstrap::shutdown` closes transport publication and asks Player to quiesce lower activity while succession and other runtime consumers still exist.
-3. Player closes its callback gate, unsubscribes provider observations, shuts down provider event sources, then shuts down Engine while provider-owned dependencies still exist.
-4. Engine stops and joins its event worker, retires render state, closes the backend, and releases track sources; StreamingSource destruction stops and joins decode workers.
-5. Sequence, transport, view, workspace, and persistence objects are destroyed before `CoreRuntime` stops its worker pool and releases the callback executor, library, and notifications.
+2. `PlaybackService::shutdown` closes public intent admission, drops pending intents, disconnects lower observations, and revokes deferred service tasks.
+3. `PlaybackBootstrap::shutdown` asks PlaybackTransport and Player to quiesce lower activity while succession and other runtime consumers still exist.
+4. Player closes its callback gate, unsubscribes provider observations, shuts down provider event sources, then shuts down Engine while provider-owned dependencies still exist.
+5. Engine stops and joins its event worker, retires render state, closes the backend, and releases track sources; StreamingSource destruction stops and joins decode workers.
+6. Sequence, transport, view, workspace, and persistence objects are destroyed before `CoreRuntime` stops its worker pool and releases the callback executor, library, and notifications.
 
 A callback already executing may call supported control operations but cannot synchronously destroy or shut down its emitting owner.
 Queued Player callbacks become no-ops after the gate closes, and every dedicated producer is stopped and joined before the state it may address is destroyed.
@@ -342,7 +346,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 ## Implementation map
 
 - [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) composes sequence, transport, persistence, view, workspace, and teardown ownership.
-- [`PlaybackService`](../../app/include/ao/rt/playback/PlaybackService.h) is the public application boundary; its [reference](../reference/playback/application-boundary.md) owns the exact commands, snapshot, and revisioned events.
+- [`PlaybackService`](../../app/include/ao/rt/playback/PlaybackService.h) is the public application boundary and commit authority; its [reference](../reference/playback/application-boundary.md) owns exact types and its [specification](../spec/playback/application-commit.md) owns intent and publication behavior.
 - [`PlaybackSuccession`](../../app/runtime/playback/PlaybackSuccession.h) and [`PlaybackCursorSession`](../../app/runtime/playback/PlaybackCursorSession.h) own succession composition and its live source/projection lifetime.
 - [`PlaybackCursor`](../../app/runtime/playback/PlaybackCursor.h), [`ProjectionAnchor`](../../app/runtime/playback/ProjectionAnchor.h), [`ShuffleHistory`](../../app/runtime/playback/ShuffleHistory.h), and [`PreparedNextRegistry`](../../app/runtime/playback/PreparedNextRegistry.h) divide pure/session policy.
 - [`PlaybackTransport`](../../app/runtime/playback/PlaybackTransport.h) owns application transport, runtime-to-audio translation, and accepted lower observation publication.
@@ -358,7 +362,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 ## Test map
 
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive composition and service lifetime.
-- [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) protects the public-surface closure, coherent snapshots, revision publication, quality correlation, command bracketing, and spontaneous-event coalescing.
+- [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) protects public-surface closure, coherent commits, revision publication without subscribers, observer deferral, intent supersession, failure correlation, pending-intent lifetime, quality correlation, and spontaneous-event coalescing.
 - [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp), [`PlaybackCursorModelTest.cpp`](../../test/unit/runtime/playback/PlaybackCursorModelTest.cpp), and [`ProjectionAnchorTest.cpp`](../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) protect succession ownership and the pure/session boundary.
 - [`PlaybackTransportControlTest.cpp`](../../test/unit/runtime/PlaybackTransportControlTest.cpp), [`PlaybackTransportOutputTest.cpp`](../../test/unit/runtime/PlaybackTransportOutputTest.cpp), and [`PlaybackTransportTokenTest.cpp`](../../test/unit/runtime/PlaybackTransportTokenTest.cpp) protect application transport and cross-domain identity.
 - [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) and [`PlaybackSessionRevisionTest.cpp`](../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protect composite persistence and restore coordination.

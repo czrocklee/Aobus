@@ -7,6 +7,7 @@
 #include "PlaybackEvents.h"
 #include "PlaybackSnapshot.h"
 
+#include <functional>
 #include <memory>
 
 namespace ao::rt
@@ -19,12 +20,10 @@ namespace ao::rt
    *
    * It exposes the current coherent snapshot directly, owns access to the
    * narrow `PlaybackCommands` and `PlaybackEvents` roles, and hides the
-   * transport and succession collaborators. During RFC 0005 stages 1 and 2 it
-   * is an adapter over runtime-internal owners: it brackets commands issued
-   * through it so one logical command publishes at most one snapshot, and
-   * coalesces spontaneous lower-layer changes into one deferred publication
-   * per executor turn. The final "one logical commit, one revision" authority
-   * moves into a coordinator in a later stage.
+   * transport and succession collaborators. Its private implementation is the
+   * playback commit authority: one logical mutation produces at most one
+   * coherent revision, and observer-issued commands enter a later executor
+   * turn. Every method and returned role is callback-executor-affine.
    */
   class PlaybackService final
   {
@@ -36,7 +35,11 @@ namespace ao::rt
     PlaybackService(PlaybackService&&) = delete;
     PlaybackService& operator=(PlaybackService&&) = delete;
 
-    /** Borrows the last committed snapshot, stable until the next publication. */
+    /**
+     * Borrows the last committed snapshot, stable until the next publication
+     * or service destruction. Do not retain it across a command or callback
+     * that may publish a newer snapshot.
+     */
     PlaybackSnapshot const& snapshot() const;
     PlaybackCommands& commands() noexcept;
     PlaybackEvents& events() noexcept;
@@ -45,23 +48,13 @@ namespace ao::rt
     friend class AppRuntime;
     friend class PlaybackBootstrap;
 
-    class [[nodiscard]] CommandBracket final
-    {
-    public:
-      explicit CommandBracket(PlaybackService& owner) noexcept;
-      ~CommandBracket();
-
-      CommandBracket(CommandBracket const&) = delete;
-      CommandBracket& operator=(CommandBracket const&) = delete;
-      CommandBracket(CommandBracket&&) = delete;
-      CommandBracket& operator=(CommandBracket&&) = delete;
-
-    private:
-      PlaybackService& _owner;
-    };
-
     struct Impl;
     explicit PlaybackService(std::unique_ptr<Impl> implPtr);
+
+    // Reports only whether immediate admission was available. Invariant faults
+    // from an admitted operation remain exceptions after commit bookkeeping.
+    bool runSynchronousIntent(std::move_only_function<bool()> operation);
+    void shutdown() noexcept;
 
     std::unique_ptr<Impl> _implPtr;
   };

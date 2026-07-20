@@ -57,7 +57,7 @@ The render cursor points non-owningly into Engine's control-plane timeline.
 The current and lookahead nodes keep source, decoder, and file lifetime alive until a control/event consumer retires them.
 
 Player owns one Engine, all registered providers, route graph state, its executor, and a shared callback/teardown gate.
-PlaybackService owns runtime metadata separately; `audio::PlaybackInput` contains only path, optional duration, and optional format hints.
+PlaybackTransport owns runtime metadata separately; `audio::PlaybackInput` contains only path, optional duration, and optional format hints.
 
 ## Commands and transitions
 
@@ -168,18 +168,19 @@ Player repeats the generation test when the queued executor task runs.
 An accepted route snapshot binds to the Player graph epoch observed on that executor turn; it is not inferred from when the Engine callback was queued.
 FIFO delivery permits an earlier advanced task to reset the graph before a following route task is interpreted.
 
-PlaybackService retains the prepared runtime request by opaque item id.
+PlaybackTransport retains the prepared runtime request by opaque item id.
 Natural advance commits matching now-playing metadata without an intermediate idle publication.
 When clear returns a disarmed id, only that metadata is removed; metadata for an already spliced item remains until the advanced callback consumes it.
 
 ### Runtime publication
 
-PlaybackService public mutators, state reads, subscription creation, and subscription reset are executor-affine.
-An always-on `ensureOnExecutor` guard logs critically and aborts on violation rather than permitting an unobserved race.
+PlaybackTransport mutators, state reads, subscription creation, and subscription reset are executor-affine.
+Its always-on `ensureOnExecutor` guard logs critically and aborts on violation rather than permitting an unobserved race.
+The public `PlaybackService` shares that callback-executor affinity and serializes observer-issued commands through its application commit pump.
 
 Control commands call Player, refresh `PlaybackState`, and emit command-specific signals synchronously.
 Asynchronous Player events arrive on a later executor turn.
-Signal handlers defer service destruction until publication returns.
+Lower signal handlers defer owner destruction until publication returns; public playback observers cannot re-enter lower control because their commands execute in a later service turn.
 
 Production hosts supply a real owner-thread executor.
 GTK and TUI marshal through their toolkit loops, while CLI drives `LoopExecutor`; a foreign Player callback therefore cannot enter executor-affine service state inline on its producer thread.

@@ -74,6 +74,7 @@ test/test_results/
 .gemini
 .claude
 .ai-bridge
+.qoder/
 
 # Python
 __pycache__/

@@ -107,11 +107,12 @@ namespace ao::rt
   };
 
   /**
-   * One immutable application playback state. Every accepted logical transition
-   * publishes exactly one snapshot; observers read a coherent transport,
-   * succession, and preparation view rather than assembling it from independent
-   * services. The transport quality and output travel with the snapshot so they
-   * cannot advance as unrelated public state.
+   * One immutable application playback state. Every logical transition that
+   * changes semantic content publishes exactly one snapshot; a no-op publishes
+   * none. Observers read a coherent transport, succession, and preparation view
+   * rather than assembling it from independent services. The transport quality
+   * and output travel with the snapshot so they cannot advance as unrelated
+   * public state.
    */
   struct PlaybackSnapshot final
   {

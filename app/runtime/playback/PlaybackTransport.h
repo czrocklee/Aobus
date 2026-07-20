@@ -194,15 +194,14 @@ namespace ao::rt
     void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
-    bool isPublishingAcceptedStart() const;
+    Result<PlaybackStartReceipt> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
     Result<SuccessionPreparedNextReceipt> prepareNextWithReceipt(PlaybackRequest const& request, ListId sourceListId);
     Result<PlaybackStartReceipt> playSuccessionTrack(TrackId trackId, ListId sourceListId);
     Result<SuccessionPreparedNextReceipt> prepareSuccessionNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearSuccessionPreparedNext();
     PreparedCancellationBarrier stopSuccession();
     PlaybackTransportSessionState playbackTransportSessionState();
-    Result<> restorePlaybackTransport(PlaybackTransportSessionState const& session,
-                                      std::move_only_function<void(std::chrono::milliseconds) noexcept> beforePublish);
+    Result<std::chrono::milliseconds> restorePlaybackTransport(PlaybackTransportSessionState const& session);
     void discardPlaybackTransportSnapshot();
 
     struct Impl;

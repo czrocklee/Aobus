@@ -41,7 +41,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 
 ## State model
 
-The owner retains started/shutdown/restoring/discarded flags, current volume/mute/position intent, one composite revision, subscriptions to succession and transport events, one scheduled debounce-or-retry task, one periodic task, retry delay, and schedule generation.
+The owner retains started/shutdown/restoring/discarded flags, current volume/mute/position intent, one composite revision, subscriptions to succession persistence intent and committed `PlaybackService` snapshots, one scheduled debounce-or-retry task, one periodic task, retry delay, and schedule generation.
 
 The succession and transport services each retain a last-restorable snapshot after ordinary stop, exhaustion, or invalidation removes live state.
 A later successful launch replaces those snapshots.
@@ -84,7 +84,13 @@ Fallback, replacement, anchor clamp, offset clamp, or any other changed serializ
 
 The owner constructs the same lease, filter, and detached projection chain used by a view launch without creating a view.
 It prepares candidate cursor, idle current target, modes, position, volume, and mute.
-One executor transaction then installs sequence and deferred transport.
+One `PlaybackService` restore commit first installs deferred transport without lower publication, then installs the prepared succession session, and finally publishes their combined snapshot.
+There is no callback from transport into cursor installation and no intermediate transport-only or cursor-only public state.
+A restore that installs a candidate always publishes a new position anchor, even
+when the subject is unchanged. The persistence owner consumes that exact
+snapshot as the restored clean baseline, so a repeated idle restore cannot make
+the next unrelated mutation appear clean and a changed offset is immediately
+observable.
 
 The first later Play or PlayPause consumes the deferred token and starts the resolved subject at the offset.
 GTK may navigate/reveal after success, but workspace selection is not part of this transaction.
@@ -159,7 +165,7 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, deferred start, dirty events, timing, retry, discard, store selection, and failure atomicity.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, repeated-restore baselines, deferred observer commands, deferred start, dirty events, timing, retry, discard, store selection, and failure atomicity.
 - [`PlaybackSessionRevisionTest.cpp`](../../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protects captured-revision acknowledgement.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
 

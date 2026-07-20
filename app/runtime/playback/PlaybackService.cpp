@@ -20,9 +20,13 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
+#include <exception>
+#include <expected>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -51,18 +55,40 @@ namespace ao::rt
     : PlaybackCommands
     , PlaybackEvents
   {
-    struct DeferredPublicationControl final
+    struct DeferredControl final
     {
       Impl* owner = nullptr;
+    };
+
+    struct IntentOutcome final
+    {
+      bool forcesPositionAnchor = false;
+    };
+
+    struct PendingIntent final
+    {
+      std::uint64_t generation = 0;
+      PlaybackCommandId commandId{};
+      TrackId failureTrackId = kInvalidTrackId;
+      bool staleWhenSuperseded = false;
+      std::move_only_function<Result<IntentOutcome>()> operation;
+    };
+
+    struct PendingFailure final
+    {
+      std::optional<PlaybackCommandId> optCommandId{};
+      PlaybackFailure failure{};
     };
 
     Impl(async::Executor& executorRef, PlaybackTransport& transportRef, PlaybackSuccession& successionRef)
       : executor{executorRef}
       , transport{transportRef}
       , succession{successionRef}
-      , deferredPublicationControlPtr{std::make_shared<DeferredPublicationControl>(this)}
+      , deferredControlPtr{std::make_shared<DeferredControl>(this)}
+      , lastSnapshot{composeContent()}
+      , observedAnchorTrackId{lastSnapshot.transport.nowPlaying.trackId}
+      , observedAnchorSourceListId{lastSnapshot.transport.nowPlaying.sourceListId}
     {
-      lastSnapshot = composeContent();
     }
 
     Impl(Impl const&) = delete;
@@ -73,43 +99,16 @@ namespace ao::rt
     ~Impl() override
     {
       subscriptions.clear();
-      deferredPublicationControlPtr->owner = nullptr;
-      deferredPublicationControlPtr.reset();
+      deferredControlPtr->owner = nullptr;
+      deferredControlPtr.reset();
     }
-
-    // One accepted logical command through PlaybackService brackets every lower signal
-    // it triggers so at most one snapshot is published for it.
-    class [[nodiscard]] CommandBracket final
-    {
-    public:
-      explicit CommandBracket(Impl& owner) noexcept
-        : _owner{owner}
-      {
-        _owner.beginCommand();
-      }
-
-      ~CommandBracket() { _owner.endCommand(); }
-
-      CommandBracket(CommandBracket const&) = delete;
-      CommandBracket& operator=(CommandBracket const&) = delete;
-      CommandBracket(CommandBracket&&) = delete;
-      CommandBracket& operator=(CommandBracket&&) = delete;
-
-    private:
-      Impl& _owner;
-    };
 
     // Playback snapshot and events -------------------------------------------
 
-    PlaybackSnapshot const& snapshot()
-    {
-      observed = true;
-      return lastSnapshot;
-    }
+    PlaybackSnapshot const& snapshot() const noexcept { return lastSnapshot; }
 
     async::Subscription onSnapshot(PlaybackSnapshotObserver observer) override
     {
-      observed = true;
       return snapshotSignal.connect(std::move(observer));
     }
 
@@ -133,92 +132,344 @@ namespace ao::rt
 
     Result<> startFromView(ViewId const viewId, TrackId const startTrackId) override
     {
-      auto const bracket = CommandBracket{*this};
-      return succession.playFromView(viewId, startTrackId);
+      return submitResult(
+        [this, viewId, startTrackId] -> Result<IntentOutcome>
+        {
+          if (auto const started = succession.playFromView(viewId, startTrackId); !started)
+          {
+            return std::unexpected{started.error()};
+          }
+
+          return IntentOutcome{.forcesPositionAnchor = true};
+        },
+        true,
+        true,
+        startTrackId);
     }
 
     void next() override
     {
-      auto const bracket = CommandBracket{*this};
-      succession.next();
+      submitPositioning([this] { return succession.next(); }, true, true);
     }
 
     void previous() override
     {
-      auto const bracket = CommandBracket{*this};
-      succession.previous();
+      submitPositioning([this] { return succession.previous(); }, true, true);
     }
 
     void clearSequence() override
     {
-      auto const bracket = CommandBracket{*this};
-      succession.clear();
+      submitVoid([this] { succession.clear(); }, true, false);
     }
 
     void setShuffleMode(ShuffleMode const mode) override
     {
-      auto const bracket = CommandBracket{*this};
-      succession.setShuffleMode(mode);
+      submitVoid([this, mode] { succession.setShuffleMode(mode); }, false, false);
     }
 
     void setRepeatMode(RepeatMode const mode) override
     {
-      auto const bracket = CommandBracket{*this};
-      succession.setRepeatMode(mode);
+      submitVoid([this, mode] { succession.setRepeatMode(mode); }, false, false);
     }
 
     void pause() override
     {
-      auto const bracket = CommandBracket{*this};
-      transport.pause();
+      submitVoid([this] { transport.pause(); }, false, false);
     }
 
     void resume() override
     {
-      auto const bracket = CommandBracket{*this};
-      transport.resume();
+      submitVoid([this] { transport.resume(); }, false, false);
     }
 
     void stop() override
     {
-      auto const bracket = CommandBracket{*this};
-      std::ignore = transport.stop();
+      submitVoid([this] { std::ignore = transport.stop(); }, true, false);
     }
 
     void seek(std::chrono::milliseconds const elapsed, PlaybackSeekMode const mode) override
     {
-      auto const bracket = CommandBracket{*this};
-      transport.seek(
-        elapsed,
-        mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview : PlaybackTransport::SeekMode::Final);
+      submitVoid(
+        [this, elapsed, mode]
+        {
+          transport.seek(elapsed,
+                         mode == PlaybackSeekMode::Preview ? PlaybackTransport::SeekMode::Preview
+                                                           : PlaybackTransport::SeekMode::Final);
+        },
+        false,
+        false);
     }
 
     void setOutputDevice(audio::BackendId const& backendId,
                          audio::DeviceId const& deviceId,
                          audio::ProfileId const& profileId) override
     {
-      auto const bracket = CommandBracket{*this};
-      transport.setOutputDevice(backendId, deviceId, profileId);
+      submitVoid([this, backendId, deviceId, profileId] { transport.setOutputDevice(backendId, deviceId, profileId); },
+                 true,
+                 false);
     }
 
     void setVolume(float const volume) override
     {
-      auto const bracket = CommandBracket{*this};
-      transport.setVolume(volume);
+      submitVoid([this, volume] { transport.setVolume(volume); }, false, false);
     }
 
     void setMuted(bool const muted) override
     {
-      auto const bracket = CommandBracket{*this};
-      transport.setMuted(muted);
+      submitVoid([this, muted] { transport.setMuted(muted); }, false, false);
     }
 
-    void revealPlayingTrack() override { transport.revealPlayingTrack(); }
+    void revealPlayingTrack() override
+    {
+      submitVoid([this] { transport.revealPlayingTrack(); }, false, false);
+    }
 
     void revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId) override
     {
-      transport.revealTrack(trackId, preferredViewId, preferredListId);
+      submitVoid([this, trackId, preferredViewId, preferredListId]
+                 { transport.revealTrack(trackId, preferredViewId, preferredListId); },
+                 false,
+                 false);
     }
+
+    Result<> submitResult(std::move_only_function<Result<IntentOutcome>()> operation,
+                          bool const invalidatesOlderIntent,
+                          bool const staleWhenSuperseded,
+                          TrackId const failureTrackId = kInvalidTrackId)
+    {
+      if (closed)
+      {
+        return makeError(Error::Code::InvalidState, "Playback is shutting down");
+      }
+
+      auto intent = PendingIntent{
+        .generation = ++intentGenerationCounter,
+        .commandId = PlaybackCommandId{.value = ++commandIdCounter},
+        .failureTrackId = failureTrackId,
+        .staleWhenSuperseded = staleWhenSuperseded,
+        .operation = std::move(operation),
+      };
+
+      if (invalidatesOlderIntent)
+      {
+        latestInvalidatingGeneration = intent.generation;
+      }
+
+      if (insideBoundary() || hasPendingIntentBacklog())
+      {
+        pendingIntents.push_back(std::move(intent));
+
+        if (!insideBoundary())
+        {
+          scheduleIntentDrain();
+        }
+
+        return {};
+      }
+
+      return executeIntentAndContinue(intent, false);
+    }
+
+    void submitVoid(std::move_only_function<void()> operation,
+                    bool const invalidatesOlderIntent,
+                    bool const staleWhenSuperseded)
+    {
+      std::ignore = submitResult(
+        [operation = std::move(operation)] mutable -> Result<IntentOutcome>
+        {
+          operation();
+          return IntentOutcome{};
+        },
+        invalidatesOlderIntent,
+        staleWhenSuperseded);
+    }
+
+    void submitPositioning(std::move_only_function<bool()> operation,
+                           bool const invalidatesOlderIntent,
+                           bool const staleWhenSuperseded)
+    {
+      std::ignore = submitResult([operation = std::move(operation)] mutable -> Result<IntentOutcome>
+                                 { return IntentOutcome{.forcesPositionAnchor = operation()}; },
+                                 invalidatesOlderIntent,
+                                 staleWhenSuperseded);
+    }
+
+    Result<> executeIntent(PendingIntent& intent, bool const wasQueued)
+    {
+      if (closed || (intent.staleWhenSuperseded && intent.generation < latestInvalidatingGeneration))
+      {
+        return {};
+      }
+
+      beginCommit(intent.commandId);
+      auto result = Result<IntentOutcome>{};
+      auto operationException = std::exception_ptr{};
+      bool forcesPositionAnchor = false;
+
+      try
+      {
+        result = intent.operation();
+
+        if (result)
+        {
+          forcesPositionAnchor = result->forcesPositionAnchor;
+        }
+        else if (wasQueued && !hasPendingFailureFor(intent.commandId))
+        {
+          pendingFailures.push_back(PendingFailure{
+            .optCommandId = intent.commandId,
+            .failure =
+              PlaybackFailure{
+                .kind = PlaybackFailureKind::TrackOpen,
+                .trackId = intent.failureTrackId,
+                .error = result.error(),
+                .title = result.error().message,
+              },
+          });
+        }
+      }
+      catch (...)
+      {
+        operationException = std::current_exception();
+      }
+
+      auto settlementException = std::exception_ptr{};
+
+      try
+      {
+        settleCommit(forcesPositionAnchor);
+      }
+      catch (...)
+      {
+        settlementException = std::current_exception();
+      }
+
+      closeCommit();
+
+      if (operationException)
+      {
+        std::rethrow_exception(operationException);
+      }
+
+      if (settlementException)
+      {
+        std::rethrow_exception(settlementException);
+      }
+
+      if (!result)
+      {
+        return std::unexpected{result.error()};
+      }
+
+      return {};
+    }
+
+    Result<> executeIntentAndContinue(PendingIntent& intent, bool const wasQueued)
+    {
+      auto result = Result<>{};
+      auto executionException = std::exception_ptr{};
+
+      try
+      {
+        result = executeIntent(intent, wasQueued);
+      }
+      catch (...)
+      {
+        executionException = std::current_exception();
+      }
+
+      if (executionException)
+      {
+        try
+        {
+          scheduleIntentDrain();
+        }
+        catch (...) // NOLINT(bugprone-empty-catch) -- preserve the primary invariant fault
+        {
+          // Preserve the invariant fault from the intent or its settlement.
+          // A later admission retries the still-visible backlog.
+        }
+
+        std::rethrow_exception(executionException);
+      }
+
+      scheduleIntentDrain();
+      return result;
+    }
+
+    bool hasPendingFailureFor(PlaybackCommandId const commandId) const noexcept
+    {
+      return std::ranges::any_of(
+        pendingFailures, [commandId](PendingFailure const& pending) { return pending.optCommandId == commandId; });
+    }
+
+    bool runSynchronousIntent(std::move_only_function<bool()> operation)
+    {
+      if (closed || insideBoundary() || hasPendingIntentBacklog())
+      {
+        return false;
+      }
+
+      auto intent = PendingIntent{
+        .generation = ++intentGenerationCounter,
+        .commandId = PlaybackCommandId{.value = ++commandIdCounter},
+        .staleWhenSuperseded = false,
+        .operation = [operation = std::move(operation)] mutable -> Result<IntentOutcome>
+        { return IntentOutcome{.forcesPositionAnchor = operation()}; },
+      };
+      latestInvalidatingGeneration = intent.generation;
+      std::ignore = executeIntentAndContinue(intent, false);
+      return true;
+    }
+
+    void scheduleIntentDrain()
+    {
+      if (closed || intentDrainScheduled || pendingIntents.empty() || insideBoundary())
+      {
+        return;
+      }
+
+      intentDrainScheduled = true;
+      auto const weakControlPtr = std::weak_ptr<DeferredControl>{deferredControlPtr};
+
+      try
+      {
+        executor.defer(
+          [weakControlPtr]
+          {
+            auto const controlPtr = weakControlPtr.lock();
+
+            if (controlPtr == nullptr || controlPtr->owner == nullptr)
+            {
+              return;
+            }
+
+            controlPtr->owner->drainOneIntent();
+          });
+      }
+      catch (...)
+      {
+        intentDrainScheduled = false;
+        throw;
+      }
+    }
+
+    void drainOneIntent()
+    {
+      intentDrainScheduled = false;
+
+      if (closed || pendingIntents.empty())
+      {
+        return;
+      }
+
+      auto intent = std::move(pendingIntents.front());
+      pendingIntents.pop_front();
+      std::ignore = executeIntentAndContinue(intent, true);
+    }
+
+    bool insideBoundary() const noexcept { return commitDepth != 0 || publicationDepth != 0; }
+    bool hasPendingIntentBacklog() const noexcept { return intentDrainScheduled || !pendingIntents.empty(); }
 
     // Adapter wiring ----------------------------------------------------------
 
@@ -229,10 +480,11 @@ namespace ao::rt
       subscriptions.push_back(transport.onPreparing(markChanged));
       subscriptions.push_back(transport.onStarted(markChanged));
       subscriptions.push_back(transport.onPaused(markChanged));
-      subscriptions.push_back(transport.onIdle(markChanged));
+      subscriptions.push_back(transport.onIdle([this] { onTransportIdle(); }));
       subscriptions.push_back(transport.onStopped(markChanged));
       subscriptions.push_back(transport.onOutputDevicesChanged(markChanged));
-      subscriptions.push_back(transport.onNowPlayingChanged([this](auto const&) { onPositionAnchorChanged(); }));
+      subscriptions.push_back(transport.onNowPlayingChanged([this](PlaybackTransport::NowPlayingChanged const& event)
+                                                            { onPositionAnchorChanged(event); }));
       subscriptions.push_back(transport.onOutputDeviceChanged([this](auto const&) { onSourceChanged(); }));
       subscriptions.push_back(transport.onQualityChanged([this](auto const&) { onSourceChanged(); }));
       subscriptions.push_back(transport.onVolumeChanged([this](float) { onSourceChanged(); }));
@@ -244,10 +496,9 @@ namespace ao::rt
       subscriptions.push_back(transport.onRevealTrackRequested(
         [this](PlaybackTransport::RevealTrackRequested const& request)
         {
-          emitSafely(revealTrackSignal,
-                     PlaybackRevealTrackRequest{.trackId = request.trackId,
-                                                .preferredViewId = request.preferredViewId,
-                                                .preferredListId = request.preferredListId});
+          onRevealTrackRequested(PlaybackRevealTrackRequest{.trackId = request.trackId,
+                                                            .preferredViewId = request.preferredViewId,
+                                                            .preferredListId = request.preferredListId});
         }));
 
       subscriptions.push_back(succession.onChanged([this](PlaybackSuccessionState const&) { onSourceChanged(); }));
@@ -259,27 +510,39 @@ namespace ao::rt
 
     void onSourceChanged()
     {
-      if (bracketDepth != 0)
+      if (commitDepth != 0)
       {
-        bracketDirty = true;
-        return;
-      }
-
-      if (!observed)
-      {
-        lastSnapshot = composeContent();
+        commitDirty = true;
         return;
       }
 
       scheduleDeferredPublish();
     }
 
+    void onTransportIdle()
+    {
+      if (commitDepth == 0)
+      {
+        pendingExternalPositionAnchor = true;
+      }
+
+      onSourceChanged();
+    }
+
     void onSeekUpdate(PlaybackTransport::SeekUpdate const& update)
     {
       if (update.mode == PlaybackTransport::SeekMode::Preview)
       {
-        emitSafely(
-          seekPreviewSignal, PlaybackSeekPreview{.revision = lastSnapshot.revision, .elapsed = update.elapsed});
+        if (commitDepth != 0)
+        {
+          pendingSeekPreviews.push_back(update.elapsed);
+        }
+        else
+        {
+          emitSafely(
+            seekPreviewSignal, PlaybackSeekPreview{.revision = lastSnapshot.revision, .elapsed = update.elapsed});
+        }
+
         return;
       }
 
@@ -288,17 +551,50 @@ namespace ao::rt
       onSourceChanged();
     }
 
-    void onPositionAnchorChanged()
+    void onPositionAnchorChanged(PlaybackTransport::NowPlayingChanged const& event)
     {
+      pendingExternalPositionAnchor = false;
+      auto const repeatsEmptyAnchor = event.trackId == kInvalidTrackId && event.trackId == observedAnchorTrackId &&
+                                      event.sourceListId == observedAnchorSourceListId;
+      observedAnchorTrackId = event.trackId;
+      observedAnchorSourceListId = event.sourceListId;
+
+      if (repeatsEmptyAnchor)
+      {
+        onSourceChanged();
+        return;
+      }
+
       ++positionRevisionCounter;
+      commitObservedPositionAnchor = commitDepth != 0;
       onSourceChanged();
     }
 
     void onFailure(PlaybackFailure const& failure)
     {
-      emitSafely(
-        failureSignal,
-        PlaybackFailureEvent{.revision = lastSnapshot.revision, .optCommandId = std::nullopt, .failure = failure});
+      if (commitDepth != 0)
+      {
+        pendingFailures.push_back(PendingFailure{.optCommandId = optCurrentCommandId, .failure = failure});
+        return;
+      }
+
+      emitSafely(failureSignal,
+                 PlaybackFailureEvent{
+                   .revision = lastSnapshot.revision,
+                   .optCommandId = std::nullopt,
+                   .failure = failure,
+                 });
+    }
+
+    void onRevealTrackRequested(PlaybackRevealTrackRequest request)
+    {
+      if (commitDepth != 0)
+      {
+        pendingRevealRequests.push_back(std::move(request));
+        return;
+      }
+
+      emitSafely(revealTrackSignal, request);
     }
 
     void scheduleDeferredPublish()
@@ -309,42 +605,104 @@ namespace ao::rt
       }
 
       publishScheduled = true;
-      auto const weakControlPtr = std::weak_ptr<DeferredPublicationControl>{deferredPublicationControlPtr};
-      executor.defer(
-        [weakControlPtr]
-        {
-          auto const controlPtr = weakControlPtr.lock();
+      auto const weakControlPtr = std::weak_ptr<DeferredControl>{deferredControlPtr};
 
-          if (controlPtr == nullptr || controlPtr->owner == nullptr)
+      try
+      {
+        executor.defer(
+          [weakControlPtr]
           {
-            return;
-          }
+            auto const controlPtr = weakControlPtr.lock();
 
-          controlPtr->owner->publishScheduled = false;
-          controlPtr->owner->publishNow();
-        });
+            if (controlPtr == nullptr || controlPtr->owner == nullptr)
+            {
+              return;
+            }
+
+            controlPtr->owner->publishScheduled = false;
+
+            if (controlPtr->owner->closed)
+            {
+              return;
+            }
+
+            controlPtr->owner->publishNow();
+          });
+      }
+      catch (...)
+      {
+        publishScheduled = false;
+        throw;
+      }
     }
 
-    void beginCommand() noexcept { ++bracketDepth; }
-
-    void endCommand() noexcept
+    void beginCommit(PlaybackCommandId const commandId)
     {
-      if (--bracketDepth == 0 && bracketDirty)
+      if (commitDepth == 0)
       {
-        bracketDirty = false;
-        publishNow();
+        auto const& nowPlaying = transport.state().nowPlaying;
+        optCurrentCommandId = commandId;
+        commitStartTrackId = nowPlaying.trackId;
+        commitStartSourceListId = nowPlaying.sourceListId;
+        commitObservedPositionAnchor = false;
       }
+
+      ++commitDepth;
+    }
+
+    void settleCommit(bool const forcesPositionAnchor)
+    {
+      if (commitDepth > 1)
+      {
+        return;
+      }
+
+      auto const& nowPlaying = transport.state().nowPlaying;
+      auto const subjectChanged =
+        nowPlaying.trackId != commitStartTrackId || nowPlaying.sourceListId != commitStartSourceListId;
+
+      if (!commitObservedPositionAnchor && (forcesPositionAnchor || subjectChanged))
+      {
+        ++positionRevisionCounter;
+        commitDirty = true;
+        observedAnchorTrackId = nowPlaying.trackId;
+        observedAnchorSourceListId = nowPlaying.sourceListId;
+      }
+
+      if (commitDirty)
+      {
+        publishNow();
+        commitDirty = false;
+      }
+
+      publishPendingEvents();
+    }
+
+    void closeCommit() noexcept
+    {
+      if (commitDepth == 1)
+      {
+        optCurrentCommandId.reset();
+      }
+
+      --commitDepth;
     }
 
     void publishNow()
     {
-      auto content = composeContent();
+      auto const& nowPlaying = transport.state().nowPlaying;
+      auto const unobservedSubjectChange =
+        nowPlaying.trackId != observedAnchorTrackId || nowPlaying.sourceListId != observedAnchorSourceListId;
 
-      if (!observed)
+      if (pendingExternalPositionAnchor || unobservedSubjectChange)
       {
-        lastSnapshot = std::move(content);
-        return;
+        ++positionRevisionCounter;
+        observedAnchorTrackId = nowPlaying.trackId;
+        observedAnchorSourceListId = nowPlaying.sourceListId;
+        pendingExternalPositionAnchor = false;
       }
+
+      auto content = composeContent();
 
       if (content.sameContentAs(lastSnapshot))
       {
@@ -352,24 +710,73 @@ namespace ao::rt
       }
 
       content.revision = PlaybackRevision{.value = ++revisionCounter};
-      lastSnapshot = content;
-      emitSafely(snapshotSignal, content);
+      lastSnapshot = std::move(content);
+      emitSafely(snapshotSignal, lastSnapshot);
+    }
+
+    void publishPendingEvents()
+    {
+      auto failures = std::exchange(pendingFailures, {});
+      auto seekPreviews = std::exchange(pendingSeekPreviews, {});
+      auto revealRequests = std::exchange(pendingRevealRequests, {});
+
+      for (auto const& pending : failures)
+      {
+        emitSafely(failureSignal,
+                   PlaybackFailureEvent{
+                     .revision = lastSnapshot.revision,
+                     .optCommandId = pending.optCommandId,
+                     .failure = pending.failure,
+                   });
+      }
+
+      for (auto const elapsed : seekPreviews)
+      {
+        emitSafely(seekPreviewSignal, PlaybackSeekPreview{.revision = lastSnapshot.revision, .elapsed = elapsed});
+      }
+
+      for (auto const& request : revealRequests)
+      {
+        emitSafely(revealTrackSignal, request);
+      }
     }
 
     template<typename Event>
-    static void emitSafely(async::Signal<Event const&>& signal, Event const& event) noexcept
+    void emitSafely(async::Signal<Event const&>& signal, Event const& event)
     {
+      ++publicationDepth;
+
       try
       {
         signal.emit(event);
       }
-      catch (...)
+      catch (...) // NOLINT(bugprone-empty-catch) -- public observer faults are isolated
       {
         // Runtime observation is exception-contained by the boundary. Every
         // still-connected observer has already run because Signal preserves
         // the first exception until delivery completes.
+      }
+
+      --publicationDepth;
+
+      if (!insideBoundary())
+      {
+        scheduleIntentDrain();
+      }
+    }
+
+    void shutdown() noexcept
+    {
+      if (closed)
+      {
         return;
       }
+
+      closed = true;
+      latestInvalidatingGeneration = ++intentGenerationCounter;
+      pendingIntents.clear();
+      subscriptions.clear();
+      deferredControlPtr->owner = nullptr;
     }
 
     PlaybackSnapshot composeContent() const
@@ -419,15 +826,37 @@ namespace ao::rt
     async::Signal<PlaybackRevealTrackRequest const&> revealTrackSignal;
 
     std::vector<async::Subscription> subscriptions;
-    std::shared_ptr<DeferredPublicationControl> deferredPublicationControlPtr;
-    PlaybackSnapshot lastSnapshot{};
+    std::shared_ptr<DeferredControl> deferredControlPtr;
+
+    // The commit pump is callback-executor-confined. Either boundary depth
+    // blocks synchronous intent execution; the queue plus its scheduled marker
+    // forms one FIFO backlog. An outer commit owns its command identity, dirty
+    // and anchor evidence, and transient events until settlement. Each deferred
+    // marker represents at most one task; shutdown revokes the task's owner link.
+    std::deque<PendingIntent> pendingIntents;
+    std::vector<PendingFailure> pendingFailures;
+    std::vector<std::chrono::milliseconds> pendingSeekPreviews;
+    std::vector<PlaybackRevealTrackRequest> pendingRevealRequests;
     std::uint64_t revisionCounter = 0;
     std::uint64_t positionRevisionCounter = 0;
     std::uint64_t finalSeekRevisionCounter = 0;
-    std::size_t bracketDepth = 0;
-    bool bracketDirty = false;
+    std::uint64_t intentGenerationCounter = 0;
+    std::uint64_t latestInvalidatingGeneration = 0;
+    std::uint64_t commandIdCounter = 0;
+    std::optional<PlaybackCommandId> optCurrentCommandId{};
+    TrackId commitStartTrackId = kInvalidTrackId;
+    ListId commitStartSourceListId = kInvalidListId;
+    PlaybackSnapshot lastSnapshot{};
+    TrackId observedAnchorTrackId = kInvalidTrackId;
+    ListId observedAnchorSourceListId = kInvalidListId;
+    std::size_t commitDepth = 0;
+    std::size_t publicationDepth = 0;
+    bool commitDirty = false;
+    bool commitObservedPositionAnchor = false;
+    bool pendingExternalPositionAnchor = false;
     bool publishScheduled = false;
-    bool observed = false;
+    bool intentDrainScheduled = false;
+    bool closed = false;
   };
 
   PlaybackBootstrap::PlaybackBootstrap(PlaybackTransport& transport) noexcept
@@ -475,14 +904,13 @@ namespace ao::rt
     return *_implPtr;
   }
 
-  PlaybackService::CommandBracket::CommandBracket(PlaybackService& owner) noexcept
-    : _owner{owner}
+  bool PlaybackService::runSynchronousIntent(std::move_only_function<bool()> operation)
   {
-    _owner._implPtr->beginCommand();
+    return _implPtr->runSynchronousIntent(std::move(operation));
   }
 
-  PlaybackService::CommandBracket::~CommandBracket()
+  void PlaybackService::shutdown() noexcept
   {
-    _owner._implPtr->endCommand();
+    _implPtr->shutdown();
   }
 } // namespace ao::rt

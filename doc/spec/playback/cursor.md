@@ -216,7 +216,8 @@ If that already-started transition wins the race, its track becomes current and 
 ### Clear and mode changes
 
 `clear()` removes succession authority without stopping present transport.
-`next()`, `previous()`, and `clear()` are no-ops when no session is active or when the current accepted-start publication blocks reentrant sequence mutation.
+`next()`, `previous()`, and `clear()` are no-ops when no session is active.
+Public observer reentrancy is serialized by the owning `PlaybackService` commit boundary rather than rejected by succession.
 
 Shuffle and repeat preferences exist even while Inactive and are inherited by the next launch.
 Setting a mode to its current value is a no-op.
@@ -249,7 +250,7 @@ Before clear, stop, exhaustion, or invalidation removes succession authority, th
 Composite persistence rejects a cursor/transport current-subject mismatch instead of combining different playback generations.
 
 The restore matrix, dirty revision, and save timing belong to [playback session persistence](session-persistence.md); exact fields and schema compatibility belong to the [session-state reference](../../reference/playback/session-state.md).
-RFC 0005 proposes changing coordination and persistence execution, but it does not change this current authority until implemented documentation replaces it.
+RFC 0005 Stage 3 moved application coordination and persistence installation into the `PlaybackService` commit boundary without moving cursor policy out of succession.
 
 ## Frontend observations
 
@@ -260,7 +261,7 @@ Anchor movement, membership churn, or preparation replacement that leaves the tu
 Source invalidation, current-track transition, successor change, and crossing the previous-restart threshold publish only when they change that tuple.
 
 Shuffle and repeat have dedicated events for actual mode changes because a mode can change without changing the semantic tuple.
-No-op and blocked commands publish neither semantic nor mode events.
+No-op commands publish neither semantic nor mode events.
 Observers are observational and do not choose succession policy.
 
 ## Implementation map
@@ -279,7 +280,7 @@ Observers are observational and do not choose succession policy.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
 - [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, timer generations, pause/resume/seek control, session replacement, and shutdown.
-- [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, reentrancy containment, and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects the public projection.
+- [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 
 ## Related documents

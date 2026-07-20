@@ -27,9 +27,10 @@ namespace ao::rt
   };
 
   /**
-   * Correlation identity for one accepted public playback command. It lets an
-   * asynchronous failure event name the command it belongs to once preparation
-   * moves off the callback executor. Until then it is absent.
+   * Correlation identity for one accepted public playback command. A failure
+   * observed while that command executes carries the identity; failures from
+   * lower asynchronous work carry it when their originating command remains
+   * correlated.
    */
   struct PlaybackCommandId final
   {
@@ -68,7 +69,9 @@ namespace ao::rt
    * reports when a new snapshot is published and carries revisioned events that
    * are not self-contained application state. Every method is
    * callback-executor-affine; handlers run on the executor thread and must
-   * defer owner teardown to a later turn.
+   * defer owner teardown to a later turn. A playback command issued by a
+   * handler is admitted into the service intent queue and executes in a later
+   * executor turn; it cannot alter the event currently being delivered.
    */
   class PlaybackEvents
   {
