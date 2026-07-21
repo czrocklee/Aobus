@@ -14,6 +14,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 if [[ -z "${AO_IN_NIX_PORTAL:-}" ]]; then
+    # Do not let Python modules from a previously entered project shell shadow
+    # the versions selected by the current shell.nix.
+    unset PYTHONHOME PYTHONPATH
     exec nix-shell "$ROOT/shell.nix" --run "AO_IN_NIX_PORTAL=1 $(printf '%q ' "$ROOT/ao" "$@")"
 fi
 

@@ -20,6 +20,17 @@ from ao.command.build import BuildResult
 from ao.core import builddir
 
 
+class LinuxShellPortalTest(unittest.TestCase):
+    def test_nix_reentry_discards_python_paths_from_a_stale_shell(self):
+        portal = Path(__file__).resolve().parents[2] / "ao"
+        content = portal.read_text(encoding="utf-8")
+
+        unset_offset = content.index("unset PYTHONHOME PYTHONPATH")
+        reentry_offset = content.index('exec nix-shell "$ROOT/shell.nix"')
+
+        self.assertLess(unset_offset, reentry_offset)
+
+
 class WindowsBatchPortalTest(unittest.TestCase):
     def test_python_bootstrap_normalizes_state_arguments_and_ignores_ambient_packages(self):
         portal = Path(__file__).resolve().parents[2] / "ao.bat"

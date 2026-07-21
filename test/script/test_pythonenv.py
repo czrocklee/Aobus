@@ -50,8 +50,9 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
         versions = pythonenv.tool_versions()
         requirements = pythonenv.REQUIREMENTS_FILE.read_text(encoding="utf-8")
 
-        self.assertEqual(versions, {"python": "3.13.13", "ruff": "0.15.14", "mypy": "1.20.1"})
+        self.assertEqual(versions, {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"})
         for package, version in {
+            "ast-serialize": "0.6.0",
             "librt": "0.13.0",
             "mypy": versions["mypy"],
             "mypy_extensions": "1.1.0",
@@ -60,15 +61,15 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
             "typing_extensions": "4.16.0",
         }.items():
             self.assertIn(f"{package}=={version}", requirements)
-        self.assertEqual(requirements.count("--hash=sha256:"), 6)
+        self.assertEqual(requirements.count("--hash=sha256:"), 7)
 
     def test_fingerprint_changes_with_requirements_or_base_python(self):
-        versions = {"python": "3.13.13", "ruff": "0.15.14", "mypy": "1.20.1"}
+        versions = {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"}
         with tempfile.TemporaryDirectory() as temp_dir:
             requirements = Path(temp_dir) / "requirements.txt"
-            requirements.write_text("ruff==0.15.14\n", encoding="utf-8")
+            requirements.write_text("ruff==0.15.22\n", encoding="utf-8")
             first = pythonenv.environment_fingerprint(versions, requirements, executable=r"C:\Python\python.exe")
-            requirements.write_text("ruff==0.15.15\n", encoding="utf-8")
+            requirements.write_text("ruff==0.15.23\n", encoding="utf-8")
             changed_lock = pythonenv.environment_fingerprint(versions, requirements, executable=r"C:\Python\python.exe")
             changed_python = pythonenv.environment_fingerprint(
                 versions, requirements, executable=r"D:\Python\python.exe"
@@ -87,7 +88,7 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
         key.assert_called_once_with(Path("Y:\\"), environ={"AOBUS_CHECKOUT_ID": "id"}, create_id=True)
 
     def test_ready_environment_is_reused_without_rebuilding(self):
-        versions = {"python": "3.13.13", "ruff": "0.15.14", "mypy": "1.20.1"}
+        versions = {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"}
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             config = root / "toolchain.json"
@@ -109,7 +110,7 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
         build.assert_not_called()
 
     def test_new_environment_is_staged_then_published(self):
-        versions = {"python": "3.13.13", "ruff": "0.15.14", "mypy": "1.20.1"}
+        versions = {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"}
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             config = root / "toolchain.json"
@@ -140,7 +141,7 @@ class WindowsPythonEnvironmentTest(unittest.TestCase):
             create.assert_called_once()
 
     def test_builder_installs_only_hash_locked_binary_packages(self):
-        versions = {"python": "3.13.13", "ruff": "0.15.14", "mypy": "1.20.1"}
+        versions = {"python": "3.14.6", "ruff": "0.15.22", "mypy": "2.1.0"}
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             destination = root / "environment"
