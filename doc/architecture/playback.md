@@ -92,7 +92,7 @@ Sequence-only operations use a private collaboration surface so ordinary consume
 ### Session-persistence coordinator
 
 `PlaybackSessionPersistence` owns the composite durable listening intent rather than either playback authority owning a partial payload.
-It observes the coherent playback snapshot plus internal persistence intent, coordinates save scheduling and retry, validates stored input, prepares a restore candidate, and installs sequence and deferred transport coherently.
+It observes the coherent playback snapshot plus internal persistence intent, coordinates debounced and natural-boundary saves, validates stored input, prepares a restore candidate, and installs sequence and deferred transport coherently.
 
 It borrows the runtime library, public `PlaybackService`, both internal playback owners, `ConfigStore`, and `async::Runtime` from `AppRuntime` composition.
 It does not become a third live playback-state authority: current sequence and transport snapshots remain owned by their services.
@@ -209,8 +209,7 @@ The correlation values have separate owners and meanings:
 | `TrackId` and `ListId` | Runtime library subject and source context. | An accepted or still-current audio item. |
 | `PreparedNextToken` | PlaybackTransport/Sequence correlation for one prepared application intent. | Engine generation or current list membership. |
 | `Engine::PlaybackItemId` | Opaque audio item identity allocated at the runtime/audio bridge and echoed by Engine. | Library identity or succession policy. |
-| Playback generation and cancellation barrier | Engine/Player proof that older audio callbacks can no longer win. | Projection revision or persistence revision. |
-| Session persistence revision | Persistence proof that one captured durable intent was acknowledged. | Audio callback or prepared-transition freshness. |
+| Playback generation and cancellation barrier | Engine/Player proof that older audio callbacks can no longer win. | Projection revision or save-schedule freshness. |
 
 No layer infers one form of evidence from another.
 
@@ -242,7 +241,7 @@ Sequence persistence intent + transport persistence intent
   -> PlaybackService publishes one coherent snapshot
   -> PlaybackSessionPersistence captures that snapshot plus internal cursor evidence
   -> reject mismatched current subjects
-  -> ConfigStore candidate save with composite revision acknowledgement
+  -> ConfigStore candidate save
 
 stored payload
   -> validate against storage and format
@@ -295,7 +294,7 @@ Player is the intentional bridge between the callback-executor domain and the th
 Engine is the intentional bridge between serialized control and the dedicated event, decode, and render domains.
 The Engine control domain is a synchronization domain, not a dedicated control thread: public control calls execute synchronously on their caller and are serialized internally.
 Through Player the caller is normally the runtime callback executor, so current track opening, source construction, preroll, and route activation performed during staging remain on that synchronous call path; only later event delivery, streaming decode, and rendering use dedicated threads.
-Playback-session timers sleep outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
+The playback-session debounce delay sleeps outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
 
 Runtime lower-layer signals are delivered synchronously within the callback domain and are exception-contained by their owner.
 Public playback observation is delivered only by `PlaybackService`; a command requested from one of its observers enters the service FIFO and executes on a later executor turn.
@@ -325,7 +324,7 @@ Explicit start and restore use silent lower-owner installation, so succession ne
 
 Core audio classifies execution failures, while Engine and Player own quiescence of the failing audio activity; PlaybackTransport translates accepted lower failures into application transport state and public observations.
 PlaybackSuccession owns recovery only when choosing another source member requires cursor context.
-The persistence coordinator owns malformed-session rejection, durable retry, and restore normalization.
+The persistence coordinator owns malformed-session rejection, best-effort save scheduling, and restore normalization.
 
 Cancellation evidence is scoped to its owner.
 Async persistence work uses stop tokens and lifetime guards; StreamingSource owns decode/seek stop sources; Engine and Player use playback generations and cancellation barriers to reject stale callbacks and prepared transitions.
@@ -365,7 +364,7 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) protects public-surface closure, coherent commits, revision publication without subscribers, observer deferral, intent supersession, failure correlation, pending-intent lifetime, quality correlation, and spontaneous-event coalescing.
 - [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp), [`PlaybackCursorModelTest.cpp`](../../test/unit/runtime/playback/PlaybackCursorModelTest.cpp), and [`ProjectionAnchorTest.cpp`](../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) protect succession ownership and the pure/session boundary.
 - [`PlaybackTransportControlTest.cpp`](../../test/unit/runtime/PlaybackTransportControlTest.cpp), [`PlaybackTransportOutputTest.cpp`](../../test/unit/runtime/PlaybackTransportOutputTest.cpp), and [`PlaybackTransportTokenTest.cpp`](../../test/unit/runtime/PlaybackTransportTokenTest.cpp) protect application transport and cross-domain identity.
-- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) and [`PlaybackSessionRevisionTest.cpp`](../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protect composite persistence and restore coordination.
+- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects composite persistence and restore coordination.
 - [`PlaybackCommandSurfaceTest.cpp`](../../test/unit/uimodel/playback/command/PlaybackCommandSurfaceTest.cpp) protects the UIModel/runtime command boundary.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects Player ownership, provider/Engine composition, and callback marshalling.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp), [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp), [`EngineGaplessTest.cpp`](../../test/unit/audio/EngineGaplessTest.cpp), and [`EngineBackendSwapTest.cpp`](../../test/unit/audio/EngineBackendSwapTest.cpp) protect Engine control, status/seek serialization, event, transition, and backend boundaries.

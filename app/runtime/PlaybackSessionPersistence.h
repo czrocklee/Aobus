@@ -3,18 +3,15 @@
 
 #pragma once
 
-#include "runtime/playback/PlaybackSessionRevision.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
-#include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <stop_token>
 
@@ -50,48 +47,31 @@ namespace ao::rt
     PlaybackSessionPersistence(PlaybackSessionPersistence&&) = delete;
     PlaybackSessionPersistence& operator=(PlaybackSessionPersistence&&) = delete;
 
-    void start();
     Result<> checkpoint();
     Result<> shutdown();
     Result<PlaybackSessionPersistenceRestoreResult> restore();
     Result<> discardRestorableSession();
-    async::Subscription onDirty(std::move_only_function<void()> handler);
 
   private:
     using Delay = std::chrono::milliseconds;
 
-    enum class ScheduledSave : std::uint8_t
-    {
-      None,
-      DirtyDebounce,
-      Retry,
-    };
+    static constexpr Delay kSaveDebounceDelay = std::chrono::seconds{1};
 
-    static constexpr Delay kDirtyDebounceDelay = std::chrono::seconds{1};
-    static constexpr Delay kInitialRetryDelay = std::chrono::seconds{1};
-    static constexpr Delay kMaximumRetryDelay = std::chrono::minutes{1};
-    static constexpr Delay kPeriodicSaveInterval = std::chrono::seconds{10};
-
+    void ensureStarted();
     Result<> save();
+    void checkpointBestEffort();
     void handleSnapshot(PlaybackSnapshot const& snapshot);
-    void markDirty();
+    void requestDebouncedSave();
     bool hasActiveSession() const;
     bool hasRestorableSession() const;
-    void handleSaveSucceeded();
-    void scheduleRetry();
-    void scheduleSave(ScheduledSave kind, Delay delay);
-    void handleScheduledSave(std::uint64_t scheduleGeneration, ScheduledSave kind);
+    void scheduleSave(Delay delay);
+    void handleScheduledSave(std::uint64_t scheduleGeneration);
     void cancelScheduledSave() noexcept;
-    void startPeriodicSave();
     static async::Task<void> waitForScheduledSave(async::Runtime* asyncRuntime,
                                                   std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
                                                   Delay delay,
                                                   std::uint64_t scheduleGeneration,
-                                                  ScheduledSave kind,
                                                   std::stop_token stopToken);
-    static async::Task<void> runPeriodicSave(async::Runtime* asyncRuntime,
-                                             std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
-                                             std::stop_token stopToken);
 
     ConfigStore& _config;
     Library& _library;
@@ -99,23 +79,15 @@ namespace ao::rt
     PlaybackTransport& _playbackTransport;
     PlaybackService& _playback;
     async::Runtime& _asyncRuntime;
-    async::Signal<> _dirtySignal;
     async::Subscription _successionIntentSubscription;
     async::Subscription _snapshotSubscription;
     PlaybackSnapshot _lastSnapshot{};
-    PlaybackSessionRevision _sessionRevision;
     async::TaskHandle _scheduledTask;
-    async::TaskHandle _periodicTask;
-    Delay _nextRetryDelay{kInitialRetryDelay};
     std::uint64_t _scheduleGeneration = 0;
-    ScheduledSave _scheduledSave = ScheduledSave::None;
     bool _sessionDiscarded = false;
     bool _restorePublicationPending = false;
     bool _restoring = false;
     bool _started = false;
     bool _shuttingDown = false;
-    std::chrono::milliseconds _committedIntentPosition{0};
-    float _volumeIntent = 1.0F;
-    bool _mutedIntent = false;
   };
 } // namespace ao::rt

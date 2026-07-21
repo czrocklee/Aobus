@@ -195,7 +195,7 @@ Atomic replacement protects the target path from a helper-written partial replac
 It always installs a private-user file after a complete write, data barrier, and close, and gives every uncommitted temporary file one RAII cleanup owner.
 Its success means the platform replacement call succeeded; it does not serialize concurrent writers, prove absolute power-loss durability, or acknowledge a newer in-memory revision on behalf of the state owner.
 
-Playback-session persistence adds dirty revisions, debounce, retry, and final checkpoint policy above this mechanism.
+Playback-session persistence adds event-driven debounce, natural checkpoints, and final checkpoint policy above this mechanism.
 Workspace, GTK preference, layout, and presentation owners currently use their own explicit lifecycle save points.
 
 ### Library switching
@@ -248,7 +248,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`AppRuntimeDependencies`](../../app/include/ao/rt/AppRuntime.h) injects workspace and playback-session stores.
 - [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h) and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own workspace snapshot and restore coordination.
 - [`WorkspaceSessionYamlSchema`](../../app/runtime/WorkspaceSessionYamlSchema.h) owns the strict workspace persistence DTO and stable presentation conversion.
-- [`PlaybackSessionYamlSchema`](../../app/runtime/PlaybackSessionYamlSchema.h) owns playback-session structural and semantic candidate validation; [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns scheduling, revision acknowledgement, restore, and store use.
+- [`PlaybackSessionYamlSchema`](../../app/runtime/PlaybackSessionYamlSchema.h) owns playback-session structural and semantic candidate validation; [`PlaybackSessionPersistence`](../../app/runtime/PlaybackSessionPersistence.h) owns scheduling, restore, and store use.
 - [`AppConfigStore`](../../app/linux-gtk/app/AppConfigStore.h) owns the global GTK file boundary.
 - [`KeymapStore`](../../app/include/ao/uimodel/input/KeymapStore.h), [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), and the UIModel presentation schemas own platform-neutral state and serialization helpers.
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h), [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h), and [`GtkLayoutStateStore`](../../app/linux-gtk/app/GtkLayoutStateStore.h) are GTK file adapters.
@@ -263,7 +263,7 @@ The specialized layout component-state store provides its own mutex-protected op
 - [`RymlAdapterTest.cpp`](../../test/unit/utility/RymlAdapterTest.cpp) protects strict parsing, scalar conversion, and callback diagnostic lifetime; [`YamlSerializationTest.cpp`](../../test/unit/utility/YamlSerializationTest.cpp) protects explicit map/sequence composition, failure order, and arena ownership.
 - [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) protects workspace absence, restore rollback, and failure propagation.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects stable workspace presentation conversion and strict semantic rejection.
-- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) and [`PlaybackSessionRevisionTest.cpp`](../../test/unit/runtime/playback/PlaybackSessionRevisionTest.cpp) protect exact deserialization, semantic validation, dirty revisions, retry, discard, and store selection.
+- [`PlaybackSessionTest.cpp`](../../test/unit/runtime/PlaybackSessionTest.cpp) protects exact deserialization, semantic validation, event-driven saving, discard, failure propagation, and store selection.
 - [`AppConfigStoreTest.cpp`](../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) and [`KeymapStoreTest.cpp`](../../test/unit/uimodel/input/KeymapStoreTest.cpp) protect global GTK groups and delta-from-default keymaps.
 - [`ShellLayoutStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp), [`ShellLayoutComponentStateStoreTest.cpp`](../../test/unit/linux-gtk/app/ShellLayoutComponentStateStoreTest.cpp), and [`GtkLayoutStateStoreTest.cpp`](../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) protect the specialized GTK file boundaries.
 

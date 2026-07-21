@@ -53,7 +53,7 @@ Use the [specification template](../template/spec.md).
 - [Playback succession cursor](playback/cursor.md) defines live-projection launch, anchors, navigation, repeat, shuffle, prepared-next, and failure walking.
 - [Decoder session](playback/decoder-session.md) defines decoder lifecycle, format negotiation, PCM representations, and failures.
 - [Audio execution and concurrency](playback/audio-execution.md) defines control serialization, event delivery, realtime rendering, gapless transitions, generation fences, backend lifetime, and shutdown.
-- [Playback session persistence](playback/session-persistence.md) defines strict restore, normalization, deferred transport, dirty revisions, saving, retry, discard, and shutdown.
+- [Playback session persistence](playback/session-persistence.md) defines strict restore, normalization, deferred transport, event-driven best-effort saving, discard, and shutdown.
 
 ## Query
 

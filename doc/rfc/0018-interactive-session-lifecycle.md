@@ -33,7 +33,7 @@ TUI calls `playback.stop()`, requests async stop, joins the runtime, and exits w
 
 Checkpointing does not represent one application operation.
 GTK writes window state, presentation state, global application session, playback session, and workspace session through separate wrappers with mixed void, result-returning, and logging behavior.
-There is no checkpoint identity, captured runtime revision set, component receipt, retry policy, or rule preventing repeated lifecycle triggers from writing an older snapshot after a newer one.
+There is no checkpoint identity, component receipt, or one admission rule for repeated lifecycle triggers.
 
 Construction permits invalid persistence composition.
 `AppRuntimeDependencies::workspaceConfigStorePtr` defaults to null, while `AppRuntime` dereferences the resulting pointer directly and also uses it as the fallback playback-session store.
@@ -63,7 +63,7 @@ The final checkpoint receipt cannot claim applied grouped commits while workspac
 - Represent degraded readiness and unresolved persisted input without overwriting rejected state.
 - Give GTK and TUI equivalent workspace and playback session continuity when persistence is enabled.
 - Make persistence capability explicit and type-safe at runtime construction.
-- Coalesce repeated checkpoint triggers and acknowledge exact captured component revisions.
+- Serialize repeated lifecycle checkpoint triggers and return exact per-component outcomes.
 - Define one idempotent shutdown sequence that frontends invoke rather than partially reproducing it.
 - Publish lifecycle phase and operation identity for frontend progress, reporting, and active-library replacement.
 
@@ -213,26 +213,26 @@ A blocking library or runtime initialization failure never becomes ready merely 
 ### Checkpoint coordinator
 
 All lifecycle save triggers submit one `CheckpointRequest` to the runtime lifecycle.
-The request declares a reason such as explicit save, periodic dirty checkpoint, hide, shutdown, or library switch.
+The request declares a reason such as explicit save, hide, shutdown, or library switch.
 
 The coordinator:
 
-1. Coalesces compatible pending requests while preserving the strongest reason and acknowledgement requirement.
-2. Captures one workspace revision, one playback revision, and any runtime-owned managed state on the callback executor.
+1. Admits one checkpoint operation at a time and folds compatible pending lifecycle requests into the strongest reason.
+2. Captures current workspace, playback, and other runtime-owned managed state synchronously on the callback executor.
 3. Sends immutable payload candidates to their single writer owners.
 4. Collects one receipt per physical document and semantic component.
-5. Clears dirty state only through each acknowledged captured revision.
-6. Publishes one checkpoint completion with applied, visibility-only, failed, superseded, or partially applied component outcomes.
+5. Publishes one checkpoint completion with applied, visibility-only, failed, superseded, or partially applied component outcomes.
 
-Repeated hide, destructor, and release triggers cannot independently write the same or older runtime snapshot.
+Repeated hide, destructor, and release triggers do not create competing background writers.
 Frontends may still checkpoint UI-local stores, but they correlate those receipts with the same lifecycle operation id at the active-library/application-shell boundary.
 
 No cross-file atomicity is claimed.
-If workspace commits and playback fails, the receipt says so and playback remains dirty for retry.
+If workspace commits and playback fails, the receipt says so; playback waits for the next natural or lifecycle checkpoint and does not retain a dirty revision or schedule a retry.
 Shutdown and switching policy decides which component failures block transition.
 
 The current grouped store supplies candidate-isolated whole-document saves.
-Lifecycle receipts correlate those results with captured semantic revisions; they inherit the atomic replacement boundary in which a returned error is pre-replacement and success records an applied platform replacement without stronger power-loss evidence.
+Lifecycle receipts correlate those results with the operation and component snapshot identities already owned by each domain; they do not introduce persistence-only revisions.
+They inherit the atomic replacement boundary in which a returned error is pre-replacement and success records an applied platform replacement without stronger power-loss evidence.
 
 ### Degraded state and recovery
 
@@ -313,7 +313,7 @@ Typed degraded state separates usability from authorization to replace input.
 ### Make checkpoint one cross-file transaction
 
 Workspace, playback, presentation, shell, and global application state have different documents and owners.
-A journaled multi-file protocol is disproportionate; exact component receipts and dirty revisions are honest about partial application.
+A journaled multi-file protocol is disproportionate; exact component receipts are sufficient to report partial application.
 
 ### Rely on destructors for final save and shutdown
 
@@ -331,7 +331,7 @@ Implementation proceeds in phases:
 2. Replace nullable persistence dependencies with explicit managed/disabled capabilities.
 3. Move workspace bootstrap, exact presentation precedence, and default-view creation into the lifecycle using RFC 0017 and RFC 0016.
 4. Migrate TUI to the same start path and add managed versus ephemeral session behavior tests.
-5. Add checkpoint operation ids, captured revisions, coalescing, unresolved-input suppression, and per-component receipts.
+5. Add checkpoint operation ids, serialized admission, unresolved-input suppression, and per-component receipts without playback dirty state or retry scheduling.
 6. Expose current store results through semantic writers, integrate RFC 0013 dispositions, and remove void/log-only lifecycle save paths.
 7. Integrate RFC 0005's coherent playback lifecycle role and remove composition-root use of internal playback services.
 8. Move GTK and TUI teardown to explicit lifecycle shutdown and add admission/quiescence guardrails.
@@ -350,9 +350,9 @@ Frontends may temporarily adapt to the lifecycle while internal calls remain syn
 - Unsupported, incompatible, or malformed managed input can enter documented degraded mode without being overwritten by automatic checkpoint.
 - GTK and managed TUI restore the same workspace and playback intent from equivalent inputs.
 - Ephemeral TUI follows the same bootstrap and shutdown state machine without accessing a store.
-- One startup receipt distinguishes every component outcome and names the committed workspace/playback revisions.
-- Repeated explicit save, hide, destructor-adjacent, switch, and shutdown requests coalesce without acknowledging or writing an older revision over a newer one.
-- Partial checkpoint application preserves exact component receipts and leaves only unacknowledged revisions dirty.
+- One startup receipt distinguishes every component outcome and names the committed workspace revision and playback restore outcome.
+- Repeated explicit save, hide, destructor-adjacent, switch, and shutdown requests pass through one serialized checkpoint admission path without competing background writes.
+- Partial checkpoint application preserves exact component receipts without manufacturing persistence-only dirty revisions.
 - A checkpoint failure receives exactly the reporting disposition selected under RFC 0013.
 - Shutdown closes admission before quiescence, performs at most one required final checkpoint, and produces no callback into destroyed frontend observers.
 - Calling shutdown repeatedly returns the same terminal state without repeating semantic writes or teardown.
@@ -377,7 +377,7 @@ If accepted and implemented, update the [interactive session lifecycle architect
 Update the [system architecture](../architecture/system-overview.md) with the role only if it changes the public application-runtime composition map.
 Update the [runtime execution architecture](../architecture/runtime-execution.md) with lifecycle admission, callback draining, and shutdown quiescence.
 
-Update the [workspace session specification](../spec/workspace/session.md) with lifecycle invocation, default-view policy, unresolved-input suppression, and revision acknowledgement.
+Update the [workspace session specification](../spec/workspace/session.md) with lifecycle invocation, default-view policy, unresolved-input suppression, and checkpoint receipts.
 Update playback session specifications with lifecycle restore/checkpoint/quiescence after RFC 0005 integration.
 Add a focused interactive-session lifecycle specification for the exact phases, receipts, degradation matrix, checkpoint reasons, and frontend gates.
 

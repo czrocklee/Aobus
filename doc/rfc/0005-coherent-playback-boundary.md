@@ -21,6 +21,10 @@ privilege, installation, and restore guards have been removed. The resulting
 behavior is owned by the
 [playback application commit specification](../spec/playback/application-commit.md).
 
+The serialized asynchronous persistence stage was not adopted.
+On 2026-07-21, playback-session persistence was deliberately simplified to synchronous best-effort saves on discrete intent and natural lifecycle boundaries, without a playback-specific dirty revision or retry scheduler.
+The current [playback session persistence specification](../spec/playback/session-persistence.md) owns that implemented behavior; the persistence section below remains proposal history rather than pending implementation direction.
+
 ## Problem
 
 At acceptance, the playback implementation had sound separation between application semantics and Core audio execution, but its application boundary exposed the internal split instead of containing it.

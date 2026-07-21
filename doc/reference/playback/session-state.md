@@ -10,7 +10,7 @@ summary: Enumerates the exact playback-session group, version 3 fields, types, d
 ## Scope and version
 
 This reference owns the exact serialized `PlaybackSessionState` payload in schema version `3`.
-Capture, validation, restore, normalization, dirty, retry, discard, and shutdown behavior belongs to the [playback session persistence specification](../../spec/playback/session-persistence.md).
+Capture, validation, restore, normalization, save scheduling, failure, discard, and shutdown behavior belongs to the [playback session persistence specification](../../spec/playback/session-persistence.md).
 
 ## Code boundary
 
@@ -57,7 +57,7 @@ The payload contains none of these:
 - sticky shuffle candidate or shuffle history;
 - decoder, Engine, audio, route, render, or callback generations;
 - output backend/profile/device identity; or
-- dirty revision and timer state.
+- debounce task and scheduling generation.
 
 ## Validation rules
 

@@ -249,7 +249,7 @@ An active session supplies its live cursor snapshot.
 Before clear, stop, exhaustion, or invalidation removes succession authority, the runtime captures an immutable last-restorable cursor snapshot.
 Composite persistence rejects a cursor/transport current-subject mismatch instead of combining different playback generations.
 
-The restore matrix, dirty revision, and save timing belong to [playback session persistence](session-persistence.md); exact fields and schema compatibility belong to the [session-state reference](../../reference/playback/session-state.md).
+The restore matrix and event-driven save timing belong to [playback session persistence](session-persistence.md); exact fields and schema compatibility belong to the [session-state reference](../../reference/playback/session-state.md).
 RFC 0005 Stage 3 moved application coordination and persistence installation into the `PlaybackService` commit boundary without moving cursor policy out of succession.
 
 ## Frontend observations

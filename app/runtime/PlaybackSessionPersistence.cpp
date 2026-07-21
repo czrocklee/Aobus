@@ -10,7 +10,6 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/async/Signal.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/ConfigStore.h>
@@ -29,7 +28,6 @@
 #include <cstdint>
 #include <exception>
 #include <expected>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -59,34 +57,6 @@ namespace ao::rt
       bool& _restoring;
       bool _previous = false;
     };
-
-    void publishDirtySafely(async::Signal<>& signal) noexcept
-    {
-      try
-      {
-        signal.emit();
-      }
-      catch (std::exception const& error)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback session dirty observer threw: {}", error.what());
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- observer containment must remain noexcept
-        {
-        }
-      }
-      catch (...)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback session dirty observer threw an unknown exception");
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- observer containment must remain noexcept
-        {
-        }
-      }
-    }
 
     PlaybackSessionState snapshotState(PlaybackLaunchSpec launchSpec,
                                        TrackId const currentTrackId,
@@ -121,19 +91,12 @@ namespace ao::rt
     , _playbackTransport{playbackTransport}
     , _playback{playback}
     , _asyncRuntime{asyncRuntime}
-    , _lastSnapshot{_playback.snapshot()}
-    , _committedIntentPosition{_lastSnapshot.transport.elapsed}
-    , _volumeIntent{_lastSnapshot.transport.volume.level}
-    , _mutedIntent{_lastSnapshot.transport.volume.muted}
   {
-    _successionIntentSubscription = _succession.onPersistenceIntentChanged([this] { markDirty(); });
-    _snapshotSubscription =
-      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   PlaybackSessionPersistence::~PlaybackSessionPersistence() = default;
 
-  void PlaybackSessionPersistence::start()
+  void PlaybackSessionPersistence::ensureStarted()
   {
     if (_started || _shuttingDown)
     {
@@ -141,13 +104,10 @@ namespace ao::rt
     }
 
     _started = true;
-
-    if (_sessionRevision.dirty())
-    {
-      scheduleSave(ScheduledSave::DirtyDebounce, kDirtyDebounceDelay);
-    }
-
-    startPeriodicSave();
+    _lastSnapshot = _playback.snapshot();
+    _successionIntentSubscription = _succession.onPersistenceIntentChanged([this] { requestDebouncedSave(); });
+    _snapshotSubscription =
+      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
 
   Result<> PlaybackSessionPersistence::checkpoint()
@@ -157,16 +117,17 @@ namespace ao::rt
       return {};
     }
 
+    ensureStarted();
     cancelScheduledSave();
+    return save();
+  }
 
-    if (auto result = save(); !result)
+  void PlaybackSessionPersistence::checkpointBestEffort()
+  {
+    if (auto const saved = checkpoint(); !saved)
     {
-      scheduleRetry();
-      return result;
+      APP_LOG_WARN("Playback session checkpoint failed: {}", saved.error().message);
     }
-
-    handleSaveSucceeded();
-    return {};
   }
 
   Result<> PlaybackSessionPersistence::shutdown()
@@ -181,7 +142,6 @@ namespace ao::rt
     _successionIntentSubscription.reset();
     _snapshotSubscription.reset();
     cancelScheduledSave();
-    _periodicTask.reset();
     return shouldSave ? save() : Result<>{};
   }
 
@@ -201,41 +161,24 @@ namespace ao::rt
       // snapshot after the restore transaction returns. Adopt that publication
       // as the restored baseline without treating it as a new persistence intent.
       _restorePublicationPending = false;
-      _committedIntentPosition = snapshot.transport.elapsed;
       return;
     }
 
-    bool persistenceIntentChanged = false;
     auto const subjectChanged =
       snapshot.transport.nowPlaying.trackId != previous.transport.nowPlaying.trackId ||
       snapshot.transport.nowPlaying.sourceListId != previous.transport.nowPlaying.sourceListId;
     auto const committedPositionChanged = snapshot.transport.finalSeekRevision != previous.transport.finalSeekRevision;
+    auto const volumeIntentChanged = snapshot.transport.volume.level != previous.transport.volume.level ||
+                                     snapshot.transport.volume.muted != previous.transport.volume.muted;
 
-    if (snapshot.transport.volume.level != _volumeIntent)
+    if (volumeIntentChanged && !committedPositionChanged)
     {
-      _volumeIntent = snapshot.transport.volume.level;
-      persistenceIntentChanged = true;
+      requestDebouncedSave();
     }
 
-    if (subjectChanged)
+    if (committedPositionChanged && _sessionDiscarded && hasActiveSession())
     {
-      _committedIntentPosition = snapshot.transport.elapsed;
-    }
-    else if (committedPositionChanged && snapshot.transport.elapsed != _committedIntentPosition)
-    {
-      _committedIntentPosition = snapshot.transport.elapsed;
-      persistenceIntentChanged = true;
-    }
-
-    if (snapshot.transport.volume.muted != _mutedIntent)
-    {
-      _mutedIntent = snapshot.transport.volume.muted;
-      persistenceIntentChanged = true;
-    }
-
-    if (persistenceIntentChanged)
-    {
-      markDirty();
+      _sessionDiscarded = false;
     }
 
     auto const settledTransport = snapshot.transport.transport != previous.transport.transport &&
@@ -244,7 +187,7 @@ namespace ao::rt
 
     if (_started && (subjectChanged || committedPositionChanged || settledTransport))
     {
-      std::ignore = checkpoint();
+      checkpointBestEffort();
     }
   }
 
@@ -256,67 +199,26 @@ namespace ao::rt
     return _succession.capturePlaybackSessionSnapshot(launchSpec, trackId, anchorIndex);
   }
 
-  void PlaybackSessionPersistence::markDirty()
+  void PlaybackSessionPersistence::requestDebouncedSave()
   {
-    if (auto const active = hasActiveSession(); _restoring || !hasRestorableSession() || (_sessionDiscarded && !active))
+    if (auto const active = hasActiveSession();
+        !_started || _shuttingDown || _restoring || !hasRestorableSession() || (_sessionDiscarded && !active))
     {
       return;
     }
 
     _sessionDiscarded = false;
-
-    if (_sessionRevision.markDirty())
-    {
-      publishDirtySafely(_dirtySignal);
-
-      if (_started && !_shuttingDown && _scheduledSave != ScheduledSave::Retry)
-      {
-        scheduleSave(ScheduledSave::DirtyDebounce, kDirtyDebounceDelay);
-      }
-    }
+    scheduleSave(kSaveDebounceDelay);
   }
 
-  void PlaybackSessionPersistence::handleSaveSucceeded()
+  void PlaybackSessionPersistence::scheduleSave(Delay const delay)
   {
     cancelScheduledSave();
-    _nextRetryDelay = kInitialRetryDelay;
-
-    if (_sessionRevision.dirty() && _started && !_shuttingDown)
-    {
-      scheduleSave(ScheduledSave::DirtyDebounce, kDirtyDebounceDelay);
-    }
-  }
-
-  void PlaybackSessionPersistence::scheduleRetry()
-  {
-    if (!_started || _shuttingDown)
-    {
-      return;
-    }
-
-    auto const retryDelay = _nextRetryDelay;
-
-    if (_nextRetryDelay >= kMaximumRetryDelay / 2)
-    {
-      _nextRetryDelay = kMaximumRetryDelay;
-    }
-    else
-    {
-      _nextRetryDelay = std::min(_nextRetryDelay * 2, kMaximumRetryDelay);
-    }
-
-    scheduleSave(ScheduledSave::Retry, retryDelay);
-  }
-
-  void PlaybackSessionPersistence::scheduleSave(ScheduledSave const kind, Delay const delay)
-  {
-    cancelScheduledSave();
-    _scheduledSave = kind;
     auto const callbackGeneration = _scheduleGeneration;
     _scheduledTask = _asyncRuntime.spawnCancellable(
-      [asyncRuntime = &_asyncRuntime, weakSelfPtr = weak_from_this(), delay, callbackGeneration, kind](
+      [asyncRuntime = &_asyncRuntime, weakSelfPtr = weak_from_this(), delay, callbackGeneration](
         std::stop_token const stopToken)
-      { return waitForScheduledSave(asyncRuntime, weakSelfPtr, delay, callbackGeneration, kind, stopToken); });
+      { return waitForScheduledSave(asyncRuntime, weakSelfPtr, delay, callbackGeneration, stopToken); });
   }
 
   async::Task<void> PlaybackSessionPersistence::waitForScheduledSave(
@@ -324,7 +226,6 @@ namespace ao::rt
     std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
     Delay const delay,
     std::uint64_t const scheduleGeneration,
-    ScheduledSave const kind,
     std::stop_token const stopToken)
   {
     co_await asyncRuntime->sleepFor(delay, stopToken);
@@ -332,59 +233,24 @@ namespace ao::rt
 
     if (auto const selfPtr = weakSelfPtr.lock(); selfPtr)
     {
-      selfPtr->handleScheduledSave(scheduleGeneration, kind);
+      selfPtr->handleScheduledSave(scheduleGeneration);
     }
   }
 
-  void PlaybackSessionPersistence::handleScheduledSave(std::uint64_t const scheduleGeneration, ScheduledSave const kind)
+  void PlaybackSessionPersistence::handleScheduledSave(std::uint64_t const scheduleGeneration)
   {
-    if (_shuttingDown || scheduleGeneration != _scheduleGeneration || _scheduledSave != kind)
+    if (_shuttingDown || scheduleGeneration != _scheduleGeneration)
     {
       return;
     }
 
-    std::ignore = checkpoint();
+    checkpointBestEffort();
   }
 
   void PlaybackSessionPersistence::cancelScheduledSave() noexcept
   {
     ++_scheduleGeneration;
-    _scheduledSave = ScheduledSave::None;
     _scheduledTask.reset();
-  }
-
-  void PlaybackSessionPersistence::startPeriodicSave()
-  {
-    _periodicTask = _asyncRuntime.spawnCancellable(
-      [asyncRuntime = &_asyncRuntime, weakSelfPtr = weak_from_this()](std::stop_token const stopToken)
-      { return runPeriodicSave(asyncRuntime, weakSelfPtr, stopToken); });
-  }
-
-  async::Task<void> PlaybackSessionPersistence::runPeriodicSave(async::Runtime* asyncRuntime,
-                                                                std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
-                                                                std::stop_token const stopToken)
-  {
-    while (true)
-    {
-      co_await asyncRuntime->sleepFor(kPeriodicSaveInterval, stopToken);
-      co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
-
-      {
-        auto const selfPtr = weakSelfPtr.lock();
-
-        if (!selfPtr || selfPtr->_shuttingDown)
-        {
-          co_return;
-        }
-
-        if (selfPtr->_playback.snapshot().transport.transport == audio::Transport::Playing)
-        {
-          std::ignore = selfPtr->checkpoint();
-        }
-      }
-
-      co_await asyncRuntime->resumeOnWorker(stopToken);
-    }
   }
 
   Result<> PlaybackSessionPersistence::save()
@@ -421,18 +287,9 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback cursor and transport current tracks disagree during save");
     }
 
-    auto const capturedRevision = _sessionRevision.capture();
     auto const session = snapshotState(std::move(launchSpec), currentTrackId, anchorIndex, elapsed, snapshot);
 
-    if (auto const saved = _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{}); !saved)
-    {
-      return saved;
-    }
-
-    _committedIntentPosition = elapsed;
-    _sessionRevision.acknowledge(capturedRevision);
-
-    return {};
+    return _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
   }
 
   Result<PlaybackSessionPersistenceRestoreResult> PlaybackSessionPersistence::restore()
@@ -442,6 +299,7 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback session restore is already in progress");
     }
 
+    ensureStarted();
     auto loaded = PlaybackSessionState{};
     auto const loadedSession = _config.load(kPlaybackSessionConfigGroup, loaded, PlaybackSessionYamlSchema{});
 
@@ -466,19 +324,16 @@ namespace ao::rt
         return PlaybackSessionPersistenceRestoreResult{};
       }
 
-      auto restoredState = loaded;
       auto launchSpec = PlaybackLaunchSpec{
         .sourceListId = loaded.sourceListId,
         .quickFilterExpression = loaded.quickFilterExpression,
         .order = TrackOrderSpec{.sortBy = loaded.sortBy},
       };
-      bool normalized = false;
 
       if (!sourceExists)
       {
         launchSpec.sourceListId = kAllTracksListId;
         launchSpec.quickFilterExpression.clear();
-        normalized = true;
       }
 
       auto currentTrackId = loaded.currentTrackId;
@@ -515,7 +370,6 @@ namespace ao::rt
 
         currentTrackId = (*candidate)->trackIdAt(*optReplacementIndex);
         positionMs = 0;
-        normalized = true;
         candidate = _succession.preparePlaybackSessionRestore(
           launchSpec, currentTrackId, *optReplacementIndex, loaded.shuffleMode, loaded.repeatMode);
 
@@ -525,13 +379,6 @@ namespace ao::rt
         }
       }
 
-      auto const actualAnchor = (*candidate)->cursor().anchor().anchorIndex();
-      restoredState.sourceListId = launchSpec.sourceListId;
-      restoredState.quickFilterExpression = launchSpec.quickFilterExpression;
-      restoredState.currentTrackId = currentTrackId;
-      restoredState.anchorIndex = actualAnchor;
-      restoredState.positionMs = positionMs;
-      normalized = normalized || restoredState != loaded;
       auto const outcome = PlaybackSessionPersistenceRestoreResult{
         .restored = true,
         .trackId = currentTrackId,
@@ -556,28 +403,10 @@ namespace ao::rt
         }
 
         _restorePublicationPending = true;
-        _committedIntentPosition = *restoredElapsed;
         _succession.commitPlaybackSessionRestore(
           std::move(*candidate), loaded.shuffleMode, loaded.repeatMode, *restoredElapsed);
 
-        auto const& successionState = _succession.state();
-        auto const& playbackState = _playbackTransport.state();
-        restoredState.positionMs =
-          static_cast<std::uint64_t>(std::max(*restoredElapsed, std::chrono::milliseconds{0}).count());
-        auto const coherentCurrent = successionState.currentTrackId == currentTrackId &&
-                                     successionState.sourceListId == launchSpec.sourceListId &&
-                                     playbackState.nowPlaying.trackId == currentTrackId &&
-                                     playbackState.nowPlaying.sourceListId == launchSpec.sourceListId;
-        normalized = normalized || !coherentCurrent || restoredState != loaded;
         _sessionDiscarded = false;
-        _volumeIntent = playbackState.volume.level;
-        _mutedIntent = playbackState.volume.muted;
-        _sessionRevision.resetClean();
-
-        if (normalized && _sessionRevision.markDirty())
-        {
-          publishDirtySafely(_dirtySignal);
-        }
 
         return {};
       }();
@@ -602,8 +431,8 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback session restore is in progress");
     }
 
+    ensureStarted();
     cancelScheduledSave();
-    _nextRetryDelay = kInitialRetryDelay;
 
     if (auto const removed = _config.removeGroup(kPlaybackSessionConfigGroup); !removed)
     {
@@ -613,22 +442,6 @@ namespace ao::rt
     _succession.discardPlaybackSessionSnapshot();
     _playbackTransport.discardPlaybackTransportSnapshot();
     _sessionDiscarded = true;
-    _sessionRevision.resetClean();
     return {};
-  }
-
-  async::Subscription PlaybackSessionPersistence::onDirty(std::move_only_function<void()> handler)
-  {
-    if (!handler)
-    {
-      return {};
-    }
-
-    if (_sessionRevision.dirty())
-    {
-      handler();
-    }
-
-    return _dirtySignal.connect(std::move(handler));
   }
 } // namespace ao::rt

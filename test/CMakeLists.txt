@@ -266,7 +266,6 @@ add_executable(ao_core_test
     unit/runtime/projection/TrackListProjectionScaleTest.cpp
     unit/runtime/playback/PlaybackCursorModelTest.cpp
     unit/runtime/playback/PlaybackRestartDeadlineTest.cpp
-    unit/runtime/playback/PlaybackSessionRevisionTest.cpp
     unit/runtime/playback/PreparedNextRegistryTest.cpp
     unit/runtime/playback/ProjectionAnchorTest.cpp
     unit/runtime/playback/ShuffleHistoryTest.cpp

@@ -38,7 +38,7 @@ The service's private implementation owns intent ordering and revision commits; 
 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
-| `value` | `std::uint64_t` | `0` | Monotonic identity of one accepted application transition. Totally ordered; never derived from an Engine item id, audio generation, or persistence revision. |
+| `value` | `std::uint64_t` | `0` | Monotonic identity of one accepted application transition. Totally ordered; never derived from an Engine item id or audio generation. |
 
 ### Position identities
 

@@ -16,8 +16,7 @@ namespace ao::rt
   /**
    * Monotonically increasing identity for one accepted application playback
    * transition. It correlates published snapshots and revisioned events; it is
-   * never derived from or substituted for an Engine item id, audio generation,
-   * or persistence revision.
+   * never derived from or substituted for an Engine item id or audio generation.
    */
   struct PlaybackRevision final
   {

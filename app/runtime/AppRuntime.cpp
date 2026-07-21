@@ -9,7 +9,6 @@
 #include <ao/Error.h>
 #include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
 #include <ao/async/Runtime.h>
-#include <ao/async/Subscription.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Player.h>
 #include <ao/rt/AppRuntime.h>
@@ -27,7 +26,6 @@
 
 #include <exception>
 #include <expected>
-#include <functional>
 #include <memory>
 #include <utility>
 
@@ -140,7 +138,6 @@ namespace ao::rt
     auto const accepted = _implPtr->playbackPtr->runSynchronousIntent(
       [this, &restored]
       {
-        _implPtr->playbackSessionPersistencePtr->start();
         restored = _implPtr->playbackSessionPersistencePtr->restore();
         return restored && restored->restored;
       });
@@ -166,11 +163,6 @@ namespace ao::rt
   Result<> AppRuntime::discardRestorablePlaybackSession()
   {
     return _implPtr->playbackSessionPersistencePtr->discardRestorableSession();
-  }
-
-  async::Subscription AppRuntime::onPlaybackSessionDirty(std::move_only_function<void()> handler)
-  {
-    return _implPtr->playbackSessionPersistencePtr->onDirty(std::move(handler));
   }
 
   void AppRuntime::reloadAllTracks()
