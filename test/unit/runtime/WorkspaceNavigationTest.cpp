@@ -38,8 +38,6 @@ namespace ao::rt::test
 
     REQUIRE(runtime.workspace().navigateTo(fixture.firstListId));
 
-    CHECK(runtime.workspace().canGoBack() == false);
-    CHECK(runtime.workspace().canGoForward() == false);
     auto const layout = runtime.workspace().snapshot();
     CHECK(layout.activeViewId != kInvalidViewId);
     auto const state = runtime.views().trackListState(layout.activeViewId);
@@ -56,7 +54,6 @@ namespace ao::rt::test
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == kAllTracksListId);
-    CHECK(runtime.workspace().canGoBack() == true);
   }
 
   TEST_CASE("WorkspaceService - filtered AllTracks navigation uses the global list",
@@ -83,7 +80,6 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);
-    CHECK(runtime.workspace().canGoBack() == false);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
   }
@@ -163,7 +159,6 @@ namespace ao::rt::test
     auto const result = runtime.jumpToAlbum(trackId);
     REQUIRE(result);
     CHECK(revealCalled == true);
-    CHECK(result->afterRevision == runtime.workspace().snapshot().revision);
 
     auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == kAllTracksListId);
@@ -200,8 +195,6 @@ namespace ao::rt::test
     CHECK(afterLayout.openViews == beforeLayout.openViews);
     CHECK(afterLayout.revision == beforeLayout.revision);
     CHECK(runtime.views().listViews().size() == beforeViews.size());
-    CHECK_FALSE(runtime.workspace().canGoBack());
-    CHECK_FALSE(runtime.workspace().canGoForward());
   }
 
   TEST_CASE("WorkspaceService - focus rejects ids outside the open live aggregate",
@@ -214,7 +207,7 @@ namespace ao::rt::test
       ao::test::requireValue(runtime.views().createView(TrackListViewConfig{.listId = fixture.secondListId}));
     auto const before = runtime.workspace().snapshot();
 
-    for (auto const viewId : {kInvalidViewId, unopenedView.viewId, ViewId{999999}})
+    for (auto const viewId : {kInvalidViewId, unopenedView, ViewId{999999}})
     {
       auto const result = runtime.workspace().focusView(viewId);
       REQUIRE_FALSE(result);
@@ -225,7 +218,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("WorkspaceService - no-op focus and close preserve revision and observation",
-            "[runtime][unit][workspace][receipt]")
+            "[runtime][unit][workspace][observation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& workspace = fixture.runtime.workspace();
@@ -236,19 +229,16 @@ namespace ao::rt::test
     std::int32_t changeCount = 0;
     auto const sub = workspace.onChanged([&](WorkspaceChanged const&) { ++changeCount; });
 
-    auto const focus = ao::test::requireValue(workspace.focusView(activeViewId));
-    auto const close = ao::test::requireValue(workspace.closeView(unopened.viewId));
+    REQUIRE(workspace.focusView(activeViewId));
+    REQUIRE(workspace.closeView(unopened));
 
-    CHECK(focus.disposition == WorkspaceCommitDisposition::NoChange);
-    CHECK(close.disposition == WorkspaceCommitDisposition::NoChange);
-    CHECK(focus.beforeRevision == before.revision);
-    CHECK(focus.afterRevision == before.revision);
     CHECK(workspace.snapshot() == before);
-    CHECK(fixture.runtime.views().trackListState(unopened.viewId).lifecycle == ViewLifecycleState::Attached);
+    CHECK(fixture.runtime.views().trackListState(unopened).id == unopened);
     CHECK(changeCount == 0);
   }
 
-  TEST_CASE("WorkspaceService - focus commits a different open live view once", "[runtime][unit][workspace][receipt]")
+  TEST_CASE("WorkspaceService - focus commits a different open live view once",
+            "[runtime][unit][workspace][observation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& workspace = fixture.runtime.workspace();
@@ -258,12 +248,10 @@ namespace ao::rt::test
     auto changed = WorkspaceChanged{};
     auto const sub = workspace.onChanged([&](WorkspaceChanged const& value) { changed = value; });
 
-    auto const receipt = ao::test::requireValue(workspace.focusView(firstViewId));
+    REQUIRE(workspace.focusView(firstViewId));
 
-    CHECK(receipt.disposition == WorkspaceCommitDisposition::Applied);
-    CHECK(receipt.beforeRevision == before.revision);
-    CHECK(receipt.afterRevision == before.revision + 1);
-    CHECK(receipt.activeViewId == firstViewId);
+    CHECK(workspace.snapshot().revision == before.revision + 1);
+    CHECK(workspace.snapshot().activeViewId == firstViewId);
     CHECK(changed.cause == WorkspaceChangeCause::Focus);
     CHECK(changed.snapshot == workspace.snapshot());
   }
@@ -281,14 +269,12 @@ namespace ao::rt::test
     auto const receivingSub =
       runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received.push_back(changed); });
 
-    auto const receipt = ao::test::requireValue(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
+    REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
 
-    CHECK(receipt.disposition == WorkspaceCommitDisposition::Applied);
     CHECK(received.empty());
     CHECK_NOTHROW(executor->drain());
     REQUIRE(received.size() == 1);
     CHECK(received.front().snapshot == runtime.workspace().snapshot());
-    CHECK(received.front().snapshot.revision == receipt.afterRevision);
   }
 
   TEST_CASE("WorkspaceService - reentrant changes cannot mutate the observation being delivered",
@@ -316,13 +302,14 @@ namespace ao::rt::test
         }
       });
 
-    auto const firstReceipt = ao::test::requireValue(runtime.workspace().navigateTo(firstListId));
+    REQUIRE(runtime.workspace().navigateTo(firstListId));
+    auto const firstRevision = runtime.workspace().snapshot().revision;
     REQUIRE(executor->drainUntil([&] { return received.size() == 1; }));
 
     REQUIRE(received.size() == 1);
     auto const firstObservation = received.front();
-    CHECK(firstObservation.snapshot.revision == firstReceipt.afterRevision);
-    CHECK(runtime.workspace().snapshot().revision == firstReceipt.afterRevision + 1);
+    CHECK(firstObservation.snapshot.revision == firstRevision);
+    CHECK(runtime.workspace().snapshot().revision == firstRevision + 1);
     CHECK(received.front() == firstObservation);
 
     REQUIRE(executor->drainUntil([&] { return received.size() == 2; }));

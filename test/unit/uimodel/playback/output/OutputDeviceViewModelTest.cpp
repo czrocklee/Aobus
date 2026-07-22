@@ -206,12 +206,11 @@ namespace ao::uimodel::test
     auto viewModel = OutputDeviceViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
     viewModel.refresh();
     REQUIRE(log.states.size() == 1);
-    auto const revisionBefore = fixture.playback.snapshot().revision;
-
     fixture.commands().setShuffleMode(ShuffleMode::On);
     fixture.commands().setRepeatMode(RepeatMode::All);
 
-    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::All);
     CHECK(log.states.size() == 1);
   }
 } // namespace ao::uimodel::test

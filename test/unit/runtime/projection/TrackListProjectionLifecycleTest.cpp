@@ -38,10 +38,9 @@ namespace ao::rt::test
       CHECK(proj.trackIdAt(1) == id2);
     }
 
-    SECTION("viewId and revision")
+    SECTION("viewId")
     {
       CHECK(proj.viewId() == ViewId{1});
-      CHECK(proj.revision() == 0);
     }
 
     SECTION("trackIdAt out of bounds returns invalid")
@@ -137,8 +136,6 @@ namespace ao::rt::test
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
     CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));
-    CHECK(batches.front().revision == 1);
-    CHECK(proj.revision() == 1);
 
     auto lateBatches = std::vector<TrackListProjectionDeltaBatch>{};
     auto lateSubscription =

@@ -38,7 +38,7 @@ Frontends choose lifecycle points and inject the store but do not deserialize wo
 - Every persisted view is reconstructed against the active runtime's library and source cache.
 - Restore publishes no workspace aggregate until every candidate view has been created.
 - A failed candidate creation destroys every view created by that restore and preserves snapshot, revision, focus, presets, and history.
-- A missing `workspace` group is a successful `NoChange` restore.
+- A missing `workspace` group is a successful no-op restore.
 - One successful nonempty restore advances one workspace revision and publishes one complete `Restore` observation.
 - The active-list hint is advisory; unmatched state falls back to the first open view.
 - The restored active view becomes one initial navigation point; old history is never persisted.
@@ -47,7 +47,7 @@ Frontends choose lifecycle points and inject the store but do not deserialize wo
 
 ## State model
 
-The live `WorkspaceSnapshot` contains ordered open ids, active id, custom presets, navigation availability, and workspace revision.
+The live `WorkspaceSnapshot` contains ordered open ids, active id, custom presets, and workspace revision.
 Each open id identifies `TrackListViewState` owned by `ViewService`.
 
 The persistence candidate contains ordered semantic `TrackListViewConfig` values, one active-list hint, and custom presets.
@@ -73,7 +73,7 @@ There is no workspace dirty revision, retry scheduler, or durable acknowledgemen
 `restoreSession(store)` seeds a `WorkspaceSessionState` and asks the store to load the `workspace` group through `WorkspaceSessionYamlSchema`.
 The schema strictly deserializes its private document and returns one complete semantic candidate.
 
-- A missing group returns a `NoChange` receipt without creating a view or publishing an event.
+- A missing group returns success without creating a view or publishing an event.
 - File, parse, node-shape, missing/extra field, sequence-element, version, or stable-vocabulary failure returns before view creation.
 - Successful deserialize attempts to create every configured view through `ViewService`.
 - If a later creation fails, all earlier candidate ids are destroyed and the error returns.
@@ -96,9 +96,9 @@ That initial point is deduplicated normally and has no previous entry in the ord
 
 ### Commit
 
-Restore installs open ids, focus, complete custom presets, navigation availability, history cursor, and revision through one workspace commit.
-The returned `WorkspaceCommitReceipt` identifies the before and after revisions and resulting active view.
-An effectively identical deserialized candidate returns `NoChange`.
+Restore installs open ids, focus, complete custom presets, history cursor, and revision through one workspace commit.
+The command returns empty success; callers observe restored state through `snapshot()`.
+An effectively identical deserialized candidate succeeds without publication.
 
 One `WorkspaceChanged` event with cause `Restore` is queued after acceptance.
 Consumers never receive a sequence of partially added views or a separate preset/focus event.
@@ -155,7 +155,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 
 ## Test map
 
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group `NoChange`, one-event multi-view restore, initial history, fallback, malformed rejection, and candidate cleanup.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, one-event multi-view restore, initial history, fallback, malformed rejection, and candidate cleanup.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.

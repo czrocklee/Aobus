@@ -15,10 +15,8 @@
 #include <ao/async/Subscription.h>
 
 #include <chrono>
-#include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -40,31 +38,15 @@ namespace ao::rt
   class WorkspaceService;
   class LibraryChanges;
 
-  struct FilterStatusChanged final
-  {
-    ViewId viewId{};
-    std::string expression{};
-    bool pending = false;
-    std::optional<Error> optError = std::nullopt;
-    std::uint64_t revision = 0;
-  };
-
   struct TrackListProjectionChanged final
   {
     ViewId viewId{};
     std::shared_ptr<TrackListProjection> projectionPtr{};
-    std::uint64_t revision = 0;
   };
 
   class ViewService final
   {
   public:
-    struct FilterChanged final
-    {
-      ViewId viewId{};
-      std::string filterExpression{};
-    };
-
     struct SelectionChanged final
     {
       ViewId viewId{};
@@ -91,7 +73,7 @@ namespace ao::rt
     ViewService(ViewService&&) = delete;
     ViewService& operator=(ViewService&&) = delete;
 
-    Result<CreateTrackListViewReply> createView(TrackListViewConfig const& initial, bool attached = true);
+    Result<ViewId> createView(TrackListViewConfig const& initial);
     Result<> destroyView(ViewId viewId);
     Result<> setFilter(ViewId viewId, std::string filterExpression);
     Result<> setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
@@ -102,13 +84,11 @@ namespace ao::rt
 
     async::Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
     async::Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
-    async::Subscription onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler);
-    async::Subscription onFilterStatusChanged(std::move_only_function<void(FilterStatusChanged const&)> handler);
     async::Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
     async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
     async::Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
 
-    std::vector<ViewRecord> listViews() const;
+    std::vector<ViewId> listViews() const;
 
     TrackListViewState trackListState(ViewId viewId) const;
 

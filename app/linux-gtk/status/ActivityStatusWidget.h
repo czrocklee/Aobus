@@ -19,9 +19,6 @@
 
 #include <chrono>
 #include <cstdint>
-#include <functional>
-#include <string>
-#include <string_view>
 
 namespace ao::rt
 {
@@ -52,17 +49,11 @@ namespace ao::gtk
     std::int32_t maxTextChars = kDefaultMaxTextChars;
   };
 
-  using ActivityStatusWidgetActionRenderState = uimodel::ActivityActionAvailability;
-  using ActivityStatusWidgetActionResolver = uimodel::ActivityActionAvailabilityResolver;
-  using ActivityStatusWidgetActionHandler = std::function<void(rt::NotificationId, std::string_view, Gtk::Widget&)>;
-
   struct ActivityStatusWidgetDependencies final
   {
     rt::NotificationService& notifications;
     rt::LibraryChanges const* libraryChanges = nullptr;
     ActivityStatusWidgetOptions options{};
-    ActivityStatusWidgetActionResolver resolveNotificationAction{};
-    ActivityStatusWidgetActionHandler onNotificationAction{};
   };
 
   class ActivityStatusWidget final
@@ -83,7 +74,6 @@ namespace ao::gtk
     Gtk::MenuButton& detailButton() { return _detailButton; }
     Gtk::Popover& detailPopover() { return _detailPopover; }
     Gtk::Box& detailContent() { return _detailBox; }
-    uimodel::ActivityStatusViewModel& activityStatusViewModel() noexcept { return _activityStatusViewModel; }
 
   private:
     void buildUi();
@@ -95,11 +85,8 @@ namespace ao::gtk
     void clearKindClasses();
     void handleDismissClicked();
     void handleDetailDismissClicked(rt::NotificationId id);
-    void handleDetailActionClicked(rt::NotificationId id, std::string actionId, Gtk::Widget& anchor);
 
     ActivityStatusWidgetOptions _options{};
-    ActivityStatusWidgetActionResolver _resolveNotificationAction{};
-    ActivityStatusWidgetActionHandler _onNotificationAction{};
 
     Gtk::Box _box;
     Gtk::MenuButton _detailButton;

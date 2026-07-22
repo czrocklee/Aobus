@@ -32,11 +32,9 @@ namespace ao::rt::test
     LibraryWriter& writer() { return writerFixture.writer(); }
     ViewService makeService() { return ViewService{executor, libraryFixture.library(), *cachePtr}; }
 
-    CreateTrackListViewReply requireView(ViewService& service,
-                                         TrackListViewConfig const& config = {},
-                                         bool const attached = true)
+    ViewId requireView(ViewService& service, TrackListViewConfig const& config = {})
     {
-      return ao::test::requireValue(service.createView(config, attached));
+      return ao::test::requireValue(service.createView(config));
     }
   };
 } // namespace ao::rt::test

@@ -46,20 +46,20 @@ namespace ao::gtk::test
       CHECK(allTracksPtr->listId() == rt::kAllTracksListId);
 
       // "All Tracks" should have "Manual List A" as child
-      REQUIRE(allTracksPtr->nChildren() == 1);
-      auto const itemAPtr = allTracksPtr->child(0);
+      auto const allTracksChildrenPtr = allTracksPtr->children();
+      REQUIRE(allTracksChildrenPtr->get_n_items() == 1);
+      auto const itemAPtr = allTracksChildrenPtr->get_item(0);
       CHECK_FALSE(itemAPtr->row()->name().empty());
       CHECK_FALSE(itemAPtr->row()->isSmart());
       CHECK(itemAPtr->listId() == idA);
-      CHECK(itemAPtr->parent() == allTracksPtr.get());
 
       // "Manual List A" should have "Smart Child B" as child
-      REQUIRE(itemAPtr->nChildren() == 1);
-      auto const itemBPtr = itemAPtr->child(0);
+      auto const itemAChildrenPtr = itemAPtr->children();
+      REQUIRE(itemAChildrenPtr->get_n_items() == 1);
+      auto const itemBPtr = itemAChildrenPtr->get_item(0);
       CHECK_FALSE(itemBPtr->row()->name().empty());
       CHECK(itemBPtr->row()->isSmart());
       CHECK(itemBPtr->listId() == idB);
-      CHECK(itemBPtr->parent() == itemAPtr.get());
     }
 
     SECTION("Models are created")

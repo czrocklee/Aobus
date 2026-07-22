@@ -99,7 +99,7 @@ namespace ao::rt::test
           .trackIds = {trackIds.begin(), trackIds.end()},
         }));
         config.listId = listId;
-        viewId = ao::test::requireValue(views.createView(config, true)).viewId;
+        viewId = ao::test::requireValue(views.createView(config));
         successionPtr = std::make_unique<PlaybackSuccession>(
           executor, views, sources, libraryFixture.library(), playbackTransport, notifications, asyncRuntime);
       }
@@ -164,7 +164,7 @@ namespace ao::rt::test
           .name = "Transport order",
           .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
         }));
-        viewId = ao::test::requireValue(views.createView({.listId = listId}, true)).viewId;
+        viewId = ao::test::requireValue(views.createView({.listId = listId}));
         successionPtr = std::make_unique<PlaybackSuccession>(transport.executor,
                                                              views,
                                                              sources,
@@ -256,7 +256,7 @@ namespace ao::rt::test
           .name = "Long playback order",
           .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
         }));
-        viewId = ao::test::requireValue(views.createView({.listId = listId}, true)).viewId;
+        viewId = ao::test::requireValue(views.createView({.listId = listId}));
         successionPtr = std::make_unique<PlaybackSuccession>(
           executor, views, sources, libraryFixture.library(), *transportPtr, notifications, asyncRuntime);
       }
@@ -271,7 +271,7 @@ namespace ao::rt::test
           .name = "Failing playback order",
           .trackIds = {firstTrackId},
         }));
-        viewId = ao::test::requireValue(views.createView({.listId = listId}, true)).viewId;
+        viewId = ao::test::requireValue(views.createView({.listId = listId}));
         successionPtr = std::make_unique<PlaybackSuccession>(
           executor, views, sources, libraryFixture.library(), *transportPtr, notifications, asyncRuntime);
       }
@@ -349,6 +349,8 @@ namespace ao::rt::test
     auto const sequenceBeforeRejection = succession.state();
     auto const transportBeforeRejection = fixture.playbackTransport.state();
     REQUIRE(sequenceBeforeRejection.optResolvedSuccessor == successor);
+    std::uint32_t changedCount = 0;
+    auto const changedSubscription = succession.onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
 
     auto const rejected = succession.playFromView(fixture.viewId, broken);
 
@@ -356,10 +358,9 @@ namespace ao::rt::test
     auto const rejectionFeed = fixture.notifications.feed();
     REQUIRE(rejectionFeed.entries.size() == 1);
     CHECK(rejectionFeed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(rejectionFeed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    CHECK(rejectionFeed.entries.front().content.topic == NotificationTopic::PlaybackError);
+    CHECK(rejectionFeed.entries.front().lifetime == NotificationLifetime::pinned());
     CHECK(succession.state() == sequenceBeforeRejection);
-    CHECK(succession.state().semanticRevision == sequenceBeforeRejection.semanticRevision);
+    CHECK(changedCount == 0);
 
     auto const transportAfterRejection = fixture.playbackTransport.state();
     CHECK(transportAfterRejection.transport == transportBeforeRejection.transport);
@@ -437,7 +438,7 @@ namespace ao::rt::test
     CHECK(afterRemoval.currentTrackId == fixture.firstTrackId);
     CHECK(afterRemoval.sourceState == PlaybackSuccessionSourceState::Live);
     CHECK(afterRemoval.optResolvedSuccessor == fixture.secondTrackId);
-    CHECK(afterRemoval.semanticRevision == beforeRemoval.semanticRevision);
+    CHECK(afterRemoval == beforeRemoval);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
 
@@ -465,7 +466,6 @@ namespace ao::rt::test
           NotificationReportTemplate::PlaybackSequenceFinished);
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
-    CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
   TEST_CASE("PlaybackSuccession - launch spec remains detached from later view edits and destruction",
@@ -540,7 +540,7 @@ namespace ao::rt::test
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(succession.state().optResolvedSuccessor == fixture.thirdTrackId);
-    CHECK(succession.state().semanticRevision == beforeMove.semanticRevision + 1);
+    CHECK(succession.state() != beforeMove);
     CHECK(changedCount == 1);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.firstTrackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
@@ -549,7 +549,7 @@ namespace ao::rt::test
       fixture.writer().moveManualListTracks(fixture.listId, std::array{fixture.thirdTrackId}, std::size_t{1});
     REQUIRE(noOp);
     CHECK_FALSE(noOp->changed);
-    CHECK(succession.state().semanticRevision == beforeMove.semanticRevision + 1);
+    CHECK(succession.state().optResolvedSuccessor == fixture.thirdTrackId);
     CHECK(changedCount == 1);
   }
 
@@ -566,15 +566,10 @@ namespace ao::rt::test
       .name = "Recent",
       .expression = "$year >= 2000",
     }));
-    fixture.viewId =
-      ao::test::requireValue(
-        fixture.views.createView(
-          TrackListViewConfig{
-            .listId = fixture.listId,
-            .optPresentation = TrackPresentationSpec{.id = "year-order",
-                                                     .sortBy = {{.field = TrackSortField::Year, .ascending = true}}}},
-          true))
-        .viewId;
+    fixture.viewId = ao::test::requireValue(fixture.views.createView(TrackListViewConfig{
+      .listId = fixture.listId,
+      .optPresentation =
+        TrackPresentationSpec{.id = "year-order", .sortBy = {{.field = TrackSortField::Year, .ascending = true}}}}));
     fixture.successionPtr = std::make_unique<PlaybackSuccession>(fixture.executor,
                                                                  fixture.views,
                                                                  fixture.sources,
@@ -586,13 +581,16 @@ namespace ao::rt::test
     REQUIRE(succession.playFromView(fixture.viewId, fixture.secondTrackId));
     auto const beforeAddition = succession.state();
     REQUIRE(beforeAddition.optResolvedSuccessor == fixture.thirdTrackId);
+    std::uint32_t changedCount = 0;
+    auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
 
     REQUIRE(fixture.writerFixture.updateMetadata(
       std::array{fixture.firstTrackId}, MetadataPatch{.optYear = std::uint16_t{2005}}));
     auto const afterAddition = succession.state();
     CHECK(afterAddition.currentTrackId == fixture.secondTrackId);
     CHECK(afterAddition.optResolvedSuccessor == fixture.firstTrackId);
-    CHECK(afterAddition.semanticRevision == beforeAddition.semanticRevision + 1);
+    CHECK(afterAddition != beforeAddition);
+    CHECK(changedCount == 1);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);
 
     REQUIRE(fixture.writerFixture.updateMetadata(
@@ -601,7 +599,8 @@ namespace ao::rt::test
     CHECK(currentRemoved.sourceState == PlaybackSuccessionSourceState::Live);
     CHECK(currentRemoved.currentTrackId == fixture.secondTrackId);
     CHECK(currentRemoved.optResolvedSuccessor == fixture.firstTrackId);
-    CHECK(currentRemoved.semanticRevision == afterAddition.semanticRevision);
+    CHECK(currentRemoved == afterAddition);
+    CHECK(changedCount == 1);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);
     CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
   }
@@ -641,7 +640,6 @@ namespace ao::rt::test
           NotificationReportTemplate::PlaybackSequenceFinished);
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
-    CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
   TEST_CASE("PlaybackSuccession - empty live source has no successor with repeat off or all",
@@ -681,7 +679,6 @@ namespace ao::rt::test
           NotificationReportTemplate::PlaybackSequenceFinished);
     CHECK(feed.entries.front().severity == NotificationSeverity::Info);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::transient());
-    CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
   }
 
   TEST_CASE("PlaybackSuccession - idle fallback advances without a prepared successor",
@@ -754,7 +751,6 @@ namespace ao::rt::test
     REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.firstTrackId));
     fixture.transport.executor.drain();
     events.clear();
-    auto const revisionBeforeAdvance = fixture.successionPtr->state().semanticRevision;
 
     fixture.queueNaturalAdvance();
     fixture.transport.executor.drain();
@@ -763,7 +759,6 @@ namespace ao::rt::test
     REQUIRE(events.front().optPreparedNextToken);
     CHECK(events.front().trackId == fixture.secondTrackId);
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);
-    CHECK(fixture.successionPtr->state().semanticRevision == revisionBeforeAdvance + 1);
     CHECK(fixture.transport.playbackTransport.state().transport == audio::Transport::Playing);
   }
 
@@ -870,12 +865,10 @@ namespace ao::rt::test
 
     REQUIRE(skipSummary != nullptr);
     CHECK(skipSummary->severity == NotificationSeverity::Warning);
-    CHECK(skipSummary->lifetime == NotificationLifetime::sessionHistory());
-    CHECK(skipSummary->content.topic == NotificationTopic::PlaybackSequence);
+    CHECK(skipSummary->lifetime == NotificationLifetime::history());
     REQUIRE(failureLimit != nullptr);
     CHECK(failureLimit->severity == NotificationSeverity::Error);
-    CHECK(failureLimit->lifetime == NotificationLifetime::untilDismissed());
-    CHECK(failureLimit->content.topic == NotificationTopic::PlaybackSequence);
+    CHECK(failureLimit->lifetime == NotificationLifetime::pinned());
   }
 
   TEST_CASE("PlaybackSuccession - non-recoverable device failure terminates the active session",
@@ -902,7 +895,6 @@ namespace ao::rt::test
     auto const feed = fixture.transport.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackError);
   }
 
   TEST_CASE("PlaybackSuccession - track failure on an invalidated source posts one terminal succession error",
@@ -931,8 +923,7 @@ namespace ao::rt::test
     auto const feed = fixture.notifications.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
-    CHECK(feed.entries.front().content.topic == NotificationTopic::PlaybackSequence);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
     auto const& report = std::get<NotificationReport>(feed.entries.front().message);
     CHECK(report.templateId == NotificationReportTemplate::PlaybackStoppedForTrack);
@@ -957,12 +948,10 @@ namespace ao::rt::test
     CHECK_FALSE(succession.hasPrevious());
     CHECK_FALSE(succession.state().hasPrevious);
 
-    auto const revisionAtBoundary = succession.state().semanticRevision;
     playbackTransport.seek(std::chrono::milliseconds{3001}, PlaybackTransport::SeekMode::Final);
     CHECK(playbackTransport.elapsed() == std::chrono::milliseconds{3001});
     CHECK(succession.hasPrevious());
     CHECK(succession.state().hasPrevious);
-    CHECK(succession.state().semanticRevision == revisionAtBoundary + 1);
 
     succession.previous();
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
@@ -994,11 +983,9 @@ namespace ao::rt::test
     succession.previous();
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
 
-    auto const revisionBeforeRepeat = succession.state().semanticRevision;
     succession.setRepeatMode(RepeatMode::One);
     CHECK(succession.state().repeat == RepeatMode::One);
     CHECK(succession.state().optResolvedSuccessor == fixture.firstTrackId);
-    CHECK(succession.state().semanticRevision > revisionBeforeRepeat);
     CHECK(repeatEvents == 1);
     succession.setRepeatMode(RepeatMode::One);
     CHECK(repeatEvents == 1);
@@ -1041,14 +1028,12 @@ namespace ao::rt::test
       auto const currentTrackId = succession.state().currentTrackId;
       REQUIRE(currentTrackId != fixture.firstTrackId);
       REQUIRE(succession.hasPrevious());
-      auto const revisionBeforeFailure = succession.state().semanticRevision;
       fixture.removePlayableFile(fixture.firstTrackId);
 
       succession.previous();
 
       CHECK(succession.state().currentTrackId == currentTrackId);
       CHECK_FALSE(succession.hasPrevious());
-      CHECK(succession.state().semanticRevision > revisionBeforeFailure);
       CHECK(fixture.playbackTransport.state().transport == audio::Transport::Playing);
     }
   }

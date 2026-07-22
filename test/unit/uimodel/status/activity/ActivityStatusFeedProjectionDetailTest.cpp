@@ -9,39 +9,25 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <string>
-#include <string_view>
-#include <utility>
-#include <vector>
-
 namespace ao::uimodel::test
 {
   TEST_CASE("ActivityStatusFeedProjection - projects detail feed items and helpers",
             "[uimodel][unit][status][activity]")
   {
     auto feedProjection = ActivityStatusFeedProjection{};
-    auto notification = entry(rt::NotificationId{12},
-                              rt::NotificationSeverity::Error,
-                              "Write failed",
-                              rt::NotificationLifetime::untilDismissed());
-    notification.content.title = "Library Error";
-    notification.content.iconName = "dialog-error-symbolic";
-    notification.content.actions = {rt::NotificationAction{.id = "library.retry", .label = "Retry"}};
-
-    auto currentFeed = feed({entry(rt::NotificationId{13}, rt::NotificationSeverity::Warning, "Clearable warning"),
-                             notification,
-                             progressEntry(rt::NotificationId{14}, "Importing", 0.25)});
+    auto const retainedError = entry(
+      rt::NotificationId{12}, rt::NotificationSeverity::Error, "Write failed", rt::NotificationLifetime::pinned());
+    auto const clearableWarning = entry(rt::NotificationId{13}, rt::NotificationSeverity::Warning, "Clearable warning");
+    auto const latestWarning = entry(rt::NotificationId{14}, rt::NotificationSeverity::Warning, "Latest warning");
+    auto currentFeed = feed({clearableWarning, retainedError, latestWarning});
 
     feedProjection.initialize(currentFeed);
 
-    SECTION("detail items keep progress first and latest-first ordering")
+    SECTION("detail items use latest-first ordering")
     {
       auto const& detail = feedProjection.viewState().detail;
       REQUIRE(detail.items.size() == 3);
-      CHECK(detail.hasActiveProgress);
       CHECK(detail.items[0].id == rt::NotificationId{14});
-      CHECK(detail.items[0].optProgressMode == rt::NotificationProgressMode::Fraction);
-      CHECK(detail.items[0].progressFraction == 0.25);
       CHECK(detail.items[1].id == rt::NotificationId{13});
       CHECK(detail.items[2].id == rt::NotificationId{12});
       CHECK(hasDetailContent(detail));
@@ -56,125 +42,29 @@ namespace ao::uimodel::test
       REQUIRE(detail.optLibraryTask);
       CHECK(detail.optLibraryTask->message == "Scanning: album.flac");
       CHECK(detail.optLibraryTask->progressFraction == 0.5);
-      CHECK(detail.hasActiveProgress);
     }
 
-    SECTION("detail items expose title icon severity actions and dismissibility")
+    SECTION("detail items expose severity message and local dismissibility")
     {
-      auto const& item = feedProjection.viewState().detail.items[2];
+      auto const& errorItem = feedProjection.viewState().detail.items[2];
+      CHECK(errorItem.severity == rt::NotificationSeverity::Error);
+      CHECK(errorItem.message == "Write failed");
+      CHECK_FALSE(errorItem.dismissible);
 
-      CHECK(item.severity == rt::NotificationSeverity::Error);
-      CHECK(item.title == "Library Error");
-      CHECK(item.message == "Write failed");
-      CHECK(item.iconName == "dialog-error-symbolic");
-      CHECK_FALSE(item.dismissible);
-      REQUIRE(item.actions.size() == 1);
-      CHECK(item.actions[0].id == "library.retry");
-      CHECK(item.actions[0].label == "Retry");
+      auto const& warningItem = feedProjection.viewState().detail.items[0];
+      CHECK(warningItem.severity == rt::NotificationSeverity::Warning);
+      CHECK(warningItem.message == "Latest warning");
+      CHECK(warningItem.dismissible);
     }
 
-    SECTION("clearable ids skip until-dismissed and progress notifications")
+    SECTION("detail dismiss ignores pinned and hides clearable notifications")
     {
-      auto const ids = feedProjection.locallyHideableNotificationIds(currentFeed);
+      feedProjection.hideDetailNotification(rt::NotificationId{12}, currentFeed);
+      feedProjection.hideDetailNotification(rt::NotificationId{14}, currentFeed);
 
-      REQUIRE(ids.size() == 1);
-      CHECK(ids[0] == rt::NotificationId{13});
-    }
-
-    SECTION("detail dismiss ignores until-dismissed and progress notifications")
-    {
-      feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{12}, currentFeed);
-      feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{14}, currentFeed);
-
-      REQUIRE(feedProjection.viewState().detail.items.size() == 3);
-      CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{14});
-      CHECK(feedProjection.viewState().detail.items[2].id == rt::NotificationId{12});
-    }
-
-    SECTION("rich default info remains detail eligible")
-    {
-      auto info = entry(rt::NotificationId{22}, rt::NotificationSeverity::Info, "Playlist saved");
-      info.content.title = "Playlist";
-      info.content.actions = {rt::NotificationAction{.id = "playlist.open", .label = "Open"}};
-
-      auto const infoFeed = feed({info});
-      feedProjection.initialize(infoFeed);
-
-      auto const& detail = feedProjection.viewState().detail;
-      REQUIRE(detail.items.size() == 1);
-      CHECK(detail.items[0].id == rt::NotificationId{22});
-      CHECK(detail.items[0].title == "Playlist");
-      REQUIRE(detail.items[0].actions.size() == 1);
-      CHECK(detail.items[0].actions[0].id == "playlist.open");
-      CHECK(hasDetailContent(detail));
-    }
-
-    SECTION("indeterminate progress mode is preserved for detail rendering")
-    {
-      auto progress = entry(rt::NotificationId{30}, rt::NotificationSeverity::Info, "Importing");
-      progress.content.optProgress = rt::NotificationProgressState{
-        .mode = rt::NotificationProgressMode::Indeterminate, .fraction = 0.0, .label = "Importing"};
-
-      feedProjection.initialize(feed({progress}));
-
-      auto const& detail = feedProjection.viewState().detail;
-      REQUIRE(detail.items.size() == 1);
-      CHECK(detail.items[0].optProgressMode == rt::NotificationProgressMode::Indeterminate);
-      CHECK(detail.hasActiveProgress);
-    }
-
-    SECTION("action render policy filters hidden actions and keeps disabled reasons")
-    {
-      auto const actions = std::vector<ActivityActionDescriptor>{
-        {.id = "library.retry", .label = "Retry"}, {.id = "library.ignore", .label = "Ignore"}};
-
-      auto const resolved = resolveActivityActionStates(
-        actions,
-        [](std::string_view actionId, std::string_view label)
-        {
-          if (actionId == "library.retry")
-          {
-            return ActivityActionAvailability{
-              .visible = true, .enabled = false, .label = std::string{label}, .disabledReason = "Library busy"};
-          }
-
-          return ActivityActionAvailability{};
-        },
-        2);
-
-      REQUIRE(resolved.size() == 1);
-      CHECK(resolved[0].id == "library.retry");
-      CHECK(resolved[0].label == "Retry");
-      CHECK(resolved[0].enabled == false);
-      CHECK(resolved[0].disabledReason == "Library busy");
-    }
-
-    SECTION("action render policy skips empty labels and caps visible actions")
-    {
-      auto const actions = std::vector<ActivityActionDescriptor>{{.id = "library.retry", .label = ""},
-                                                                 {.id = "library.ignore", .label = "Ignore"},
-                                                                 {.id = "library.details", .label = "Details"}};
-
-      auto const resolved = resolveActivityActionStates(
-        actions,
-        [](std::string_view actionId, std::string_view label)
-        {
-          auto resolvedLabel = std::string{label};
-
-          if (actionId == "library.retry")
-          {
-            resolvedLabel = "Retry";
-          }
-
-          return ActivityActionAvailability{.visible = true, .enabled = true, .label = std::move(resolvedLabel)};
-        },
-        2);
-
-      REQUIRE(resolved.size() == 2);
-      CHECK(resolved[0].id == "library.retry");
-      CHECK(resolved[0].label == "Retry");
-      CHECK(resolved[1].id == "library.ignore");
-      CHECK(resolved[1].label == "Ignore");
+      REQUIRE(feedProjection.viewState().detail.items.size() == 2);
+      CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{13});
+      CHECK(feedProjection.viewState().detail.items[1].id == rt::NotificationId{12});
     }
   }
 } // namespace ao::uimodel::test

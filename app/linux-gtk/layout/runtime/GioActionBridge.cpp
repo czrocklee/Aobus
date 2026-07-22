@@ -78,7 +78,7 @@ namespace ao::gtk::layout
         [&registry, &contextProvider, id = desc.id](Glib::VariantBase const& /*parameter*/)
         {
           auto ctx = contextProvider.actionContext(id);
-          registry.tryActivate(id, ctx);
+          registry.activate(id, ctx);
         });
 
       actionMap.add_action(actionPtr);

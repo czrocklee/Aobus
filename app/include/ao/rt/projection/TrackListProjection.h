@@ -56,9 +56,7 @@ namespace ao::rt
   };
 
   struct ProjectionReset final
-  {
-    std::uint64_t revision = 0;
-  };
+  {};
 
   struct ProjectionInsertRange final
   {
@@ -86,8 +84,6 @@ namespace ao::rt
 
   struct TrackListProjectionDeltaBatch final
   {
-    std::uint64_t revision = 0;
-
     // Nearly every publish carries exactly one delta, so a small_vector with inline
     // capacity for one element keeps the common case allocation-free. Larger batches
     // (rare) spill to the heap transparently.
@@ -113,7 +109,6 @@ namespace ao::rt
     TrackListProjection& operator=(TrackListProjection&&) = delete;
 
     virtual ViewId viewId() const noexcept = 0;
-    virtual std::uint64_t revision() const noexcept = 0;
 
     virtual TrackPresentationSpec presentation() const = 0;
     virtual std::size_t groupCount() const noexcept = 0;

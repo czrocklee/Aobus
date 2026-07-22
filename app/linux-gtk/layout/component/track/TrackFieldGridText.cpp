@@ -5,7 +5,7 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/uimodel/field/TrackInlineEdit.h>
+#include <ao/uimodel/field/TrackFieldEditPolicy.h>
 
 #include <glib.h>
 #include <glibmm/miscutils.h>

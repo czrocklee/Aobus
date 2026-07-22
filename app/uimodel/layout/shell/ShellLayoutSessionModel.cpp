@@ -46,15 +46,10 @@ namespace ao::uimodel
     return {.presetId = _activePresetId, .layout = _activeLayout};
   }
 
-  void ShellLayoutSessionModel::applyLoadedLayout(std::string presetId, LayoutDocument layout)
+  void ShellLayoutSessionModel::applyLayout(std::string presetId, LayoutDocument layout)
   {
     _activePresetId = std::move(presetId);
     _activeLayout = std::move(layout);
-  }
-
-  void ShellLayoutSessionModel::applyEditorSave(std::string presetId, LayoutDocument layout)
-  {
-    applyLoadedLayout(std::move(presetId), std::move(layout));
   }
 
   ShellLayoutRuntimeStateReset ShellLayoutSessionModel::resetRuntimeLayoutState()
@@ -70,23 +65,14 @@ namespace ao::uimodel
   std::optional<ShellLayoutPanelSizePromotion> ShellLayoutSessionModel::preparePanelSizePromotion(
     LayoutComponentStateDocument const& runtimeComponentState) const
   {
-    auto promotion = ShellLayoutPanelSizePromotion{.presetId = activeOrDefaultPresetId(_activePresetId),
-                                                   .layout = _activeLayout,
-                                                   .componentState = runtimeComponentState};
-    promotion.componentState.preset = promotion.presetId;
-    promotion.result = promotePanelSizeDefaults(promotion.layout, promotion.componentState);
+    auto promotion = ShellLayoutPanelSizePromotion{.layout = _activeLayout, .componentState = runtimeComponentState};
+    promotion.componentState.preset = activeOrDefaultPresetId(_activePresetId);
 
-    if (!promotion.result.changed)
+    if (!promotePanelSizeDefaults(promotion.layout, promotion.componentState))
     {
       return std::nullopt;
     }
 
     return promotion;
-  }
-
-  void ShellLayoutSessionModel::applyPanelSizePromotion(ShellLayoutPanelSizePromotion promotion)
-  {
-    _activePresetId = std::move(promotion.presetId);
-    _activeLayout = std::move(promotion.layout);
   }
 } // namespace ao::uimodel

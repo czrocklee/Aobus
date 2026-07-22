@@ -12,6 +12,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <memory>
+#include <stdexcept>
 #include <tuple>
 #include <variant>
 #include <vector>
@@ -26,7 +28,7 @@ namespace ao::rt::test
     CHECK(service.listViews().empty());
   }
 
-  TEST_CASE("ViewService - createView assigns ids and lifecycle state", "[runtime][unit][view][lifecycle]")
+  TEST_CASE("ViewService - createView assigns ids and lists live views", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
@@ -34,7 +36,7 @@ namespace ao::rt::test
     SECTION("creating a track list view returns ViewId")
     {
       auto const result = env.requireView(service);
-      CHECK(result.viewId != rt::kInvalidViewId);
+      CHECK(result != rt::kInvalidViewId);
     }
 
     SECTION("creating multiple views returns distinct ViewIds")
@@ -42,7 +44,7 @@ namespace ao::rt::test
       auto const r1 = env.requireView(service);
       auto const r2 = env.requireView(service);
 
-      CHECK(r1.viewId != r2.viewId);
+      CHECK(r1 != r2);
     }
 
     SECTION("created view appears in listViews")
@@ -50,16 +52,7 @@ namespace ao::rt::test
       auto const result = env.requireView(service);
       auto const views = service.listViews();
       CHECK(views.size() == 1);
-      CHECK(views[0].id == result.viewId);
-      CHECK(views[0].lifecycle == ViewLifecycleState::Attached);
-    }
-
-    SECTION("detached view creates in Detached state")
-    {
-      std::ignore = env.requireView(service, {}, false);
-      auto const views = service.listViews();
-      REQUIRE(views.size() == 1);
-      CHECK(views[0].lifecycle == ViewLifecycleState::Detached);
+      CHECK(views[0] == result);
     }
   }
 
@@ -69,14 +62,14 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
 
-    auto const failed = service.createView({.listId = kInvalidListId}, true);
+    auto const failed = service.createView({.listId = kInvalidListId});
 
     REQUIRE_FALSE(failed);
     CHECK(failed.error().code == Error::Code::InvalidInput);
     CHECK(service.listViews().empty());
 
     auto const created = env.requireView(service);
-    CHECK(created.viewId == ViewId{1});
+    CHECK(created == ViewId{1});
   }
 
   TEST_CASE("ViewService - destroyView removes state and publishes destruction", "[runtime][unit][view][lifecycle]")
@@ -85,7 +78,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service);
-    auto const viewId = ViewId{result.viewId};
+    auto const viewId = ViewId{result};
 
     SECTION("destroying a view removes it from listViews")
     {
@@ -101,15 +94,14 @@ namespace ao::rt::test
       CHECK(missing.error().code == Error::Code::NotFound);
     }
 
-    SECTION("state after destroy shows Destroyed lifecycle")
+    SECTION("destroy removes state and repeated destroy reports not found")
     {
       REQUIRE(service.destroyView(viewId));
 
-      auto const snap = service.trackListState(viewId);
-      CHECK(snap.lifecycle == ViewLifecycleState::Destroyed);
+      CHECK_THROWS_AS(std::ignore = service.trackListState(viewId), std::out_of_range);
       auto const repeated = service.destroyView(viewId);
       REQUIRE_FALSE(repeated);
-      CHECK(repeated.error().code == Error::Code::InvalidState);
+      CHECK(repeated.error().code == Error::Code::NotFound);
     }
 
     SECTION("destroyed views reject launch-context capture")
@@ -118,7 +110,7 @@ namespace ao::rt::test
 
       auto const captured = service.capturePlaybackLaunchSpec(viewId);
       REQUIRE_FALSE(captured);
-      CHECK(captured.error().code == Error::Code::InvalidState);
+      CHECK(captured.error().code == Error::Code::NotFound);
     }
 
     SECTION("destroy publishes ViewDestroyed event")
@@ -132,13 +124,13 @@ namespace ao::rt::test
 
     SECTION("destroy releases the owned projection")
     {
-      auto projectionPtr = service.trackListProjection(viewId);
-      REQUIRE(projectionPtr != nullptr);
+      auto const projectionWeakPtr = std::weak_ptr<TrackListProjection>{service.trackListProjection(viewId)};
+      REQUIRE_FALSE(projectionWeakPtr.expired());
 
       REQUIRE(service.destroyView(viewId));
 
-      CHECK(service.trackListProjection(viewId) == nullptr);
-      CHECK(projectionPtr->viewId() == viewId);
+      CHECK(projectionWeakPtr.expired());
+      CHECK_THROWS_AS(std::ignore = service.trackListProjection(viewId), std::out_of_range);
     }
   }
 
@@ -148,12 +140,11 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service, {.filterExpression = "$year > 2000"});
-    auto const snap = service.trackListState(result.viewId);
+    auto const snap = service.trackListState(result);
 
-    CHECK(snap.id == result.viewId);
+    CHECK(snap.id == result);
     CHECK(snap.listId == kAllTracksListId);
     CHECK(snap.filterExpression == "$year > 2000");
-    CHECK(snap.lifecycle == ViewLifecycleState::Attached);
     CHECK(snap.groupBy == TrackGroupKey::None);
 
     auto const expectedNone = std::vector{TrackSortField::AlbumArtist,
@@ -176,9 +167,9 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service);
-    auto const projectionPtr = service.trackListProjection(result.viewId);
+    auto const projectionPtr = service.trackListProjection(result);
     REQUIRE(projectionPtr != nullptr);
-    CHECK(projectionPtr->viewId() == result.viewId);
+    CHECK(projectionPtr->viewId() == result);
     CHECK(projectionPtr->size() == 0);
   }
 
@@ -190,11 +181,11 @@ namespace ao::rt::test
     auto const order = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
     auto const result = env.requireView(service, {.sortBy = order});
 
-    auto const state = service.trackListState(result.viewId);
+    auto const state = service.trackListState(result);
     CHECK(state.groupBy == TrackGroupKey::None);
     CHECK(state.sortBy == order);
     CHECK(state.presentation.id.empty());
-    auto const launchSpec = service.capturePlaybackLaunchSpec(result.viewId);
+    auto const launchSpec = service.capturePlaybackLaunchSpec(result);
     REQUIRE(launchSpec);
     CHECK(launchSpec->order.sortBy == order);
   }
@@ -205,7 +196,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service);
-    auto const projectionPtr = service.trackListProjection(result.viewId);
+    auto const projectionPtr = service.trackListProjection(result);
     REQUIRE(projectionPtr != nullptr);
 
     bool received = false;

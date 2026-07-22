@@ -390,7 +390,6 @@ namespace ao::rt::test
     CHECK(cursor.anchor().state() == ProjectionAnchor::State::Bound);
     CHECK(cursor.anchor().anchorIndex() == 1);
     CHECK(cursor.semanticTuple() == expectedTuple);
-    CHECK(cursor.semanticRevision() == 0);
   }
 
   TEST_CASE("PlaybackCursor - source invalidation is terminal without stale sequence queries",
@@ -403,7 +402,7 @@ namespace ao::rt::test
 
     auto effect = cursor.invalidateSource(policy);
 
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = true, .persistenceIntentChanged = false}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = false}));
     CHECK(cursor.sourceState() == PlaybackCursor::SourceState::Invalidated);
     CHECK(cursor.semanticTuple().sourceState == PlaybackCursor::SourceState::Invalidated);
     CHECK_FALSE(cursor.semanticTuple().hasNext);
@@ -418,18 +417,18 @@ namespace ao::rt::test
     CHECK(cursor.resolvePrevious(policy) == noCommand());
 
     effect = cursor.setRepeatMode(RepeatMode::All, policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = false, .persistenceIntentChanged = true}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
     effect = cursor.setShuffleMode(ShuffleMode::Off, policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = false, .persistenceIntentChanged = true}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
 
     effect = cursor.setPreviousRestartAvailable(true, policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = true, .persistenceIntentChanged = false}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = false}));
     CHECK(cursor.resolvePrevious(policy) == restartCurrent(kSecondTrack));
     CHECK(cursor.resolveNext() == stopPlayback());
 
     auto const frozenAnchor = cursor.anchor();
     effect = cursor.adoptInvalidatedCurrent(kFourthTrack);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = true, .persistenceIntentChanged = true}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = true}));
     CHECK(cursor.currentTrackId() == kFourthTrack);
     CHECK(cursor.anchor() == frozenAnchor);
     CHECK(cursor.resolvePrevious(policy) == restartCurrent(kFourthTrack));
@@ -467,7 +466,7 @@ namespace ao::rt::test
     auto restartCursor = boundCursor(restartPolicy, kSecondTrack, 1, RepeatMode::Off, ShuffleMode::On);
     auto const restartEffect = restartCursor.setPreviousRestartAvailable(true, restartPolicy);
 
-    CHECK(restartEffect.persistenceIntentChanged == false);
+    CHECK(restartEffect.restorableStateChanged == false);
     CHECK(restartCursor.resolvePrevious(restartPolicy) == restartCurrent(kSecondTrack));
     CHECK(restartPolicy.historySize() == 1);
 
@@ -484,14 +483,14 @@ namespace ao::rt::test
     auto cursor = boundCursor(policy, kSecondTrack, 1);
 
     auto effect = cursor.adoptLiveCurrent(ProjectionAnchor::gap(TrackId{9}, 1, policy.tracks().size()), policy);
-    CHECK(effect.persistenceIntentChanged);
+    CHECK(effect.restorableStateChanged);
     CHECK(cursor.resolveNext() == startTrack(kSecondTrack));
     CHECK(cursor.resolvePrevious(policy) == startTrack(kFirstTrack));
 
     effect = cursor.adoptLiveCurrent(ProjectionAnchor::gap(TrackId{9}, 0, policy.tracks().size()), policy);
-    REQUIRE(effect.persistenceIntentChanged);
+    REQUIRE(effect.restorableStateChanged);
     effect = cursor.setRepeatMode(RepeatMode::All, policy);
-    REQUIRE(effect.persistenceIntentChanged);
+    REQUIRE(effect.restorableStateChanged);
     CHECK(cursor.resolveNext() == startTrack(kFirstTrack));
     CHECK(cursor.resolvePrevious(policy) == startTrack(kThirdTrack));
 
@@ -503,55 +502,59 @@ namespace ao::rt::test
     CHECK(cursor.resolvePrevious(policy) == noCommand());
 
     effect = cursor.setRepeatMode(RepeatMode::One, policy);
-    CHECK(effect.persistenceIntentChanged);
+    CHECK(effect.restorableStateChanged);
     CHECK(cursor.resolveNext() == startTrack(TrackId{9}));
     CHECK(cursor.resolvePrevious(policy) == noCommand());
   }
 
-  TEST_CASE("PlaybackCursor - semantic revision and persistence intent classify distinct mutations",
-            "[runtime][unit][playback-cursor]")
+  TEST_CASE("PlaybackCursor - changes distinguish semantic and restorable state", "[runtime][unit][playback-cursor]")
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1);
     REQUIRE(cursor.semanticTuple().optResolvedSuccessor == kThirdTrack);
-    REQUIRE(cursor.semanticRevision() == 0);
+    auto const initialTuple = cursor.semanticTuple();
 
     policy.setTracks({kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack, TrackId{5}});
     auto effect = cursor.applyProjectionBatch(insertBatch(4), policy);
-    CHECK(effect == PlaybackCursor::MutationEffect{});
-    CHECK(cursor.semanticRevision() == 0);
+    CHECK(effect == PlaybackCursor::Changes{});
+    CHECK(cursor.semanticTuple() == initialTuple);
 
     policy.setTracks({TrackId{6}, kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack, TrackId{5}});
     effect = cursor.applyProjectionBatch(insertBatch(0), policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = false, .persistenceIntentChanged = true}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
     CHECK(cursor.anchor().anchorIndex() == 2);
-    CHECK(cursor.semanticRevision() == 0);
+    CHECK(cursor.semanticTuple() == initialTuple);
 
     policy.setTracks({TrackId{6}, kFirstTrack, kThirdTrack, kFourthTrack, TrackId{5}});
     effect = cursor.applyProjectionBatch(removeBatch(2), policy);
-    CHECK(effect == PlaybackCursor::MutationEffect{});
+    CHECK(effect == PlaybackCursor::Changes{});
     CHECK(cursor.anchor().state() == ProjectionAnchor::State::Gap);
     CHECK(cursor.anchor().anchorIndex() == 2);
     CHECK(cursor.semanticTuple().optResolvedSuccessor == kThirdTrack);
-    CHECK(cursor.semanticRevision() == 0);
+    CHECK(cursor.semanticTuple() == initialTuple);
 
     policy.setTracks({TrackId{6}, kFirstTrack, kFourthTrack, TrackId{5}});
     effect = cursor.applyProjectionBatch(removeBatch(2), policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = true, .persistenceIntentChanged = false}));
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = false}));
     CHECK(cursor.semanticTuple().optResolvedSuccessor == kFourthTrack);
-    CHECK(cursor.semanticRevision() == 1);
+    CHECK(cursor.semanticTuple() != initialTuple);
+    auto const successorChangedTuple = cursor.semanticTuple();
 
     effect = cursor.setRepeatMode(RepeatMode::All, policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = false, .persistenceIntentChanged = true}));
-    CHECK(cursor.semanticRevision() == 1);
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = false, .restorableStateChanged = true}));
+    CHECK(cursor.semanticTuple() == successorChangedTuple);
 
     effect = cursor.setPreviousRestartAvailable(true, policy);
-    CHECK(effect == PlaybackCursor::MutationEffect{});
-    CHECK(cursor.semanticRevision() == 1);
+    CHECK(effect == PlaybackCursor::Changes{});
+    CHECK(cursor.semanticTuple() == successorChangedTuple);
 
     effect = cursor.invalidateSource(policy);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = true, .persistenceIntentChanged = false}));
-    CHECK(cursor.semanticRevision() == 2);
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = false}));
+    CHECK(cursor.semanticTuple().sourceState == PlaybackCursor::SourceState::Invalidated);
+    CHECK(cursor.semanticTuple().currentTrackId == kSecondTrack);
+    CHECK_FALSE(cursor.semanticTuple().hasNext);
+    CHECK(cursor.semanticTuple().hasPrevious);
+    CHECK_FALSE(cursor.semanticTuple().optResolvedSuccessor);
   }
 
   TEST_CASE("PlaybackCursor - projection move reconciliation is observable only after the complete batch",
@@ -559,13 +562,14 @@ namespace ao::rt::test
   {
     auto policy = CursorPolicyDouble{{kFirstTrack, kSecondTrack, kThirdTrack, kFourthTrack}};
     auto cursor = boundCursor(policy, kSecondTrack, 1);
+    auto const tupleBeforeMove = cursor.semanticTuple();
     auto optObservedAnchor = std::optional<ProjectionAnchor>{};
-    auto optObservedRevision = std::optional<std::uint64_t>{};
+    auto optObservedTuple = std::optional<PlaybackCursor::SemanticTuple>{};
     policy.setIndexOfObserver(
       [&]
       {
         optObservedAnchor = cursor.anchor();
-        optObservedRevision = cursor.semanticRevision();
+        optObservedTuple = cursor.semanticTuple();
       });
     policy.setTracks({kFirstTrack, kThirdTrack, kFourthTrack, kSecondTrack});
     auto const moveBatch = TrackListProjectionDeltaBatch{
@@ -579,13 +583,14 @@ namespace ao::rt::test
     auto const effect = cursor.applyProjectionBatch(moveBatch, policy);
 
     REQUIRE(optObservedAnchor);
+    REQUIRE(optObservedTuple);
     CHECK(optObservedAnchor->state() == ProjectionAnchor::State::Bound);
     CHECK(optObservedAnchor->anchorIndex() == 1);
-    CHECK(optObservedRevision == 0);
-    CHECK(effect == (PlaybackCursor::MutationEffect{.semanticChanged = true, .persistenceIntentChanged = true}));
+    CHECK(*optObservedTuple == tupleBeforeMove);
+    CHECK(effect == (PlaybackCursor::Changes{.semanticChanged = true, .restorableStateChanged = true}));
     CHECK(cursor.anchor().state() == ProjectionAnchor::State::Bound);
     CHECK(cursor.anchor().anchorIndex() == 3);
-    CHECK(cursor.semanticRevision() == 1);
+    CHECK(cursor.semanticTuple() != tupleBeforeMove);
     CHECK_FALSE(cursor.semanticTuple().optResolvedSuccessor);
   }
 
@@ -606,7 +611,6 @@ namespace ao::rt::test
     auto referenceAnchor = ReferenceAnchor{.bound = true, .index = 1};
     auto repeatMode = RepeatMode::Off;
     auto expectedTuple = referenceTuple(tracks, referenceAnchor, kSecondTrack, repeatMode);
-    std::uint64_t expectedRevision = 0;
     std::uint32_t nextTrackValue = 100;
     auto trace = std::string{};
 
@@ -622,16 +626,10 @@ namespace ao::rt::test
         expectedTuple = referenceTuple(tracks, referenceAnchor, kSecondTrack, repeatMode);
         auto const semanticChanged = expectedTuple != previousTuple;
 
-        if (semanticChanged)
-        {
-          ++expectedRevision;
-        }
-
         trace += std::format("{}: repeat={}\n", step, repeatMode == RepeatMode::All ? "all" : "off");
         CHECK(modeEffect.semanticChanged == semanticChanged);
-        CHECK(modeEffect.persistenceIntentChanged);
+        CHECK(modeEffect.restorableStateChanged);
         CHECK(cursor.semanticTuple() == expectedTuple);
-        CHECK(cursor.semanticRevision() == expectedRevision);
       }
 
       auto batch = TrackListProjectionDeltaBatch{};
@@ -716,12 +714,7 @@ namespace ao::rt::test
       applyReferenceBatch(referenceAnchor, batch, kSecondTrack, tracks);
       expectedTuple = referenceTuple(tracks, referenceAnchor, kSecondTrack, repeatMode);
       auto const semanticChanged = expectedTuple != previousTuple;
-      auto const persistenceIntentChanged = referenceAnchor.index != previousAnchorIndex;
-
-      if (semanticChanged)
-      {
-        ++expectedRevision;
-      }
+      auto const restorableStateChanged = referenceAnchor.index != previousAnchorIndex;
 
       auto const effect = cursor.applyProjectionBatch(batch, policy);
       auto const current = std::ranges::find(tracks, kSecondTrack);
@@ -734,9 +727,8 @@ namespace ao::rt::test
       CHECK((cursor.anchor().state() == ProjectionAnchor::State::Bound) == (current != tracks.end()));
       CHECK(cursor.anchor().anchorIndex() == referenceAnchor.index);
       CHECK(effect.semanticChanged == semanticChanged);
-      CHECK(effect.persistenceIntentChanged == persistenceIntentChanged);
+      CHECK(effect.restorableStateChanged == restorableStateChanged);
       CHECK(cursor.semanticTuple() == expectedTuple);
-      CHECK(cursor.semanticRevision() == expectedRevision);
       CHECK(cursor.resolveNext() == expectedNext);
       CHECK(cursor.resolvePrevious(policy) == expectedPrevious);
     }

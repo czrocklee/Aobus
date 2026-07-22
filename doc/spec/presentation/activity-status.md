@@ -3,180 +3,121 @@ id: presentation.activity-status
 type: spec
 status: current
 domain: presentation
-summary: Defines the shared UIModel projection of runtime notifications and library-task activity into compact and detail state.
+summary: Defines compact and detail projection of notifications and library-task progress.
 ---
 # Activity-status specification
 
 ## Scope
 
-This specification owns the frontend-neutral UIModel projection that combines runtime notifications and active library-task progress into compact activity status and detail state.
-It defines eligibility, priority, grouping, ordering, presentation-local compact lifetime, and suppression.
+This specification owns the UIModel projection consumed by GTK and TUI activity surfaces.
+It combines runtime notifications with current library-task progress, chooses compact priority, builds detail rows, and owns presentation-local hiding.
 
-It does not own failure classification, recovery, the authoritative notification feed, library-task execution, or GTK/TUI rendering geometry.
-Those facts belong to the [failure and reporting architecture](../../architecture/failure-and-reporting.md), [notification feed specification](../reporting/notification-feed.md), [library task specification](../library/runtime/task-execution.md), and frontend documents.
-The exact projection fields, enum values, constants, and helper surfaces belong to the [activity-status reference](../../reference/presentation/activity-status.md).
+It does not mutate the runtime feed, classify domain failures, or define toolkit layout.
+Runtime retention belongs to the [notification feed specification](../reporting/notification-feed.md), and exact fields belong to the [activity-status surface reference](../../reference/presentation/activity-status.md).
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places this policy in UIModel, and the [presentation architecture](../../architecture/presentation.md) defines its relation to runtime state and frontends.
-Public state and view-model types live under `app/include/ao/uimodel/status/activity/`; projection implementation lives under `app/uimodel/status/activity/`.
-
-The projection may depend on runtime notification and library-change values.
-It does not dismiss the runtime feed, mutate library work, choose recovery, or depend on GTK, FTXUI, or another platform type.
-
-## Terminology
-
-- **Compact state** is the single inline activity summary shared by GTK and TUI.
-- **Detail state** is the narrower list of eligible notification rows plus optional active library-task detail.
-- A **persistent compact** is a warning or error summary that does not receive an automatic timeout.
-- A **presentation-transient compact** is a locally retained info or successful-completion summary with a UIModel-owned automatic timeout.
-- A **runtime-transient notification** is a feed entry whose authoritative removal is scheduled by `NotificationService`; it does not receive a second UIModel deadline.
-- **Local suppression** hides a notification only from the activity projection while its runtime feed entry remains authoritative for other consumers.
-- **Openable detail** means the detail state has a notification row or active library-task row; each frontend additionally controls how users reach it.
+This behavior belongs to the **UIModel** layer in the
+[system architecture](../../architecture/system-overview.md), under the
+[presentation architecture](../../architecture/presentation.md). Public state
+and the view model live in `app/include/ao/uimodel/status/activity/`, and
+projection implementation lives in `app/uimodel/status/activity/`. The
+implementation may retain source ids for local hiding, but those ids are not
+frontend view state and no GTK or FTXUI type crosses this boundary.
 
 ## Invariants
 
-- Runtime notification entries remain unchanged by all activity-status projection commands.
-- `ActivityStatusViewModel` consumes only canonical notification-feed updates, accepts each increasing feed revision at most once, and renders at most once for that accepted revision.
-- Active library-task progress owns the compact slot until the task completes.
-- Without an active task, unsuppressed `Default` error notifications outrank warnings; warnings outrank transient info and completion; an empty projection is idle.
-- Notifications at the selected highest persistent severity are grouped; lower severities remain in detail but do not contribute to that compact group.
-- `DetailOnly` notifications may enter detail but never compact, and `Hidden` notifications enter neither activity surface.
-- Plain `Default` info without until-dismissed lifetime, progress, title, icon, or actions may create compact text but does not create a detail row.
-- Detail ordering places progress notifications first and orders each progress/non-progress partition by newest notification id first.
-- Compact or detail dismissal is local suppression and never calls `NotificationService::dismiss`.
-- Until-dismissed or progress detail rows cannot be locally dismissed from activity status.
-- Local suppression is pruned after the corresponding notification leaves the runtime feed, so a future entry cannot inherit stale suppression.
-- Updating the source of a visible transient info compact refreshes compact and detail state from the same immutable feed snapshot.
-- Authoritative runtime expiry arrives as a feed revision and removes that notification from compact and detail projection together.
-- Presentation-local timeout expiry reprojects the current feed and reveals the highest unsuppressed persistent compact, if any, without removing retained feed state.
+- Projection is synchronous and frontend-neutral.
+- Every accepted feed update is projected from its immutable snapshot and triggers at most one render callback.
+- Active library-task progress owns compact status until completion.
+- Without an active task, error notifications outrank warnings. Entries at the selected severity are grouped.
+- A newly posted info notification may use compact status only when no warning or error owns it.
+- Detail contains warnings, errors, pinned notifications, and active library-task progress.
+- Detail notification rows are newest-first.
+- Compact and detail dismissal are local UIModel state; they never remove runtime entries.
+- Pinned detail rows cannot be hidden locally.
+- Suppressed ids are pruned when their entries leave the feed.
+- Runtime `Transient` expiry comes from `NotificationService`; UIModel does not create a competing deadline for it.
 
-## State model
+## Initial state
 
-The projection retains:
+Construction snapshots the current feed, projects eligible detail, and selects any unsuppressed warning or error compact.
+Retained info is not replayed into compact status merely because a new view model subscribes.
+The initial state is rendered unless `emitInitialState` is false.
 
-- current compact and detail view state;
-- whether a library task is active and its most recent typed progress kind, subject, and fraction;
-- locally suppressed compact notification ids;
-- locally suppressed detail notification ids;
-- in `ActivityStatusViewModel`, the last accepted notification-feed revision;
-- in `ActivityStatusViewModel`, an optional steady-clock deadline only for the current presentation-transient compact.
+## Notification updates
 
-Initial projection includes current eligible detail rows and current unsuppressed persistent warning/error compact state.
-Historical plain info does not become compact merely because a view model subscribes after it was posted.
+A posted warning or error immediately participates in compact grouping unless a library task is active.
+The group uses the highest present severity, shows the newest entry text when there is one entry, and uses `<N> warnings` or `<N> errors` when there are several.
 
-## Commands and transitions
+A posted info replaces the current temporary info compact when no warning or error is eligible.
+An effective keyed update refreshes a visible info compact from the same snapshot.
+Expiry and automatic history eviction reproject compact and detail together.
 
-### Notification feed updates
+Structured notification reports are resolved once through `PresentationTextCatalog` while projecting.
+Runtime carries no widget action, icon, or progress presentation state.
 
-A newly posted `Default` warning or error participates immediately in persistent projection unless library-task progress currently owns compact state.
-A newly posted `Default` info becomes transient compact only when no unsuppressed persistent warning or error already owns compact.
-While a task is active, compact-eligible notification posts are deferred from compact presentation; detail is still refreshed.
+## Detail
 
-The view model ignores an update with an empty snapshot, a snapshot revision that differs from the update revision, or a revision no newer than the last accepted revision.
-One accepted update is projected once from its immutable snapshot and invokes the render callback at most once.
+A notification enters detail when either condition holds:
 
-Non-post feed mutations always refresh detail.
-They preserve a still-valid info or success transient when no persistent compact supersedes it, and remove a notification-derived transient when its source leaves the feed.
-Message, content, progress, and progress-clear mutations affecting the source of the visible info transient reproject that compact from the same snapshot instead of retaining stale text or content.
-An `Expired` mutation follows the same source-removal path as explicit dismissal but remains distinguishable in the canonical runtime update.
-
-### Persistent compact grouping
-
-The projection selects the highest severity present among unsuppressed compact-eligible warning and error entries.
-With one selected entry it uses that entry's title when non-empty, otherwise its message.
-Structured notification messages are resolved through `PresentationTextCatalog` before entering compact or detail view state.
-With multiple selected entries it reports the severity group count.
-The compact state retains every selected source id so later suppression or feed removal can reproject correctly.
-
-### Library task progress and completion
-
-Task progress produces processing compact state, exposes the supplied fraction, and adds task detail.
-The runtime event carries `LibraryTaskProgressKind` plus a raw subject.
-UIModel selects the stable library-level compact summary for `Scanning` and `Updating` by kind and formats complete detail text without parsing the subject.
-`Fingerprinting` and `IndexingAudioIdentity` use their complete detail text in compact state.
-
-Completion removes task progress and first reprojects persistent notifications.
-Only when no persistent compact remains does it show a transient success summary; zero additions and nonzero additions have distinct summary text.
-
-### Detail eligibility
-
-A notification is detail-eligible when it is not `Hidden` and one of these conditions holds:
-
-- presentation is `DetailOnly`;
 - severity is `Warning` or `Error`;
-- its lifetime is `UntilDismissed`;
-- it carries progress;
-- it has a non-empty title or icon name;
-- it has at least one action.
+- lifetime is `Pinned`.
 
-Detail resolves structured notification messages once, then copies severity, title, resolved message, icon, progress, actions, and derived dismissibility into frontend-neutral activity values.
-It also exposes whether any notification or library-task progress is active.
+A non-pinned warning or error row may be hidden from this activity projection.
+A pinned row remains visible while its runtime entry exists.
+Hiding a detail row also removes it from compact grouping when applicable.
 
-### Local dismissal
+## Library tasks
 
-Compact dismissal records every current compact source id as locally suppressed, resets compact to idle, and retains eligible detail.
-A later new persistent notification can reappear; suppressing an error does not suppress a later warning with a different id.
+`LibraryTaskProgressUpdated` supplies a typed operation kind, subject, and fraction.
+Projection produces `Processing` compact state and one task detail row without parsing display text.
 
-Detail dismissal accepts only a currently eligible entry that is neither until-dismissed nor carrying progress.
-It hides that row and removes it from persistent compact grouping when applicable, without changing the runtime feed.
+Completion clears task progress and restores the current notification projection.
+When completion is `Succeeded` and no warning or error owns compact status, UIModel shows a temporary success summary:
 
-### Runtime and presentation lifetime
+- zero affected tracks: `Library is up to date`;
+- nonzero affected tracks: `Scan complete: <count> added`, using the shared track-count formatter.
 
-`NotificationService` owns authoritative `Transient(duration)` expiry.
-An info entry with that runtime lifetime produces no `optAutoDismissTimeout`; its `Expired` feed revision removes it for every consumer.
-This prevents GTK and TUI event-loop timing from becoming competing authorities over feed retention.
+Other completion statuses do not synthesize success state.
 
-`SessionHistory` and `UntilDismissed` info may still be compact-presented temporarily.
-Those retained entries use `kActivityStatusDefaultAutoDismissTimeout` as presentation-only suppression, and the runtime feed entry remains after the local compact disappears.
-Until-dismissed info remains detail-eligible and not locally dismissible.
-Warning and error compact state has no presentation auto-dismiss timeout regardless of lifetime.
+## Local compact dismissal
 
-Successful library-task completion is synthetic UIModel state rather than a notification entry and also uses the shared presentation timeout.
-`ActivityStatusViewModel` therefore retains its injected steady clock and explicit expiry checks for these presentation-only cases.
+`dismissCompact()` records the current notification source ids, clears compact status, and retains detail.
+Later notifications with different ids may surface normally.
 
-## Failure and cancellation
+History and pinned info compact states use the presentation-only `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
+The view model records a steady-clock deadline for such compact state and for synthetic task success.
+`autoDismissCompact()` clears that temporary presentation and reprojects warning/error state.
+`autoDismissCompactIfDue()` performs the same transition only after the deadline.
 
-Projection operations are synchronous value transformations and expose no recoverable error channel.
-Malformed optional presentation data is narrowed by exact helper policy; it does not trigger subsystem recovery or mutate the producer.
+Warning and error compact states have no local timeout.
+Runtime-transient info also has no local timeout because its authoritative service expiry removes it for all consumers.
 
-The view model owns subscriptions only for its lifetime.
-Runtime and library-change owners outlive the view model according to the application composition order.
-An exception escaping notification projection or its render callback is an observer fault contained and diagnosed by the runtime notification publication boundary after the feed revision has committed.
+## Lifetime and failure
 
-## Frontend observations
-
-GTK opens its activity detail popover only when detail exists and compact is visible, so a `DetailOnly` entry has no GTK compact affordance in an idle-hidden layout.
-TUI provides an explicit notification-center command in addition to the compact status slot, so it may expose detail independently of compact visibility.
-
-Frontend action adapters resolve activity action ids against their own action registry or command surface.
-Unknown or invisible actions are omitted, disabled actions retain their reason, empty producer labels may be replaced by a registered label, and activation does not imply feed dismissal.
-
-GTK currently bounds one rendering pass to four notification rows and two resolved actions per row.
-These are GTK adapter limits, not runtime notification-model limits.
+The view model owns its subscriptions and the optional local deadline.
+The notification service and optional `LibraryChanges` owner outlive it through application composition.
+Projection exposes no recoverable error channel.
+If a projection or render callback throws while handling a feed update, the runtime notification observer boundary contains and diagnoses that exception after feed commit.
 
 ## Implementation map
 
-- [`ActivityStatusViewState.h`](../../../app/include/ao/uimodel/status/activity/ActivityStatusViewState.h) defines shared projection values and helpers.
-- [`ActivityStatusViewModel.h`](../../../app/include/ao/uimodel/status/activity/ActivityStatusViewModel.h) defines subscriptions, transient expiry, and presentation-local commands.
-- [`ActivityStatusFeedProjection.cpp`](../../../app/uimodel/status/activity/ActivityStatusFeedProjection.cpp) implements priority, eligibility, ordering, and suppression.
-- [`ActivityStatusViewModel.cpp`](../../../app/uimodel/status/activity/ActivityStatusViewModel.cpp) composes runtime notification and library-task observations.
-- GTK [`ActivityStatusWidget.cpp`](../../../app/linux-gtk/status/ActivityStatusWidget.cpp) and TUI [`StatusBar.cpp`](../../../app/tui/StatusBar.cpp) plus [`NotificationCenterPanel.cpp`](../../../app/tui/NotificationCenterPanel.cpp) are frontend adapters.
+- [`ActivityStatusViewState.h`](../../../app/include/ao/uimodel/status/activity/ActivityStatusViewState.h) defines compact and detail values.
+- [`ActivityStatusViewModel.h`](../../../app/include/ao/uimodel/status/activity/ActivityStatusViewModel.h) defines construction and local commands.
+- [`ActivityStatusFeedProjection.cpp`](../../../app/uimodel/status/activity/ActivityStatusFeedProjection.cpp) implements priority, detail, and suppression.
+- [`ActivityStatusViewModel.cpp`](../../../app/uimodel/status/activity/ActivityStatusViewModel.cpp) owns subscriptions and deadlines.
 
 ## Test map
 
-- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) proves compact priority, task ownership, deferral, and completion.
-- [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) proves grouping, runtime-transient timeout exclusion, source removal, and local suppression.
-- [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) proves eligibility, ordering, rich fields, progress, actions, and clearability.
-- [`ActivityStatusFeedProjectionPresentationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionPresentationTest.cpp) proves `Default`, `DetailOnly`, and `Hidden` behavior.
-- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) proves one render per accepted feed revision, coherent transient updates, presentation-only injected-clock expiry, and library task events.
-- [`ActivityStatusWidgetTest.cpp`](../../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects the GTK adapter and action-resolution boundary.
+- [`ActivityStatusFeedProjectionCompactTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp) protects compact priority and task transitions.
+- [`ActivityStatusFeedProjectionNotificationTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp) protects grouping, expiry, updates, and compact suppression.
+- [`ActivityStatusFeedProjectionDetailTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp) protects detail eligibility, ordering, and local hiding.
+- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp) protects rendering, deadlines, and subscriptions.
 
 ## Related documents
 
 - [Presentation architecture](../../architecture/presentation.md)
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
 - [Notification feed specification](../reporting/notification-feed.md)
-- [Activity-status reference](../../reference/presentation/activity-status.md)
-- [Selection-summary specification](selection-summary.md)
-- [TUI interaction specification](../tui/interaction.md)
+- [Activity-status surface reference](../../reference/presentation/activity-status.md)

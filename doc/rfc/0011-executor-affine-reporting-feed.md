@@ -1,15 +1,21 @@
 ---
 id: rfc.0011.executor-affine-reporting-feed
 type: rfc
-status: draft
+status: implemented
 domain: reporting
-summary: Proposes an executor-confined, revisioned, bounded reporting feed with authoritative retention and coherent activity projection.
+summary: Proposed the executor-affine bounded notification feed and coherent activity projection.
 depends-on: none
 ---
 # RFC 0011: Executor-affine reporting feed
 
-Migration stages 1 through 5 are implemented in the current [notification feed specification](../spec/reporting/notification-feed.md), [activity-status specification](../spec/presentation/activity-status.md), and [RFC 0030 disposition](0030-structured-presentation-vocabulary.md): the service is executor-affine, publishes one immutable canonical update, contains observer faults, queues reentrant revisions, owns typed transient lifetime and generation-checked expiry, bounds retained state, exposes typed command outcomes, correlates producer-owned report keys, retains structured playback reports, and no longer uses English progress prefixes.
-Cross-frontend detail discoverability and the remaining generic-content policy remain proposal work in this RFC.
+## Disposition
+
+Implemented in a narrower form.
+The current service is executor-affine, bounded, generation-checks transient expiry, publishes immutable snapshots, contains observer faults, queues reentrant publication, and supports producer-owned report keys.
+
+The later simplification removed feed revisions, mutation replies, dismissal commands, generic rich content, notification actions and progress, presentation modes, and the unused topic taxonomy.
+Activity status retains only severity/lifetime projection, local hiding, and real library-task progress.
+The [notification feed specification](../spec/reporting/notification-feed.md) and [activity-status specification](../spec/presentation/activity-status.md) are the current authorities; the proposal text below is historical.
 
 ## Problem
 

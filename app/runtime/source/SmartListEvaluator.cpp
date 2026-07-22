@@ -9,7 +9,6 @@
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
@@ -180,12 +179,12 @@ namespace ao::rt
       return;
     }
 
-    if (!list._dirty)
+    if (!list._optPending)
     {
-      list.stageExpression(list._current.expression);
+      list.setExpression(list._current.expression);
     }
 
-    evaluateDirtyLists(*it->second);
+    evaluatePendingLists(*it->second);
   }
 
   void SmartListEvaluator::notifyUpdated(SmartListSource& list, TrackId const trackId)
@@ -255,7 +254,7 @@ namespace ao::rt
         .list = list,
         .oldMembers = list->_members.vector(),
         .members = list->_members.vector(),
-        .active = list->state() == TrackSourceState::Live && !list->_dirty && !list->_current.optError &&
+        .active = list->state() == TrackSourceState::Live && !list->_optPending && !list->_current.optError &&
                   list->_current.planPtr != nullptr,
       };
 
@@ -297,10 +296,8 @@ namespace ao::rt
     for (auto const trackId : touchedTrackIds)
     {
       auto matches = std::vector<bool>(works.size(), false);
-      auto const optView =
-        storageValueOrNullopt(reader.get(trackId, storeMode), "Failed to evaluate smart-list track mutation");
 
-      if (optView)
+      if (auto const optView = reader.get(trackId, storeMode); optView)
       {
         for (std::size_t index = 0; index < works.size(); ++index)
         {
@@ -423,20 +420,20 @@ namespace ao::rt
     }
   }
 
-  void SmartListEvaluator::evaluateDirtyLists(SourceBucket& bucket)
+  void SmartListEvaluator::evaluatePendingLists(SourceBucket& bucket)
   {
-    auto dirtyLists = std::vector<SmartListSource*>{};
+    auto pendingLists = std::vector<SmartListSource*>{};
 
     for (auto* const list : bucket.lists)
     {
-      if (list->_dirty && list->state() == TrackSourceState::Live)
+      if (list->_optPending && list->state() == TrackSourceState::Live)
       {
-        list->applyStagedState();
-        dirtyLists.push_back(list);
+        list->applyPendingState();
+        pendingLists.push_back(list);
       }
     }
 
-    rebuildLists(bucket, dirtyLists);
+    rebuildLists(bucket, pendingLists);
   }
 
   void SmartListEvaluator::rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> const lists)

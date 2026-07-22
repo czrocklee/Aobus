@@ -23,8 +23,6 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
-#include <ao/rt/NotificationService.h>
-#include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -263,13 +261,6 @@ namespace ao::gtk
 
         rebuildListPages();
       });
-
-    _runtime.notifications().post(rt::NotificationRequest{
-      .severity = rt::NotificationSeverity::Info,
-      .message = "Aobus Ready",
-      .lifetime = rt::NotificationLifetime::transient(),
-      .activityPresentation = rt::NotificationActivityPresentation::Hidden,
-    });
 
     auto const restored = _runtime.workspace().restoreSession(_runtime.workspaceConfigStore());
 

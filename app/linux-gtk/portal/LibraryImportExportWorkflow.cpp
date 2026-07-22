@@ -166,9 +166,8 @@ namespace ao::gtk::portal
     if (!result)
     {
       logStructuredError("Audio identity indexing failed", result.error());
-      _runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                    "Audio identity indexing failed",
-                                    rt::NotificationLifetime::sessionHistory());
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Warning, "Audio identity indexing failed", rt::NotificationLifetime::history());
       co_return;
     }
 
@@ -181,7 +180,7 @@ namespace ao::gtk::portal
     {
       _runtime.notifications().post(rt::NotificationSeverity::Warning,
                                     "Audio identity indexing completed with errors",
-                                    rt::NotificationLifetime::sessionHistory());
+                                    rt::NotificationLifetime::history());
     }
     else if (result->completedCount > 0)
     {
@@ -327,8 +326,7 @@ namespace ao::gtk::portal
       }
     }
 
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::sessionHistory());
+    _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::history());
     return true;
   }
 
@@ -367,13 +365,12 @@ namespace ao::gtk::portal
         }
 
         _runtime.notifications().post(
-          rt::NotificationSeverity::Warning, std::move(message), rt::NotificationLifetime::sessionHistory());
+          rt::NotificationSeverity::Warning, std::move(message), rt::NotificationLifetime::history());
       }
       else if (result->missingCount > 0)
       {
-        _runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                      scanCompletionSummary(*result),
-                                      rt::NotificationLifetime::sessionHistory());
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Warning, scanCompletionSummary(*result), rt::NotificationLifetime::history());
       }
       else
       {
@@ -411,12 +408,12 @@ namespace ao::gtk::portal
   {
     logStructuredError(action, error);
     _runtime.notifications().post(
-      rt::NotificationSeverity::Error, notificationMessage, rt::NotificationLifetime::sessionHistory());
+      rt::NotificationSeverity::Error, notificationMessage, rt::NotificationLifetime::history());
   }
 
   void LibraryImportExportWorkflow::presentInternalFailure(std::string_view notificationMessage)
   {
     _runtime.notifications().post(
-      rt::NotificationSeverity::Error, std::string{notificationMessage}, rt::NotificationLifetime::sessionHistory());
+      rt::NotificationSeverity::Error, std::string{notificationMessage}, rt::NotificationLifetime::history());
   }
 } // namespace ao::gtk::portal

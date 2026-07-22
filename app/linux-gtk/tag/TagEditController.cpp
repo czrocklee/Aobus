@@ -12,7 +12,8 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/uimodel/library/property/TagEditWorkflow.h>
+#include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <giomm/actionmap.h>
@@ -168,28 +169,31 @@ namespace ao::gtk
       }
     }
 
-    auto request = ao::uimodel::TagEditRequest{};
-    request.selectedIds = selection.selectedIds;
-    request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());
-    request.tagsToRemove.assign(tagsToRemove.begin(), tagsToRemove.end());
+    auto const result = ao::uimodel::applyTagEdit(*_tagEditSessionPtr, tagsToAdd, tagsToRemove);
 
-    auto workflow = ao::uimodel::TagEditWorkflow{*_tagEditSessionPtr};
-    auto const result = workflow.apply(request);
-
-    if (result.rejected || result.stale)
+    if (!result)
     {
       _runtime.notifications().post(
-        rt::NotificationSeverity::Error, result.notificationText, rt::NotificationLifetime::sessionHistory());
-
-      if (result.stale)
-      {
-        _tagEditSessionPtr.reset();
-      }
-
+        rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
       return;
     }
 
-    if (!result.applied)
+    if (result->status == rt::TrackAuthoringStatus::Stale || result->status == rt::TrackAuthoringStatus::Unavailable)
+    {
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
+      _tagEditSessionPtr.reset();
+      return;
+    }
+
+    if (result->status == rt::TrackAuthoringStatus::Missing)
+    {
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
+      return;
+    }
+
+    if (result->status != rt::TrackAuthoringStatus::Applied)
     {
       return;
     }
@@ -200,7 +204,7 @@ namespace ao::gtk
     }
 
     _runtime.notifications().post(
-      rt::NotificationSeverity::Info, result.notificationText, rt::NotificationLifetime::transient());
+      rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
   }
 
   void TagEditController::createActions()
@@ -384,7 +388,7 @@ namespace ao::gtk
     {
       _tagEditSessionPtr.reset();
       _runtime.notifications().post(
-        rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::sessionHistory());
+        rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
       return false;
     }
 

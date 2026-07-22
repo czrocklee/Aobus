@@ -62,10 +62,8 @@ namespace ao::uimodel::test
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
-      auto const error = entry(rt::NotificationId{4},
-                               rt::NotificationSeverity::Error,
-                               "Import failed",
-                               rt::NotificationLifetime::untilDismissed());
+      auto const error = entry(
+        rt::NotificationId{4}, rt::NotificationSeverity::Error, "Import failed", rt::NotificationLifetime::pinned());
       auto const currentFeed = feed({error});
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{4}));
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
@@ -75,7 +73,6 @@ namespace ao::uimodel::test
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
       CHECK(compact.text == "Import failed");
-      CHECK(compact.persistent);
       CHECK(!compact.optAutoDismissTimeout);
     }
 
@@ -84,10 +81,8 @@ namespace ao::uimodel::test
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
-      auto const error = entry(rt::NotificationId{15},
-                               rt::NotificationSeverity::Error,
-                               "Import failed",
-                               rt::NotificationLifetime::untilDismissed());
+      auto const error = entry(
+        rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", rt::NotificationLifetime::pinned());
       feedProjection.handleFeedUpdated(postedUpdate(feed({error}), rt::NotificationId{15}));
 
       feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), feed({}));
@@ -109,7 +104,6 @@ namespace ao::uimodel::test
 
         CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
         CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
-        CHECK_FALSE(feedProjection.viewState().detail.hasActiveProgress);
       }
     }
 

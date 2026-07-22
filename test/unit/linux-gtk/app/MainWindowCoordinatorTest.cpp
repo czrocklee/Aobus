@@ -229,7 +229,7 @@ namespace ao::gtk::test
       .trackIds = {trackId},
     }));
     runtime.reloadAllTracks();
-    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigateTo(sourceListId)).activeViewId;
+    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigateTo(sourceListId));
     REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
     playback.commands().seek(std::chrono::milliseconds{500});
     playback.commands().setShuffleMode(rt::ShuffleMode::On);

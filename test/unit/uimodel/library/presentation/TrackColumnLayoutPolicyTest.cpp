@@ -3,7 +3,6 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,14 +22,5 @@ namespace ao::uimodel::test
     CHECK(ordered[0] == rt::TrackField::Album);
     CHECK(ordered[1] == rt::TrackField::Title);
     CHECK(ordered[2] == rt::TrackField::Artist);
-  }
-
-  TEST_CASE("TrackColumnLayoutPolicy - uses stored widths only when positive", "[uimodel][unit][library][presentation]")
-  {
-    CHECK(effectiveTrackFieldColumnWidth(rt::TrackField::Title, 321) == 321);
-    CHECK(effectiveTrackFieldColumnWidth(rt::TrackField::Title, 0) ==
-          defaultTrackFieldColumnWidth(rt::TrackField::Title));
-    CHECK(effectiveTrackFieldColumnWidth(rt::TrackField::Title, -1) ==
-          defaultTrackFieldColumnWidth(rt::TrackField::Title));
   }
 } // namespace ao::uimodel::test

@@ -128,7 +128,6 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 - [`AsyncExceptionHandler.h`](../../../include/ao/async/AsyncExceptionHandler.h) defines the injected terminal diagnostic seam.
 - [`TaskFuture.h`](../../../include/ao/async/TaskFuture.h) defines explicit caller-owned result and exception transport without requiring default-constructible task values.
 - [`Runtime.h`](../../../include/ao/async/Runtime.h), [`Runtime.cpp`](../../../lib/async/Runtime.cpp), and [`LifetimeScope.cpp`](../../../lib/async/LifetimeScope.cpp) implement terminal ownership, cancellation exclusion, fallback, and bookkeeping order.
-- [`StorageResult.h`](../../../app/include/ao/rt/StorageResult.h) demonstrates the deliberate `NotFound`-to-absence translation used by runtime storage reads.
 - [`UiWorkflow.h`](../../../app/linux-gtk/common/UiWorkflow.h) implements diagnostic-before-presentation ordering for GTK workflows.
 - Domain-private translation helpers live under subsystem `detail/` boundaries such as [`DecoderError.h`](../../../include/ao/audio/detail/DecoderError.h), [`LibraryError.h`](../../../include/ao/library/detail/LibraryError.h), [`QueryError.h`](../../../include/ao/query/detail/QueryError.h), and [`MediaError.h`](../../../include/ao/media/detail/MediaError.h).
 
@@ -141,7 +140,6 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 - [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects callback-affine failure cleanup before exception propagation.
 - [`UiWorkflowTest.cpp`](../../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
 - [`LogTest.cpp`](../../../test/unit/runtime/LogTest.cpp) protects the retained application logging adapter.
-- [`StorageResultTest.cpp`](../../../test/unit/runtime/StorageResultTest.cpp) protects the declared `NotFound` collapse and preservation of other failures.
 - Subsystem tests under [`test/unit/audio/`](../../../test/unit/audio), [`test/unit/library/`](../../../test/unit/library), [`test/unit/query/`](../../../test/unit/query), and [`test/unit/runtime/`](../../../test/unit/runtime) protect boundary-specific return and translation behavior.
 
 ## Related documents

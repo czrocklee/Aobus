@@ -56,7 +56,7 @@ It owns storage, asynchronous execution, the library facade and change bus, sour
 
 `AppRuntime` extends that composition for interactive applications.
 It adds view and workspace services, playback transport and succession, audio-player ownership, and playback-session persistence.
-It also owns narrow cross-service application commands, such as album reveal, that compose a workspace receipt with playback intent without making either domain service depend on the other.
+It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns construction, restoration order, active-library replacement, and teardown coordination.
 
@@ -123,7 +123,7 @@ These routes expose where a change crosses architecture owners without duplicati
 | Media ingestion and identity | Encoded path -> `ao_media` file reader -> visitor-to-library runtime adapter and payload evidence -> stored records and resources | [Encoded media](encoded-media.md), [library](library.md), and [failure and reporting](failure-and-reporting.md) |
 | Cover-art delivery | Stored resource -> runtime id and owned bytes -> projection/playback state -> GTK, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
 | Track discovery and organization | UI authoring or CLI expression -> query compilation/evaluation -> live source membership -> projection shape -> frontend adaptation | [Track expression](track-expression.md), [library](library.md), and [presentation](presentation.md) |
-| Interactive playback | Frontend intent -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
+| Interactive playback | Frontend command -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
 | Session restore and active-library replacement | Frontend composition root -> managed-state candidate -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |
 | GTK shell construction | Layout preset and component state -> UIModel document/catalog policy -> GTK registries and factories -> widget tree and action bridge | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
 | Failure reporting | Subsystem failure -> typed result or event -> owning recovery boundary -> runtime notification or application-leaf presentation | [Failure and reporting](failure-and-reporting.md) plus the originating subsystem architecture |

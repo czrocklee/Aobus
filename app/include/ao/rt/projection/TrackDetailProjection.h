@@ -45,7 +45,6 @@ namespace ao::rt
   {
     SelectionKind selectionKind = SelectionKind::None;
     std::vector<TrackId> trackIds{};
-    std::uint64_t revision = 0;
 
     ResourceId singleCoverArtId{kInvalidResourceId};
     std::array<AggregateValue<TrackFieldRawValue>, kTrackFieldCount> fields{};

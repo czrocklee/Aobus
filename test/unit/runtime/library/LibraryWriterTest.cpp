@@ -39,7 +39,7 @@ namespace ao::rt::test
     auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
 
     REQUIRE(result);
-    CHECK_FALSE(result->mutatedIds.empty());
+    CHECK_FALSE(result->changes.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
   }
@@ -73,7 +73,7 @@ namespace ao::rt::test
     auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Committed Title"});
 
     REQUIRE(result);
-    CHECK_FALSE(result->mutatedIds.empty());
+    CHECK_FALSE(result->changes.empty());
     CHECK(observedTitle == "Committed Title");
   }
 
@@ -93,7 +93,7 @@ namespace ao::rt::test
     auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Original Title"});
 
     REQUIRE(result);
-    CHECK(result->mutatedIds.empty());
+    CHECK(result->changes.empty());
     CHECK(mutated.empty());
   }
 
@@ -124,7 +124,7 @@ namespace ao::rt::test
 
     auto const result = writerFixture.updateMetadata(targetIds, patch);
     REQUIRE(result);
-    CHECK_FALSE(result->mutatedIds.empty());
+    CHECK_FALSE(result->changes.empty());
 
     auto const transaction = libraryFixture.library().readTransaction();
     auto const optView =
@@ -230,7 +230,7 @@ namespace ao::rt::test
     auto const result = writerFixture.editTags(trackIdsArr, toAdd, toRemove);
 
     REQUIRE(result);
-    CHECK_FALSE(result->mutatedIds.empty());
+    CHECK_FALSE(result->changes.empty());
   }
 
   TEST_CASE("LibraryWriter - editTags rejects missing targets before mutation", "[runtime][unit][library][tag]")

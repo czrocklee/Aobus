@@ -122,14 +122,13 @@ namespace ao::rt::test
 
     auto patch = MetadataPatch{};
     patch.optTitle = "After";
-    auto outcomeResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
+    auto authoringResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
 
-    REQUIRE(outcomeResult);
-    CHECK(outcomeResult->status == TrackAuthoringStatus::Applied);
-    CHECK(outcomeResult->libraryRevision == boundResult->libraryRevision() + 1U);
-    REQUIRE(outcomeResult->optNextTargets);
-    CHECK(outcomeResult->optNextTargets->libraryRevision() == outcomeResult->libraryRevision);
-    CHECK(std::ranges::equal(outcomeResult->optNextTargets->trackIds(), boundResult->trackIds()));
+    REQUIRE(authoringResult);
+    CHECK(authoringResult->status == TrackAuthoringStatus::Applied);
+    REQUIRE(authoringResult->optNextTargets);
+    CHECK(authoringResult->optNextTargets->libraryRevision() == boundResult->libraryRevision() + 1U);
+    CHECK(std::ranges::equal(authoringResult->optNextTargets->trackIds(), boundResult->trackIds()));
     CHECK(order == std::vector<std::string>{"change", "available"});
     CHECK(reboundFromAvailability);
     CHECK(fixture.title() == "After");
@@ -150,11 +149,11 @@ namespace ao::rt::test
         nestedMutationRejected = !nestedResult && nestedResult.error().code == Error::Code::InvalidState;
       });
 
-    auto outcomeResult =
+    auto authoringResult =
       fixture.runtimeLibrary().writer().updateMetadata(*boundResult, MetadataPatch{.optTitle = "After"});
 
-    REQUIRE(outcomeResult);
-    CHECK(outcomeResult->status == TrackAuthoringStatus::Applied);
+    REQUIRE(authoringResult);
+    CHECK(authoringResult->status == TrackAuthoringStatus::Applied);
     CHECK(nestedMutationRejected);
   }
 
@@ -188,12 +187,11 @@ namespace ao::rt::test
     auto patch = MetadataPatch{};
     patch.optTitle = "Before";
 
-    auto outcomeResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
+    auto authoringResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
 
-    REQUIRE(outcomeResult);
-    CHECK(outcomeResult->status == TrackAuthoringStatus::NoOp);
-    CHECK(outcomeResult->libraryRevision == 0);
-    CHECK_FALSE(outcomeResult->optNextTargets);
+    REQUIRE(authoringResult);
+    CHECK(authoringResult->status == TrackAuthoringStatus::NoOp);
+    CHECK_FALSE(authoringResult->optNextTargets);
     CHECK(changedCount == 0);
     CHECK(fixture.runtimeLibrary().authoringAvailability().libraryRevision == boundResult->libraryRevision());
     CHECK(fixture.title() == "Before");
@@ -280,11 +278,11 @@ namespace ao::rt::test
 
     auto patch = MetadataPatch{};
     patch.optTitle = "Should not apply";
-    auto outcomeResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
+    auto authoringResult = fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch);
 
-    REQUIRE(outcomeResult);
-    CHECK(outcomeResult->status == TrackAuthoringStatus::Stale);
-    CHECK(outcomeResult->reply.mutatedIds.empty());
+    REQUIRE(authoringResult);
+    CHECK(authoringResult->status == TrackAuthoringStatus::Stale);
+    CHECK(authoringResult->reply.changes.empty());
     CHECK(fixture.title() == "Before");
   }
 

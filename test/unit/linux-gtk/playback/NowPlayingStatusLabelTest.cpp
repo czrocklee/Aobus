@@ -37,9 +37,9 @@ namespace ao::gtk::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(fixture.runtime(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
     fixture.runtime().reloadAllTracks();
-    auto const view = fixture.runtime().views().createView({.listId = rt::kAllTracksListId}, true);
+    auto const view = fixture.runtime().views().createView({.listId = rt::kAllTracksListId});
     REQUIRE(view);
-    REQUIRE(playback.commands().startFromView(view->viewId, trackId));
+    REQUIRE(playback.commands().startFromView(*view, trackId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());
 

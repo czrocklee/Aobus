@@ -34,7 +34,7 @@ namespace ao::rt::test
 {
   using namespace ao::library;
 
-  TEST_CASE("TrackSourceCache - source lookup and list refresh maintain source state",
+  TEST_CASE("TrackSourceCache - source lookup and reload maintain source state",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -46,7 +46,9 @@ namespace ao::rt::test
     {
       auto const allTracksResult = cache.acquire(kAllTracksListId);
       REQUIRE(allTracksResult);
-      CHECK(&allTracksResult->source() == &cache.allTracks());
+      auto const secondAllTracksResult = cache.acquire(kAllTracksListId);
+      REQUIRE(secondAllTracksResult);
+      CHECK(&allTracksResult->source() == &secondAllTracksResult->source());
 
       auto const invalidResult = cache.acquire(kInvalidListId);
       REQUIRE_FALSE(invalidResult);
@@ -103,183 +105,31 @@ namespace ao::rt::test
 
     SECTION("reloadAllTracks updates allTracks source")
     {
+      auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       libraryFixture.addTrack("Track 1");
       libraryFixture.addTrack("Track 2");
 
       cache.reloadAllTracks();
-      CHECK(cache.allTracks().size() == 2);
+      CHECK(allTracks->size() == 2);
     }
 
     SECTION("track delete notifications remove allTracks membership")
     {
       auto const trackId = libraryFixture.addTrack("Track 1");
+      auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       cache.reloadAllTracks();
-      REQUIRE(cache.allTracks().size() == 1);
-      auto spy = TrackSourceBatchSpy{cache.allTracks()};
+      REQUIRE(allTracks->size() == 1);
+      auto spy = TrackSourceBatchSpy{allTracks.source()};
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
       auto& writer = writerFixture.writer();
 
       CHECK(writer.deleteTrack(trackId).has_value());
-      CHECK(cache.allTracks().size() == 0);
+      CHECK(allTracks->size() == 0);
       REQUIRE(spy.batches.size() == 1);
       REQUIRE(spy.batches.front().deltas.size() == 1);
       auto const& removal = std::get<SourceRemoveRange>(spy.batches.front().deltas.front());
       CHECK(removal.start == 0);
       CHECK(removal.trackIds == std::vector{trackId});
-    }
-
-    SECTION("refreshList updates manual list source")
-    {
-      auto listId = ListId{0};
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto builder = ListBuilder::makeEmpty();
-        builder.name("Manual");
-        listId =
-          ao::test::requireValue(
-            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-            .first;
-        REQUIRE(transaction.commit());
-      }
-
-      auto lease = ao::test::requireValue(cache.acquire(listId));
-      auto& source = lease.source();
-      CHECK(source.size() == 0);
-
-      auto t1 = libraryFixture.addTrack("A");
-      cache.reloadAllTracks(); // ensure parent source has it
-
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto optView = libraryFixture.library().lists().reader(transaction).get(listId);
-        auto builder = ListBuilder::fromView(*optView);
-        builder.tracks().add(t1);
-        CHECK(libraryFixture.library()
-                .lists()
-                .writer(transaction)
-                .update(listId, ao::test::requireValue(builder.serialize())));
-        REQUIRE(transaction.commit());
-      }
-
-      cache.refreshList(listId);
-      REQUIRE(source.size() == 1);
-      REQUIRE(source.trackIdAt(0) == t1);
-    }
-
-    SECTION("refreshList updates smart list source")
-    {
-      auto listId = ListId{0};
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto builder = ListBuilder::makeEmpty();
-        builder.name("Smart");
-        builder.filter("$year >= 2020");
-        listId =
-          ao::test::requireValue(
-            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-            .first;
-        REQUIRE(transaction.commit());
-      }
-
-      auto lease = ao::test::requireValue(cache.acquire(listId));
-      auto& source = lease.source();
-      CHECK(source.size() == 0);
-
-      libraryFixture.addTrack("B");
-      libraryFixture.addTrack("A");
-
-      cache.reloadAllTracks();
-
-      cache.refreshList(listId);
-      CHECK(source.size() == 2);
-    }
-
-    SECTION("refreshList invalid ID returns early")
-    {
-      // shouldn't crash
-      cache.refreshList(kInvalidListId);
-    }
-
-    SECTION("refreshList for missing ID calls eraseList")
-    {
-      auto listId = ListId{0};
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto builder = ListBuilder::makeEmpty();
-        builder.name("DeleteMe");
-        listId =
-          ao::test::requireValue(
-            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-            .first;
-        REQUIRE(transaction.commit());
-      }
-
-      auto lease = ao::test::requireValue(cache.acquire(listId));
-
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        libraryFixture.library().lists().writer(transaction).remove(listId);
-        REQUIRE(transaction.commit());
-      }
-
-      // refreshList should detect the missing list and erase it from _sources
-      cache.refreshList(listId);
-
-      CHECK(lease->state() == TrackSourceState::Invalidated);
-      auto const missingResult = cache.acquire(listId);
-      REQUIRE_FALSE(missingResult);
-      CHECK(missingResult.error().code == Error::Code::NotFound);
-    }
-
-    SECTION("eraseList removes list and its children")
-    {
-      auto parentId = ListId{0};
-      auto childId = ListId{0};
-      auto grandchildId = ListId{0};
-
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        auto listWriter = libraryFixture.library().lists().writer(transaction);
-
-        auto parentBuilder = ListBuilder::makeEmpty();
-        parentBuilder.name("Parent");
-        parentId = ao::test::requireValue(listWriter.create(ao::test::requireValue(parentBuilder.serialize()))).first;
-
-        auto childBuilder = ListBuilder::makeEmpty();
-        childBuilder.name("Child");
-        childBuilder.parentId(parentId);
-        childId = ao::test::requireValue(listWriter.create(ao::test::requireValue(childBuilder.serialize()))).first;
-
-        auto grandchildBuilder = ListBuilder::makeEmpty();
-        grandchildBuilder.name("Grandchild");
-        grandchildBuilder.parentId(childId);
-        grandchildId =
-          ao::test::requireValue(listWriter.create(ao::test::requireValue(grandchildBuilder.serialize()))).first;
-
-        REQUIRE(transaction.commit());
-      }
-
-      // Build the hierarchy in TrackSourceCache
-      auto parentLease = ao::test::requireValue(cache.acquire(parentId));
-      auto childLease = ao::test::requireValue(cache.acquire(childId));
-      auto grandchildLease = ao::test::requireValue(cache.acquire(grandchildId));
-
-      {
-        auto transaction = library::test::writeTransaction(libraryFixture.library());
-        libraryFixture.library().lists().writer(transaction).remove(grandchildId);
-        libraryFixture.library().lists().writer(transaction).remove(childId);
-        libraryFixture.library().lists().writer(transaction).remove(parentId);
-        REQUIRE(transaction.commit());
-      }
-
-      cache.eraseList(parentId);
-
-      CHECK(parentLease->state() == TrackSourceState::Invalidated);
-      CHECK(childLease->state() == TrackSourceState::Invalidated);
-      CHECK(grandchildLease->state() == TrackSourceState::Invalidated);
-      CHECK_FALSE(cache.acquire(parentId));
-      CHECK_FALSE(cache.acquire(childId));
-      CHECK_FALSE(cache.acquire(grandchildId));
     }
 
     SECTION("LibraryWriter integration")
@@ -332,6 +182,7 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
+    auto allTracksLease = ao::test::requireValue(cache.acquire(kAllTracksListId));
     auto smartLease = ao::test::requireValue(cache.acquire(smartListId));
     auto& smartSource = smartLease.source();
     REQUIRE(smartSource.size() == 0);
@@ -339,7 +190,7 @@ namespace ao::rt::test
     auto allTracksBatches = std::vector<TrackSourceDeltaBatch>{};
     auto smartBatches = std::vector<TrackSourceDeltaBatch>{};
     auto allTracksSubscription =
-      cache.allTracks().subscribe([&](TrackSourceDeltaBatch const& batch) { allTracksBatches.push_back(batch); });
+      allTracksLease->subscribe([&](TrackSourceDeltaBatch const& batch) { allTracksBatches.push_back(batch); });
     auto smartSubscription =
       smartSource.subscribe([&](TrackSourceDeltaBatch const& batch) { smartBatches.push_back(batch); });
 
@@ -391,11 +242,11 @@ namespace ao::rt::test
     subscription.reset();
   }
 
-  TEST_CASE("TrackSourceCache - eviction preserves mutation delivery, identity, and deletion invalidation",
+  TEST_CASE("TrackSourceCache - cached sources preserve mutation delivery, identity, and deletion invalidation",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const trackId = libraryFixture.addTrack("Inserted after eviction");
+    auto const trackId = libraryFixture.addTrack("Inserted after acquisition");
     auto changes = LibraryChanges{};
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
@@ -408,10 +259,8 @@ namespace ao::rt::test
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto* const identity = &lease.source();
 
-    cache.evict(listId);
     auto reacquired = ao::test::requireValue(cache.acquire(listId));
     CHECK(&reacquired.source() == identity);
-    cache.evict(listId);
 
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     auto subscription = lease->subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
@@ -473,7 +322,7 @@ namespace ao::rt::test
     CHECK(oldBatches.size() == 1);
   }
 
-  TEST_CASE("TrackSourceCache - a child lease pins its dependency graph and parent deletion is terminal once",
+  TEST_CASE("TrackSourceCache - parent deletion invalidates its cached dependency graph once",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -490,33 +339,22 @@ namespace ao::rt::test
       .name = "Child",
     }));
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
-    auto optChildLease = std::optional<TrackSourceLease>{};
-    TrackSource* parentIdentity = nullptr;
-
-    {
-      auto parentLease = ao::test::requireValue(cache.acquire(parentId));
-      parentIdentity = &parentLease.source();
-      optChildLease.emplace(ao::test::requireValue(cache.acquire(childId)));
-    }
-
-    cache.evict(childId);
-    cache.evict(parentId);
-    auto parentAfterEviction = ao::test::requireValue(cache.acquire(parentId));
-    CHECK(&parentAfterEviction.source() == parentIdentity);
-    cache.evict(parentId);
+    auto parentLease = ao::test::requireValue(cache.acquire(parentId));
+    auto childLease = ao::test::requireValue(cache.acquire(childId));
+    auto parentAgain = ao::test::requireValue(cache.acquire(parentId));
+    CHECK(&parentAgain.source() == &parentLease.source());
 
     auto parentBatches = std::vector<TrackSourceDeltaBatch>{};
     auto childBatches = std::vector<TrackSourceDeltaBatch>{};
     auto parentSubscription =
-      parentAfterEviction->subscribe([&](TrackSourceDeltaBatch const& batch) { parentBatches.push_back(batch); });
+      parentAgain->subscribe([&](TrackSourceDeltaBatch const& batch) { parentBatches.push_back(batch); });
     auto childSubscription =
-      (*optChildLease)->subscribe([&](TrackSourceDeltaBatch const& batch) { childBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) { childBatches.push_back(batch); });
 
     REQUIRE(writer.deleteList(parentId));
-    cache.eraseList(parentId);
 
-    CHECK(parentAfterEviction->state() == TrackSourceState::Invalidated);
-    CHECK((*optChildLease)->state() == TrackSourceState::Invalidated);
+    CHECK(parentAgain->state() == TrackSourceState::Invalidated);
+    CHECK(childLease->state() == TrackSourceState::Invalidated);
     REQUIRE(parentBatches.size() == 1);
     REQUIRE(childBatches.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(parentBatches[0].deltas[0]));
@@ -657,7 +495,6 @@ namespace ao::rt::test
 
     auto const expectedAfterDetailed = std::vector{second, inserted, third};
     CHECK(sourceTrackIds(lease.source()) == expectedAfterDetailed);
-    CHECK(lease->revision() == 3);
 
     auto const replacement = writer.updateList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
@@ -671,7 +508,6 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceReset>(batches[3].deltas.front()));
     auto const expectedAfterReset = std::vector{third, second, inserted};
     CHECK(sourceTrackIds(lease.source()) == expectedAfterReset);
-    CHECK(lease->revision() == 4);
 
     for (auto const& batch : batches | std::views::take(3))
     {
@@ -731,7 +567,6 @@ namespace ao::rt::test
     CHECK(&lease.source() == identity);
     CHECK(lease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(lease.source()) == std::vector{first, inserted});
-    CHECK(lease->revision() == 1);
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
     auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas.front());
@@ -815,7 +650,6 @@ namespace ao::rt::test
     CHECK(&childLease.source() == identity);
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(childLease.source()) == std::vector{first, inserted});
-    CHECK(childLease->revision() == 1);
     REQUIRE(batches.size() == 1);
     REQUIRE(batches[0].deltas.size() == 1);
     auto const& insertion = std::get<SourceInsertRange>(batches[0].deltas.front());
@@ -937,7 +771,6 @@ namespace ao::rt::test
     CHECK(&childLease.source() == identity);
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(childLease.source()) == std::vector{first, second});
-    CHECK(childLease->revision() == 1);
     REQUIRE(batches.size() == 1);
     REQUIRE(batches[0].deltas.size() == 1);
     auto const& outerInsertion = std::get<SourceInsertRange>(batches[0].deltas.front());
@@ -956,7 +789,7 @@ namespace ao::rt::test
     CHECK(rejectedAfterFault.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("TrackSourceCache - hidden manual insert stays revisionless and re-enters in stored order",
+  TEST_CASE("TrackSourceCache - hidden manual insert does not publish and re-enters in stored order",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -985,7 +818,6 @@ namespace ao::rt::test
 
     auto const hiddenInsert = writer.insertManualListTracks(childId, 1, std::array{hidden});
     REQUIRE(hiddenInsert);
-    CHECK(childLease->revision() == 0);
     CHECK(batches.empty());
     CHECK(sourceTrackIds(childLease.source()) == std::vector{visible});
 
@@ -999,7 +831,6 @@ namespace ao::rt::test
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{hidden});
     CHECK(sourceTrackIds(childLease.source()) == expected);
-    CHECK(childLease->revision() == 1);
   }
 
   TEST_CASE("TrackSourceCache - track deletion does not duplicate detailed manual removal via parent",
@@ -1034,7 +865,6 @@ namespace ao::rt::test
     CHECK(removal.start == 1);
     CHECK(removal.trackIds == std::vector{deleted});
     CHECK(sourceTrackIds(lease.source()) == expected);
-    CHECK(lease->revision() == 1);
   }
 
   TEST_CASE("TrackSourceCache - identical source specs share one ad-hoc source", "[runtime][unit][source][source-spec]")

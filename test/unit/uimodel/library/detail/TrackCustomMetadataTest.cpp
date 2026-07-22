@@ -3,7 +3,7 @@
 
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
-#include <ao/uimodel/library/detail/TrackCustomMetadataWorkflow.h>
+#include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 
 #include <catch2/catch_test_macros.hpp>
 

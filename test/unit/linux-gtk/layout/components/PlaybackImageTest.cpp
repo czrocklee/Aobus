@@ -103,9 +103,9 @@ namespace ao::gtk::layout::test
     void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)
     {
       runtime.reloadAllTracks();
-      auto const view = runtime.views().createView({.listId = rt::kAllTracksListId}, true);
+      auto const view = runtime.views().createView({.listId = rt::kAllTracksListId});
       REQUIRE(view);
-      REQUIRE(runtime.playback().commands().startFromView(view->viewId, trackId));
+      REQUIRE(runtime.playback().commands().startFromView(*view, trackId));
     }
   } // namespace
 

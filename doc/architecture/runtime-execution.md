@@ -49,10 +49,10 @@ It is unsynchronized and does not choose an executor, so its owner defines the s
 Its `post()` operation is a weak-lifetime deferred hop through a supplied executor, not permission for other signal operations to cross threads.
 The [signal delivery specification](../spec/async/signal.md) owns its exact ordering, reentrancy, observer-exception, and destruction behavior.
 
-The notification service refines synchronous callback delivery with a revision queue.
-One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later revision rather than nesting signal delivery.
+The notification service refines synchronous callback delivery with a small publication queue.
+One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later update rather than nesting signal delivery.
 Observer failure is contained after every connected observer has run and is reported through `Runtime::reportUnhandledException`, so it cannot unwind an already committed feed command.
-Candidate bounding and eligible session-history eviction complete before that commit, so rejection leaves the current snapshot and id watermark untouched while accepted eviction remains part of one observed revision.
+Candidate bounding and eligible history eviction complete before that commit, so rejection leaves the current snapshot and id watermark untouched while accepted eviction remains part of the same observed update.
 For transient notification lifetime, the service schedules a cancellable worker sleep through the same runtime and defers completion to the callback executor.
 Only a callback carrying the current notification id and lifetime generation may commit expiry; updates restart the duration, while cancellation merely avoids obsolete work.
 
@@ -159,7 +159,7 @@ The current Engine non-realtime queue and Player-to-executor task stream do not 
 - A maintenance guard closes interactive admission across slow preparation but never grants storage write access by itself.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - Synchronous observer delivery cannot destroy the emitting owner on the same callback stack; teardown is deferred to a later executor turn.
-- Reentrant notification publication is revision-queued, so observers of revision R retain one immutable snapshot even if an earlier observer commits revision R+1.
+- Reentrant notification mutations queue another immutable update, so every observer finishes the current snapshot before delivery moves to the next one.
 - Notification expiry tasks never mutate feed state on a worker; a stale, cancelled, or owner-retired expiry callback is rejected on the callback executor.
 - A dedicated audio or device thread cannot become a general application worker.
 - Tests replace time, execution, or backend facilities through explicit executor and sleeper seams instead of relying on sleeps.
@@ -216,7 +216,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp) exercise the public playback service and executor-affine internal succession owner.
-- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable revision delivery, reentrant commands, and observer-fault containment.
+- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, reentrant commands, and observer-fault containment.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
 
 ## Related documents

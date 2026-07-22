@@ -82,6 +82,12 @@ namespace ao::uimodel
 
       return {};
     }
+
+    NowPlayingActionCommand::Type playPauseCommand(audio::Transport const transport) noexcept
+    {
+      return transport == audio::Transport::Playing ? NowPlayingActionCommand::Type::Pause
+                                                    : NowPlayingActionCommand::Type::Resume;
+    }
   } // namespace
 
   NowPlayingViewModel::NowPlayingViewModel(rt::PlaybackService& playback,
@@ -96,12 +102,6 @@ namespace ao::uimodel
     _snapshotSub =
       _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
     refresh();
-  }
-
-  NowPlayingActionCommand::Type resolveNowPlayingPlayPauseCommand(audio::Transport const transport) noexcept
-  {
-    return transport == audio::Transport::Playing ? NowPlayingActionCommand::Type::Pause
-                                                  : NowPlayingActionCommand::Type::Resume;
   }
 
   void NowPlayingViewModel::refresh()
@@ -187,7 +187,7 @@ namespace ao::uimodel
     {
       case NowPlayingFieldAction::Reveal: cmd.type = NowPlayingActionCommand::Type::Reveal; break;
 
-      case NowPlayingFieldAction::PlayPause: cmd.type = resolveNowPlayingPlayPauseCommand(state.transport); break;
+      case NowPlayingFieldAction::PlayPause: cmd.type = playPauseCommand(state.transport); break;
 
       case NowPlayingFieldAction::FilterByField:
       {

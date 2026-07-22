@@ -723,7 +723,7 @@ namespace ao::tui
       loop.RunOnceBlocking();
       frameTimer.recordPresentIfDrawn();
 
-      activityStatusViewModel.expireTransientIfDue();
+      activityStatusViewModel.autoDismissCompactIfDue();
 
       if (kittyCoverArt)
       {

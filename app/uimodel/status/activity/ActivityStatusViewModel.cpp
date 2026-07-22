@@ -11,7 +11,6 @@
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -25,6 +24,13 @@ namespace ao::uimodel
     {
       return std::chrono::steady_clock::now();
     }
+
+    bool sameCompactPresentation(ActivityCompactState const& lhs, ActivityCompactState const& rhs)
+    {
+      return lhs.kind == rhs.kind && lhs.text == rhs.text && lhs.optProgressFraction == rhs.optProgressFraction &&
+             lhs.dismissible == rhs.dismissible && lhs.hasDetails == rhs.hasDetails &&
+             lhs.optAutoDismissTimeout == rhs.optAutoDismissTimeout;
+    }
   } // namespace
 
   struct ActivityStatusViewModel::Impl final
@@ -34,8 +40,8 @@ namespace ao::uimodel
     ActivityStatusClock clock;
     ActivityStatusFeedProjection feedProjection;
     std::optional<std::chrono::steady_clock::time_point> optAutoDismissDeadline{};
+    std::optional<ActivityCompactState> optScheduledCompact{};
 
-    std::uint64_t lastAcceptedNotificationRevision = 0;
     async::Subscription feedUpdatedSub;
     async::Subscription libraryProgressSub;
     async::Subscription libraryCompletedSub;
@@ -51,19 +57,16 @@ namespace ao::uimodel
       }
 
       auto const initialFeed = notifications.feed();
-      lastAcceptedNotificationRevision = initialFeed.revision;
       feedProjection.initialize(initialFeed);
 
       feedUpdatedSub = notifications.onFeedUpdated(
         [this](rt::NotificationFeedUpdate const& update)
         {
-          if (!update.feedPtr || update.revision <= lastAcceptedNotificationRevision ||
-              update.revision != update.feedPtr->revision)
+          if (!update.feedPtr)
           {
             return;
           }
 
-          lastAcceptedNotificationRevision = update.revision;
           feedProjection.handleFeedUpdated(update);
           publish();
         });
@@ -101,18 +104,25 @@ namespace ao::uimodel
       if (!compact.optAutoDismissTimeout)
       {
         optAutoDismissDeadline.reset();
+        optScheduledCompact.reset();
         return;
       }
 
+      if (optAutoDismissDeadline && optScheduledCompact && sameCompactPresentation(*optScheduledCompact, compact))
+      {
+        return;
+      }
+
+      optScheduledCompact = compact;
       optAutoDismissDeadline = now() + *compact.optAutoDismissTimeout;
     }
 
     std::chrono::steady_clock::time_point now() const { return clock(); }
 
-    void expireTransient()
+    void autoDismissCompact()
     {
       optAutoDismissDeadline.reset();
-      feedProjection.handleTransientExpired(notifications.feed());
+      feedProjection.autoDismissCompact(notifications.feed());
       publish();
     }
 
@@ -122,9 +132,9 @@ namespace ao::uimodel
       publish();
     }
 
-    void dismissDetailNotificationFromActivity(rt::NotificationId const id)
+    void hideDetailNotification(rt::NotificationId const id)
     {
-      feedProjection.dismissDetailNotificationFromActivity(id, notifications.feed());
+      feedProjection.hideDetailNotification(id, notifications.feed());
       publish();
     }
 
@@ -155,25 +165,20 @@ namespace ao::uimodel
     return _implPtr->feedProjection.viewState();
   }
 
-  bool ActivityStatusViewModel::hasPendingAutoDismiss() const noexcept
-  {
-    return _implPtr->optAutoDismissDeadline.has_value();
-  }
-
-  bool ActivityStatusViewModel::expireTransientIfDue()
+  bool ActivityStatusViewModel::autoDismissCompactIfDue()
   {
     if (!_implPtr->optAutoDismissDeadline || _implPtr->now() < *_implPtr->optAutoDismissDeadline)
     {
       return false;
     }
 
-    expireTransient();
+    autoDismissCompact();
     return true;
   }
 
-  void ActivityStatusViewModel::expireTransient()
+  void ActivityStatusViewModel::autoDismissCompact()
   {
-    _implPtr->expireTransient();
+    _implPtr->autoDismissCompact();
   }
 
   void ActivityStatusViewModel::dismissCompact()
@@ -181,18 +186,8 @@ namespace ao::uimodel
     _implPtr->dismissCompact();
   }
 
-  void ActivityStatusViewModel::dismissDetailNotificationFromActivity(rt::NotificationId const id)
+  void ActivityStatusViewModel::hideDetailNotification(rt::NotificationId const id)
   {
-    _implPtr->dismissDetailNotificationFromActivity(id);
-  }
-
-  void ActivityStatusViewModel::handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
-  {
-    _implPtr->handleLibraryTaskProgress(event);
-  }
-
-  void ActivityStatusViewModel::handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event)
-  {
-    _implPtr->handleLibraryTaskCompleted(event);
+    _implPtr->hideDetailNotification(id);
   }
 } // namespace ao::uimodel

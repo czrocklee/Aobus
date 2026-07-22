@@ -147,7 +147,7 @@ namespace ao::tui
     if (_notifications != nullptr)
     {
       auto const lifetime = severity == rt::NotificationSeverity::Info ? rt::NotificationLifetime::transient()
-                                                                       : rt::NotificationLifetime::sessionHistory();
+                                                                       : rt::NotificationLifetime::history();
       _notifications->post(
         rt::NotificationRequest{.severity = severity, .message = std::move(message), .lifetime = lifetime});
     }
@@ -400,13 +400,13 @@ namespace ao::tui
     return std::chrono::milliseconds{elapsed};
   }
 
-  void EventController::applySeekDecision(uimodel::SeekSliderDecision const& decision)
+  void EventController::applySeekUpdate(uimodel::SeekSliderUpdate const& update)
   {
-    switch (decision.action)
+    switch (update.action)
     {
       case uimodel::SeekSliderAction::None: return;
-      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(decision.elapsed); return;
-      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(decision.elapsed); return;
+      case uimodel::SeekSliderAction::Preview: _seekViewModel.seekPreview(update.elapsed); return;
+      case uimodel::SeekSliderAction::Commit: _seekViewModel.seekFinal(update.elapsed); return;
     }
   }
 
@@ -434,9 +434,9 @@ namespace ao::tui
       {
         syncSeekSlider();
         auto const elapsed = seekRailElapsed(mouse.x);
-        auto const decision = mouse.motion == ftxui::Mouse::Released ? _seekSlider.endPointerInteraction(elapsed)
-                                                                     : _seekSlider.valueChanged(elapsed);
-        applySeekDecision(decision);
+        auto const update = mouse.motion == ftxui::Mouse::Released ? _seekSlider.endPointerInteraction(elapsed)
+                                                                   : _seekSlider.valueChanged(elapsed);
+        applySeekUpdate(update);
 
         if (mouse.motion == ftxui::Mouse::Released)
         {
@@ -552,7 +552,7 @@ namespace ao::tui
     }
 
     _optSeekRailDrag = SeekRailDrag{};
-    applySeekDecision(_seekSlider.valueChanged(seekRailElapsed(mouse.x)));
+    applySeekUpdate(_seekSlider.valueChanged(seekRailElapsed(mouse.x)));
     return true;
   }
 
@@ -706,7 +706,7 @@ namespace ao::tui
       {
         if (hitRegionIt->dismissible)
         {
-          _activityStatusViewModel->dismissDetailNotificationFromActivity(hitRegionIt->id);
+          _activityStatusViewModel->hideDetailNotification(hitRegionIt->id);
           return true;
         }
 

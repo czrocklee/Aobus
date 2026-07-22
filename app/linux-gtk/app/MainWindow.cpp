@@ -212,12 +212,12 @@ namespace ao::gtk
 
     _shellLayout.refreshExportedActions();
 
-    _shellLayout.loadLayout(*_configStorePtr);
+    _shellLayout.loadLayout();
   }
 
   void MainWindow::rebuildLayout()
   {
-    _shellLayout.loadLayout(*_configStorePtr);
+    _shellLayout.loadLayout();
   }
 
   void MainWindow::openLayoutEditor()

@@ -15,53 +15,40 @@
 
 namespace ao::uimodel::test
 {
-  inline rt::NotificationEntry entry(
-    rt::NotificationId id,
-    rt::NotificationSeverity severity,
-    std::string message,
-    rt::NotificationLifetime lifetime = rt::NotificationLifetime::sessionHistory(),
-    rt::NotificationActivityPresentation activityPresentation = rt::NotificationActivityPresentation::Default)
+  inline rt::NotificationEntry entry(rt::NotificationId id,
+                                     rt::NotificationSeverity severity,
+                                     std::string message,
+                                     rt::NotificationLifetime lifetime = rt::NotificationLifetime::history())
   {
     return rt::NotificationEntry{
       .id = id,
       .severity = severity,
       .message = std::move(message),
       .lifetime = lifetime,
-      .activityPresentation = activityPresentation,
     };
-  }
-
-  inline rt::NotificationEntry progressEntry(rt::NotificationId id, std::string message, double fraction)
-  {
-    auto result = entry(id, rt::NotificationSeverity::Info, std::move(message));
-    result.content.optProgress = rt::NotificationProgressState{
-      .mode = rt::NotificationProgressMode::Fraction, .fraction = fraction, .label = "Importing"};
-    return result;
   }
 
   inline rt::NotificationFeedState feed(std::vector<rt::NotificationEntry> entries)
   {
-    return rt::NotificationFeedState{.entries = std::move(entries), .revision = 9};
+    return rt::NotificationFeedState{.entries = std::move(entries)};
   }
 
   inline rt::NotificationFeedUpdate postedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
   {
     auto feedPtr = std::make_shared<rt::NotificationFeedState const>(std::move(snapshot));
     return rt::NotificationFeedUpdate{
-      .revision = feedPtr->revision,
       .mutationKind = rt::NotificationFeedMutationKind::Posted,
-      .affectedIds = {id},
+      .id = id,
       .feedPtr = std::move(feedPtr),
     };
   }
 
-  inline rt::NotificationFeedUpdate dismissedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
+  inline rt::NotificationFeedUpdate expiredUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
   {
     auto feedPtr = std::make_shared<rt::NotificationFeedState const>(std::move(snapshot));
     return rt::NotificationFeedUpdate{
-      .revision = feedPtr->revision,
-      .mutationKind = rt::NotificationFeedMutationKind::Dismissed,
-      .affectedIds = {id},
+      .mutationKind = rt::NotificationFeedMutationKind::Expired,
+      .id = id,
       .feedPtr = std::move(feedPtr),
     };
   }

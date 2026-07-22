@@ -31,8 +31,8 @@ namespace ao::uimodel
   {
     _snapshotSub =
       _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { onSnapshotChanged(snapshot); });
-    _seekPreviewSub = _playback.events().onSeekPreview([this](rt::PlaybackSeekPreview const& preview)
-                                                       { refresh(false, true, preview.elapsed); });
+    _seekPreviewSub = _playback.events().onSeekPreview([this](std::chrono::milliseconds const elapsed)
+                                                       { refresh(false, true, elapsed); });
 
     refresh(true, false);
   }

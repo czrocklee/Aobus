@@ -5,8 +5,6 @@
 
 #include "ActionRegistry.h"
 #include <ao/rt/AppRuntime.h>
-#include <ao/uimodel/layout/action/LayoutActionBinding.h>
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/widget.h>
@@ -25,16 +23,11 @@ namespace ao::gtk::layout
   std::function<void()> ActionBinder::bind(uimodel::LayoutNode const& node,
                                            std::string_view propName,
                                            std::string_view defaultActionId,
-                                           uimodel::LayoutActionSlot slot,
                                            Gtk::Widget& anchorWidget) const
   {
     auto const actionId = node.propertyOr<std::string>(std::string{propName}, std::string{defaultActionId});
 
-    // TODO: hasAnchor and hasFocusedView are hardcoded for Phase 1 widget bindings
-    auto const bindCtx = uimodel::LayoutActionBindingContext{
-      .slot = slot, .hasAnchor = true, .hasFocusedView = true, .componentType = node.type};
-
-    if (!_registry.tryBind(actionId, bindCtx))
+    if (actionId.empty() || actionId == "none" || !_registry.descriptor(actionId))
     {
       return {};
     }
@@ -50,7 +43,7 @@ namespace ao::gtk::layout
     {
       auto actionCtx = ActionActivationContext{
         .runtime = *runtime, .parentWindow = *parentWindow, .anchorWidget = *anchor, .componentId = nodeId};
-      registry->tryActivate(actionId, actionCtx);
+      registry->activate(actionId, actionCtx);
     };
   }
 } // namespace ao::gtk::layout

@@ -28,9 +28,7 @@ namespace ao::uimodel::test
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
       CHECK(compact.text == "2 errors");
-      CHECK(compact.groupedCount == 2);
       CHECK(compact.hasDetails);
-      REQUIRE(compact.sourceNotificationIds.size() == 2);
     }
 
     SECTION("runtime-transient notification does not create a presentation-local timeout")
@@ -50,10 +48,8 @@ namespace ao::uimodel::test
 
     SECTION("compact dismiss does not remove detail feed")
     {
-      auto currentFeed = feed({entry(rt::NotificationId{6},
-                                     rt::NotificationSeverity::Error,
-                                     "Scan failed",
-                                     rt::NotificationLifetime::untilDismissed())});
+      auto currentFeed = feed({entry(
+        rt::NotificationId{6}, rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::pinned())});
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{6}));
 
       feedProjection.dismissCompact(currentFeed);
@@ -65,51 +61,41 @@ namespace ao::uimodel::test
 
     SECTION("new persistent notification reappears after previous compact dismiss")
     {
-      auto firstFeed = feed({entry(rt::NotificationId{7},
-                                   rt::NotificationSeverity::Error,
-                                   "Old failure",
-                                   rt::NotificationLifetime::untilDismissed())});
+      auto firstFeed = feed({entry(
+        rt::NotificationId{7}, rt::NotificationSeverity::Error, "Old failure", rt::NotificationLifetime::pinned())});
       feedProjection.handleFeedUpdated(postedUpdate(firstFeed, rt::NotificationId{7}));
       feedProjection.dismissCompact(firstFeed);
 
-      auto nextFeed = feed({entry(rt::NotificationId{7},
-                                  rt::NotificationSeverity::Error,
-                                  "Old failure",
-                                  rt::NotificationLifetime::untilDismissed()),
-                            entry(rt::NotificationId{8},
-                                  rt::NotificationSeverity::Error,
-                                  "New failure",
-                                  rt::NotificationLifetime::untilDismissed())});
+      auto nextFeed = feed(
+        {entry(
+           rt::NotificationId{7}, rt::NotificationSeverity::Error, "Old failure", rt::NotificationLifetime::pinned()),
+         entry(
+           rt::NotificationId{8}, rt::NotificationSeverity::Error, "New failure", rt::NotificationLifetime::pinned())});
       feedProjection.handleFeedUpdated(postedUpdate(nextFeed, rt::NotificationId{8}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Error);
       CHECK(feedProjection.viewState().compact.text == "New failure");
-      CHECK(feedProjection.viewState().compact.groupedCount == 1);
       REQUIRE(feedProjection.viewState().detail.items.size() == 2);
     }
 
     SECTION("dismissed higher severity does not suppress new lower severity persistent notification")
     {
-      auto errorFeed = feed({entry(rt::NotificationId{16},
-                                   rt::NotificationSeverity::Error,
-                                   "Old failure",
-                                   rt::NotificationLifetime::untilDismissed())});
+      auto errorFeed = feed({entry(
+        rt::NotificationId{16}, rt::NotificationSeverity::Error, "Old failure", rt::NotificationLifetime::pinned())});
       feedProjection.handleFeedUpdated(postedUpdate(errorFeed, rt::NotificationId{16}));
       feedProjection.dismissCompact(errorFeed);
 
-      auto warningFeed = feed({entry(rt::NotificationId{16},
-                                     rt::NotificationSeverity::Error,
-                                     "Old failure",
-                                     rt::NotificationLifetime::untilDismissed()),
-                               entry(rt::NotificationId{17},
-                                     rt::NotificationSeverity::Warning,
-                                     "New warning",
-                                     rt::NotificationLifetime::untilDismissed())});
+      auto warningFeed = feed(
+        {entry(
+           rt::NotificationId{16}, rt::NotificationSeverity::Error, "Old failure", rt::NotificationLifetime::pinned()),
+         entry(rt::NotificationId{17},
+               rt::NotificationSeverity::Warning,
+               "New warning",
+               rt::NotificationLifetime::pinned())});
       feedProjection.handleFeedUpdated(postedUpdate(warningFeed, rt::NotificationId{17}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "New warning");
-      CHECK(feedProjection.viewState().compact.groupedCount == 1);
     }
 
     SECTION("notification-derived transient disappears when its source leaves the feed")
@@ -118,7 +104,7 @@ namespace ao::uimodel::test
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{18}));
       REQUIRE(feedProjection.viewState().compact.kind == ActivityStatusKind::Info);
 
-      feedProjection.handleFeedUpdated(dismissedUpdate(feed({}), rt::NotificationId{18}));
+      feedProjection.handleFeedUpdated(expiredUpdate(feed({}), rt::NotificationId{18}));
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
     }
@@ -130,7 +116,7 @@ namespace ao::uimodel::test
       feedProjection.dismissCompact(currentFeed);
 
       auto replacementFeed = feed({entry(rt::NotificationId{10}, rt::NotificationSeverity::Warning, "New warning")});
-      feedProjection.handleTransientExpired(replacementFeed);
+      feedProjection.autoDismissCompact(replacementFeed);
 
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "New warning");
@@ -143,21 +129,14 @@ namespace ao::uimodel::test
 
       feedProjection.initialize(currentFeed);
       REQUIRE(feedProjection.viewState().detail.items.size() == 2);
-      REQUIRE(feedProjection.viewState().compact.sourceNotificationIds.size() == 2);
 
-      feedProjection.dismissDetailNotificationFromActivity(rt::NotificationId{24}, currentFeed);
+      feedProjection.hideDetailNotification(rt::NotificationId{24}, currentFeed);
 
       CHECK(currentFeed.entries.size() == 2);
       REQUIRE(feedProjection.viewState().detail.items.size() == 1);
       CHECK(feedProjection.viewState().detail.items[0].id == rt::NotificationId{23});
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Warning);
       CHECK(feedProjection.viewState().compact.text == "Older warning");
-      REQUIRE(feedProjection.viewState().compact.sourceNotificationIds.size() == 1);
-      CHECK(feedProjection.viewState().compact.sourceNotificationIds[0] == rt::NotificationId{23});
-
-      auto const hideableIds = feedProjection.locallyHideableNotificationIds(currentFeed);
-      REQUIRE(hideableIds.size() == 1);
-      CHECK(hideableIds[0] == rt::NotificationId{23});
     }
   }
 } // namespace ao::uimodel::test

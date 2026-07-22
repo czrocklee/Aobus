@@ -44,12 +44,6 @@ namespace ao::rt
 
   using NavigationTarget = std::variant<ListId, FilteredListTarget, GlobalViewKind>;
 
-  struct WorkspacePresentationReceipt final
-  {
-    TrackPresentationSpec presentation{};
-    WorkspaceCommitReceipt commit{};
-  };
-
   class WorkspaceService final
   {
   public:
@@ -63,28 +57,25 @@ namespace ao::rt
 
     WorkspaceSnapshot snapshot() const;
 
-    Result<WorkspaceCommitReceipt> focusView(ViewId viewId);
-    Result<WorkspaceCommitReceipt> navigateTo(NavigationTarget const& target, NavigationOptions options = {});
-    Result<WorkspaceCommitReceipt> closeView(ViewId viewId);
+    Result<> focusView(ViewId viewId);
+    Result<ViewId> navigateTo(NavigationTarget const& target, NavigationOptions options = {});
+    Result<> closeView(ViewId viewId);
 
-    Result<WorkspaceCommitReceipt> setActivePresentation(TrackPresentationSpec const& presentation,
-                                                         NavigationOptions options = {});
-    Result<WorkspacePresentationReceipt> setActivePresentation(std::string_view presentationId,
-                                                               NavigationOptions options = {});
+    Result<> setActivePresentation(TrackPresentationSpec const& presentation, NavigationOptions options = {});
+    Result<TrackPresentationSpec> setActivePresentation(std::string_view presentationId,
+                                                        NavigationOptions options = {});
 
-    Result<WorkspaceCommitReceipt> goBack();
-    Result<WorkspaceCommitReceipt> goForward();
-    bool canGoBack() const;
-    bool canGoForward() const;
+    Result<> goBack();
+    Result<> goForward();
 
     async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
-    Result<WorkspaceCommitReceipt> addCustomPreset(CustomTrackPresentationPreset const& preset);
-    Result<WorkspaceCommitReceipt> removeCustomPreset(std::string_view presetId);
+    Result<> addCustomPreset(CustomTrackPresentationPreset const& preset);
+    Result<> removeCustomPreset(std::string_view presetId);
 
     void saveSession(ConfigStore& store) const;
-    Result<WorkspaceCommitReceipt> restoreSession(ConfigStore& store);
+    Result<> restoreSession(ConfigStore& store);
 
   private:
     struct Impl;

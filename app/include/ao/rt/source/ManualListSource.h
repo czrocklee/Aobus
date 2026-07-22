@@ -27,7 +27,7 @@ namespace ao::rt
   struct ManualTracksRemove;
 
   /**
-   * A manually ordered source whose stored intent is filtered by a parent.
+   * A manually ordered source whose stored rows are filtered by a parent.
    *
    * The stored order is canonical and independent from parent visibility. The
    * effective TrackSource snapshot is the stored order intersected with the

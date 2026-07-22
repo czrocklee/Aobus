@@ -53,7 +53,7 @@ namespace ao::rt
                                              std::stop_token stopToken = {});
     async::Task<Result<ScanPlan>> buildScanPlanAsync(std::stop_token stopToken = {});
     // Cooperative cancellation propagates OperationCancelled; a returned
-    // ScanApplyResult always represents a non-cancelled terminal outcome.
+    // ScanApplyResult always represents a completed, non-cancelled scan.
     async::Task<Result<ScanApplyResult>> applyScanPlanAsync(ScanPlan plan,
                                                             ScanApplyOptions options = {},
                                                             std::stop_token stopToken = {},

@@ -120,25 +120,6 @@ namespace ao::uimodel
         }
       }
     }
-
-    void regenerateRecursive(LayoutNode& node, ReservedLayoutNodeIds& reservedIds)
-    {
-      if (!node.id.empty() || isStatefulLayoutComponentType(node.type))
-      {
-        auto const stem = idStem(node.type, node.id.empty() ? "copy" : node.id);
-        node.id = makeUniqueFromReserved(reservedIds, stem);
-      }
-
-      for (auto& child : node.children)
-      {
-        regenerateRecursive(child, reservedIds);
-      }
-
-      if (node.optTooltip && node.optTooltip->nodePtr)
-      {
-        regenerateRecursive(*node.optTooltip->nodePtr, reservedIds);
-      }
-    }
   } // namespace
 
   void visitLayoutNode(LayoutNode const& node, LayoutNodeVisitor const& visitor)
@@ -211,12 +192,5 @@ namespace ao::uimodel
     auto reservedIds = ReservedLayoutNodeIds{};
     collectIds(doc, reservedIds);
     return makeUniqueFromReserved(reservedIds, idStem(componentType, role));
-  }
-
-  void regenerateLayoutNodeIds(LayoutNode& subtree, LayoutDocument const& ownerDoc)
-  {
-    auto reservedIds = ReservedLayoutNodeIds{};
-    collectIds(ownerDoc, reservedIds);
-    regenerateRecursive(subtree, reservedIds);
   }
 } // namespace ao::uimodel

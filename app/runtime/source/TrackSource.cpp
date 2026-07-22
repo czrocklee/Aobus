@@ -32,7 +32,7 @@ namespace ao::rt
 
     if (_state == TrackSourceState::Invalidated)
     {
-      handler(TrackSourceDeltaBatch{.revision = _revision, .deltas = {SourceInvalidated{}}});
+      handler(TrackSourceDeltaBatch{.deltas = {SourceInvalidated{}}});
       return {};
     }
 
@@ -47,7 +47,7 @@ namespace ao::rt
     }
 
     _state = TrackSourceState::Invalidated;
-    _changedSignal.emit(TrackSourceDeltaBatch{.revision = ++_revision, .deltas = {SourceInvalidated{}}});
+    _changedSignal.emit(TrackSourceDeltaBatch{.deltas = {SourceInvalidated{}}});
     _changedSignal.disconnectAll();
   }
 
@@ -200,7 +200,6 @@ namespace ao::rt
     gsl_Assert(!batch.deltas.empty() && validateTrackSourceDeltaBatch(batch, previousSize) &&
                !std::holds_alternative<SourceInvalidated>(batch.deltas.front()));
 
-    batch.revision = ++_revision;
     _changedSignal.emit(batch);
     return true;
   }

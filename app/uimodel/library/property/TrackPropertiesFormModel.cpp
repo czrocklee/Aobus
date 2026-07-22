@@ -50,7 +50,7 @@ namespace ao::uimodel
       return TrackFieldEditValue{};
     }
 
-    bool isFieldDirty(TrackPropertiesFormFieldState const& state)
+    bool hasFieldChange(TrackPropertiesFormFieldState const& state)
     {
       auto patch = rt::MetadataPatch{};
       return writeTrackPropertiesFormEdit(patch, state, state.currentEditValue);
@@ -103,16 +103,15 @@ namespace ao::uimodel
                              : formatTrackFieldRawValue(state->field, state->originalRawValue),
         .mixed = state->mixed,
         .editable = state->editable,
-        .dirty = isFieldDirty(*state),
       };
     }
 
-    return TrackPropertiesFormRowView{.field = field, .mixed = false, .editable = false, .dirty = false};
+    return TrackPropertiesFormRowView{.field = field, .mixed = false, .editable = false};
   }
 
   bool TrackPropertiesFormModel::canSave() const
   {
-    return std::ranges::any_of(_fields, isFieldDirty);
+    return std::ranges::any_of(_fields, hasFieldChange);
   }
 
   rt::MetadataPatch TrackPropertiesFormModel::buildPatch() const

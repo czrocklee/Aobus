@@ -25,10 +25,9 @@ namespace ao::uimodel
     void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
                                     rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
-    void dismissDetailNotificationFromActivity(rt::NotificationId id, rt::NotificationFeedState const& feed);
-    void handleTransientExpired(rt::NotificationFeedState const& feed);
+    void hideDetailNotification(rt::NotificationId id, rt::NotificationFeedState const& feed);
+    void autoDismissCompact(rt::NotificationFeedState const& feed);
 
-    std::vector<rt::NotificationId> locallyHideableNotificationIds(rt::NotificationFeedState const& feed) const;
     ActivityStatusViewState const& viewState() const noexcept;
 
   private:
@@ -46,17 +45,20 @@ namespace ao::uimodel
     void projectPersistentCompact(rt::NotificationFeedState const& feed);
     void projectNotificationCompact(rt::NotificationEntry const& entry);
     void projectCompletionCompact(std::size_t count);
-    bool hasPresentedCompactSource(ActivityCompactState const& compact, rt::NotificationFeedState const& feed) const;
-    bool isCompactSourceDismissed(ActivityCompactState const& compact) const;
-    bool isCompactSourceSuppressed(rt::NotificationId id) const;
-    void rememberDismissedCompactSources();
-    void pruneDismissedSources(rt::NotificationFeedState const& feed);
+    void setCompact(ActivityCompactState compact, std::vector<rt::NotificationId> sourceIds = {});
+    bool hasPresentedCompactSource(std::vector<rt::NotificationId> const& sourceIds,
+                                   rt::NotificationFeedState const& feed) const;
+    bool areCompactSourcesHidden(std::vector<rt::NotificationId> const& sourceIds) const;
+    bool isCompactSourceHidden(rt::NotificationId id) const;
+    void rememberHiddenCompactSources();
+    void pruneHiddenSources(rt::NotificationFeedState const& feed);
 
     ActivityStatusViewState _state{};
     PresentationTextCatalog _textCatalog{};
     bool _taskActive = false;
     std::optional<LibraryProgressState> _optLibraryProgress{};
-    std::vector<rt::NotificationId> _compactDismissedNotificationIds{};
-    std::vector<rt::NotificationId> _detailDismissedNotificationIds{};
+    std::vector<rt::NotificationId> _compactSourceNotificationIds{};
+    std::vector<rt::NotificationId> _hiddenCompactIds{};
+    std::vector<rt::NotificationId> _hiddenDetailIds{};
   };
 } // namespace ao::uimodel

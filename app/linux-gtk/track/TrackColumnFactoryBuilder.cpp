@@ -49,13 +49,13 @@ namespace ao::gtk
       sigc::scoped_connection commitConnection;         // inline-edit commit (Enter)
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
       std::unique_ptr<uimodel::TrackAuthoringSession> editSessionPtr;
-      async::Subscription editSessionStateSubscription;
+      async::Subscription editSessionInvalidatedSubscription;
       std::uint64_t editSessionGeneration = 0;
 
       void clearEditSession()
       {
         ++editSessionGeneration;
-        editSessionStateSubscription.reset();
+        editSessionInvalidatedSubscription.reset();
         editSessionPtr.reset();
       }
     };
@@ -277,18 +277,12 @@ namespace ao::gtk
       stack.set_visible_child("display");
     }
 
-    void handleEditSessionState(Gtk::ListItem& item,
-                                Gtk::Stack& stack,
-                                CellBindingState& bindingState,
-                                std::uint64_t editSessionGeneration,
-                                uimodel::TrackAuthoringSessionState state)
+    void handleEditSessionInvalidated(Gtk::ListItem& item,
+                                      Gtk::Stack& stack,
+                                      CellBindingState& bindingState,
+                                      std::uint64_t editSessionGeneration)
     {
-      if (state != uimodel::TrackAuthoringSessionState::Stale && state != uimodel::TrackAuthoringSessionState::Rejected)
-      {
-        return;
-      }
-
-      // Defer teardown until the state signal has unwound: the subscription
+      // Defer teardown until the invalidation callback has unwound: the subscription
       // being reset owns this callback. Tracking the ListItem prevents the
       // deferred raw-state access after cell destruction, while the generation
       // protects a replacement edit session installed before the idle callback.
@@ -329,10 +323,9 @@ namespace ao::gtk
 
       bindingState.editSessionPtr = std::move(*sessionResult);
       auto const editSessionGeneration = bindingState.editSessionGeneration;
-      bindingState.editSessionStateSubscription = bindingState.editSessionPtr->onStateChanged(
-        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState, editSessionGeneration](
-          uimodel::TrackAuthoringSessionState state)
-        { handleEditSessionState(*itemRaw, *stackRaw, *bindingStateRaw, editSessionGeneration, state); });
+      bindingState.editSessionInvalidatedSubscription = bindingState.editSessionPtr->onInvalidated(
+        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState, editSessionGeneration]
+        { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw, editSessionGeneration); });
     }
 
     void installInlineEditControllers(Gtk::ListItem& item,

@@ -45,7 +45,7 @@ namespace ao::uimodel
     }
   } // namespace
 
-  TrackFieldGridSchema buildTrackFieldGridSchema(TrackFieldGridSchemaRequest const request)
+  TrackFieldGridSchema buildTrackFieldGridSchema(TrackFieldGridSchemaOptions const options)
   {
     auto projection = TrackFieldGridSchema{};
 
@@ -58,7 +58,7 @@ namespace ao::uimodel
 
       if (def.category == rt::TrackFieldCategory::Metadata)
       {
-        if (!request.includeMetadata || isSecondaryCompositeField(def.field))
+        if (!options.includeMetadata || isSecondaryCompositeField(def.field))
         {
           continue;
         }
@@ -73,7 +73,7 @@ namespace ao::uimodel
           projection.metadataFields.push_back(def.field);
         }
       }
-      else if (def.category == rt::TrackFieldCategory::Technical && request.includeTechnical)
+      else if (def.category == rt::TrackFieldCategory::Technical && options.includeTechnical)
       {
         projection.technicalFields.push_back(def.field);
       }

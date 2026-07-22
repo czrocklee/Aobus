@@ -19,7 +19,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
-#include <ao/uimodel/library/list/ListEditWorkflow.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>
@@ -285,7 +284,7 @@ namespace ao::gtk
 
   ListId ListNavigationController::createList(rt::LibraryListDraft const& draft)
   {
-    auto const listResult = uimodel::ListEditWorkflow{_runtime.library()}.create(draft);
+    auto const listResult = _runtime.library().createList(draft);
 
     if (!listResult)
     {
@@ -300,7 +299,7 @@ namespace ao::gtk
 
   bool ListNavigationController::updateList(rt::LibraryListDraft const& draft)
   {
-    auto const updateResult = uimodel::ListEditWorkflow{_runtime.library()}.update(draft);
+    auto const updateResult = _runtime.library().updateList(draft);
 
     if (!updateResult)
     {
@@ -349,7 +348,7 @@ namespace ao::gtk
       return;
     }
 
-    if (auto const deleteResult = uimodel::ListEditWorkflow{_runtime.library()}.remove(listId); !deleteResult)
+    if (auto const deleteResult = _runtime.library().deleteList(listId); !deleteResult)
     {
       APP_LOG_ERROR("Failed to delete list {}: {}", listId, deleteResult.error().message);
       return;

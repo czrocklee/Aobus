@@ -139,12 +139,6 @@ namespace ao::rt
     spdlog::shutdown();
   }
 
-  bool Log::isInitialized()
-  {
-    auto const lock = std::scoped_lock{_lifecycleMutex};
-    return _initialized;
-  }
-
   async::AsyncExceptionHandler Log::asyncExceptionHandler()
   {
     auto const lock = std::scoped_lock{_lifecycleMutex};

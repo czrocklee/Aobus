@@ -53,7 +53,7 @@ Good split boundaries include:
 
 - Query evaluator scalar, dictionary, tag, bloom-filter, range/list, and load-mode behavior.
 - TrackStore raw layout and malformed buffer behavior vs create/read/update/delete behavior through fixtures.
-- Activity status compact, detail, dismissal, and progress policy.
+- Activity status compact, detail, local hiding, and task-progress policy.
 - Import/export round-trip correctness vs coordinator dialog/lifecycle glue.
 
 Do not perform a broad test-file split as drive-by cleanup unless it is necessary for the current change or explicitly requested.

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <functional>
@@ -35,7 +34,6 @@ namespace ao::gtk::layout
      * @param node The layout node.
      * @param propName The property name containing the action ID.
      * @param defaultActionId The default action ID if the property is missing.
-     * @param slot The action slot.
      * @param anchorWidget The anchor widget for the action context.
      *                     NOTE: The caller must ensure 'anchorWidget' outlives the returned function.
      * @return A function that activates the action.
@@ -43,7 +41,6 @@ namespace ao::gtk::layout
     std::function<void()> bind(uimodel::LayoutNode const& node,
                                std::string_view propName,
                                std::string_view defaultActionId,
-                               uimodel::LayoutActionSlot slot,
                                Gtk::Widget& anchorWidget) const;
 
   private:

@@ -14,6 +14,7 @@
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
@@ -89,8 +90,7 @@ namespace ao::gtk
     if (sessionResult)
     {
       _editSessionPtr = std::move(*sessionResult);
-      _editSessionStateSubscription =
-        _editSessionPtr->onStateChanged([this](uimodel::TrackAuthoringSessionState) { updateSaveEnabled(); });
+      _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated([this] { updateSaveEnabled(); });
     }
     else
     {
@@ -347,13 +347,13 @@ namespace ao::gtk
       return;
     }
 
-    if (replyResult->status != uimodel::TrackAuthoringSubmitStatus::Applied &&
-        replyResult->status != uimodel::TrackAuthoringSubmitStatus::NoOp)
+    if (replyResult->status != rt::TrackAuthoringStatus::Applied &&
+        replyResult->status != rt::TrackAuthoringStatus::NoOp)
     {
       AppDialog::presentMessage(
         *this,
         "Save could not be applied",
-        replyResult->status == uimodel::TrackAuthoringSubmitStatus::Missing
+        replyResult->status == rt::TrackAuthoringStatus::Missing
           ? "One or more selected tracks no longer exist."
           : "The library changed while this dialog was open. Reload the properties and try again.",
         {AppDialogAction{
@@ -362,9 +362,9 @@ namespace ao::gtk
       return;
     }
 
-    for (auto const trackId : replyResult->reply.mutatedIds)
+    for (auto const& change : replyResult->reply.changes)
     {
-      _rowCache.invalidate(trackId);
+      _rowCache.invalidate(change.trackId);
     }
   }
 
@@ -372,9 +372,7 @@ namespace ao::gtk
   {
     if (_saveButton != nullptr)
     {
-      auto const sessionCanSave =
-        _editSessionPtr != nullptr && (_editSessionPtr->state() == uimodel::TrackAuthoringSessionState::Editing ||
-                                       _editSessionPtr->state() == uimodel::TrackAuthoringSessionState::Applied);
+      auto const sessionCanSave = _editSessionPtr != nullptr && _editSessionPtr->isCurrent();
       _saveButton->set_sensitive(sessionCanSave && _formModel.canSave());
     }
   }

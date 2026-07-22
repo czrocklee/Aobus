@@ -8,7 +8,6 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/ViewIds.h>
@@ -22,7 +21,6 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
@@ -135,7 +133,6 @@ namespace ao::rt
     LibraryChanges const& changes;
 
     TrackDetailSnapshot cachedSnapshot;
-    std::uint64_t revision = 0;
     std::vector<std::move_only_function<void(TrackDetailSnapshot const&)>> subscribers;
     async::Subscription focusSub;
     async::Subscription selectionSub;
@@ -275,8 +272,6 @@ namespace ao::rt
 
   void LiveTrackDetailProjection::publishSnapshot()
   {
-    _implPtr->cachedSnapshot.revision = ++_implPtr->revision;
-
     for (auto& sub : _implPtr->subscribers)
     {
       if (sub)
@@ -309,8 +304,7 @@ namespace ao::rt
 
     for (auto const trackId : ids)
     {
-      auto const optView = storageValueOrNullopt(
-        trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Both), "Failed to build track detail snapshot");
+      auto const optView = trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
       if (!optView)
       {

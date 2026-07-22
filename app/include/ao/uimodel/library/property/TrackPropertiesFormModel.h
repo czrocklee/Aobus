@@ -28,7 +28,6 @@ namespace ao::uimodel
     std::string text = {};
     bool mixed = false;
     bool editable = false;
-    bool dirty = false;
   };
 
   class TrackPropertiesFormModel final

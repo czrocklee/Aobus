@@ -3,147 +3,103 @@ id: presentation.activity-status-surface
 type: reference
 status: current
 domain: presentation
-summary: Enumerates activity-status view-state types, semantic kinds, defaults, helpers, and UIModel command surface.
+summary: Enumerates activity-status view-state values, defaults, options, and commands.
 ---
 # Activity-status surface reference
 
 ## Scope and version
 
-This reference enumerates the current in-process `ao::uimodel` activity-status state and view-model surface.
-The exact structs are C++ presentation API, not persisted state or a frontend rendering schema.
-
-Projection priority, detail eligibility, suppression, and timeout behavior belong to the [activity-status specification](../../spec/presentation/activity-status.md).
+This reference enumerates the current in-process `ao::uimodel` activity-status API.
+It is neither persisted state nor a frontend rendering schema.
+Behavior belongs to the [activity-status specification](../../spec/presentation/activity-status.md).
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places this surface in UIModel, and the [presentation architecture](../../architecture/presentation.md) defines its allowed runtime and frontend dependencies.
-The public authority is `app/include/ao/uimodel/status/activity/`; it may contain runtime notification ids and values but no GTK or FTXUI types.
+This surface belongs to the **UIModel** layer in the
+[system architecture](../../architecture/system-overview.md), under the
+[presentation architecture](../../architecture/presentation.md). Public state
+and commands live in `app/include/ao/uimodel/status/activity/`, with projection
+implementation in `app/uimodel/status/activity/`. It may consume runtime
+notification ids and task events, but contains no GTK or FTXUI types.
 
-## Surface
+## Kind and timeout
 
-### Kind
+`ActivityStatusKind` is a `std::uint8_t` enum with values `Idle`, `Processing`, `Success`, `Info`, `Warning`, and `Error`.
 
-`ActivityStatusKind` is a scoped enum with underlying type `std::uint8_t`.
-Its values are `Idle`, `Processing`, `Success`, `Info`, `Warning`, and `Error`.
-Frontend adapters map these semantic values to toolkit-specific styles.
+`kActivityStatusDefaultAutoDismissTimeout` is currently `5000ms`.
+It applies to temporary UIModel compact presentation, not runtime `Transient` lifetime.
 
-The shared default presentation-only auto-dismiss timeout is `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
-It applies to retained info compact state and synthetic successful library-task completion, not to runtime `Transient` lifetime.
-
-### Action values
-
-| Type | Fields |
-|---|---|
-| `ActivityActionDescriptor` | `std::string id`, `std::string label` |
-| `ActivityActionAvailability` | `bool visible`, `bool enabled`, `std::string label`, `std::string disabledReason` |
-| `ActivityResolvedActionState` | `std::string id`, `bool enabled`, `std::string label`, `std::string disabledReason` |
-
-`ActivityActionAvailabilityResolver` has signature equivalent to:
-
-```cpp
-ActivityActionAvailability(std::string_view id, std::string_view producerLabel);
-```
-
-`resolveActivityActionStates` accepts descriptors, a resolver, and `maxVisibleActions`.
-It preserves source order, skips invisible or empty resolved labels, includes disabled actions and reasons, and stops after the requested visible limit.
-An empty resolver or zero limit returns an empty vector.
-
-### Compact state
+## Compact state
 
 | `ActivityCompactState` field | Type | Default |
 |---|---|---|
 | `kind` | `ActivityStatusKind` | `Idle` |
 | `text` | `std::string` | empty |
 | `optProgressFraction` | `std::optional<double>` | empty |
-| `groupedCount` | `std::size_t` | `0` |
-| `persistent` | `bool` | `false` |
 | `dismissible` | `bool` | `false` |
 | `hasDetails` | `bool` | `false` |
 | `optAutoDismissTimeout` | `std::optional<std::chrono::milliseconds>` | empty |
-| `sourceNotificationIds` | `std::vector<rt::NotificationId>` | empty |
 
-### Detail state
+## Detail state
 
-| Type | Fields |
+| Type | Fields and defaults |
 |---|---|
-| `ActivityDetailItem` | `id`, `severity`, `title`, `message`, `iconName`, `dismissible`, `optProgressMode`, `progressFraction`, `progressLabel`, `actions` |
-| `ActivityTaskDetail` | `message`, `progressFraction` |
-| `ActivityDetailState` | `items`, `optLibraryTask`, `hasActiveProgress` |
-| `ActivityStatusViewState` | `compact`, `detail` |
+| `ActivityDetailItem` | invalid `id`, `Info` severity, empty `message`, `dismissible = false` |
+| `ActivityTaskDetail` | empty `message`, `progressFraction = 0.0` |
+| `ActivityDetailState` | empty `items`, empty `optLibraryTask` |
+| `ActivityStatusViewState` | default `compact`, default `detail` |
 
-`ActivityDetailItem` defaults to invalid id `0`, info severity, empty text and actions, non-dismissible, no progress mode, and progress fraction `0.0`.
-`ActivityTaskDetail` defaults to empty message and fraction `0.0`.
+`hasDetailContent(detail)` returns true when notification items are non-empty or a library-task detail exists.
 
-`hasDetailContent(detail)` returns true when `detail.items` is non-empty or `detail.optLibraryTask` has a value.
-`hasActiveProgress` is separate: it reports active library-task or notification progress, not mere detail presence.
+## Construction options
 
-### View-model construction and commands
-
-`ActivityStatusViewModelOptions` contains:
-
-| Field | Type | Default |
+| `ActivityStatusViewModelOptions` field | Type | Default |
 |---|---|---|
 | `libraryChanges` | `rt::LibraryChanges const*` | `nullptr` |
-| `clock` | `ActivityStatusClock` | empty, replaced by `steady_clock::now` |
+| `clock` | `ActivityStatusClock` | empty; replaced with `steady_clock::now` |
 | `emitInitialState` | `bool` | `true` |
 
 The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatusViewState const&)` callback, and optional options.
-Construction snapshots the current feed revision, subscribes to `NotificationFeedUpdate`, and emits the initial projected state only when `emitInitialState` is true.
-Later duplicate, older, empty, or revision-mismatched feed updates do not invoke the render callback.
+When `libraryChanges` is present, it subscribes to task progress and completion.
+
+## View-model members
 
 | Member | Return |
 |---|---|
 | `viewState() const noexcept` | `ActivityStatusViewState const&` |
-| `hasPendingAutoDismiss() const noexcept` | `bool` |
-| `expireTransientIfDue()` | `bool` |
-| `expireTransient()` | `void` |
+| `autoDismissCompactIfDue()` | `bool` |
+| `autoDismissCompact()` | `void` |
 | `dismissCompact()` | `void` |
-| `dismissDetailNotificationFromActivity(NotificationId)` | `void` |
-| `handleLibraryTaskProgress(LibraryTaskProgressUpdated const&)` | `void` |
-| `handleLibraryTaskCompleted(LibraryTaskCompleted const&)` | `void` |
+| `hideDetailNotification(NotificationId)` | `void` |
 
-`expireTransientIfDue()` returns `true` only when it performs a presentation-local expiry transition.
-Runtime-transient notification expiry arrives through `NotificationFeedUpdate` and does not create a view-model deadline.
+`autoDismissCompactIfDue()` returns true only when it clears a due temporary compact presentation.
+`autoDismissCompact()` is used by a frontend-owned timer that already waited for `optAutoDismissTimeout`.
+Neither command mutates the runtime notification feed.
 
-### Current generated compact text
+## Current generated text
 
 | Situation | Text |
 |---|---|
-| Multiple selected info notifications | `<N> notifications` |
-| Multiple selected warnings | `<N> warnings` |
-| Multiple selected errors | `<N> errors` |
-| Library progress kind `Scanning` | `Scanning library` |
-| Library progress kind `Updating` | `Updating library` |
-| Library progress kind `Fingerprinting` | `Fingerprinting` plus optional subject |
-| Library progress kind `IndexingAudioIdentity` | `Indexing audio identity` plus optional subject |
+| Multiple warnings | `<N> warnings` |
+| Multiple errors | `<N> errors` |
+| Library task `Scanning` | `Scanning library` |
+| Library task `Updating` | `Updating library` |
+| Library task `Fingerprinting` | `Fingerprinting` plus optional subject |
+| Library task `IndexingAudioIdentity` | `Indexing audio identity` plus optional subject |
 | Successful completion with zero affected tracks | `Library is up to date` |
-| Successful completion with nonzero affected tracks | `Scan complete: <N> tracks added` |
+| Successful completion with affected tracks | `Scan complete: <formatted track count> added` |
 
-These strings are current UIModel output and are not localization keys.
-They are resolved by the [presentation text catalog](text-catalog.md); progress subjects never select behavior by prefix.
-`CompletedWithIssues`, `Failed`, and `Cancelled` clear task progress without synthesizing a success message; notification projection may then surface an owning warning or error.
+Notification and library-task text is resolved through the [presentation text catalog](text-catalog.md).
+Progress subjects do not select behavior by prefix.
 
-## Validation rules
+## Validation and lifetime
 
-The UIModel does not clamp progress fractions.
-Action resolution requires a visible result with a non-empty resolved label; the resolver owns registry lookup and label fallback.
-
-Notification ids in local projection state have service-lifetime scope.
-Callers must not persist them or use them after the notification owner has been replaced.
-
-## Compatibility and versioning
+UIModel does not clamp task progress fractions.
+Notification ids have service-lifetime scope and must not be persisted.
+The notification service and optional library-change source must outlive the view model.
 
 This is an in-process C++ surface without independent versioning.
-Field layout and enum ordinals are not persistence guarantees.
 Frontend adapters update together with UIModel changes.
-
-## Examples
-
-```cpp
-auto options = ao::uimodel::ActivityStatusViewModelOptions{
-  .libraryChanges = &runtime.library().changes(),
-};
-```
 
 ## Implementation authority
 
@@ -153,8 +109,7 @@ auto options = ao::uimodel::ActivityStatusViewModelOptions{
 
 ## Test authority
 
-- Projection tests under [`test/unit/uimodel/status/activity/`](../../../test/unit/uimodel/status/activity) lock exact state and helper outputs.
-- [`ActivityStatusWidgetTest.cpp`](../../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects GTK consumption and CSS-class mapping of this surface.
+- [`ActivityStatusViewModelTest.cpp`](../../../test/unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp)
 
 ## Related documents
 

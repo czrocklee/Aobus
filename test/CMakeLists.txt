@@ -160,7 +160,6 @@ add_executable(ao_core_test
     unit/uimodel/field/TrackFieldEditCodecTest.cpp
      unit/uimodel/field/TrackFieldEditPolicyTest.cpp
      unit/uimodel/field/TrackFieldFormatterTest.cpp
-    unit/uimodel/field/TrackInlineEditTest.cpp
     unit/uimodel/input/KeyChordTest.cpp
     unit/uimodel/input/KeymapModelTest.cpp
     unit/uimodel/input/KeymapStoreTest.cpp
@@ -177,7 +176,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
     unit/uimodel/presentation/PresentationTextCatalogTest.cpp
-    unit/uimodel/library/detail/TrackCustomMetadataWorkflowTest.cpp
+    unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
     unit/uimodel/library/list/ListActionPolicyTest.cpp
@@ -198,7 +197,7 @@ add_executable(ao_core_test
     unit/uimodel/library/presentation/TrackPresentationCatalogTest.cpp
     unit/uimodel/library/presentation/TrackPresentationPickerViewModelTest.cpp
     unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp
-    unit/uimodel/library/property/TagEditWorkflowTest.cpp
+    unit/uimodel/library/property/TagEditTest.cpp
     unit/uimodel/library/property/TrackAuthoringSessionTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
@@ -223,7 +222,6 @@ add_executable(ao_core_test
     unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp
     unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp
     unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp
-    unit/uimodel/status/activity/ActivityStatusFeedProjectionPresentationTest.cpp
     unit/uimodel/status/activity/ActivityStatusViewModelTest.cpp
 
     # app unit tests (no platform deps)
@@ -232,7 +230,6 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryPathsTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
-    unit/runtime/StorageResultTest.cpp
     unit/runtime/completion/CompletionServiceTest.cpp
     unit/runtime/LifetimeScopeTest.cpp
     unit/runtime/LogTest.cpp
@@ -502,7 +499,6 @@ add_executable(ao_gtk_test
       unit/linux-gtk/layout/document/LayoutModelTest.cpp
       unit/linux-gtk/layout/runtime/ActionRegistryTest.cpp
       unit/linux-gtk/layout/runtime/ActionBinderTest.cpp
-      unit/linux-gtk/layout/runtime/ActionValidatorTest.cpp
       unit/linux-gtk/layout/runtime/ComponentInteractionControllerTest.cpp
       unit/linux-gtk/layout/runtime/ComponentRegistryInjectionTest.cpp
       unit/linux-gtk/layout/runtime/GioActionBridgeTest.cpp

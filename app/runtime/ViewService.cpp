@@ -12,9 +12,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/ScopedTimer.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -48,10 +46,9 @@ namespace ao::rt
     struct ViewEntry final
     {
       TrackListViewState state;
-      std::optional<TrackSourceLease> optBaseSourceLease;
-      std::optional<TrackSourceLease> optActiveSourceLease;
-      std::optional<Error> optFilterError;
-      std::shared_ptr<LiveTrackListProjection> projectionPtr = nullptr;
+      TrackSourceLease baseSourceLease;
+      TrackSourceLease activeSourceLease;
+      std::shared_ptr<LiveTrackListProjection> projectionPtr;
     };
 
     struct PreparedViewResources final
@@ -175,19 +172,14 @@ namespace ao::rt
     void installResources(ViewEntry& entry, PreparedViewResources resources)
     {
       entry.projectionPtr = std::move(resources.projectionPtr);
-      entry.optActiveSourceLease = std::move(resources.activeSourceLease);
-      entry.optFilterError = std::move(resources.optFilterError);
-      entry.optBaseSourceLease = std::move(resources.baseSourceLease);
+      entry.activeSourceLease = std::move(resources.activeSourceLease);
+      entry.state.optFilterError = std::move(resources.optFilterError);
+      entry.baseSourceLease = std::move(resources.baseSourceLease);
     }
 
     std::unexpected<Error> missingViewError(ViewId const viewId)
     {
       return makeError(Error::Code::NotFound, std::format("View {} does not exist", viewId));
-    }
-
-    std::unexpected<Error> destroyedViewError(ViewId const viewId)
-    {
-      return makeError(Error::Code::InvalidState, std::format("View {} is destroyed", viewId));
     }
 
     void applyPresentation(ViewEntry& entry, TrackPresentationSpec const& spec)
@@ -220,8 +212,6 @@ namespace ao::rt
 
     async::Signal<ViewId> destroyedSignal;
     async::Signal<TrackListProjectionChanged const&> projectionChangedSignal;
-    async::Signal<ViewService::FilterChanged const&> filterChangedSignal;
-    async::Signal<FilterStatusChanged const&> filterStatusChangedSignal;
     async::Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     async::Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
     async::Signal<ViewService::ListChanged const&> listChangedSignal;
@@ -245,17 +235,6 @@ namespace ao::rt
     return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onFilterChanged(std::move_only_function<void(FilterChanged const&)> handler)
-  {
-    return _implPtr->filterChangedSignal.connect(std::move(handler));
-  }
-
-  async::Subscription ViewService::onFilterStatusChanged(
-    std::move_only_function<void(FilterStatusChanged const&)> handler)
-  {
-    return _implPtr->filterStatusChangedSignal.connect(std::move(handler));
-  }
-
   async::Subscription ViewService::onPresentationChanged(
     std::move_only_function<void(PresentationChanged const&)> handler)
   {
@@ -272,7 +251,7 @@ namespace ao::rt
     return _implPtr->listChangedSignal.connect(std::move(handler));
   }
 
-  Result<CreateTrackListViewReply> ViewService::createView(TrackListViewConfig const& initial, bool const attached)
+  Result<ViewId> ViewService::createView(TrackListViewConfig const& initial)
   {
     auto baseSourceResult = _implPtr->sources.acquire(initial.listId);
 
@@ -298,23 +277,23 @@ namespace ao::rt
 
     auto state = TrackListViewState{
       .id = id,
-      .lifecycle = attached ? ViewLifecycleState::Attached : ViewLifecycleState::Detached,
       .listId = initial.listId,
       .filterExpression = initial.filterExpression,
       .groupBy = presentation.groupBy,
       .sortBy = presentation.sortBy,
       .presentation = presentation,
     };
+    auto resources = std::move(*resourcesResult);
     auto entry = ViewEntry{
       .state = std::move(state),
-      .optBaseSourceLease = std::nullopt,
-      .optActiveSourceLease = std::nullopt,
-      .optFilterError = std::nullopt,
+      .baseSourceLease = std::move(resources.baseSourceLease),
+      .activeSourceLease = std::move(resources.activeSourceLease),
+      .projectionPtr = std::move(resources.projectionPtr),
     };
-    installResources(entry, std::move(*resourcesResult));
+    entry.state.optFilterError = std::move(resources.optFilterError);
     _implPtr->views.emplace(id, std::move(entry));
     ++_implPtr->nextViewId;
-    return CreateTrackListViewReply{.viewId = id};
+    return id;
   }
 
   Result<> ViewService::destroyView(ViewId viewId)
@@ -326,16 +305,8 @@ namespace ao::rt
       return missingViewError(viewId);
     }
 
-    if (it->second.state.lifecycle == ViewLifecycleState::Destroyed)
-    {
-      return destroyedViewError(viewId);
-    }
-
-    it->second.state.lifecycle = ViewLifecycleState::Destroyed;
+    _implPtr->views.erase(it);
     _implPtr->destroyedSignal.post(_implPtr->executor, viewId);
-    it->second.projectionPtr.reset();
-    it->second.optActiveSourceLease.reset();
-    it->second.optBaseSourceLease.reset();
     return {};
   }
 
@@ -351,24 +322,14 @@ namespace ao::rt
 
     auto& entry = it->second;
 
-    if (entry.state.lifecycle == ViewLifecycleState::Destroyed)
-    {
-      return destroyedViewError(viewId);
-    }
-
     if (entry.state.filterExpression == filterExpression)
     {
       return {};
     }
 
-    if (!entry.optBaseSourceLease)
-    {
-      return makeError(Error::Code::InvalidState, "View has no live source lease");
-    }
-
     auto resourcesResult = prepareViewResources(viewId,
                                                 entry.state.listId,
-                                                *entry.optBaseSourceLease,
+                                                entry.baseSourceLease,
                                                 filterExpression,
                                                 entry.state.presentation,
                                                 _implPtr->library,
@@ -381,24 +342,8 @@ namespace ao::rt
 
     installResources(entry, std::move(*resourcesResult));
     entry.state.filterExpression = std::move(filterExpression);
-    ++entry.state.revision;
-    _implPtr->filterChangedSignal.post(
-      _implPtr->executor,
-      ViewService::FilterChanged{.viewId = viewId, .filterExpression = entry.state.filterExpression});
     _implPtr->projectionChangedSignal.post(
-      _implPtr->executor,
-      TrackListProjectionChanged{
-        .viewId = viewId, .projectionPtr = entry.projectionPtr, .revision = entry.state.revision});
-
-    auto status = FilterStatusChanged{
-      .viewId = viewId,
-      .expression = entry.state.filterExpression,
-      .revision = entry.state.revision,
-    };
-
-    status.optError = entry.optFilterError;
-
-    _implPtr->filterStatusChangedSignal.emit(status);
+      _implPtr->executor, TrackListProjectionChanged{.viewId = viewId, .projectionPtr = entry.projectionPtr});
     return {};
   }
 
@@ -411,11 +356,6 @@ namespace ao::rt
       return missingViewError(viewId);
     }
 
-    if (it->second.state.lifecycle == ViewLifecycleState::Destroyed)
-    {
-      return destroyedViewError(viewId);
-    }
-
     auto spec = normalizeTrackPresentationSpec(presentation);
 
     if (it->second.state.presentation == spec)
@@ -424,7 +364,6 @@ namespace ao::rt
     }
 
     applyPresentation(it->second, spec);
-    it->second.state.revision++;
     _implPtr->presentationChangedSignal.post(
       _implPtr->executor, ViewService::PresentationChanged{.viewId = viewId, .presentation = spec});
     return {};
@@ -457,13 +396,7 @@ namespace ao::rt
       return missingViewError(viewId);
     }
 
-    if (it->second.state.lifecycle == ViewLifecycleState::Destroyed)
-    {
-      return destroyedViewError(viewId);
-    }
-
     it->second.state.selection = std::move(selection);
-    it->second.state.revision++;
 
     _implPtr->selectionChangedSignal.emit(
       ViewService::SelectionChanged{.viewId = viewId, .selection = it->second.state.selection});
@@ -480,11 +413,6 @@ namespace ao::rt
     }
 
     auto& entry = it->second;
-
-    if (entry.state.lifecycle == ViewLifecycleState::Destroyed)
-    {
-      return destroyedViewError(viewId);
-    }
 
     if (entry.state.listId == listId)
     {
@@ -513,11 +441,8 @@ namespace ao::rt
 
     installResources(entry, std::move(*resourcesResult));
     entry.state.listId = listId;
-    ++entry.state.revision;
     _implPtr->projectionChangedSignal.post(
-      _implPtr->executor,
-      TrackListProjectionChanged{
-        .viewId = viewId, .projectionPtr = entry.projectionPtr, .revision = entry.state.revision});
+      _implPtr->executor, TrackListProjectionChanged{.viewId = viewId, .projectionPtr = entry.projectionPtr});
 
     _implPtr->listChangedSignal.post(_implPtr->executor, ViewService::ListChanged{.viewId = viewId, .listId = listId});
     return {};
@@ -532,11 +457,6 @@ namespace ao::rt
       return missingViewError(viewId);
     }
 
-    if (it->second.state.lifecycle == ViewLifecycleState::Destroyed)
-    {
-      return destroyedViewError(viewId);
-    }
-
     auto const& state = it->second.state;
     return PlaybackLaunchSpec{
       .sourceListId = state.listId,
@@ -545,20 +465,17 @@ namespace ao::rt
     };
   }
 
-  std::vector<ViewRecord> ViewService::listViews() const
+  std::vector<ViewId> ViewService::listViews() const
   {
-    auto records = std::vector<ViewRecord>{};
-    records.reserve(_implPtr->views.size());
+    auto viewIds = std::vector<ViewId>{};
+    viewIds.reserve(_implPtr->views.size());
 
-    for (auto const& [viewId, entry] : _implPtr->views)
+    for (auto const& entry : _implPtr->views)
     {
-      if (entry.state.lifecycle != ViewLifecycleState::Destroyed)
-      {
-        records.push_back(ViewRecord{.id = viewId, .kind = ViewKind::TrackList, .lifecycle = entry.state.lifecycle});
-      }
+      viewIds.push_back(entry.first);
     }
 
-    return records;
+    return viewIds;
   }
 
   TrackListViewState ViewService::trackListState(ViewId viewId) const
@@ -587,9 +504,7 @@ namespace ao::rt
 
     for (auto const trackId : it->second.state.selection)
     {
-      if (auto const optView = storageValueOrNullopt(
-            reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold), "Failed to calculate selection duration");
-          optView)
+      if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold); optView)
       {
         totalDuration += optView->property().duration();
       }

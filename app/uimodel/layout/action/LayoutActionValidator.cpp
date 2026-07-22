@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <array>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -21,7 +20,6 @@ namespace ao::uimodel
     void validateActionProperty(LayoutNode const& node,
                                 LayoutPropertyDescriptor const& propDesc,
                                 LayoutActionCatalog const& actions,
-                                LayoutActionBindingContextResolver const& resolveBindingContext,
                                 std::vector<LayoutDiagnostic>& diagnostics)
     {
       if (!propDesc.optActionBinding)
@@ -49,19 +47,12 @@ namespace ao::uimodel
 
       if (auto const& actionId = *optActionId; !actionId.empty() && actionId != "none")
       {
-        auto const optBindCtx = resolveBindingContext(node, propDesc);
-
-        if (!optBindCtx)
-        {
-          return;
-        }
-
-        if (!actions.canBind(actionId, *optBindCtx))
+        if (!actions.descriptor(actionId))
         {
           diagnostics.push_back(LayoutDiagnostic{.componentId = node.id.empty() ? node.type : node.id,
                                                  .propertyName = propDesc.name,
                                                  .actionId = actionId,
-                                                 .message = "Unknown or incompatible action ID: " + actionId});
+                                                 .message = "Unknown action ID: " + actionId});
         }
       }
     }
@@ -69,14 +60,13 @@ namespace ao::uimodel
     void validateNode(LayoutNode const& node,
                       LayoutComponentCatalog const& components,
                       LayoutActionCatalog const& actions,
-                      LayoutActionBindingContextResolver const& resolveBindingContext,
                       std::vector<LayoutDiagnostic>& diagnostics)
     {
       if (auto const optCompDesc = components.descriptor(node.type); optCompDesc)
       {
         for (auto const& propDesc : optCompDesc->props)
         {
-          validateActionProperty(node, propDesc, actions, resolveBindingContext, diagnostics);
+          validateActionProperty(node, propDesc, actions, diagnostics);
         }
 
         // Phase 1: Diagnose disallowed global action properties
@@ -106,18 +96,17 @@ namespace ao::uimodel
 
       for (auto const& child : node.children)
       {
-        validateNode(child, components, actions, resolveBindingContext, diagnostics);
+        validateNode(child, components, actions, diagnostics);
       }
     }
   } // namespace
 
   std::vector<LayoutDiagnostic> validateLayoutActions(LayoutDocument const& doc,
                                                       LayoutComponentCatalog const& components,
-                                                      LayoutActionCatalog const& actions,
-                                                      LayoutActionBindingContextResolver const& resolveBindingContext)
+                                                      LayoutActionCatalog const& actions)
   {
     auto diagnostics = std::vector<LayoutDiagnostic>{};
-    validateNode(doc.root, components, actions, resolveBindingContext, diagnostics);
+    validateNode(doc.root, components, actions, diagnostics);
     return diagnostics;
   }
 } // namespace ao::uimodel

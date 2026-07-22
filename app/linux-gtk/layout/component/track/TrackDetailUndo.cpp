@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <glibmm/main.h>
@@ -106,8 +107,8 @@ namespace ao::gtk::layout
       return;
     }
 
-    if (replyResult->status != uimodel::TrackAuthoringSubmitStatus::Applied &&
-        replyResult->status != uimodel::TrackAuthoringSubmitStatus::NoOp)
+    if (replyResult->status != rt::TrackAuthoringStatus::Applied &&
+        replyResult->status != rt::TrackAuthoringStatus::NoOp)
     {
       APP_LOG_ERROR("Metadata undo is stale or unavailable");
       clear();

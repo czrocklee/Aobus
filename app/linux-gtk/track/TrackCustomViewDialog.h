@@ -20,17 +20,11 @@ namespace ao::gtk
   class TrackCustomViewDialog final : public AppDialog
   {
   public:
-    struct TrackCustomPresentationDialogResult final
-    {
-      rt::CustomTrackPresentationPreset preset;
-      bool deleted = false;
-    };
-
     TrackCustomViewDialog(Gtk::Window& parent,
                           rt::TrackPresentationSpec const& initialSpec,
                           std::string_view initialLabel);
 
-    std::optional<TrackCustomPresentationDialogResult> runDialog();
+    std::optional<rt::CustomTrackPresentationPreset> runDialog();
 
   private:
     void buildUi();

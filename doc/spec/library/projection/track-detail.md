@@ -42,14 +42,14 @@ Current multi-selection snapshots do not compute a tag intersection or a shared 
 
 ## Refresh and publication
 
-Construction builds the initial snapshot without incrementing its publication revision.
+Construction builds the initial snapshot.
 Subscription immediately receives the current snapshot.
 
 Focus or tracked-view selection changes rebuild and publish a snapshot.
 A library reset or inserted, deleted, or mutated track intersecting the retained selection also rebuilds and publishes.
-Unrelated track changes do not advance the detail revision.
+Unrelated track changes do not publish.
 
-Each publication increments the projection-local revision after final snapshot state is installed.
+Each publication occurs after final snapshot state is installed.
 
 ## Failure and lifetime
 

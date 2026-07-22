@@ -24,10 +24,10 @@ namespace ao::rt
   /**
    * The mutation side of the playback boundary. Commands are
    * callback-executor-affine. Small transport commands complete within one
-   * executor turn and report no completion token; a view start returns a
-   * synchronous admission result, and its asynchronous outcome is observed on
-   * the failure event and the next snapshot. Session save, restore, and discard
-   * keep call-level results on `AppRuntime` because their callers act on them.
+   * executor turn and report no completion token; a view start returns its
+   * immediate execution result or successful queue admission. Session save,
+   * restore, and discard keep call-level results on `AppRuntime` because their
+   * callers act on them.
    * Once shutdown closes admission, void commands are ignored and a view start
    * returns `InvalidState`.
    */
@@ -61,7 +61,7 @@ namespace ao::rt
     virtual void setMuted(bool muted) = 0;
 
     // Reveal remains on the boundary temporarily; RFC 0005 stage 6 moves it to
-    // an explicit navigation intent above playback.
+    // an explicit navigation command above playback.
     virtual void revealPlayingTrack() = 0;
     virtual void revealTrack(TrackId trackId,
                              ViewId preferredViewId = kInvalidViewId,

@@ -38,7 +38,7 @@ UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; r
 - GTK and TUI use the same UIModel resolver.
 - GTK and TUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
 - Runtime evaluates resolved text through the same source and predicate path used by Smart Lists.
-- An invalid expression is observable as filter status and empty filtered membership without corrupting the base source.
+- An invalid expression is observable in the view state and empty filtered membership without corrupting the base source.
 - Creating a Smart List uses the resolved expression, not the user's unresolved quick-search text.
 
 ## Input resolution
@@ -93,30 +93,30 @@ The runtime owns aggregate vocabulary storage and invalidation; the selected fie
 
 ## State model
 
-`TrackFilterViewModel` retains active `ViewId`, raw entry text, resolved expression, pending state, and optional filter error.
+`TrackFilterViewModel` retains active `ViewId`, raw entry text, resolved expression, and optional filter error.
 No focused view disables the control and clears its state.
 
-Updating raw text resolves it immediately, marks the local view state pending, and calls `ViewService::setFilter()` with either an empty expression or the resolved expression.
-`FilterStatusChanged` for another view is ignored.
-The matching status clears or retains pending according to runtime state and installs the optional expression error.
+Updating raw text resolves it immediately and calls synchronous `ViewService::setFilter()` with either an empty expression or the resolved expression.
+On success the model reads the installed expression error from `TrackListViewState`; a command failure becomes the displayed error without replacing the preceding runtime resources.
+The model renders once for the completed call.
 
 The frontend-neutral view exposes:
 
 - raw entry text;
 - resolved expression;
-- enabled and pending state;
+- enabled state;
 - error presence and tooltip;
 - whether Create Smart List is allowed.
 
-Create Smart List is allowed only when the resolved expression is non-empty and the current state is neither pending nor erroneous.
+Create Smart List is allowed only when the resolved expression is non-empty and the current state has no error.
 
 ## Runtime transition
 
 For a changed expression, `ViewService` acquires an ad-hoc source over the existing base list, constructs a new `LiveTrackListProjection` with the existing `TrackPresentationSpec`, and then installs the resources atomically into the view entry.
 
-After installation it updates expression text, advances the view revision, and publishes filter, projection, and filter-status observations.
+After installation it updates expression text and its optional expression error, then publishes the projection replacement.
 An identical expression is a no-op.
-A missing, destroyed, or source-less view returns a typed error without installing partial resources.
+A missing or source-less view returns a typed error without installing partial resources.
 
 The ad-hoc source is weak-cached by `(baseListId, filterExpression)` while leased.
 Its detailed membership and expression-error behavior is owned by [track sources](../library/source/track-source.md).
@@ -129,7 +129,7 @@ Parsing and compilation happen in the runtime source path.
 An invalid expression remains an accepted view-filter state with an attached `FormatRejected` error and empty filtered membership.
 Resource-acquisition failures that prevent construction return a failed `Result` and preserve the preceding installed view resources.
 
-Resolution, source compilation, view replacement, and status publication are synchronous on their owning path and have no cancellation point.
+Resolution, source compilation, and view replacement are synchronous on their owning path and have no cancellation point.
 
 ## Persistence and versioning
 
@@ -141,7 +141,7 @@ Only a successful library mutation turns that text into durable list data.
 
 ## Frontend observations
 
-GTK binds the shared track-filter completer to its entry, renders clear and Create Smart List actions, and keeps Create disabled until UIModel allows it.
+GTK binds the shared track-filter completer to its entry, renders clear and Create Smart List actions, and keeps Create disabled while the current expression is empty or erroneous.
 The clear action submits empty text.
 The create action emits the resolved expression.
 
@@ -161,7 +161,7 @@ Frontend-specific debounce, focus styling, popover rendering, and command syntax
 
 - [`TrackFilterResolverTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterResolverTest.cpp) protects classification, exact mixed-quote preservation, serialized syntax, and expansion.
 - [`TrackFilterCompleterTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterCompleterTest.cpp) protects the live field set, ranking, limits, replacement, escaping, and Quick/expression boundary.
-- [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state and status policy.
+- [`TrackFilterViewModelTest.cpp`](../../../test/unit/uimodel/library/track/TrackFilterViewModelTest.cpp) protects state, synchronous failure handling, and single-render policy.
 - View-service and source tests under [`test/unit/runtime/`](../../../test/unit/runtime/) protect runtime replacement and membership.
 - GTK quick-filter and TUI library-controller tests protect frontend adaptation.
 

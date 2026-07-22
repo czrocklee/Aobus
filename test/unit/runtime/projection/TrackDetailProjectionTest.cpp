@@ -79,9 +79,9 @@ namespace ao::rt::test
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Before", .artist = "ArtistA", .album = "AlbumX"});
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    REQUIRE(env.views.setSelection(reply.viewId, {id1}));
+    REQUIRE(env.views.setSelection(reply, {id1}));
 
-    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
+    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply}, env.workspace, env.changes);
 
     auto snap = projPtr->snapshot();
     CHECK(snap.selectionKind == SelectionKind::Single);
@@ -110,18 +110,19 @@ namespace ao::rt::test
     auto const id2 = env.libraryFixture.addTrack("Other");
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    REQUIRE(env.views.setSelection(reply.viewId, {id1}));
+    REQUIRE(env.views.setSelection(reply, {id1}));
 
-    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
-
-    auto const revBefore = projPtr->snapshot().revision;
+    auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply}, env.workspace, env.changes);
+    std::int32_t publicationCount = 0;
+    [[maybe_unused]] auto subscription = projPtr->subscribe([&](TrackDetailSnapshot const&) { ++publicationCount; });
+    CHECK(publicationCount == 1);
 
     // Mutate a track not in the selection
     auto const otherIds = std::array{id2};
     REQUIRE(env.writerFixture.updateMetadata(otherIds, MetadataPatch{.optTitle = "Something Else"}));
 
-    // Revision should NOT change because the mutated track is not selected
-    CHECK(projPtr->snapshot().revision == revBefore);
+    CHECK(publicationCount == 1);
+    CHECK(projPtr->snapshot().trackIds == std::vector{id1});
   }
 
   TEST_CASE("TrackDetailProjection - aggregates common and mixed metadata for multi-select",
@@ -135,9 +136,9 @@ namespace ao::rt::test
       env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Song B", .artist = "Same", .album = "AlbumY"});
 
     auto const reply = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    REQUIRE(env.views.setSelection(reply.viewId, {id1, id2}));
+    REQUIRE(env.views.setSelection(reply, {id1, id2}));
 
-    auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply.viewId}, env.workspace, env.changes);
+    auto const projPtr = env.views.detailProjection(ExplicitViewTarget{reply}, env.workspace, env.changes);
     auto const snap = projPtr->snapshot();
 
     CHECK(snap.selectionKind == SelectionKind::Multiple);
@@ -182,27 +183,27 @@ namespace ao::rt::test
     CHECK(callCount == 1); // Called immediately
 
     auto const reply1 = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
-    REQUIRE(env.views.setSelection(reply1.viewId, {id1}));
+    REQUIRE(env.views.setSelection(reply1, {id1}));
     REQUIRE(env.workspace.navigateTo(GlobalViewKind::AllTracks));
 
     CHECK(callCount >= 2);
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
 
     // Change selection in the focused view
-    REQUIRE(env.views.setSelection(reply1.viewId, {id2}));
+    REQUIRE(env.views.setSelection(reply1, {id2}));
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song B");
 
     // Change focus away
-    REQUIRE(env.workspace.closeView(reply1.viewId));
+    REQUIRE(env.workspace.closeView(reply1));
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
 
     // Unsubscribe
     sub = {};
 
     // Now trigger a selection change in the old view, should NOT update because it's no longer focused
-    auto const destroyedSelection = env.views.setSelection(reply1.viewId, {id1});
-    REQUIRE_FALSE(destroyedSelection);
-    CHECK(destroyedSelection.error().code == Error::Code::InvalidState);
+    auto const removedSelection = env.views.setSelection(reply1, {id1});
+    REQUIRE_FALSE(removedSelection);
+    CHECK(removedSelection.error().code == Error::Code::NotFound);
     CHECK(projPtr->snapshot().selectionKind == SelectionKind::None);
   }
 
@@ -212,7 +213,7 @@ namespace ao::rt::test
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Already Selected"});
 
-    auto const viewId = ao::test::requireValue(env.workspace.navigateTo(GlobalViewKind::AllTracks)).activeViewId;
+    auto const viewId = ao::test::requireValue(env.workspace.navigateTo(GlobalViewKind::AllTracks));
     REQUIRE(env.views.setSelection(viewId, {id1}));
 
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);

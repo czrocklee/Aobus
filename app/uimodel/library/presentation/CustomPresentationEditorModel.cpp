@@ -44,11 +44,6 @@ namespace ao::uimodel
     _label = std::string{label};
   }
 
-  void CustomPresentationEditorModel::setGroupKey(rt::TrackGroupKey key)
-  {
-    _groupKey = key;
-  }
-
   bool CustomPresentationEditorModel::setGroupKeyByOptionIndex(std::size_t optionIndex)
   {
     if (optionIndex >= _groupOptions.size())

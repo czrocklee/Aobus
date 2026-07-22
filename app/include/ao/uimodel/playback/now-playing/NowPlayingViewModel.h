@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
-#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
@@ -23,11 +22,6 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  namespace detail
-  {
-    std::string formatPipelineTooltip(rt::PlaybackState const& state);
-  }
-
   enum class NowPlayingFieldAction : std::uint8_t
   {
     None,
@@ -50,8 +44,6 @@ namespace ao::uimodel
     Type type = Type::None;
     std::string navigateQuery;
   };
-
-  NowPlayingActionCommand::Type resolveNowPlayingPlayPauseCommand(audio::Transport transport) noexcept;
 
   struct AudioPipelineViewState final
   {

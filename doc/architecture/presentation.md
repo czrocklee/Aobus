@@ -42,7 +42,7 @@ GTK and TUI adapt those values to toolkit lifecycle, rendering, input, timing, a
 
 ### Runtime presentation inputs
 
-Runtime owns canonical identities, workspace/view lifecycle under the [workspace architecture](workspace.md), structural presentation specifications, live source/projection state, playback state, the executor-affine revisioned notification feed, and commands that mutate application behavior.
+Runtime owns canonical identities, workspace/view lifecycle under the [workspace architecture](workspace.md), structural presentation specifications, live source/projection state, playback state, the executor-affine notification feed, and commands that mutate application behavior.
 It exposes typed snapshots and subscriptions without naming widgets, CSS classes, terminal cells, or native icons.
 
 For track-list views, runtime keeps content and shape as separate state axes.
@@ -69,9 +69,9 @@ Runtime completion items retain query syntax, rank, and typed detail roles or fr
 Core audio descriptors retain backend/profile ids and external device facts; UIModel supplies built-in backend/profile copy and semantic audio icon kinds.
 Shared playback reports retain a closed template and typed arguments in the notification feed, and library-task progress retains a typed operation kind plus raw subject.
 
-The shared activity-status model consumes one immutable notification-feed update per accepted revision.
-It derives compact and detail state from that same snapshot and emits at most one render for the revision; frontend adapters do not combine parallel notification signals into their own refresh policy.
-Runtime-transient expiry is one such authoritative feed revision.
+The shared activity-status model consumes one immutable notification-feed update per mutation.
+It derives compact and detail state from that snapshot and emits at most one render for the update; frontend adapters do not combine parallel notification signals into their own refresh policy.
+Runtime-transient expiry arrives through the same canonical stream.
 UIModel timers remain presentation-only for retained info and synthetic completion state, so frontend timing cannot disagree about whether a runtime notification still exists.
 
 UIModel may subscribe to runtime services, combine several runtime snapshots, format display values, maintain an edit draft or gesture, and emit a runtime command or typed edit result.
@@ -94,7 +94,7 @@ Runtime persists the selected id as opaque application-preference text, while GT
 
 Metadata and tag editors use a platform-neutral `TrackAuthoringSession`.
 Session creation asks runtime to bind one exact target order to the current runtime instance and committed library revision.
-The session owns that evidence, draft submission state, and stale policy; it never owns a storage transaction and never silently rebinds a draft after a library change.
+The session owns that evidence and its current/invalid lifetime; it never owns a storage transaction and never silently rebinds a draft after a library change.
 Maintenance, runtime replacement, any intervening effective commit, or a rejected/missing target makes the corresponding edit non-committable.
 An applied submission receives evidence for the new committed revision, enabling a guarded follow-up edit or undo without weakening the original target set.
 
@@ -133,7 +133,7 @@ Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029
 - UIModel depends on runtime interfaces and stable core value types, never platform UI libraries.
 - GTK and TUI may depend on runtime and UIModel and own all platform resources.
 - UIModel cannot include direct LMDB stores or audio player/engine/backend control headers.
-- GTK and TUI cannot call `LibraryWriter` directly; mutation events cross a UIModel workflow or another narrow semantic runtime surface.
+- GTK and TUI cannot call `LibraryWriter` directly; mutations cross a UIModel editor/session or a narrow semantic runtime surface.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
 - Core and runtime expose machine identities, structured absence, typed report/progress intent, and raw external data; shared authored copy resolves only after crossing into UIModel.
@@ -156,7 +156,7 @@ runtime semantic snapshot/event + raw arguments
   -> GTK widget binding or TUI render function
 ```
 
-User intent flows inward:
+User input flows inward:
 
 ```text
 GTK/TUI input event
@@ -204,14 +204,14 @@ A quick filter narrows the active membership while retaining the active presenta
 - Runtime snapshots remain the source of truth after a frontend rebuilds its widget tree or terminal frame.
 - Runtime/Core values never carry GTK symbolic-icon names or built-in backend marketing copy.
 - Runtime grouping, completion, progress, and shared report behavior never switches on resolved catalog text.
-- A UIModel notification projection ignores duplicate, older, empty, or revision-mismatched updates rather than regressing its accepted state.
+- A UIModel notification projection consumes each non-null immutable update in callback-executor delivery order.
 - UI-local persisted preferences influence presentation but do not replace canonical runtime state.
 - Persisted presentation documents use explicit version gates and runtime-owned stable tokens rather than C++ enum ordinals.
 - Runtime workspace, UIModel layout/preference, and GTK file ownership stay separate; sharing token conversion does not justify a universal cross-layer document schema.
 - Layout component factories receive an explicit dependency bundle and runtime-state carrier rather than reaching through global frontend singletons.
 - Narrow GTK evaluator composition may borrow the const core-library view; committing authority remains inaccessible to GTK and UIModel.
 - An open authoring session never retargets when GTK recycles a row, selection changes, or a detail projection refreshes.
-- UIModel owns stale/submit/undo policy; frontend code owns only editor lifetime and rendering of those states.
+- UIModel owns binding invalidation and guarded undo policy; frontend code owns editor lifetime and rendering.
 
 ## Failure, cancellation, and lifetime boundaries
 
@@ -219,7 +219,7 @@ Runtime failures arrive as typed results, snapshots, or observational events.
 UIModel converts semantic state into platform-neutral display or action state but does not choose runtime recovery behavior.
 Frontends decide how and where to render an error and own cancellation tied to widget/dialog/terminal lifetime.
 
-`TrackAuthoringSession` observes authoring availability and becomes stale when its runtime instance/revision is no longer current.
+`TrackAuthoringSession` observes authoring availability and invalidates itself when its runtime instance/revision is no longer current.
 Runtime revalidates the same facts under writer ownership at submission, so delayed availability delivery cannot permit a stale commit.
 
 GTK main-window teardown releases controllers, widgets, view models, and subscriptions before the window-owned `AppRuntime` is destroyed.
@@ -251,7 +251,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 ## Test map
 
 - [`test/unit/uimodel/`](../../test/unit/uimodel) mirrors UIModel feature capsules and protects platform-neutral policy.
-- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding, stale-state, all-or-none outcomes, and guarded follow-up submissions.
+- [`TrackAuthoringSessionTest.cpp`](../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects binding invalidation, all-or-none results, and guarded follow-up submissions.
 - [`TrackFieldTest.cpp`](../../test/unit/runtime/TrackFieldTest.cpp) and UIModel presentation schema tests protect stable persistence vocabulary and semantic document validation.
 - [`PresentationTextCatalogTest.cpp`](../../test/unit/uimodel/presentation/PresentationTextCatalogTest.cpp) protects catalog completeness, structured formatting, and open-id fallback.
 - [`ListTreeProjectionTest.cpp`](../../test/unit/uimodel/library/list/ListTreeProjectionTest.cpp) protects shared list hierarchy, recovery, and ordering.

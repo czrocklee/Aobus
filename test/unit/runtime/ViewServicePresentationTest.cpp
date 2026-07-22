@@ -22,7 +22,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service, {.groupBy = TrackGroupKey::Artist});
-    auto const snap = service.trackListState(result.viewId);
+    auto const snap = service.trackListState(result);
 
     CHECK(snap.groupBy == TrackGroupKey::Artist);
 
@@ -41,16 +41,16 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - presentation mutation reports a destroyed view", "[runtime][unit][view][presentation]")
+  TEST_CASE("ViewService - presentation mutation reports a removed view", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
     auto const view = env.requireView(service);
-    REQUIRE(service.destroyView(view.viewId));
+    REQUIRE(service.destroyView(view));
 
-    auto const result = service.setPresentation(view.viewId, defaultTrackPresentationSpec());
+    auto const result = service.setPresentation(view, defaultTrackPresentationSpec());
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::InvalidState);
+    CHECK(result.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ViewService - createView with Album groupBy applies album sort", "[runtime][unit][view][presentation]")
@@ -59,7 +59,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service, {.groupBy = TrackGroupKey::Album});
-    auto const snap = service.trackListState(result.viewId);
+    auto const snap = service.trackListState(result);
 
     CHECK(snap.groupBy == TrackGroupKey::Album);
 
@@ -87,7 +87,7 @@ namespace ao::rt::test
     }));
 
     auto const created = env.requireView(service, {.listId = manualListId});
-    auto const state = service.trackListState(created.viewId);
+    auto const state = service.trackListState(created);
 
     CHECK(state.presentation.id == kListOrderTrackPresentationId);
     CHECK(state.groupBy == TrackGroupKey::None);
@@ -107,7 +107,7 @@ namespace ao::rt::test
     REQUIRE(albumsPreset != nullptr);
 
     auto const created = env.requireView(service, {.listId = manualListId, .optPresentation = albumsPreset->spec});
-    auto const state = service.trackListState(created.viewId);
+    auto const state = service.trackListState(created);
 
     CHECK(state.presentation.id == "albums");
     CHECK(state.groupBy == TrackGroupKey::Album);
@@ -128,8 +128,8 @@ namespace ao::rt::test
     auto const allTracks = env.requireView(service);
     auto const smart = env.requireView(service, {.listId = smartListId});
 
-    CHECK(service.trackListState(allTracks.viewId).presentation.id == kDefaultTrackPresentationId);
-    CHECK(service.trackListState(smart.viewId).presentation.id == kDefaultTrackPresentationId);
+    CHECK(service.trackListState(allTracks).presentation.id == kDefaultTrackPresentationId);
+    CHECK(service.trackListState(smart).presentation.id == kDefaultTrackPresentationId);
   }
 
   TEST_CASE("ViewService - playback launch capture contains exact list filter and sort only",
@@ -142,7 +142,7 @@ namespace ao::rt::test
     auto const created =
       env.requireView(service, {.filterExpression = "$year > 2000", .optPresentation = genresPreset->spec});
 
-    auto const captured = service.capturePlaybackLaunchSpec(created.viewId);
+    auto const captured = service.capturePlaybackLaunchSpec(created);
 
     REQUIRE(captured);
     CHECK(captured->sourceListId == kAllTracksListId);
@@ -160,7 +160,7 @@ namespace ao::rt::test
     auto service = env.makeService();
 
     auto const result = env.requireView(service);
-    auto const viewId = ViewId{result.viewId};
+    auto const viewId = ViewId{result};
 
     auto const* preset = builtinTrackPresentationPreset("genres");
     REQUIRE(preset != nullptr);
@@ -179,14 +179,15 @@ namespace ao::rt::test
     auto const* preset = builtinTrackPresentationPreset("years");
     REQUIRE(preset != nullptr);
     auto const result = env.requireView(service);
-    REQUIRE(service.setPresentation(result.viewId, preset->spec));
-    auto const snap = service.trackListState(result.viewId);
-    auto const revBefore = snap.revision;
+    std::int32_t published = 0;
+    auto const sub = service.onPresentationChanged([&](auto const&) { ++published; });
+    REQUIRE(service.setPresentation(result, preset->spec));
+    CHECK(published == 1);
 
-    REQUIRE(service.setPresentation(result.viewId, preset->spec));
-    auto const snapAfter = service.trackListState(result.viewId);
+    REQUIRE(service.setPresentation(result, preset->spec));
+    auto const snapAfter = service.trackListState(result);
 
-    CHECK(snapAfter.revision == revBefore);
+    CHECK(published == 1);
     CHECK(snapAfter.groupBy == TrackGroupKey::Year);
   }
 
@@ -199,14 +200,12 @@ namespace ao::rt::test
     auto presentation = defaultTrackPresentationSpec();
     presentation.id = "custom";
     presentation.visibleFields = {TrackField::Title};
-    REQUIRE(service.setPresentation(result.viewId, presentation));
-    auto const beforeRevision = service.trackListState(result.viewId).revision;
+    REQUIRE(service.setPresentation(result, presentation));
 
     presentation.visibleFields = {TrackField::Title, TrackField::Artist};
-    REQUIRE(service.setPresentation(result.viewId, presentation));
+    REQUIRE(service.setPresentation(result, presentation));
 
-    auto const state = service.trackListState(result.viewId);
-    CHECK(state.revision == beforeRevision + 1);
+    auto const state = service.trackListState(result);
     CHECK(state.presentation.visibleFields == presentation.visibleFields);
   }
 
@@ -222,7 +221,7 @@ namespace ao::rt::test
 
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
-    REQUIRE(service.setPresentation(result.viewId, preset->spec));
+    REQUIRE(service.setPresentation(result, preset->spec));
 
     CHECK(received.id == "albums");
     CHECK(received.groupBy == TrackGroupKey::Album);
@@ -240,15 +239,15 @@ namespace ao::rt::test
 
     auto const* artistPreset = builtinTrackPresentationPreset("artists");
     REQUIRE(artistPreset != nullptr);
-    REQUIRE(service.setPresentation(result.viewId, artistPreset->spec));
+    REQUIRE(service.setPresentation(result, artistPreset->spec));
     CHECK(callCount == 1);
 
-    REQUIRE(service.setPresentation(result.viewId, artistPreset->spec));
+    REQUIRE(service.setPresentation(result, artistPreset->spec));
     CHECK(callCount == 1);
 
     auto const* albumPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumPreset != nullptr);
-    REQUIRE(service.setPresentation(result.viewId, albumPreset->spec));
+    REQUIRE(service.setPresentation(result, albumPreset->spec));
     CHECK(callCount == 2);
   }
 
@@ -261,16 +260,16 @@ namespace ao::rt::test
     auto const result = env.requireView(service);
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
-    REQUIRE(service.setPresentation(result.viewId, preset->spec));
+    REQUIRE(service.setPresentation(result, preset->spec));
 
-    auto const& presentation = service.trackListPresentation(result.viewId);
-    auto const& presentationAgain = service.trackListPresentation(result.viewId);
+    auto const& presentation = service.trackListPresentation(result);
+    auto const& presentationAgain = service.trackListPresentation(result);
 
     // Both calls hand back the same stored object: an accessor to the view's spec,
     // not a per-call copy of the whole TrackListViewState.
     CHECK(&presentation == &presentationAgain);
     CHECK(presentation.id == "albums");
-    CHECK(presentation.id == service.trackListState(result.viewId).presentation.id);
+    CHECK(presentation.id == service.trackListState(result).presentation.id);
   }
 
   TEST_CASE("ViewService - setPresentation with preset string", "[runtime][unit][view][presentation]")
@@ -279,8 +278,8 @@ namespace ao::rt::test
     auto service = env.makeService();
     auto const result = env.requireView(service);
 
-    auto const spec = service.setPresentation(result.viewId, "artists");
-    auto const snap = service.trackListState(result.viewId);
+    auto const spec = service.setPresentation(result, "artists");
+    auto const snap = service.trackListState(result);
 
     REQUIRE(spec);
     CHECK(spec->id == "artists");

@@ -40,9 +40,8 @@ namespace ao::uimodel::test
       CHECK(log.last().elapsed == std::chrono::milliseconds{0});
 
       log.clear();
-      auto const revisionBefore = fixture.playback.snapshot().revision;
       fixture.commands().setShuffleMode(ShuffleMode::On);
-      CHECK(fixture.playback.snapshot().revision > revisionBefore);
+      CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
       CHECK(log.empty());
     }
 

@@ -60,18 +60,18 @@ namespace ao::gtk
 
     if (_catalog == nullptr || preferences == nullptr)
     {
-      _workflowPtr.reset();
+      _viewModelPtr.reset();
       render({});
       return;
     }
 
-    _workflowPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
+    _viewModelPtr = std::make_unique<uimodel::TrackPresentationPickerViewModel>(
       _runtime.views(),
       _runtime.workspace(),
       *_catalog,
       *preferences,
       [this](uimodel::TrackPresentationPickerState const& state) { render(state); });
-    _workflowPtr->refresh();
+    _viewModelPtr->refresh();
   }
 
   void TrackPresentationButton::render(uimodel::TrackPresentationPickerState const& state)
@@ -126,25 +126,21 @@ namespace ao::gtk
   {
     _popover.popdown();
 
-    if (_workflowPtr == nullptr)
+    if (_viewModelPtr == nullptr)
     {
       return;
     }
 
-    applyCommand(_workflowPtr->selectPresentation(presentationId));
-  }
+    auto optSpec = _viewModelPtr->selectPresentation(presentationId);
 
-  void TrackPresentationButton::applyCommand(uimodel::TrackPresentationApplyCommand const& command)
-  {
-    if (!command.shouldApply)
+    if (!optSpec)
     {
       return;
     }
 
-    auto spec = command.spec;
     _applyPresentationConn.disconnect();
     _applyPresentationConn = Glib::signal_idle().connect(
-      [this, spec = std::move(spec)]
+      [this, spec = std::move(*optSpec)]
       {
         if (auto const result = _runtime.workspace().setActivePresentation(spec); !result)
         {
@@ -159,7 +155,7 @@ namespace ao::gtk
   {
     _popover.popdown();
 
-    if (!_state.enabled || _catalog == nullptr || _workflowPtr == nullptr)
+    if (!_state.enabled || _catalog == nullptr || _viewModelPtr == nullptr)
     {
       return;
     }
@@ -183,22 +179,10 @@ namespace ao::gtk
       optToken = _themeCoordinator->registerToplevel(dialog);
     }
 
-    if (auto const optResult = dialog.runDialog(); optResult)
+    if (auto const optPreset = dialog.runDialog(); optPreset)
     {
-      if (optResult->deleted)
-      {
-        _catalog->removeCustomPresentation(optResult->preset.spec.id);
-
-        if (spec.id == optResult->preset.spec.id)
-        {
-          applyCommand(_workflowPtr->selectPresentation(rt::kDefaultTrackPresentationId));
-        }
-      }
-      else
-      {
-        _catalog->addCustomPresentation(optResult->preset);
-        applyCommand(_workflowPtr->selectPresentation(optResult->preset.spec.id));
-      }
+      _catalog->addCustomPresentation(*optPreset);
+      handlePresentationSelected(optPreset->spec.id);
     }
   }
 } // namespace ao::gtk

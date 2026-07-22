@@ -8,7 +8,6 @@
 
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <type_traits>
 #include <variant>
@@ -79,9 +78,9 @@ namespace ao::rt
     return script;
   }
 
-  TrackSourceDeltaBatch sourceBatchOf(delta::RegularTrackEditScript const& script, std::uint64_t revision)
+  TrackSourceDeltaBatch sourceBatchOf(delta::RegularTrackEditScript const& script)
   {
-    auto batch = TrackSourceDeltaBatch{.revision = revision};
+    auto batch = TrackSourceDeltaBatch{};
     batch.deltas.reserve(script.edits.size());
 
     for (auto const& edit : script.edits)

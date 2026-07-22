@@ -33,8 +33,7 @@ namespace ao::gtk
 
     for (auto const& [id, row] : projection.rowsById)
     {
-      auto listRowPtr =
-        ListRowObject::create(id, row.parentId, 0, row.kind == rt::ListNodeKind::Smart, row.name, row.localExpression);
+      auto listRowPtr = ListRowObject::create(id, row.kind == rt::ListNodeKind::Smart, row.name, row.localExpression);
       auto treeNodePtr = ListTreeItem::create(listRowPtr);
       result.nodesById[id] = treeNodePtr;
     }
@@ -53,7 +52,6 @@ namespace ao::gtk
         if (auto const childIt = result.nodesById.find(childId); childIt != result.nodesById.end())
         {
           parentIt->second->children()->append(childIt->second);
-          childIt->second->setParent(parentIt->second.get());
         }
       }
     }

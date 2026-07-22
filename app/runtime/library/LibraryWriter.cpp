@@ -31,6 +31,7 @@
 #include <format>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -717,7 +718,6 @@ namespace ao::rt
                                                                      MetadataPatch const& patch)
     {
       auto writer = library.tracks().writer(transaction);
-      auto mutated = std::vector<TrackId>{};
       auto changes = std::vector<TrackChangeRecord>{};
 
       for (auto const trackId : trackIds)
@@ -772,11 +772,10 @@ namespace ao::rt
           }
         }
 
-        mutated.push_back(trackId);
         changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
       }
 
-      return UpdateTrackMetadataReply{.mutatedIds = std::move(mutated), .changes = std::move(changes)};
+      return UpdateTrackMetadataReply{.changes = std::move(changes)};
     }
 
     Result<EditTrackTagsReply> applyTagPatchInTransaction(library::MusicLibrary& library,
@@ -786,7 +785,6 @@ namespace ao::rt
                                                           std::span<std::string const> tagsToRemove)
     {
       auto writer = library.tracks().writer(transaction);
-      auto mutated = std::vector<TrackId>{};
       auto changes = std::vector<TrackTagsChange>{};
 
       for (auto const trackId : trackIds)
@@ -841,12 +839,11 @@ namespace ao::rt
           return storageError("Failed to update hot track data", result.error());
         }
 
-        mutated.push_back(trackId);
         changes.push_back(TrackTagsChange{
           .trackId = trackId, .addedTags = std::move(addedTags), .removedTags = std::move(removedTags)});
       }
 
-      return EditTrackTagsReply{.mutatedIds = std::move(mutated), .changes = std::move(changes)};
+      return EditTrackTagsReply{.changes = std::move(changes)};
     }
   } // namespace
 
@@ -854,13 +851,13 @@ namespace ao::rt
   {
     Result<UpdateTrackMetadataReply> previewUpdateMetadata(std::span<TrackId const> trackIds,
                                                            MetadataPatch const& patch);
-    Result<MetadataAuthoringOutcome> applyUpdateMetadata(BoundTrackTargets const& targets, MetadataPatch const& patch);
+    Result<MetadataAuthoringResult> applyUpdateMetadata(BoundTrackTargets const& targets, MetadataPatch const& patch);
     Result<EditTrackTagsReply> previewEditTags(std::span<TrackId const> trackIds,
                                                std::span<std::string const> tagsToAdd,
                                                std::span<std::string const> tagsToRemove);
-    Result<TagAuthoringOutcome> applyEditTags(BoundTrackTargets const& targets,
-                                              std::span<std::string const> tagsToAdd,
-                                              std::span<std::string const> tagsToRemove);
+    Result<TagAuthoringResult> applyEditTags(BoundTrackTargets const& targets,
+                                             std::span<std::string const> tagsToAdd,
+                                             std::span<std::string const> tagsToRemove);
     Result<ListId> applyCreateList(ListDraft const& draft, MutationMode mode);
     Result<UpdateListReply> applyUpdateList(ListDraft const& draft, MutationMode mode);
     Result<InsertManualListTracksReply> applyInsertManualListTracks(ListId listId,
@@ -889,8 +886,8 @@ namespace ao::rt
 
   LibraryWriter::~LibraryWriter() = default;
 
-  Result<LibraryWriter::MetadataAuthoringOutcome> LibraryWriter::updateMetadata(BoundTrackTargets const& targets,
-                                                                                MetadataPatch const& patch)
+  Result<LibraryWriter::MetadataAuthoringResult> LibraryWriter::updateMetadata(BoundTrackTargets const& targets,
+                                                                               MetadataPatch const& patch)
   {
     return _implPtr->applyUpdateMetadata(targets, patch);
   }
@@ -901,9 +898,9 @@ namespace ao::rt
     return _implPtr->previewUpdateMetadata(trackIds, patch);
   }
 
-  Result<LibraryWriter::TagAuthoringOutcome> LibraryWriter::editTags(BoundTrackTargets const& targets,
-                                                                     std::span<std::string const> tagsToAdd,
-                                                                     std::span<std::string const> tagsToRemove)
+  Result<LibraryWriter::TagAuthoringResult> LibraryWriter::editTags(BoundTrackTargets const& targets,
+                                                                    std::span<std::string const> tagsToAdd,
+                                                                    std::span<std::string const> tagsToRemove)
   {
     return _implPtr->applyEditTags(targets, tagsToAdd, tagsToRemove);
   }
@@ -1040,19 +1037,16 @@ namespace ao::rt
     return std::move(*replyResult);
   }
 
-  Result<LibraryWriter::MetadataAuthoringOutcome> LibraryWriter::Impl::applyUpdateMetadata(
+  Result<LibraryWriter::MetadataAuthoringResult> LibraryWriter::Impl::applyUpdateMetadata(
     BoundTrackTargets const& targets,
     MetadataPatch const& patch)
   {
     auto start = mutationService.beginAuthoringMutation(targets);
-    auto outcome = MetadataAuthoringOutcome{
-      .status = start.status,
-      .missingTargetIds = std::move(start.missingTargetIds),
-    };
+    auto result = MetadataAuthoringResult{.status = start.status};
 
     if (!start.optMutation)
     {
-      return outcome;
+      return result;
     }
 
     auto replyResult =
@@ -1063,25 +1057,26 @@ namespace ao::rt
       return std::unexpected{replyResult.error()};
     }
 
-    outcome.reply = std::move(*replyResult);
+    result.reply = std::move(*replyResult);
 
-    if (outcome.reply.mutatedIds.empty())
+    if (result.reply.changes.empty())
     {
-      outcome.status = TrackAuthoringStatus::NoOp;
-      return outcome;
+      result.status = TrackAuthoringStatus::NoOp;
+      return result;
     }
 
-    auto commitResult = start.optMutation->commit(LibraryChangeSet{.tracksMutated = outcome.reply.mutatedIds});
+    auto mutatedIds =
+      result.reply.changes | std::views::transform(&TrackChangeRecord::trackId) | std::ranges::to<std::vector>();
+    auto commitResult = start.optMutation->commit(LibraryChangeSet{.tracksMutated = std::move(mutatedIds)});
 
     if (!commitResult)
     {
       return storageError("Failed to commit metadata update", commitResult.error());
     }
 
-    outcome.status = TrackAuthoringStatus::Applied;
-    outcome.libraryRevision = commitResult->libraryRevision;
-    outcome.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitResult->libraryRevision));
-    return outcome;
+    result.status = TrackAuthoringStatus::Applied;
+    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitResult->libraryRevision));
+    return result;
   }
 
   Result<EditTrackTagsReply> LibraryWriter::Impl::previewEditTags(std::span<TrackId const> trackIds,
@@ -1106,20 +1101,17 @@ namespace ao::rt
     return std::move(*replyResult);
   }
 
-  Result<LibraryWriter::TagAuthoringOutcome> LibraryWriter::Impl::applyEditTags(
+  Result<LibraryWriter::TagAuthoringResult> LibraryWriter::Impl::applyEditTags(
     BoundTrackTargets const& targets,
     std::span<std::string const> tagsToAdd,
     std::span<std::string const> tagsToRemove)
   {
     auto start = mutationService.beginAuthoringMutation(targets);
-    auto outcome = TagAuthoringOutcome{
-      .status = start.status,
-      .missingTargetIds = std::move(start.missingTargetIds),
-    };
+    auto result = TagAuthoringResult{.status = start.status};
 
     if (!start.optMutation)
     {
-      return outcome;
+      return result;
     }
 
     auto replyResult = applyTagPatchInTransaction(
@@ -1130,25 +1122,26 @@ namespace ao::rt
       return std::unexpected{replyResult.error()};
     }
 
-    outcome.reply = std::move(*replyResult);
+    result.reply = std::move(*replyResult);
 
-    if (outcome.reply.mutatedIds.empty())
+    if (result.reply.changes.empty())
     {
-      outcome.status = TrackAuthoringStatus::NoOp;
-      return outcome;
+      result.status = TrackAuthoringStatus::NoOp;
+      return result;
     }
 
-    auto commitResult = start.optMutation->commit(LibraryChangeSet{.tracksMutated = outcome.reply.mutatedIds});
+    auto mutatedIds =
+      result.reply.changes | std::views::transform(&TrackTagsChange::trackId) | std::ranges::to<std::vector>();
+    auto commitResult = start.optMutation->commit(LibraryChangeSet{.tracksMutated = std::move(mutatedIds)});
 
     if (!commitResult)
     {
       return storageError("Failed to commit tag update", commitResult.error());
     }
 
-    outcome.status = TrackAuthoringStatus::Applied;
-    outcome.libraryRevision = commitResult->libraryRevision;
-    outcome.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitResult->libraryRevision));
-    return outcome;
+    result.status = TrackAuthoringStatus::Applied;
+    result.optNextTargets.emplace(mutationService.advanceBoundTargets(targets, commitResult->libraryRevision));
+    return result;
   }
 
   Result<ListId> LibraryWriter::Impl::applyCreateList(ListDraft const& draft, MutationMode mode)

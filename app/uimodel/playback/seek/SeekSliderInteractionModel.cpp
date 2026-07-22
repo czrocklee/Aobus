@@ -44,7 +44,7 @@ namespace ao::uimodel
     return true;
   }
 
-  SeekSliderDecision SeekSliderInteractionModel::endPointerInteraction(std::chrono::milliseconds elapsed) noexcept
+  SeekSliderUpdate SeekSliderInteractionModel::endPointerInteraction(std::chrono::milliseconds elapsed) noexcept
   {
     if (!_pointerActive)
     {
@@ -62,7 +62,7 @@ namespace ao::uimodel
     return {.action = SeekSliderAction::Commit, .elapsed = clampElapsed(elapsed)};
   }
 
-  SeekSliderDecision SeekSliderInteractionModel::valueChanged(std::chrono::milliseconds elapsed) noexcept
+  SeekSliderUpdate SeekSliderInteractionModel::valueChanged(std::chrono::milliseconds elapsed) noexcept
   {
     if (!_enabled)
     {

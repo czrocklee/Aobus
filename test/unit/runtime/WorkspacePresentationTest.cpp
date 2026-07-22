@@ -29,7 +29,6 @@ namespace ao::rt::test
     REQUIRE(albumsPreset != nullptr);
     REQUIRE(runtime.workspace().setActivePresentation(albumsPreset->spec));
 
-    CHECK(runtime.workspace().canGoBack() == true);
     requireBackNavigation(runtime);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.presentation.id == "list-order");
@@ -46,7 +45,6 @@ namespace ao::rt::test
     auto const result = runtime.workspace().setActivePresentation(albumsPreset->spec);
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidState);
-    CHECK(runtime.workspace().canGoBack() == false);
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation deduplicates the current spec",
@@ -60,13 +58,13 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
 
     REQUIRE(runtime.workspace().setActivePresentation(albumsPreset->spec));
-    auto const repeated = ao::test::requireValue(runtime.workspace().setActivePresentation(albumsPreset->spec));
-    CHECK(repeated.disposition == WorkspaceCommitDisposition::NoChange);
+    auto const beforeRepeated = runtime.workspace().snapshot();
+    REQUIRE(runtime.workspace().setActivePresentation(albumsPreset->spec));
+    CHECK(runtime.workspace().snapshot() == beforeRepeated);
 
     requireBackNavigation(runtime);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.presentation.id == "list-order");
-    CHECK(runtime.workspace().canGoBack() == false);
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation can skip recording history",
@@ -83,7 +81,6 @@ namespace ao::rt::test
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.presentation.id == "albums");
-    CHECK(runtime.workspace().canGoBack() == false);
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation resolves preset ids", "[runtime][unit][workspace][presentation]")
@@ -92,8 +89,7 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime;
 
     requireNavigation(runtime, fixture.firstListId);
-    auto const result = ao::test::requireValue(runtime.workspace().setActivePresentation("albums"));
-    auto const& spec = result.presentation;
+    auto const spec = ao::test::requireValue(runtime.workspace().setActivePresentation("albums"));
 
     CHECK(spec.id == "albums");
     CHECK(spec.groupBy == TrackGroupKey::Album);
@@ -111,7 +107,6 @@ namespace ao::rt::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
-    CHECK(runtime.workspace().canGoBack() == false);
   }
 
   TEST_CASE("WorkspaceService - preset resolution rejects unknown ids before checking focus",
@@ -162,8 +157,8 @@ namespace ao::rt::test
     CHECK(presets[0].spec.groupBy == TrackGroupKey::Work);
 
     requireNavigation(runtime, fixture.firstListId);
-    auto const result = ao::test::requireValue(runtime.workspace().setActivePresentation("custom1_id"));
-    CHECK(result.presentation.groupBy == TrackGroupKey::Work);
+    auto const presentation = ao::test::requireValue(runtime.workspace().setActivePresentation("custom1_id"));
+    CHECK(presentation.groupBy == TrackGroupKey::Work);
 
     REQUIRE(runtime.workspace().removeCustomPreset("custom1_id"));
     CHECK(emitCount == 3);

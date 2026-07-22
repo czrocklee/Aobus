@@ -212,7 +212,6 @@ namespace ao::rt
     }
 
     auto forwarded = batch;
-    forwarded.revision = 0;
     auto const previousSize = _publishedSize;
     _publishedSize = _implementationPtr->size();
 

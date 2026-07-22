@@ -8,7 +8,6 @@
 #include <ao/rt/PreparedPlayback.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -22,7 +21,7 @@ namespace ao::rt
   public:
     using ProjectionIndexResolver = std::function<std::optional<std::size_t>(TrackId)>;
 
-    void activate(PreparedNextToken token, std::uint64_t issuedGeneration, ProjectionAnchor anchor);
+    void activate(PreparedNextToken token, ProjectionAnchor anchor);
     bool acknowledgeDisarm(PreparedNextToken token);
 
     /**
@@ -60,7 +59,6 @@ namespace ao::rt
     {
       PreparedNextToken token{};
       ProjectionAnchor anchor;
-      std::uint64_t issuedGeneration = 0;
     };
 
     Commitment const* find(PreparedNextToken token) const noexcept;

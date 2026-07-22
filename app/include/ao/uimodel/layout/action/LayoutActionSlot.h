@@ -12,9 +12,7 @@ namespace ao::uimodel
     PrimaryClick,
     PrimaryLongPress,
     SecondaryClick,
-    SecondaryLongPress,
-    MenuItem,
-    Shortcut
+    SecondaryLongPress
   };
 
   using LayoutActionSlotMask = std::uint32_t;

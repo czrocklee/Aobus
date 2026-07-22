@@ -58,7 +58,6 @@ namespace ao::rt
     std::optional<TrackId> optResolvedSuccessor{};
     ShuffleMode shuffle = ShuffleMode::Off;
     RepeatMode repeat = RepeatMode::Off;
-    std::uint64_t semanticRevision = 0;
 
     bool operator==(PlaybackSuccessionState const&) const = default;
   };
@@ -127,7 +126,7 @@ namespace ao::rt
                                       RepeatMode repeatMode,
                                       std::chrono::milliseconds elapsed) noexcept;
     void discardPlaybackSessionSnapshot();
-    async::Subscription onPersistenceIntentChanged(std::move_only_function<void()> handler);
+    async::Subscription onRestorableStateChanged(std::move_only_function<void()> handler);
 
     struct Impl;
     std::unique_ptr<Impl> _implPtr;

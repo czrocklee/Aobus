@@ -454,7 +454,6 @@ namespace ao::rt
       ListId sourceListId = kInvalidListId;
       audio::Engine::PlaybackItemId itemId;
       PreparedNextToken token{};
-      std::uint64_t issuedGeneration = 0;
       audio::Engine::PreparedTransitionMode transition = audio::Engine::PreparedTransitionMode::DrainFallback;
     };
 
@@ -807,14 +806,14 @@ namespace ao::rt
       };
     }
 
-    Result<PreparedNextToken> issuePreparedNextToken()
+    Result<PreparedNextToken> issuePreparedNextToken(std::uint64_t const issuedGeneration)
     {
       if (nextPreparedTokenValue == 0 || nextPreparedTokenValue == std::numeric_limits<std::uint64_t>::max())
       {
         return makeError(Error::Code::InvalidState, "Prepared-next token space exhausted");
       }
 
-      return PreparedNextToken{.value = nextPreparedTokenValue++};
+      return PreparedNextToken{.value = nextPreparedTokenValue++, .issuedGeneration = issuedGeneration};
     }
 
     void rememberPreparedRequest(PreparedPlaybackRequest request) { preparedRequests.push_back(std::move(request)); }
@@ -825,7 +824,7 @@ namespace ao::rt
       auto const it =
         std::ranges::find_if(preparedRequests,
                              [&](PreparedPlaybackRequest const& request)
-                             { return request.itemId == itemId && request.issuedGeneration == generation; });
+                             { return request.itemId == itemId && request.token.issuedGeneration == generation; });
 
       if (it == preparedRequests.end())
       {
@@ -852,7 +851,7 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      return takePreparedRequest(it->itemId, it->issuedGeneration);
+      return takePreparedRequest(it->itemId, it->token.issuedGeneration);
     }
 
     void clearPreparedRequestsCoveredBy(PreparedCancellationBarrier const barrier)
@@ -862,14 +861,14 @@ namespace ao::rt
         auto const active =
           std::ranges::find(preparedRequests, *optActivePreparedToken, &PreparedPlaybackRequest::token);
 
-        if (active == preparedRequests.end() || barrier.covers(active->issuedGeneration))
+        if (active == preparedRequests.end() || barrier.covers(active->token))
         {
           optActivePreparedToken.reset();
         }
       }
 
-      std::erase_if(preparedRequests,
-                    [&](PreparedPlaybackRequest const& request) { return barrier.covers(request.issuedGeneration); });
+      std::erase_if(
+        preparedRequests, [&](PreparedPlaybackRequest const& request) { return barrier.covers(request.token); });
     }
 
     void discardPreparedRequests()
@@ -1007,7 +1006,7 @@ namespace ao::rt
       auto const it =
         std::ranges::find_if(preparedRequests,
                              [&](PreparedPlaybackRequest const& request)
-                             { return request.itemId == itemId && request.issuedGeneration == generation; });
+                             { return request.itemId == itemId && request.token.issuedGeneration == generation; });
 
       if (it == preparedRequests.end())
       {
@@ -1039,15 +1038,13 @@ namespace ao::rt
       }
 
       gsl_Expects(optLastPlaybackFailureReport);
-      std::ignore =
-        notifications.createOrUpdate(optLastPlaybackFailureReport->reportKey,
-                                     NotificationRequest{
-                                       .severity = NotificationSeverity::Error,
-                                       .message = report,
-                                       .lifetime = failure.recoverable ? NotificationLifetime::sessionHistory()
-                                                                       : NotificationLifetime::untilDismissed(),
-                                       .content = NotificationContentState{.topic = NotificationTopic::PlaybackError},
-                                     });
+      notifications.createOrUpdate(
+        optLastPlaybackFailureReport->reportKey,
+        NotificationRequest{
+          .severity = NotificationSeverity::Error,
+          .message = report,
+          .lifetime = failure.recoverable ? NotificationLifetime::history() : NotificationLifetime::pinned(),
+        });
     }
 
     void publishPlaybackFailure(PlaybackFailure failure)
@@ -1475,7 +1472,8 @@ namespace ao::rt
     impl->playbackFailureRecoveryHandlerPtr.reset();
   }
 
-  Result<PlaybackStartReceipt> PlaybackTransport::playSuccessionTrack(TrackId const trackId, ListId const sourceListId)
+  Result<PreparedCancellationBarrier> PlaybackTransport::playSuccessionTrack(TrackId const trackId,
+                                                                             ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1504,9 +1502,7 @@ namespace ao::rt
     }
   }
 
-  Result<PlaybackTransport::SuccessionPreparedNextReceipt> PlaybackTransport::prepareSuccessionNext(
-    TrackId const trackId,
-    ListId const sourceListId)
+  Result<PreparedNextToken> PlaybackTransport::prepareSuccessionNext(TrackId const trackId, ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1520,7 +1516,7 @@ namespace ao::rt
         return std::unexpected{requestResult.error()};
       }
 
-      return prepareNextWithReceipt(*requestResult, sourceListId);
+      return prepareNextRequest(*requestResult, sourceListId);
     }
     catch (std::exception const& ex)
     {
@@ -1607,13 +1603,13 @@ namespace ao::rt
       std::make_unique<PreparedPlaybackStart::Impl>(std::move(*preparedResult), request, sourceListId)};
   }
 
-  Result<PlaybackStartReceipt> PlaybackTransport::commitPlayback(PreparedPlaybackStart&& preparedStart)
+  Result<PreparedCancellationBarrier> PlaybackTransport::commitPlayback(PreparedPlaybackStart&& preparedStart)
   {
     return commitStagedPlayback(std::move(preparedStart), true);
   }
 
-  Result<PlaybackStartReceipt> PlaybackTransport::commitStagedPlayback(PreparedPlaybackStart&& preparedStart,
-                                                                       bool const announce)
+  Result<PreparedCancellationBarrier> PlaybackTransport::commitStagedPlayback(PreparedPlaybackStart&& preparedStart,
+                                                                              bool const announce)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1661,16 +1657,12 @@ namespace ao::rt
       impl->announceNowPlaying(preparedImplPtr->request, preparedImplPtr->sourceListId);
     }
 
-    return PlaybackStartReceipt{
-      .trackId = preparedImplPtr->request.item.trackId,
-      .sourceListId = preparedImplPtr->sourceListId,
-      .cancellationBarrier = barrier,
-    };
+    return barrier;
   }
 
-  Result<PlaybackStartReceipt> PlaybackTransport::play(PlaybackRequest const& request,
-                                                       ListId const sourceListId,
-                                                       std::chrono::milliseconds const initialOffset)
+  Result<PreparedCancellationBarrier> PlaybackTransport::play(PlaybackRequest const& request,
+                                                              ListId const sourceListId,
+                                                              std::chrono::milliseconds const initialOffset)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1685,7 +1677,7 @@ namespace ao::rt
     return commitPlayback(std::move(*preparedResult));
   }
 
-  Result<PlaybackStartReceipt> PlaybackTransport::playTrack(TrackId const trackId, ListId const sourceListId)
+  Result<PreparedCancellationBarrier> PlaybackTransport::playTrack(TrackId const trackId, ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1707,9 +1699,8 @@ namespace ao::rt
     }
   }
 
-  Result<PlaybackTransport::SuccessionPreparedNextReceipt> PlaybackTransport::prepareNextWithReceipt(
-    PlaybackRequest const& request,
-    ListId const sourceListId)
+  Result<PreparedNextToken> PlaybackTransport::prepareNextRequest(PlaybackRequest const& request,
+                                                                  ListId const sourceListId)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
@@ -1736,7 +1727,7 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    auto const tokenResult = impl->issuePreparedNextToken();
+    auto const tokenResult = impl->issuePreparedNextToken(result->generation);
 
     if (!tokenResult)
     {
@@ -1749,23 +1740,15 @@ namespace ao::rt
       .sourceListId = sourceListId,
       .itemId = result->itemId,
       .token = *tokenResult,
-      .issuedGeneration = result->generation,
       .transition = result->transition,
     });
     impl->optActivePreparedToken = *tokenResult;
-    return SuccessionPreparedNextReceipt{.token = *tokenResult, .issuedGeneration = result->generation};
+    return *tokenResult;
   }
 
   Result<PreparedNextToken> PlaybackTransport::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
   {
-    auto receiptResult = prepareNextWithReceipt(request, sourceListId);
-
-    if (!receiptResult)
-    {
-      return std::unexpected{receiptResult.error()};
-    }
-
-    return receiptResult->token;
+    return prepareNextRequest(request, sourceListId);
   }
 
   Result<PreparedNextToken> PlaybackTransport::prepareNext(TrackId const trackId, ListId const sourceListId)

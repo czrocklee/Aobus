@@ -51,7 +51,6 @@ namespace ao::uimodel
     std::vector<TrackPresentationMenuItem> menuItems() const;
 
     void addCustomPresentation(rt::CustomTrackPresentationPreset const& state);
-    void removeCustomPresentation(std::string_view id);
 
     async::Signal<>& signalChanged() noexcept { return _changed; }
 

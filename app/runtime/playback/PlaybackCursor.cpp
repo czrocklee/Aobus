@@ -65,8 +65,8 @@ namespace ao::rt
     _semanticTuple = computeSemanticTuple(policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::applyProjectionBatch(TrackListProjectionDeltaBatch const& batch,
-                                                                      PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::applyProjectionBatch(TrackListProjectionDeltaBatch const& batch,
+                                                               PlaybackCursorPolicy& policy)
   {
     if (_sourceState == SourceState::Invalidated)
     {
@@ -77,10 +77,10 @@ namespace ao::rt
     auto const projectionSize = policy.projectionSize();
     auto const optCurrentIndex = policy.indexOf(_currentTrackId);
     _anchor.applyBatch(batch, projectionSize, optCurrentIndex);
-    return effect(_anchor.anchorIndex() != previousAnchorIndex, policy);
+    return changes(_anchor.anchorIndex() != previousAnchorIndex, policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::invalidateSource(PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::invalidateSource(PlaybackCursorPolicy& policy)
   {
     if (_sourceState == SourceState::Invalidated)
     {
@@ -89,10 +89,10 @@ namespace ao::rt
 
     policy.clearShuffleState();
     _sourceState = SourceState::Invalidated;
-    return effect(false, policy);
+    return changes(false, policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::setRepeatMode(RepeatMode const mode, PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::setRepeatMode(RepeatMode const mode, PlaybackCursorPolicy& policy)
   {
     if (_repeatMode == mode)
     {
@@ -106,10 +106,10 @@ namespace ao::rt
       policy.invalidateShuffleForwardCandidate();
     }
 
-    return effect(true, policy);
+    return changes(true, policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::setShuffleMode(ShuffleMode const mode, PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::setShuffleMode(ShuffleMode const mode, PlaybackCursorPolicy& policy)
   {
     if (_shuffleMode == mode)
     {
@@ -123,11 +123,11 @@ namespace ao::rt
       policy.invalidateShuffleForwardCandidate();
     }
 
-    return effect(true, policy);
+    return changes(true, policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::setPreviousRestartAvailable(bool const available,
-                                                                             PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::setPreviousRestartAvailable(bool const available,
+                                                                      PlaybackCursorPolicy& policy)
   {
     if (_previousRestartAvailable == available)
     {
@@ -135,11 +135,10 @@ namespace ao::rt
     }
 
     _previousRestartAvailable = available;
-    return effect(false, policy);
+    return changes(false, policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::adoptLiveCurrent(ProjectionAnchor currentAnchor,
-                                                                  PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::adoptLiveCurrent(ProjectionAnchor currentAnchor, PlaybackCursorPolicy& policy)
   {
     if (_sourceState == SourceState::Invalidated)
     {
@@ -147,7 +146,7 @@ namespace ao::rt
     }
 
     validateLiveAnchor(currentAnchor, policy);
-    auto const persistenceIntentChanged =
+    auto const restorableStateChanged =
       currentAnchor.trackId() != _currentTrackId || currentAnchor.anchorIndex() != _anchor.anchorIndex();
 
     if (currentAnchor.trackId() != _currentTrackId)
@@ -157,10 +156,10 @@ namespace ao::rt
 
     _currentTrackId = currentAnchor.trackId();
     _anchor = std::move(currentAnchor);
-    return effect(persistenceIntentChanged, policy);
+    return changes(restorableStateChanged, policy);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::adoptInvalidatedCurrent(TrackId const currentTrackId)
+  PlaybackCursor::Changes PlaybackCursor::adoptInvalidatedCurrent(TrackId const currentTrackId)
   {
     if (_sourceState != SourceState::Invalidated)
     {
@@ -190,15 +189,14 @@ namespace ao::rt
     if (semanticChanged)
     {
       _semanticTuple = nextTuple;
-      ++_semanticRevision;
     }
 
-    return MutationEffect{.semanticChanged = semanticChanged, .persistenceIntentChanged = true};
+    return Changes{.semanticChanged = semanticChanged, .restorableStateChanged = true};
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::refreshSemanticState(PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::refreshSemanticState(PlaybackCursorPolicy& policy)
   {
-    return effect(false, policy);
+    return changes(false, policy);
   }
 
   PlaybackCursor::CommandResolution PlaybackCursor::resolveNext() const noexcept
@@ -388,16 +386,14 @@ namespace ao::rt
     }
 
     _semanticTuple = nextTuple;
-    ++_semanticRevision;
     return true;
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursor::effect(bool const persistenceIntentChanged,
-                                                        PlaybackCursorPolicy& policy)
+  PlaybackCursor::Changes PlaybackCursor::changes(bool const restorableStateChanged, PlaybackCursorPolicy& policy)
   {
-    return MutationEffect{
+    return Changes{
       .semanticChanged = updateSemanticTuple(policy),
-      .persistenceIntentChanged = persistenceIntentChanged,
+      .restorableStateChanged = restorableStateChanged,
     };
   }
 } // namespace ao::rt

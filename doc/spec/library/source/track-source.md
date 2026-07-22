@@ -3,7 +3,7 @@ id: library.track-source
 type: spec
 status: current
 domain: library
-summary: Defines ordered track sources, source leases, revisioned deltas, caches, and source dependency behavior.
+summary: Defines ordered track sources, source leases, delta batches, caches, and source dependency behavior.
 ---
 # Track sources
 
@@ -34,7 +34,7 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 - Range coordinates are sequential: each operation is interpreted in the state produced by preceding operations in the batch.
 - Reset and invalidation are singleton batch kinds and never mix with regular edits.
 - Invalid or duplicate identities in a unique source state are programmer errors.
-- Invalidation publishes at most once; destruction or cache eviction alone is not semantic invalidation.
+- Invalidation publishes at most once; destruction or cache teardown alone is not semantic invalidation.
 - A lease pins the exact source identity and every upstream dependency needed for its subscription lifetime.
 
 ## Source kinds
@@ -51,7 +51,7 @@ Its effective order is the stable subsequence of stored ids currently present in
 When an upstream track disappears and later re-enters, it returns to its stored position.
 
 Exact manual insert, remove, and move changes are translated without a reset fallback.
-A change affecting only currently hidden stored ids updates intent without publishing an effective source batch or advancing its visible revision.
+A change affecting only currently hidden stored ids updates stored order without publishing an effective source batch.
 Parent reorder alone does not reorder manual intent.
 
 ### Smart lists
@@ -74,6 +74,8 @@ Equal specs share one weak-cached source identity while leased.
 
 The cache owns all-tracks, list source shells, smart evaluators, and list dependency links.
 Cached list identities are stable shells that can rebind an updated implementation.
+The cache retains each acquired list identity until that list is deleted or the cache is destroyed.
+Ad-hoc filtered sources are weak-cached and may be rebuilt after their last lease is released.
 
 A list definition update may rebind its implementation while preserving the shell identity.
 Deleting a list invalidates its source and dependent chain terminally.

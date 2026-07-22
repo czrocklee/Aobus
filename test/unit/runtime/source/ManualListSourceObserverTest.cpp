@@ -61,7 +61,6 @@ namespace ao::rt::test
     CHECK(insertion.trackIds == std::vector{TrackId{2}});
     CHECK(sourceTrackIds(source) == expectedStored);
     CHECK(storedTrackIdsOf(source) == expectedStored);
-    CHECK(source.revision() == 2);
   }
 
   TEST_CASE("ManualListSource - quick filter remains a stable subsequence of stored manual order",
@@ -120,7 +119,6 @@ namespace ao::rt::test
 
     auto const expected = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
     CHECK(sourceTrackIds(source) == expected);
-    CHECK(source.revision() == 0);
     CHECK(batches.empty());
   }
 
@@ -149,7 +147,6 @@ namespace ao::rt::test
     CHECK(removal.trackIds == std::vector{TrackId{2}});
     CHECK(insertion.start == 2);
     CHECK(insertion.trackIds == std::vector{TrackId{4}});
-    CHECK(batches.front().revision == 1);
     CHECK(sourceTrackIds(source) == expected);
   }
 
@@ -176,10 +173,9 @@ namespace ao::rt::test
     auto const expectedUpdated = std::vector{TrackId{1}, TrackId{3}};
     CHECK(update.start == 0);
     CHECK(update.trackIds == expectedUpdated);
-    CHECK(source.revision() == 1);
   }
 
-  TEST_CASE("ManualListSource - hidden parent changes do not advance child revision",
+  TEST_CASE("ManualListSource - hidden parent changes do not publish a child batch",
             "[runtime][unit][source][manual-list]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{9}});
@@ -194,7 +190,6 @@ namespace ao::rt::test
     parentPtr->remove(TrackId{8});
 
     CHECK(sourceTrackIds(source) == std::vector{TrackId{1}});
-    CHECK(source.revision() == 0);
     CHECK(batches.empty());
   }
 
@@ -235,9 +230,7 @@ namespace ao::rt::test
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(batches.front().deltas.front()));
-    CHECK(batches.front().revision == 1);
     CHECK(source.state() == TrackSourceState::Invalidated);
-    CHECK(source.revision() == 1);
   }
 
   TEST_CASE("ManualListSource - invalidation propagates through a leased manual chain",

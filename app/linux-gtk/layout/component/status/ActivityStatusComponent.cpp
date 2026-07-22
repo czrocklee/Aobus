@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "StatusComponentRegistrations.h"
-#include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -18,8 +17,6 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <string_view>
-#include <utility>
 
 namespace ao::gtk::layout
 {
@@ -68,64 +65,21 @@ namespace ao::gtk::layout
       };
     }
 
-    std::string componentIdFromNode(LayoutNode const& node)
-    {
-      return node.id.empty() ? node.type : node.id;
-    }
-
     class ActivityStatusComponent final : public LayoutComponent
     {
     public:
       ActivityStatusComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _runtime{ctx.runtime}
-        , _parentWindow{ctx.parentWindow}
-        , _actionRegistry{ctx.actionRegistry}
-        , _componentId{componentIdFromNode(node)}
-        , _widget{ActivityStatusWidgetDependencies{
+        : _widget{ActivityStatusWidgetDependencies{
             .notifications = ctx.runtime.notifications(),
             .libraryChanges = &ctx.runtime.library().changes(),
             .options = optionsFromNode(node),
-            .resolveNotificationAction =
-              [this](std::string_view actionId, std::string_view actionLabel)
-            {
-              auto const optDesc = _actionRegistry.descriptor(actionId);
-
-              if (!optDesc)
-              {
-                return ActivityStatusWidgetActionRenderState{};
-              }
-
-              auto activationContext = ActionActivationContext{.runtime = _runtime,
-                                                               .parentWindow = _parentWindow,
-                                                               .anchorWidget = _widget.widget(),
-                                                               .componentId = _componentId};
-              auto const actionState = _actionRegistry.state(actionId, activationContext);
-              auto label = actionLabel.empty() ? optDesc->label : std::string{actionLabel};
-
-              return ActivityStatusWidgetActionRenderState{.visible = !label.empty(),
-                                                           .enabled = actionState.enabled,
-                                                           .label = std::move(label),
-                                                           .disabledReason = actionState.disabledReason};
-            },
-            .onNotificationAction =
-              [this](auto, auto actionId, Gtk::Widget& anchor)
-            {
-              auto activationContext = ActionActivationContext{.runtime = _runtime,
-                                                               .parentWindow = _parentWindow,
-                                                               .anchorWidget = anchor,
-                                                               .componentId = _componentId};
-              _actionRegistry.tryActivate(actionId, activationContext);
-            }}}
+          }}
       {
       }
 
       Gtk::Widget& widget() override { return _widget.widget(); }
 
     private:
-      rt::AppRuntime& _runtime;
-      Gtk::Window& _parentWindow;
-      ActionRegistry const& _actionRegistry;
-      std::string _componentId;
       ActivityStatusWidget _widget;
     };
 

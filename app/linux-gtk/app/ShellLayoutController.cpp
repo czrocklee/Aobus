@@ -34,7 +34,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -557,7 +556,7 @@ namespace ao::gtk
     _host.commit(_runtimeState, std::move(*pending));
   }
 
-  void ShellLayoutController::loadLayout(AppConfigStore& /*configStore*/)
+  void ShellLayoutController::loadLayout()
   {
     auto& runtime = _runtime.async();
     runtime.spawnWithLifetime(
@@ -673,7 +672,7 @@ namespace ao::gtk
 
     // Invalidate the old generation before replacing the shared component-state document.
     _runtimeState.componentStateGeneration = pending->componentStateGeneration();
-    _session.applyLoadedLayout(std::move(presetId), std::move(document));
+    _session.applyLayout(std::move(presetId), std::move(document));
     auto const snapshot = _session.snapshot();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(componentState);
@@ -868,7 +867,7 @@ namespace ao::gtk
 
     // Invalidate the retiring generation before replacing its shared state document.
     _runtimeState.componentStateGeneration = pending->componentStateGeneration();
-    _session.applyEditorSave(result.activePresetId, result.activeDocument);
+    _session.applyLayout(result.activePresetId, result.activeDocument);
     auto const snapshot = _session.snapshot();
     _runtimeState.activePresetId = snapshot.presetId;
     _runtimeState.componentState = std::move(nextComponentState);
@@ -926,7 +925,7 @@ namespace ao::gtk
       return;
     }
 
-    auto presetId = optPromotion->presetId;
+    auto presetId = optPromotion->componentState.preset;
     auto apply = [this, presetId, promotion = std::move(*optPromotion)](bool confirmed) mutable
     {
       if (!confirmed)
@@ -935,7 +934,7 @@ namespace ao::gtk
         return;
       }
 
-      applyPromotedPanelSizes(presetId, std::move(promotion.layout), std::move(promotion.componentState));
+      applyPromotedPanelSizes(std::move(promotion.layout), std::move(promotion.componentState));
     };
 
     if (_confirmPromotionFn)
@@ -948,10 +947,10 @@ namespace ao::gtk
     }
   }
 
-  void ShellLayoutController::applyPromotedPanelSizes(std::string const& presetId,
-                                                      uimodel::LayoutDocument promotedLayout,
+  void ShellLayoutController::applyPromotedPanelSizes(uimodel::LayoutDocument promotedLayout,
                                                       uimodel::LayoutComponentStateDocument promotedState)
   {
+    auto const& presetId = promotedState.preset;
     auto prepared = uimodel::prepareLayout(promotedLayout, layoutLimits());
 
     if (!prepared)
@@ -997,8 +996,7 @@ namespace ao::gtk
       }
     }
 
-    _session.applyPanelSizePromotion(uimodel::ShellLayoutPanelSizePromotion{
-      .presetId = presetId, .layout = std::move(promotedLayout), .componentState = promotedState});
+    _session.applyLayout(presetId, std::move(promotedLayout));
     auto const snapshot = _session.snapshot();
     _runtimeState.componentStateGeneration = pending->componentStateGeneration();
     _runtimeState.activePresetId = snapshot.presetId;
@@ -1012,10 +1010,10 @@ namespace ao::gtk
     _confirmPromotionFn = std::move(fn);
   }
 
-  uimodel::LayoutActionActivationResult ShellLayoutController::activateAction(std::string_view id)
+  void ShellLayoutController::activateAction(std::string_view id)
   {
     auto ctx = actionContext(id);
-    return _actionRegistry.tryActivate(id, ctx);
+    _actionRegistry.activate(id, ctx);
   }
 
   uimodel::LayoutActionAvailability ShellLayoutController::actionAvailability(std::string_view id)

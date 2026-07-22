@@ -173,7 +173,6 @@ namespace ao::rt::test
     auto const& reads = runtime.library();
 
     auto scope = reads.reader();
-    REQUIRE(scope.isValid());
 
     auto const optRow = scope.trackRow(seeded.trackId);
     REQUIRE(optRow);
@@ -236,9 +235,7 @@ namespace ao::rt::test
     CHECK_FALSE(scope.trackUriPath(TrackId{999999}).has_value());
 
     CHECK(scope.resolve(seeded.artistId) == "An Artist");
-    auto const dictionaryIds = std::array{seeded.artistId, seeded.albumId};
-    auto const resolved = scope.resolveAll(dictionaryIds);
-    CHECK(resolved == std::vector<std::string>{"An Artist", "The Album"});
+    CHECK(scope.resolve(seeded.albumId) == "The Album");
 
     auto const optResource = scope.loadResource(seeded.resourceId);
     REQUIRE(optResource);

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/uimodel/layout/action/LayoutActionBinding.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -35,10 +34,9 @@ namespace ao::uimodel::test
     {
       CHECK(catalog.registerActionDescriptor(LayoutActionDescriptor{
         .id = "test", .label = "A", .category = "X", .capabilities = LayoutActionCapability::RequiresAnchor}));
-      CHECK(
-        catalog.registerActionDescriptor(LayoutActionDescriptor{
-          .id = "test", .label = "B", .category = "Y", .capabilities = LayoutActionCapability::RequiresFocusedView}) ==
-        false);
+      CHECK(catalog.registerActionDescriptor(LayoutActionDescriptor{
+              .id = "test", .label = "B", .category = "Y", .capabilities = LayoutActionCapability::PresentsMenu}) ==
+            false);
 
       auto const optDesc = catalog.descriptor("test");
       REQUIRE(optDesc);
@@ -46,7 +44,7 @@ namespace ao::uimodel::test
       CHECK(optDesc->label == "A");
       CHECK(optDesc->category == "X");
       CHECK(optDesc->capabilities.has(LayoutActionCapability::RequiresAnchor));
-      CHECK(optDesc->capabilities.has(LayoutActionCapability::RequiresFocusedView) == false);
+      CHECK_FALSE(optDesc->capabilities.has(LayoutActionCapability::PresentsMenu));
 
       auto const all = catalog.descriptors();
       REQUIRE(all.size() == 1);
@@ -68,87 +66,6 @@ namespace ao::uimodel::test
       REQUIRE(all.size() == 2);
       CHECK(all[0].id == "first");
       CHECK(all[1].id == "second");
-    }
-  }
-
-  TEST_CASE("LayoutActionCatalog - canBind rejects actions missing required context", "[uimodel][unit][layout][action]")
-  {
-    auto catalog = LayoutActionCatalog{};
-
-    catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "needsAnchor",
-                                                            .label = "Needs Anchor",
-                                                            .category = "Test",
-                                                            .capabilities = LayoutActionCapability::RequiresAnchor});
-
-    catalog.registerActionDescriptor(
-      LayoutActionDescriptor{.id = "needsFocusedView",
-                             .label = "Needs Focus",
-                             .category = "Test",
-                             .capabilities = LayoutActionCapability::RequiresFocusedView});
-
-    catalog.registerActionDescriptor(LayoutActionDescriptor{
-      .id = "noRequirements", .label = "Simple", .category = "Test", .capabilities = LayoutActionCapability::None});
-
-    SECTION("returns false for unknown action id")
-    {
-      CHECK(catalog.canBind("unknown", {}) == false);
-    }
-
-    SECTION("allows actions with no requirements in any context")
-    {
-      CHECK(catalog.canBind("noRequirements", {}) == true);
-    }
-
-    SECTION("rejects anchor-requiring action without anchor")
-    {
-      auto ctx = LayoutActionBindingContext{};
-      ctx.hasAnchor = false;
-      CHECK(catalog.canBind("needsAnchor", ctx) == false);
-    }
-
-    SECTION("allows anchor-requiring action with anchor")
-    {
-      auto ctx = LayoutActionBindingContext{};
-      ctx.hasAnchor = true;
-      CHECK(catalog.canBind("needsAnchor", ctx) == true);
-    }
-
-    SECTION("rejects focused-view action without focused view")
-    {
-      auto ctx = LayoutActionBindingContext{};
-      ctx.hasFocusedView = false;
-      CHECK(catalog.canBind("needsFocusedView", ctx) == false);
-    }
-
-    SECTION("allows focused-view action with focused view")
-    {
-      auto ctx = LayoutActionBindingContext{};
-      ctx.hasFocusedView = true;
-      CHECK(catalog.canBind("needsFocusedView", ctx) == true);
-    }
-  }
-
-  TEST_CASE("LayoutActionCatalog - tryBind returns a bound action when context is valid",
-            "[uimodel][unit][layout][action]")
-  {
-    auto catalog = LayoutActionCatalog{};
-
-    catalog.registerActionDescriptor(LayoutActionDescriptor{
-      .id = "valid", .label = "Valid", .category = "Test", .capabilities = LayoutActionCapability::None});
-
-    SECTION("rejects empty id")
-    {
-      CHECK(catalog.tryBind("", {}) == false);
-    }
-
-    SECTION("rejects none id")
-    {
-      CHECK(catalog.tryBind("none", {}) == false);
-    }
-
-    SECTION("returns true for valid bindable action")
-    {
-      CHECK(catalog.tryBind("valid", {}) == true);
     }
   }
 } // namespace ao::uimodel::test

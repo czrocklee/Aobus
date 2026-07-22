@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <functional>
 #include <utility>
 #include <vector>
@@ -57,30 +58,29 @@ namespace ao::uimodel::test
     auto sessionPtr = std::move(*sessionResult);
 
     CHECK(std::ranges::equal(sessionPtr->targetIds(), targetIds));
-    CHECK(sessionPtr->state() == TrackAuthoringSessionState::Editing);
+    CHECK(sessionPtr->isCurrent());
 
-    auto states = std::vector<TrackAuthoringSessionState>{};
-    auto subscription = sessionPtr->onStateChanged([&states](auto state) { states.push_back(state); });
+    std::size_t invalidatedCount = 0;
+    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] { ++invalidatedCount; });
     auto patch = rt::MetadataPatch{.optTitle = "Applied"};
     auto submitResult = sessionPtr->submitMetadata(patch);
 
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::Applied);
-    CHECK(sessionPtr->state() == TrackAuthoringSessionState::Applied);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::Applied);
+    CHECK(sessionPtr->isCurrent());
+    CHECK(invalidatedCount == 0);
     CHECK(fixture.title(targetIds[0]) == "Applied");
     CHECK(fixture.title(targetIds[1]) == "Applied");
 
     REQUIRE(fixture.library().writer().createList(
       rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
-    CHECK(sessionPtr->state() == TrackAuthoringSessionState::Stale);
-    CHECK(states == std::vector{TrackAuthoringSessionState::Submitting,
-                                TrackAuthoringSessionState::Applied,
-                                TrackAuthoringSessionState::Stale});
+    CHECK_FALSE(sessionPtr->isCurrent());
+    CHECK(invalidatedCount == 1);
 
     patch.optTitle = "Must not apply";
     submitResult = sessionPtr->submitMetadata(patch);
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::Stale);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::Stale);
     CHECK(fixture.title(targetIds[0]) == "Applied");
   }
 
@@ -93,12 +93,12 @@ namespace ao::uimodel::test
 
     auto submitResult = sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Old Title"});
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::NoOp);
-    CHECK(sessionPtr->state() == TrackAuthoringSessionState::Editing);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::NoOp);
+    CHECK(sessionPtr->isCurrent());
 
     submitResult = sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Now changed"});
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::Applied);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::Applied);
     CHECK(fixture.title(fixture.trackIds().front()) == "Now changed");
   }
 
@@ -116,14 +116,14 @@ namespace ao::uimodel::test
     auto submitResult = firstPtr->submitTags(std::array{std::string{"First"}}, {});
 
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::Applied);
-    CHECK(firstPtr->state() == TrackAuthoringSessionState::Applied);
-    CHECK(secondPtr->state() == TrackAuthoringSessionState::Stale);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::Applied);
+    CHECK(firstPtr->isCurrent());
+    CHECK_FALSE(secondPtr->isCurrent());
     CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"First"});
 
     submitResult = secondPtr->submitTags(std::array{std::string{"Second"}}, {});
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::Stale);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::Stale);
     CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"First"});
   }
 
@@ -138,12 +138,12 @@ namespace ao::uimodel::test
       [](rt::LibraryChangeSet const&) { throwException<Exception>("publication observer failed"); });
 
     CHECK_THROWS_AS(sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Committed"}), Exception);
-    CHECK(sessionPtr->state() == TrackAuthoringSessionState::Stale);
+    CHECK_FALSE(sessionPtr->isCurrent());
     CHECK(fixture.title(fixture.trackIds().front()) == "Committed");
     CHECK(fixture.library().authoringAvailability().state == rt::LibraryAuthoringState::Faulted);
   }
 
-  TEST_CASE("TrackAuthoringSession - swallowed publication failure retains applied outcome but stales the session",
+  TEST_CASE("TrackAuthoringSession - swallowed publication failure retains applied result but stales the session",
             "[uimodel][unit][library-authoring]")
   {
     auto temp = ao::test::TempDir{};
@@ -163,8 +163,8 @@ namespace ao::uimodel::test
     auto submitResult = sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Committed"});
 
     REQUIRE(submitResult);
-    CHECK(submitResult->status == TrackAuthoringSubmitStatus::Applied);
-    CHECK(sessionPtr->state() == TrackAuthoringSessionState::Stale);
+    CHECK(submitResult->status == rt::TrackAuthoringStatus::Applied);
+    CHECK_FALSE(sessionPtr->isCurrent());
     CHECK(library.authoringAvailability().state == rt::LibraryAuthoringState::Faulted);
   }
 } // namespace ao::uimodel::test

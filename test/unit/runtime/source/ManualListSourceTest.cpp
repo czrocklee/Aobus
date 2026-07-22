@@ -47,7 +47,7 @@ namespace ao::rt::test
     CHECK_FALSE(source.contains(TrackId{2}));
   }
 
-  TEST_CASE("ManualListSource - hidden-only reload updates stored intent without a revision",
+  TEST_CASE("ManualListSource - hidden-only reload updates stored order without a source batch",
             "[runtime][unit][source][manual-list]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}});
@@ -64,7 +64,6 @@ namespace ao::rt::test
     auto const expectedEffective = std::vector{TrackId{1}};
     CHECK(storedTrackIdsOf(source) == expectedStored);
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(source.revision() == 0);
     CHECK(batches.empty());
   }
 
@@ -90,8 +89,6 @@ namespace ao::rt::test
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
     CHECK(std::holds_alternative<SourceReset>(batches.front().deltas.front()));
-    CHECK(batches.front().revision == 1);
-    CHECK(source.revision() == 1);
     CHECK(sourceTrackIds(source) == expectedEffective);
     REQUIRE(observedSnapshots.size() == 1);
     CHECK(observedSnapshots.front() == expectedEffective);
@@ -117,14 +114,12 @@ namespace ao::rt::test
     CHECK(insertion.trackIds == std::vector{TrackId{3}});
     CHECK(storedTrackIdsOf(source) == expectedStored);
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(source.revision() == 1);
 
     source.applyManualTracksInsert(ManualTracksInsert{.storedIndex = 2, .trackIds = {TrackId{4}}});
 
     auto const expectedStoredAfterHiddenInsert = std::vector{TrackId{1}, TrackId{2}, TrackId{4}, TrackId{3}};
     CHECK(storedTrackIdsOf(source) == expectedStoredAfterHiddenInsert);
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(source.revision() == 1);
     CHECK(batches.size() == 1);
 
     source.applyManualTracksRemove(
@@ -133,7 +128,6 @@ namespace ao::rt::test
     auto const expectedStoredAfterHiddenRemove = std::vector{TrackId{1}, TrackId{3}};
     CHECK(storedTrackIdsOf(source) == expectedStoredAfterHiddenRemove);
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(source.revision() == 1);
     CHECK(batches.size() == 1);
   }
 
@@ -189,7 +183,6 @@ namespace ao::rt::test
     CHECK(insertion.trackIds == std::vector{TrackId{3}});
     CHECK(storedTrackIdsOf(source) == expectedStored);
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(source.revision() == 1);
   }
 
   TEST_CASE("ManualListSource - preserves exact move identity for an ambiguous final permutation",
@@ -222,11 +215,8 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(moveFirstToEnd) == expected);
     CHECK(storedTrackIdsOf(moveTailToFront) == expected);
     CHECK(sourceTrackIds(moveTailToFront) == expected);
-    CHECK(moveFirstToEnd.revision() == 1);
-    CHECK(moveTailToFront.revision() == 1);
 
     REQUIRE(firstMoveBatches.size() == 1);
-    CHECK(firstMoveBatches.front().revision == 1);
     REQUIRE(firstMoveBatches.front().deltas.size() == 2);
     REQUIRE(std::holds_alternative<SourceRemoveRange>(firstMoveBatches.front().deltas[0]));
     REQUIRE(std::holds_alternative<SourceInsertRange>(firstMoveBatches.front().deltas[1]));
@@ -238,7 +228,6 @@ namespace ao::rt::test
     CHECK(firstInsertion.trackIds == std::vector{TrackId{1}});
 
     REQUIRE(tailMoveBatches.size() == 1);
-    CHECK(tailMoveBatches.front().revision == 1);
     REQUIRE(tailMoveBatches.front().deltas.size() == 2);
     REQUIRE(std::holds_alternative<SourceRemoveRange>(tailMoveBatches.front().deltas[0]));
     REQUIRE(std::holds_alternative<SourceInsertRange>(tailMoveBatches.front().deltas[1]));
@@ -270,7 +259,6 @@ namespace ao::rt::test
     auto const expectedEffective = std::vector{TrackId{1}};
     CHECK(storedTrackIdsOf(source) == expectedStored);
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(source.revision() == 0);
     CHECK(batches.empty());
   }
 } // namespace ao::rt::test

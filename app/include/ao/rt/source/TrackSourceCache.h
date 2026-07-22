@@ -56,17 +56,11 @@ namespace ao::rt
     TrackSourceCache(TrackSourceCache&&) = delete;
     TrackSourceCache& operator=(TrackSourceCache&&) = delete;
 
-    TrackSource& allTracks();
     Result<TrackSourceLease> acquire(ListId listId);
     Result<TrackSourceLease> acquire(SourceSpec const& spec);
     std::optional<Error> sourceError(TrackSourceLease const& lease) const;
 
     void reloadAllTracks();
-    void refreshList(ListId listId);
-    void evict(ListId listId);
-    void eraseList(ListId listId);
-
-    SmartListEvaluator& smartEvaluator();
 
   private:
     Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
@@ -75,10 +69,12 @@ namespace ao::rt
     void handleIncrementalLibraryChange(LibraryChangeSet const& event);
     std::vector<ListId> applyManualContentChanges(LibraryChangeSet const& event);
     void notifyMetadataUpdates(LibraryChangeSet const& event);
+    void refreshList(ListId listId);
+    void eraseList(ListId listId);
     void applyListMutation(std::move_only_function<void()> mutation);
     void drainPendingRefreshes();
     void refreshListNow(ListId listId);
-    std::shared_ptr<CachedListSource> liveSource(ListId listId);
+    std::shared_ptr<CachedListSource> findSource(ListId listId);
     std::unique_ptr<TrackSource> buildImplementation(library::ListView const& view,
                                                      TrackSourceLease const& parentLease);
     void linkGraph(ListId listId, ListId parentId);
@@ -95,8 +91,7 @@ namespace ao::rt
     bool _refreshDrainActive = false;
     std::vector<ListId> _pendingRefreshListIds;
 
-    boost::unordered_flat_map<ListId, std::shared_ptr<CachedListSource>, std::hash<ListId>> _hotSources;
-    boost::unordered_flat_map<ListId, std::weak_ptr<CachedListSource>, std::hash<ListId>> _liveSources;
+    boost::unordered_flat_map<ListId, std::shared_ptr<CachedListSource>, std::hash<ListId>> _sources;
     boost::unordered_flat_map<ListId, ListId, std::hash<ListId>> _parentIds;
     boost::unordered_flat_map<ListId, std::vector<ListId>, std::hash<ListId>> _childIds;
     boost::unordered_flat_map<SourceSpec, std::weak_ptr<TrackSource>, SourceSpecHash> _adHocSources;

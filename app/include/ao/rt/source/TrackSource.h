@@ -42,7 +42,6 @@ namespace ao::rt
     virtual TrackId trackIdAt(std::size_t index) const = 0;
     virtual std::optional<std::size_t> indexOf(TrackId id) const = 0;
 
-    std::uint64_t revision() const noexcept { return _revision; }
     TrackSourceState state() const noexcept { return _state; }
 
     async::Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler);
@@ -64,7 +63,6 @@ namespace ao::rt
     bool publishDeltaBatch(TrackSourceDeltaBatch batch, std::size_t previousSize);
 
   private:
-    std::uint64_t _revision = 0;
     TrackSourceState _state = TrackSourceState::Live;
     async::Signal<TrackSourceDeltaBatch const&> _changedSignal;
 

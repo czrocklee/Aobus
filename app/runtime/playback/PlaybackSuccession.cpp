@@ -296,7 +296,6 @@ namespace ao::rt
         .sourceState = sourceStateFor(sessionPtr.get()),
         .shuffle = shuffleMode,
         .repeat = repeatMode,
-        .semanticRevision = state.semanticRevision,
       };
 
       if (sessionPtr)
@@ -311,11 +310,6 @@ namespace ao::rt
       }
 
       auto const semanticChanged = !sameSemanticTuple(state, next);
-
-      if (semanticChanged)
-      {
-        next.semanticRevision = state.semanticRevision + 1;
-      }
 
       state = std::move(next);
 
@@ -340,11 +334,11 @@ namespace ao::rt
       };
     }
 
-    void notifyPersistenceIntentChanged()
+    void notifyRestorableStateChanged()
     {
       if (!isClosing())
       {
-        publishSequenceObserverSafely("persistence-intent-changed", [this] { persistenceIntentChangedSignal.emit(); });
+        publishSequenceObserverSafely("restorable-state-changed", [this] { restorableStateChangedSignal.emit(); });
       }
     }
 
@@ -391,7 +385,6 @@ namespace ao::rt
           .severity = NotificationSeverity::Info,
           .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackSequenceFinished},
           .lifetime = NotificationLifetime::transient(),
-          .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
         });
       }
     }
@@ -417,14 +410,13 @@ namespace ao::rt
         optSkipReportKey.emplace(std::format("playback-sequence.skipped-tracks.{}", nextSkipReportKey));
       }
 
-      std::ignore = notifications.createOrUpdate(
+      notifications.createOrUpdate(
         *optSkipReportKey,
         NotificationRequest{
           .severity = NotificationSeverity::Warning,
           .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackTracksSkipped,
                                         .count = skippedFailureCount},
-          .lifetime = NotificationLifetime::sessionHistory(),
-          .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
+          .lifetime = NotificationLifetime::history(),
         });
     }
 
@@ -434,8 +426,7 @@ namespace ao::rt
         .severity = NotificationSeverity::Error,
         .message = NotificationReport{.templateId = NotificationReportTemplate::PlaybackStoppedAfterFailures,
                                       .count = kMaxConsecutivePlaybackFailures},
-        .lifetime = NotificationLifetime::untilDismissed(),
-        .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
+        .lifetime = NotificationLifetime::pinned(),
       });
     }
 
@@ -447,24 +438,23 @@ namespace ao::rt
                                       .trackId = failure.trackId,
                                       .subject = failure.title,
                                       .detail = failure.error.message},
-        .lifetime = NotificationLifetime::untilDismissed(),
-        .content = NotificationContentState{.topic = NotificationTopic::PlaybackSequence},
+        .lifetime = NotificationLifetime::pinned(),
       });
     }
 
     void startObservingCurrentSession()
     {
       sessionPtr->startObserving(
-        [this](PlaybackCursor::MutationEffect const effect, bool const sourceInvalidated)
+        [this](PlaybackCursor::Changes const changes, bool const sourceInvalidated)
         {
           if (!isClosing())
           {
-            handleProjectionBatch(effect, sourceInvalidated);
+            handleProjectionBatch(changes, sourceInvalidated);
           }
         });
     }
 
-    void handleProjectionBatch(PlaybackCursor::MutationEffect const effect, bool const sourceInvalidated)
+    void handleProjectionBatch(PlaybackCursor::Changes const changes, bool const sourceInvalidated)
     {
       if (!sessionPtr)
       {
@@ -482,14 +472,14 @@ namespace ao::rt
         reprepareNext(false);
       }
 
-      if (effect.semanticChanged || sourceInvalidated)
+      if (changes.semanticChanged || sourceInvalidated)
       {
         synchronizeState();
       }
 
-      if (effect.persistenceIntentChanged)
+      if (changes.restorableStateChanged)
       {
-        notifyPersistenceIntentChanged();
+        notifyRestorableStateChanged();
       }
     }
 
@@ -527,9 +517,7 @@ namespace ao::rt
 
         if (prepared)
         {
-          registry.activate(prepared->token,
-                            prepared->issuedGeneration,
-                            session.anchorFor(successor, session.cursor().anchor().anchorIndex()));
+          registry.activate(*prepared, session.anchorFor(successor, session.cursor().anchor().anchorIndex()));
           return true;
         }
 
@@ -562,11 +550,11 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "No active playback sequence");
       }
 
-      auto receipt = transport.playSuccessionTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
+      auto barrier = transport.playSuccessionTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
 
-      if (!receipt)
+      if (!barrier)
       {
-        return std::unexpected{receipt.error()};
+        return std::unexpected{barrier.error()};
       }
 
       if (isClosing())
@@ -574,7 +562,7 @@ namespace ao::rt
         return {};
       }
 
-      sessionPtr->clearPreparedCoveredBy(receipt->cancellationBarrier);
+      sessionPtr->clearPreparedCoveredBy(*barrier);
       auto adopted = sessionPtr->adoptCurrent(trackId, std::nullopt, origin);
 
       if (!adopted)
@@ -586,7 +574,7 @@ namespace ao::rt
       restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
       synchronizeState();
-      notifyPersistenceIntentChanged();
+      notifyRestorableStateChanged();
       return {};
     }
 
@@ -831,7 +819,7 @@ namespace ao::rt
       restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
       synchronizeState();
-      notifyPersistenceIntentChanged();
+      notifyRestorableStateChanged();
     }
 
     PlaybackFailureDisposition handlePlaybackFailure(PlaybackFailure const& failure)
@@ -998,7 +986,7 @@ namespace ao::rt
       changedSignal.disconnectAll();
       shuffleModeChangedSignal.disconnectAll();
       repeatModeChangedSignal.disconnectAll();
-      persistenceIntentChangedSignal.disconnectAll();
+      restorableStateChangedSignal.disconnectAll();
     }
 
     async::Executor& executor;
@@ -1015,7 +1003,7 @@ namespace ao::rt
     async::Signal<PlaybackSuccessionState const&> changedSignal;
     async::Signal<PlaybackSuccession::ShuffleModeChanged const&> shuffleModeChangedSignal;
     async::Signal<PlaybackSuccession::RepeatModeChanged const&> repeatModeChangedSignal;
-    async::Signal<> persistenceIntentChangedSignal;
+    async::Signal<> restorableStateChangedSignal;
     PlaybackRestartDeadline restartDeadline;
     async::Subscription idleSubscription;
     async::Subscription nowPlayingSubscription;
@@ -1089,11 +1077,11 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Playback sequence closed during preparation");
     }
 
-    auto receipt = impl->transport.commitStagedPlayback(std::move(*preparedStart), false);
+    auto barrier = impl->transport.commitStagedPlayback(std::move(*preparedStart), false);
 
-    if (!receipt)
+    if (!barrier)
     {
-      return std::unexpected{receipt.error()};
+      return std::unexpected{barrier.error()};
     }
 
     if (impl->isClosing())
@@ -1103,7 +1091,7 @@ namespace ao::rt
 
     if (impl->sessionPtr)
     {
-      impl->sessionPtr->clearPreparedCoveredBy(receipt->cancellationBarrier);
+      impl->sessionPtr->clearPreparedCoveredBy(*barrier);
       impl->captureRestorableSnapshot();
     }
 
@@ -1115,7 +1103,7 @@ namespace ao::rt
     impl->restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
     impl->reprepareNext(false);
     impl->synchronizeState();
-    impl->notifyPersistenceIntentChanged();
+    impl->notifyRestorableStateChanged();
     return {};
   }
 
@@ -1211,7 +1199,7 @@ namespace ao::rt
     publishSequenceObserverSafely(
       "shuffle-mode-changed", [&] { impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode}); });
 
-    impl->notifyPersistenceIntentChanged();
+    impl->notifyRestorableStateChanged();
   }
 
   void PlaybackSuccession::setRepeatMode(RepeatMode const mode)
@@ -1237,7 +1225,7 @@ namespace ao::rt
     publishSequenceObserverSafely(
       "repeat-mode-changed", [&] { impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode}); });
 
-    impl->notifyPersistenceIntentChanged();
+    impl->notifyRestorableStateChanged();
   }
 
   PlaybackSuccessionState const& PlaybackSuccession::state() const
@@ -1366,10 +1354,10 @@ namespace ao::rt
     impl->optLastRestorableSnapshot.reset();
   }
 
-  async::Subscription PlaybackSuccession::onPersistenceIntentChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSuccession::onRestorableStateChanged(std::move_only_function<void()> handler)
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
-    return impl->persistenceIntentChangedSignal.connect(std::move(handler));
+    return impl->restorableStateChangedSignal.connect(std::move(handler));
   }
 } // namespace ao::rt

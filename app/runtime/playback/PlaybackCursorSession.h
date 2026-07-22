@@ -38,7 +38,7 @@ namespace ao::rt
   {
   public:
     using ProjectionBatchHandler =
-      std::move_only_function<void(PlaybackCursor::MutationEffect effect, bool sourceInvalidated)>;
+      std::move_only_function<void(PlaybackCursor::Changes changes, bool sourceInvalidated)>;
 
     static Result<std::unique_ptr<PlaybackCursorSession>> create(PlaybackLaunchSpec launchSpec,
                                                                  TrackId startTrackId,
@@ -85,14 +85,14 @@ namespace ao::rt
     std::optional<std::size_t> indexOf(TrackId trackId) const override;
 
     ProjectionAnchor anchorFor(TrackId trackId, std::size_t fallbackGap) const;
-    PlaybackCursor::MutationEffect refreshSemanticState();
-    PlaybackCursor::MutationEffect setPreviousRestartAvailable(bool available);
-    PlaybackCursor::MutationEffect setShuffleMode(ShuffleMode mode);
-    PlaybackCursor::MutationEffect setRepeatMode(RepeatMode mode);
+    PlaybackCursor::Changes refreshSemanticState();
+    PlaybackCursor::Changes setPreviousRestartAvailable(bool available);
+    PlaybackCursor::Changes setShuffleMode(ShuffleMode mode);
+    PlaybackCursor::Changes setRepeatMode(RepeatMode mode);
     PlaybackCursor::CommandResolution resolvePrevious();
-    Result<PlaybackCursor::MutationEffect> adoptCurrent(TrackId trackId,
-                                                        std::optional<PreparedNextToken> optPreparedNextToken,
-                                                        ShuffleHistory::TransitionOrigin origin);
+    Result<PlaybackCursor::Changes> adoptCurrent(TrackId trackId,
+                                                 std::optional<PreparedNextToken> optPreparedNextToken,
+                                                 ShuffleHistory::TransitionOrigin origin);
 
     void invalidatePreparedNext(std::optional<PreparedNextToken> optDisarmedToken);
     void clearPreparedCoveredBy(PreparedCancellationBarrier barrier) noexcept;

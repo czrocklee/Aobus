@@ -10,16 +10,13 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <tuple>
 #include <utility>
 
 namespace ao::rt
 {
-  void PreparedNextRegistry::activate(PreparedNextToken const token,
-                                      std::uint64_t const issuedGeneration,
-                                      ProjectionAnchor anchor)
+  void PreparedNextRegistry::activate(PreparedNextToken const token, ProjectionAnchor anchor)
   {
     if (token.value == 0)
     {
@@ -32,7 +29,7 @@ namespace ao::rt
     }
 
     retireActive();
-    _optActive.emplace(Commitment{.token = token, .anchor = std::move(anchor), .issuedGeneration = issuedGeneration});
+    _optActive.emplace(Commitment{.token = token, .anchor = std::move(anchor)});
   }
 
   bool PreparedNextRegistry::acknowledgeDisarm(PreparedNextToken const token)
@@ -108,12 +105,12 @@ namespace ao::rt
 
   void PreparedNextRegistry::clearCoveredByBarrier(PreparedCancellationBarrier const barrier) noexcept
   {
-    if (_optActive && barrier.covers(_optActive->issuedGeneration))
+    if (_optActive && barrier.covers(_optActive->token))
     {
       _optActive.reset();
     }
 
-    std::erase_if(_retired, [&](Commitment const& commitment) { return barrier.covers(commitment.issuedGeneration); });
+    std::erase_if(_retired, [&](Commitment const& commitment) { return barrier.covers(commitment.token); });
   }
 
   void PreparedNextRegistry::clear() noexcept

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 
 #include <cstdint>
 #include <functional>
@@ -17,18 +18,6 @@ namespace ao::rt
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
-
-  enum class TransportAction : std::uint8_t
-  {
-    Play,
-    Pause,
-    Stop,
-    PlayPause,
-    Next,
-    Previous,
-    Shuffle,
-    Repeat,
-  };
 
   enum class TransportIcon : std::uint8_t
   {
@@ -58,7 +47,7 @@ namespace ao::uimodel
   public:
     TransportViewModel(rt::PlaybackService& playback,
                        PlaybackCommandSurface& commands,
-                       TransportAction action,
+                       PlaybackCommand command,
                        bool showLabel,
                        std::function<void(TransportViewState const&)> onRender);
 
@@ -75,7 +64,7 @@ namespace ao::uimodel
   private:
     rt::PlaybackService& _playback;
     PlaybackCommandSurface& _commands;
-    TransportAction _action;
+    PlaybackCommand _command;
     bool _showLabel;
     std::function<void(TransportViewState const&)> _onRender;
 

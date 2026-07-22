@@ -369,14 +369,12 @@ namespace ao::tui::test
         uimodel::ActivityCompactState{
           .kind = uimodel::ActivityStatusKind::Error,
           .text = "Scan failed",
-          .persistent = true,
           .dismissible = true,
           .hasDetails = true,
         },
       .detail = uimodel::ActivityDetailState{
         .items = {uimodel::ActivityDetailItem{.id = rt::NotificationId{9},
                                               .severity = rt::NotificationSeverity::Error,
-                                              .title = "Scan failed",
                                               .message = "Permission denied",
                                               .dismissible = true}},
       }};

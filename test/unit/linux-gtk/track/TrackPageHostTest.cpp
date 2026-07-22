@@ -93,12 +93,13 @@ namespace ao::gtk::test
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);
 
-      auto const receipt = runtime.jumpToAlbum(trackId);
+      auto const result = runtime.jumpToAlbum(trackId);
 
-      REQUIRE(receipt);
+      REQUIRE(result);
       drainGtkEvents();
-      REQUIRE(host.find(receipt->activeViewId) != nullptr);
-      CHECK(runtime.views().trackListState(receipt->activeViewId).selection == std::vector<TrackId>{trackId});
+      auto const activeViewId = runtime.workspace().snapshot().activeViewId;
+      REQUIRE(host.find(activeViewId) != nullptr);
+      CHECK(runtime.views().trackListState(activeViewId).selection == std::vector<TrackId>{trackId});
     }
   }
 } // namespace ao::gtk::test

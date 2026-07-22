@@ -24,10 +24,10 @@ TEST_CASE("functionName returns result under condition", "[layer][unit][componen
 Examples:
 
 ```cpp
-TEST_CASE("NotificationService - dismissing missing id does not publish event",
+TEST_CASE("NotificationService - unchanged keyed report does not publish an update",
           "[runtime][unit][notification]")
 
-TEST_CASE("ActivityStatusFeedProjection - detail-only notification does not replace compact state",
+TEST_CASE("ActivityStatusFeedProjection - pinned info remains in detail after compact hides",
           "[uimodel][unit][activity-status]")
 
 TEST_CASE("TrackPresentationButton - selecting preset updates active list presentation",
@@ -196,7 +196,7 @@ Use `CHECK` for independent observations after the action:
 ```cpp
 CHECK(entry.id == id);
 CHECK(entry.message == "Importing library");
-CHECK(entry.lifetime == NotificationLifetime::untilDismissed());
+CHECK(entry.lifetime == NotificationLifetime::pinned());
 ```
 
 ## Expected values

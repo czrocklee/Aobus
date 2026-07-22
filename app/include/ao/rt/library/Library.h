@@ -5,6 +5,7 @@
 
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 
 #include <functional>
@@ -49,6 +50,10 @@ namespace ao::rt
     LibraryChanges const& changes() const noexcept;
     LibraryWriter& writer() noexcept;
     LibraryTaskService& taskService() noexcept;
+
+    Result<ListId> createList(LibraryListDraft const& draft);
+    Result<UpdateListReply> updateList(LibraryListDraft const& draft);
+    Result<DeleteListReply> deleteList(ListId listId);
 
     LibraryAuthoringAvailability authoringAvailability() const;
     async::Subscription onAuthoringAvailabilityChanged(

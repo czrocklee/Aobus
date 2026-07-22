@@ -84,11 +84,9 @@ add_library(ao_app_uimodel STATIC
     uimodel/field/TrackFieldEditCodec.cpp
     uimodel/field/TrackFieldEditPolicy.cpp
     uimodel/field/TrackFieldFormatter.cpp
-    uimodel/field/TrackInlineEdit.cpp
-    uimodel/library/detail/TrackCustomMetadataWorkflow.cpp
+    uimodel/library/detail/TrackCustomMetadata.cpp
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
-    uimodel/library/list/ListEditWorkflow.cpp
     uimodel/library/list/ListTreeProjection.cpp
     uimodel/library/list/SmartListDraft.cpp
     uimodel/library/list/SmartListEditorViewState.cpp
@@ -107,7 +105,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/presentation/ListPresentationPreferenceStore.cpp
     uimodel/library/presentation/TrackPresentationRecommender.cpp
     uimodel/library/presentation/TrackPresentationPickerViewModel.cpp
-    uimodel/library/property/TagEditWorkflow.cpp
+    uimodel/library/property/TagEdit.cpp
     uimodel/library/property/TrackAuthoringSession.cpp
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp

@@ -44,7 +44,7 @@ Use the [reference template](../template/reference.md).
 
 ## Playback
 
-- [Playback application boundary](playback/application-boundary.md) enumerates `PlaybackService::snapshot()`, its event and command roles, and the revisioned payloads introduced by RFC 0005.
+- [Playback application boundary](playback/application-boundary.md) enumerates the `PlaybackService` snapshot, event, and command surface.
 - [Audio quality surface](playback/quality-surface.md) enumerates quality levels, findings, fields, labels, verdict categories, and style tokens.
 - [Decoder errors](playback/decoder-error.md) enumerate factory routing, operation code families, end-of-stream, and private translation behavior.
 - [Playback session state](playback/session-state.md) enumerates the exact version 3 restorable listening-intent payload and compatibility gate.

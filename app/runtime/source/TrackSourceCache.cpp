@@ -87,9 +87,9 @@ namespace ao::rt
   {
     reloadAllTracks();
     auto liveListIds = std::vector<ListId>{};
-    liveListIds.reserve(_liveSources.size());
+    liveListIds.reserve(_sources.size());
 
-    for (auto const& [listId, sourcePtr] : _liveSources)
+    for (auto const& [listId, sourcePtr] : _sources)
     {
       std::ignore = sourcePtr;
       liveListIds.push_back(listId);
@@ -143,7 +143,7 @@ namespace ao::rt
         detailedListIds.push_back(contentChange.listId);
       }
 
-      auto sourcePtr = liveSource(contentChange.listId);
+      auto sourcePtr = findSource(contentChange.listId);
 
       if (sourcePtr == nullptr)
       {
@@ -192,11 +192,6 @@ namespace ao::rt
     }
 
     _allTracksPtr->notifyUpdated(metadataTrackIds);
-  }
-
-  TrackSource& TrackSourceCache::allTracks()
-  {
-    return *_allTracksPtr;
   }
 
   Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId)
@@ -269,7 +264,7 @@ namespace ao::rt
 
   void TrackSourceCache::refreshListNow(ListId const listId)
   {
-    auto sourcePtr = liveSource(listId);
+    auto sourcePtr = findSource(listId);
 
     if (sourcePtr == nullptr)
     {
@@ -399,14 +394,6 @@ namespace ao::rt
     }
   }
 
-  void TrackSourceCache::evict(ListId const listId)
-  {
-    if (listId != kAllTracksListId)
-    {
-      _hotSources.erase(listId);
-    }
-  }
-
   void TrackSourceCache::eraseList(ListId const listId)
   {
     if (listId == kInvalidListId || listId == kAllTracksListId)
@@ -419,20 +406,14 @@ namespace ao::rt
 
     for (auto const id : listIds)
     {
-      if (auto sourcePtr = liveSource(id); sourcePtr != nullptr)
+      if (auto sourcePtr = findSource(id); sourcePtr != nullptr)
       {
         sourcePtr->semanticInvalidate();
       }
 
-      _hotSources.erase(id);
-      _liveSources.erase(id);
+      _sources.erase(id);
       unlinkGraph(id);
     }
-  }
-
-  SmartListEvaluator& TrackSourceCache::smartEvaluator()
-  {
-    return _smartEvaluator;
   }
 
   Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId, std::vector<ListId> ancestry)
@@ -452,15 +433,9 @@ namespace ao::rt
       return makeError(Error::Code::InvalidInput, "List source parent graph contains a cycle");
     }
 
-    if (auto const it = _hotSources.find(listId); it != _hotSources.end())
+    if (auto const it = _sources.find(listId); it != _sources.end())
     {
       return TrackSourceLease{it->second};
-    }
-
-    if (auto sourcePtr = liveSource(listId); sourcePtr != nullptr)
-    {
-      _hotSources.insert_or_assign(listId, sourcePtr);
-      return TrackSourceLease{std::move(sourcePtr)};
     }
 
     auto const transaction = _library.readTransaction();
@@ -485,33 +460,18 @@ namespace ao::rt
     auto implementationPtr = buildImplementation(*optView, *parentResult);
     auto sourcePtr =
       std::make_shared<CachedListSource>(listId, std::move(definition), *parentResult, std::move(implementationPtr));
-    _hotSources.insert_or_assign(listId, sourcePtr);
-    _liveSources.insert_or_assign(listId, sourcePtr);
+    _sources.insert_or_assign(listId, sourcePtr);
     linkGraph(listId, parentId);
     return TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(sourcePtr))};
   }
 
-  std::shared_ptr<CachedListSource> TrackSourceCache::liveSource(ListId const listId)
+  std::shared_ptr<CachedListSource> TrackSourceCache::findSource(ListId const listId)
   {
-    if (auto const hot = _hotSources.find(listId); hot != _hotSources.end())
+    if (auto const source = _sources.find(listId); source != _sources.end())
     {
-      return hot->second;
+      return source->second;
     }
 
-    auto const live = _liveSources.find(listId);
-
-    if (live == _liveSources.end())
-    {
-      return {};
-    }
-
-    if (auto sourcePtr = live->second.lock(); sourcePtr != nullptr)
-    {
-      return sourcePtr;
-    }
-
-    _liveSources.erase(live);
-    unlinkGraph(listId);
     return {};
   }
 

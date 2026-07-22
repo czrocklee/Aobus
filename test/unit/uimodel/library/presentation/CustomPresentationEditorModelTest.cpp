@@ -26,7 +26,7 @@ namespace ao::uimodel::test
     SECTION("populates initial state and options")
     {
       CHECK(model.label() == "Album View");
-      CHECK(model.groupKey() == rt::TrackGroupKey::Album);
+      CHECK(model.collectState("test").spec.groupBy == rt::TrackGroupKey::Album);
       REQUIRE(model.groupKeyOptionIndex());
       CHECK(model.groupOptions()[*model.groupKeyOptionIndex()].label == "Album");
 
@@ -49,17 +49,6 @@ namespace ao::uimodel::test
       CHECK(state.label == "Artist View");
       CHECK(state.spec.id == "custom-id-1");
       CHECK(state.spec.groupBy == rt::TrackGroupKey::AlbumArtist);
-    }
-
-    SECTION("supports direct group key updates")
-    {
-      model.setGroupKey(rt::TrackGroupKey::Work);
-      CHECK(model.groupKey() == rt::TrackGroupKey::Work);
-      REQUIRE(model.groupKeyOptionIndex());
-      CHECK(model.groupOptions()[*model.groupKeyOptionIndex()].label == "Work");
-
-      model.setGroupKey(static_cast<rt::TrackGroupKey>(250));
-      CHECK_FALSE(model.groupKeyOptionIndex());
     }
 
     SECTION("manages sort term rows")
@@ -114,7 +103,7 @@ namespace ao::uimodel::test
     SECTION("rejects out-of-range row operations")
     {
       auto const originalLabel = model.label();
-      auto const originalGroupKey = model.groupKey();
+      auto const originalGroupKey = model.collectState("test").spec.groupBy;
       auto const originalSortTermsSpan = model.sortTerms();
       auto const originalVisibleFieldsSpan = model.visibleFields();
       auto const originalSortTerms =
@@ -136,7 +125,7 @@ namespace ao::uimodel::test
       CHECK_FALSE(model.removeVisibleField(model.visibleFields().size()));
 
       CHECK(model.label() == originalLabel);
-      CHECK(model.groupKey() == originalGroupKey);
+      CHECK(model.collectState("test").spec.groupBy == originalGroupKey);
       CHECK(std::vector<rt::TrackSortTerm>{model.sortTerms().begin(), model.sortTerms().end()} == originalSortTerms);
       CHECK(std::vector<rt::TrackField>{model.visibleFields().begin(), model.visibleFields().end()} ==
             originalVisibleFields);

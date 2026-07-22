@@ -146,7 +146,7 @@ namespace ao::gtk
       return;
     }
 
-    applySeekDecision(_interaction.valueChanged(scaleElapsed()));
+    applySeekUpdate(_interaction.valueChanged(scaleElapsed()));
   }
 
   void SeekControlWidget::beginUserInteraction()
@@ -157,17 +157,17 @@ namespace ao::gtk
 
   void SeekControlWidget::endUserInteraction()
   {
-    applySeekDecision(_interaction.endPointerInteraction(scaleElapsed()));
+    applySeekUpdate(_interaction.endPointerInteraction(scaleElapsed()));
     updateTickState();
   }
 
-  void SeekControlWidget::applySeekDecision(uimodel::SeekSliderDecision const& decision)
+  void SeekControlWidget::applySeekUpdate(uimodel::SeekSliderUpdate const& update)
   {
-    switch (decision.action)
+    switch (update.action)
     {
       case uimodel::SeekSliderAction::Preview:
-        _interpolator.updateState(decision.elapsed, _interaction.duration(), false);
-        _seekViewModel.seekPreview(decision.elapsed);
+        _interpolator.updateState(update.elapsed, _interaction.duration(), false);
+        _seekViewModel.seekPreview(update.elapsed);
         break;
       case uimodel::SeekSliderAction::Commit: commitSeekFromScale(); break;
       case uimodel::SeekSliderAction::None: break;

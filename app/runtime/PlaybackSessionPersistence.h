@@ -3,11 +3,11 @@
 
 #pragma once
 
-#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
@@ -22,13 +22,6 @@ namespace ao::rt
   class PlaybackSuccession;
   class PlaybackTransport;
   class PlaybackService;
-
-  struct PlaybackSessionPersistenceRestoreResult final
-  {
-    bool restored = false;
-    TrackId trackId = kInvalidTrackId;
-    ListId sourceListId = kInvalidListId;
-  };
 
   /** Executor-affine owner of playback-session serialization, restore, and save policy. */
   class PlaybackSessionPersistence final : public std::enable_shared_from_this<PlaybackSessionPersistence>
@@ -49,7 +42,7 @@ namespace ao::rt
 
     Result<> checkpoint();
     Result<> shutdown();
-    Result<PlaybackSessionPersistenceRestoreResult> restore();
+    Result<PlaybackSessionRestoreResult> restore();
     Result<> discardRestorableSession();
 
   private:
@@ -79,7 +72,7 @@ namespace ao::rt
     PlaybackTransport& _playbackTransport;
     PlaybackService& _playback;
     async::Runtime& _asyncRuntime;
-    async::Subscription _successionIntentSubscription;
+    async::Subscription _successionStateSubscription;
     async::Subscription _snapshotSubscription;
     PlaybackSnapshot _lastSnapshot{};
     async::TaskHandle _scheduledTask;

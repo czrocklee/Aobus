@@ -12,6 +12,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
@@ -143,6 +144,7 @@ namespace ao::rt::test
 
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
+    auto allTracksLease = ao::test::requireValue(cache.acquire(kAllTracksListId));
     auto manualLease = ao::test::requireValue(cache.acquire(manualListId));
     auto smartLease = ao::test::requireValue(cache.acquire(smartListId));
     auto manualProjection = LiveTrackListProjection{
@@ -164,7 +166,7 @@ namespace ao::rt::test
       auto const manualExpected = storedManualTrackIds(libraryFixture.library(), manualListId);
       auto const smartExpected = matchingYears(libraryFixture.library(), allExpected, 2020);
 
-      CHECK(sourceTrackIds(cache.allTracks()) == allExpected);
+      CHECK(sourceTrackIds(allTracksLease.source()) == allExpected);
       CHECK(sourceTrackIds(manualLease.source()) == manualExpected);
       CHECK(sourceTrackIds(smartLease.source()) == smartExpected);
       CHECK(projectionTrackIds(manualProjection) == sortedByTitle(libraryFixture.library(), manualExpected));

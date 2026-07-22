@@ -384,7 +384,7 @@ namespace ao::gtk
     return _model.collectState(generateId());
   }
 
-  std::optional<TrackCustomViewDialog::TrackCustomPresentationDialogResult> TrackCustomViewDialog::runDialog()
+  std::optional<rt::CustomTrackPresentationPreset> TrackCustomViewDialog::runDialog()
   {
     show();
 
@@ -403,7 +403,7 @@ namespace ao::gtk
 
     if (response == Gtk::ResponseType::OK)
     {
-      return TrackCustomPresentationDialogResult{.preset = collectState(), .deleted = false};
+      return collectState();
     }
 
     return std::nullopt;

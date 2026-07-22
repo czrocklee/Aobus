@@ -129,12 +129,4 @@ namespace ao::uimodel
       APP_LOG_ERROR("Failed to add custom track presentation: {}", result.error().message);
     }
   }
-
-  void TrackPresentationCatalog::removeCustomPresentation(std::string_view id)
-  {
-    if (auto const result = _workspace.removeCustomPreset(id); !result)
-    {
-      APP_LOG_ERROR("Failed to remove custom track presentation: {}", result.error().message);
-    }
-  }
 } // namespace ao::uimodel

@@ -95,7 +95,6 @@ namespace ao::gtk::test
       }
 
       rt::ViewId viewId() const noexcept override { return rt::ViewId{1}; }
-      std::uint64_t revision() const noexcept override { return _revision; }
 
       rt::TrackPresentationSpec presentation() const override
       {
@@ -173,7 +172,6 @@ namespace ao::gtk::test
         if (_invalidated)
         {
           handler(rt::TrackListProjectionDeltaBatch{
-            .revision = _revision,
             .deltas = {rt::ProjectionSourceInvalidated{}},
           });
           return {};
@@ -181,7 +179,6 @@ namespace ao::gtk::test
 
         _handlerPtr = std::make_shared<Handler>(std::move(handler));
         (*_handlerPtr)(rt::TrackListProjectionDeltaBatch{
-          .revision = _revision,
           .deltas = {rt::ProjectionReset{}},
         });
 
@@ -197,12 +194,10 @@ namespace ao::gtk::test
 
         _invalidated = true;
         auto const handlerPtr = _handlerPtr;
-        ++_revision;
 
         if (handlerPtr != nullptr)
         {
           (*handlerPtr)(rt::TrackListProjectionDeltaBatch{
-            .revision = _revision,
             .deltas = {rt::ProjectionSourceInvalidated{}},
           });
         }
@@ -224,7 +219,6 @@ namespace ao::gtk::test
 
       std::vector<TrackId> _trackIds;
       std::shared_ptr<Handler> _handlerPtr;
-      std::uint64_t _revision = 0;
       bool _invalidated = false;
       mutable std::size_t _postInvalidationQueryCount = 0;
     };

@@ -38,8 +38,8 @@ The public boundary is under `app/include/ao/rt/`; implementations live under `a
 
 ### View service
 
-`ViewService` allocates runtime-local `ViewId` values and owns each view's content state, source lease, live projection, selection, presentation state, revision, and `Attached`, `Detached`, or `Destroyed` lifecycle.
-A destroyed view releases its projection and source leases and cannot become usable again under the same identity.
+`ViewService` allocates runtime-local `ViewId` values and owns each live view's content state, source lease, projection, selection, and presentation.
+Destroying a view erases that entry and releases its projection and source leases; later access to the same id is simply not found.
 
 `ViewId` is execution state rather than a durable library or navigation identity.
 History and sessions therefore retain semantic reconstruction inputs instead of persisting a live handle.
@@ -52,12 +52,12 @@ It owns semantic target resolution, browser-like navigation history, custom pres
 The service borrows `ViewService` to create, focus, replay, and destroy views and borrows the callback executor to enforce serialized ownership and queue observations.
 It observes committed list deletion through `LibraryChanges` and closes views whose base list no longer exists.
 
-Every public mutation is a validated semantic command returning a commit receipt.
+Every public mutation is a validated semantic command returning only the value its caller needs or an empty success.
 One accepted command installs one complete `WorkspaceSnapshot`, advances its revision once, and queues one self-contained `WorkspaceChanged` observation.
-No-change commands preserve revision and publish nothing.
+No-op commands preserve revision and publish nothing.
 
 Workspace has no playback dependency.
-`AppRuntime::jumpToAlbum()` is the narrow application-level composition that first obtains a workspace navigation receipt and then submits playback reveal.
+`AppRuntime::jumpToAlbum()` is the narrow application-level composition that first obtains the active `ViewId` from workspace navigation and then submits playback reveal.
 Transport and succession remain playback authorities.
 
 ### Presentation consumers
@@ -82,11 +82,11 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 ### Navigation
 
 ```text
-frontend or UIModel intent
+frontend or UIModel command
   -> WorkspaceService resolves a semantic target
   -> ViewService reuses or creates a view and projection
   -> WorkspaceService prepares snapshot and history candidates
-  -> one commit installs open views, focus, availability, presets, and revision
+  -> one commit installs open views, focus, presets, and revision
   -> one complete workspace observation reaches presentation consumers
 ```
 
@@ -144,7 +144,7 @@ RFC 0017 is not current behavior.
 ## Implementation map
 
 - [`ViewService`](../../app/include/ao/rt/ViewService.h), [`ViewState`](../../app/include/ao/rt/ViewState.h), and [`ViewService.cpp`](../../app/runtime/ViewService.cpp) own runtime views and their resources.
-- [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h), [`WorkspaceSnapshot`](../../app/include/ao/rt/WorkspaceSnapshot.h), and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own commands, the aggregate, receipts, and observations.
+- [`WorkspaceService`](../../app/include/ao/rt/WorkspaceService.h), [`WorkspaceSnapshot`](../../app/include/ao/rt/WorkspaceSnapshot.h), and [`WorkspaceService.cpp`](../../app/runtime/WorkspaceService.cpp) own commands, the aggregate, and observations.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) owns album-reveal composition above workspace and playback.
 - [`NavigationHistory`](../../app/include/ao/rt/NavigationHistory.h) owns bounded semantic navigation history.
 - [`WorkspaceSessionState`](../../app/include/ao/rt/WorkspaceSessionState.h) defines the current persistence candidate model.

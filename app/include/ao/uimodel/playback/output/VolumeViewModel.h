@@ -55,12 +55,11 @@ namespace ao::uimodel
     void handleScroll(double scrollDy);
     void adjustVolume(float delta);
 
-    static float resolveVolumeOffset(double widgetWidth, double offsetX, float currentDragStartVolume = 0.0F);
+  private:
     static float resolveVolumeScroll(float currentVolume, double scrollDy);
     static VolumeIndicatorKind resolveIndicatorKind(float volume, bool muted) noexcept;
     static std::string resolveTooltip(float volume, bool muted, bool isHardwareAssisted);
 
-  private:
     void applyVolumeTarget(float currentVolume, bool muted, float targetVolume);
     void refresh();
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);

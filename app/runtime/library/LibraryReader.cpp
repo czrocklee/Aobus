@@ -3,6 +3,7 @@
 
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/CoreIds.h>
+#include <ao/Exception.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestLayout.h>
@@ -15,7 +16,6 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/ListNode.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackRow.h>
@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <map>
 #include <memory>
 #include <optional>
@@ -110,13 +111,17 @@ namespace ao::rt
       {
         auto const manifestReader = library.manifest().reader(transaction);
 
-        auto const optManifest = storageValueOrNullopt(manifestReader.get(uri), "Failed to load file manifest entry");
-
-        if (optManifest)
+        if (auto manifestResult = manifestReader.get(uri); manifestResult)
         {
-          fileSize = optManifest->fileSize();
-          modifiedTime = optManifest->mtime();
-          status = optManifest->status();
+          fileSize = manifestResult->fileSize();
+          modifiedTime = manifestResult->mtime();
+          status = manifestResult->status();
+        }
+        else if (manifestResult.error().code != Error::Code::NotFound)
+        {
+          auto const& error = manifestResult.error();
+          auto const message = std::format("Failed to load file manifest entry: {}", error.message);
+          throwException<Exception>(std::string_view{message}, error.location);
         }
       }
 
@@ -191,18 +196,12 @@ namespace ao::rt
   LibraryReader& LibraryReader::operator=(LibraryReader&&) noexcept = default;
   LibraryReader::~LibraryReader() = default;
 
-  bool LibraryReader::isValid() const noexcept
-  {
-    return _implPtr != nullptr;
-  }
-
   std::optional<TrackRow> LibraryReader::trackRow(TrackId id) const
   {
     auto const& library = _implPtr->library;
     auto const& transaction = _implPtr->transaction;
     auto const reader = library.tracks().reader(transaction);
-    auto const optView =
-      storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track row");
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -215,16 +214,13 @@ namespace ao::rt
   bool LibraryReader::containsTrack(TrackId const id) const
   {
     auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
-    return storageValueOrNullopt(
-             reader.get(id, library::TrackStore::Reader::LoadMode::Hot), "Failed to check track existence")
-      .has_value();
+    return reader.get(id, library::TrackStore::Reader::LoadMode::Hot).has_value();
   }
 
   ResourceId LibraryReader::trackCoverArtId(TrackId id) const
   {
     auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
-    auto const optView = storageValueOrNullopt(
-      reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track cover art");
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -241,8 +237,7 @@ namespace ao::rt
   {
     auto const& library = _implPtr->library;
     auto const reader = library.tracks().reader(_implPtr->transaction);
-    auto const optView =
-      storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track URI");
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -257,8 +252,7 @@ namespace ao::rt
     auto const& library = _implPtr->library;
     auto const& transaction = _implPtr->transaction;
     auto const reader = library.tracks().reader(transaction);
-    auto const optView =
-      storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to load track field");
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
     if (!optView)
     {
@@ -272,20 +266,6 @@ namespace ao::rt
   std::string LibraryReader::resolve(DictionaryId id) const
   {
     return resolveDictionaryId(_implPtr->library.dictionary(), id);
-  }
-
-  std::vector<std::string> LibraryReader::resolveAll(std::span<DictionaryId const> ids) const
-  {
-    auto const& dictionary = _implPtr->library.dictionary();
-    auto result = std::vector<std::string>{};
-    result.reserve(ids.size());
-
-    for (auto const id : ids)
-    {
-      result.push_back(resolveDictionaryId(dictionary, id));
-    }
-
-    return result;
   }
 
   std::vector<ListNode> LibraryReader::lists() const
@@ -304,7 +284,7 @@ namespace ao::rt
   std::optional<ListNode> LibraryReader::listNode(ListId id) const
   {
     auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
-    auto const optView = storageValueOrNullopt(reader.get(id), "Failed to load list node");
+    auto const optView = reader.get(id);
 
     if (!optView)
     {
@@ -317,7 +297,7 @@ namespace ao::rt
   std::vector<TrackId> LibraryReader::listTrackIds(ListId id) const
   {
     auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
-    auto const optView = storageValueOrNullopt(reader.get(id), "Failed to load list tracks");
+    auto const optView = reader.get(id);
 
     if (!optView)
     {
@@ -337,7 +317,7 @@ namespace ao::rt
   std::optional<std::vector<std::byte>> LibraryReader::loadResource(ResourceId id) const
   {
     auto const reader = _implPtr->library.resources().reader(_implPtr->transaction);
-    auto const optBytes = storageValueOrNullopt(reader.get(id), "Failed to load resource");
+    auto const optBytes = reader.get(id);
 
     if (!optBytes)
     {
@@ -367,8 +347,7 @@ namespace ao::rt
 
     for (auto const trackId : trackIds)
     {
-      auto const optView = storageValueOrNullopt(
-        reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot), "Failed to load track tags");
+      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
       if (!optView)
       {

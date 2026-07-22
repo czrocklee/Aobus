@@ -7,6 +7,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
@@ -29,7 +30,7 @@ namespace ao::uimodel::test
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm =
-        TransportViewModel{playback, commands, TransportAction::Play, false, [&log](auto const& v) { log.render(v); }};
+        TransportViewModel{playback, commands, PlaybackCommand::Play, false, [&log](auto const& v) { log.render(v); }};
 
       REQUIRE(!log.empty());
       CHECK(log.last().enabled == false);
@@ -41,7 +42,7 @@ namespace ao::uimodel::test
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        playback, commands, TransportAction::PlayPause, true, [&log](auto const& v) { log.render(v); }};
+        playback, commands, PlaybackCommand::PlayPause, true, [&log](auto const& v) { log.render(v); }};
 
       CHECK(log.last().icon == TransportIcon::Play);
       CHECK(log.last().tooltip == "Play");
@@ -57,10 +58,13 @@ namespace ao::uimodel::test
 
       auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
       auto repeatLog = ao::test::RenderLog<TransportViewState>{};
-      auto shuffleVm = TransportViewModel{
-        playback, commands, TransportAction::Shuffle, true, [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
+      auto shuffleVm = TransportViewModel{playback,
+                                          commands,
+                                          PlaybackCommand::ToggleShuffle,
+                                          true,
+                                          [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
       auto repeatVm = TransportViewModel{
-        playback, commands, TransportAction::Repeat, true, [&repeatLog](auto const& v) { repeatLog.render(v); }};
+        playback, commands, PlaybackCommand::CycleRepeat, true, [&repeatLog](auto const& v) { repeatLog.render(v); }};
 
       CHECK(shuffleLog.last().engaged == true);
       CHECK(shuffleLog.last().label == "Shuffle");
@@ -83,9 +87,9 @@ namespace ao::uimodel::test
     auto nextLog = ao::test::RenderLog<TransportViewState>{};
     auto previousLog = ao::test::RenderLog<TransportViewState>{};
     auto nextVm = TransportViewModel{
-      playback, commands, TransportAction::Next, false, [&nextLog](auto const& v) { nextLog.render(v); }};
+      playback, commands, PlaybackCommand::Next, false, [&nextLog](auto const& v) { nextLog.render(v); }};
     auto previousVm = TransportViewModel{
-      playback, commands, TransportAction::Previous, false, [&previousLog](auto const& v) { previousLog.render(v); }};
+      playback, commands, PlaybackCommand::Previous, false, [&previousLog](auto const& v) { previousLog.render(v); }};
 
     CHECK(nextLog.last().enabled == true);
     CHECK(previousLog.last().enabled == false);
@@ -101,9 +105,12 @@ namespace ao::uimodel::test
     auto playLog = ao::test::RenderLog<TransportViewState>{};
     auto shuffleLog = ao::test::RenderLog<TransportViewState>{};
     auto playVm = TransportViewModel{
-      playback, commands, TransportAction::Play, false, [&playLog](auto const& v) { playLog.render(v); }};
-    auto shuffleVm = TransportViewModel{
-      playback, commands, TransportAction::Shuffle, false, [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
+      playback, commands, PlaybackCommand::Play, false, [&playLog](auto const& v) { playLog.render(v); }};
+    auto shuffleVm = TransportViewModel{playback,
+                                        commands,
+                                        PlaybackCommand::ToggleShuffle,
+                                        false,
+                                        [&shuffleLog](auto const& v) { shuffleLog.render(v); }};
 
     auto const playCount = playLog.states.size();
     auto const shuffleCount = shuffleLog.states.size();
@@ -131,7 +138,7 @@ namespace ao::uimodel::test
 
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        playback, commands, TransportAction::PlayPause, false, [&log](auto const& v) { log.render(v); }};
+        playback, commands, PlaybackCommand::PlayPause, false, [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
@@ -144,7 +151,7 @@ namespace ao::uimodel::test
       REQUIRE(fixture.playFromView(firstTrack));
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm =
-        TransportViewModel{playback, commands, TransportAction::Next, false, [&log](auto const& v) { log.render(v); }};
+        TransportViewModel{playback, commands, PlaybackCommand::Next, false, [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
@@ -155,7 +162,7 @@ namespace ao::uimodel::test
     {
       auto log = ao::test::RenderLog<TransportViewState>{};
       auto vm = TransportViewModel{
-        playback, commands, TransportAction::Shuffle, false, [&log](auto const& v) { log.render(v); }};
+        playback, commands, PlaybackCommand::ToggleShuffle, false, [&log](auto const& v) { log.render(v); }};
 
       vm.handleClick();
 
@@ -173,7 +180,7 @@ namespace ao::uimodel::test
 
     auto log = ao::test::RenderLog<TransportViewState>{};
     auto viewModelPtr = std::make_unique<TransportViewModel>(
-      playback, commands, TransportAction::Shuffle, false, [&log](auto const& view) { log.render(view); });
+      playback, commands, PlaybackCommand::ToggleShuffle, false, [&log](auto const& view) { log.render(view); });
 
     REQUIRE(!log.empty());
     log.clear();

@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <ao/CoreIds.h>
-
 #include <cstdint>
 
 namespace ao::rt
@@ -13,6 +11,7 @@ namespace ao::rt
   struct PreparedNextToken final
   {
     std::uint64_t value = 0;
+    std::uint64_t issuedGeneration = 0;
 
     bool operator==(PreparedNextToken const&) const = default;
   };
@@ -25,16 +24,7 @@ namespace ao::rt
   {
     std::uint64_t generation = 0;
 
-    bool covers(std::uint64_t issuedGeneration) const noexcept { return issuedGeneration < generation; }
+    bool covers(PreparedNextToken const token) const noexcept { return token.issuedGeneration < generation; }
     bool operator==(PreparedCancellationBarrier const&) const = default;
-  };
-
-  struct PlaybackStartReceipt final
-  {
-    TrackId trackId = kInvalidTrackId;
-    ListId sourceListId = kInvalidListId;
-    PreparedCancellationBarrier cancellationBarrier{};
-
-    bool operator==(PlaybackStartReceipt const&) const = default;
   };
 } // namespace ao::rt

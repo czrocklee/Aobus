@@ -51,7 +51,7 @@ Action-capable components can expose these standard props according to their pol
 ## Action descriptor surface
 
 An action descriptor contains `id`, `label`, `category`, and a capability mask.
-Capability values are `RequiresAnchor`, `RequiresActiveTrack`, `RequiresFocusedView`, and `PresentsMenu`.
+Capability values are `RequiresAnchor` and `PresentsMenu`.
 The live registry additionally owns one handler and optional availability provider per descriptor.
 
 | Action id | Category | Capabilities |
@@ -77,7 +77,7 @@ The live registry additionally owns one handler and optional availability provid
 - Component and action ids are exact and case-sensitive.
 - Registering a duplicate component descriptor or action descriptor does not create a second stable identity.
 - A component is a container when its descriptor permits at least one child or has no maximum.
-- A binding is accepted only when the action exists and its capabilities fit the component slot and available activation context.
+- A binding is accepted only when the action id exists and the component exposes that action property slot.
 - Gio export skips an anchored or menu-presenting action unless the context provider can supply a safe anchor.
 - Tooltip construction uses only components whose surface mask admits `Tooltip`; action interaction is not attached on a tooltip surface.
 - Component prop kinds, defaults, enum values, child counts, and allowed surfaces are validated against the live descriptor registered beside its factory.

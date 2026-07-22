@@ -10,13 +10,11 @@ depends-on: rfc.0009.pure-expression-binding
 
 ## Problem
 
-Interactive filters and Smart Lists share predicate-backed `TrackSource` machinery, but their application boundary is neither coherent nor responsive.
+Interactive filters and Smart Lists share predicate-backed `TrackSource` machinery, but their current application boundary is not responsive at library scale.
 
-`TrackFilterViewModel::updateFilter()` marks its local state pending, ignores the `ViewService::setFilter()` result, and relies on a later status event to clear pending.
-`ViewService::setFilter()` returns immediately without an event when the resolved expression is unchanged.
-Submitting identical text, changing only whitespace that resolves to the same expression, or receiving an early command failure can therefore leave Create Smart List disabled by a permanently pending UIModel state.
+The synchronous baseline now has no speculative pending state: `TrackFilterViewModel::updateFilter()` handles the `ViewService::setFilter()` result directly and reads the installed expression error from `TrackListViewState`.
+Identical expressions are ordinary no-ops, and command failure cannot strand UI state.
 
-Runtime `FilterStatusChanged::pending` does not model real work.
 The current filter command synchronously acquires an ad-hoc source, compiles its expression, reads the complete upstream source, evaluates every required track, constructs a projection, and only then returns.
 Large libraries can block the interactive callback thread during quick filtering, Smart List opening, and preview rebuild.
 
@@ -223,11 +221,12 @@ Implementation proceeds in phases:
 6. Route Smart List resets and expensive rebuilds through the same materialization boundary where scale evidence justifies it.
 
 During migration, no new frontend may construct a concrete smart evaluator or use `CoreRuntime::musicLibrary()` for preview.
+Phase 1 is current behavior; later phases remain proposal work.
 
 ## Validation
 
-- Repeating identical raw and resolved filters always produces a non-pending coherent snapshot.
-- A synchronous command failure cannot strand UIModel pending state.
+- Repeating identical raw and resolved filters preserves the current coherent view state.
+- A synchronous command failure remains visible without replacing committed runtime resources.
 - Terms containing either or both quote styles, backslashes, whitespace, and Unicode round-trip through AST serialization without text substitution.
 - Unterminated quick-search quotes produce an explicit authoring result rather than silently changing term boundaries.
 - Invalid expressions preserve the preceding committed projection and publish `Rejected` with the requested text.

@@ -12,7 +12,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -23,13 +22,6 @@ namespace ao::rt
     Info,
     Warning,
     Error,
-  };
-
-  enum class NotificationTopic : std::uint8_t
-  {
-    General,
-    PlaybackSequence,
-    PlaybackError,
   };
 
   enum class NotificationReportTemplate : std::uint8_t
@@ -57,62 +49,11 @@ namespace ao::rt
 
   using NotificationMessage = std::variant<std::string, NotificationReport>;
 
-  inline std::string_view resolvedNotificationText(NotificationMessage const& message) noexcept
-  {
-    if (auto const* text = std::get_if<std::string>(&message); text != nullptr)
-    {
-      return *text;
-    }
-
-    return {};
-  }
-
-  enum class NotificationProgressMode : std::uint8_t
-  {
-    Indeterminate,
-    Fraction,
-  };
-
-  struct NotificationProgressState final
-  {
-    NotificationProgressMode mode = NotificationProgressMode::Indeterminate;
-    double fraction = 0.0;
-    std::string label{};
-
-    bool operator==(NotificationProgressState const&) const = default;
-  };
-
-  struct NotificationAction final
-  {
-    std::string id{};
-    std::string label{};
-
-    bool operator==(NotificationAction const&) const = default;
-  };
-
-  struct NotificationContentState final
-  {
-    NotificationTopic topic = NotificationTopic::General;
-    std::string title{};
-    std::string iconName{};
-    std::vector<NotificationAction> actions{};
-    std::optional<NotificationProgressState> optProgress{};
-
-    bool operator==(NotificationContentState const&) const = default;
-  };
-
-  enum class NotificationActivityPresentation : std::uint8_t
-  {
-    Default,
-    DetailOnly,
-    Hidden,
-  };
-
   enum class NotificationLifetimeKind : std::uint8_t
   {
     Transient,
-    SessionHistory,
-    UntilDismissed,
+    History,
+    Pinned,
   };
 
   inline constexpr std::chrono::milliseconds kDefaultNotificationTransientDuration{5000};
@@ -126,14 +67,14 @@ namespace ao::rt
       return NotificationLifetime{NotificationLifetimeKind::Transient, duration};
     }
 
-    static constexpr NotificationLifetime sessionHistory() noexcept
+    static constexpr NotificationLifetime history() noexcept
     {
-      return NotificationLifetime{NotificationLifetimeKind::SessionHistory, {}};
+      return NotificationLifetime{NotificationLifetimeKind::History, {}};
     }
 
-    static constexpr NotificationLifetime untilDismissed() noexcept
+    static constexpr NotificationLifetime pinned() noexcept
     {
-      return NotificationLifetime{NotificationLifetimeKind::UntilDismissed, {}};
+      return NotificationLifetime{NotificationLifetimeKind::Pinned, {}};
     }
 
     constexpr NotificationLifetimeKind kind() const noexcept { return _kind; }
@@ -157,7 +98,7 @@ namespace ao::rt
     {
     }
 
-    NotificationLifetimeKind _kind = NotificationLifetimeKind::SessionHistory;
+    NotificationLifetimeKind _kind = NotificationLifetimeKind::History;
     std::chrono::milliseconds _duration{};
   };
 
@@ -166,8 +107,6 @@ namespace ao::rt
     NotificationSeverity severity = NotificationSeverity::Info;
     NotificationMessage message{};
     NotificationLifetime lifetime;
-    NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
-    NotificationContentState content{};
   };
 
   struct NotificationEntry final
@@ -176,10 +115,7 @@ namespace ao::rt
     std::optional<NotificationReportKey> optReportKey{};
     NotificationSeverity severity = NotificationSeverity::Info;
     NotificationMessage message{};
-    NotificationLifetime lifetime = NotificationLifetime::sessionHistory();
-    std::uint64_t lifetimeGeneration = 0;
-    NotificationActivityPresentation activityPresentation = NotificationActivityPresentation::Default;
-    NotificationContentState content{};
+    NotificationLifetime lifetime = NotificationLifetime::history();
 
     bool operator==(NotificationEntry const&) const = default;
   };
@@ -187,63 +123,33 @@ namespace ao::rt
   struct NotificationFeedState final
   {
     std::vector<NotificationEntry> entries{};
-    std::uint64_t revision = 0;
   };
 
   enum class NotificationFeedMutationKind : std::uint8_t
   {
     Posted,
     ReportUpdated,
-    MessageUpdated,
-    ContentUpdated,
-    ProgressUpdated,
-    ProgressCleared,
     Expired,
-    Dismissed,
-    Cleared,
-  };
-
-  enum class NotificationMutationOutcome : std::uint8_t
-  {
-    Applied,
-    Missing,
-    Unchanged,
-    Rejected,
-  };
-
-  struct NotificationMutationReply final
-  {
-    NotificationMutationOutcome outcome = NotificationMutationOutcome::Rejected;
-    NotificationId id = kInvalidNotificationId;
-
-    bool operator==(NotificationMutationReply const&) const = default;
   };
 
   struct NotificationFeedLimits final
   {
     static constexpr std::size_t kDefaultMaxEntries = 256;
-    static constexpr std::size_t kDefaultMaxSessionHistoryEntries = 128;
-    static constexpr std::size_t kDefaultMaxActionsPerEntry = 8;
+    static constexpr std::size_t kDefaultMaxHistoryEntries = 128;
     static constexpr std::size_t kDefaultMaxTextBytes = 4096;
     static constexpr std::size_t kDefaultMaxTotalTextBytes = std::size_t{256} * 1024;
 
     std::size_t maxEntries = kDefaultMaxEntries;
-    std::size_t maxSessionHistoryEntries = kDefaultMaxSessionHistoryEntries;
-    std::size_t maxActionsPerEntry = kDefaultMaxActionsPerEntry;
+    std::size_t maxHistoryEntries = kDefaultMaxHistoryEntries;
     std::size_t maxTextBytes = kDefaultMaxTextBytes;
     std::size_t maxTotalTextBytes = kDefaultMaxTotalTextBytes;
   };
 
   struct NotificationFeedUpdate final
   {
-    std::uint64_t revision = 0;
     NotificationFeedMutationKind mutationKind = NotificationFeedMutationKind::Posted;
-    std::vector<NotificationId> affectedIds{};
-    // Automatic history eviction is part of the same committed revision as
-    // the command that required it. Ids are listed from oldest to newest.
-    std::vector<NotificationId> evictedIds{};
-    // Service-produced updates always carry a non-null immutable snapshot
-    // whose revision equals the update revision.
+    NotificationId id{};
+    // Service-produced updates always carry a non-null immutable snapshot.
     std::shared_ptr<NotificationFeedState const> feedPtr{};
   };
 } // namespace ao::rt

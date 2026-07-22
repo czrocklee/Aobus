@@ -29,6 +29,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -409,7 +410,7 @@ namespace ao::gtk::layout::test
     auto feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
-    CHECK(rt::resolvedNotificationText(feed.entries.back().message) == "Tags added 1 for 1 track");
+    CHECK(std::get<std::string>(feed.entries.back().message) == "Tags added 1 for 1 track");
 
     REQUIRE(runtime.library().writer().createList(
       rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
@@ -420,7 +421,7 @@ namespace ao::gtk::layout::test
     feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
-    CHECK(rt::resolvedNotificationText(feed.entries.back().message) ==
+    CHECK(std::get<std::string>(feed.entries.back().message) ==
           "Library changed while the tag editor was open. Reload and try again.");
   }
 
@@ -489,14 +490,14 @@ namespace ao::gtk::layout::test
     deletePatch.customUpdates["Mood"] = std::nullopt;
     auto deleteResult = sessionPtr->submitMetadata(deletePatch);
     REQUIRE(deleteResult);
-    REQUIRE(deleteResult->status == TrackAuthoringSubmitStatus::Applied);
+    REQUIRE(deleteResult->status == rt::TrackAuthoringStatus::Applied);
     auto controller = TrackDetailUndoController{};
     controller.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
 
     REQUIRE(runtime.library().writer().createList(
       rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
     REQUIRE(controller.pendingCustomMetadataUndo());
-    CHECK(controller.pendingCustomMetadataUndo()->sessionPtr->state() == TrackAuthoringSessionState::Stale);
+    CHECK_FALSE(controller.pendingCustomMetadataUndo()->sessionPtr->isCurrent());
 
     controller.undo();
 
@@ -538,7 +539,7 @@ namespace ao::gtk::layout::test
                                         { trackId = library::test::addTrack(musicLibrary, {.title = "Before"}); }};
     auto& runtime = fixture.runtime();
     auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
-    REQUIRE(runtime.views().setSelection(navigation.activeViewId, {trackId}));
+    REQUIRE(runtime.views().setSelection(navigation, {trackId}));
     drainGtkEvents();
 
     auto const componentPtr =
@@ -573,7 +574,7 @@ namespace ao::gtk::layout::test
       { trackId = library::test::addTrack(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}}); }};
     auto& runtime = fixture.runtime();
     auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
-    REQUIRE(runtime.views().setSelection(navigation.activeViewId, {trackId}));
+    REQUIRE(runtime.views().setSelection(navigation, {trackId}));
     drainGtkEvents();
 
     auto const componentPtr =
@@ -601,7 +602,7 @@ namespace ao::gtk::layout::test
     auto const feed = runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
-    CHECK(rt::resolvedNotificationText(feed.entries.back().message) ==
+    CHECK(std::get<std::string>(feed.entries.back().message) ==
           "Library changed while this edit was open. Reload the value and try again.");
 
     drainGtkEvents();
@@ -622,7 +623,7 @@ namespace ao::gtk::layout::test
                                         }};
     auto& runtime = fixture.runtime();
 
-    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
     REQUIRE(runtime.views().setSelection(viewId, {firstTrackId}));
     drainGtkEvents();
 
@@ -664,7 +665,7 @@ namespace ao::gtk::layout::test
     auto& runtime = fixture.runtime();
     auto const& musicLibrary = runtime.musicLibrary();
 
-    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
 
@@ -712,7 +713,7 @@ namespace ao::gtk::layout::test
     auto& runtime = fixture.runtime();
     auto const& musicLibrary = runtime.musicLibrary();
 
-    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId)).activeViewId;
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
 

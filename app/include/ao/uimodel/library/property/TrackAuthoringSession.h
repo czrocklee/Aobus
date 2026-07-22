@@ -7,13 +7,12 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <span>
 #include <string>
-#include <vector>
 
 namespace ao::rt
 {
@@ -23,30 +22,11 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
-  enum class TrackAuthoringSessionState : std::uint8_t
-  {
-    Editing,
-    Submitting,
-    Applied,
-    Stale,
-    Rejected,
-  };
-
-  enum class TrackAuthoringSubmitStatus : std::uint8_t
-  {
-    Applied,
-    NoOp,
-    Stale,
-    Missing,
-    Unavailable,
-  };
-
   template<typename Reply>
   struct TrackAuthoringSubmitResult final
   {
-    TrackAuthoringSubmitStatus status = TrackAuthoringSubmitStatus::NoOp;
+    rt::TrackAuthoringStatus status = rt::TrackAuthoringStatus::NoOp;
     Reply reply{};
-    std::vector<TrackId> missingTargetIds{};
   };
 
   using TrackMetadataSubmitResult = TrackAuthoringSubmitResult<rt::UpdateTrackMetadataReply>;
@@ -72,9 +52,9 @@ namespace ao::uimodel
     TrackAuthoringSession(TrackAuthoringSession&&) = delete;
     TrackAuthoringSession& operator=(TrackAuthoringSession&&) = delete;
 
-    TrackAuthoringSessionState state() const noexcept;
+    bool isCurrent() const noexcept;
     std::span<TrackId const> targetIds() const noexcept;
-    async::Subscription onStateChanged(std::move_only_function<void(TrackAuthoringSessionState)> handler) const;
+    async::Subscription onInvalidated(std::move_only_function<void()> handler) const;
 
     Result<TrackMetadataSubmitResult> submitMetadata(rt::MetadataPatch const& patch);
     Result<TrackTagSubmitResult> submitTags(std::span<std::string const> tagsToAdd,

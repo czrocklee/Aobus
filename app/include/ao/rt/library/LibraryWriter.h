@@ -35,8 +35,8 @@ namespace ao::rt
   class [[nodiscard]] LibraryWriter final
   {
   public:
-    using MetadataAuthoringOutcome = TrackAuthoringOutcome<UpdateTrackMetadataReply>;
-    using TagAuthoringOutcome = TrackAuthoringOutcome<EditTrackTagsReply>;
+    using MetadataAuthoringResult = TrackAuthoringResult<UpdateTrackMetadataReply>;
+    using TagAuthoringResult = TrackAuthoringResult<EditTrackTagsReply>;
 
     using ListKind = LibraryListKind;
     using ListDraft = LibraryListDraft;
@@ -51,12 +51,12 @@ namespace ao::rt
     // counterparts, but return before commit and publish no change events.
     // Preview replies never include allocated ids; ids are only valid after a
     // successful committing call.
-    Result<MetadataAuthoringOutcome> updateMetadata(BoundTrackTargets const& targets, MetadataPatch const& patch);
+    Result<MetadataAuthoringResult> updateMetadata(BoundTrackTargets const& targets, MetadataPatch const& patch);
     Result<UpdateTrackMetadataReply> previewUpdateMetadata(std::span<TrackId const> trackIds,
                                                            MetadataPatch const& patch);
-    Result<TagAuthoringOutcome> editTags(BoundTrackTargets const& targets,
-                                         std::span<std::string const> tagsToAdd,
-                                         std::span<std::string const> tagsToRemove);
+    Result<TagAuthoringResult> editTags(BoundTrackTargets const& targets,
+                                        std::span<std::string const> tagsToAdd,
+                                        std::span<std::string const> tagsToRemove);
     Result<EditTrackTagsReply> previewEditTags(std::span<TrackId const> trackIds,
                                                std::span<std::string const> tagsToAdd,
                                                std::span<std::string const> tagsToRemove);

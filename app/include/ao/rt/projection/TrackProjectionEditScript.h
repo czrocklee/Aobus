@@ -6,12 +6,11 @@
 #include "TrackListProjection.h"
 #include <ao/rt/TrackEditScript.h>
 
-#include <cstdint>
 #include <vector>
 
 namespace ao::rt
 {
-  TrackListProjectionDeltaBatch eraseTrackIds(delta::RegularTrackEditScript const& script, std::uint64_t revision = 0);
+  TrackListProjectionDeltaBatch eraseTrackIds(delta::RegularTrackEditScript const& script);
   void appendProjectionInsertRanges(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices);
   void appendProjectionRemoveRanges(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices);
   void appendProjectionUpdateRanges(TrackListProjectionDeltaBatch& batch, std::vector<std::size_t>& rowIndices);

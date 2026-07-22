@@ -20,14 +20,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include <utility>
 
 namespace ao::gtk
 {
   namespace
   {
     constexpr std::size_t kMaxNotificationDetailRows = 4;
-    constexpr std::size_t kMaxNotificationDetailActions = 2;
 
     constexpr char const* activityStatusKindCssClass(uimodel::ActivityStatusKind const kind) noexcept
     {
@@ -67,17 +65,10 @@ namespace ao::gtk
 
       return "ao-activity-detail-info";
     }
-
-    std::string detailTitle(uimodel::ActivityDetailItem const& item)
-    {
-      return item.title.empty() ? item.message : item.title;
-    }
   } // namespace
 
   ActivityStatusWidget::ActivityStatusWidget(ActivityStatusWidgetDependencies dependencies)
     : _options{dependencies.options}
-    , _resolveNotificationAction{std::move(dependencies.resolveNotificationAction)}
-    , _onNotificationAction{std::move(dependencies.onNotificationAction)}
     , _box{Gtk::Orientation::HORIZONTAL}
     , _readoutBox{Gtk::Orientation::HORIZONTAL}
     , _detailBox{Gtk::Orientation::VERTICAL}
@@ -285,7 +276,7 @@ namespace ao::gtk
     header->set_spacing(layout::kSpacingSmall);
     header->set_valign(Gtk::Align::START);
 
-    auto* const title = Gtk::make_managed<Gtk::Label>(detailTitle(item));
+    auto* const title = Gtk::make_managed<Gtk::Label>(item.message);
     title->set_xalign(0.0F);
     title->set_wrap(true);
     title->set_hexpand(true);
@@ -305,69 +296,6 @@ namespace ao::gtk
 
     row->append(*header);
 
-    if (!item.title.empty() && !item.message.empty())
-    {
-      auto* const message = Gtk::make_managed<Gtk::Label>(item.message);
-      message->set_xalign(0.0F);
-      message->set_wrap(true);
-      message->add_css_class("ao-activity-detail-message");
-      row->append(*message);
-    }
-
-    if (item.optProgressMode)
-    {
-      auto* const progress = Gtk::make_managed<Gtk::ProgressBar>();
-
-      if (*item.optProgressMode == rt::NotificationProgressMode::Fraction)
-      {
-        progress->set_fraction(item.progressFraction);
-      }
-      else
-      {
-        progress->pulse();
-      }
-
-      progress->add_css_class("ao-activity-detail-progress");
-      row->append(*progress);
-    }
-
-    if (_resolveNotificationAction && _onNotificationAction && !item.actions.empty())
-    {
-      Gtk::Box* actions = nullptr;
-      auto const resolvedActions =
-        uimodel::resolveActivityActionStates(item.actions, _resolveNotificationAction, kMaxNotificationDetailActions);
-
-      for (auto const& action : resolvedActions)
-      {
-        auto* const actionButton = Gtk::make_managed<Gtk::Button>(action.label);
-        actionButton->add_css_class("flat");
-        actionButton->add_css_class("ao-activity-detail-action");
-        actionButton->set_sensitive(action.enabled);
-
-        if (!action.enabled && !action.disabledReason.empty())
-        {
-          actionButton->set_tooltip_text(action.disabledReason);
-        }
-
-        actionButton->signal_clicked().connect([this, id = item.id, actionId = action.id, actionButton]
-                                               { handleDetailActionClicked(id, actionId, *actionButton); });
-
-        if (actions == nullptr)
-        {
-          actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
-          actions->set_spacing(layout::kSpacingSmall);
-          actions->add_css_class("ao-activity-detail-actions");
-        }
-
-        actions->append(*actionButton);
-      }
-
-      if (actions != nullptr)
-      {
-        row->append(*actions);
-      }
-    }
-
     _detailBox.append(*row);
   }
 
@@ -376,7 +304,7 @@ namespace ao::gtk
     _autoDismissTimer = Glib::signal_timeout().connect(
       [this]
       {
-        _activityStatusViewModel.expireTransient();
+        _activityStatusViewModel.autoDismissCompact();
         return false;
       },
       static_cast<std::uint32_t>(timeout.count()));
@@ -404,16 +332,6 @@ namespace ao::gtk
 
   void ActivityStatusWidget::handleDetailDismissClicked(rt::NotificationId const id)
   {
-    _activityStatusViewModel.dismissDetailNotificationFromActivity(id);
-  }
-
-  void ActivityStatusWidget::handleDetailActionClicked(rt::NotificationId const id,
-                                                       std::string actionId,
-                                                       Gtk::Widget& anchor)
-  {
-    if (_onNotificationAction)
-    {
-      _onNotificationAction(id, actionId, anchor);
-    }
+    _activityStatusViewModel.hideDetailNotification(id);
   }
 } // namespace ao::gtk

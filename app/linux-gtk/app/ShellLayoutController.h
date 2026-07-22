@@ -18,12 +18,11 @@
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
-#include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
-#include <ao/uimodel/layout/component/LayoutStatePromoter.h>
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 
@@ -103,7 +102,7 @@ namespace ao::gtk
     void attachToWindow();
     void setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr);
     void refreshExportedActions();
-    void loadLayout(AppConfigStore& configStore);
+    void loadLayout();
     void openEditor(AppConfigStore& configStore);
     void resetRuntimeLayoutState();
     void saveCurrentPanelSizesAsLayoutDefaults();
@@ -112,7 +111,7 @@ namespace ao::gtk
     using ConfirmPromotionFn = std::function<void(std::string const& presetId, ConfirmPromotionAnswer answer)>;
     void setConfirmPromotionCallback(ConfirmPromotionFn fn);
 
-    uimodel::LayoutActionActivationResult activateAction(std::string_view id);
+    void activateAction(std::string_view id);
     uimodel::LayoutActionAvailability actionAvailability(std::string_view id);
 
     layout::editor::LayoutEditorDialog* editorDialog() const { return _editorDialogPtr.get(); }
@@ -127,8 +126,7 @@ namespace ao::gtk
                                   layout::ActionStateProvider const& hasActiveSequence);
     void registerTrackActions(RegisterActionFn const& registerAction);
 
-    void applyPromotedPanelSizes(std::string const& presetId,
-                                 uimodel::LayoutDocument promotedLayout,
+    void applyPromotedPanelSizes(uimodel::LayoutDocument promotedLayout,
                                  uimodel::LayoutComponentStateDocument promotedState);
 
     void applyLoadedLayout(std::string presetId,

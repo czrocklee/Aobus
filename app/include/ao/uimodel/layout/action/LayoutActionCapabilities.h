@@ -11,9 +11,7 @@ namespace ao::uimodel
   {
     None = 0,
     RequiresAnchor = 1U << 0U,
-    RequiresActiveTrack = 1U << 1U,
-    RequiresFocusedView = 1U << 2U,
-    PresentsMenu = 1U << 3U
+    PresentsMenu = 1U << 1U
   };
 
   struct LayoutActionCapabilities final

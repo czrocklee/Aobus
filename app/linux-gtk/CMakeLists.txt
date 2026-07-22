@@ -107,7 +107,6 @@ add_library(aobus-gtk-lib STATIC
     layout/runtime/DecoratedLayoutComponent.cpp
     layout/runtime/ActionRegistry.cpp
     layout/runtime/GioActionBridge.cpp
-    layout/runtime/ActionValidator.cpp
     layout/runtime/ActionBinder.cpp
     layout/runtime/LayoutHost.cpp
     layout/component/common/CommonLayoutProps.cpp

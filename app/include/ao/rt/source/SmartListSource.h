@@ -69,8 +69,7 @@ namespace ao::rt
       std::optional<Error> optError;
     };
 
-    void stageExpression(std::string expr);
-    void applyStagedState();
+    void applyPendingState();
     void replaceMembers(std::vector<TrackId> members);
 
     TrackSourceLease _sourceLease;
@@ -80,8 +79,6 @@ namespace ao::rt
     QueryState _current;
     query::PlanEvaluator _planEvaluator;
 
-    // Staging for lazy/batch updates
-    QueryState _staged;
-    bool _dirty = true;
+    std::optional<QueryState> _optPending;
   };
 } // namespace ao::rt

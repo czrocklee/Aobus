@@ -67,12 +67,12 @@ namespace ao::rt
       bool operator==(SemanticTuple const&) const = default;
     };
 
-    struct MutationEffect final
+    struct Changes final
     {
       bool semanticChanged = false;
-      bool persistenceIntentChanged = false;
+      bool restorableStateChanged = false;
 
-      bool operator==(MutationEffect const&) const = default;
+      bool operator==(Changes const&) const = default;
     };
 
     enum class CommandAction : std::uint8_t
@@ -105,34 +105,33 @@ namespace ao::rt
     ShuffleMode shuffleMode() const noexcept { return _shuffleMode; }
     bool previousRestartAvailable() const noexcept { return _previousRestartAvailable; }
     SemanticTuple const& semanticTuple() const noexcept { return _semanticTuple; }
-    std::uint64_t semanticRevision() const noexcept { return _semanticRevision; }
 
     /** Applies one complete regular projection batch and reconciles once. */
-    MutationEffect applyProjectionBatch(TrackListProjectionDeltaBatch const& batch, PlaybackCursorPolicy& policy);
+    Changes applyProjectionBatch(TrackListProjectionDeltaBatch const& batch, PlaybackCursorPolicy& policy);
 
-    /** Freezes sequence authority without changing serialized cursor intent. */
-    MutationEffect invalidateSource(PlaybackCursorPolicy& policy);
+    /** Freezes sequence authority without changing restorable cursor state. */
+    Changes invalidateSource(PlaybackCursorPolicy& policy);
 
-    MutationEffect setRepeatMode(RepeatMode mode, PlaybackCursorPolicy& policy);
-    MutationEffect setShuffleMode(ShuffleMode mode, PlaybackCursorPolicy& policy);
+    Changes setRepeatMode(RepeatMode mode, PlaybackCursorPolicy& policy);
+    Changes setShuffleMode(ShuffleMode mode, PlaybackCursorPolicy& policy);
 
     /**
-     * Updates the elapsed-time restart policy. Elapsed progress is not
-     * serialized cursor intent.
+     * Updates the elapsed-time restart policy. Elapsed progress is not part of
+     * restorable cursor state.
      */
-    MutationEffect setPreviousRestartAvailable(bool available, PlaybackCursorPolicy& policy);
+    Changes setPreviousRestartAvailable(bool available, PlaybackCursorPolicy& policy);
 
     /** Adopts an already-reconciled current anchor while the source is Live. */
-    MutationEffect adoptLiveCurrent(ProjectionAnchor currentAnchor, PlaybackCursorPolicy& policy);
+    Changes adoptLiveCurrent(ProjectionAnchor currentAnchor, PlaybackCursorPolicy& policy);
 
     /**
      * Updates only the present transport subject after source invalidation;
      * the non-authoritative anchor remains frozen and no policy is queried.
      */
-    MutationEffect adoptInvalidatedCurrent(TrackId currentTrackId);
+    Changes adoptInvalidatedCurrent(TrackId currentTrackId);
 
     /** Re-evaluates after transient policy state changes such as a failed shuffle candidate. */
-    MutationEffect refreshSemanticState(PlaybackCursorPolicy& policy);
+    Changes refreshSemanticState(PlaybackCursorPolicy& policy);
 
     /** Resolves both manual next and natural advance. */
     CommandResolution resolveNext() const noexcept;
@@ -147,7 +146,7 @@ namespace ao::rt
     std::optional<TrackId> resolveSequentialPrevious(PlaybackCursorPolicy& policy) const;
     TrackId requireTrackAt(PlaybackCursorPolicy& policy, std::size_t index) const;
     bool updateSemanticTuple(PlaybackCursorPolicy& policy);
-    MutationEffect effect(bool persistenceIntentChanged, PlaybackCursorPolicy& policy);
+    Changes changes(bool restorableStateChanged, PlaybackCursorPolicy& policy);
 
     PlaybackLaunchSpec const _launchSpec;
     SourceState _sourceState = SourceState::Live;
@@ -157,6 +156,5 @@ namespace ao::rt
     ShuffleMode _shuffleMode = ShuffleMode::Off;
     bool _previousRestartAvailable = false;
     SemanticTuple _semanticTuple{};
-    std::uint64_t _semanticRevision = 0;
   };
 } // namespace ao::rt

@@ -212,22 +212,22 @@ namespace ao::rt
     return ProjectionAnchor::gap(trackId, std::min(fallbackGap, projectionSize()), projectionSize());
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursorSession::refreshSemanticState()
+  PlaybackCursor::Changes PlaybackCursorSession::refreshSemanticState()
   {
     return _cursor.refreshSemanticState(*this);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursorSession::setPreviousRestartAvailable(bool const available)
+  PlaybackCursor::Changes PlaybackCursorSession::setPreviousRestartAvailable(bool const available)
   {
     return _cursor.setPreviousRestartAvailable(available, *this);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursorSession::setShuffleMode(ShuffleMode const mode)
+  PlaybackCursor::Changes PlaybackCursorSession::setShuffleMode(ShuffleMode const mode)
   {
     return _cursor.setShuffleMode(mode, *this);
   }
 
-  PlaybackCursor::MutationEffect PlaybackCursorSession::setRepeatMode(RepeatMode const mode)
+  PlaybackCursor::Changes PlaybackCursorSession::setRepeatMode(RepeatMode const mode)
   {
     return _cursor.setRepeatMode(mode, *this);
   }
@@ -248,7 +248,7 @@ namespace ao::rt
                                             excludedTrackIds);
   }
 
-  Result<PlaybackCursor::MutationEffect> PlaybackCursorSession::adoptCurrent(
+  Result<PlaybackCursor::Changes> PlaybackCursorSession::adoptCurrent(
     TrackId const trackId,
     std::optional<PreparedNextToken> const optPreparedNextToken,
     ShuffleHistory::TransitionOrigin const origin)
@@ -310,20 +310,20 @@ namespace ao::rt
   {
     auto const sourceInvalidated =
       batch.deltas.size() == 1 && std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front());
-    auto effect = PlaybackCursor::MutationEffect{};
+    auto changes = PlaybackCursor::Changes{};
 
     if (sourceInvalidated)
     {
-      effect = _cursor.invalidateSource(*this);
+      changes = _cursor.invalidateSource(*this);
     }
     else
     {
       _preparedNextRegistry.applyBatch(
         batch, projectionSize(), [this](TrackId const trackId) { return indexOf(trackId); });
-      effect = _cursor.applyProjectionBatch(batch, *this);
+      changes = _cursor.applyProjectionBatch(batch, *this);
     }
 
-    _projectionBatchHandler(effect, sourceInvalidated);
+    _projectionBatchHandler(changes, sourceInvalidated);
   }
 
   std::vector<TrackId> PlaybackCursorSession::projectionSnapshot() const

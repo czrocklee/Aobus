@@ -3,13 +3,13 @@ id: playback.session-persistence
 type: spec
 status: current
 domain: playback
-summary: Defines listening-intent capture, strict validation, candidate restoration, fallback, deferred transport, best-effort saving, discard, and shutdown.
+summary: Defines restorable playback-state capture, validation, restoration, best-effort saving, discard, and shutdown.
 ---
 # Playback session persistence
 
 ## Scope
 
-This specification defines current behavior for capturing, validating, restoring, normalizing, saving on natural application events, discarding, and shutting down the last restorable listening intent.
+This specification defines current behavior for capturing, validating, restoring, normalizing, saving on natural application events, discarding, and shutting down the last restorable playback state.
 The [playback session state reference](../../reference/playback/session-state.md) owns the exact version 3 payload.
 
 It does not persist a materialized queue, workspace selection, prepared-next token, Engine generation, or decoder/output state.
@@ -21,17 +21,16 @@ This contract belongs to the **application runtime** layer in the [system archit
 
 ## Terminology
 
-- **Restorable intent**: the serialized succession context, current subject, offset, modes, volume, and mute.
+- **Restorable state**: the serialized succession context, current subject, offset, modes, volume, and mute.
 - **Deferred transport**: a restored idle current subject consumed by a later Play or PlayPause.
-- **Normalization**: a valid restore whose live result differs from serialized intent because of fallback, replacement, or clamp.
-- **Persistence intent**: a discrete change to serialized session meaning, as opposed to naturally advancing playback time.
+- **Normalization**: a valid restore whose live result differs from stored state because of fallback, replacement, or clamp.
 
 ## Invariants
 
 - Restore validates the complete version 3 payload before resolving a source.
 - A candidate is prepared completely before it replaces live sequence or transport state.
 - Restore never autoplays, arms an output route, or creates a frontend view.
-- A failed restore leaves prior cursor, transport, modes, volume/mute, and application revisions unchanged.
+- A failed restore leaves prior public playback and restorable state unchanged.
 - Cursor and transport snapshots must name the same current track before save.
 - A save captures one coherent cursor and transport value synchronously on the callback executor.
 - A failed save leaves live playback state unchanged.
@@ -40,7 +39,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 
 ## State model
 
-The owner retains started/shutdown/restoring/discarded flags, the last observed `PlaybackService` snapshot, subscriptions to succession persistence intent and committed snapshots, one scheduled debounce task, and its schedule generation.
+The owner retains started/shutdown/restoring/discarded flags, the last observed `PlaybackService` snapshot, subscriptions to succession restorable-state changes and committed snapshots, one scheduled debounce task, and its schedule generation.
 
 The succession and transport services each retain a last-restorable snapshot after ordinary stop, exhaustion, or invalidation removes live state.
 A later successful launch replaces those snapshots.
@@ -87,7 +86,7 @@ There is no callback from transport into cursor installation and no intermediate
 A restore that installs a candidate always publishes a new position anchor, even
 when the subject is unchanged. The persistence owner consumes that exact
 snapshot as the restored observation baseline, so a repeated idle restore does
-not distort later intent detection and a changed offset is immediately
+not look like a later state change and a changed offset is immediately
 observable.
 
 The first later Play or PlayPause consumes the deferred token and starts the resolved subject at the offset.
@@ -99,23 +98,23 @@ While active, save captures live launch context, current and anchor.
 After ordinary clear/stop/exhaustion/invalidation, it uses immutable last-restorable cursor and transport snapshots.
 A mismatch rejects save.
 
-Launch spec, current/anchor, modes, volume/mute, and final seek are persistence intents.
+Launch spec, current/anchor, modes, volume/mute, and final seek are restorable state.
 Elapsed progress, projection churn with unchanged anchor, source invalidation alone, prepared-token changes, sticky shuffle candidate changes, and shuffle history are not save triggers.
 Elapsed position is sampled when save is requested.
 
-Each discrete persistence intent re-arms a one-second trailing debounce.
+Succession restorable-state changes and volume/mute changes request a one-second trailing debounce.
 Subject changes, final seeks, and transitions to paused or idle request an immediate checkpoint because they already provide a natural application boundary.
 
 ### Schedule, save, and checkpoint
 
-The first restore, explicit checkpoint, or discard establishes the observation baseline, connects intent subscriptions, and admits debounce work.
+The first restore, explicit checkpoint, or discard establishes the observation baseline, connects state subscriptions, and admits debounce work.
 Explicit lifecycle requests and shutdown also request checkpoints.
 
 Save writes the payload through an explicit `PlaybackSessionYamlSchema` and one result-bearing `ConfigStore::save` candidate commit.
 There is no playback-specific dirty bit, durable acknowledgement, or retry scheduler.
 An automatic save failure is logged and waits for the next natural trigger; an explicit checkpoint returns the typed failure to its caller.
 
-Ordinary elapsed progress is not a persistence intent and does not schedule a checkpoint.
+Ordinary elapsed progress does not schedule a checkpoint.
 An abrupt process termination during uninterrupted playback may therefore restore the position captured by the last successful checkpoint, with no bounded position-freshness guarantee.
 Frontends request restore/checkpoint and shut down the owner but do not implement save scheduling policy.
 
@@ -158,7 +157,7 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, deferred observer commands, event-driven timing, failed-save recovery on later intent, discard, store selection, and failure atomicity.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, deferred observer commands, event-driven timing, failed-save recovery on a later change, discard, store selection, and failure atomicity.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
 
 ## Related documents

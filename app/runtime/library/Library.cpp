@@ -9,6 +9,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -81,6 +82,21 @@ namespace ao::rt
   LibraryTaskService& Library::taskService() noexcept
   {
     return _implPtr->taskService;
+  }
+
+  Result<ListId> Library::createList(LibraryListDraft const& draft)
+  {
+    return _implPtr->writer.createList(draft);
+  }
+
+  Result<UpdateListReply> Library::updateList(LibraryListDraft const& draft)
+  {
+    return _implPtr->writer.updateList(draft);
+  }
+
+  Result<DeleteListReply> Library::deleteList(ListId const listId)
+  {
+    return _implPtr->writer.deleteList(listId);
   }
 
   LibraryAuthoringAvailability Library::authoringAvailability() const

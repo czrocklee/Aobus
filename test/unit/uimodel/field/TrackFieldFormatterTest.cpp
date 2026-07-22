@@ -64,14 +64,6 @@ namespace ao::uimodel::test
     CHECK(formatSampleRate(192000) == "192000 Hz");
   }
 
-  TEST_CASE("TrackFieldFormatter - sample rate compact formatting", "[uimodel][unit][field][formatter]")
-  {
-    CHECK(formatSampleRateCompact(0).empty());
-    CHECK(formatSampleRateCompact(44100) == "44.1 kHz");
-    CHECK(formatSampleRateCompact(48000) == "48 kHz");
-    CHECK(formatSampleRateCompact(192000) == "192 kHz");
-  }
-
   TEST_CASE("TrackFieldFormatter - bitrate formatting", "[uimodel][unit][field][formatter]")
   {
     CHECK(formatBitrate(0).empty());

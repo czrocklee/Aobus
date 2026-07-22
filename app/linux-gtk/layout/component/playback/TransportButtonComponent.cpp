@@ -75,12 +75,12 @@ namespace ao::gtk::layout
 
     std::unique_ptr<LayoutComponent> createShuffleButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Shuffle);
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::ToggleShuffle);
     }
 
     std::unique_ptr<LayoutComponent> createRepeatButton(LayoutBuildContext& ctx, LayoutNode const& node)
     {
-      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::Repeat);
+      return std::make_unique<TransportButtonComponent>(ctx, node, TransportButton::Action::CycleRepeat);
     }
 
     std::unique_ptr<LayoutComponent> createPlayButton(LayoutBuildContext& ctx, LayoutNode const& node)

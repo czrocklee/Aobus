@@ -134,8 +134,8 @@ namespace ao::rt
 
   Result<PlaybackSessionRestoreResult> AppRuntime::restorePlaybackSession()
   {
-    auto restored = Result<PlaybackSessionPersistenceRestoreResult>{};
-    auto const accepted = _implPtr->playbackPtr->runSynchronousIntent(
+    auto restored = Result<PlaybackSessionRestoreResult>{};
+    auto const accepted = _implPtr->playbackPtr->runSynchronousCommand(
       [this, &restored]
       {
         restored = _implPtr->playbackSessionPersistencePtr->restore();
@@ -145,7 +145,7 @@ namespace ao::rt
     if (!accepted)
     {
       return makeError(
-        Error::Code::InvalidState, "Cannot restore playback while another playback intent is active or pending");
+        Error::Code::InvalidState, "Cannot restore playback while another playback command is active or pending");
     }
 
     if (!restored)
@@ -153,11 +153,7 @@ namespace ao::rt
       return std::unexpected{restored.error()};
     }
 
-    return PlaybackSessionRestoreResult{
-      .restored = restored->restored,
-      .trackId = restored->trackId,
-      .sourceListId = restored->sourceListId,
-    };
+    return restored;
   }
 
   Result<> AppRuntime::discardRestorablePlaybackSession()
@@ -203,7 +199,7 @@ namespace ao::rt
     }
   }
 
-  Result<WorkspaceCommitReceipt> AppRuntime::jumpToAlbum(TrackId const trackId)
+  Result<> AppRuntime::jumpToAlbum(TrackId const trackId)
   {
     if (trackId == kInvalidTrackId)
     {
@@ -225,8 +221,8 @@ namespace ao::rt
       return std::unexpected{navigation.error()};
     }
 
-    _implPtr->playbackPtr->commands().revealTrack(trackId, navigation->activeViewId);
-    return *navigation;
+    _implPtr->playbackPtr->commands().revealTrack(trackId, *navigation);
+    return {};
   }
 
   void AppRuntime::addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr)

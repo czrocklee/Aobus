@@ -37,14 +37,14 @@ namespace ao::rt::test
     auto projectionChanged = TrackListProjectionChanged{};
     auto projectionSub = service.onProjectionChanged([&](auto const& ev) { projectionChanged = ev; });
 
-    REQUIRE(service.openListInView(result.viewId, listId));
-    auto const snap = service.trackListState(result.viewId);
-    auto const projectionPtr = service.trackListProjection(result.viewId);
+    REQUIRE(service.openListInView(result, listId));
+    auto const snap = service.trackListState(result);
+    auto const projectionPtr = service.trackListProjection(result);
 
     REQUIRE(projectionPtr != nullptr);
     CHECK(snap.listId == listId);
     CHECK(listChanged == listId);
-    CHECK(projectionChanged.viewId == result.viewId);
+    CHECK(projectionChanged.viewId == result);
     CHECK(projectionChanged.projectionPtr == projectionPtr);
     REQUIRE(projectionPtr->size() == 1);
     CHECK(projectionPtr->trackIdAt(0) == trackId);
@@ -60,23 +60,22 @@ namespace ao::rt::test
     auto env = ViewServiceFixture{};
     auto service = env.makeService();
     auto const created = env.requireView(service);
-    auto const before = service.trackListState(created.viewId);
-    auto const projectionPtr = service.trackListProjection(created.viewId);
+    auto const before = service.trackListState(created);
+    auto const projectionPtr = service.trackListProjection(created);
     std::int32_t listChangedCount = 0;
     std::int32_t projectionChangedCount = 0;
     auto const listSub = service.onListChanged([&](auto const&) { ++listChangedCount; });
     auto const projectionSub = service.onProjectionChanged([&](auto const&) { ++projectionChangedCount; });
 
-    auto const result = service.openListInView(created.viewId, ListId{999999});
+    auto const result = service.openListInView(created, ListId{999999});
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
-    auto const after = service.trackListState(created.viewId);
+    auto const after = service.trackListState(created);
     CHECK(after.listId == before.listId);
     CHECK(after.filterExpression == before.filterExpression);
     CHECK(after.presentation == before.presentation);
-    CHECK(after.revision == before.revision);
-    CHECK(service.trackListProjection(created.viewId) == projectionPtr);
+    CHECK(service.trackListProjection(created) == projectionPtr);
     CHECK(listChangedCount == 0);
     CHECK(projectionChangedCount == 0);
     CHECK(service.listViews().size() == 1);
@@ -92,18 +91,6 @@ namespace ao::rt::test
     auto service = env.makeService();
     auto const result = env.requireView(service);
 
-    auto filterStr = std::string{};
-    auto filterSub = service.onFilterChanged([&](auto const& ev) { filterStr = ev.filterExpression; });
-
-    auto statusStr = std::string{};
-    bool statusHasError = true;
-    auto statusSub = service.onFilterStatusChanged(
-      [&](auto const& ev)
-      {
-        statusStr = ev.expression;
-        statusHasError = ev.optError.has_value();
-      });
-
     auto projView = kInvalidViewId;
     std::int32_t projectionChangedCount = 0;
     auto projSub = service.onProjectionChanged(
@@ -115,41 +102,53 @@ namespace ao::rt::test
 
     SECTION("setting a new filter expression creates adHocSource")
     {
-      REQUIRE(service.setFilter(result.viewId, "$year > 2000"));
-      auto const snap = service.trackListState(result.viewId);
-      auto const filteredProjectionPtr = service.trackListProjection(result.viewId);
+      REQUIRE(service.setFilter(result, "$year > 2000"));
+      auto const snap = service.trackListState(result);
+      auto const filteredProjectionPtr = service.trackListProjection(result);
 
       REQUIRE(filteredProjectionPtr != nullptr);
       CHECK(snap.filterExpression == "$year > 2000");
-      CHECK(filterStr == "$year > 2000");
-      CHECK(statusStr == "$year > 2000");
-      CHECK_FALSE(statusHasError);
-      CHECK(projView == result.viewId);
+      CHECK_FALSE(snap.optFilterError);
+      CHECK(projView == result);
       CHECK(projectionChangedCount == 1);
       REQUIRE(filteredProjectionPtr->size() == 1);
       CHECK(filteredProjectionPtr->trackIdAt(0) == newTrackId);
 
-      REQUIRE(service.setFilter(result.viewId, "$year > 2025"));
-      auto const snap2 = service.trackListState(result.viewId);
-      auto const updatedFilteredProjectionPtr = service.trackListProjection(result.viewId);
+      REQUIRE(service.setFilter(result, "$year > 2025"));
+      auto const snap2 = service.trackListState(result);
+      auto const updatedFilteredProjectionPtr = service.trackListProjection(result);
       CHECK(snap2.filterExpression == "$year > 2025");
-      CHECK(filterStr == "$year > 2025");
+      CHECK_FALSE(snap2.optFilterError);
       CHECK(projectionChangedCount == 2);
       REQUIRE(updatedFilteredProjectionPtr != nullptr);
       CHECK(updatedFilteredProjectionPtr != filteredProjectionPtr);
       CHECK(updatedFilteredProjectionPtr->size() == 0);
 
-      REQUIRE(service.setFilter(result.viewId, ""));
-      auto const snap3 = service.trackListState(result.viewId);
-      auto const unfilteredProjectionPtr = service.trackListProjection(result.viewId);
+      REQUIRE(service.setFilter(result, ""));
+      auto const snap3 = service.trackListState(result);
+      auto const unfilteredProjectionPtr = service.trackListProjection(result);
       CHECK(snap3.filterExpression.empty());
-      CHECK(filterStr.empty());
+      CHECK_FALSE(snap3.optFilterError);
       CHECK(projectionChangedCount == 3);
       REQUIRE(unfilteredProjectionPtr != nullptr);
       CHECK(unfilteredProjectionPtr != filteredProjectionPtr);
       REQUIRE(unfilteredProjectionPtr->size() == 2);
       CHECK(unfilteredProjectionPtr->indexOf(oldTrackId).has_value());
       CHECK(unfilteredProjectionPtr->indexOf(newTrackId).has_value());
+    }
+
+    SECTION("invalid expression is retained with its synchronous error")
+    {
+      REQUIRE(service.setFilter(result, "$year >"));
+      auto const snap = service.trackListState(result);
+      auto const filteredProjectionPtr = service.trackListProjection(result);
+
+      CHECK(snap.filterExpression == "$year >");
+      REQUIRE(snap.optFilterError);
+      CHECK(snap.optFilterError->code == Error::Code::FormatRejected);
+      REQUIRE(filteredProjectionPtr != nullptr);
+      CHECK(filteredProjectionPtr->size() == 0);
+      CHECK(projectionChangedCount == 1);
     }
 
     SECTION("invalid view ID is safe")
@@ -175,15 +174,15 @@ namespace ao::rt::test
 
     auto service = env.makeService();
     auto const result = env.requireView(service, {.filterExpression = "$year > 2000"});
-    auto const initialProjectionPtr = service.trackListProjection(result.viewId);
+    auto const initialProjectionPtr = service.trackListProjection(result);
 
     REQUIRE(initialProjectionPtr != nullptr);
     REQUIRE(initialProjectionPtr->size() == 1);
     CHECK(initialProjectionPtr->trackIdAt(0) == newTrackId);
 
-    REQUIRE(service.openListInView(result.viewId, oldListId));
-    auto const snap = service.trackListState(result.viewId);
-    auto const projectionPtr = service.trackListProjection(result.viewId);
+    REQUIRE(service.openListInView(result, oldListId));
+    auto const snap = service.trackListState(result);
+    auto const projectionPtr = service.trackListProjection(result);
 
     REQUIRE(projectionPtr != nullptr);
     CHECK(snap.listId == oldListId);

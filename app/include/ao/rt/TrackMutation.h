@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include "ViewIds.h"
 #include <ao/CoreIds.h>
 
 #include <cstdint>
@@ -66,7 +65,6 @@ namespace ao::rt
 
   struct UpdateTrackMetadataReply final
   {
-    std::vector<TrackId> mutatedIds{};
     std::vector<TrackChangeRecord> changes{};
 
     bool operator==(UpdateTrackMetadataReply const&) const = default;
@@ -74,7 +72,6 @@ namespace ao::rt
 
   struct EditTrackTagsReply final
   {
-    std::vector<TrackId> mutatedIds{};
     std::vector<TrackTagsChange> changes{};
 
     bool operator==(EditTrackTagsReply const&) const = default;
@@ -107,10 +104,5 @@ namespace ao::rt
     std::vector<ListId> removedFromListIds{};
 
     bool operator==(DeleteTrackReply const&) const = default;
-  };
-
-  struct CreateTrackListViewReply final
-  {
-    ViewId viewId{};
   };
 } // namespace ao::rt

@@ -6,7 +6,6 @@
 #include <ao/rt/TrackField.h>
 
 #include <cstdint>
-#include <optional>
 #include <string_view>
 
 namespace ao::uimodel
@@ -29,8 +28,5 @@ namespace ao::uimodel
   TrackColumnSizing trackFieldColumnSizing(rt::TrackField field);
   TrackColumnAlignment trackFieldColumnAlignment(rt::TrackField field);
 
-  bool isTrackFieldVisibleByDefault(rt::TrackField field);
   std::string_view trackFieldColumnTitle(rt::TrackField field);
-
-  std::optional<rt::TrackField> redundantSortFieldColumn(rt::TrackSortField field);
 } // namespace ao::uimodel

@@ -11,24 +11,19 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
-#include <cstdint>
 #include <optional>
 
 namespace ao::rt::test
 {
   namespace
   {
-    constexpr auto kFirstToken = PreparedNextToken{1};
-    constexpr auto kSecondToken = PreparedNextToken{2};
-    constexpr auto kThirdToken = PreparedNextToken{3};
+    constexpr auto kFirstToken = PreparedNextToken{.value = 1, .issuedGeneration = 10};
+    constexpr auto kSecondToken = PreparedNextToken{.value = 2, .issuedGeneration = 20};
+    constexpr auto kThirdToken = PreparedNextToken{.value = 3, .issuedGeneration = 30};
     constexpr auto kUnknownToken = PreparedNextToken{999};
     constexpr auto kFirstTrack = TrackId{10};
     constexpr auto kSecondTrack = TrackId{20};
     constexpr auto kThirdTrack = TrackId{30};
-    constexpr std::uint64_t kFirstGeneration = 10;
-    constexpr std::uint64_t kSecondGeneration = 20;
-    constexpr std::uint64_t kThirdGeneration = 30;
-
     TrackListProjectionDeltaBatch insertBatch(std::size_t const start, std::size_t const count)
     {
       return TrackListProjectionDeltaBatch{
@@ -41,9 +36,9 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 1, 4));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 1, 4));
 
-    registry.activate(kSecondToken, kSecondGeneration, ProjectionAnchor::gap(kSecondTrack, 3, 4));
+    registry.activate(kSecondToken, ProjectionAnchor::gap(kSecondTrack, 3, 4));
 
     CHECK(registry.activeToken() == kSecondToken);
     CHECK(registry.isRetired(kFirstToken));
@@ -58,8 +53,8 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 1, 4));
-    registry.activate(kSecondToken, kSecondGeneration, ProjectionAnchor::gap(kSecondTrack, 3, 4));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 1, 4));
+    registry.activate(kSecondToken, ProjectionAnchor::gap(kSecondTrack, 3, 4));
 
     registry.applyBatch(insertBatch(1, 2),
                         6,
@@ -81,12 +76,12 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 0, 2));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
     CHECK(registry.acknowledgeDisarm(kFirstToken));
     CHECK(registry.size() == 0);
 
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 0, 2));
-    registry.activate(kSecondToken, kSecondGeneration, ProjectionAnchor::bound(kSecondTrack, 1, 2));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
+    registry.activate(kSecondToken, ProjectionAnchor::bound(kSecondTrack, 1, 2));
     REQUIRE(registry.isRetired(kFirstToken));
 
     CHECK(registry.acknowledgeDisarm(kFirstToken));
@@ -99,8 +94,8 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 0, 2));
-    registry.activate(kSecondToken, kSecondGeneration, ProjectionAnchor::bound(kSecondTrack, 1, 2));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
+    registry.activate(kSecondToken, ProjectionAnchor::bound(kSecondTrack, 1, 2));
 
     auto const optUnknown = registry.resolveWinner(kUnknownToken);
     CHECK_FALSE(optUnknown);
@@ -120,16 +115,16 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 0, 3));
-    registry.activate(kSecondToken, kSecondGeneration, ProjectionAnchor::bound(kSecondTrack, 1, 3));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 3));
+    registry.activate(kSecondToken, ProjectionAnchor::bound(kSecondTrack, 1, 3));
 
-    registry.clearCoveredByBarrier(PreparedCancellationBarrier{.generation = kSecondGeneration});
+    registry.clearCoveredByBarrier(PreparedCancellationBarrier{.generation = kSecondToken.issuedGeneration});
 
     CHECK_FALSE(registry.contains(kFirstToken));
     CHECK(registry.activeToken() == kSecondToken);
-    registry.activate(kThirdToken, kThirdGeneration, ProjectionAnchor::bound(kThirdTrack, 2, 3));
+    registry.activate(kThirdToken, ProjectionAnchor::bound(kThirdTrack, 2, 3));
 
-    registry.clearCoveredByBarrier(PreparedCancellationBarrier{.generation = kThirdGeneration});
+    registry.clearCoveredByBarrier(PreparedCancellationBarrier{.generation = kThirdToken.issuedGeneration});
 
     CHECK_FALSE(registry.contains(kSecondToken));
     CHECK(registry.activeToken() == kThirdToken);
@@ -140,11 +135,11 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 0, 2));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 2));
 
     registry.clear();
-    registry.activate(kSecondToken, kSecondGeneration, ProjectionAnchor::bound(kSecondTrack, 1, 2));
-    registry.clearCoveredByBarrier(PreparedCancellationBarrier{.generation = kSecondGeneration});
+    registry.activate(kSecondToken, ProjectionAnchor::bound(kSecondTrack, 1, 2));
+    registry.clearCoveredByBarrier(PreparedCancellationBarrier{.generation = kSecondToken.issuedGeneration});
 
     CHECK_FALSE(registry.contains(kFirstToken));
     CHECK(registry.activeToken() == kSecondToken);
@@ -155,7 +150,7 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::gap(kFirstTrack, 2, 3));
+    registry.activate(kFirstToken, ProjectionAnchor::gap(kFirstTrack, 2, 3));
 
     registry.invalidate();
 
@@ -173,7 +168,7 @@ namespace ao::rt::test
             "[runtime][unit][playback-cursor]")
   {
     auto registry = PreparedNextRegistry{};
-    registry.activate(kFirstToken, kFirstGeneration, ProjectionAnchor::bound(kFirstTrack, 0, 1));
+    registry.activate(kFirstToken, ProjectionAnchor::bound(kFirstTrack, 0, 1));
 
     registry.invalidate(kFirstToken);
 

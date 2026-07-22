@@ -71,18 +71,18 @@ namespace ao::uimodel::test
       CHECK(unknown.usedFallback);
     }
 
-    SECTION("loaded and editor-saved layouts update the active session identity")
+    SECTION("applying a layout updates the active session identity")
     {
       auto model = ShellLayoutSessionModel{};
       auto initialDoc = panelLayoutDocument();
 
-      model.applyLoadedLayout("modern", initialDoc);
+      model.applyLayout("modern", initialDoc);
       CHECK(model.snapshot().presetId == "modern");
       CHECK(model.snapshot().layout.root.children.front().id == "library-panel");
 
-      auto savedDoc = LayoutDocument{};
-      savedDoc.root.type = "stack";
-      model.applyEditorSave("classic", savedDoc);
+      auto replacementDoc = LayoutDocument{};
+      replacementDoc.root.type = "stack";
+      model.applyLayout("classic", replacementDoc);
       CHECK(model.snapshot().presetId == "classic");
       CHECK(model.snapshot().layout.root.type == "stack");
     }
@@ -103,7 +103,7 @@ namespace ao::uimodel::test
     {
       auto model = ShellLayoutSessionModel{};
       auto doc = panelLayoutDocument();
-      model.applyLoadedLayout("modern", doc);
+      model.applyLayout("modern", doc);
 
       auto reset = model.resetRuntimeLayoutState();
 
@@ -118,27 +118,26 @@ namespace ao::uimodel::test
       auto model = ShellLayoutSessionModel{};
       auto doc = panelLayoutDocument();
       auto stateDoc = panelRuntimeState(doc);
-      model.applyLoadedLayout("modern", doc);
+      model.applyLayout("modern", doc);
 
       auto optPromotion = model.preparePanelSizePromotion(stateDoc);
 
       REQUIRE(optPromotion);
-      CHECK(optPromotion->presetId == "modern");
-      CHECK(optPromotion->result.promotedCount == 1);
+      CHECK(optPromotion->componentState.preset == "modern");
       CHECK(optPromotion->componentState.components.empty());
 
       auto const& promotedSplit = optPromotion->layout.root.children.front();
       CHECK_FALSE(promotedSplit.props.contains("position"));
       CHECK(promotedSplit.props.at("initialPositionPercent").asDouble() == 0.68);
 
-      model.applyPanelSizePromotion(std::move(*optPromotion));
+      model.applyLayout(optPromotion->componentState.preset, std::move(optPromotion->layout));
       CHECK(model.snapshot().layout.root.children.front().props.at("initialPositionPercent").asDouble() == 0.68);
     }
 
     SECTION("panel size promotion reports no work when runtime state has no promotable entries")
     {
       auto model = ShellLayoutSessionModel{};
-      model.applyLoadedLayout("modern", panelLayoutDocument());
+      model.applyLayout("modern", panelLayoutDocument());
 
       auto stateDoc = LayoutComponentStateDocument{.preset = "modern"};
 

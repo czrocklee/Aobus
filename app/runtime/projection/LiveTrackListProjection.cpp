@@ -11,7 +11,6 @@
 #include <ao/library/TrackView.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/ScopedTimer.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -641,7 +640,6 @@ namespace ao::rt
     TrackListProjectionOperationCounts operationCounts;
     std::size_t rowsTouchedSinceRebuild = 0;
     std::size_t arenaRebaseThresholdBytes = kMinimumArenaRebaseBytes;
-    std::uint64_t rev = 0;
     async::Signal<TrackListProjectionDeltaBatch const&> changedSignal;
     bool sourceInvalidated = false;
     async::Subscription sourceSubscription;
@@ -977,8 +975,7 @@ namespace ao::rt
           continue;
         }
 
-        auto const optView =
-          storageValueOrNullopt(reader.get(trackId, loadMode), "Failed to incrementally rebuild track order");
+        auto const optView = reader.get(trackId, loadMode);
 
         if (!optView)
         {
@@ -1201,7 +1198,6 @@ namespace ao::rt
       gsl_Assert(!batch.deltas.empty() && validateTrackListProjectionDeltaBatch(batch, previousSize) &&
                  !std::holds_alternative<ProjectionSourceInvalidated>(batch.deltas.front()));
 
-      batch.revision = ++rev;
       changedSignal.emit(batch);
     }
 
@@ -1219,10 +1215,7 @@ namespace ao::rt
 
       sourceInvalidated = true;
       sourceSubscription.reset();
-      auto const batch = TrackListProjectionDeltaBatch{
-        .revision = ++rev,
-        .deltas = {ProjectionSourceInvalidated{}},
-      };
+      auto const batch = TrackListProjectionDeltaBatch{.deltas = {ProjectionSourceInvalidated{}}};
       changedSignal.emit(batch);
       changedSignal.disconnectAll();
     }
@@ -1398,11 +1391,6 @@ namespace ao::rt
     return _implPtr->viewId;
   }
 
-  std::uint64_t LiveTrackListProjection::revision() const noexcept
-  {
-    return _implPtr->rev;
-  }
-
   void LiveTrackListProjection::setPresentation(TrackPresentationSpec const& presentation)
   {
     if (_implPtr->sourceInvalidated)
@@ -1546,10 +1534,7 @@ namespace ao::rt
 
     if (_implPtr->sourceInvalidated)
     {
-      handler(TrackListProjectionDeltaBatch{
-        .revision = _implPtr->rev,
-        .deltas = {ProjectionSourceInvalidated{}},
-      });
+      handler(TrackListProjectionDeltaBatch{.deltas = {ProjectionSourceInvalidated{}}});
       return {};
     }
 
@@ -1558,10 +1543,7 @@ namespace ao::rt
     auto subscription = _implPtr->changedSignal.connect([handlerPtr](TrackListProjectionDeltaBatch const& batch)
                                                         { (*handlerPtr)(batch); });
 
-    (*handlerPtr)(TrackListProjectionDeltaBatch{
-      .revision = _implPtr->rev,
-      .deltas = {ProjectionReset{}},
-    });
+    (*handlerPtr)(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}});
 
     return subscription;
   }

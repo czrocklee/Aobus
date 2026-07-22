@@ -694,7 +694,7 @@ namespace ao::tui::test
     auto const feed = fixture.runtime.notifications().feed();
     REQUIRE_FALSE(feed.entries.empty());
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Warning);
-    CHECK(rt::resolvedNotificationText(feed.entries.back().message) == "Playback control unavailable");
+    CHECK(std::get<std::string>(feed.entries.back().message) == "Playback control unavailable");
   }
 
   TEST_CASE("EventController - idle stop is a silent no-op", "[tui][unit][event]")
@@ -786,40 +786,13 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::None);
 
     fixture.runtime.notifications().post(
-      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory());
+      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::history());
 
     CHECK(controller.handleEvent(ftxui::Event::Character("n")));
     CHECK(fixture.shell.overlay() == Overlay::Notifications);
 
     CHECK(controller.handleEvent(ftxui::Event::Character("n")));
     CHECK(fixture.shell.overlay() == Overlay::None);
-  }
-
-  TEST_CASE("EventController - notification hide shortcut respects dismissible state", "[tui][regression][event]")
-  {
-    auto fixture = EventControllerFixture{};
-    auto library = fixture.makeLibrary();
-    auto activityStatusViewModel =
-      uimodel::ActivityStatusViewModel{fixture.runtime.notifications(), [](uimodel::ActivityStatusViewState const&) {}};
-    auto controller = EventController{fixture.screen,
-                                      fixture.shell,
-                                      library,
-                                      fixture.runtime,
-                                      EventControllerBindings{.activityStatusViewModel = &activityStatusViewModel}};
-
-    activityStatusViewModel.handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated{
-      .kind = rt::LibraryChanges::LibraryTaskProgressKind::Updating,
-      .fraction = 0.625,
-      .subject = "status-progress.flac",
-    });
-    REQUIRE(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Processing);
-    REQUIRE_FALSE(activityStatusViewModel.viewState().compact.dismissible);
-
-    fixture.shell.openOverlay(Overlay::Notifications);
-
-    CHECK(controller.handleEvent(ftxui::Event::Character("x")));
-    CHECK(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Processing);
-    CHECK(activityStatusViewModel.viewState().compact.text == "Updating library");
   }
 
   TEST_CASE("EventController - panel actions use transient activity notifications when available", "[tui][unit][event]")
@@ -844,7 +817,7 @@ namespace ao::tui::test
     CHECK(fixture.shell.overlay() == Overlay::ListChooser);
     CHECK(activityStatusViewModel.viewState().compact.kind == uimodel::ActivityStatusKind::Info);
     CHECK(activityStatusViewModel.viewState().compact.text == "Lists");
-    CHECK_FALSE(activityStatusViewModel.hasPendingAutoDismiss());
+    CHECK_FALSE(activityStatusViewModel.viewState().compact.optAutoDismissTimeout);
     auto const feed = fixture.runtime.notifications().feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().lifetime == rt::NotificationLifetime::transient());
@@ -856,10 +829,9 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto activityStatusViewModel =
       uimodel::ActivityStatusViewModel{fixture.runtime.notifications(), [](uimodel::ActivityStatusViewState const&) {}};
-    auto const notificationId =
-      fixture.runtime.notifications()
-        .post(rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::sessionHistory())
-        .id;
+    fixture.runtime.notifications().post(
+      rt::NotificationSeverity::Warning, "Partial import", rt::NotificationLifetime::history());
+    auto const notificationId = fixture.runtime.notifications().feed().entries.front().id;
     auto hitRegions = TuiHitRegions{};
     hitRegions.activityStatusBox = ftxui::Box{.x_min = 0, .x_max = 24, .y_min = 23, .y_max = 23};
     hitRegions.notificationDetailRows = {NotificationDetailRowHitRegion{
@@ -1193,10 +1165,10 @@ namespace ao::tui::test
 
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto snapshots = std::vector<rt::PlaybackSnapshot>{};
-    auto previewSub = playback.events().onSeekPreview([&seekPreviews](rt::PlaybackSeekPreview const& preview)
-                                                      { seekPreviews.push_back(preview); });
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed)
+                                                      { seekPreviews.push_back(elapsed); });
     auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
                                                     { snapshots.push_back(snapshot); });
     auto controller = EventController{
@@ -1209,7 +1181,7 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", release)));
 
     REQUIRE(seekPreviews.size() == 1);
-    CHECK(seekPreviews[0].elapsed == duration / 2);
+    CHECK(seekPreviews[0] == duration / 2);
     REQUIRE(snapshots.size() == 1);
     CHECK(snapshots[0].transport.elapsed == duration / 2);
   }
@@ -1224,10 +1196,10 @@ namespace ao::tui::test
 
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto snapshots = std::vector<rt::PlaybackSnapshot>{};
-    auto previewSub = playback.events().onSeekPreview([&seekPreviews](rt::PlaybackSeekPreview const& preview)
-                                                      { seekPreviews.push_back(preview); });
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed)
+                                                      { seekPreviews.push_back(elapsed); });
     auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
                                                     { snapshots.push_back(snapshot); });
     auto controller = EventController{
@@ -1242,8 +1214,8 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", releaseOutside)));
 
     REQUIRE(seekPreviews.size() == 2);
-    CHECK(seekPreviews[0].elapsed == std::chrono::milliseconds{0});
-    CHECK(seekPreviews[1].elapsed == duration);
+    CHECK(seekPreviews[0] == std::chrono::milliseconds{0});
+    CHECK(seekPreviews[1] == duration);
     REQUIRE(snapshots.size() == 1);
     CHECK(snapshots[0].transport.elapsed == duration);
   }
@@ -1254,9 +1226,9 @@ namespace ao::tui::test
     auto library = fixture.makeLibrary();
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = fixture.runtime.playback().events().onSeekPreview(
-      [&seekPreviews](rt::PlaybackSeekPreview const& preview) { seekPreviews.push_back(preview); });
+      [&seekPreviews](std::chrono::milliseconds const elapsed) { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1273,9 +1245,9 @@ namespace ao::tui::test
     prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = fixture.runtime.playback().events().onSeekPreview(
-      [&seekPreviews](rt::PlaybackSeekPreview const& preview) { seekPreviews.push_back(preview); });
+      [&seekPreviews](std::chrono::milliseconds const elapsed) { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1293,9 +1265,9 @@ namespace ao::tui::test
     prepareSeekablePlayback(fixture, library);
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
-    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = fixture.runtime.playback().events().onSeekPreview(
-      [&seekPreviews](rt::PlaybackSeekPreview const& preview) { seekPreviews.push_back(preview); });
+      [&seekPreviews](std::chrono::milliseconds const elapsed) { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1370,9 +1342,9 @@ namespace ao::tui::test
     auto hitRegions = TuiHitRegions{};
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto& playback = fixture.runtime.playback();
-    auto seekPreviews = std::vector<rt::PlaybackSeekPreview>{};
-    auto previewSub = playback.events().onSeekPreview([&seekPreviews](rt::PlaybackSeekPreview const& preview)
-                                                      { seekPreviews.push_back(preview); });
+    auto seekPreviews = std::vector<std::chrono::milliseconds>{};
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed)
+                                                      { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1382,7 +1354,7 @@ namespace ao::tui::test
 
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", press)));
     REQUIRE(seekPreviews.size() == 1);
-    CHECK(seekPreviews[0].elapsed == std::chrono::milliseconds{0});
+    CHECK(seekPreviews[0] == std::chrono::milliseconds{0});
 
     fixture.shell.openOverlay(Overlay::ListChooser);
     CHECK_FALSE(controller.handleEvent(ftxui::Event::Mouse("", drag)));

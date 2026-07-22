@@ -30,6 +30,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::cli
@@ -161,13 +162,21 @@ namespace ao::cli
     {
       if (format != OutputFormat::Plain)
       {
+        auto trackIds = std::vector<TrackId>{};
+        trackIds.reserve(reply.changes.size());
+
+        for (auto const& change : reply.changes)
+        {
+          trackIds.push_back(change.trackId);
+        }
+
         emitDocument(os,
                      format,
                      TagMutationReportDto{.action = std::string{action},
                                           .tag = tagName,
                                           .dryRun = dryRun,
-                                          .updated = static_cast<std::uint64_t>(reply.mutatedIds.size()),
-                                          .trackIds = reply.mutatedIds,
+                                          .updated = static_cast<std::uint64_t>(reply.changes.size()),
+                                          .trackIds = std::move(trackIds),
                                           .changes = reply.changes});
         return;
       }
@@ -177,7 +186,7 @@ namespace ao::cli
                    action == "add" ? "added" : "removed",
                    tagName,
                    action == "add" ? "to" : "from",
-                   reply.mutatedIds.size(),
+                   reply.changes.size(),
                    dryRun ? " (dry-run)" : "");
     }
 

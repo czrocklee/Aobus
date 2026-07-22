@@ -16,7 +16,6 @@
 #include <cstdint>
 #include <format>
 #include <optional>
-#include <ranges>
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,46 +58,19 @@ namespace ao::uimodel
       return kind == ActivityStatusKind::Warning || kind == ActivityStatusKind::Error;
     }
 
-    bool isDetailPresented(rt::NotificationEntry const& entry)
-    {
-      return entry.activityPresentation != rt::NotificationActivityPresentation::Hidden;
-    }
-
-    bool isCompactPresented(rt::NotificationEntry const& entry)
-    {
-      return entry.activityPresentation == rt::NotificationActivityPresentation::Default;
-    }
-
-    bool hasRichDetail(rt::NotificationEntry const& entry)
-    {
-      return entry.lifetime.kind() == rt::NotificationLifetimeKind::UntilDismissed || entry.content.optProgress ||
-             !entry.content.title.empty() || !entry.content.iconName.empty() || !entry.content.actions.empty();
-    }
-
     bool isDetailEligible(rt::NotificationEntry const& entry)
     {
-      if (!isDetailPresented(entry))
-      {
-        return false;
-      }
-
-      if (entry.activityPresentation == rt::NotificationActivityPresentation::DetailOnly)
-      {
-        return true;
-      }
-
-      return isPersistentSeverity(entry.severity) || hasRichDetail(entry);
+      return isPersistentSeverity(entry.severity) || entry.lifetime.kind() == rt::NotificationLifetimeKind::Pinned;
     }
 
     bool isDetailClearable(rt::NotificationEntry const& entry)
     {
-      return isDetailEligible(entry) && entry.lifetime.kind() != rt::NotificationLifetimeKind::UntilDismissed &&
-             !entry.content.optProgress;
+      return isDetailEligible(entry) && entry.lifetime.kind() != rt::NotificationLifetimeKind::Pinned;
     }
 
     std::string primaryText(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
     {
-      return entry.content.title.empty() ? textCatalog.notificationMessage(entry.message) : entry.content.title;
+      return textCatalog.notificationMessage(entry.message);
     }
 
     std::string groupedText(rt::NotificationSeverity const severity, std::size_t const count)
@@ -120,73 +92,18 @@ namespace ao::uimodel
 
     ActivityDetailItem detailItem(PresentationTextCatalog const& textCatalog, rt::NotificationEntry const& entry)
     {
-      auto item = ActivityDetailItem{
+      return ActivityDetailItem{
         .id = entry.id,
         .severity = entry.severity,
-        .title = entry.content.title,
         .message = textCatalog.notificationMessage(entry.message),
-        .iconName = entry.content.iconName,
         .dismissible = isDetailClearable(entry),
       };
-
-      if (entry.content.optProgress)
-      {
-        item.optProgressMode = entry.content.optProgress->mode;
-        item.progressFraction = entry.content.optProgress->fraction;
-        item.progressLabel = entry.content.optProgress->label;
-      }
-
-      item.actions.reserve(entry.content.actions.size());
-
-      for (auto const& action : entry.content.actions)
-      {
-        item.actions.push_back(ActivityActionDescriptor{.id = action.id, .label = action.label});
-      }
-
-      return item;
     }
   } // namespace
 
   bool hasDetailContent(ActivityDetailState const& detail) noexcept
   {
     return !detail.items.empty() || detail.optLibraryTask;
-  }
-
-  std::vector<ActivityResolvedActionState> resolveActivityActionStates(
-    std::vector<ActivityActionDescriptor> const& actions,
-    ActivityActionAvailabilityResolver const& resolveAction,
-    std::size_t const maxVisibleActions)
-  {
-    auto result = std::vector<ActivityResolvedActionState>{};
-
-    if (!resolveAction || maxVisibleActions == 0)
-    {
-      return result;
-    }
-
-    result.reserve(std::min(actions.size(), maxVisibleActions));
-
-    for (auto const& action : actions)
-    {
-      if (result.size() >= maxVisibleActions)
-      {
-        break;
-      }
-
-      auto state = resolveAction(action.id, action.label);
-
-      if (!state.visible || state.label.empty())
-      {
-        continue;
-      }
-
-      result.push_back(ActivityResolvedActionState{.id = action.id,
-                                                   .enabled = state.enabled,
-                                                   .label = std::move(state.label),
-                                                   .disabledReason = std::move(state.disabledReason)});
-    }
-
-    return result;
   }
 
   void ActivityStatusFeedProjection::initialize(rt::NotificationFeedState const& feed)
@@ -197,26 +114,25 @@ namespace ao::uimodel
 
   void ActivityStatusFeedProjection::handleFeedUpdated(rt::NotificationFeedUpdate const& update)
   {
-    if (!update.feedPtr || update.revision != update.feedPtr->revision)
+    if (!update.feedPtr)
     {
       return;
     }
 
     auto const& feed = *update.feedPtr;
 
-    if (update.mutationKind == rt::NotificationFeedMutationKind::Posted && update.affectedIds.size() == 1 &&
-        update.evictedIds.empty())
+    if (update.mutationKind == rt::NotificationFeedMutationKind::Posted)
     {
-      handleNotificationPosted(feed, update.affectedIds.front());
+      handleNotificationPosted(feed, update.id);
       return;
     }
 
     if (refreshesVisibleTransient(update))
     {
-      auto const sourceId = _state.compact.sourceNotificationIds.front();
+      auto const sourceId = _compactSourceNotificationIds.front();
       auto const iter = std::ranges::find(feed.entries, sourceId, &rt::NotificationEntry::id);
 
-      if (iter != feed.entries.end() && isCompactPresented(*iter))
+      if (iter != feed.entries.end())
       {
         projectDetail(feed);
         projectNotificationCompact(*iter);
@@ -237,7 +153,8 @@ namespace ao::uimodel
     }
 
     if (auto const persistentKind = isPersistentCompact(_state.compact.kind);
-        persistentKind && hasPresentedCompactSource(_state.compact, feed) && !isCompactSourceDismissed(_state.compact))
+        persistentKind && hasPresentedCompactSource(_compactSourceNotificationIds, feed) &&
+        !areCompactSourcesHidden(_compactSourceNotificationIds))
     {
       projectPersistentCompact(feed);
       return;
@@ -252,15 +169,15 @@ namespace ao::uimodel
     if (auto previousCompact = _state.compact;
         previousCompact.kind == ActivityStatusKind::Info || previousCompact.kind == ActivityStatusKind::Success)
     {
+      auto previousSourceIds = _compactSourceNotificationIds;
       projectPersistentCompact(feed);
 
-      bool const sourceStillValid =
-        previousCompact.sourceNotificationIds.empty() ||
-        (hasPresentedCompactSource(previousCompact, feed) && !isCompactSourceDismissed(previousCompact));
+      bool const sourceStillValid = previousSourceIds.empty() || (hasPresentedCompactSource(previousSourceIds, feed) &&
+                                                                  !areCompactSourcesHidden(previousSourceIds));
 
       if (_state.compact.kind == ActivityStatusKind::Idle && sourceStillValid)
       {
-        _state.compact = std::move(previousCompact);
+        setCompact(std::move(previousCompact), std::move(previousSourceIds));
       }
     }
   }
@@ -272,7 +189,7 @@ namespace ao::uimodel
 
     auto const iter = std::ranges::find(feed.entries, id, &rt::NotificationEntry::id);
 
-    if (iter == feed.entries.end() || !isCompactPresented(*iter))
+    if (iter == feed.entries.end())
     {
       return;
     }
@@ -298,24 +215,16 @@ namespace ao::uimodel
 
   bool ActivityStatusFeedProjection::refreshesVisibleTransient(rt::NotificationFeedUpdate const& update) const
   {
-    if (_taskActive || _state.compact.kind != ActivityStatusKind::Info ||
-        _state.compact.sourceNotificationIds.size() != 1)
+    if (_taskActive || _state.compact.kind != ActivityStatusKind::Info || _compactSourceNotificationIds.size() != 1)
     {
       return false;
     }
 
     switch (update.mutationKind)
     {
-      case rt::NotificationFeedMutationKind::ReportUpdated:
-      case rt::NotificationFeedMutationKind::MessageUpdated:
-      case rt::NotificationFeedMutationKind::ContentUpdated:
-      case rt::NotificationFeedMutationKind::ProgressUpdated:
-      case rt::NotificationFeedMutationKind::ProgressCleared:
-        return std::ranges::contains(update.affectedIds, _state.compact.sourceNotificationIds.front());
+      case rt::NotificationFeedMutationKind::ReportUpdated: return update.id == _compactSourceNotificationIds.front();
       case rt::NotificationFeedMutationKind::Posted:
-      case rt::NotificationFeedMutationKind::Expired:
-      case rt::NotificationFeedMutationKind::Dismissed:
-      case rt::NotificationFeedMutationKind::Cleared: return false;
+      case rt::NotificationFeedMutationKind::Expired: return false;
     }
 
     return false;
@@ -327,16 +236,15 @@ namespace ao::uimodel
     _taskActive = true;
     _optLibraryProgress =
       LibraryProgressState{.kind = event.kind, .subject = event.subject, .fraction = event.fraction};
-    _state.compact = ActivityCompactState{
+    setCompact(ActivityCompactState{
       .kind = ActivityStatusKind::Processing,
       .text = _textCatalog.libraryTaskProgressCompact(event.kind, event.subject),
       .optProgressFraction = event.fraction,
-    };
+    });
     _state.detail.optLibraryTask = ActivityTaskDetail{
       .message = _textCatalog.libraryTaskProgressDetail(event.kind, event.subject),
       .progressFraction = event.fraction,
     };
-    _state.detail.hasActiveProgress = true;
   }
 
   void ActivityStatusFeedProjection::handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
@@ -357,13 +265,13 @@ namespace ao::uimodel
 
   void ActivityStatusFeedProjection::dismissCompact(rt::NotificationFeedState const& feed)
   {
-    rememberDismissedCompactSources();
-    _state.compact = ActivityCompactState{};
+    rememberHiddenCompactSources();
+    setCompact({});
     projectDetail(feed);
   }
 
-  void ActivityStatusFeedProjection::dismissDetailNotificationFromActivity(rt::NotificationId const id,
-                                                                           rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedProjection::hideDetailNotification(rt::NotificationId const id,
+                                                            rt::NotificationFeedState const& feed)
   {
     auto const iter = std::ranges::find(feed.entries, id, &rt::NotificationEntry::id);
 
@@ -372,39 +280,24 @@ namespace ao::uimodel
       return;
     }
 
-    if (!std::ranges::contains(_detailDismissedNotificationIds, id))
+    if (!std::ranges::contains(_hiddenDetailIds, id))
     {
-      _detailDismissedNotificationIds.push_back(id);
+      _hiddenDetailIds.push_back(id);
     }
 
-    bool const compactReferencedDismissedSource = std::ranges::contains(_state.compact.sourceNotificationIds, id);
+    bool const compactReferencedHiddenSource = std::ranges::contains(_compactSourceNotificationIds, id);
     projectDetail(feed);
 
-    if (compactReferencedDismissedSource && !_taskActive)
+    if (compactReferencedHiddenSource && !_taskActive)
     {
       projectPersistentCompact(feed);
     }
   }
 
-  void ActivityStatusFeedProjection::handleTransientExpired(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedProjection::autoDismissCompact(rt::NotificationFeedState const& feed)
   {
     projectDetail(feed);
     projectPersistentCompact(feed);
-  }
-
-  std::vector<rt::NotificationId> ActivityStatusFeedProjection::locallyHideableNotificationIds(
-    rt::NotificationFeedState const& feed) const
-  {
-    return feed.entries | std::views::filter(isDetailEligible) |
-           std::views::filter([this](auto const& entry)
-                              { return !std::ranges::contains(_detailDismissedNotificationIds, entry.id); }) |
-           std::views::filter(
-             [](auto const& entry)
-             {
-               return entry.lifetime.kind() != rt::NotificationLifetimeKind::UntilDismissed &&
-                      !entry.content.optProgress;
-             }) |
-           std::views::transform(&rt::NotificationEntry::id) | std::ranges::to<std::vector>();
   }
 
   ActivityStatusViewState const& ActivityStatusFeedProjection::viewState() const noexcept
@@ -414,11 +307,10 @@ namespace ao::uimodel
 
   void ActivityStatusFeedProjection::projectDetail(rt::NotificationFeedState const& feed)
   {
-    pruneDismissedSources(feed);
+    pruneHiddenSources(feed);
 
     auto items = std::vector<ActivityDetailItem>{};
     items.reserve(feed.entries.size());
-    bool hasActiveProgress = _optLibraryProgress.has_value();
 
     for (auto const& entry : feed.entries)
     {
@@ -427,31 +319,15 @@ namespace ao::uimodel
         continue;
       }
 
-      if (std::ranges::contains(_detailDismissedNotificationIds, entry.id))
+      if (std::ranges::contains(_hiddenDetailIds, entry.id))
       {
         continue;
-      }
-
-      if (entry.content.optProgress)
-      {
-        hasActiveProgress = true;
       }
 
       items.push_back(detailItem(_textCatalog, entry));
     }
 
-    std::ranges::sort(
-      items,
-      [](auto const& lhs, auto const& rhs)
-      {
-        if (bool const lhsProgress = lhs.optProgressMode.has_value(), rhsProgress = rhs.optProgressMode.has_value();
-            lhsProgress != rhsProgress)
-        {
-          return lhsProgress;
-        }
-
-        return lhs.id > rhs.id;
-      });
+    std::ranges::sort(items, [](auto const& lhs, auto const& rhs) { return lhs.id > rhs.id; });
 
     auto optLibraryTask = std::optional<ActivityTaskDetail>{};
 
@@ -463,8 +339,7 @@ namespace ao::uimodel
       };
     }
 
-    _state.detail = ActivityDetailState{
-      .items = std::move(items), .optLibraryTask = std::move(optLibraryTask), .hasActiveProgress = hasActiveProgress};
+    _state.detail = ActivityDetailState{.items = std::move(items), .optLibraryTask = std::move(optLibraryTask)};
   }
 
   void ActivityStatusFeedProjection::projectPersistentCompact(rt::NotificationFeedState const& feed)
@@ -475,17 +350,12 @@ namespace ao::uimodel
 
     for (auto const& entry : feed.entries)
     {
-      if (!isCompactPresented(entry))
-      {
-        continue;
-      }
-
       if (!isPersistentSeverity(entry.severity))
       {
         continue;
       }
 
-      if (isCompactSourceSuppressed(entry.id))
+      if (isCompactSourceHidden(entry.id))
       {
         continue;
       }
@@ -510,7 +380,7 @@ namespace ao::uimodel
 
     if (!optSeverity || latestEntry == nullptr)
     {
-      _state.compact = ActivityCompactState{};
+      setCompact({});
       return;
     }
 
@@ -521,80 +391,83 @@ namespace ao::uimodel
       text = primaryText(_textCatalog, *latestEntry);
     }
 
-    _state.compact = ActivityCompactState{
-      .kind = kindForSeverity(*optSeverity),
-      .text = std::move(text),
-      .groupedCount = ids.size(),
-      .persistent = true,
-      .dismissible = true,
-      .hasDetails = !ids.empty(),
-      .sourceNotificationIds = std::move(ids),
-    };
+    auto const hasDetails = !ids.empty();
+    setCompact(
+      ActivityCompactState{
+        .kind = kindForSeverity(*optSeverity),
+        .text = std::move(text),
+        .dismissible = true,
+        .hasDetails = hasDetails,
+      },
+      std::move(ids));
   }
 
   void ActivityStatusFeedProjection::projectNotificationCompact(rt::NotificationEntry const& entry)
   {
-    _state.compact = ActivityCompactState{
-      .kind = kindForSeverity(entry.severity),
-      .text = primaryText(_textCatalog, entry),
-      .groupedCount = 1,
-      .persistent = isPersistentSeverity(entry.severity),
-      .dismissible = true,
-      .hasDetails = isDetailEligible(entry),
-      .optAutoDismissTimeout =
-        isPersistentSeverity(entry.severity) || entry.lifetime.kind() == rt::NotificationLifetimeKind::Transient
-          ? std::optional<std::chrono::milliseconds>{}
-          : std::optional{kActivityStatusDefaultAutoDismissTimeout},
-      .sourceNotificationIds = {entry.id},
-    };
+    setCompact(
+      ActivityCompactState{
+        .kind = kindForSeverity(entry.severity),
+        .text = primaryText(_textCatalog, entry),
+        .dismissible = true,
+        .hasDetails = isDetailEligible(entry),
+        .optAutoDismissTimeout =
+          isPersistentSeverity(entry.severity) || entry.lifetime.kind() == rt::NotificationLifetimeKind::Transient
+            ? std::optional<std::chrono::milliseconds>{}
+            : std::optional{kActivityStatusDefaultAutoDismissTimeout},
+      },
+      {entry.id});
   }
 
   void ActivityStatusFeedProjection::projectCompletionCompact(std::size_t const count)
   {
-    _state.compact = ActivityCompactState{
+    setCompact(ActivityCompactState{
       .kind = ActivityStatusKind::Success,
       .text = count == 0 ? std::string{"Library is up to date"}
                          : std::format("Scan complete: {} added", formatTrackCount(count)),
       .optAutoDismissTimeout = kActivityStatusDefaultAutoDismissTimeout,
-    };
+    });
   }
 
-  bool ActivityStatusFeedProjection::hasPresentedCompactSource(ActivityCompactState const& compact,
+  void ActivityStatusFeedProjection::setCompact(ActivityCompactState compact, std::vector<rt::NotificationId> sourceIds)
+  {
+    _state.compact = std::move(compact);
+    _compactSourceNotificationIds = std::move(sourceIds);
+  }
+
+  bool ActivityStatusFeedProjection::hasPresentedCompactSource(std::vector<rt::NotificationId> const& sourceIds,
                                                                rt::NotificationFeedState const& feed) const
   {
-    return std::ranges::any_of(compact.sourceNotificationIds,
+    return std::ranges::any_of(sourceIds,
                                [&feed](auto const id)
                                {
                                  auto const iter = std::ranges::find(feed.entries, id, &rt::NotificationEntry::id);
-                                 return iter != feed.entries.end() && isCompactPresented(*iter);
+                                 return iter != feed.entries.end();
                                });
   }
 
-  bool ActivityStatusFeedProjection::isCompactSourceDismissed(ActivityCompactState const& compact) const
+  bool ActivityStatusFeedProjection::areCompactSourcesHidden(std::vector<rt::NotificationId> const& sourceIds) const
   {
-    return !compact.sourceNotificationIds.empty() &&
-           std::ranges::all_of(
-             compact.sourceNotificationIds, [this](auto const id) { return isCompactSourceSuppressed(id); });
+    return !sourceIds.empty() &&
+           std::ranges::all_of(sourceIds, [this](auto const id) { return isCompactSourceHidden(id); });
   }
 
-  bool ActivityStatusFeedProjection::isCompactSourceSuppressed(rt::NotificationId const id) const
+  bool ActivityStatusFeedProjection::isCompactSourceHidden(rt::NotificationId const id) const
   {
-    return std::ranges::contains(_compactDismissedNotificationIds, id) ||
-           std::ranges::contains(_detailDismissedNotificationIds, id);
+    return std::ranges::contains(_hiddenCompactIds, id) || std::ranges::contains(_hiddenDetailIds, id);
   }
 
-  void ActivityStatusFeedProjection::rememberDismissedCompactSources()
+  void ActivityStatusFeedProjection::rememberHiddenCompactSources()
   {
-    for (auto const id : _state.compact.sourceNotificationIds)
+    for (auto const id : _compactSourceNotificationIds)
     {
-      if (!std::ranges::contains(_compactDismissedNotificationIds, id))
+      if (!std::ranges::contains(_hiddenCompactIds, id))
       {
-        _compactDismissedNotificationIds.push_back(id);
+        _hiddenCompactIds.push_back(id);
       }
     }
   }
 
-  void ActivityStatusFeedProjection::pruneDismissedSources(rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedProjection::pruneHiddenSources(rt::NotificationFeedState const& feed)
   {
     auto const existsInFeed = [&feed](auto const id)
     { return std::ranges::contains(feed.entries, id, &rt::NotificationEntry::id); };
@@ -602,7 +475,7 @@ namespace ao::uimodel
     auto prune = [&](auto& ids)
     { ids.erase(std::ranges::remove_if(ids, [&](auto const id) { return !existsInFeed(id); }).begin(), ids.end()); };
 
-    prune(_compactDismissedNotificationIds);
-    prune(_detailDismissedNotificationIds);
+    prune(_hiddenCompactIds);
+    prune(_hiddenDetailIds);
   }
 } // namespace ao::uimodel

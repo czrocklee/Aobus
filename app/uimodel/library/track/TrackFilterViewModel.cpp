@@ -11,7 +11,6 @@
 #include <format>
 #include <functional>
 #include <string>
-#include <tuple>
 #include <utility>
 
 namespace ao::uimodel
@@ -29,8 +28,6 @@ namespace ao::uimodel
           handleFocusedViewChanged(changed.snapshot.activeViewId);
         }
       });
-    _filterStatusSub =
-      _viewService.onFilterStatusChanged([this](auto const& status) { handleFilterStatusChanged(status); });
 
     handleFocusedViewChanged(_workspaceService.snapshot().activeViewId);
   }
@@ -47,15 +44,16 @@ namespace ao::uimodel
 
     auto const resolved = resolveTrackFilterExpression(rawText);
     _resolvedExpression = resolved.expression;
-    _filterPending = true;
 
-    if (resolved.mode == TrackFilterMode::None)
+    auto const result = _viewService.setFilter(_viewId, _resolvedExpression);
+
+    if (!result)
     {
-      std::ignore = _viewService.setFilter(_viewId, "");
+      _optFilterError = result.error();
     }
     else
     {
-      std::ignore = _viewService.setFilter(_viewId, resolved.expression);
+      _optFilterError = _viewService.trackListState(_viewId).optFilterError;
     }
 
     refresh();
@@ -69,7 +67,6 @@ namespace ao::uimodel
     {
       _entryText.clear();
       _resolvedExpression.clear();
-      _filterPending = false;
       _optFilterError.reset();
       refresh();
       return;
@@ -80,21 +77,7 @@ namespace ao::uimodel
 
     auto const resolved = resolveTrackFilterExpression(_entryText);
     _resolvedExpression = resolved.expression;
-    _filterPending = false;
-    _optFilterError.reset();
-
-    refresh();
-  }
-
-  void TrackFilterViewModel::handleFilterStatusChanged(rt::FilterStatusChanged const& status)
-  {
-    if (status.viewId != _viewId)
-    {
-      return;
-    }
-
-    _filterPending = status.pending;
-    _optFilterError = status.optError;
+    _optFilterError = state.optFilterError;
 
     refresh();
   }
@@ -112,15 +95,14 @@ namespace ao::uimodel
       view.enabled = true;
       view.entryText = _entryText;
       view.resolvedExpression = _resolvedExpression;
-      view.pending = _filterPending;
 
       if (_optFilterError)
       {
         view.hasError = true;
-        view.tooltip = std::format("Expression error: {}", _optFilterError->message);
+        view.tooltip = std::format("Filter error: {}", _optFilterError->message);
       }
 
-      view.canCreateSmartList = !view.resolvedExpression.empty() && !view.pending && !view.hasError;
+      view.canCreateSmartList = !view.resolvedExpression.empty() && !view.hasError;
     }
 
     if (_onRender)

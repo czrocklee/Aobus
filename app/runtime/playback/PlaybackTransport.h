@@ -150,7 +150,7 @@ namespace ao::rt
     async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
     async::Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler);
 
-    Result<PlaybackStartReceipt> playTrack(TrackId trackId, ListId sourceListId);
+    Result<PreparedCancellationBarrier> playTrack(TrackId trackId, ListId sourceListId);
 
     // Lower-level playback entry point: start a fully-resolved request.
     // playTrack() resolves a TrackId via the library and forwards here.
@@ -159,10 +159,10 @@ namespace ao::rt
     Result<PreparedPlaybackStart> stagePlayback(PlaybackRequest const& request,
                                                 ListId sourceListId,
                                                 std::chrono::milliseconds initialOffset = {});
-    Result<PlaybackStartReceipt> commitPlayback(PreparedPlaybackStart&& preparedStart);
-    Result<PlaybackStartReceipt> play(PlaybackRequest const& request,
-                                      ListId sourceListId,
-                                      std::chrono::milliseconds initialOffset = {});
+    Result<PreparedCancellationBarrier> commitPlayback(PreparedPlaybackStart&& preparedStart);
+    Result<PreparedCancellationBarrier> play(PlaybackRequest const& request,
+                                             ListId sourceListId,
+                                             std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextToken> prepareNext(PlaybackRequest const& request, ListId sourceListId);
     Result<PreparedNextToken> prepareNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearPreparedNext();
@@ -184,20 +184,14 @@ namespace ao::rt
     friend class PlaybackSessionPersistence;
     friend class PlaybackSuccession;
 
-    struct SuccessionPreparedNextReceipt final
-    {
-      PreparedNextToken token{};
-      std::uint64_t issuedGeneration = 0;
-    };
-
     void shutdown() noexcept;
     void addProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
-    Result<PlaybackStartReceipt> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
-    Result<SuccessionPreparedNextReceipt> prepareNextWithReceipt(PlaybackRequest const& request, ListId sourceListId);
-    Result<PlaybackStartReceipt> playSuccessionTrack(TrackId trackId, ListId sourceListId);
-    Result<SuccessionPreparedNextReceipt> prepareSuccessionNext(TrackId trackId, ListId sourceListId);
+    Result<PreparedCancellationBarrier> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
+    Result<PreparedNextToken> prepareNextRequest(PlaybackRequest const& request, ListId sourceListId);
+    Result<PreparedCancellationBarrier> playSuccessionTrack(TrackId trackId, ListId sourceListId);
+    Result<PreparedNextToken> prepareSuccessionNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearSuccessionPreparedNext();
     PreparedCancellationBarrier stopSuccession();
     PlaybackTransportSessionState playbackTransportSessionState();

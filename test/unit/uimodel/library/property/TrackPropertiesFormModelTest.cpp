@@ -81,13 +81,10 @@ namespace ao::uimodel::test
     CHECK(initialTitle.text == "Old Title");
     CHECK(initialTitle.editable);
     CHECK_FALSE(initialTitle.mixed);
-    CHECK_FALSE(initialTitle.dirty);
     CHECK_FALSE(model.canSave());
 
     model.setEditValue(rt::TrackField::Title, textEdit("New Title"));
 
-    auto const editedTitle = model.rowView(rt::TrackField::Title);
-    CHECK(editedTitle.dirty);
     CHECK(model.canSave());
 
     auto const patch = model.buildPatch();
@@ -107,7 +104,6 @@ namespace ao::uimodel::test
     auto const view = model.rowView(rt::TrackField::Title);
     CHECK(view.mixed);
     CHECK(view.text == kMultipleTrackValuesText);
-    CHECK_FALSE(view.dirty);
 
     model.setEditValue(rt::TrackField::Title, textEdit("Replacement"));
     CHECK_FALSE(model.canSave());

@@ -115,21 +115,20 @@ namespace ao::rt
       return std::min(1.0, static_cast<double>(progress.processedCount) / static_cast<double>(progress.totalCount));
     }
 
-    struct CoordinatedScanOutcome final
+    struct CoordinatedScanResult final
     {
       ScanApplyResult result;
       bool cancelled = false;
     };
 
-    Result<CoordinatedScanOutcome> applyCoordinatedScan(
-      LibraryMutationService& mutationService,
-      LibraryMutationService::MaintenanceGuard const& maintenance,
-      library::MusicLibrary& library,
-      ScanPlan plan,
-      ScanApplyOptions options,
-      std::move_only_function<void(ScanApplyProgress const&)> progress,
-      std::move_only_function<void(ScanFailure const&)> failure,
-      std::stop_token stopToken)
+    Result<CoordinatedScanResult> applyCoordinatedScan(LibraryMutationService& mutationService,
+                                                       LibraryMutationService::MaintenanceGuard const& maintenance,
+                                                       library::MusicLibrary& library,
+                                                       ScanPlan plan,
+                                                       ScanApplyOptions options,
+                                                       std::move_only_function<void(ScanApplyProgress const&)> progress,
+                                                       std::move_only_function<void(ScanFailure const&)> failure,
+                                                       std::stop_token stopToken)
     {
       auto operation = ScanApplyOperation{library, std::move(plan), std::move(progress), std::move(failure), options};
       auto prepareResult = operation.prepare(stopToken);
@@ -141,7 +140,7 @@ namespace ao::rt
 
       if (operation.cancelled())
       {
-        return CoordinatedScanOutcome{.result = std::move(*prepareResult), .cancelled = true};
+        return CoordinatedScanResult{.result = std::move(*prepareResult), .cancelled = true};
       }
 
       auto revalidationResult = operation.revalidatePreparedFiles(stopToken);
@@ -153,12 +152,12 @@ namespace ao::rt
 
       if (operation.cancelled())
       {
-        return CoordinatedScanOutcome{.result = std::move(*revalidationResult), .cancelled = true};
+        return CoordinatedScanResult{.result = std::move(*revalidationResult), .cancelled = true};
       }
 
       if (!operation.readyForMutation())
       {
-        return CoordinatedScanOutcome{.result = std::move(*revalidationResult)};
+        return CoordinatedScanResult{.result = std::move(*revalidationResult)};
       }
 
       auto mutationResult = mutationService.beginMaintenanceMutation(maintenance);
@@ -178,12 +177,12 @@ namespace ao::rt
 
       if (operation.cancelled())
       {
-        return CoordinatedScanOutcome{.result = std::move(*applyResult), .cancelled = true};
+        return CoordinatedScanResult{.result = std::move(*applyResult), .cancelled = true};
       }
 
       if (!operation.transactionShouldCommit())
       {
-        return CoordinatedScanOutcome{.result = std::move(*applyResult)};
+        return CoordinatedScanResult{.result = std::move(*applyResult)};
       }
 
       auto mutatedIds = applyResult->mutatedIds;
@@ -197,7 +196,7 @@ namespace ao::rt
       }
 
       applyResult->libraryRevision = commitResult->libraryRevision;
-      return CoordinatedScanOutcome{.result = std::move(*applyResult)};
+      return CoordinatedScanResult{.result = std::move(*applyResult)};
     }
 
     void logLibraryTaskFailure(std::string_view stage, std::string_view uri, std::string_view message)
@@ -610,7 +609,7 @@ namespace ao::rt
     co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
     setCurrentThreadName("ApplyScanPlan");
 
-    auto applyOutcome = Result<CoordinatedScanOutcome>{};
+    auto coordinatedScan = Result<CoordinatedScanResult>{};
     auto const totalItems = plan.size();
     auto exceptionPtr = std::exception_ptr{};
 
@@ -620,14 +619,14 @@ namespace ao::rt
         makeScanProgressReporter(totalItems, _implPtr->makeProgressPublisher(), std::move(progressCallback));
       auto failure = makeScanFailureReporter(std::move(failureCallback));
 
-      applyOutcome = applyCoordinatedScan(_implPtr->mutationService,
-                                          maintenance,
-                                          _implPtr->library,
-                                          std::move(plan),
-                                          options,
-                                          std::move(progress),
-                                          std::move(failure),
-                                          stopToken);
+      coordinatedScan = applyCoordinatedScan(_implPtr->mutationService,
+                                             maintenance,
+                                             _implPtr->library,
+                                             std::move(plan),
+                                             options,
+                                             std::move(progress),
+                                             std::move(failure),
+                                             stopToken);
     }
     catch (...)
     {
@@ -642,16 +641,16 @@ namespace ao::rt
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
-    if (!applyOutcome)
+    if (!coordinatedScan)
     {
       _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Failed);
-      co_return std::unexpected{applyOutcome.error()};
+      co_return std::unexpected{coordinatedScan.error()};
     }
 
-    auto const& result = applyOutcome->result;
+    auto const& result = coordinatedScan->result;
     auto const processedCount = result.insertedIds.size() + result.mutatedIds.size() + result.relinkedIds.size();
 
-    if (applyOutcome->cancelled)
+    if (coordinatedScan->cancelled)
     {
       _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Cancelled);
       async::throwOperationCancelled();
@@ -662,7 +661,7 @@ namespace ao::rt
                                                    : LibraryTaskCompletionStatus::CompletedWithIssues,
                                                  processedCount);
 
-    co_return Result<ScanApplyResult>{std::move(applyOutcome->result)};
+    co_return Result<ScanApplyResult>{std::move(coordinatedScan->result)};
   }
 
   async::Task<Result<AudioIdentityIndexResult>> LibraryTaskService::backfillAudioIdentityAsync(

@@ -21,5 +21,5 @@ namespace ao::rt
 
   TrackSourceBatchKind classifyTrackSourceBatch(TrackSourceDeltaBatch const& batch) noexcept;
   Result<delta::RegularTrackEditScript> regularTrackEditScriptOf(TrackSourceDeltaBatch const& batch);
-  TrackSourceDeltaBatch sourceBatchOf(delta::RegularTrackEditScript const& script, std::uint64_t revision = 0);
+  TrackSourceDeltaBatch sourceBatchOf(delta::RegularTrackEditScript const& script);
 } // namespace ao::rt

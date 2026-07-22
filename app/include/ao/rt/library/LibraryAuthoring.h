@@ -83,12 +83,10 @@ namespace ao::rt
   };
 
   template<typename Reply>
-  struct TrackAuthoringOutcome final
+  struct TrackAuthoringResult final
   {
     TrackAuthoringStatus status = TrackAuthoringStatus::NoOp;
     Reply reply{};
-    std::uint64_t libraryRevision = 0;
     std::optional<BoundTrackTargets> optNextTargets{};
-    std::vector<TrackId> missingTargetIds{};
   };
 } // namespace ao::rt

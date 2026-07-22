@@ -19,23 +19,6 @@
 
 namespace ao::uimodel
 {
-  namespace
-  {
-    TrackAuthoringSubmitStatus mapStatus(rt::TrackAuthoringStatus status)
-    {
-      switch (status)
-      {
-        case rt::TrackAuthoringStatus::Applied: return TrackAuthoringSubmitStatus::Applied;
-        case rt::TrackAuthoringStatus::NoOp: return TrackAuthoringSubmitStatus::NoOp;
-        case rt::TrackAuthoringStatus::Stale: return TrackAuthoringSubmitStatus::Stale;
-        case rt::TrackAuthoringStatus::Missing: return TrackAuthoringSubmitStatus::Missing;
-        case rt::TrackAuthoringStatus::Unavailable: return TrackAuthoringSubmitStatus::Unavailable;
-      }
-
-      return TrackAuthoringSubmitStatus::Unavailable;
-    }
-  } // namespace
-
   struct TrackAuthoringSession::Impl final
   {
     Impl(rt::Library& libraryValue, rt::BoundTrackTargets targetsValue)
@@ -46,11 +29,6 @@ namespace ao::uimodel
       handleAvailability(library.authoringAvailability());
     }
 
-    bool canSubmit() const noexcept
-    {
-      return currentState == TrackAuthoringSessionState::Editing || currentState == TrackAuthoringSessionState::Applied;
-    }
-
     bool bindingIsCurrent() const
     {
       auto const availability = library.authoringAvailability();
@@ -59,21 +37,21 @@ namespace ao::uimodel
              availability.libraryRevision == targets.libraryRevision();
     }
 
-    void setState(TrackAuthoringSessionState nextState)
+    void invalidate(rt::TrackAuthoringStatus const nextStatus)
     {
-      if (currentState == nextState)
+      if (!current || submitting)
       {
         return;
       }
 
-      currentState = nextState;
-      stateChanged.emit(currentState);
+      current = false;
+      invalidStatus = nextStatus;
+      invalidated.emit();
     }
 
     void handleAvailability(rt::LibraryAuthoringAvailability const& availability)
     {
-      if (currentState == TrackAuthoringSessionState::Submitting ||
-          currentState == TrackAuthoringSessionState::Rejected || currentState == TrackAuthoringSessionState::Stale)
+      if (!current)
       {
         return;
       }
@@ -82,44 +60,49 @@ namespace ao::uimodel
           availability.runtimeInstanceId != targets.runtimeInstanceId() ||
           availability.libraryRevision != targets.libraryRevision())
       {
-        setState(TrackAuthoringSessionState::Stale);
+        invalidate(rt::TrackAuthoringStatus::Stale);
       }
     }
 
-    template<typename RuntimeOutcome, typename SubmitResult>
-    Result<SubmitResult> finishSubmission(Result<RuntimeOutcome> outcomeResult)
+    template<typename RuntimeResult, typename SubmitResult>
+    Result<SubmitResult> finishSubmission(Result<RuntimeResult> runtimeResult)
     {
-      if (!outcomeResult)
+      if (!runtimeResult)
       {
-        setState(bindingIsCurrent() ? TrackAuthoringSessionState::Rejected : TrackAuthoringSessionState::Stale);
-        return std::unexpected{outcomeResult.error()};
+        invalidate(bindingIsCurrent() ? rt::TrackAuthoringStatus::Unavailable : rt::TrackAuthoringStatus::Stale);
+        return std::unexpected{runtimeResult.error()};
       }
 
-      auto outcome = std::move(*outcomeResult);
-      auto result = SubmitResult{
-        .status = mapStatus(outcome.status),
-        .reply = std::move(outcome.reply),
-        .missingTargetIds = std::move(outcome.missingTargetIds),
-      };
+      auto completed = std::move(*runtimeResult);
+      auto result = SubmitResult{.status = completed.status, .reply = std::move(completed.reply)};
 
-      switch (outcome.status)
+      switch (completed.status)
       {
         case rt::TrackAuthoringStatus::Applied:
-          if (!outcome.optNextTargets)
+          if (!completed.optNextTargets)
           {
-            setState(TrackAuthoringSessionState::Rejected);
+            invalidate(rt::TrackAuthoringStatus::Unavailable);
             return makeError(Error::Code::InvalidState, "Applied authoring result did not return a next binding");
           }
 
-          targets = std::move(*outcome.optNextTargets);
-          setState(bindingIsCurrent() ? TrackAuthoringSessionState::Applied : TrackAuthoringSessionState::Stale);
+          targets = std::move(*completed.optNextTargets);
+
+          if (!bindingIsCurrent())
+          {
+            invalidate(rt::TrackAuthoringStatus::Stale);
+          }
+
           break;
         case rt::TrackAuthoringStatus::NoOp:
-          setState(bindingIsCurrent() ? TrackAuthoringSessionState::Editing : TrackAuthoringSessionState::Stale);
+          if (!bindingIsCurrent())
+          {
+            invalidate(rt::TrackAuthoringStatus::Stale);
+          }
+
           break;
         case rt::TrackAuthoringStatus::Stale:
-        case rt::TrackAuthoringStatus::Unavailable: setState(TrackAuthoringSessionState::Stale); break;
-        case rt::TrackAuthoringStatus::Missing: setState(TrackAuthoringSessionState::Rejected); break;
+        case rt::TrackAuthoringStatus::Unavailable: invalidate(rt::TrackAuthoringStatus::Stale); break;
+        case rt::TrackAuthoringStatus::Missing: invalidate(rt::TrackAuthoringStatus::Unavailable); break;
       }
 
       return result;
@@ -129,25 +112,29 @@ namespace ao::uimodel
     {
       try
       {
-        setState(bindingIsCurrent() ? TrackAuthoringSessionState::Rejected : TrackAuthoringSessionState::Stale);
+        invalidate(bindingIsCurrent() ? rt::TrackAuthoringStatus::Unavailable : rt::TrackAuthoringStatus::Stale);
       }
       catch (...)
       {
-        // Preserve the submission exception; setState changes state before notification.
+        // Preserve the submission exception; invalidate changes state before notification.
         return;
       }
     }
 
-    template<typename RuntimeOutcome, typename SubmitResult, typename Operation>
+    template<typename RuntimeResult, typename SubmitResult, typename Operation>
     Result<SubmitResult> runSubmission(Operation&& operation)
     {
+      submitting = true;
+
       try
       {
-        setState(TrackAuthoringSessionState::Submitting);
-        return finishSubmission<RuntimeOutcome, SubmitResult>(std::invoke(std::forward<Operation>(operation)));
+        auto runtimeResult = std::invoke(std::forward<Operation>(operation));
+        submitting = false;
+        return finishSubmission<RuntimeResult, SubmitResult>(std::move(runtimeResult));
       }
       catch (...)
       {
+        submitting = false;
         finishExceptionalSubmission();
         throw;
       }
@@ -155,9 +142,11 @@ namespace ao::uimodel
 
     rt::Library& library;
     rt::BoundTrackTargets targets;
-    TrackAuthoringSessionState currentState = TrackAuthoringSessionState::Editing;
+    bool current = true;
+    bool submitting = false;
+    rt::TrackAuthoringStatus invalidStatus = rt::TrackAuthoringStatus::Unavailable;
     async::Subscription availabilitySubscription;
-    mutable async::Signal<TrackAuthoringSessionState> stateChanged;
+    mutable async::Signal<> invalidated;
   };
 
   Result<std::unique_ptr<TrackAuthoringSession>> TrackAuthoringSession::begin(rt::Library& library,
@@ -181,9 +170,9 @@ namespace ao::uimodel
 
   TrackAuthoringSession::~TrackAuthoringSession() = default;
 
-  TrackAuthoringSessionState TrackAuthoringSession::state() const noexcept
+  bool TrackAuthoringSession::isCurrent() const noexcept
   {
-    return _implPtr->currentState;
+    return _implPtr->current;
   }
 
   std::span<TrackId const> TrackAuthoringSession::targetIds() const noexcept
@@ -191,36 +180,31 @@ namespace ao::uimodel
     return _implPtr->targets.trackIds();
   }
 
-  async::Subscription TrackAuthoringSession::onStateChanged(
-    std::move_only_function<void(TrackAuthoringSessionState)> handler) const
+  async::Subscription TrackAuthoringSession::onInvalidated(std::move_only_function<void()> handler) const
   {
-    return _implPtr->stateChanged.connect(std::move(handler));
+    return _implPtr->invalidated.connect(std::move(handler));
   }
 
   Result<TrackMetadataSubmitResult> TrackAuthoringSession::submitMetadata(rt::MetadataPatch const& patch)
   {
-    if (!_implPtr->canSubmit())
+    if (!_implPtr->current)
     {
-      return TrackMetadataSubmitResult{.status = _implPtr->currentState == TrackAuthoringSessionState::Stale
-                                                   ? TrackAuthoringSubmitStatus::Stale
-                                                   : TrackAuthoringSubmitStatus::Unavailable};
+      return TrackMetadataSubmitResult{.status = _implPtr->invalidStatus};
     }
 
-    return _implPtr->runSubmission<rt::LibraryWriter::MetadataAuthoringOutcome, TrackMetadataSubmitResult>(
+    return _implPtr->runSubmission<rt::LibraryWriter::MetadataAuthoringResult, TrackMetadataSubmitResult>(
       [this, &patch] { return _implPtr->library.writer().updateMetadata(_implPtr->targets, patch); });
   }
 
   Result<TrackTagSubmitResult> TrackAuthoringSession::submitTags(std::span<std::string const> tagsToAdd,
                                                                  std::span<std::string const> tagsToRemove)
   {
-    if (!_implPtr->canSubmit())
+    if (!_implPtr->current)
     {
-      return TrackTagSubmitResult{.status = _implPtr->currentState == TrackAuthoringSessionState::Stale
-                                              ? TrackAuthoringSubmitStatus::Stale
-                                              : TrackAuthoringSubmitStatus::Unavailable};
+      return TrackTagSubmitResult{.status = _implPtr->invalidStatus};
     }
 
-    return _implPtr->runSubmission<rt::LibraryWriter::TagAuthoringOutcome, TrackTagSubmitResult>(
+    return _implPtr->runSubmission<rt::LibraryWriter::TagAuthoringResult, TrackTagSubmitResult>(
       [this, tagsToAdd, tagsToRemove]
       { return _implPtr->library.writer().editTags(_implPtr->targets, tagsToAdd, tagsToRemove); });
   }

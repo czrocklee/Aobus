@@ -11,7 +11,7 @@
 
 namespace ao::uimodel
 {
-  struct TrackFieldGridSchemaRequest final
+  struct TrackFieldGridSchemaOptions final
   {
     bool includeMetadata = true;
     bool includeTechnical = true;
@@ -32,7 +32,7 @@ namespace ao::uimodel
     std::vector<rt::TrackField> technicalFields;
   };
 
-  TrackFieldGridSchema buildTrackFieldGridSchema(TrackFieldGridSchemaRequest request);
+  TrackFieldGridSchema buildTrackFieldGridSchema(TrackFieldGridSchemaOptions options = {});
 
   std::string formatMetadataHeader(std::string_view titleText, std::string_view artistText);
   std::string formatTechnicalHeader(std::string_view codecText,

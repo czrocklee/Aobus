@@ -81,12 +81,12 @@ Good patterns:
 
 For notification-like services, cover:
 
-- create/post behavior.
-- update behavior.
-- dismissal/removal behavior.
-- no-op behavior for missing IDs.
+- post and keyed create-or-update behavior.
+- validation and capacity rejection without partial mutation.
+- authoritative expiry and stale timer generations.
 - feed/state projection.
-- signal emission and non-emission.
+- immutable update delivery and non-emission for unchanged keyed requests.
+- observer failure and reentrant FIFO delivery when those are part of the service contract.
 
 ## Callback tests
 
@@ -95,21 +95,17 @@ Callback assertions should be specific enough to reject wrong events:
 ```cpp
 auto received = std::vector<NotificationFeedUpdate>{};
 auto sub = service.onFeedUpdated(
-  [&](auto const& update)
-  {
-    if (update.mutationKind == NotificationFeedMutationKind::Dismissed)
-    {
-      received.push_back(update);
-    }
-  });
+  [&](auto const& update) { received.push_back(update); });
 
-service.dismiss(id);
-service.dismiss(NotificationId{999});
+service.post(NotificationSeverity::Warning,
+             "Device unavailable",
+             NotificationLifetime::history());
 
 REQUIRE(received.size() == 1);
-CHECK(received[0].affectedIds == std::vector{id});
+CHECK(received[0].mutationKind == NotificationFeedMutationKind::Posted);
 REQUIRE(received[0].feedPtr);
-CHECK(received[0].revision == received[0].feedPtr->revision);
+CHECK(received[0].id == received[0].feedPtr->entries.back().id);
+CHECK(received[0].feedPtr->entries.back().message == NotificationMessage{"Device unavailable"});
 ```
 
 Avoid only checking a boolean unless the contract has no payload.
@@ -119,8 +115,9 @@ Avoid only checking a boolean unless the contract has no payload.
 Keep subscriptions in named variables when their lifetime keeps callbacks connected:
 
 ```cpp
+auto latestFeed = std::shared_ptr<NotificationFeedState const>{};
 auto sub = service.onFeedUpdated(
-  [&](auto const& update) { latestRevision = update.revision; });
+  [&](auto const& update) { latestFeed = update.feedPtr; });
 ```
 
 For cancellation/lifetime tests, assert both sides:

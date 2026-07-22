@@ -2,13 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
-#include <algorithm>
 #include <cstdint>
-#include <optional>
 #include <string_view>
 
 namespace ao::uimodel
@@ -148,26 +145,8 @@ namespace ao::uimodel
     }
   }
 
-  bool isTrackFieldVisibleByDefault(rt::TrackField field)
-  {
-    return std::ranges::contains(rt::defaultTrackPresentationSpec().visibleFields, field);
-  }
-
   std::string_view trackFieldColumnTitle(rt::TrackField field)
   {
     return PresentationTextCatalog{}.trackFieldLabel(field);
-  }
-
-  std::optional<rt::TrackField> redundantSortFieldColumn(rt::TrackSortField sortField)
-  {
-    for (auto const& def : rt::trackFieldDefinitions())
-    {
-      if (def.optSortField == sortField && def.groupable)
-      {
-        return def.field;
-      }
-    }
-
-    return std::nullopt;
   }
 } // namespace ao::uimodel

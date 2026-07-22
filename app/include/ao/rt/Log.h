@@ -42,7 +42,6 @@ namespace ao::rt
                            LogConsoleMode consoleMode = LogConsoleMode::Enabled);
     static void shutdown();
 
-    static bool isInitialized();
     static async::AsyncExceptionHandler asyncExceptionHandler();
 
     static std::shared_ptr<spdlog::logger> const& appLogger() noexcept { return _appLoggerPtr; }

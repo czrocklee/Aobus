@@ -84,10 +84,7 @@ namespace ao::rt::test
                                  "  value: 1\n";
     auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
 
-    auto const receipt = runtime.workspace().restoreSession(store);
-
-    REQUIRE(receipt);
-    CHECK(receipt->disposition == WorkspaceCommitDisposition::NoChange);
+    REQUIRE(runtime.workspace().restoreSession(store));
     CHECK(runtime.workspace().snapshot() == before);
     CHECK(runtime.views().listViews().size() == 1);
   }
@@ -112,8 +109,6 @@ namespace ao::rt::test
 
       auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
       CHECK(state.listId == listId);
-      CHECK(runtime.workspace().canGoBack() == false);
-      CHECK(runtime.workspace().canGoForward() == false);
     }
   }
 
@@ -138,7 +133,6 @@ namespace ao::rt::test
     REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
     REQUIRE(runtime.workspace().navigateTo(secondListId));
 
-    CHECK(runtime.workspace().canGoBack() == true);
     REQUIRE(runtime.workspace().goBack());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == firstListId);
@@ -170,14 +164,13 @@ namespace ao::rt::test
         changed = value;
       });
 
-    auto const receipt = ao::test::requireValue(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
 
     CHECK(changeCount == 1);
     CHECK(changed.cause == WorkspaceChangeCause::Restore);
     CHECK(changed.snapshot.openViews.size() == 2);
     CHECK(changed.snapshot == runtime.workspace().snapshot());
-    CHECK(receipt.beforeRevision == 0);
-    CHECK(receipt.afterRevision == 1);
+    CHECK(changed.snapshot.revision == 1);
   }
 
   TEST_CASE("WorkspaceService - saveSession tolerates flush failures", "[runtime][unit][workspace][session]")
@@ -244,8 +237,6 @@ namespace ao::rt::test
     CHECK(layout.activeViewId == kInvalidViewId);
     CHECK(layout.revision == 0);
     CHECK(runtime.views().listViews().empty());
-    CHECK_FALSE(runtime.workspace().canGoBack());
-    CHECK_FALSE(runtime.workspace().canGoForward());
   }
 
   TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary",

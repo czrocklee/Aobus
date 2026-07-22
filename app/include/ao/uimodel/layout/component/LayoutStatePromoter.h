@@ -3,19 +3,10 @@
 
 #pragma once
 
-#include <cstddef>
-
 namespace ao::uimodel
 {
   struct LayoutComponentStateDocument;
   struct LayoutDocument;
-
-  struct PanelSizePromotionResult final
-  {
-    bool changed = false;
-    std::size_t promotedCount = 0;
-    std::size_t residualCount = 0;
-  };
 
   /**
    * @brief Promote runtime panel sizes from @p stateDoc into @p doc defaults.
@@ -24,6 +15,8 @@ namespace ao::uimodel
    * `collapsibleSplit.size` becomes `position`. Promoted entries are removed
    * from @p stateDoc; non-promoted values (e.g. `revealed`) are kept with a
    * refreshed baseline hash.
+   *
+   * @return Whether any panel size was promoted.
    */
-  PanelSizePromotionResult promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc);
+  bool promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc);
 } // namespace ao::uimodel

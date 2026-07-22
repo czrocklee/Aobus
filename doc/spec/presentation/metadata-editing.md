@@ -10,7 +10,7 @@ summary: Defines track-detail aggregation, editable field policy, custom metadat
 ## Scope
 
 This specification owns frontend-neutral presentation and editing policy for built-in track metadata, technical properties, custom metadata, and tags across a selected track set.
-It defines the runtime detail snapshot consumed by editors, UIModel field/schema policy, patch construction, multi-selection behavior, and mutation outcomes.
+It defines the runtime detail snapshot consumed by editors, UIModel field/schema policy, patch construction, multi-selection behavior, and mutation results.
 
 It does not define GTK geometry, chip widgets, popovers, or shell placement; those belong to the [GTK track-detail specification](../linux-gtk/track-detail.md).
 It does not define tag-file import mappings or query grammar.
@@ -19,7 +19,7 @@ It does not define tag-file import mappings or query grammar.
 
 Runtime `TrackDetailProjection` owns the authoritative aggregate snapshot and observes library/view changes.
 `LibraryMutationService` owns admission, commit, and change publication; `LibraryWriter` exposes bound metadata/tag commands.
-UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`, and `field/` owns schema, visibility, display formatting, validation, edit codecs, and patch/workflow construction.
+UIModel code under `app/include/ao/uimodel/library/detail/`, `library/property/`, and `field/` owns schema, visibility, display formatting, validation, edit codecs, and patch construction.
 
 `TrackAuthoringSession` is the UIModel boundary for committing metadata and tag edits and may call the narrow runtime writer supplied by composition.
 It does not open transactions or mutate `MusicLibrary` stores directly.
@@ -38,7 +38,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 
 ## Invariants
 
-- `TrackDetailSnapshot` contains one coherent selection kind, id set, revision, aggregate field array, custom metadata set, common-tag ids, and single-selection cover id.
+- `TrackDetailSnapshot` contains one coherent selection kind, id set, aggregate field array, custom metadata set, common-tag ids, and single-selection cover id.
 - Synthetic display fields and tags are excluded from the built-in field grid; tags have their own editing surface.
 - Technical fields are never editable through metadata UI policy.
 - Mixed built-in/custom values display the shared `<Multiple Values>` marker, and that literal cannot be committed as a custom value.
@@ -47,7 +47,7 @@ The non-interactive CLI may bind command-selected ids immediately before invokin
 - Built-in metadata can be cleared but not structurally deleted.
 - A tag edit with no selected ids or no additions/removals is a no-op.
 - One open editor owns one `TrackAuthoringSession`; changing selection or recycling a row cannot retarget that session.
-- Any intervening effective library commit, maintenance entry, fault, or runtime replacement makes an open non-submitting session stale.
+- Any intervening effective library commit, maintenance entry, fault, or runtime replacement invalidates an open session.
 - Missing targets reject the complete metadata/tag command; multi-selection authoring never applies a surviving subset.
 - A semantic no-op does not commit and leaves the current session binding usable.
 - File tag readers map only explicitly supported Aobus fields; unknown vendor fields do not become custom metadata.
@@ -61,12 +61,13 @@ Each `CustomMetadataItem` carries key, aggregate string value, `presentOnAll`, a
 The field-grid schema divides supported definitions into metadata, composite metadata, and technical fields according to the requested categories.
 Visibility policy depends on category enablement, selection, section expansion, show-empty state, editor activity, and current display text.
 
-`TrackAuthoringSession` has `Editing`, `Submitting`, `Applied`, `Stale`, and `Rejected` states.
+`TrackAuthoringSession` exposes only whether its retained binding is current and a one-shot invalidation observation.
+It has no public submission lifecycle: submission is synchronous, and frontends only need to know whether another command may use the same binding.
 Beginning a session binds its explicit targets and immediately reconciles current runtime availability after subscribing, closing the bind-to-subscribe event gap.
-An applied submission replaces the retained binding with the returned next-revision binding; a later effective commit makes it stale.
-Operational failure or a missing target rejects the session, while stale or unavailable submission makes it stale.
-Every submission reconciles runtime availability after mapping its outcome, including events ignored while the session was `Submitting`.
-A durably applied command whose publication exception is contained by the callback executor therefore retains its `Applied` outcome but leaves the session `Stale` because that runtime is faulted.
+During its own submission, the session defers availability invalidation until the runtime result supplies the next binding.
+An applied submission replaces the retained binding with that next-revision binding; a later effective commit invalidates it.
+Operational failure, a missing target, stale or unavailable status, or mismatched post-submit availability also invalidates it.
+A durably applied command whose publication exception is contained by the callback executor therefore retains its `Applied` result but leaves the session invalid because that runtime is faulted.
 
 ## Commands and transitions
 
@@ -81,18 +82,18 @@ An empty metadata display value remains hidden by default unless show-empty is a
 
 Addition first validates duplicate and reserved-key conflicts.
 Update creates `customUpdates[key] = value`; delete creates `customUpdates[key] = nullopt`.
-The mutation result's `mutatedIds` determines whether the visible operation applied.
+An empty `changes` list is a no-op; each applied entry identifies its track and changed fields or tags.
 
 Before deletion, UIModel returns an undo value only for a key present on all targets with a non-mixed value.
-An applied deletion transfers its session, now holding the next-revision binding, into the undo receipt.
+An applied deletion transfers its session, now holding the next-revision binding, into the pending undo state.
 Presentation and timeout remain frontend-local, but replay submits the reverse patch through that same guarded session.
 Any intervening effective commit makes undo stale instead of overwriting newer work.
 
 ### Tags
 
-`TagEditWorkflow` verifies that the event's selected ids exactly equal its session targets, then submits additions/removals through that session.
-It reports whether any target changed, whether the request was rejected or stale, and one status string summarizing added/removed counts and mutated track count.
-Suggested tags are a presentation aid; only the final add/remove request is authoritative.
+`applyTagEdit()` submits additions/removals through the targets already bound to its `TrackAuthoringSession`; it does not copy or rebind a second selected-id set.
+Its result reuses `TrackAuthoringStatus` and carries display text only when the frontend has something to report.
+Suggested tags are a presentation aid; only the final add/remove command is authoritative.
 
 ## Failure and cancellation
 
@@ -123,18 +124,18 @@ Custom keys are queryable through the custom-variable syntax in the predicate la
 - [`TrackDetailProjection.h`](../../../app/include/ao/rt/projection/TrackDetailProjection.h) defines the aggregate snapshot.
 - [`LiveTrackDetailProjection.cpp`](../../../app/runtime/projection/LiveTrackDetailProjection.cpp) builds and observes live snapshots.
 - [`TrackFieldGridSchema.cpp`](../../../app/uimodel/library/detail/TrackFieldGridSchema.cpp) and [`TrackFieldGridPolicy.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGridPolicy.h) own field selection and visibility.
-- [`TrackCustomMetadataWorkflow.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadataWorkflow.cpp) owns display, validation, patches, and undo eligibility.
-- [`TagEditWorkflow.cpp`](../../../app/uimodel/library/property/TagEditWorkflow.cpp) owns tag mutation requests and status.
-- [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns stable targets, binding lifetime, submit states, and outcome mapping.
+- [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
+- [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.
+- [`TrackAuthoringSession.h`](../../../app/include/ao/uimodel/library/property/TrackAuthoringSession.h) owns stable targets, current-binding lifetime, invalidation, and result mapping.
 - [`LibraryWriter.cpp`](../../../app/runtime/library/LibraryWriter.cpp) owns mutation commit.
 
 ## Test map
 
 - Runtime projection tests under [`test/unit/runtime/projection/`](../../../test/unit/runtime/projection/) protect aggregation and refresh.
 - [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridPolicyTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp) protect field/visibility policy.
-- [`TrackCustomMetadataWorkflowTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataWorkflowTest.cpp) protects validation, patches, mixed values, and undo eligibility.
-- [`TagEditWorkflowTest.cpp`](../../../test/unit/uimodel/library/property/TagEditWorkflowTest.cpp) protects tag mutations and outcomes.
-- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, stale transitions, and post-commit faults with both propagating and exception-containing executors.
+- [`TrackCustomMetadataTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, mixed values, and undo eligibility.
+- [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
+- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, invalidation, and post-commit faults with both propagating and exception-containing executors.
 - [`LibraryWriterTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTest.cpp) protects committed multi-target behavior.
 
 ## Related documents

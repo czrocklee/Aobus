@@ -40,7 +40,7 @@ Good `runtime` tests usually:
 
 Appropriate contracts:
 
-- NotificationService posts, updates, dismisses, and feed revisions.
+- NotificationService posts, keyed updates, bounds, expiry, and immutable update delivery.
 - LifetimeScope cancellation prevents queued callback work.
 - Workspace navigation changes active view state.
 - Library export/import preserves user data across a round trip.
@@ -54,7 +54,7 @@ This is the preferred layer for most UI behavior.
 Good `uimodel` tests usually:
 
 - Feed model-like state in and assert view state out.
-- Cover priority, fallback, grouping, dismissal, validation, and no-op cases.
+- Cover priority, fallback, grouping, local hiding, validation, and no-op cases.
 - Verify signal emission counts and payloads when signals are part of the contract.
 - Keep GTK out entirely.
 

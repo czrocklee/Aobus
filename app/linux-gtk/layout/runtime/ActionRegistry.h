@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -23,11 +22,6 @@ namespace Gtk
 {
   class Window;
   class Widget;
-}
-
-namespace ao::uimodel
-{
-  struct LayoutActionBindingContext;
 }
 
 namespace ao::gtk::layout
@@ -61,12 +55,8 @@ namespace ao::gtk::layout
     std::optional<uimodel::LayoutActionDescriptor> descriptor(std::string_view id) const;
     std::vector<uimodel::LayoutActionDescriptor> descriptors() const;
 
-    bool canBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
-    bool tryBind(std::string_view id, uimodel::LayoutActionBindingContext const& ctx) const;
-
     uimodel::LayoutActionAvailability state(std::string_view id, ActionActivationContext const& ctx) const;
-    uimodel::LayoutActionActivationResult activate(std::string_view id, ActionActivationContext& ctx) const;
-    uimodel::LayoutActionActivationResult tryActivate(std::string_view id, ActionActivationContext& ctx) const;
+    bool activate(std::string_view id, ActionActivationContext& ctx) const;
 
     uimodel::LayoutActionCatalog const& catalog() const noexcept;
 

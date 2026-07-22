@@ -25,10 +25,9 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackListProjection.h>
-#include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
-#include <ao/uimodel/field/TrackInlineEdit.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
@@ -533,35 +532,46 @@ namespace ao::gtk
       return;
     }
 
-    auto const result = uimodel::applyTrackInlineEdit(
-      uimodel::TrackInlineEditRequest{
-        .field = field, .oldText = rowPtr->fieldText(field).raw(), .newText = std::move(newValue)},
-      uimodel::TrackInlineEditHooks{
-        .parse = [uiDef](std::string_view text) -> Result<uimodel::TrackFieldEditValue>
-        { return uiDef->parseInlineEdit(text); },
-        .readCurrentValue = [rowPtr, field, uiDef] -> uimodel::TrackFieldEditValue
-        { return uiDef->readRowEditValue(*rowPtr, field); },
-        .applyValue = [rowPtr, field, uiDef](uimodel::TrackFieldEditValue const& value)
-        { uiDef->applyRowEditValue(*rowPtr, value, field); },
-        .writePatch = [field](rt::MetadataPatch& patch, uimodel::TrackFieldEditValue const& value)
-        { uimodel::writeTrackFieldPatch(patch, field, value); },
-        .session = &session,
-      });
-
-    switch (result.outcome)
+    if (newValue == rowPtr->fieldText(field).raw())
     {
-      case uimodel::TrackInlineEditOutcome::NoChange:
-      case uimodel::TrackInlineEditOutcome::NotEditable: return;
-      case uimodel::TrackInlineEditOutcome::ParseRejected: setStatusMessage(result.statusMessage); return;
-      case uimodel::TrackInlineEditOutcome::MutationRejected:
-        APP_LOG_ERROR("Metadata update failed: {}", result.statusMessage);
-        return;
-      case uimodel::TrackInlineEditOutcome::Stale:
-      case uimodel::TrackInlineEditOutcome::Missing:
-      case uimodel::TrackInlineEditOutcome::Unavailable: setStatusMessage(result.statusMessage); return;
-      case uimodel::TrackInlineEditOutcome::Applied: break;
+      return;
     }
 
+    auto const editValueResult = uiDef->parseInlineEdit(newValue);
+
+    if (!editValueResult)
+    {
+      setStatusMessage(editValueResult.error().message);
+      return;
+    }
+
+    auto patch = rt::MetadataPatch{};
+
+    if (!uimodel::writeTrackFieldPatch(patch, field, *editValueResult))
+    {
+      return;
+    }
+
+    auto const replyResult = session.submitMetadata(patch);
+
+    if (!replyResult)
+    {
+      APP_LOG_ERROR("Metadata update failed: {}", replyResult.error().message);
+      return;
+    }
+
+    switch (replyResult->status)
+    {
+      case rt::TrackAuthoringStatus::NoOp: return;
+      case rt::TrackAuthoringStatus::Stale:
+        setStatusMessage("Library changed while this edit was open. Reload the value and try again.");
+        return;
+      case rt::TrackAuthoringStatus::Missing: setStatusMessage("The edited track no longer exists."); return;
+      case rt::TrackAuthoringStatus::Unavailable: setStatusMessage("Library editing is currently unavailable."); return;
+      case rt::TrackAuthoringStatus::Applied: break;
+    }
+
+    uiDef->applyRowEditValue(*rowPtr, *editValueResult, field);
     clearStatusMessage();
   }
 

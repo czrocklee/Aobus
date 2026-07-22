@@ -360,7 +360,7 @@ namespace ao::rt::test
     auto const updateResult =
       writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
     REQUIRE(updateResult);
-    CHECK_FALSE(updateResult->mutatedIds.empty());
+    CHECK_FALSE(updateResult->changes.empty());
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Jazz", 1},
@@ -403,7 +403,7 @@ namespace ao::rt::test
     auto const updateResult =
       writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
     REQUIRE(updateResult);
-    CHECK_FALSE(updateResult->mutatedIds.empty());
+    CHECK_FALSE(updateResult->changes.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                             {"Bach", 1},
@@ -546,7 +546,7 @@ namespace ao::rt::test
     auto const updateResult =
       writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
     REQUIRE(updateResult);
-    CHECK_FALSE(updateResult->mutatedIds.empty());
+    CHECK_FALSE(updateResult->changes.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},

@@ -2,10 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
-#include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -53,13 +51,5 @@ namespace ao::uimodel::test
     CHECK(parentForNewSmartList(kInvalidListId) == kInvalidListId);
     CHECK(parentForNewSmartList(rt::kAllTracksListId) == kInvalidListId);
     CHECK(parentForNewSmartList(ListId{42}) == ListId{42});
-  }
-
-  TEST_CASE("ListActionPolicy - enables track reordering only for manual List Order views", "[uimodel][unit][list]")
-  {
-    CHECK(canReorderListTracks(ListPresentationSourceKind::Manual, rt::kListOrderTrackPresentationId));
-    CHECK_FALSE(canReorderListTracks(ListPresentationSourceKind::Manual, "albums"));
-    CHECK_FALSE(canReorderListTracks(ListPresentationSourceKind::Smart, rt::kListOrderTrackPresentationId));
-    CHECK_FALSE(canReorderListTracks(ListPresentationSourceKind::AllTracks, rt::kListOrderTrackPresentationId));
   }
 } // namespace ao::uimodel::test

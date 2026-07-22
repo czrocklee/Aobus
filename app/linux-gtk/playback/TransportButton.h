@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <gtkmm/button.h>
@@ -25,7 +26,7 @@ namespace ao::gtk
   class TransportButton final
   {
   public:
-    using Action = uimodel::TransportAction;
+    using Action = uimodel::PlaybackCommand;
 
     TransportButton(rt::PlaybackService& playback,
                     uimodel::PlaybackCommandSurface& commands,

@@ -23,7 +23,7 @@ namespace ao::rt
   SmartListSource::SmartListSource(TrackSourceLease sourceLease, SmartListEvaluator& evaluator)
     : _sourceLease{std::move(sourceLease)}, _evaluator{&evaluator}
   {
-    stageExpression("");
+    setExpression("");
     _evaluator->registerList(*this);
   }
 
@@ -37,7 +37,35 @@ namespace ao::rt
 
   void SmartListSource::setExpression(std::string expr)
   {
-    stageExpression(std::move(expr));
+    _optPending.emplace();
+    _optPending->expression = std::move(expr);
+
+    auto const setError = [this](Error error)
+    {
+      APP_LOG_ERROR("Smart list expression error for '{}': {}", _optPending->expression, error.message);
+
+      _optPending->optError = std::move(error);
+      _optPending->planPtr.reset();
+    };
+
+    auto parsed = query::parse(_optPending->expression.empty() ? "true" : _optPending->expression);
+
+    if (!parsed)
+    {
+      setError(std::move(parsed).error());
+      return;
+    }
+
+    auto plan = query::compileQuery(*parsed);
+
+    if (!plan)
+    {
+      setError(std::move(plan).error());
+      return;
+    }
+
+    _optPending->planPtr = std::make_unique<query::ExecutionPlan>(*std::move(plan));
+    _optPending->optError.reset();
   }
 
   void SmartListSource::reload()
@@ -65,48 +93,15 @@ namespace ao::rt
     _evaluator->notifyUpdated(*this, id);
   }
 
-  void SmartListSource::stageExpression(std::string expr)
+  void SmartListSource::applyPendingState()
   {
-    _staged.expression = std::move(expr);
-    _dirty = true;
-
-    auto const stageError = [this](Error error)
-    {
-      APP_LOG_ERROR("Smart list expression error for '{}': {}", _staged.expression, error.message);
-
-      _staged.optError = std::move(error);
-      _staged.planPtr.reset();
-    };
-
-    auto parsed = query::parse(_staged.expression.empty() ? "true" : _staged.expression);
-
-    if (!parsed)
-    {
-      stageError(std::move(parsed).error());
-      return;
-    }
-
-    auto plan = query::compileQuery(*parsed);
-
-    if (!plan)
-    {
-      stageError(std::move(plan).error());
-      return;
-    }
-
-    _staged.planPtr = std::make_unique<query::ExecutionPlan>(*std::move(plan));
-    _staged.optError.reset();
-  }
-
-  void SmartListSource::applyStagedState()
-  {
-    if (!_dirty)
+    if (!_optPending)
     {
       return;
     }
 
-    _current = std::move(_staged);
-    _dirty = false;
+    _current = std::move(*_optPending);
+    _optPending.reset();
   }
 
   void SmartListSource::replaceMembers(std::vector<TrackId> members)

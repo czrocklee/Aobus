@@ -34,7 +34,7 @@ namespace ao::rt::test
 
     auto const reply = writer.editTags(std::array{trackId}, favorite, {});
     REQUIRE(reply);
-    CHECK_FALSE(reply->mutatedIds.empty());
+    CHECK_FALSE(reply->changes.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
 
@@ -66,7 +66,7 @@ namespace ao::rt::test
 
     auto const reply = writer.editTags(std::array{trackId}, favorite, {});
     REQUIRE(reply);
-    CHECK(reply->mutatedIds.empty());
+    CHECK(reply->changes.empty());
     CHECK(mutated.empty());
   }
 
@@ -109,7 +109,7 @@ namespace ao::rt::test
 
     auto const reply = writer.editTags(std::array{trackId}, {}, favorite);
     REQUIRE(reply);
-    CHECK_FALSE(reply->mutatedIds.empty());
+    CHECK_FALSE(reply->changes.empty());
     REQUIRE(mutated.size() == 1);
     CHECK(mutated[0] == trackId);
   }
@@ -129,7 +129,7 @@ namespace ao::rt::test
     auto const nonExistent = std::array{std::string{"NonExistent"}};
     auto const reply = writer.editTags(std::array{trackId}, {}, nonExistent);
     REQUIRE(reply);
-    CHECK(reply->mutatedIds.empty());
+    CHECK(reply->changes.empty());
     CHECK(mutated.empty());
   }
 

@@ -3,13 +3,13 @@
 
 #pragma once
 
-#include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,18 +28,10 @@ namespace ao::uimodel
   {
     bool enabled = false;
     rt::ViewId activeViewId = rt::kInvalidViewId;
-    ListId activeListId = kInvalidListId;
-    std::string activePresentationId = {};
     std::string label = "Presentation";
     std::vector<TrackPresentationMenuItem> menuItems;
 
     bool operator==(TrackPresentationPickerState const&) const = default;
-  };
-
-  struct TrackPresentationApplyCommand final
-  {
-    bool shouldApply = false;
-    rt::TrackPresentationSpec spec;
   };
 
   class TrackPresentationPickerViewModel final
@@ -57,11 +49,12 @@ namespace ao::uimodel
     TrackPresentationPickerViewModel(TrackPresentationPickerViewModel&&) = delete;
     TrackPresentationPickerViewModel& operator=(TrackPresentationPickerViewModel&&) = delete;
 
-    TrackPresentationPickerState state() const;
     void refresh();
-    TrackPresentationApplyCommand selectPresentation(std::string_view presentationId);
+    std::optional<rt::TrackPresentationSpec> selectPresentation(std::string_view presentationId);
 
   private:
+    TrackPresentationPickerState state() const;
+
     rt::ViewService& _views;
     rt::WorkspaceService& _workspace;
     TrackPresentationCatalog& _catalog;

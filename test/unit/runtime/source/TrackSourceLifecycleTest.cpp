@@ -19,7 +19,7 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackSource - live subscription publishes exact revisions without a synthetic batch",
+  TEST_CASE("TrackSource - live subscription publishes exact deltas without a synthetic batch",
             "[runtime][unit][source]")
   {
     auto source = MutableTrackSource{};
@@ -34,9 +34,6 @@ namespace ao::rt::test
     source.remove(TrackId{20});
 
     REQUIRE(batches.size() == 3);
-    CHECK(batches[0].revision == 1);
-    CHECK(batches[1].revision == 2);
-    CHECK(batches[2].revision == 3);
 
     auto const& inserted = std::get<SourceInsertRange>(batches[0].deltas[0]);
     CHECK(inserted.start == 1);
@@ -49,7 +46,6 @@ namespace ao::rt::test
     auto const& removed = std::get<SourceRemoveRange>(batches[2].deltas[0]);
     CHECK(removed.start == 1);
     CHECK(removed.trackIds == std::vector{TrackId{20}});
-    CHECK(source.revision() == 3);
   }
 
   TEST_CASE("TrackSource - one mixed operation publishes after the complete source state is visible",
@@ -81,7 +77,6 @@ namespace ao::rt::test
                             });
 
     REQUIRE(observedBatches.size() == 1);
-    CHECK(observedBatches[0].revision == 1);
     REQUIRE(observedBatches[0].deltas.size() == 2);
     CHECK(observedIds == std::vector<TrackId>(finalIds.begin(), finalIds.end()));
   }
@@ -97,17 +92,14 @@ namespace ao::rt::test
     source.emitReset();
 
     REQUIRE(batches.size() == 1);
-    CHECK(batches[0].revision == 1);
     REQUIRE(batches[0].deltas.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(batches[0].deltas[0]));
     CHECK(source.state() == TrackSourceState::Invalidated);
-    CHECK(source.revision() == 1);
 
     auto lateBatches = std::vector<TrackSourceDeltaBatch>{};
     auto lateSubscription = source.subscribe([&](TrackSourceDeltaBatch const& batch) { lateBatches.push_back(batch); });
 
     REQUIRE(lateBatches.size() == 1);
-    CHECK(lateBatches[0].revision == 1);
     REQUIRE(lateBatches[0].deltas.size() == 1);
     CHECK(std::holds_alternative<SourceInvalidated>(lateBatches[0].deltas[0]));
   }
@@ -131,13 +123,15 @@ namespace ao::rt::test
   {
     auto source = MutableTrackSource{};
     std::uint32_t batchCount = 0;
+    std::uint32_t retainedBatchCount = 0;
     auto subscription = source.subscribe([&](TrackSourceDeltaBatch const&) { ++batchCount; });
+    auto retainedSubscription = source.subscribe([&](TrackSourceDeltaBatch const&) { ++retainedBatchCount; });
 
     subscription.reset();
     source.emitReset();
 
     CHECK(batchCount == 0);
-    CHECK(source.revision() == 1);
+    CHECK(retainedBatchCount == 1);
   }
 
   TEST_CASE("TrackSourceLease - shared ownership pins source identity", "[runtime][unit][source]")

@@ -79,11 +79,9 @@ namespace ao::uimodel::test
     auto log = ao::test::RenderLog<AobusSoulViewState>{};
     auto const viewModel = AobusSoulViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
     REQUIRE(log.states.size() == 1);
-    auto const revisionBefore = fixture.playback.snapshot().revision;
-
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
-    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(log.states.size() == 1);
   }
 

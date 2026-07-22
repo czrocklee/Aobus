@@ -15,7 +15,7 @@ namespace ao::uimodel
     Commit,
   };
 
-  struct SeekSliderDecision final
+  struct SeekSliderUpdate final
   {
     SeekSliderAction action = SeekSliderAction::None;
     std::chrono::milliseconds elapsed{0};
@@ -28,16 +28,16 @@ namespace ao::uimodel
     void reset() noexcept;
 
     bool beginPointerInteraction() noexcept;
-    SeekSliderDecision endPointerInteraction(std::chrono::milliseconds elapsed) noexcept;
-    SeekSliderDecision valueChanged(std::chrono::milliseconds elapsed) noexcept;
+    SeekSliderUpdate endPointerInteraction(std::chrono::milliseconds elapsed) noexcept;
+    SeekSliderUpdate valueChanged(std::chrono::milliseconds elapsed) noexcept;
 
     bool isPointerActive() const noexcept { return _pointerActive; }
     bool hasPendingFinalSeek() const noexcept { return _pendingFinalSeek; }
     std::chrono::milliseconds duration() const noexcept { return _duration; }
-    bool isEnabled() const noexcept { return _enabled; }
-    std::chrono::milliseconds clampElapsed(std::chrono::milliseconds elapsed) const noexcept;
 
   private:
+    std::chrono::milliseconds clampElapsed(std::chrono::milliseconds elapsed) const noexcept;
+
     std::chrono::milliseconds _duration{0};
     bool _enabled = false;
     bool _pointerActive = false;

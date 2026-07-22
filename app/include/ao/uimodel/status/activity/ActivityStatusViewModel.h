@@ -42,13 +42,10 @@ namespace ao::uimodel
     ~ActivityStatusViewModel();
 
     ActivityStatusViewState const& viewState() const noexcept;
-    bool hasPendingAutoDismiss() const noexcept;
-    bool expireTransientIfDue();
-    void expireTransient();
+    bool autoDismissCompactIfDue();
+    void autoDismissCompact();
     void dismissCompact();
-    void dismissDetailNotificationFromActivity(rt::NotificationId id);
-    void handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event);
-    void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event);
+    void hideDetailNotification(rt::NotificationId id);
 
   private:
     struct Impl;

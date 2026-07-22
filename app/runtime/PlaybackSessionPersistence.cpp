@@ -12,6 +12,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
@@ -37,21 +38,21 @@ namespace ao::rt
 {
   namespace
   {
-    class [[nodiscard]] RestoreIntentTransaction final
+    class [[nodiscard]] RestoreScope final
     {
     public:
-      explicit RestoreIntentTransaction(bool& restoring) noexcept
+      explicit RestoreScope(bool& restoring) noexcept
         : _restoring{restoring}, _previous{restoring}
       {
         _restoring = true;
       }
 
-      ~RestoreIntentTransaction() { _restoring = _previous; }
+      ~RestoreScope() { _restoring = _previous; }
 
-      RestoreIntentTransaction(RestoreIntentTransaction const&) = delete;
-      RestoreIntentTransaction& operator=(RestoreIntentTransaction const&) = delete;
-      RestoreIntentTransaction(RestoreIntentTransaction&&) = delete;
-      RestoreIntentTransaction& operator=(RestoreIntentTransaction&&) = delete;
+      RestoreScope(RestoreScope const&) = delete;
+      RestoreScope& operator=(RestoreScope const&) = delete;
+      RestoreScope(RestoreScope&&) = delete;
+      RestoreScope& operator=(RestoreScope&&) = delete;
 
     private:
       bool& _restoring;
@@ -105,7 +106,7 @@ namespace ao::rt
 
     _started = true;
     _lastSnapshot = _playback.snapshot();
-    _successionIntentSubscription = _succession.onPersistenceIntentChanged([this] { requestDebouncedSave(); });
+    _successionStateSubscription = _succession.onRestorableStateChanged([this] { requestDebouncedSave(); });
     _snapshotSubscription =
       _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
   }
@@ -139,7 +140,7 @@ namespace ao::rt
 
     auto const shouldSave = _started;
     _shuttingDown = true;
-    _successionIntentSubscription.reset();
+    _successionStateSubscription.reset();
     _snapshotSubscription.reset();
     cancelScheduledSave();
     return shouldSave ? save() : Result<>{};
@@ -157,9 +158,9 @@ namespace ao::rt
 
     if (_restorePublicationPending)
     {
-      // AppRuntime commits the lower-layer restore as one synchronous intent
+      // AppRuntime commits the lower-layer restore as one synchronous command
       // snapshot after the restore transaction returns. Adopt that publication
-      // as the restored baseline without treating it as a new persistence intent.
+      // as the restored baseline without treating it as a new persistence change.
       _restorePublicationPending = false;
       return;
     }
@@ -168,10 +169,10 @@ namespace ao::rt
       snapshot.transport.nowPlaying.trackId != previous.transport.nowPlaying.trackId ||
       snapshot.transport.nowPlaying.sourceListId != previous.transport.nowPlaying.sourceListId;
     auto const committedPositionChanged = snapshot.transport.finalSeekRevision != previous.transport.finalSeekRevision;
-    auto const volumeIntentChanged = snapshot.transport.volume.level != previous.transport.volume.level ||
-                                     snapshot.transport.volume.muted != previous.transport.volume.muted;
+    auto const volumeChanged = snapshot.transport.volume.level != previous.transport.volume.level ||
+                               snapshot.transport.volume.muted != previous.transport.volume.muted;
 
-    if (volumeIntentChanged && !committedPositionChanged)
+    if (volumeChanged && !committedPositionChanged)
     {
       requestDebouncedSave();
     }
@@ -292,7 +293,7 @@ namespace ao::rt
     return _config.save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{});
   }
 
-  Result<PlaybackSessionPersistenceRestoreResult> PlaybackSessionPersistence::restore()
+  Result<PlaybackSessionRestoreResult> PlaybackSessionPersistence::restore()
   {
     if (_restoring)
     {
@@ -310,7 +311,7 @@ namespace ao::rt
 
     if (!*loadedSession)
     {
-      return PlaybackSessionPersistenceRestoreResult{};
+      return PlaybackSessionRestoreResult{};
     }
 
     try
@@ -321,7 +322,7 @@ namespace ao::rt
 
       if (!sourceExists && !currentExists)
       {
-        return PlaybackSessionPersistenceRestoreResult{};
+        return PlaybackSessionRestoreResult{};
       }
 
       auto launchSpec = PlaybackLaunchSpec{
@@ -365,7 +366,7 @@ namespace ao::rt
 
         if (!optReplacementIndex)
         {
-          return PlaybackSessionPersistenceRestoreResult{};
+          return PlaybackSessionRestoreResult{};
         }
 
         currentTrackId = (*candidate)->trackIdAt(*optReplacementIndex);
@@ -379,7 +380,7 @@ namespace ao::rt
         }
       }
 
-      auto const outcome = PlaybackSessionPersistenceRestoreResult{
+      auto const result = PlaybackSessionRestoreResult{
         .restored = true,
         .trackId = currentTrackId,
         .sourceListId = launchSpec.sourceListId,
@@ -394,7 +395,7 @@ namespace ao::rt
 
       auto restored = [&] -> Result<>
       {
-        auto const restoring = RestoreIntentTransaction{_restoring};
+        auto const restoring = RestoreScope{_restoring};
         auto restoredElapsed = _playbackTransport.restorePlaybackTransport(transport);
 
         if (!restoredElapsed)
@@ -416,7 +417,7 @@ namespace ao::rt
         return std::unexpected{restored.error()};
       }
 
-      return outcome;
+      return result;
     }
     catch (std::exception const& error)
     {

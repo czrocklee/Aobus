@@ -50,7 +50,6 @@ namespace ao::rt
     LiveTrackListProjection& operator=(LiveTrackListProjection&&) = delete;
 
     ViewId viewId() const noexcept override;
-    std::uint64_t revision() const noexcept override;
 
     TrackPresentationSpec presentation() const override;
     std::size_t groupCount() const noexcept override;

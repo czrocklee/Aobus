@@ -13,7 +13,6 @@
 
 namespace ao::rt
 {
-  struct FilterStatusChanged;
   class ViewService;
   class WorkspaceService;
 }
@@ -26,7 +25,6 @@ namespace ao::uimodel
     std::string resolvedExpression;
     std::string tooltip;
     bool enabled = false;
-    bool pending = false;
     bool hasError = false;
     bool canCreateSmartList = false;
   };
@@ -49,7 +47,6 @@ namespace ao::uimodel
 
   private:
     void handleFocusedViewChanged(rt::ViewId viewId);
-    void handleFilterStatusChanged(rt::FilterStatusChanged const& status);
     void refresh();
 
     rt::ViewService& _viewService;
@@ -59,10 +56,8 @@ namespace ao::uimodel
     rt::ViewId _viewId{rt::kInvalidViewId};
     std::string _entryText;
     std::string _resolvedExpression;
-    bool _filterPending = false;
     std::optional<Error> _optFilterError;
 
     async::Subscription _focusSub;
-    async::Subscription _filterStatusSub;
   };
 } // namespace ao::uimodel

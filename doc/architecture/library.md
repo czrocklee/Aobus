@@ -234,7 +234,8 @@ Changing presentation reshapes the projection without changing base-list or filt
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
 - `LibraryChanges` accepts publication only from the coordinator and serializes contiguous revision delivery onto the callback executor even when worker producers finish out of order.
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
-- A source lease pins source lifetime for its consumer, while the cache may otherwise evict unused implementations.
+- Cached list sources retain stable identity until deletion or cache teardown; a lease keeps its exact source and
+  upstream dependencies alive beyond cache teardown. Ad-hoc filtered sources remain weak-cached while leased.
 - Dictionary read caches never extend a store view beyond the owning `MusicLibrary`, and they do not provide transaction isolation or a dictionary snapshot.
 - Projection raw-text caches borrow stable dictionary storage, while normalized projection keys never outlive the projection arena that owns them.
 - Exact persistence records and exact delta operations are delegated to reference and specification documents.

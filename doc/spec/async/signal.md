@@ -83,7 +83,7 @@ Destroying the signal before a posted callback runs turns that callback into a s
 ## Test map
 
 - [`SignalTest.cpp`](../../../test/unit/async/SignalTest.cpp) covers connection order, move-only handlers, connect/disconnect during emission, nested emission, self-disconnection lifetime, `disconnectAll`, subscription moves, observer exceptions, owner destruction, decayed posts, later turns, and destroyed-owner posts.
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) proves that the reporting owner adds revision queuing and observer-failure containment above the generic primitive.
+- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) proves that the reporting owner adds immutable reentrant-update queuing and observer-failure containment above the generic primitive.
 
 ## Related documents
 

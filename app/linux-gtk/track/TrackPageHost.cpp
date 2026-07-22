@@ -406,19 +406,17 @@ namespace ao::gtk
 
   void TrackPageHost::handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId const viewId)
   {
-    auto const route = ao::uimodel::describeSelectionRoute(viewId, page.selectionController().selectedTrackIds());
-
-    if (!route.shouldUpdateRuntimeSelection)
+    if (viewId == rt::kInvalidViewId)
     {
       return;
     }
 
-    if (auto result = _runtime.views().setSelection(route.focusedViewId, route.selectedIds); !result)
+    if (auto result = _runtime.views().setSelection(viewId, page.selectionController().selectedTrackIds()); !result)
     {
       APP_LOG_ERROR("Failed to publish track selection: {}", result.error().message);
     }
 
-    if (auto const focused = _runtime.workspace().focusView(route.focusedViewId); !focused)
+    if (auto const focused = _runtime.workspace().focusView(viewId); !focused)
     {
       APP_LOG_ERROR("Failed to focus selected track view: {}", focused.error().message);
     }

@@ -102,7 +102,7 @@ namespace ao::rt::test
         .sortBy = std::move(sortBy),
       });
       REQUIRE(created);
-      return created->viewId;
+      return *created;
     }
 
     PlaybackSessionState storedSession(ConfigStore& store)
@@ -141,7 +141,7 @@ namespace ao::rt::test
         .sortBy = std::move(sortBy),
       });
       REQUIRE(created);
-      return ManualView{.listId = listId, .viewId = created->viewId};
+      return ManualView{.listId = listId, .viewId = *created};
     }
 
     std::string rawPlaybackSessionYaml(TrackId const trackId,
@@ -594,7 +594,7 @@ namespace ao::rt::test
     CHECK(afterDebounce.shuffleMode == ShuffleMode::On);
   }
 
-  TEST_CASE("PlaybackSession - next persistence intent saves after a failed debounce",
+  TEST_CASE("PlaybackSession - next restorable state change saves after a failed debounce",
             "[runtime][unit][playback-session][timing]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -631,7 +631,7 @@ namespace ao::rt::test
     CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.6F);
   }
 
-  TEST_CASE("PlaybackSession - launch publishes one coherent final live intent",
+  TEST_CASE("PlaybackSession - launch publishes one coherent final live state",
             "[runtime][regression][playback-session][launch]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -701,7 +701,7 @@ namespace ao::rt::test
     storeSession(runtime, normalizedPayload);
 
     std::uint32_t snapshotCount = 0;
-    bool nestedIntentRequested = false;
+    bool nestedCommandRequested = false;
     bool nestedRestoreAccepted = false;
     auto nestedRestoreError = Error::Code::Generic;
     bool nestedLaunchAccepted = false;
@@ -713,9 +713,9 @@ namespace ao::rt::test
         CHECK(snapshot.transport.nowPlaying.trackId == firstTrackId);
         CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{400});
 
-        if (!nestedIntentRequested)
+        if (!nestedCommandRequested)
         {
-          nestedIntentRequested = true;
+          nestedCommandRequested = true;
           auto const nestedRestore = runtime.restorePlaybackSession();
           nestedRestoreAccepted = nestedRestore.has_value();
 
@@ -736,7 +736,7 @@ namespace ao::rt::test
     REQUIRE(restored);
     REQUIRE(restored->restored);
     CHECK(snapshotCount == 1);
-    CHECK(nestedIntentRequested);
+    CHECK(nestedCommandRequested);
     CHECK_FALSE(nestedRestoreAccepted);
     CHECK(nestedRestoreError == Error::Code::InvalidState);
     CHECK(nestedLaunchAccepted);
@@ -757,7 +757,7 @@ namespace ao::rt::test
       }));
   }
 
-  TEST_CASE("PlaybackSession - restore does not overtake a pending observer intent",
+  TEST_CASE("PlaybackSession - restore does not overtake a pending observer command",
             "[runtime][regression][playback-session][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -820,7 +820,6 @@ namespace ao::rt::test
     REQUIRE(restored);
     REQUIRE(restored->restored);
     auto const after = runtime.playback().snapshot();
-    CHECK(after.revision.value == before.revision.value + 1);
     CHECK(after.transport.positionRevision.value == before.transport.positionRevision.value + 1);
     CHECK(after.transport.finalSeekRevision == before.transport.finalSeekRevision);
     CHECK(after.transport.elapsed == std::chrono::milliseconds{750});
@@ -1143,11 +1142,10 @@ namespace ao::rt::test
     CHECK(playbackAfter.volume == playbackBefore.volume);
     CHECK(playbackAfter.output == playbackBefore.output);
     CHECK(playbackAfter.quality == playbackBefore.quality);
-    CHECK(snapshotAfter.revision == snapshotBefore.revision);
     CHECK(storedSession(runtime.playbackSessionConfigStore()) == payload);
   }
 
-  TEST_CASE("PlaybackSession - freezes invalidated and exhausted cursors as last-restorable intent",
+  TEST_CASE("PlaybackSession - freezes invalidated and exhausted cursors as last-restorable state",
             "[runtime][unit][playback-session][lifecycle]")
   {
     SECTION("source invalidation and stop retain the frozen cursor")
@@ -1165,7 +1163,7 @@ namespace ao::rt::test
       }));
       auto const view = runtime.views().createView({.listId = listId});
       REQUIRE(view);
-      REQUIRE(runtime.playback().commands().startFromView(view->viewId, first));
+      REQUIRE(runtime.playback().commands().startFromView(*view, first));
       REQUIRE(runtime.savePlaybackSession());
 
       auto const selected = runtime.playback().snapshot().transport.output.selectedDevice;
@@ -1272,7 +1270,6 @@ namespace ao::rt::test
     REQUIRE(projectionPtr->size() == 2);
     CHECK(projectionPtr->trackIdAt(0) == alpha);
     CHECK(projectionPtr->trackIdAt(1) == charlie);
-    auto const projectionRevision = projectionPtr->revision();
     std::uint32_t projectionBatchCount = 0;
     auto const projectionSubscription =
       projectionPtr->subscribe([&](TrackListProjectionDeltaBatch const&) { ++projectionBatchCount; });
@@ -1284,7 +1281,6 @@ namespace ao::rt::test
     REQUIRE(moved);
     REQUIRE(moved->changed);
 
-    CHECK(projectionPtr->revision() == projectionRevision);
     CHECK(projectionBatchCount == 0);
     CHECK(runtime.playback().snapshot().succession == beforeState);
     CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == current);
@@ -1293,7 +1289,7 @@ namespace ao::rt::test
     CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
   }
 
-  TEST_CASE("PlaybackSession - prepared replacement remains outside the public session payload",
+  TEST_CASE("PlaybackSession - prepared replacement remains outside public playback and session state",
             "[runtime][regression][playback-session][snapshot]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -1309,7 +1305,6 @@ namespace ao::rt::test
 
     auto const beforeSnapshot = runtime.playback().snapshot();
     REQUIRE(beforeSnapshot.succession.hasNext);
-    REQUIRE(beforeSnapshot.preparation.hasPreparedNext);
     auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
 
     auto const insertedIds = std::vector{insertedTrack};
@@ -1320,9 +1315,7 @@ namespace ao::rt::test
     auto const afterSnapshot = runtime.playback().snapshot();
     CHECK(afterSnapshot.succession.currentTrackId == first);
     CHECK(afterSnapshot.succession.hasNext);
-    CHECK(afterSnapshot.preparation.hasPreparedNext);
-    CHECK(afterSnapshot.sameContentAs(beforeSnapshot));
-    CHECK(afterSnapshot.revision == beforeSnapshot.revision);
+    CHECK(afterSnapshot == beforeSnapshot);
     CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
     REQUIRE(runtime.savePlaybackSession());
     CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
@@ -1356,7 +1349,7 @@ namespace ao::rt::test
     auto const afterSnapshot = runtime.playback().snapshot();
     CHECK(afterSnapshot.succession.currentTrackId == current);
     CHECK(afterSnapshot.succession.hasNext);
-    CHECK(afterSnapshot.preparation.hasPreparedNext);
+    CHECK(afterSnapshot == beforeSnapshot);
     CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
     REQUIRE(runtime.savePlaybackSession());
     CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
@@ -1405,7 +1398,7 @@ namespace ao::rt::test
     CHECK_FALSE(runtime.playback().snapshot().succession.hasPrevious);
   }
 
-  TEST_CASE("PlaybackSession - discard suppresses recreation until active intent changes",
+  TEST_CASE("PlaybackSession - discard suppresses recreation until active state changes",
             "[runtime][unit][playback-session][forget]")
   {
     auto tempDir = ao::test::TempDir{};

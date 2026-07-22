@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
-#include <cstdint>
 #include <ranges>
 #include <type_traits>
 #include <utility>
@@ -55,9 +54,9 @@ namespace ao::rt
     }
   } // namespace
 
-  TrackListProjectionDeltaBatch eraseTrackIds(delta::RegularTrackEditScript const& script, std::uint64_t revision)
+  TrackListProjectionDeltaBatch eraseTrackIds(delta::RegularTrackEditScript const& script)
   {
-    auto batch = TrackListProjectionDeltaBatch{.revision = revision};
+    auto batch = TrackListProjectionDeltaBatch{};
     batch.deltas.reserve(script.edits.size());
 
     for (auto const& edit : script.edits)

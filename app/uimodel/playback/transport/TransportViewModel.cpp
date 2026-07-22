@@ -16,35 +16,35 @@ namespace ao::uimodel
 {
   namespace
   {
-    TransportIcon iconForAction(TransportAction action)
+    TransportIcon iconForCommand(PlaybackCommand command)
     {
-      switch (action)
+      switch (command)
       {
-        case TransportAction::Play: return TransportIcon::Play;
-        case TransportAction::Pause: return TransportIcon::Pause;
-        case TransportAction::Stop: return TransportIcon::Stop;
-        case TransportAction::PlayPause: return TransportIcon::Play;
-        case TransportAction::Next: return TransportIcon::Next;
-        case TransportAction::Previous: return TransportIcon::Previous;
-        case TransportAction::Shuffle: return TransportIcon::Shuffle;
-        case TransportAction::Repeat: return TransportIcon::Repeat;
+        case PlaybackCommand::Play: return TransportIcon::Play;
+        case PlaybackCommand::Pause: return TransportIcon::Pause;
+        case PlaybackCommand::Stop: return TransportIcon::Stop;
+        case PlaybackCommand::PlayPause: return TransportIcon::Play;
+        case PlaybackCommand::Next: return TransportIcon::Next;
+        case PlaybackCommand::Previous: return TransportIcon::Previous;
+        case PlaybackCommand::ToggleShuffle: return TransportIcon::Shuffle;
+        case PlaybackCommand::CycleRepeat: return TransportIcon::Repeat;
       }
 
       return TransportIcon::None;
     }
 
-    char const* labelForAction(TransportAction action)
+    char const* labelForCommand(PlaybackCommand command)
     {
-      switch (action)
+      switch (command)
       {
-        case TransportAction::Play: return "Play";
-        case TransportAction::Pause: return "Pause";
-        case TransportAction::Stop: return "Stop";
-        case TransportAction::PlayPause: return "Play";
-        case TransportAction::Next: return "Next Track";
-        case TransportAction::Previous: return "Previous Track";
-        case TransportAction::Shuffle: return "Shuffle";
-        case TransportAction::Repeat: return "Repeat";
+        case PlaybackCommand::Play: return "Play";
+        case PlaybackCommand::Pause: return "Pause";
+        case PlaybackCommand::Stop: return "Stop";
+        case PlaybackCommand::PlayPause: return "Play";
+        case PlaybackCommand::Next: return "Next Track";
+        case PlaybackCommand::Previous: return "Previous Track";
+        case PlaybackCommand::ToggleShuffle: return "Shuffle";
+        case PlaybackCommand::CycleRepeat: return "Repeat";
       }
 
       return "";
@@ -56,7 +56,7 @@ namespace ao::uimodel
              transport == audio::Transport::Playing || transport == audio::Transport::Seeking;
     }
 
-    TransportViewState describeTransportButton(TransportAction action,
+    TransportViewState describeTransportButton(PlaybackCommand command,
                                                rt::PlaybackTransportSnapshot const& transport,
                                                rt::PlaybackSuccessionSnapshot const& succession,
                                                bool enabled,
@@ -65,16 +65,16 @@ namespace ao::uimodel
       auto view = TransportViewState{};
       bool const isPlaying = isPresentedAsPlaying(transport.transport);
 
-      view.icon = iconForAction(action);
-      view.tooltip = labelForAction(action);
+      view.icon = iconForCommand(command);
+      view.tooltip = labelForCommand(command);
       view.enabled = enabled;
 
       if (showLabel)
       {
-        view.label = labelForAction(action);
+        view.label = labelForCommand(command);
       }
 
-      if (action == TransportAction::PlayPause)
+      if (command == PlaybackCommand::PlayPause)
       {
         view.icon = isPlaying ? TransportIcon::Pause : TransportIcon::Play;
         view.tooltip = isPlaying ? "Pause" : "Play";
@@ -85,11 +85,11 @@ namespace ao::uimodel
           view.label = isPlaying ? "Pause" : "Play";
         }
       }
-      else if (action == TransportAction::Shuffle)
+      else if (command == PlaybackCommand::ToggleShuffle)
       {
         view.engaged = (succession.shuffle == rt::ShuffleMode::On);
       }
-      else if (action == TransportAction::Repeat)
+      else if (command == PlaybackCommand::CycleRepeat)
       {
         if (succession.repeat == rt::RepeatMode::All)
         {
@@ -110,47 +110,29 @@ namespace ao::uimodel
 
       return view;
     }
-
-    PlaybackCommand commandForAction(TransportAction action) noexcept
-    {
-      switch (action)
-      {
-        case TransportAction::Play: return PlaybackCommand::Play;
-        case TransportAction::Pause: return PlaybackCommand::Pause;
-        case TransportAction::Stop: return PlaybackCommand::Stop;
-        case TransportAction::PlayPause: return PlaybackCommand::PlayPause;
-        case TransportAction::Next: return PlaybackCommand::Next;
-        case TransportAction::Previous: return PlaybackCommand::Previous;
-        case TransportAction::Shuffle: return PlaybackCommand::ToggleShuffle;
-        case TransportAction::Repeat: return PlaybackCommand::CycleRepeat;
-      }
-
-      return PlaybackCommand::PlayPause;
-    }
   } // namespace
 
   TransportViewModel::TransportViewModel(rt::PlaybackService& playback,
                                          PlaybackCommandSurface& commands,
-                                         TransportAction action,
+                                         PlaybackCommand command,
                                          bool showLabel,
                                          std::function<void(TransportViewState const&)> onRender)
-    : _playback{playback}, _commands{commands}, _action{action}, _showLabel{showLabel}, _onRender{std::move(onRender)}
+    : _playback{playback}, _commands{commands}, _command{command}, _showLabel{showLabel}, _onRender{std::move(onRender)}
   {
-    _availabilitySub = _commands.onAvailabilityChanged(commandForAction(_action), [this] { refresh(); });
+    _availabilitySub = _commands.onAvailabilityChanged(_command, [this] { refresh(); });
     refresh();
   }
 
   void TransportViewModel::handleClick()
   {
-    _commands.execute(commandForAction(_action));
+    _commands.execute(_command);
   }
 
   void TransportViewModel::refresh()
   {
-    auto const command = commandForAction(_action);
     auto const& snapshot = _playback.snapshot();
     auto const view = describeTransportButton(
-      _action, snapshot.transport, snapshot.succession, _commands.isEnabled(command), _showLabel);
+      _command, snapshot.transport, snapshot.succession, _commands.isEnabled(_command), _showLabel);
 
     if (_onRender)
     {

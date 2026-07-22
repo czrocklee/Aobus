@@ -254,7 +254,7 @@ RFC 0005 Stage 3 moved application coordination and persistence installation int
 
 ## Frontend observations
 
-Internal `PlaybackSuccessionState` exposes source state, current and source identities, next/previous availability, resolved successor, modes, and semantic revision without exposing projection rows or prepared tokens.
+Internal `PlaybackSuccessionState` exposes source state, current and source identities, next/previous availability, resolved successor, and modes without exposing projection rows or prepared tokens.
 
 `onChanged` publishes synchronously on the callback executor only when the semantic tuple changes.
 Anchor movement, membership churn, or preparation replacement that leaves the tuple unchanged is not a semantic event.
@@ -275,7 +275,7 @@ Observers are observational and do not choose succession policy.
 
 ## Test map
 
-- [`PlaybackCursorModelTest.cpp`](../../../test/unit/runtime/playback/PlaybackCursorModelTest.cpp) proves state precedence, semantic revision, persistence-intent classification, complete-batch observation, and model-based anchor invariants.
+- [`PlaybackCursorModelTest.cpp`](../../../test/unit/runtime/playback/PlaybackCursorModelTest.cpp) proves state precedence, semantic/restorable mutation effects, complete-batch observation, and model-based anchor invariants.
 - [`ProjectionAnchorTest.cpp`](../../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) proves insertion/removal boundaries, move reconciliation, reset, empty gaps, and range invariants.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.

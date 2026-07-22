@@ -107,12 +107,12 @@ namespace ao::uimodel
     }
   } // namespace
 
-  PanelSizePromotionResult promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc)
+  bool promotePanelSizeDefaults(LayoutDocument& doc, LayoutComponentStateDocument& stateDoc)
   {
-    auto result = PanelSizePromotionResult{};
+    bool changed = false;
 
     visitLayoutDocumentMutable(doc,
-                               [&stateDoc, &result](LayoutNode& node)
+                               [&stateDoc, &changed](LayoutNode& node)
                                {
                                  if (auto const optEntry = resolveComponentState(stateDoc, node); optEntry)
                                  {
@@ -129,13 +129,11 @@ namespace ao::uimodel
 
                                    if (promoted)
                                    {
-                                     result.changed = true;
-                                     ++result.promotedCount;
+                                     changed = true;
                                    }
                                  }
                                });
 
-    result.residualCount = stateDoc.components.size();
-    return result;
+    return changed;
   }
 } // namespace ao::uimodel

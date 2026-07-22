@@ -8,6 +8,7 @@
 #include "ViewIds.h"
 #include "VirtualListIds.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 
 #include <cstdint>
 #include <optional>
@@ -16,29 +17,16 @@
 
 namespace ao::rt
 {
-  enum class ViewLifecycleState : std::uint8_t
-  {
-    Attached,
-    Detached,
-    Destroyed,
-  };
-
-  enum class ViewKind : std::uint8_t
-  {
-    TrackList,
-  };
-
   struct TrackListViewState final
   {
     ViewId id{};
-    ViewLifecycleState lifecycle = ViewLifecycleState::Detached;
     ListId listId{};
     std::string filterExpression{};
+    std::optional<Error> optFilterError = std::nullopt;
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
     std::vector<TrackId> selection{};
     TrackPresentationSpec presentation{};
-    std::uint64_t revision = 0;
   };
 
   struct TrackListViewConfig final
@@ -48,13 +36,6 @@ namespace ao::rt
     TrackGroupKey groupBy = TrackGroupKey::None;
     std::vector<TrackSortTerm> sortBy{};
     std::optional<TrackPresentationSpec> optPresentation{};
-  };
-
-  struct ViewRecord final
-  {
-    ViewId id{};
-    ViewKind kind = ViewKind::TrackList;
-    ViewLifecycleState lifecycle = ViewLifecycleState::Detached;
   };
 
   enum class GlobalViewKind : std::uint8_t

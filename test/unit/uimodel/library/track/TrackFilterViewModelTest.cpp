@@ -37,7 +37,7 @@ namespace ao::uimodel::test
 
       rt::ViewId focusAllTracksView()
       {
-        return ao::test::requireValue(workspaceService.navigateTo(rt::GlobalViewKind::AllTracks)).activeViewId;
+        return ao::test::requireValue(workspaceService.navigateTo(rt::GlobalViewKind::AllTracks));
       }
     };
   } // namespace
@@ -60,7 +60,6 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().enabled == false);
     CHECK(fixture.renderLog.last().entryText.empty());
     CHECK(fixture.renderLog.last().resolvedExpression.empty());
-    CHECK(fixture.renderLog.last().pending == false);
     CHECK(fixture.renderLog.last().canCreateSmartList == false);
   }
 
@@ -74,7 +73,6 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().enabled == true);
     CHECK(fixture.renderLog.last().entryText == "$artist ~ 'Beatles'");
     CHECK(fixture.renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
-    CHECK(fixture.renderLog.last().pending == false);
     CHECK(fixture.renderLog.last().hasError == false);
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
@@ -117,14 +115,43 @@ namespace ao::uimodel::test
   {
     auto fixture = TrackFilterFixture{};
     fixture.focusAllTracksView();
+    fixture.renderLog.clear();
 
     fixture.viewModel.updateFilter("$artist ~ 'Beatles'");
 
+    REQUIRE(fixture.renderLog.states.size() == 1);
     CHECK(fixture.renderLog.last().entryText == "$artist ~ 'Beatles'");
     CHECK(fixture.renderLog.last().resolvedExpression == "$artist ~ 'Beatles'");
-    CHECK(fixture.renderLog.last().pending == false);
     CHECK(fixture.renderLog.last().hasError == false);
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
+  }
+
+  TEST_CASE("TrackFilterViewModel - invalid expression exposes the runtime error", "[uimodel][unit][track-filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    fixture.focusAllTracksView();
+
+    fixture.viewModel.updateFilter("$year >");
+
+    CHECK(fixture.renderLog.last().entryText == "$year >");
+    CHECK(fixture.renderLog.last().resolvedExpression == "$year >");
+    CHECK(fixture.renderLog.last().hasError == true);
+    CHECK(fixture.renderLog.last().tooltip.contains("Filter error"));
+    CHECK(fixture.renderLog.last().canCreateSmartList == false);
+  }
+
+  TEST_CASE("TrackFilterViewModel - command failure is rendered instead of ignored", "[uimodel][unit][track-filter]")
+  {
+    auto fixture = TrackFilterFixture{};
+    auto const viewId = fixture.focusAllTracksView();
+    REQUIRE(fixture.viewService.destroyView(viewId));
+
+    fixture.viewModel.updateFilter("Beatles");
+
+    CHECK(fixture.renderLog.last().entryText == "Beatles");
+    CHECK(fixture.renderLog.last().hasError == true);
+    CHECK(fixture.renderLog.last().tooltip.contains("does not exist"));
+    CHECK(fixture.renderLog.last().canCreateSmartList == false);
   }
 
   TEST_CASE("TrackFilterViewModel - filter edits preserve focused view presentation", "[uimodel][unit][track-filter]")
@@ -133,12 +160,12 @@ namespace ao::uimodel::test
     auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
     config.optPresentation = rt::defaultTrackPresentationSpec();
     config.optPresentation->id = "custom";
-    auto const reply = ao::test::requireValue(
+    auto const viewId = ao::test::requireValue(
       fixture.workspaceService.navigateTo(rt::GlobalViewKind::AllTracks, {.optPresentation = config.optPresentation}));
 
     fixture.viewModel.updateFilter("$artist = \"Muse\"");
 
-    auto const state = fixture.viewService.trackListState(reply.activeViewId);
+    auto const state = fixture.viewService.trackListState(viewId);
     CHECK(state.filterExpression == "$artist = \"Muse\"");
     CHECK(state.presentation.id == "custom");
     CHECK(fixture.renderLog.last().entryText == "$artist = \"Muse\"");

@@ -22,7 +22,7 @@ Use the [specification template](../template/spec.md).
 ## Failure and reporting
 
 - [Outcome channels](failure/outcome-channel.md) define normal values, recoverable results, asynchronous observations, cancellation, and invariant faults.
-- [Notification feed](reporting/notification-feed.md) defines executor-affine runtime feed mutation, immutable revision updates, identity, and observation.
+- [Notification feed](reporting/notification-feed.md) defines executor-affine runtime feed mutation, immutable updates, identity, and observation.
 
 ## Storage
 
@@ -48,7 +48,7 @@ Use the [specification template](../template/spec.md).
 
 ## Playback
 
-- [Playback application commits](playback/application-commit.md) defines intent admission, supersession, coherent commits, revision publication, observer reentrancy, transient-event correlation, and shutdown.
+- [Playback application commits](playback/application-commit.md) defines command admission, supersession, coherent snapshot publication, observer reentrancy, transient events, and shutdown.
 - [Audio quality analysis](playback/quality-analysis.md) defines graph evidence, fidelity axes, conversion proof, runtime publication, and verdict precedence.
 - [Playback succession cursor](playback/cursor.md) defines live-projection launch, anchors, navigation, repeat, shuffle, prepared-next, and failure walking.
 - [Decoder session](playback/decoder-session.md) defines decoder lifecycle, format negotiation, PCM representations, and failures.

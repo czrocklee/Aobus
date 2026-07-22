@@ -49,7 +49,7 @@ namespace ao::gtk::test
       return std::ranges::any_of(
         feed.entries,
         [&](auto const& entry)
-        { return entry.severity == severity && rt::resolvedNotificationText(entry.message) == message; });
+        { return entry.severity == severity && std::get<std::string>(entry.message) == message; });
     }
 
     bool hasNotificationContaining(GtkRuntimeFixture& fixture,
@@ -58,12 +58,10 @@ namespace ao::gtk::test
     {
       auto const feed = fixture.runtime().notifications().feed();
 
-      return std::ranges::any_of(feed.entries,
-                                 [&](auto const& entry)
-                                 {
-                                   return entry.severity == severity &&
-                                          rt::resolvedNotificationText(entry.message).contains(messageFragment);
-                                 });
+      return std::ranges::any_of(
+        feed.entries,
+        [&](auto const& entry)
+        { return entry.severity == severity && std::get<std::string>(entry.message).contains(messageFragment); });
     }
 
     portal::ImportExportCallbacks callbacksWithMutationCounter(std::int32_t& mutationCallbackCount)
@@ -159,7 +157,7 @@ namespace ao::gtk::test
     auto const feed = fixture.runtime().notifications().feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
-    CHECK(rt::resolvedNotificationText(feed.entries.back().message) == "Library is up to date");
+    CHECK(std::get<std::string>(feed.entries.back().message) == "Library is up to date");
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan mutates only when files change", "[gtk][unit][workflow][scan]")
@@ -209,7 +207,6 @@ namespace ao::gtk::test
 
     optCompletedCount.reset();
     progressEvents.clear();
-    fixture.runtime().notifications().dismissAll();
 
     workflow.scan();
 
@@ -266,7 +263,6 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
-    fixture.runtime().notifications().dismissAll();
     auto optCompletedCount = std::optional<std::size_t>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
       [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
@@ -304,7 +300,6 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
-    fixture.runtime().notifications().dismissAll();
     auto optCompletedCount = std::optional<std::size_t>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
       [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
@@ -341,7 +336,6 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
-    fixture.runtime().notifications().dismissAll();
     std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
     {
       auto out = std::ofstream{fixture.runtime().musicRoot() / "corrupted.flac", std::ios::binary};
@@ -403,7 +397,6 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
     REQUIRE(libraryHasTrackTitle(fixture, "Test Title"));
-    fixture.runtime().notifications().dismissAll();
     mutationCallbackCount = 0;
 
     workflow.exportTo(target, rt::ExportMode::Full);
@@ -438,7 +431,6 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&sourceFixture]
       { return hasNotification(sourceFixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
-    sourceFixture.runtime().notifications().dismissAll();
 
     sourceWorkflow.exportTo(target, rt::ExportMode::Full);
     REQUIRE(pumpGtkEventsUntil(
@@ -620,10 +612,9 @@ library:
     executor->runUntilIdle();
 
     CHECK(mutationCallbackCount == 0);
-    CHECK_FALSE(
-      std::ranges::any_of(runtime.notifications().feed().entries,
-                          [](auto const& entry)
-                          { return rt::resolvedNotificationText(entry.message) == "Library imported successfully"; }));
+    CHECK_FALSE(std::ranges::any_of(
+      runtime.notifications().feed().entries,
+      [](auto const& entry) { return std::get<std::string>(entry.message) == "Library imported successfully"; }));
   }
 
   TEST_CASE("LibraryImportExportWorkflow - import reports read errors without mutation", "[gtk][unit][workflow][error]")

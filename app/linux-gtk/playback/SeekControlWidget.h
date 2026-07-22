@@ -48,7 +48,7 @@ namespace ao::gtk
     void handleScaleValueChanged();
     void beginUserInteraction();
     void endUserInteraction();
-    void applySeekDecision(uimodel::SeekSliderDecision const& decision);
+    void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
     void commitSeekFromScale();
     void executeDebouncedFinalSeek();
     void setScaleRange(std::chrono::milliseconds duration);

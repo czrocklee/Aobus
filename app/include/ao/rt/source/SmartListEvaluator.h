@@ -109,7 +109,7 @@ namespace ao::rt
                                    std::span<TrackId const> preferredMovedIds);
     void commitDerivedWorks(SourceBucket& bucket, IndexedTrackSequence upstreamTracks, std::vector<DerivedWork>& works);
 
-    void evaluateDirtyLists(SourceBucket& bucket);
+    void evaluatePendingLists(SourceBucket& bucket);
     void rebuildLists(SourceBucket& bucket, std::span<SmartListSource*> lists);
 
     static TrackLoadMode unionMode(std::span<SmartListSource* const> lists);

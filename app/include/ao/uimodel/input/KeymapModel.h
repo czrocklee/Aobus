@@ -68,7 +68,6 @@ namespace ao::uimodel
     std::optional<std::string> actionFor(KeyChord const& chord) const;
 
     KeymapBindings const& bindings() const noexcept { return _effective; }
-    KeymapBindings const& defaults() const noexcept { return _defaults; }
 
     /// Chords bound to more than one action, keyed deterministically by chord.
     std::vector<KeymapConflict> conflicts() const;

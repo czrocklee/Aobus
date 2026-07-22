@@ -198,7 +198,7 @@ namespace ao::rt::test
           .name = "Playback order",
           .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
         }));
-        viewId = ao::test::requireValue(application.views.createView({.listId = listId}, true)).viewId;
+        viewId = ao::test::requireValue(application.views.createView({.listId = listId}));
         application.addReadyProvider();
       }
 
@@ -242,7 +242,6 @@ namespace ao::rt::test
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
                                                                      { snapshots.push_back(snapshot); });
-    auto const revisionBeforeStart = fixture.playback().snapshot().revision.value;
 
     auto const started = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
     REQUIRE(started);
@@ -252,25 +251,24 @@ namespace ao::rt::test
     REQUIRE(snapshots.size() == 1);
 
     auto const& published = snapshots.front();
-    CHECK(published.revision.value == revisionBeforeStart + 1);
     // The transport subject and the succession subject describe one track.
     CHECK(published.transport.nowPlaying.trackId == fixture.firstTrackId);
     CHECK(published.succession.currentTrackId == fixture.firstTrackId);
     CHECK(published.succession.sourceState == PlaybackSourceState::Live);
     CHECK(published.transport.transport != audio::Transport::Idle);
-    // Output readiness and quality are captured inside the same revisioned
-    // value rather than arriving as independently correlated public state.
+    // Output readiness and quality are captured inside the same value rather
+    // than arriving as independently correlated public state.
     CHECK(published.transport.output == fixture.application.playbackTransport.state().output);
     CHECK(published.transport.ready == fixture.application.playbackTransport.state().ready);
     CHECK(published.transport.quality == fixture.application.playbackTransport.state().quality);
 
     // snapshot() reflects the same coherent state on demand.
     auto const observed = fixture.playback().snapshot();
-    CHECK(observed.revision.value == revisionBeforeStart + 1);
-    CHECK(observed.sameContentAs(published));
+    CHECK(observed == published);
   }
 
-  TEST_CASE("PlaybackService - revisions advance monotonically on real change", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - real changes publish once and no-ops publish none",
+            "[runtime][unit][playback][coherence]")
   {
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
@@ -278,26 +276,21 @@ namespace ao::rt::test
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
                                                                      { snapshots.push_back(snapshot); });
-    auto const revisionBeforeStart = fixture.playback().snapshot().revision.value;
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots.back().revision.value == revisionBeforeStart + 1);
 
     fixture.commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(snapshots.size() == 2);
-    CHECK(snapshots.back().revision.value == revisionBeforeStart + 2);
     CHECK(snapshots.back().succession.shuffle == ShuffleMode::On);
 
-    // Re-issuing the same shuffle mode changes no content and must not publish
-    // or advance the revision.
+    // Re-issuing the same shuffle mode changes no content and must not publish.
     fixture.commands().setShuffleMode(ShuffleMode::On);
     CHECK(snapshots.size() == 2);
-    CHECK(fixture.playback().snapshot().revision.value == revisionBeforeStart + 2);
+    CHECK(fixture.playback().snapshot() == snapshots.back());
 
     fixture.commands().stop();
     REQUIRE(snapshots.size() == 3);
-    CHECK(snapshots.back().revision.value == revisionBeforeStart + 3);
     CHECK(snapshots.back().transport.transport == audio::Transport::Idle);
     CHECK(snapshots.back().succession.sourceState == PlaybackSourceState::Inactive);
   }
@@ -311,11 +304,9 @@ namespace ao::rt::test
     after.transport.elapsed = std::chrono::milliseconds{900};
 
     CHECK(after == before);
-    CHECK(after.sameContentAs(before));
 
     after.transport.positionRevision = PlaybackPositionRevision{.value = 1};
     CHECK_FALSE(after == before);
-    CHECK_FALSE(after.sameContentAs(before));
   }
 
   TEST_CASE("PlaybackService - final seeks advance explicit position identities",
@@ -425,12 +416,11 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     REQUIRE(snapshots.size() == 1);
-    CHECK(snapshots.front().revision.value == before.revision.value + 1);
     CHECK(snapshots.front().succession.shuffle == ShuffleMode::On);
     CHECK(snapshots.front().succession.repeat == RepeatMode::All);
   }
 
-  TEST_CASE("PlaybackService - revisions advance without snapshot subscribers", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - current snapshot updates without subscribers", "[runtime][unit][playback][coherence]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto const before = fixture.playback.snapshot();
@@ -438,11 +428,11 @@ namespace ao::rt::test
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
     auto const after = fixture.playback.snapshot();
-    CHECK(after.revision.value == before.revision.value + 1);
+    CHECK(after != before);
     CHECK(after.succession.shuffle == ShuffleMode::On);
   }
 
-  TEST_CASE("PlaybackService - a no-op stop does not create a revision", "[runtime][unit][playback][coherence]")
+  TEST_CASE("PlaybackService - a no-op stop does not publish", "[runtime][unit][playback][coherence]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     // The first stop synchronizes the transport snapshot with the underlying
@@ -546,11 +536,10 @@ namespace ao::rt::test
     fixture.executor.drain();
 
     REQUIRE(snapshots.size() == 2);
-    CHECK(snapshots.back().revision.value == snapshots.front().revision.value + 1);
     CHECK(snapshots.back().succession.repeat == RepeatMode::All);
   }
 
-  TEST_CASE("PlaybackService - later commands do not overtake pending observer intents",
+  TEST_CASE("PlaybackService - later commands do not overtake queued observer commands",
             "[runtime][regression][playback][concurrency]")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
@@ -576,7 +565,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
   }
 
-  TEST_CASE("PlaybackService - rejected drain scheduling preserves pending intent order",
+  TEST_CASE("PlaybackService - rejected drain scheduling preserves queued command order",
             "[runtime][regression][playback][concurrency]")
   {
     auto fixture = ApplicationPlaybackFixtureT<RejectingDeferExecutor>{};
@@ -607,7 +596,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
   }
 
-  TEST_CASE("PlaybackService - queued intent exceptions do not strand later commands",
+  TEST_CASE("PlaybackService - queued command exceptions do not strand later commands",
             "[runtime][regression][playback][concurrency]")
   {
     // The arm must outlive the backend that borrows it.
@@ -680,34 +669,6 @@ namespace ao::rt::test
 
     CHECK(fixture.playback().snapshot().transport.nowPlaying.trackId == kInvalidTrackId);
     CHECK(fixture.playback().snapshot().succession.currentTrackId == kInvalidTrackId);
-  }
-
-  TEST_CASE("PlaybackService - queued command failures carry their command identity",
-            "[runtime][unit][playback][concurrency]")
-  {
-    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
-    auto failures = std::vector<PlaybackFailureEvent>{};
-    bool queuedInvalidStart = false;
-    auto const failureSubscription = fixture.playback.events().onPlaybackFailure(
-      [&failures](PlaybackFailureEvent const& failure) { failures.push_back(failure); });
-    auto const snapshotSubscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
-      {
-        if (!queuedInvalidStart && snapshot.succession.shuffle == ShuffleMode::On)
-        {
-          queuedInvalidStart = true;
-          REQUIRE(fixture.commands().startFromView(ViewId{999}, TrackId{999}));
-        }
-      });
-
-    fixture.commands().setShuffleMode(ShuffleMode::On);
-    auto const committedRevision = fixture.playback.snapshot().revision;
-    fixture.executor.drain();
-
-    REQUIRE(failures.size() == 1);
-    REQUIRE(failures.front().optCommandId);
-    CHECK(failures.front().optCommandId->value != 0);
-    CHECK(failures.front().revision == committedRevision);
   }
 
   TEST_CASE("PlaybackService - destruction drops a pending observer command", "[runtime][unit][playback][concurrency]")

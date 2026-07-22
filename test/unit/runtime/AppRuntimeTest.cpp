@@ -218,7 +218,7 @@ namespace ao::rt::test
       .name = "Teardown order",
       .trackIds = {firstTrackId, secondTrackId},
     }));
-    auto const viewId = ao::test::requireValue(appPtr->views().createView({.listId = listId}, true)).viewId;
+    auto const viewId = ao::test::requireValue(appPtr->views().createView({.listId = listId}));
     REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 

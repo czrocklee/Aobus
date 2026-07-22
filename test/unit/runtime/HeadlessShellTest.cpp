@@ -54,10 +54,8 @@ namespace ao::rt::test
     SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const filteredViewId =
-        ao::test::requireValue(runtime.workspace().navigateTo(
-                                 FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""}))
-          .activeViewId;
+      auto const filteredViewId = ao::test::requireValue(runtime.workspace().navigateTo(
+        FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""}));
       REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
 
       auto const layout = runtime.workspace().snapshot();

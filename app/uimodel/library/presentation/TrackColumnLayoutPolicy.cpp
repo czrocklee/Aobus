@@ -3,10 +3,8 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
-#include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 
 #include <algorithm>
-#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -39,10 +37,5 @@ namespace ao::uimodel
     }
 
     return ordered;
-  }
-
-  std::int32_t effectiveTrackFieldColumnWidth(rt::TrackField field, std::int32_t storedWidth)
-  {
-    return storedWidth > 0 ? storedWidth : defaultTrackFieldColumnWidth(field);
   }
 } // namespace ao::uimodel

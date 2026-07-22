@@ -9,33 +9,20 @@
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
-#include <cstdint>
-
 namespace ao::gtk
 {
   class ListRowObject final : public Glib::Object
   {
   public:
     ListId listId() const { return _listId; }
-    void setListId(ListId id) { _listId = id; }
-
-    ListId parentId() const { return _parentId; }
-    void setParentId(ListId id) { _parentId = id; }
-
-    std::int32_t depth() const { return _depth; }
-    void setDepth(std::int32_t depth) { _depth = depth; }
 
     bool isSmart() const { return _isSmart; }
-    void setSmart(bool smart) { _isSmart = smart; }
 
     Glib::ustring name() const { return _name; }
-    void setName(Glib::ustring const& name) { _name = name; }
 
     Glib::ustring filter() const { return _filter; }
 
     static Glib::RefPtr<ListRowObject> create(ListId id,
-                                              ListId parentId,
-                                              std::int32_t depth,
                                               bool smart,
                                               Glib::ustring const& name,
                                               Glib::ustring const& filter = "");
@@ -45,8 +32,6 @@ namespace ao::gtk
 
   private:
     ListId _listId;
-    ListId _parentId;
-    std::int32_t _depth = 0;
     bool _isSmart = false;
     Glib::ustring _name;
     Glib::ustring _filter;

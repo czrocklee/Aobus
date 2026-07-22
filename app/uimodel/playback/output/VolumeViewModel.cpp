@@ -100,17 +100,6 @@ namespace ao::uimodel
     }
   }
 
-  float VolumeViewModel::resolveVolumeOffset(double widgetWidth, double offsetX, float currentDragStartVolume)
-  {
-    if (widgetWidth <= 0.0)
-    {
-      return currentDragStartVolume;
-    }
-
-    float const delta = static_cast<float>(offsetX / widgetWidth);
-    return std::clamp(currentDragStartVolume + delta, 0.0F, 1.0F);
-  }
-
   float VolumeViewModel::resolveVolumeScroll(float currentVolume, double scrollDy)
   {
     constexpr float kScrollStep = 0.02F;

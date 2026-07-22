@@ -50,10 +50,10 @@ namespace ao::uimodel::test
     {
       model.applyViewState(std::chrono::seconds{20}, true);
 
-      auto decision = model.valueChanged(std::chrono::seconds{11});
+      auto update = model.valueChanged(std::chrono::seconds{11});
 
-      CHECK(decision.action == SeekSliderAction::Commit);
-      CHECK(decision.elapsed == std::chrono::seconds{11});
+      CHECK(update.action == SeekSliderAction::Commit);
+      CHECK(update.elapsed == std::chrono::seconds{11});
       CHECK_FALSE(model.hasPendingFinalSeek());
     }
 
@@ -74,7 +74,6 @@ namespace ao::uimodel::test
       model.reset();
 
       CHECK(model.duration() == std::chrono::milliseconds{0});
-      CHECK_FALSE(model.isEnabled());
       CHECK_FALSE(model.isPointerActive());
       CHECK_FALSE(model.hasPendingFinalSeek());
     }

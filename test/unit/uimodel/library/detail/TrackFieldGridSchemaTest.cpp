@@ -12,7 +12,7 @@ namespace ao::uimodel::test
 {
   TEST_CASE("buildTrackFieldGridSchema builds rows from presentable track fields", "[uimodel][unit][library][detail]")
   {
-    auto const projection = buildTrackFieldGridSchema(TrackFieldGridSchemaRequest{});
+    auto const projection = buildTrackFieldGridSchema();
 
     CHECK(projection.metadataFields == std::vector{rt::TrackField::Title,
                                                    rt::TrackField::Artist,
@@ -49,13 +49,13 @@ namespace ao::uimodel::test
   TEST_CASE("buildTrackFieldGridSchema filters sections from request flags", "[uimodel][unit][library][detail]")
   {
     auto const metadataOnly =
-      buildTrackFieldGridSchema(TrackFieldGridSchemaRequest{.includeMetadata = true, .includeTechnical = false});
+      buildTrackFieldGridSchema(TrackFieldGridSchemaOptions{.includeMetadata = true, .includeTechnical = false});
     CHECK_FALSE(metadataOnly.metadataFields.empty());
     CHECK_FALSE(metadataOnly.compositeMetadataFields.empty());
     CHECK(metadataOnly.technicalFields.empty());
 
     auto const technicalOnly =
-      buildTrackFieldGridSchema(TrackFieldGridSchemaRequest{.includeMetadata = false, .includeTechnical = true});
+      buildTrackFieldGridSchema(TrackFieldGridSchemaOptions{.includeMetadata = false, .includeTechnical = true});
     CHECK(technicalOnly.metadataFields.empty());
     CHECK(technicalOnly.compositeMetadataFields.empty());
     CHECK_FALSE(technicalOnly.technicalFields.empty());

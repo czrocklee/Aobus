@@ -32,7 +32,6 @@ namespace ao::rt::test
       auto const& appLoggerPtr = Log::appLogger();
       auto const& audioLoggerPtr = Log::audioLogger();
 
-      CHECK(Log::isInitialized());
       CHECK(appLoggerPtr != nullptr);
       CHECK(audioLoggerPtr != nullptr);
 
@@ -47,7 +46,7 @@ namespace ao::rt::test
       }
 
       Log::shutdown();
-      CHECK_FALSE(Log::isInitialized());
+      CHECK_FALSE(Log::asyncExceptionHandler());
 
       // Verify log file was created
       auto const logFile = tempDir / "app.log";
@@ -79,7 +78,6 @@ namespace ao::rt::test
 
       Log::initialize(LogLevel::Warn, "");
 
-      CHECK(Log::isInitialized());
       CHECK(std::filesystem::exists(defaultDir));
       CHECK(std::filesystem::exists(defaultDir / "app.log"));
 
@@ -89,7 +87,7 @@ namespace ao::rt::test
       CHECK(spdLoc.filename != nullptr);
 
       Log::shutdown();
-      CHECK_FALSE(Log::isInitialized());
+      CHECK_FALSE(Log::asyncExceptionHandler());
     }
 
     std::filesystem::remove_all(tempDir);

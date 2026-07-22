@@ -48,8 +48,6 @@ namespace ao::uimodel
     std::span<TrackSortFieldOption const> sortFieldOptions() const noexcept { return _sortFieldOptions; }
     std::span<TrackVisibleFieldOption const> visibleFieldOptions() const noexcept { return _visibleFieldOptions; }
 
-    rt::TrackGroupKey groupKey() const noexcept { return _groupKey; }
-    void setGroupKey(rt::TrackGroupKey key);
     bool setGroupKeyByOptionIndex(std::size_t optionIndex);
     std::optional<std::size_t> groupKeyOptionIndex() const;
 

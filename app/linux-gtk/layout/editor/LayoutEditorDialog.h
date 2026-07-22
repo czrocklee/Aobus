@@ -129,9 +129,7 @@ namespace ao::gtk::layout::editor
                                   uimodel::LayoutPropertyDescriptor const& prop,
                                   uimodel::LayoutValue const& currentVal,
                                   bool isLayoutProp);
-    void populateActionComboBox(Gtk::ComboBoxText* combo,
-                                uimodel::LayoutNode* node,
-                                uimodel::LayoutPropertyDescriptor const& prop);
+    void populateActionComboBox(Gtk::ComboBoxText* combo);
     Gtk::Widget* renderStringEditor(uimodel::LayoutNode* node,
                                     uimodel::LayoutPropertyDescriptor const& prop,
                                     uimodel::LayoutValue const& currentVal,
@@ -168,7 +166,6 @@ namespace ao::gtk::layout::editor
     ComponentRegistry const& _registry;
     ActionRegistry const& _actionRegistry;
 
-    // Forward declaration of resolver (defined in LayoutActionValidator.h already included)
     uimodel::LayoutDocument _document;
 
     ModelColumns _columns;

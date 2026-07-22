@@ -3,208 +3,127 @@ id: reporting.notification-model
 type: reference
 status: current
 domain: system
-summary: Enumerates runtime notification identities, enums, fields, defaults, commands, and canonical feed updates.
+summary: Enumerates the runtime notification values, limits, updates, and service API.
 ---
 # Notification model reference
 
 ## Scope and version
 
-This reference enumerates the current in-process runtime notification model and `NotificationService` API.
-The surface is not persisted or transferred between processes and has no independent format version.
-
-Mutation, revision, and observation semantics belong to the [notification feed specification](../../spec/reporting/notification-feed.md).
+This reference enumerates the current in-process `ao::rt` notification surface.
+It is not persisted and has no independent format version.
+Behavior belongs to the [notification feed specification](../../spec/reporting/notification-feed.md).
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md) places the surface in application runtime, while the [failure and reporting architecture](../../architecture/failure-and-reporting.md) defines its reporting role.
-The public authority is `app/include/ao/rt/`; UIModel and frontends consume these values, but the types contain no UI toolkit or terminal objects.
+This surface belongs to the **application runtime** layer in the
+[system architecture](../../architecture/system-overview.md), under the
+[failure and reporting architecture](../../architecture/failure-and-reporting.md).
+Public values and the service live in `app/include/ao/rt/`, and
+`app/runtime/NotificationService.cpp` implements validation, publication, and
+expiry. UIModel and frontends may consume the public values, but runtime types
+contain no presentation-layer objects.
 
-## Surface
+## Identity and enums
 
-### Identity and enums
-
-`NotificationId` is a strong `std::uint64_t` value.
-`kInvalidNotificationId` is `0`; service-generated ids begin at `1`.
-`NotificationReportKey` is a strong owning `std::string` used only by explicit keyed create-or-update commands.
+`NotificationId` is a strong `std::uint64_t`; `kInvalidNotificationId` is `0`.
+`NotificationReportKey` is a strong owning string used only for keyed create-or-update.
 
 | Enum | Values |
 |---|---|
 | `NotificationSeverity` | `Info`, `Warning`, `Error` |
-| `NotificationTopic` | `General`, `PlaybackSequence`, `PlaybackError` |
-| `NotificationProgressMode` | `Indeterminate`, `Fraction` |
-| `NotificationActivityPresentation` | `Default`, `DetailOnly`, `Hidden` |
-| `NotificationLifetimeKind` | `Transient`, `SessionHistory`, `UntilDismissed` |
+| `NotificationLifetimeKind` | `Transient`, `History`, `Pinned` |
+| `NotificationFeedMutationKind` | `Posted`, `ReportUpdated`, `Expired` |
 | `NotificationReportTemplate` | `PlaybackTrackOpenFailed`, `PlaybackDecodeFailed`, `PlaybackRouteActivationFailed`, `PlaybackDeviceLost`, `PlaybackSequenceFinished`, `PlaybackTracksSkipped`, `PlaybackStoppedAfterFailures`, `PlaybackStoppedForTrack` |
-| `NotificationFeedMutationKind` | `Posted`, `ReportUpdated`, `MessageUpdated`, `ContentUpdated`, `ProgressUpdated`, `ProgressCleared`, `Expired`, `Dismissed`, `Cleared` |
-| `NotificationMutationOutcome` | `Applied`, `Missing`, `Unchanged`, `Rejected` |
 
-Each notification enum is a scoped enum with underlying type `std::uint8_t`.
+Each enum uses `std::uint8_t` as its underlying type.
 
-### Message values
+## Message
 
 `NotificationMessage` is `std::variant<std::string, NotificationReport>`.
-The string alternative is already resolved text for frontend-local or otherwise explicitly classified callers.
-Shared runtime playback producers use `NotificationReport`, whose fields are:
+The string alternative is already resolved text.
+The structured alternative retains playback report identity until UIModel resolves it through the [presentation text catalog](../presentation/text-catalog.md).
 
-| Field | Type | Default |
+| `NotificationReport` field | Type | Default |
 |---|---|---|
 | `templateId` | `NotificationReportTemplate` | `PlaybackSequenceFinished` |
-| `trackId` | `TrackId` | invalid `0` |
+| `trackId` | `TrackId` | invalid id |
 | `subject` | `std::string` | empty |
 | `detail` | `std::string` | empty |
 | `count` | `std::size_t` | `0` |
 
-The feed stores this structured value without retaining a second resolved form.
-UIModel resolves it through the [presentation text catalog](../presentation/text-catalog.md).
-`resolvedNotificationText` returns a view only for the string alternative and an empty view for a structured report; it is intended for code that explicitly requires already resolved text, not as report rendering.
+## Lifetime
 
-### Progress and action values
-
-| Type | Field | Type | Default |
-|---|---|---|---|
-| `NotificationProgressState` | `mode` | `NotificationProgressMode` | `Indeterminate` |
-|  | `fraction` | `double` | `0.0` |
-|  | `label` | `std::string` | empty |
-| `NotificationAction` | `id` | `std::string` | empty |
-|  | `label` | `std::string` | empty |
-
-### Content
-
-| `NotificationContentState` field | Type | Default |
-|---|---|---|
-| `topic` | `NotificationTopic` | `General` |
-| `title` | `std::string` | empty |
-| `iconName` | `std::string` | empty |
-| `actions` | `std::vector<NotificationAction>` | empty |
-| `optProgress` | `std::optional<NotificationProgressState>` | empty |
-
-The runtime action vector is bounded by `NotificationFeedLimits::maxActionsPerEntry`.
-Presentation adapters may expose a smaller subset.
-
-### Lifetime
-
-`NotificationLifetime` is an immutable policy value constructed through these factories:
+`NotificationLifetime` is created through these factories:
 
 | Factory | Meaning |
 |---|---|
-| `transient(duration)` | Authoritative feed entry expires after the positive duration. The default argument is `kDefaultNotificationTransientDuration`, currently `5000ms`. |
-| `sessionHistory()` | Entry remains in the in-memory session feed until an explicit dismissal or clear. |
-| `untilDismissed()` | Entry remains authoritative until explicit dismissal and is presented as not locally dismissible in activity detail. |
+| `transient(duration)` | Expires authoritatively after a positive duration. The default is `kDefaultNotificationTransientDuration`, currently `5000ms`. |
+| `history()` | Retained for the session and eligible for oldest-first capacity eviction. |
+| `pinned()` | Retained and excluded from automatic history eviction. |
 
-`kind()` returns `NotificationLifetimeKind`.
-`optTransientDuration()` returns the duration only for `Transient` and an empty optional for retained lifetimes.
-Severity and lifetime are independent.
+`kind()` returns the lifetime kind.
+`optTransientDuration()` returns a duration only for `Transient`.
 
-### Request and entry
+## Request, entry, and feed
 
-`NotificationRequest` has these fields and defaults:
+| Type | Fields |
+|---|---|
+| `NotificationRequest` | `severity`, `message`, `lifetime` |
+| `NotificationEntry` | `id`, `optReportKey`, `severity`, `message`, `lifetime` |
+| `NotificationFeedState` | `entries` |
 
-| Field | Type | Default |
-|---|---|---|
-| `severity` | `NotificationSeverity` | `Info` |
-| `message` | `NotificationMessage` | empty string alternative |
-| `lifetime` | `NotificationLifetime` | none; every request must select one explicitly |
-| `activityPresentation` | `NotificationActivityPresentation` | `Default` |
-| `content` | `NotificationContentState` | default content |
+`NotificationRequest::severity` defaults to `Info`; `message` defaults to an empty string alternative.
+`lifetime` has no default, so every request chooses it explicitly.
 
-`NotificationEntry` contains the same fields plus `NotificationId id`, whose default is `0`, optional `NotificationReportKey optReportKey`, and `std::uint64_t lifetimeGeneration`, whose default is `0`.
-Its value default for `lifetime` is `sessionHistory()` so an empty feed/value snapshot remains constructible; producer requests do not inherit that default.
-Service-produced transient entries start at generation `1`.
-Every later scheduled transient period increments the generation, while retained lifetime transitions preserve it, so a live entry never reuses an earlier timer generation.
-`NotificationFeedState` contains `std::vector<NotificationEntry> entries` and `std::uint64_t revision`, both initially empty or zero.
+An empty `NotificationEntry` uses invalid id, no key, info severity, empty text, and `history()`.
+Timer generations are private service control state and do not appear in snapshots.
+
+## Limits
+
+| `NotificationFeedLimits` field | Default |
+|---|---:|
+| `maxEntries` | `256` |
+| `maxHistoryEntries` | `128` |
+| `maxTextBytes` | `4096` |
+| `maxTotalTextBytes` | `256 KiB` |
+
+The per-text limit applies independently to report keys, plain messages, and structured report subject/detail strings.
+The total counts the retained string payload of all entries.
+
+## Update
 
 `NotificationFeedUpdate` contains:
 
 | Field | Type | Default |
 |---|---|---|
-| `revision` | `std::uint64_t` | `0` |
 | `mutationKind` | `NotificationFeedMutationKind` | `Posted` |
-| `affectedIds` | `std::vector<NotificationId>` | empty |
-| `evictedIds` | `std::vector<NotificationId>` | empty |
-| `feedPtr` | `std::shared_ptr<NotificationFeedState const>` | empty |
+| `id` | `NotificationId` | invalid id |
+| `feedPtr` | `std::shared_ptr<NotificationFeedState const>` | null |
 
-Every update produced by `NotificationService` has a non-empty `feedPtr`, and `revision == feedPtr->revision`.
-`evictedIds` lists automatic session-history eviction from oldest to newest inside that same revision; explicit dismissal and expiry remain represented by their mutation kind and `affectedIds`.
+Service-produced updates always carry a non-null immutable snapshot.
+`id` identifies the post, keyed update, or expiry.
+The update reference itself is callback-scoped; consumers copy `feedPtr` when retaining the snapshot.
 
-`NotificationMutationReply` contains `NotificationMutationOutcome outcome`, defaulting to `Rejected`, and `NotificationId id`, defaulting to the invalid id.
+## Service API
 
-### Feed limits
-
-`NotificationFeedLimits` has these production defaults:
-
-| Field | Default | Meaning |
-|---|---:|---|
-| `maxEntries` | `256` | Maximum entries of every lifetime combined. |
-| `maxSessionHistoryEntries` | `128` | Maximum recent `SessionHistory` entries after automatic eviction. |
-| `maxActionsPerEntry` | `8` | Maximum actions accepted in one content value. |
-| `maxTextBytes` | `4096` | Maximum `std::string::size()` for each report key or text field. |
-| `maxTotalTextBytes` | `256 * 1024` | Maximum summed text bytes retained by the complete feed. |
-
-Total text includes report keys, resolved messages or structured-report subject/detail arguments, titles, icon names, action ids and labels, and progress labels.
-Limits are immutable for one service instance and may be reduced through constructor injection for deterministic tests.
-
-### Service API
-
-Construction requires the owning `async::Runtime&` and optionally accepts `NotificationFeedLimits`.
-The service uses its callback executor for affinity and expiry delivery, its sleeper for delayed expiry, and its exception handler for observer diagnostics.
+`NotificationService(async::Runtime&, NotificationFeedLimits = {})` binds the service to the runtime callback executor.
 The runtime must outlive the service.
 
 | Member | Return |
 |---|---|
 | `feed() const` | `NotificationFeedState` |
-| `post(NotificationSeverity, std::string, NotificationLifetime)` | `NotificationMutationReply` |
-| `post(NotificationRequest)` | `NotificationMutationReply` |
-| `createOrUpdate(NotificationReportKey, NotificationRequest)` | `NotificationMutationReply` |
-| `updateMessage(NotificationId, NotificationMessage)` | `NotificationMutationReply` |
-| `updateContent(NotificationId, NotificationContentState)` | `NotificationMutationReply` |
-| `updateProgress(NotificationId, NotificationProgressState)` | `NotificationMutationReply` |
-| `clearProgress(NotificationId)` | `NotificationMutationReply` |
-| `dismiss(NotificationId)` | `NotificationMutationReply` |
-| `dismissAll()` | `NotificationMutationReply` |
+| `post(NotificationSeverity, std::string, NotificationLifetime)` | `void` |
+| `post(NotificationRequest)` | `void` |
+| `createOrUpdate(NotificationReportKey, NotificationRequest)` | `void` |
+| `onFeedUpdated(handler)` | `async::Subscription` |
 
-The short `post` overload initializes activity presentation and content to their defaults, but still requires explicit lifetime policy.
-`createOrUpdate` requires a non-empty key, replaces the complete request-shaped state of a matching entry without reordering it, and posts a new entry when the key is absent.
+All calls and subscription teardown belong to the callback executor.
+Commands report invalid or rejected candidates through the application log and do not expose a reply DTO.
 
-### Observation API
+## Compatibility
 
-| Member | Handler signature |
-|---|---|
-| `onFeedUpdated` | `void(NotificationFeedUpdate const&)` |
-
-The member returns an `async::Subscription` that owns the connection lifetime.
-The update reference is valid for the callback invocation; retaining `feedPtr` keeps that immutable snapshot alive.
-
-An observer failure is sent through the owning runtime with context `notification feed observer at revision <N>`.
-The runtime's injected handler or stderr fallback owns the final diagnostic without allowing the observer exception to escape.
-Rejected commands also write an application-log error diagnostic identifying the mutation, correlated id, and rejection reason.
-
-## Validation rules
-
-`NotificationService` rejects empty report keys, non-positive transient durations, action vectors beyond the configured count, and any report key or text field beyond the configured byte count.
-It also applies total entry, recent-history, and retained-text bounds as specified by the notification feed.
-It does not clamp progress fractions, require non-empty messages, resolve action ids, expand structured reports, or interpret icon names.
-Producers supply semantically valid content, and presentation adapters decide which optional fields they can render.
-
-`NotificationLifetime::transient` accepts a duration value, and `NotificationService` requires it to be greater than zero when scheduling.
-The lifetime type makes retained and timed states mutually exclusive rather than asking consumers to reconcile independent flags.
-
-## Compatibility and versioning
-
-This is an in-process C++ surface.
-Enum ordinals, field layout, and strong-id representation are not storage or IPC compatibility guarantees.
-Any surface change requires synchronized implementation, specification, reference, producer, consumer, and test updates.
-
-## Examples
-
-```cpp
-auto const reply = notifications.createOrUpdate(
-  ao::rt::NotificationReportKey{"library.scan.current"},
-  ao::rt::NotificationRequest{
-    .severity = ao::rt::NotificationSeverity::Warning,
-    .message = std::string{"Some tracks could not be imported"},
-    .lifetime = ao::rt::NotificationLifetime::sessionHistory(),
-  });
-```
+This is an in-process C++ API.
+Enum ordinals and field layout are not persistence guarantees, and callers update together with runtime.
 
 ## Implementation authority
 
@@ -214,13 +133,11 @@ auto const reply = notifications.createOrUpdate(
 
 ## Test authority
 
-- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) locks request storage, typed mutation replies, configured bounds, atomic history eviction, keyed aggregation, immutable updates, reentrancy, and observer-failure behavior.
-- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) locks typed lifetime scheduling, unchanged suppression, keyed lifetime transitions, expiry revisions, generations, cancellation races, and teardown.
-- Activity projection tests under [`test/unit/uimodel/status/activity/`](../../../test/unit/uimodel/status/activity) lock how the model is narrowed for shared presentation.
+- [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp)
+- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp)
 
 ## Related documents
 
 - [Notification feed specification](../../spec/reporting/notification-feed.md)
-- [Activity-status specification](../../spec/presentation/activity-status.md)
+- [Activity-status surface reference](../presentation/activity-status.md)
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
-- [Presentation text catalog](../presentation/text-catalog.md)

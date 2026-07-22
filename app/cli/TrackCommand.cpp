@@ -22,7 +22,6 @@
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/StorageResult.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -46,6 +45,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::cli
@@ -194,16 +194,24 @@ namespace ao::cli
                            OutputFormat format,
                            std::ostream& os)
     {
-      auto const updated = reply.mutatedIds.size();
+      auto const updated = reply.changes.size();
 
       if (format != OutputFormat::Plain)
       {
+        auto trackIds = std::vector<TrackId>{};
+        trackIds.reserve(reply.changes.size());
+
+        for (auto const& change : reply.changes)
+        {
+          trackIds.push_back(change.trackId);
+        }
+
         emitDocument(os,
                      format,
                      TrackUpdateReportDto{.dryRun = dryRun,
                                           .matched = matched,
                                           .updated = static_cast<std::uint64_t>(updated),
-                                          .trackIds = reply.mutatedIds,
+                                          .trackIds = std::move(trackIds),
                                           .changes = reply.changes});
         return;
       }
@@ -628,8 +636,7 @@ namespace ao::cli
         for (std::size_t i = offset; i < end; ++i)
         {
           auto const id = trackIds[i];
-          auto const optView = rt::storageValueOrNullopt(
-            reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to read track");
+          auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
           if (optView)
           {
@@ -644,8 +651,7 @@ namespace ao::cli
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const id = trackIds[i];
-        auto const optView = rt::storageValueOrNullopt(
-          reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to read track");
+        auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
         if (optView)
         {
@@ -672,8 +678,7 @@ namespace ao::cli
       for (std::size_t i = offset; i < end; ++i)
       {
         auto const id = trackIds[i];
-        auto const optView =
-          rt::storageValueOrNullopt(reader.get(id, library::TrackStore::Reader::LoadMode::Hot), "Failed to read track");
+        auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
 
         if (optView)
         {
@@ -735,8 +740,7 @@ namespace ao::cli
         for (std::size_t i = offset; i < end; ++i)
         {
           auto const id = trackIds[i];
-          auto const optView = rt::storageValueOrNullopt(
-            reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to read track");
+          auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
           if (optView)
           {
@@ -921,9 +925,7 @@ namespace ao::cli
       {
         auto const id = TrackId{targetId};
 
-        if (auto const optView = rt::storageValueOrNullopt(
-              reader.get(id, library::TrackStore::Reader::LoadMode::Both), "Failed to dump track");
-            optView)
+        if (auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both); optView)
         {
           dumpTrack(id, *optView, dictionary, raw, os);
         }

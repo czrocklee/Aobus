@@ -8,7 +8,6 @@
 #include <boost/container/small_vector.hpp>
 
 #include <cstddef>
-#include <cstdint>
 #include <variant>
 #include <vector>
 
@@ -43,7 +42,6 @@ namespace ao::rt
 
   struct TrackSourceDeltaBatch final
   {
-    std::uint64_t revision = 0;
     boost::container::small_vector<TrackSourceDelta, 1> deltas{};
   };
 

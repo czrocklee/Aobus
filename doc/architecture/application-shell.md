@@ -63,7 +63,7 @@ The GTK `ComponentRegistry` pairs each platform-neutral `LayoutComponentDescript
 Its embedded UIModel catalog is the editor and validator authority for registered type metadata.
 
 The GTK `ActionRegistry` pairs each `LayoutActionDescriptor` with one handler and optional availability provider.
-It remains the live command authority; layout nodes, keyboard maps, notification actions, and Gio actions refer to stable action ids instead of duplicating command behavior.
+It remains the live command authority; layout nodes, keyboard maps, and Gio actions refer to stable action ids instead of duplicating command behavior.
 
 ### Layout construction
 
@@ -111,7 +111,7 @@ global application preference selects classic or modern
 ### Action route
 
 ```text
-layout component, menu, shortcut, or notification action id
+layout component, menu, shortcut, or Gio action id
   -> ActionRegistry validation and availability
   -> activation context with runtime, window, anchor, and component id
   -> registered handler

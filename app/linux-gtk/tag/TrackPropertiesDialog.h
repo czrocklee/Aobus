@@ -94,7 +94,7 @@ namespace ao::gtk
     TrackRowCache& _rowCache;
     std::vector<TrackId> _trackIds;
     std::unique_ptr<uimodel::TrackAuthoringSession> _editSessionPtr;
-    async::Subscription _editSessionStateSubscription;
+    async::Subscription _editSessionInvalidatedSubscription;
     bool _multipleTracks = false;
     uimodel::TrackPropertiesFormModel _formModel;
     Gtk::Button* _saveButton = nullptr;

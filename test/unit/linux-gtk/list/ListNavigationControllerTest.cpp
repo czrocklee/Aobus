@@ -16,7 +16,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/library/list/ListEditWorkflow.h>
+#include <ao/rt/library/Library.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
@@ -38,7 +38,7 @@ namespace ao::gtk::test
   {
     ListId createList(rt::Library& library, std::string const& name, ListId parentId = kInvalidListId)
     {
-      return ao::test::requireValue(uimodel::ListEditWorkflow{library}.create(rt::LibraryListDraft{
+      return ao::test::requireValue(library.createList(rt::LibraryListDraft{
         .kind = rt::LibraryListKind::Manual,
         .parentId = parentId,
         .name = name,

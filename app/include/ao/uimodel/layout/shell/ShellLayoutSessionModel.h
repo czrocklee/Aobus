@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
-#include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 
 #include <optional>
@@ -28,10 +27,8 @@ namespace ao::uimodel
 
   struct ShellLayoutPanelSizePromotion final
   {
-    std::string presetId;
     LayoutDocument layout;
     LayoutComponentStateDocument componentState;
-    PanelSizePromotionResult result = {};
   };
 
   struct ShellLayoutSessionSnapshot final
@@ -53,13 +50,11 @@ namespace ao::uimodel
 
     ShellLayoutSessionSnapshot snapshot() const;
 
-    void applyLoadedLayout(std::string presetId, LayoutDocument layout);
-    void applyEditorSave(std::string presetId, LayoutDocument layout);
+    void applyLayout(std::string presetId, LayoutDocument layout);
 
     ShellLayoutRuntimeStateReset resetRuntimeLayoutState();
     std::optional<ShellLayoutPanelSizePromotion> preparePanelSizePromotion(
       LayoutComponentStateDocument const& runtimeComponentState) const;
-    void applyPanelSizePromotion(ShellLayoutPanelSizePromotion promotion);
 
   private:
     std::string _activePresetId;

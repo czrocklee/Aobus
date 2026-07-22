@@ -94,11 +94,8 @@ namespace ao::gtk::layout
       return;
     }
 
-    _primaryClick = binder.bind(node,
-                                uimodel::kPrimaryActionProp,
-                                policy.defaultAction(uimodel::LayoutActionSlot::PrimaryClick),
-                                uimodel::LayoutActionSlot::PrimaryClick,
-                                target);
+    _primaryClick = binder.bind(
+      node, uimodel::kPrimaryActionProp, policy.defaultAction(uimodel::LayoutActionSlot::PrimaryClick), target);
 
     if (!_primaryClick)
     {
@@ -135,11 +132,8 @@ namespace ao::gtk::layout
       return;
     }
 
-    _secondaryClick = binder.bind(node,
-                                  uimodel::kSecondaryActionProp,
-                                  policy.defaultAction(uimodel::LayoutActionSlot::SecondaryClick),
-                                  uimodel::LayoutActionSlot::SecondaryClick,
-                                  target);
+    _secondaryClick = binder.bind(
+      node, uimodel::kSecondaryActionProp, policy.defaultAction(uimodel::LayoutActionSlot::SecondaryClick), target);
 
     if (!_secondaryClick)
     {
@@ -179,7 +173,6 @@ namespace ao::gtk::layout
     _primaryLongPress = binder.bind(node,
                                     uimodel::kPrimaryLongPressActionProp,
                                     policy.defaultAction(uimodel::LayoutActionSlot::PrimaryLongPress),
-                                    uimodel::LayoutActionSlot::PrimaryLongPress,
                                     target);
 
     if (!_primaryLongPress)
@@ -217,7 +210,6 @@ namespace ao::gtk::layout
     _secondaryLongPress = binder.bind(node,
                                       uimodel::kSecondaryLongPressActionProp,
                                       policy.defaultAction(uimodel::LayoutActionSlot::SecondaryLongPress),
-                                      uimodel::LayoutActionSlot::SecondaryLongPress,
                                       target);
 
     if (!_secondaryLongPress)

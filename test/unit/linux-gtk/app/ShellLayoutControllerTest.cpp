@@ -17,7 +17,6 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/uimodel/layout/action/LayoutActionActivation.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
@@ -142,9 +141,8 @@ namespace ao::gtk::test
     {
       REQUIRE(controller.editorDialog() == nullptr);
 
-      auto const result = controller.activateAction("shell.editLayout");
+      controller.activateAction("shell.editLayout");
 
-      CHECK(result.outcome == uimodel::LayoutActionActivationOutcome::Activated);
       CHECK(controller.editorDialog() == nullptr);
       drainGtkEvents();
       CHECK(controller.editorDialog() != nullptr);
@@ -152,7 +150,7 @@ namespace ao::gtk::test
 
     SECTION("loadLayout load works")
     {
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       drainGtkEvents();
       CHECK(controller.runtimeState().componentStateStore ==
             static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
@@ -170,7 +168,7 @@ namespace ao::gtk::test
       auto const original = std::string(uimodel::LayoutDocumentLimits::kDefaultMaxFileBytes + 1, 'x');
       std::ofstream{layoutPath, std::ios::binary} << original;
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
@@ -179,7 +177,7 @@ namespace ao::gtk::test
 
     SECTION("an over-budget editor preview preserves the active GTK tree")
     {
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
       controller.openEditor(*configStorePtr);
@@ -219,7 +217,7 @@ namespace ao::gtk::test
       auto const original = std::string{"layout:\n  version: 99\n  root: future-layout\n"};
       std::ofstream{layoutPath, std::ios::binary} << original;
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
       controller.openEditor(*configStorePtr);
@@ -270,7 +268,7 @@ namespace ao::gtk::test
       configStorePtr->saveAppPrefs(prefs);
       REQUIRE(storePtr->save(panelLayoutDocument(), "classic"));
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
       controller.openEditor(*configStorePtr);
@@ -304,7 +302,7 @@ namespace ao::gtk::test
       configStorePtr->saveAppPrefs(prefs);
       themeCoordinator.load(*configStorePtr);
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
@@ -338,7 +336,7 @@ namespace ao::gtk::test
       configStorePtr->saveAppPrefs(prefs);
       themeCoordinator.load(*configStorePtr);
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
@@ -393,7 +391,7 @@ namespace ao::gtk::test
       runtime.reloadAllTracks();
       auto const view = runtime.workspace().navigateTo(rt::kAllTracksListId);
       REQUIRE(view);
-      REQUIRE(playback.commands().startFromView(view->activeViewId, trackId));
+      REQUIRE(playback.commands().startFromView(*view, trackId));
       playback.commands().seek(std::chrono::milliseconds{50});
       REQUIRE(runtime.savePlaybackSession());
       playback.commands().stop();
@@ -409,16 +407,14 @@ namespace ao::gtk::test
       REQUIRE(stopActionPtr != nullptr);
       CHECK(stopActionPtr->property_enabled() == false);
 
-      auto const playPauseResult = controller.activateAction("playback.playPause");
-      CHECK(playPauseResult.outcome == uimodel::LayoutActionActivationOutcome::Activated);
+      controller.activateAction("playback.playPause");
       CHECK(playback.snapshot().transport.transport == audio::Transport::Playing);
       CHECK(playback.snapshot().transport.nowPlaying.trackId == trackId);
 
       controller.refreshExportedActions();
       CHECK(stopActionPtr->property_enabled() == true);
 
-      auto const stopResult = controller.activateAction("playback.stop");
-      CHECK(stopResult.outcome == uimodel::LayoutActionActivationOutcome::Activated);
+      controller.activateAction("playback.stop");
       CHECK(playback.snapshot().transport.transport == audio::Transport::Idle);
     }
 
@@ -438,7 +434,7 @@ namespace ao::gtk::test
       };
       componentStateStorePtr->save("classic", stateDoc);
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
       REQUIRE(controller.runtimeState().componentState.components.contains("main-paned"));
@@ -469,7 +465,7 @@ namespace ao::gtk::test
       };
       componentStateStorePtr->save("classic", stateDoc);
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
@@ -517,7 +513,7 @@ namespace ao::gtk::test
       };
       componentStateStorePtr->save("classic", stateDoc);
 
-      controller.loadLayout(*configStorePtr);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 
@@ -583,7 +579,7 @@ namespace ao::gtk::test
         std::move(layoutStorePtr),
         std::move(componentStateStorePtr),
         GtkUiDependencies{.playbackCommandSurface = &commandSurface, .themeCoordinator = &themeCoordinator}};
-      controller.loadLayout(*configStore);
+      controller.loadLayout();
       REQUIRE(pumpGtkEventsUntil([&controller]
                                  { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
 

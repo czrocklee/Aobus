@@ -296,7 +296,7 @@ namespace ao::tui
       return std::format("Unknown view {}", presentationId);
     }
 
-    auto const& spec = result->presentation;
+    auto const& spec = *result;
 
     auto snapshot = loadTrackItemsFromView(_activeViewId);
     _tracks = std::move(snapshot.tracks);
@@ -475,7 +475,7 @@ namespace ao::tui
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
   {
     _runtime.reloadAllTracks();
-    auto navigationResult = Result<rt::WorkspaceCommitReceipt>{};
+    auto navigationResult = Result<rt::ViewId>{};
 
     if (listId == rt::kAllTracksListId)
     {
@@ -491,7 +491,7 @@ namespace ao::tui
       return {};
     }
 
-    _activeViewId = navigationResult->activeViewId;
+    _activeViewId = *navigationResult;
     return loadTrackItemsFromView(_activeViewId);
   }
 } // namespace ao::tui

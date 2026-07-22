@@ -14,7 +14,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <optional>
 #include <string>
 
 namespace ao::uimodel::test
@@ -28,10 +27,6 @@ namespace ao::uimodel::test
                                                               .label = "Valid Action",
                                                               .category = "Test",
                                                               .capabilities = LayoutActionCapability::None});
-      catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "needsAnchor",
-                                                              .label = "Needs Anchor",
-                                                              .category = "Test",
-                                                              .capabilities = LayoutActionCapability::RequiresAnchor});
       return catalog;
     }
 
@@ -48,18 +43,6 @@ namespace ao::uimodel::test
                    .optActionBinding = LayoutActionBindingProperty{.slot = LayoutActionSlot::PrimaryClick}}}});
       return catalog;
     }
-
-    auto const permissiveResolver =
-      [](LayoutNode const&, LayoutPropertyDescriptor const& prop) -> std::optional<LayoutActionBindingContext>
-    {
-      if (!prop.optActionBinding)
-      {
-        return std::nullopt;
-      }
-
-      return LayoutActionBindingContext{
-        .slot = prop.optActionBinding->slot, .hasAnchor = true, .hasFocusedView = true, .componentType = "test.button"};
-    };
   } // namespace
 
   TEST_CASE("LayoutActionValidator - reports invalid action bindings", "[uimodel][unit][layout][action]")
@@ -73,7 +56,7 @@ namespace ao::uimodel::test
       doc.root.type = "test.button";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"valid.action"}};
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       CHECK(diagnostics.empty());
     }
 
@@ -84,12 +67,12 @@ namespace ao::uimodel::test
       doc.root.id = "unknown-button";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"unknown.action"}};
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].componentId == "unknown-button");
       CHECK(diagnostics[0].actionId == "unknown.action");
       CHECK(diagnostics[0].propertyName == "primaryAction");
-      CHECK(diagnostics[0].message == "Unknown or incompatible action ID: unknown.action");
+      CHECK(diagnostics[0].message == "Unknown action ID: unknown.action");
     }
 
     SECTION("none action id produces no diagnostic")
@@ -98,7 +81,7 @@ namespace ao::uimodel::test
       doc.root.type = "test.button";
       doc.root.props["primaryAction"] = LayoutValue{std::string{"none"}};
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       CHECK(diagnostics.empty());
     }
 
@@ -108,7 +91,7 @@ namespace ao::uimodel::test
       doc.root.type = "test.button";
       doc.root.props["primaryAction"] = LayoutValue{std::string{""}};
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       CHECK(diagnostics.empty());
     }
 
@@ -117,7 +100,7 @@ namespace ao::uimodel::test
       auto doc = LayoutDocument{};
       doc.root.type = "test.button";
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       CHECK(diagnostics.empty());
     }
 
@@ -128,55 +111,12 @@ namespace ao::uimodel::test
       doc.root.id = "non-string-button";
       doc.root.props["primaryAction"] = LayoutValue{static_cast<std::int64_t>(42)};
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].componentId == "non-string-button");
       CHECK(diagnostics[0].propertyName == "primaryAction");
       CHECK(diagnostics[0].actionId == "(invalid type)");
       CHECK(diagnostics[0].message == "Action ID must be a string");
-    }
-
-    SECTION("incompatible anchor requirement produces diagnostic")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "test.button";
-      doc.root.id = "anchorless-button";
-      doc.root.props["primaryAction"] = LayoutValue{std::string{"needsAnchor"}};
-
-      auto const noAnchorResolver =
-        [](LayoutNode const&, LayoutPropertyDescriptor const& prop) -> std::optional<LayoutActionBindingContext>
-      {
-        if (!prop.optActionBinding)
-        {
-          return std::nullopt;
-        }
-
-        return LayoutActionBindingContext{.slot = prop.optActionBinding->slot,
-                                          .hasAnchor = false,
-                                          .hasFocusedView = false,
-                                          .componentType = "test.button"};
-      };
-
-      auto const diagnostics = validateLayoutActions(doc, components, actions, noAnchorResolver);
-      REQUIRE(diagnostics.size() == 1);
-      CHECK(diagnostics[0].componentId == "anchorless-button");
-      CHECK(diagnostics[0].propertyName == "primaryAction");
-      CHECK(diagnostics[0].actionId == "needsAnchor");
-      CHECK(diagnostics[0].message == "Unknown or incompatible action ID: needsAnchor");
-    }
-
-    SECTION("missing resolver returns no diagnostic (conservative)")
-    {
-      auto doc = LayoutDocument{};
-      doc.root.type = "test.button";
-      doc.root.props["primaryAction"] = LayoutValue{std::string{"needsAnchor"}};
-
-      auto const nullResolver = [](LayoutNode const&,
-                                   LayoutPropertyDescriptor const&) -> std::optional<LayoutActionBindingContext>
-      { return std::nullopt; };
-
-      auto const diagnostics = validateLayoutActions(doc, components, actions, nullResolver);
-      CHECK(diagnostics.empty());
     }
 
     SECTION("detects unsupported action slots (disallowed by policy)")
@@ -189,7 +129,7 @@ namespace ao::uimodel::test
       // But it has an explicit primaryAction prop.
       doc.root.props["secondaryAction"] = LayoutValue{std::string{"valid.action"}};
 
-      auto const diagnostics = validateLayoutActions(doc, components, actions, permissiveResolver);
+      auto const diagnostics = validateLayoutActions(doc, components, actions);
       REQUIRE(diagnostics.size() == 1);
       CHECK(diagnostics[0].componentId == "my-btn");
       CHECK(diagnostics[0].propertyName == "secondaryAction");

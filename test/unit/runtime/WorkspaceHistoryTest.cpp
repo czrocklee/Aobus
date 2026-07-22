@@ -21,18 +21,6 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("WorkspaceService - second navigateTo enables back navigation", "[runtime][unit][workspace][history]")
-  {
-    auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
-
-    requireNavigation(runtime, fixture.firstListId);
-    requireNavigation(runtime, fixture.secondListId);
-
-    CHECK(runtime.workspace().canGoBack() == true);
-    CHECK(runtime.workspace().canGoForward() == false);
-  }
-
   TEST_CASE("WorkspaceService - navigateTo deduplicates the current list", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
@@ -42,7 +30,6 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.secondListId);
     requireNavigation(runtime, fixture.secondListId);
 
-    CHECK(runtime.workspace().canGoBack() == true);
     requireBackNavigation(runtime);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
@@ -58,7 +45,7 @@ namespace ao::rt::test
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
-    CHECK(runtime.workspace().canGoBack() == false);
+    CHECK_FALSE(runtime.workspace().goBack());
   }
 
   TEST_CASE("WorkspaceService - navigateTo filtered target records filter history",
@@ -72,7 +59,6 @@ namespace ao::rt::test
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.filterExpression == "genre == \"Rock\"");
-    CHECK(runtime.workspace().canGoBack() == true);
 
     requireBackNavigation(runtime);
     auto const backState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
@@ -92,8 +78,6 @@ namespace ao::rt::test
     CHECK(runtime.workspace().goBack());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
-    CHECK(runtime.workspace().canGoBack() == true);
-    CHECK(runtime.workspace().canGoForward() == true);
   }
 
   TEST_CASE("WorkspaceService - repeated goBack restores the first list", "[runtime][unit][workspace][history]")
@@ -110,8 +94,7 @@ namespace ao::rt::test
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
-    CHECK(runtime.workspace().canGoBack() == false);
-    CHECK(runtime.workspace().canGoForward() == true);
+    CHECK_FALSE(runtime.workspace().goBack());
   }
 
   TEST_CASE("WorkspaceService - goForward after back restores the newer list", "[runtime][unit][workspace][history]")
@@ -127,7 +110,7 @@ namespace ao::rt::test
     CHECK(runtime.workspace().goForward());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.thirdListId);
-    CHECK(runtime.workspace().canGoForward() == false);
+    CHECK_FALSE(runtime.workspace().goForward());
   }
 
   TEST_CASE("WorkspaceService - goBack at the first entry returns false", "[runtime][unit][workspace][history]")
@@ -160,7 +143,7 @@ namespace ao::rt::test
     requireBackNavigation(runtime);
     requireNavigation(runtime, fixture.fourthListId);
 
-    CHECK(runtime.workspace().canGoForward() == false);
+    CHECK_FALSE(runtime.workspace().goForward());
     requireBackNavigation(runtime);
     auto const midState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(midState.listId == fixture.secondListId);
@@ -197,42 +180,6 @@ namespace ao::rt::test
     CHECK(runtime.workspace().goBack());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
-  }
-
-  TEST_CASE("WorkspaceService - changed snapshot includes navigation availability after navigate",
-            "[runtime][unit][workspace][history]")
-  {
-    auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
-
-    auto received = NavigationAvailability{};
-    auto const sub =
-      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received = changed.snapshot.navigation; });
-
-    requireNavigation(runtime, fixture.firstListId);
-    requireNavigation(runtime, fixture.secondListId);
-
-    CHECK(received.canGoBack == true);
-    CHECK(received.canGoForward == false);
-  }
-
-  TEST_CASE("WorkspaceService - changed snapshot includes navigation availability after back",
-            "[runtime][unit][workspace][history]")
-  {
-    auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
-
-    requireNavigation(runtime, fixture.firstListId);
-    requireNavigation(runtime, fixture.secondListId);
-
-    auto received = NavigationAvailability{};
-    auto const sub =
-      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received = changed.snapshot.navigation; });
-
-    requireBackNavigation(runtime);
-
-    CHECK(received.canGoBack == false);
-    CHECK(received.canGoForward == true);
   }
 
   TEST_CASE("WorkspaceService - navigation history signal skips deduplicated navigation",
@@ -281,8 +228,6 @@ namespace ao::rt::test
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.firstListId);
-    CHECK(runtime.workspace().canGoBack() == false);
-    CHECK(runtime.workspace().canGoForward() == true);
   }
 
   TEST_CASE("WorkspaceService - goBack recreates destroyed views", "[runtime][unit][workspace][history]")
@@ -312,8 +257,7 @@ namespace ao::rt::test
     CHECK(newViewA != viewA);
   }
 
-  TEST_CASE("WorkspaceService - failed goBack restores focus views and history cursor",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - failed goBack leaves workspace state unchanged", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
@@ -332,11 +276,9 @@ namespace ao::rt::test
     CHECK(after.activeViewId == before.activeViewId);
     CHECK(after.openViews == before.openViews);
     CHECK(after.revision == before.revision);
-    CHECK(runtime.workspace().canGoBack());
-    CHECK_FALSE(runtime.workspace().canGoForward());
   }
 
-  TEST_CASE("WorkspaceService - failed goForward restores focus views and history cursor",
+  TEST_CASE("WorkspaceService - failed goForward leaves workspace state unchanged",
             "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
@@ -357,7 +299,5 @@ namespace ao::rt::test
     CHECK(after.activeViewId == before.activeViewId);
     CHECK(after.openViews == before.openViews);
     CHECK(after.revision == before.revision);
-    CHECK_FALSE(runtime.workspace().canGoBack());
-    CHECK(runtime.workspace().canGoForward());
   }
 } // namespace ao::rt::test

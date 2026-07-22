@@ -12,17 +12,22 @@ depends-on: none
 
 Accepted on 2026-07-19 with the open questions resolved below.
 Implementation proceeds in the staged order of the compatibility and migration section; execution detail lives in the local plan tree.
-Stages 1 through 3 are complete: consumers use the public `PlaybackService`,
-the renamed `PlaybackTransport` and `PlaybackSuccession` owners are
-runtime-internal, and the service's private serial intent/commit pump is the
-sole application revision authority. Observer commands are deferred and
-superseded by intent generation, while the former cross-owner publication,
-privilege, installation, and restore guards have been removed. The resulting
-behavior is owned by the
+Stages 1 through 3 established the current boundary: consumers use public
+`PlaybackService`, `PlaybackTransport` and `PlaybackSuccession` are
+runtime-internal, observer commands are deferred through one serial command
+queue, and the former cross-owner publication, privilege, installation, and
+restore guards are gone.
+
+On 2026-07-21 the implemented surface was pruned further. Coherent snapshot
+equality and publication are sufficient for current consumers, so the public
+global playback revision, command id, failure event, and preparation snapshot
+were removed. Position and final-seek identities remain because clock consumers
+use them. The proposal body below preserves the original accepted design; the
+resulting behavior is owned by the
 [playback application commit specification](../spec/playback/application-commit.md).
 
 The serialized asynchronous persistence stage was not adopted.
-On 2026-07-21, playback-session persistence was deliberately simplified to synchronous best-effort saves on discrete intent and natural lifecycle boundaries, without a playback-specific dirty revision or retry scheduler.
+On 2026-07-21, playback-session persistence was deliberately simplified to synchronous best-effort saves on restorable-state changes and natural lifecycle boundaries, without a playback-specific dirty revision or retry scheduler.
 The current [playback session persistence specification](../spec/playback/session-persistence.md) owns that implemented behavior; the persistence section below remains proposal history rather than pending implementation direction.
 
 ## Problem

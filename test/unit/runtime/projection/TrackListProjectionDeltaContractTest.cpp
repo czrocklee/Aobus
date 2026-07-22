@@ -135,7 +135,6 @@ namespace ao::rt::test
     CHECK(insertion.range.start == 1);
     CHECK(insertion.range.count == 1);
     CHECK(projectionTrackIds(projection) == expected);
-    CHECK(projection.revision() == 1);
   }
 
   TEST_CASE("TrackListProjection - empty sort preserves source positions through update removal and reset",
@@ -209,7 +208,6 @@ namespace ao::rt::test
     CHECK(insertion.range.start == 1);
     CHECK(insertion.range.count == 1);
     CHECK(projectionTrackIds(projection) == expected);
-    CHECK(projection.revision() == 1);
   }
 
   TEST_CASE("TrackListProjection - empty sort publishes a source move as one sequential batch",
@@ -249,8 +247,7 @@ namespace ao::rt::test
     CHECK(projectionTrackIds(projection) == expected);
   }
 
-  TEST_CASE("TrackListProjection - sorted source-only reorder is a revisionless no-op",
-            "[runtime][unit][projection][sorted]")
+  TEST_CASE("TrackListProjection - sorted source-only reorder does not publish", "[runtime][unit][projection][sorted]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
@@ -266,7 +263,6 @@ namespace ao::rt::test
     [[maybe_unused]] auto subscription =
       projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
     batches.clear();
-    auto const revision = projection.revision();
 
     sourcePtr->replaceWithBatch(std::vector{first, second, third},
                                 TrackSourceDeltaBatch{
@@ -279,7 +275,6 @@ namespace ao::rt::test
 
     auto const expected = std::vector{first, second, third};
     CHECK(projectionTrackIds(projection) == expected);
-    CHECK(projection.revision() == revision);
     CHECK(batches.empty());
   }
 
@@ -338,7 +333,6 @@ namespace ao::rt::test
     CHECK(projection.presentation().sortBy == std::vector{TrackSortTerm{.field = TrackSortField::Title}});
     CHECK(projection.groupCount() == 0);
     CHECK(projectionTrackIds(projection) == expected);
-    CHECK(projection.revision() == 0);
   }
 
   TEST_CASE("TrackListProjection - construction never queries an already invalidated source",
@@ -358,7 +352,6 @@ namespace ao::rt::test
     });
 
     CHECK(sourcePtr->queryCount() == 0);
-    CHECK(projection.revision() == 1);
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
     CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));

@@ -62,11 +62,9 @@ namespace ao::uimodel::test
       .state = {{"size", LayoutValue{static_cast<std::int64_t>(320)}}, {"revealed", LayoutValue{false}}},
     };
 
-    auto const result = promotePanelSizeDefaults(doc, stateDoc);
+    auto const changed = promotePanelSizeDefaults(doc, stateDoc);
 
-    CHECK(result.changed);
-    CHECK(result.promotedCount == 2);
-    CHECK(result.residualCount == 1);
+    CHECK(changed);
 
     auto const& split = doc.root.children[0];
     CHECK_FALSE(split.props.contains("position"));
@@ -91,11 +89,9 @@ namespace ao::uimodel::test
 
     auto stateDoc = LayoutComponentStateDocument{.preset = "classic"};
 
-    auto const result = promotePanelSizeDefaults(doc, stateDoc);
+    auto const changed = promotePanelSizeDefaults(doc, stateDoc);
 
-    CHECK_FALSE(result.changed);
-    CHECK(result.promotedCount == 0);
-    CHECK(result.residualCount == 0);
+    CHECK_FALSE(changed);
   }
 
   TEST_CASE("LayoutStatePromoter - promotes deep layout trees", "[uimodel][unit][layout][component]")
@@ -122,9 +118,7 @@ namespace ao::uimodel::test
       .state = {{"size", LayoutValue{static_cast<std::int64_t>(320)}}},
     };
 
-    auto const result = promotePanelSizeDefaults(doc, stateDoc);
-    CHECK(result.changed);
-    CHECK(result.promotedCount == 1);
+    CHECK(promotePanelSizeDefaults(doc, stateDoc));
   }
 
   TEST_CASE("LayoutStatePromoter - rejects mismatched baseline hash", "[uimodel][unit][layout][component]")
@@ -141,9 +135,7 @@ namespace ao::uimodel::test
       .state = {{"positionPercent", LayoutValue{0.42}}},
     };
 
-    auto const result = promotePanelSizeDefaults(doc, stateDoc);
-    CHECK_FALSE(result.changed);
-    CHECK(result.promotedCount == 0);
+    CHECK_FALSE(promotePanelSizeDefaults(doc, stateDoc));
   }
 
   TEST_CASE("LayoutStatePromoter - ignores malformed state types", "[uimodel][unit][layout][component]")
@@ -160,8 +152,6 @@ namespace ao::uimodel::test
       .state = {{"size", LayoutValue{true}}},
     };
 
-    auto const result = promotePanelSizeDefaults(doc, stateDoc);
-    CHECK_FALSE(result.changed);
-    CHECK(result.promotedCount == 0);
+    CHECK_FALSE(promotePanelSizeDefaults(doc, stateDoc));
   }
 } // namespace ao::uimodel::test

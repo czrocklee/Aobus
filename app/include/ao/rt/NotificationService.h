@@ -35,19 +35,12 @@ namespace ao::rt
 
     NotificationFeedState feed() const;
 
-    NotificationMutationReply post(NotificationSeverity severity, std::string message, NotificationLifetime lifetime);
-    NotificationMutationReply post(NotificationRequest request);
-    NotificationMutationReply createOrUpdate(NotificationReportKey reportKey, NotificationRequest request);
-
-    NotificationMutationReply updateMessage(NotificationId id, NotificationMessage message);
-    NotificationMutationReply updateContent(NotificationId id, NotificationContentState content);
-    NotificationMutationReply updateProgress(NotificationId id, NotificationProgressState progress);
-    NotificationMutationReply clearProgress(NotificationId id);
-    NotificationMutationReply dismiss(NotificationId id);
-    NotificationMutationReply dismissAll();
+    void post(NotificationSeverity severity, std::string message, NotificationLifetime lifetime);
+    void post(NotificationRequest request);
+    void createOrUpdate(NotificationReportKey reportKey, NotificationRequest request);
 
     // The update reference is callback-scoped; copy feedPtr to retain the
-    // immutable revision snapshot beyond the callback.
+    // immutable snapshot beyond the callback.
     async::Subscription onFeedUpdated(std::move_only_function<void(NotificationFeedUpdate const&)> handler);
 
   private:

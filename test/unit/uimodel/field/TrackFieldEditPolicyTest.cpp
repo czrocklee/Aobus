@@ -3,8 +3,10 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -105,5 +107,22 @@ namespace ao::uimodel::test
 
     REQUIRE(patch.optTitle);
     CHECK(*patch.optTitle == "Before");
+  }
+
+  TEST_CASE("isProtectedInlineEditText protects aggregate sentinel values", "[uimodel][unit][field][inline-edit]")
+  {
+    auto snap = rt::TrackDetailSnapshot{};
+
+    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kMultipleTrackValuesText, false));
+
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = true;
+    CHECK(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, false));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "anything else", true));
+
+    rt::trackFieldArrayAt(snap.fields, rt::TrackField::Title).mixed = false;
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, kCompositeMixedTrackText, true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "edit", true));
+    CHECK_FALSE(isProtectedInlineEditText(rt::TrackField::Title, snap, "", true));
   }
 } // namespace ao::uimodel::test

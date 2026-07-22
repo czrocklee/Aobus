@@ -22,7 +22,7 @@ namespace ao::rt
    * narrow `PlaybackCommands` and `PlaybackEvents` roles, and hides the
    * transport and succession collaborators. Its private implementation is the
    * playback commit authority: one logical mutation produces at most one
-   * coherent revision, and observer-issued commands enter a later executor
+   * coherent snapshot, and observer-issued commands enter a later executor
    * turn. Every method and returned role is callback-executor-affine.
    */
   class PlaybackService final
@@ -53,7 +53,7 @@ namespace ao::rt
 
     // Reports only whether immediate admission was available. Invariant faults
     // from an admitted operation remain exceptions after commit bookkeeping.
-    bool runSynchronousIntent(std::move_only_function<bool()> operation);
+    bool runSynchronousCommand(std::move_only_function<bool()> operation);
     void shutdown() noexcept;
 
     std::unique_ptr<Impl> _implPtr;

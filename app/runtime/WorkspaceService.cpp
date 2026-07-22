@@ -90,7 +90,8 @@ namespace ao::rt
   {
     struct PendingCommit final
     {
-      WorkspaceCommitReceipt receipt{};
+      WorkspaceSnapshot snapshot{};
+      NavigationHistory history{};
       WorkspaceChanged changed{};
     };
 
@@ -124,41 +125,18 @@ namespace ao::rt
       }
     }
 
-    WorkspaceCommitReceipt noChangeReceipt() const
+    PendingCommit prepareCommit(WorkspaceSnapshot nextSnapshot,
+                                NavigationHistory nextHistory,
+                                WorkspaceChangeCause const cause) const
     {
-      return WorkspaceCommitReceipt{
-        .disposition = WorkspaceCommitDisposition::NoChange,
-        .beforeRevision = currentSnapshot.revision,
-        .afterRevision = currentSnapshot.revision,
-        .activeViewId = currentSnapshot.activeViewId,
-      };
-    }
+      nextSnapshot.revision = currentSnapshot.revision + 1;
+      auto changed = WorkspaceChanged{.snapshot = nextSnapshot, .cause = cause};
 
-    PendingCommit installCandidate(WorkspaceSnapshot nextSnapshot,
-                                   NavigationHistory nextHistory,
-                                   WorkspaceChangeCause const cause)
-    {
-      auto const beforeRevision = currentSnapshot.revision;
-      nextSnapshot.navigation = NavigationAvailability{
-        .canGoBack = nextHistory.canGoBack(),
-        .canGoForward = nextHistory.canGoForward(),
+      return PendingCommit{
+        .snapshot = std::move(nextSnapshot),
+        .history = std::move(nextHistory),
+        .changed = std::move(changed),
       };
-      nextSnapshot.revision = beforeRevision + 1;
-
-      auto pending = PendingCommit{
-        .receipt =
-          WorkspaceCommitReceipt{
-            .disposition = WorkspaceCommitDisposition::Applied,
-            .beforeRevision = beforeRevision,
-            .afterRevision = nextSnapshot.revision,
-            .activeViewId = nextSnapshot.activeViewId,
-          },
-        .changed = WorkspaceChanged{.snapshot = nextSnapshot, .cause = cause},
-      };
-
-      currentSnapshot = std::move(nextSnapshot);
-      navigationHistory = std::move(nextHistory);
-      return pending;
     }
 
     static void logFailure(std::string_view const message) noexcept
@@ -207,14 +185,13 @@ namespace ao::rt
       }
     }
 
-    void publish(PendingCommit pending) noexcept
+    void publish(WorkspaceChanged changed) noexcept
     {
       auto weakSignalPtr = std::weak_ptr<async::Signal<WorkspaceChanged const&>>{changedSignalPtr};
 
       try
       {
-        executor.defer([weakSignalPtr, changed = std::move(pending.changed)] noexcept
-                       { emitChange(weakSignalPtr, changed); });
+        executor.defer([weakSignalPtr, changed = std::move(changed)] noexcept { emitChange(weakSignalPtr, changed); });
       }
       catch (std::exception const& error)
       {
@@ -226,14 +203,18 @@ namespace ao::rt
       }
     }
 
-    WorkspaceCommitReceipt commitCandidate(WorkspaceSnapshot nextSnapshot,
-                                           NavigationHistory nextHistory,
-                                           WorkspaceChangeCause const cause)
+    void installCommit(PendingCommit pending) noexcept
     {
-      auto pending = installCandidate(std::move(nextSnapshot), std::move(nextHistory), cause);
-      auto const receipt = pending.receipt;
-      publish(std::move(pending));
-      return receipt;
+      currentSnapshot = std::move(pending.snapshot);
+      navigationHistory = std::move(pending.history);
+      publish(std::move(pending.changed));
+    }
+
+    void commitCandidate(WorkspaceSnapshot nextSnapshot,
+                         NavigationHistory nextHistory,
+                         WorkspaceChangeCause const cause)
+    {
+      installCommit(prepareCommit(std::move(nextSnapshot), std::move(nextHistory), cause));
     }
 
     Result<TrackListViewState> liveViewState(ViewId const viewId) const
@@ -245,14 +226,7 @@ namespace ao::rt
 
       try
       {
-        auto state = views.trackListState(viewId);
-
-        if (state.lifecycle == ViewLifecycleState::Destroyed)
-        {
-          return makeError(Error::Code::InvalidState, std::format("View {} is destroyed", viewId));
-        }
-
-        return state;
+        return views.trackListState(viewId);
       }
       catch (std::out_of_range const&)
       {
@@ -267,17 +241,12 @@ namespace ao::rt
         return std::nullopt;
       }
 
-      for (auto const& record : views.listViews())
+      for (auto const viewId : views.listViews())
       {
-        if (record.kind != ViewKind::TrackList)
-        {
-          continue;
-        }
-
-        if (auto const state = views.trackListState(record.id);
+        if (auto const state = views.trackListState(viewId);
             state.listId == target.listId && state.filterExpression.empty())
         {
-          return record.id;
+          return viewId;
         }
       }
 
@@ -311,7 +280,7 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    Result<WorkspaceCommitReceipt> navigateToReusableView(ViewId const viewId, NavigationOptions const& options)
+    Result<ViewId> navigateToReusableView(ViewId const viewId, NavigationOptions const& options)
     {
       auto stateResult = liveViewState(viewId);
 
@@ -349,8 +318,10 @@ namespace ao::rt
 
       if (!changed)
       {
-        return noChangeReceipt();
+        return viewId;
       }
+
+      auto pending = prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
 
       if (presentationChanged)
       {
@@ -360,11 +331,11 @@ namespace ao::rt
         }
       }
 
-      APP_LOG_DEBUG("WorkspaceService: Navigating to viewId: {}", viewId.raw());
-      return commitCandidate(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
+      installCommit(std::move(pending));
+      return viewId;
     }
 
-    Result<WorkspaceCommitReceipt> navigate(NavigationTarget const& target, NavigationOptions const& options)
+    Result<ViewId> navigate(NavigationTarget const& target, NavigationOptions const& options)
     {
       auto targetResult = resolveNavigationTarget(target);
 
@@ -386,28 +357,38 @@ namespace ao::rt
         .filterExpression = targetResult->filterExpression,
       };
       config.optPresentation = options.optPresentation;
-      auto viewResult = views.createView(config, true);
+      auto viewResult = views.createView(config);
 
       if (!viewResult)
       {
         return std::unexpected{viewResult.error()};
       }
 
-      auto const viewId = viewResult->viewId;
-      auto const state = views.trackListState(viewId);
-      nextSnapshot.openViews.push_back(viewId);
-      nextSnapshot.activeViewId = viewId;
+      auto const viewId = *viewResult;
 
-      if (options.recordHistory)
+      try
       {
-        std::ignore = nextHistory.commit(navigationPoint(state, state.presentation));
+        auto const state = views.trackListState(viewId);
+        nextSnapshot.openViews.push_back(viewId);
+        nextSnapshot.activeViewId = viewId;
+
+        if (options.recordHistory)
+        {
+          std::ignore = nextHistory.commit(navigationPoint(state, state.presentation));
+        }
+
+        installCommit(prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation));
+      }
+      catch (...)
+      {
+        std::ignore = views.destroyView(viewId);
+        throw;
       }
 
-      APP_LOG_DEBUG("WorkspaceService: Navigating to viewId: {}", viewId.raw());
-      return commitCandidate(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
+      return viewId;
     }
 
-    Result<WorkspaceCommitReceipt> focus(ViewId const viewId)
+    Result<> focus(ViewId const viewId)
     {
       if (viewId == kInvalidViewId || !std::ranges::contains(currentSnapshot.openViews, viewId))
       {
@@ -421,19 +402,20 @@ namespace ao::rt
 
       if (currentSnapshot.activeViewId == viewId)
       {
-        return noChangeReceipt();
+        return {};
       }
 
       auto nextSnapshot = currentSnapshot;
       nextSnapshot.activeViewId = viewId;
-      return commitCandidate(std::move(nextSnapshot), navigationHistory, WorkspaceChangeCause::Focus);
+      commitCandidate(std::move(nextSnapshot), navigationHistory, WorkspaceChangeCause::Focus);
+      return {};
     }
 
-    Result<WorkspaceCommitReceipt> closeViews(std::span<ViewId const> viewIds, WorkspaceChangeCause const cause)
+    Result<> closeViews(std::span<ViewId const> viewIds, WorkspaceChangeCause const cause)
     {
       if (viewIds.empty())
       {
-        return noChangeReceipt();
+        return {};
       }
 
       auto nextSnapshot = currentSnapshot;
@@ -445,7 +427,7 @@ namespace ao::rt
         nextSnapshot.activeViewId = nextSnapshot.openViews.empty() ? kInvalidViewId : nextSnapshot.openViews.back();
       }
 
-      auto const receipt = commitCandidate(std::move(nextSnapshot), navigationHistory, cause);
+      commitCandidate(std::move(nextSnapshot), navigationHistory, cause);
 
       for (auto const viewId : viewIds)
       {
@@ -455,14 +437,14 @@ namespace ao::rt
         }
       }
 
-      return receipt;
+      return {};
     }
 
-    Result<WorkspaceCommitReceipt> close(ViewId const viewId)
+    Result<> close(ViewId const viewId)
     {
       if (!std::ranges::contains(currentSnapshot.openViews, viewId))
       {
-        return noChangeReceipt();
+        return {};
       }
 
       if (auto state = liveViewState(viewId); !state)
@@ -474,8 +456,7 @@ namespace ao::rt
       return closeViews(ids, WorkspaceChangeCause::Close);
     }
 
-    Result<WorkspaceCommitReceipt> applyPresentation(TrackPresentationSpec const& requested,
-                                                     NavigationOptions const& options)
+    Result<> applyPresentation(TrackPresentationSpec const& requested, NavigationOptions const& options)
     {
       auto const viewId = currentSnapshot.activeViewId;
 
@@ -502,8 +483,10 @@ namespace ao::rt
 
       if (!changed)
       {
-        return noChangeReceipt();
+        return {};
       }
+
+      auto pending = prepareCommit(currentSnapshot, std::move(nextHistory), WorkspaceChangeCause::Presentation);
 
       if (stateResult->presentation != presentation)
       {
@@ -513,69 +496,82 @@ namespace ao::rt
         }
       }
 
-      return commitCandidate(currentSnapshot, std::move(nextHistory), WorkspaceChangeCause::Presentation);
+      installCommit(std::move(pending));
+      return {};
     }
 
-    Result<WorkspaceCommitReceipt> restoreNavigationPoint(NavigationPoint const& point, NavigationHistory nextHistory)
+    Result<> restoreNavigationPoint(NavigationPoint const& point, NavigationHistory nextHistory)
     {
       auto matchingViewId = kInvalidViewId;
 
-      for (auto const& record : views.listViews())
+      for (auto const viewId : views.listViews())
       {
-        if (record.kind != ViewKind::TrackList)
-        {
-          continue;
-        }
-
-        if (auto const state = views.trackListState(record.id);
+        if (auto const state = views.trackListState(viewId);
             state.listId == point.listId && state.filterExpression == point.filterExpression)
         {
-          matchingViewId = record.id;
+          matchingViewId = viewId;
           break;
         }
       }
 
       auto nextSnapshot = currentSnapshot;
       nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + 1);
+      bool createdView = false;
 
       if (matchingViewId == kInvalidViewId)
       {
-        auto result = views.createView(
-          TrackListViewConfig{
-            .listId = point.listId,
-            .filterExpression = point.filterExpression,
-            .optPresentation = point.presentation,
-          },
-          true);
+        auto result = views.createView(TrackListViewConfig{
+          .listId = point.listId,
+          .filterExpression = point.filterExpression,
+          .optPresentation = point.presentation,
+        });
 
         if (!result)
         {
           return std::unexpected{result.error()};
         }
 
-        matchingViewId = result->viewId;
+        matchingViewId = *result;
+        createdView = true;
       }
-      else
+
+      try
       {
-        if (auto const state = views.trackListState(matchingViewId); state.presentation != point.presentation)
+        auto const presentationChanged =
+          !createdView && views.trackListState(matchingViewId).presentation != point.presentation;
+
+        if (!std::ranges::contains(nextSnapshot.openViews, matchingViewId))
+        {
+          nextSnapshot.openViews.push_back(matchingViewId);
+        }
+
+        nextSnapshot.activeViewId = matchingViewId;
+        auto pending = prepareCommit(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
+
+        if (presentationChanged)
         {
           if (auto result = views.setPresentation(matchingViewId, point.presentation); !result)
           {
             return std::unexpected{result.error()};
           }
         }
-      }
 
-      if (!std::ranges::contains(nextSnapshot.openViews, matchingViewId))
+        installCommit(std::move(pending));
+      }
+      catch (...)
       {
-        nextSnapshot.openViews.push_back(matchingViewId);
+        if (createdView)
+        {
+          std::ignore = views.destroyView(matchingViewId);
+        }
+
+        throw;
       }
 
-      nextSnapshot.activeViewId = matchingViewId;
-      return commitCandidate(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Navigation);
+      return {};
     }
 
-    Result<WorkspaceCommitReceipt> goBack()
+    Result<> goBack()
     {
       auto nextHistory = navigationHistory;
       auto optPoint = nextHistory.back();
@@ -588,7 +584,7 @@ namespace ao::rt
       return restoreNavigationPoint(*optPoint, std::move(nextHistory));
     }
 
-    Result<WorkspaceCommitReceipt> goForward()
+    Result<> goForward()
     {
       auto nextHistory = navigationHistory;
       auto optPoint = nextHistory.forward();
@@ -601,7 +597,7 @@ namespace ao::rt
       return restoreNavigationPoint(*optPoint, std::move(nextHistory));
     }
 
-    Result<WorkspaceCommitReceipt> addPreset(CustomTrackPresentationPreset const& preset)
+    Result<> addPreset(CustomTrackPresentationPreset const& preset)
     {
       auto nextSnapshot = currentSnapshot;
       auto const it = std::ranges::find_if(
@@ -611,7 +607,7 @@ namespace ao::rt
       {
         if (*it == preset)
         {
-          return noChangeReceipt();
+          return {};
         }
 
         *it = preset;
@@ -621,10 +617,11 @@ namespace ao::rt
         nextSnapshot.customPresets.push_back(preset);
       }
 
-      return commitCandidate(std::move(nextSnapshot), navigationHistory, WorkspaceChangeCause::Presets);
+      commitCandidate(std::move(nextSnapshot), navigationHistory, WorkspaceChangeCause::Presets);
+      return {};
     }
 
-    Result<WorkspaceCommitReceipt> removePreset(std::string_view const presetId)
+    Result<> removePreset(std::string_view const presetId)
     {
       auto nextSnapshot = currentSnapshot;
       auto const removed = std::erase_if(
@@ -632,10 +629,11 @@ namespace ao::rt
 
       if (removed == 0)
       {
-        return noChangeReceipt();
+        return {};
       }
 
-      return commitCandidate(std::move(nextSnapshot), navigationHistory, WorkspaceChangeCause::Presets);
+      commitCandidate(std::move(nextSnapshot), navigationHistory, WorkspaceChangeCause::Presets);
+      return {};
     }
 
     void handleLibraryChange(LibraryChangeSet const& changeSet)
@@ -675,34 +673,33 @@ namespace ao::rt
     return _implPtr->currentSnapshot;
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::focusView(ViewId const viewId)
+  Result<> WorkspaceService::focusView(ViewId const viewId)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->focus(viewId);
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::navigateTo(NavigationTarget const& target,
-                                                              NavigationOptions const options)
+  Result<ViewId> WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->navigate(target, options);
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::closeView(ViewId const viewId)
+  Result<> WorkspaceService::closeView(ViewId const viewId)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->close(viewId);
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::setActivePresentation(TrackPresentationSpec const& presentation,
-                                                                         NavigationOptions const options)
+  Result<> WorkspaceService::setActivePresentation(TrackPresentationSpec const& presentation,
+                                                   NavigationOptions const options)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->applyPresentation(presentation, options);
   }
 
-  Result<WorkspacePresentationReceipt> WorkspaceService::setActivePresentation(std::string_view const presentationId,
-                                                                               NavigationOptions const options)
+  Result<TrackPresentationSpec> WorkspaceService::setActivePresentation(std::string_view const presentationId,
+                                                                        NavigationOptions const options)
   {
     _implPtr->ensureOnExecutor();
     auto const optPresentation = _implPtr->presentationForId(presentationId);
@@ -719,34 +716,19 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    return WorkspacePresentationReceipt{
-      .presentation = normalizeTrackPresentationSpec(*optPresentation),
-      .commit = *result,
-    };
+    return normalizeTrackPresentationSpec(*optPresentation);
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::goBack()
+  Result<> WorkspaceService::goBack()
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->goBack();
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::goForward()
+  Result<> WorkspaceService::goForward()
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->goForward();
-  }
-
-  bool WorkspaceService::canGoBack() const
-  {
-    _implPtr->ensureOnExecutor();
-    return _implPtr->navigationHistory.canGoBack();
-  }
-
-  bool WorkspaceService::canGoForward() const
-  {
-    _implPtr->ensureOnExecutor();
-    return _implPtr->navigationHistory.canGoForward();
   }
 
   async::Subscription WorkspaceService::onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler)
@@ -761,13 +743,13 @@ namespace ao::rt
     return _implPtr->currentSnapshot.customPresets;
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::addCustomPreset(CustomTrackPresentationPreset const& preset)
+  Result<> WorkspaceService::addCustomPreset(CustomTrackPresentationPreset const& preset)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->addPreset(preset);
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::removeCustomPreset(std::string_view const presetId)
+  Result<> WorkspaceService::removeCustomPreset(std::string_view const presetId)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->removePreset(presetId);
@@ -804,7 +786,7 @@ namespace ao::rt
     }
   }
 
-  Result<WorkspaceCommitReceipt> WorkspaceService::restoreSession(ConfigStore& store)
+  Result<> WorkspaceService::restoreSession(ConfigStore& store)
   {
     _implPtr->ensureOnExecutor();
     auto state = WorkspaceSessionState{};
@@ -814,7 +796,7 @@ namespace ao::rt
     {
       if (loaded.error().code == Error::Code::NotFound)
       {
-        return _implPtr->noChangeReceipt();
+        return {};
       }
 
       return std::unexpected{loaded.error()};
@@ -822,7 +804,7 @@ namespace ao::rt
 
     if (!*loaded)
     {
-      return _implPtr->noChangeReceipt();
+      return {};
     }
 
     auto createdViewIds = std::vector<ViewId>{};
@@ -830,7 +812,7 @@ namespace ao::rt
 
     for (auto const& viewConfig : state.openViews)
     {
-      auto result = _implPtr->views.createView(viewConfig, true);
+      auto result = _implPtr->views.createView(viewConfig);
 
       if (!result)
       {
@@ -842,52 +824,66 @@ namespace ao::rt
         return std::unexpected{result.error()};
       }
 
-      createdViewIds.push_back(result->viewId);
+      createdViewIds.push_back(*result);
     }
 
-    auto nextSnapshot = _implPtr->currentSnapshot;
-    nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + createdViewIds.size());
-    nextSnapshot.openViews.insert(nextSnapshot.openViews.end(), createdViewIds.begin(), createdViewIds.end());
-    nextSnapshot.customPresets = std::move(state.customPresets);
-    auto focused = kInvalidViewId;
-
-    for (auto const viewId : createdViewIds)
+    try
     {
-      if (auto const viewState = _implPtr->views.trackListState(viewId); viewState.listId == state.activeListId)
-      {
-        focused = viewId;
+      auto nextSnapshot = _implPtr->currentSnapshot;
+      nextSnapshot.openViews.reserve(nextSnapshot.openViews.size() + createdViewIds.size());
+      nextSnapshot.openViews.insert(nextSnapshot.openViews.end(), createdViewIds.begin(), createdViewIds.end());
+      nextSnapshot.customPresets = std::move(state.customPresets);
+      auto focused = kInvalidViewId;
 
-        if (!viewState.filterExpression.empty())
+      for (auto const viewId : createdViewIds)
+      {
+        if (auto const viewState = _implPtr->views.trackListState(viewId); viewState.listId == state.activeListId)
         {
-          break;
+          focused = viewId;
+
+          if (!viewState.filterExpression.empty())
+          {
+            break;
+          }
         }
       }
-    }
 
-    if (focused == kInvalidViewId && !nextSnapshot.openViews.empty())
+      if (focused == kInvalidViewId && !nextSnapshot.openViews.empty())
+      {
+        focused = nextSnapshot.openViews.front();
+      }
+
+      nextSnapshot.activeViewId = focused;
+      auto nextHistory = _implPtr->navigationHistory;
+      bool historyChanged = false;
+
+      if (focused != kInvalidViewId)
+      {
+        auto const viewState = _implPtr->views.trackListState(focused);
+        historyChanged = nextHistory.commit(Impl::navigationPoint(viewState, viewState.presentation));
+      }
+
+      auto const aggregateChanged = !createdViewIds.empty() ||
+                                    nextSnapshot.customPresets != _implPtr->currentSnapshot.customPresets ||
+                                    nextSnapshot.activeViewId != _implPtr->currentSnapshot.activeViewId;
+
+      if (!aggregateChanged && !historyChanged)
+      {
+        return {};
+      }
+
+      _implPtr->commitCandidate(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Restore);
+    }
+    catch (...)
     {
-      focused = nextSnapshot.openViews.front();
+      for (auto const viewId : createdViewIds)
+      {
+        std::ignore = _implPtr->views.destroyView(viewId);
+      }
+
+      throw;
     }
 
-    nextSnapshot.activeViewId = focused;
-    auto nextHistory = _implPtr->navigationHistory;
-    bool historyChanged = false;
-
-    if (focused != kInvalidViewId)
-    {
-      auto const viewState = _implPtr->views.trackListState(focused);
-      historyChanged = nextHistory.commit(Impl::navigationPoint(viewState, viewState.presentation));
-    }
-
-    auto const aggregateChanged = !createdViewIds.empty() ||
-                                  nextSnapshot.customPresets != _implPtr->currentSnapshot.customPresets ||
-                                  nextSnapshot.activeViewId != _implPtr->currentSnapshot.activeViewId;
-
-    if (!aggregateChanged && !historyChanged)
-    {
-      return _implPtr->noChangeReceipt();
-    }
-
-    return _implPtr->commitCandidate(std::move(nextSnapshot), std::move(nextHistory), WorkspaceChangeCause::Restore);
+    return {};
   }
 } // namespace ao::rt

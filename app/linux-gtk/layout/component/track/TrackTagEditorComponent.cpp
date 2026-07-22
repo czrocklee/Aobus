@@ -14,10 +14,11 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/library/property/TagEditWorkflow.h>
+#include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <gtkmm/widget.h>
@@ -84,40 +85,46 @@ namespace ao::gtk::layout
           if (!sessionResult)
           {
             APP_LOG_ERROR("Tag edit could not start: {}", sessionResult.error().message);
-            _notifications.post(rt::NotificationSeverity::Error,
-                                sessionResult.error().message,
-                                rt::NotificationLifetime::sessionHistory());
+            _notifications.post(
+              rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
             return;
           }
 
           _tagEditSessionPtr = std::move(*sessionResult);
         }
 
-        auto request = uimodel::TagEditRequest{.selectedIds = _currentTrackIds};
-        request.tagsToAdd.assign(tagsToAdd.begin(), tagsToAdd.end());
-        request.tagsToRemove.assign(tagsToRemove.begin(), tagsToRemove.end());
+        auto const result = uimodel::applyTagEdit(*_tagEditSessionPtr, tagsToAdd, tagsToRemove);
 
-        auto workflow = uimodel::TagEditWorkflow{*_tagEditSessionPtr};
-        auto const result = workflow.apply(request);
-
-        if (result.rejected || result.stale)
+        if (!result)
         {
-          APP_LOG_ERROR("Tag edit failed: {}", result.notificationText);
+          APP_LOG_ERROR("Tag edit failed: {}", result.error().message);
           _notifications.post(
-            rt::NotificationSeverity::Error, result.notificationText, rt::NotificationLifetime::sessionHistory());
-
-          if (result.stale)
-          {
-            _tagEditSessionPtr.reset();
-          }
-
+            rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
           return;
         }
 
-        if (result.applied)
+        if (result->status == rt::TrackAuthoringStatus::Stale ||
+            result->status == rt::TrackAuthoringStatus::Unavailable)
+        {
+          APP_LOG_ERROR("Tag edit failed: {}", result->notificationText);
+          _notifications.post(
+            rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
+          _tagEditSessionPtr.reset();
+          return;
+        }
+
+        if (result->status == rt::TrackAuthoringStatus::Missing)
+        {
+          APP_LOG_ERROR("Tag edit failed: {}", result->notificationText);
+          _notifications.post(
+            rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
+          return;
+        }
+
+        if (result->status == rt::TrackAuthoringStatus::Applied)
         {
           _notifications.post(
-            rt::NotificationSeverity::Info, result.notificationText, rt::NotificationLifetime::transient());
+            rt::NotificationSeverity::Info, result->notificationText, rt::NotificationLifetime::transient());
         }
       }
 

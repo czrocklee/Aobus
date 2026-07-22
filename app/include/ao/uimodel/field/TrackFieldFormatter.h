@@ -28,7 +28,6 @@ namespace ao::uimodel
   std::string formatFileSize(std::uint64_t fileSize);
   std::string formatTime(std::uint64_t mtime);
   std::string formatSampleRate(std::uint32_t sampleRate);
-  std::string formatSampleRateCompact(std::uint32_t sampleRate);
   std::string formatBitrate(std::uint32_t bitrate);
   std::string formatChannels(std::uint8_t channels);
   std::string formatBitDepth(std::uint8_t bitDepth);

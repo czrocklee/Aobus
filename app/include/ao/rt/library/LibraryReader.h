@@ -40,8 +40,6 @@ namespace ao::rt
     LibraryReader& operator=(LibraryReader const&) = delete;
     ~LibraryReader();
 
-    bool isValid() const noexcept;
-
     // Tracks
     std::optional<TrackRow> trackRow(TrackId id) const;
     bool containsTrack(TrackId id) const;
@@ -51,7 +49,6 @@ namespace ao::rt
 
     // Dictionary
     std::string resolve(DictionaryId id) const;
-    std::vector<std::string> resolveAll(std::span<DictionaryId const> ids) const;
 
     // List tree
     std::vector<ListNode> lists() const;

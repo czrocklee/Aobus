@@ -12,6 +12,7 @@
 #include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -62,7 +63,6 @@ namespace ao::uimodel
     auto result = TrackPresentationPickerState{
       .enabled = false,
       .activeViewId = rt::kInvalidViewId,
-      .activeListId = kInvalidListId,
       .label = "Presentation",
       .menuItems = _catalog.menuItems(),
     };
@@ -83,8 +83,6 @@ namespace ao::uimodel
 
     result.enabled = true;
     result.activeViewId = activeViewId;
-    result.activeListId = viewState.listId;
-    result.activePresentationId = presentationId;
     result.label = _catalog.labelForId(presentationId);
     return result;
   }
@@ -97,7 +95,8 @@ namespace ao::uimodel
     }
   }
 
-  TrackPresentationApplyCommand TrackPresentationPickerViewModel::selectPresentation(std::string_view presentationId)
+  std::optional<rt::TrackPresentationSpec> TrackPresentationPickerViewModel::selectPresentation(
+    std::string_view presentationId)
   {
     auto const activeViewId = _workspace.snapshot().activeViewId;
 
@@ -106,7 +105,7 @@ namespace ao::uimodel
       return {};
     }
 
-    auto const optSpec = _catalog.specForId(presentationId);
+    auto optSpec = _catalog.specForId(presentationId);
 
     if (!optSpec)
     {
@@ -122,6 +121,6 @@ namespace ao::uimodel
     _optimisticPresentationId = optSpec->id;
     refresh();
 
-    return TrackPresentationApplyCommand{.shouldApply = true, .spec = *optSpec};
+    return optSpec;
   }
 } // namespace ao::uimodel

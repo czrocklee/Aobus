@@ -142,16 +142,6 @@ namespace ao::uimodel
     return std::format("{} Hz", sampleRate);
   }
 
-  std::string formatSampleRateCompact(std::uint32_t sampleRate)
-  {
-    if (sampleRate == 0)
-    {
-      return {};
-    }
-
-    return std::format("{:.4g} kHz", static_cast<double>(sampleRate) / 1000);
-  }
-
   std::string formatBitrate(std::uint32_t bitrate)
   {
     if (bitrate == 0)

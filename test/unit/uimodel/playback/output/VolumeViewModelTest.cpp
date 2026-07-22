@@ -98,63 +98,15 @@ namespace ao::uimodel::test
     }
   }
 
-  TEST_CASE("VolumeViewModel - math helpers", "[uimodel][unit][playback]")
-  {
-    double const kWidth = 100.0;
-
-    SECTION("resolveVolumeOffset")
-    {
-      CHECK(VolumeViewModel::resolveVolumeOffset(0.0, 50.0, 0.5F) == 0.5F);
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, 0.0) == 0.0F);
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, 50.0) == 0.5F);
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, 100.0) == 1.0F);
-
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, 25.0, 0.5F) == 0.75F);
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, -25.0, 0.5F) == 0.25F);
-
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, 150.0) == 1.0F);
-      CHECK(VolumeViewModel::resolveVolumeOffset(kWidth, -50.0) == 0.0F);
-    }
-
-    SECTION("resolveVolumeScroll")
-    {
-      CHECK(VolumeViewModel::resolveVolumeScroll(0.5F, 1.0) == Catch::Approx{0.48F}.margin(0.001F));
-      CHECK(VolumeViewModel::resolveVolumeScroll(0.5F, -1.0) == Catch::Approx{0.52F}.margin(0.001F));
-      CHECK(VolumeViewModel::resolveVolumeScroll(0.01F, 1.0) == Catch::Approx{0.0F}.margin(0.001F));
-      CHECK(VolumeViewModel::resolveVolumeScroll(0.99F, -1.0) == Catch::Approx{1.0F}.margin(0.001F));
-    }
-
-    SECTION("resolveIndicatorKind")
-    {
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.5F, true) == VolumeIndicatorKind::Muted);
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.0F, false) == VolumeIndicatorKind::Muted);
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.25F, false) == VolumeIndicatorKind::Low);
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.33F, false) == VolumeIndicatorKind::Low);
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.50F, false) == VolumeIndicatorKind::Medium);
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.66F, false) == VolumeIndicatorKind::Medium);
-      CHECK(VolumeViewModel::resolveIndicatorKind(0.75F, false) == VolumeIndicatorKind::High);
-      CHECK(VolumeViewModel::resolveIndicatorKind(1.00F, false) == VolumeIndicatorKind::High);
-    }
-
-    SECTION("resolveTooltip")
-    {
-      CHECK(VolumeViewModel::resolveTooltip(0.64F, false, false) == "Volume: 64%");
-      CHECK(VolumeViewModel::resolveTooltip(0.64F, true, false) == "Volume: 64% (Muted)");
-      CHECK(VolumeViewModel::resolveTooltip(0.64F, false, true) == "Volume: 64% (Hardware)");
-    }
-  }
-
   TEST_CASE("VolumeViewModel - unrelated playback snapshots do not rerender", "[uimodel][regression][playback][volume]")
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto log = ao::test::RenderLog<VolumeViewState>{};
     auto const viewModel = VolumeViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
     REQUIRE(log.states.size() == 1);
-    auto const revisionBefore = fixture.playback.snapshot().revision;
-
     fixture.commands().setShuffleMode(ShuffleMode::On);
 
-    CHECK(fixture.playback.snapshot().revision > revisionBefore);
+    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(log.states.size() == 1);
   }
 } // namespace ao::uimodel::test

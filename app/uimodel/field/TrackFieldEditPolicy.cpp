@@ -3,12 +3,15 @@
 
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
 
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 
 namespace ao::uimodel
@@ -123,5 +126,19 @@ namespace ao::uimodel
     }
 
     return false;
+  }
+
+  bool isProtectedInlineEditText(rt::TrackField const field,
+                                 rt::TrackDetailSnapshot const& snap,
+                                 std::string_view const newText,
+                                 bool const protectCompositeMixedText)
+  {
+    if (newText == kMultipleTrackValuesText)
+    {
+      return true;
+    }
+
+    auto const& value = rt::trackFieldArrayAt(snap.fields, field);
+    return protectCompositeMixedText && value.mixed && newText == kCompositeMixedTrackText;
   }
 } // namespace ao::uimodel

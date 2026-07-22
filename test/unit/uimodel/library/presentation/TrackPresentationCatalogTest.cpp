@@ -48,11 +48,6 @@ namespace ao::uimodel::test
     CHECK(items[builtinCount + 1].label == "Library QA");
     CHECK(items.back().type == TrackPresentationMenuItemType::CreateCustomView);
     CHECK(signalCount == 1);
-
-    catalog.removeCustomPresentation("library-qa");
-
-    CHECK_FALSE(catalog.specForId("library-qa").has_value());
-    CHECK(signalCount == 2);
   }
 
   TEST_CASE("TrackPresentationCatalog - omits custom separator when no custom presets exist",

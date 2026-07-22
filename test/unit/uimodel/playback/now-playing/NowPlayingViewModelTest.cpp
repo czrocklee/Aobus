@@ -8,7 +8,6 @@
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/PlaybackInput.h>
-#include <ao/audio/Transport.h>
 #include <ao/query/Parser.h>
 #include <ao/query/Serializer.h>
 #include <ao/rt/PlaybackMode.h>
@@ -101,11 +100,13 @@ namespace ao::uimodel::test
       CHECK(cmd.type == NowPlayingActionCommand::Type::Resume);
     }
 
-    SECTION("PlayPause command policy maps transport to pause or resume")
+    SECTION("PlayPause action resolves to pause while playing")
     {
-      CHECK(resolveNowPlayingPlayPauseCommand(audio::Transport::Playing) == NowPlayingActionCommand::Type::Pause);
-      CHECK(resolveNowPlayingPlayPauseCommand(audio::Transport::Paused) == NowPlayingActionCommand::Type::Resume);
-      CHECK(resolveNowPlayingPlayPauseCommand(audio::Transport::Idle) == NowPlayingActionCommand::Type::Resume);
+      auto desc = playbackRequest(TrackId{1}, "Song");
+      REQUIRE(playbackTransport.play(desc, ListId{1}));
+
+      auto const cmd = viewModel.resolveAction(NowPlayingFieldAction::PlayPause, rt::TrackField::Title);
+      CHECK(cmd.type == NowPlayingActionCommand::Type::Pause);
     }
 
     SECTION("FilterByField with Title")

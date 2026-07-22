@@ -163,7 +163,7 @@ namespace ao::rt
       return std::clamp<std::size_t>(hardware / 2, 2, 4);
     }
 
-    enum class RowOutcome : std::uint8_t
+    enum class RowStatus : std::uint8_t
     {
       // Never pulled from the cursor, or hashing was interrupted by a stop
       // request; the row stays pending.
@@ -175,7 +175,7 @@ namespace ao::rt
 
     struct RowSlot final
     {
-      RowOutcome outcome = RowOutcome::NotProcessed;
+      RowStatus status = RowStatus::NotProcessed;
       library::AudioIdentity identity{};
     };
 
@@ -228,7 +228,7 @@ namespace ao::rt
       if (!row.pathError.empty())
       {
         reportFailure(batch, row.uri, "resolve", row.pathError);
-        return RowSlot{.outcome = RowOutcome::Failed};
+        return RowSlot{.status = RowStatus::Failed};
       }
 
       auto ec = std::error_code{};
@@ -237,12 +237,12 @@ namespace ao::rt
       if (ec)
       {
         reportFailure(batch, row.uri, "stat", ec.message());
-        return RowSlot{.outcome = RowOutcome::Failed};
+        return RowSlot{.status = RowStatus::Failed};
       }
 
       if (!exists)
       {
-        return RowSlot{.outcome = RowOutcome::Skipped};
+        return RowSlot{.status = RowStatus::Skipped};
       }
 
       auto const isRegularFile = std::filesystem::is_regular_file(row.fullPath, ec);
@@ -250,12 +250,12 @@ namespace ao::rt
       if (ec)
       {
         reportFailure(batch, row.uri, "stat", ec.message());
-        return RowSlot{.outcome = RowOutcome::Failed};
+        return RowSlot{.status = RowStatus::Failed};
       }
 
       if (!isRegularFile || !media::file::File::isSupported(row.fullPath))
       {
-        return RowSlot{.outcome = RowOutcome::Skipped};
+        return RowSlot{.status = RowStatus::Skipped};
       }
 
       auto statError = std::string{};
@@ -264,12 +264,12 @@ namespace ao::rt
       if (!optBeforeHashStat)
       {
         reportFailure(batch, row.uri, "stat", statError);
-        return RowSlot{.outcome = RowOutcome::Failed};
+        return RowSlot{.status = RowStatus::Failed};
       }
 
       if (!matchesSnapshot(*optBeforeHashStat, row))
       {
-        return RowSlot{.outcome = RowOutcome::Skipped};
+        return RowSlot{.status = RowStatus::Skipped};
       }
 
       auto identityResult = batch.fingerprint(
@@ -280,12 +280,12 @@ namespace ao::rt
       if (!identityResult)
       {
         reportFailure(batch, row.uri, "fingerprint", identityResult.error().message);
-        return RowSlot{.outcome = RowOutcome::Failed};
+        return RowSlot{.status = RowStatus::Failed};
       }
 
       if (!*identityResult)
       {
-        return RowSlot{.outcome = RowOutcome::NotProcessed};
+        return RowSlot{.status = RowStatus::NotProcessed};
       }
 
       statError.clear();
@@ -294,15 +294,15 @@ namespace ao::rt
       if (!optAfterHashStat)
       {
         reportFailure(batch, row.uri, "stat", statError);
-        return RowSlot{.outcome = RowOutcome::Failed};
+        return RowSlot{.status = RowStatus::Failed};
       }
 
       if (!matchesSnapshot(*optAfterHashStat, row))
       {
-        return RowSlot{.outcome = RowOutcome::Skipped};
+        return RowSlot{.status = RowStatus::Skipped};
       }
 
-      return RowSlot{.outcome = RowOutcome::Hashed, .identity = **identityResult};
+      return RowSlot{.status = RowStatus::Hashed, .identity = **identityResult};
     }
 
     async::Task<> fingerprintWorker(FingerprintBatch* batch)
@@ -318,7 +318,7 @@ namespace ao::rt
 
         auto const slot = processPendingRow(*batch, batch->rows[index]);
 
-        if (slot.outcome != RowOutcome::NotProcessed)
+        if (slot.status != RowStatus::NotProcessed)
         {
           batch->processedCount.fetch_add(1);
         }
@@ -337,7 +337,7 @@ namespace ao::rt
 
       for (std::size_t index = 0; index < slots.size(); ++index)
       {
-        if (slots[index].outcome != RowOutcome::Hashed)
+        if (slots[index].status != RowStatus::Hashed)
         {
           continue;
         }
@@ -449,11 +449,11 @@ namespace ao::rt
 
       for (auto const& slot : slots)
       {
-        if (slot.outcome == RowOutcome::Failed)
+        if (slot.status == RowStatus::Failed)
         {
           ++result.failureCount;
         }
-        else if (slot.outcome == RowOutcome::Skipped)
+        else if (slot.status == RowStatus::Skipped)
         {
           ++result.skippedCount;
         }

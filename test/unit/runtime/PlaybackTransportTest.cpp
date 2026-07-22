@@ -8,7 +8,6 @@
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
-#include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
@@ -256,7 +255,7 @@ namespace ao::rt::test
     CHECK(failures.empty());
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
     CHECK(
       std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
@@ -285,9 +284,8 @@ namespace ao::rt::test
     REQUIRE(fixture.notificationService.feed().entries.size() == 1);
   }
 
-  TEST_CASE(
-    "PlaybackTransport playback - rejected preflight report suppresses identical updates and renews after dismissal",
-    "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - rejected preflight report suppresses identical updates",
+            "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -300,12 +298,12 @@ namespace ao::rt::test
     auto feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
     CHECK(
       std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
 
-    auto const revisionBeforeDuplicate = feed.revision;
+    auto const originalId = feed.entries.front().id;
     std::int32_t mutationCount = 0;
     auto updateSub = fixture.notificationService.onFeedUpdated([&](NotificationFeedUpdate const&) { ++mutationCount; });
 
@@ -314,17 +312,7 @@ namespace ao::rt::test
 
     feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.revision == revisionBeforeDuplicate);
-
-    auto const dismissedId = feed.entries.front().id;
-    fixture.notificationService.dismiss(dismissedId);
-    CHECK(fixture.notificationService.feed().entries.empty());
-
-    REQUIRE_FALSE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
-
-    feed = fixture.notificationService.feed();
-    REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().id != dismissedId);
+    CHECK(feed.entries.front().id == originalId);
   }
 
   TEST_CASE("PlaybackTransport playback - rejected preflight preserves accepted playback",
@@ -365,13 +353,13 @@ namespace ao::rt::test
 
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
     CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
           NotificationReportTemplate::PlaybackRouteActivationFailed);
   }
 
-  TEST_CASE("PlaybackTransport playback - backend error publishes until-dismissed device failure",
+  TEST_CASE("PlaybackTransport playback - backend error publishes pinned device failure",
             "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
@@ -402,7 +390,7 @@ namespace ao::rt::test
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
-    CHECK(feed.entries.front().lifetime == NotificationLifetime::untilDismissed());
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
     auto const& report = std::get<NotificationReport>(feed.entries.front().message);
     CHECK(report.templateId == NotificationReportTemplate::PlaybackDeviceLost);

@@ -51,11 +51,10 @@ namespace ao::gtk
     void populatePresentationOptions(uimodel::TrackPresentationPickerState const& state);
     void handlePresentationSelected(std::string_view presentationId);
     void handleCreateCustomViewClicked();
-    void applyCommand(uimodel::TrackPresentationApplyCommand const& command);
 
     rt::AppRuntime& _runtime;
     uimodel::TrackPresentationCatalog* _catalog = nullptr;
-    std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _workflowPtr;
+    std::unique_ptr<uimodel::TrackPresentationPickerViewModel> _viewModelPtr;
     ThemeCoordinator* _themeCoordinator = nullptr;
     uimodel::TrackPresentationPickerState _state;
 

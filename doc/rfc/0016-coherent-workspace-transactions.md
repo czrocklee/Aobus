@@ -14,20 +14,20 @@ Implemented on 2026-07-16 with a narrower synchronous transaction boundary.
 
 The verified coherence gaps are closed by:
 
-- one `WorkspaceSnapshot` containing open views, focus, complete custom presets, navigation availability, and revision;
-- `WorkspaceCommitReceipt` results for every workspace mutation, with `Applied` and `NoChange` dispositions;
+- one `WorkspaceSnapshot` containing open views, focus, complete custom presets, and revision;
+- narrow command results: navigation returns its active `ViewId`, presentation lookup returns its resolved specification, and other mutations return empty success;
 - validated `focusView()` and semantic navigation in place of public `addView()` and raw `setFocusedView()`;
 - copy-then-commit workspace and history candidates for navigation, replay, presentation, presets, list deletion, and restore;
 - one deferred `onChanged()` stream carrying a complete owned snapshot and typed cause;
 - callback-executor affinity, observer exception containment, immutable reentrant delivery, and weak lifetime delivery;
 - one aggregate commit for multi-view restore and multi-view list deletion; and
-- `AppRuntime::jumpToAlbum()` composition, which removes playback from `WorkspaceService` and returns the accepted navigation revision before submitting reveal.
+- `AppRuntime::jumpToAlbum()` composition, which removes playback from `WorkspaceService` and submits reveal for the view returned by navigation.
 
 The implementation deliberately does not add a generic transaction type, detached `ViewService` lease/release handles, request generations, a posted command port, a shutdown admission state machine, or a separate application-navigation class.
 Current preparation is bounded and synchronous, `ViewService::createView()` publishes no creation event, and restore destroys all created views on preparation failure.
 Those facts make local snapshot/history candidates sufficient without another ownership framework.
 
-Commands remain synchronous so callers receive receipts directly.
+Commands remain synchronous so callers receive their results directly.
 Only observations are deferred.
 An observer may issue another command immediately, but it cannot mutate the owned snapshot currently being delivered and the resulting observation enters a later executor turn.
 

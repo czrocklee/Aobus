@@ -7,9 +7,7 @@
 #include "layout/document/GtkLayoutPresets.h"
 #include "layout/document/LayoutDocument.h"
 #include "layout/runtime/ActionRegistry.h"
-#include "layout/runtime/ActionValidator.h"
 #include "layout/runtime/ComponentRegistry.h"
-#include <ao/uimodel/layout/action/LayoutActionBinding.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionValidator.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -704,8 +702,8 @@ namespace ao::gtk::layout::editor
           return false;
         }
 
-        auto const diagnostics = uimodel::validateLayoutActions(
-          entry.doc, _registry.catalog(), _actionRegistry.catalog(), resolveGtkLayoutActionBindingContext);
+        auto const diagnostics =
+          uimodel::validateLayoutActions(entry.doc, _registry.catalog(), _actionRegistry.catalog());
 
         if (!diagnostics.empty())
         {
@@ -899,29 +897,12 @@ namespace ao::gtk::layout::editor
     return createPropertyRow(prop.label, *spin);
   }
 
-  void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo,
-                                                  LayoutNode* node,
-                                                  LayoutPropertyDescriptor const& prop)
+  void LayoutEditorDialog::populateActionComboBox(Gtk::ComboBoxText* combo)
   {
-    if (!prop.optActionBinding)
-    {
-      return;
-    }
-
-    auto const bindCtx = LayoutActionBindingContext{.slot = prop.optActionBinding->slot,
-                                                    .hasAnchor = true, // We assume standard UI buttons have anchors
-                                                    .hasFocusedView = true, // And we assume focus is valid during edit
-                                                    .componentType = node->type};
-
     combo->append("none", "none");
 
     for (auto const& desc : _actionRegistry.descriptors())
     {
-      if (!_actionRegistry.canBind(desc.id, bindCtx))
-      {
-        continue;
-      }
-
       auto label = std::string{desc.id};
       auto caps = std::vector<std::string>{};
 
@@ -933,16 +914,6 @@ namespace ao::gtk::layout::editor
       if (desc.capabilities.has(LayoutActionCapability::PresentsMenu))
       {
         caps.emplace_back("Menu");
-      }
-
-      if (desc.capabilities.has(LayoutActionCapability::RequiresActiveTrack))
-      {
-        caps.emplace_back("Track");
-      }
-
-      if (desc.capabilities.has(LayoutActionCapability::RequiresFocusedView))
-      {
-        caps.emplace_back("Focus");
       }
 
       if (!caps.empty())
@@ -977,7 +948,7 @@ namespace ao::gtk::layout::editor
 
     if (prop.optActionBinding)
     {
-      populateActionComboBox(combo, node, prop);
+      populateActionComboBox(combo);
     }
     else
     {

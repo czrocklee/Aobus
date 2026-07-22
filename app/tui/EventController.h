@@ -98,7 +98,7 @@ namespace ao::tui
     bool selectTrackFromScrollbar(std::int32_t row);
     void syncSeekSlider();
     std::chrono::milliseconds seekRailElapsed(std::int32_t column) const;
-    void applySeekDecision(uimodel::SeekSliderDecision const& decision);
+    void applySeekUpdate(uimodel::SeekSliderUpdate const& update);
     void cancelSeekInteraction();
 
     struct TrackColumnResizeDrag final

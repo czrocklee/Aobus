@@ -87,23 +87,23 @@ It decides whether to retry, skip, retain the last valid state, stop a workflow,
 Core mechanisms report evidence; UIModel and frontends do not reconstruct subsystem recovery policy from an error string.
 
 Recovery and reporting are separate decisions.
-A service may recover and publish one session-history warning, stop and publish an until-dismissed error, return a rejection directly to the initiating editor, or log a best-effort preference failure without adding it to the notification feed.
+A service may recover and publish one history warning, stop and publish a pinned error, return a rejection directly to the initiating editor, or log a best-effort preference failure without adding it to the notification feed.
 There is no process-wide recovery manager.
 
 ### Runtime reporting
 
 `CoreRuntime` owns one `NotificationService` for the active runtime composition.
-The service owns an executor-confined in-memory feed, typed notification lifetime, and commands that post, update, and dismiss entries.
-Each effective command commits one immutable revision snapshot and publishes one canonical update on the callback executor.
-Reentrant commands queue later revisions, while observer exceptions are contained after commit and forwarded to the async-runtime diagnostic handler with revision context.
-Transient lifetime is authoritative runtime state: cancellable sleeps return to the callback executor, and matching id-plus-generation evidence commits one expiry revision for every consumer.
-Session-history and until-dismissed entries do not schedule expiry.
-Construction-time entry, history, action, text, and total-text bounds keep retained state finite.
-Capacity pressure removes only oldest session history inside the accepting command's revision; exhaustion by non-evictable entries rejects the command without consuming identity.
-The feed logs that infrastructure rejection directly because it cannot safely report its own failure by recursively posting another notification; callers still receive the typed outcome for local policy.
+The service owns an executor-confined in-memory feed, explicit notification lifetimes, post and keyed create-or-update commands, and service-owned transient expiry.
+Each effective mutation publishes one canonical update carrying a complete immutable snapshot on the callback executor.
+Reentrant commands enter a small FIFO until the current update reaches every observer; observer exceptions are contained after commit and forwarded to the async-runtime diagnostic handler.
+Matching id-plus-generation evidence prevents cancelled or superseded timers from expiring newer state.
+History and pinned entries do not schedule expiry.
+Construction-time entry and text bounds keep retained state finite.
+Capacity pressure removes only oldest history; exhaustion by transient or pinned entries rejects the command without consuming identity.
+The command surface returns `void`, so the feed logs rejection directly because it cannot recursively report failure to accept a report.
 It does not inspect `Result`, catch subsystem exceptions, choose severity, retry operations, or decide which domain failures deserve a user-facing report.
 The service uses `async::Signal` only as its synchronous observer-list mechanism.
-Revision queuing, immutable update ownership, and observer-exception containment remain reporting-domain behavior above that generic primitive.
+FIFO publication, immutable update ownership, and observer-exception containment remain reporting-domain behavior above that generic primitive.
 
 Domain services and application workflow coordinators decide when a semantic outcome becomes a notification and provide the frontend-neutral content.
 They own deduplication and aggregation policy when reporting every low-level failure would produce noise or misrepresent one higher-level operation; the feed supplies typed report-key correlation and create-or-update mechanics without inventing that policy.
@@ -114,12 +114,12 @@ Typed domain events remain available when consumers need structured recovery or 
 ### UIModel reporting projection
 
 UIModel adapts runtime reporting state into reusable platform-neutral presentation state.
-The activity-status feature accepts each canonical feed revision once, combines its immutable snapshot with library-task progress, and selects compact and detail representations.
+The activity-status feature consumes canonical feed updates, combines each immutable snapshot with library-task progress, and selects compact and detail representations.
 It resolves structured notification reports and typed library-progress kinds through the immutable `PresentationTextCatalog`; neither report nor task behavior depends on the resulting English text.
-It owns presentation-local timeout only for retained info or synthetic completion state; it observes runtime-transient expiry rather than starting a competing authoritative timer.
+It owns presentation-local timeout only for history or pinned info and synthetic completion state; it observes runtime-transient expiry rather than starting a competing authoritative timer.
 It also owns presentation-local suppression policy.
 
-UIModel does not mutate the failed subsystem, select retry or skip behavior, or turn a locally hidden activity row into dismissal of the authoritative runtime feed unless an explicit command requests that mutation.
+UIModel does not mutate the failed subsystem, select retry or skip behavior, or remove an authoritative runtime entry when it hides local activity presentation.
 Validation attached to an editor may remain local typed view state instead of entering the global notification feed.
 
 ### Frontend and CLI sinks
@@ -146,7 +146,7 @@ The core async layer passes the original `std::exception_ptr` and a short contex
 Interactive composition adapts that handler to the thread-safe application logger; bare runtime and CLI composition may use the runtime's stderr fallback.
 The [outcome channel specification](../spec/failure/outcome-channel.md) owns handler selection, cancellation exclusion, terminal bookkeeping order, future single ownership, and fallback containment.
 
-Logging does not acknowledge a command, mutate runtime state, dismiss a notification, or prove that the user saw a failure.
+Logging does not acknowledge a command, mutate runtime state, alter notification lifetime, or prove that the user saw a failure.
 A notification message is likewise not a substitute for the structured error or log context needed to diagnose its origin.
 
 ## Boundaries and dependency direction
@@ -226,14 +226,14 @@ They do not invent domain recovery or silently continue mutation from a partiall
 - A typed asynchronous failure retains the correlation evidence needed to reject stale observations before recovery or reporting.
 - `NotificationService` is a semantic application feed, not a global exception handler, log sink, or automatic adapter for every failed `Result`.
 - Notification feed commands and subscriptions stay on the callback executor; workers and backend callbacks first return through their owning runtime service.
-- One committed notification revision has one immutable canonical update, and an observer fault cannot become command failure after that commit.
-- Notification capacity never silently removes transient or until-dismissed state; only oldest session history is eligible for automatic eviction.
+- One effective notification mutation has one immutable canonical update, and an observer fault cannot roll back that commit.
+- Notification capacity never silently removes transient or pinned state; only oldest history is eligible for automatic eviction.
 - Report keys express producer-owned semantic correlation, while raw notification ids remain feed identity rather than producer aggregation state.
 - Notifications describe user-relevant application outcomes; logs preserve diagnostic detail; neither substitutes for the other.
 - One higher-level operation reports once at the owner-selected granularity instead of allowing every lower layer to post independently.
 - UI-local validation and fallback state remain local unless the outcome must survive editor dismissal or be visible across application surfaces.
 - Runtime reporting values are frontend-neutral and contain no widget, terminal, or platform exception object.
-- Shared report and progress copy resolves in UIModel from typed intent; runtime does not parse or duplicate resolved catalog text.
+- Shared report and progress copy resolves in UIModel from typed values; runtime does not parse or duplicate resolved catalog text.
 - Expected cancellation is silent at generic exception-reporting leaves and cannot be swallowed before the lifetime boundary has made captured state safe.
 - A future-returning task has one explicit exception owner and is not also diagnosed as an unobserved coroutine.
 - An injected async exception handler is diagnostic-only, may run concurrently, and cannot mutate executor-affine application state.
@@ -258,7 +258,6 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 ## Implementation map
 
 - [`Error`](../../include/ao/Error.h) and [`Exception`](../../include/ao/Exception.h) define the shared recoverable value and invariant exception foundations.
-- [`StorageResult`](../../app/include/ao/rt/StorageResult.h) is a focused runtime example of narrowing storage outcomes without losing diagnostic origin.
 - [`OperationCancelled`](../../include/ao/async/OperationCancelled.h), [`LifetimeScope`](../../include/ao/async/LifetimeScope.h), and their implementations under [`lib/async/`](../../lib/async) define cancellation and lifetime completion boundaries.
 - [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) and [`Runtime.cpp`](../../lib/async/Runtime.cpp) define unobserved coroutine diagnostic ownership without replacing Asio exception transport.
 - [`Signal`](../../include/ao/async/Signal.h) supplies generic synchronous observer delivery below reporting, while [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) owns feed-specific queuing and exception containment.
@@ -277,7 +276,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) and [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) protect cancellation, executor return, single-owner exception completion, injected diagnostics, and owner lifetime.
 - [`UiWorkflowTest.cpp`](../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
 - [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects the retained application-log adapter.
-- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects typed feed mutation, configured bounds, atomic history eviction, keyed correlation, immutable revisions, executor-owned observation, reentrant publication, and observer-fault containment.
+- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, configured bounds, atomic history eviction, keyed correlation, immutable snapshots, executor-owned observation, reentrant FIFO publication, and observer-fault containment.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects transient scheduling, unchanged suppression, keyed lifetime transitions, callback-executor expiry, generation races, cancellation, and teardown.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackTransportTest.cpp`](../../test/unit/runtime/PlaybackTransportTest.cpp), and [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp) protect typed failure correlation, recovery ownership, and notification aggregation.
 - Activity-status tests under [`test/unit/uimodel/status/activity/`](../../test/unit/uimodel/status/activity) protect the runtime-feed to UIModel boundary and presentation-local suppression.

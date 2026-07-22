@@ -6,7 +6,6 @@
 #include "StatusBar.h"
 #include "Style.h"
 #include "TextCell.h"
-#include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <ftxui/dom/elements.hpp>
@@ -47,17 +46,11 @@ namespace ao::tui
 
     for (auto const& item : state.detail.items)
     {
-      auto const title = item.title.empty() ? item.message : item.title;
-      contentColumns = std::max(contentColumns, cellWidth(title) + cellWidth("error "));
-
-      if (!item.title.empty() && !item.message.empty())
-      {
-        contentColumns = std::max(contentColumns, cellWidth(item.message) + cellWidth("  "));
-      }
+      contentColumns = std::max(contentColumns, cellWidth(item.message) + cellWidth("error "));
 
       if (item.dismissible)
       {
-        contentColumns = std::max(contentColumns, cellWidth(title) + cellWidth("  x"));
+        contentColumns = std::max(contentColumns, cellWidth(item.message) + cellWidth("  x"));
       }
     }
 
@@ -101,29 +94,8 @@ namespace ao::tui
     for (auto const& item : state.detail.items)
     {
       auto const itemKind = activityKindForSeverity(item.severity);
-      auto const title = item.title.empty() ? item.message : item.title;
       auto bodyRows = Elements{};
-      bodyRows.push_back(text(title));
-
-      if (!item.title.empty() && !item.message.empty())
-      {
-        bodyRows.push_back(text(item.message) | dim);
-      }
-
-      if (item.optProgressMode)
-      {
-        auto progressText = *item.optProgressMode == rt::NotificationProgressMode::Fraction
-                              ? activityProgressRail(item.progressFraction, kActivityProgressRailColumns)
-                              : std::string{"[working]"};
-
-        if (!item.progressLabel.empty())
-        {
-          progressText.append(" ");
-          progressText.append(item.progressLabel);
-        }
-
-        bodyRows.push_back(text(std::move(progressText)) | style::accent());
-      }
+      bodyRows.push_back(text(item.message));
 
       auto rowPtr = hbox({
         text(std::string{activityKindLabel(itemKind)}) | activityKindColor(itemKind) | bold,
