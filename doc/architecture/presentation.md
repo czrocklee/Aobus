@@ -125,7 +125,7 @@ Its list chooser consumes the shared UIModel list-tree projection, and its comma
 CLI is an application adapter rather than an interactive presentation layer.
 It parses commands, invokes `CoreRuntime` library facilities, and serializes plain, YAML, or JSON output.
 It bypasses UIModel because it does not maintain a reusable interactive view state.
-Its structured automation DTOs are currently unversioned; [RFC 0029](../rfc/0029-versioned-cli-automation-protocol.md) proposes an explicit protocol envelope and compatibility policy.
+Its structured automation DTOs are unversioned source-level contracts; field changes update the command reference and smoke tests in the same change.
 
 ## Boundaries and dependency direction
 
@@ -292,6 +292,3 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [TUI interaction](../spec/tui/interaction.md) and [command reference](../reference/tui/command.md)
 - [Application-layer review](../development/application-layer-review.md) and [UIModel organization](../development/uimodel-organization.md)
 - [GTK style guide](../development/gtk-style.md)
-- [RFC 0023: revision-bound metadata authoring](../rfc/0023-revision-bound-metadata-authoring.md)
-- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../rfc/0026-lifetime-safe-file-dialog-callbacks.md)
-- [RFC 0029: versioned CLI automation protocol](../rfc/0029-versioned-cli-automation-protocol.md)

@@ -339,12 +339,8 @@ namespace ao::query
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
+    gsl_Expects(hasRequiredTrackData(plan.accessProfile, track));
     output.clear();
-
-    if (!hasRequiredTrackData(plan.accessProfile, track))
-    {
-      return;
-    }
 
     for (auto const& instr : plan.instructions)
     {

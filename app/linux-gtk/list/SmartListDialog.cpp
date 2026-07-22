@@ -128,6 +128,12 @@ namespace ao::gtk
     updatePreview();
   }
 
+  void SmartListDialog::showError(std::string_view message)
+  {
+    _errorLabel.set_text(std::string{message});
+    _errorLabel.set_visible(!message.empty());
+  }
+
   void SmartListDialog::buildUi()
   {
     constexpr std::int32_t kBoxSpacing = 12;
@@ -316,6 +322,7 @@ namespace ao::gtk
             "Cannot build smart-list preview for source {}: {}", _parentListId, parentResult.error().message);
           updateSourceLabels();
           updateDialogState();
+          showError(parentResult.error().message);
           return false;
         }
 

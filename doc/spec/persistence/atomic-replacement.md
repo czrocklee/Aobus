@@ -223,6 +223,3 @@ Native platform tests remain necessary because the seam does not emulate filesys
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Managed file locations reference](../../reference/persistence/location.md)
 - [Outcome channel specification](../failure/outcome-channel.md)
-- [RFC 0010: versioned presentation state](../../rfc/0010-versioned-presentation-state.md)
-- [RFC 0014: observable atomic replacement](../../rfc/0014-observable-atomic-replacement.md), rejected after this narrower hardening closed the verified integrity gaps
-- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md), rejected after candidate saves closed the destructive store paths without generic receipts or recovery

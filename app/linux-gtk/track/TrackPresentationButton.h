@@ -51,6 +51,7 @@ namespace ao::gtk
     void populatePresentationOptions(uimodel::TrackPresentationPickerState const& state);
     void handlePresentationSelected(std::string_view presentationId);
     void handleCreateCustomViewClicked();
+    void showPresentationError(std::string_view message);
 
     rt::AppRuntime& _runtime;
     uimodel::TrackPresentationCatalog* _catalog = nullptr;

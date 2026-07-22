@@ -196,7 +196,8 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - malformed or empty cover data.
 
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 2 does not otherwise cap total document bytes, aggregate decoded cover bytes, or one decoded cover blob; scalable transfer budgets and bounded execution are delegated to [RFC 0004](../../../rfc/0004-scalable-library-tasks.md).
+Version 2 does not otherwise cap total document bytes, aggregate decoded cover bytes, or one decoded cover blob.
+No broader transfer budget is currently defined.
 The observable failure and rollback contract is defined by the [transfer specification](../../../spec/library/runtime/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning

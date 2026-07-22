@@ -14,7 +14,7 @@ It enumerates the private persistence document, nested view presentations and cu
 
 The required `presentationVersion` is currently `1`.
 It versions the nested presentation vocabulary, not the complete workspace document.
-The payload still has no root workspace schema version or migration registry; [RFC 0017](../../rfc/0017-versioned-workspace-session.md) owns that broader proposal.
+The payload has no root workspace schema version, exact active-view index, or resource budget.
 
 The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, focus fallback, commit, and failures after deserialization.
 The [application managed-state surface](../persistence/application-config.md) owns document and writer registration.
@@ -46,6 +46,7 @@ Its value is one mapping with these required fields in canonical emitted order:
 
 The session stores no `ViewId`.
 `activeListId` cannot uniquely identify two views over the same base list and follows the focus heuristic in the workspace session specification.
+[RFC 0017](../../rfc/0017-exact-active-workspace-view.md) proposes replacing it with an index into `openViews`.
 
 ### Track-list view entry
 
@@ -108,7 +109,7 @@ Every `customPresets` entry contains:
 - Structural and semantic deserialize completes before `WorkspaceService` creates or installs candidate views.
 
 There is no schema-level limit for view count, preset count, string length, sort-term count, or field count.
-Library binding, resource budgets, exact active-view identity, and complete candidate-set validation remain RFC 0017 concerns.
+Custom-preset ids also have no complete uniqueness or built-in-collision check at this schema boundary.
 
 ## Compatibility and versioning
 
@@ -117,7 +118,7 @@ Unversioned legacy workspace state, numeric enums, unknown closed tokens, and un
 An unsupported presentation version returns `NotSupported` before version-specific sibling fields are interpreted.
 
 Strict deserialization fixes the current root member set, so changing those keys cannot remain an unnoticed version-1 edit.
-However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no document kind, library binding, filter-expression dialect contract, exact active-view identity, collection budgets, or root migration policy.
+However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no complete root version, exact active-view identity, or collection budgets.
 Those remaining compatibility limits are why this payload is not described as a complete version-1 workspace envelope.
 
 Changing a stable presentation token requires an explicit compatibility decision.
@@ -191,4 +192,4 @@ Mapping order is not semantically significant; canonical explicit emission follo
 - [Grouped configuration store](../../spec/persistence/config-store.md)
 - [Runtime track field catalog](../library/model/track-field.md)
 - [Track presentation presets](../presentation/track-preset.md)
-- [RFC 0017: versioned semantic workspace sessions](../../rfc/0017-versioned-workspace-session.md)
+- [RFC 0017: exact active workspace view](../../rfc/0017-exact-active-workspace-view.md)

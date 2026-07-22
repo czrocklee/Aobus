@@ -4,6 +4,7 @@
 #include "TrackDetailUndo.h"
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <string>
@@ -86,11 +88,11 @@ namespace ao::gtk::layout
     _changed.emit();
   }
 
-  void TrackDetailUndoController::undo()
+  Result<> TrackDetailUndoController::undo()
   {
     if (!_optPendingCustomMetadataUndo)
     {
-      return;
+      return {};
     }
 
     auto& pendingUndo = *_optPendingCustomMetadataUndo;
@@ -103,19 +105,35 @@ namespace ao::gtk::layout
     if (!replyResult)
     {
       APP_LOG_ERROR("Metadata undo failed: {}", replyResult.error().message);
+      auto error = replyResult.error();
       clear();
-      return;
+      return std::unexpected{std::move(error)};
     }
 
-    if (replyResult->status != rt::TrackAuthoringStatus::Applied &&
-        replyResult->status != rt::TrackAuthoringStatus::NoOp)
+    auto result = Result<>{};
+
+    switch (replyResult->status)
     {
-      APP_LOG_ERROR("Metadata undo is stale or unavailable");
-      clear();
-      return;
+      case rt::TrackAuthoringStatus::Applied:
+      case rt::TrackAuthoringStatus::NoOp: break;
+      case rt::TrackAuthoringStatus::Stale:
+        result = makeError(Error::Code::InvalidState, "Library changed before metadata undo could be applied");
+        break;
+      case rt::TrackAuthoringStatus::Missing:
+        result = makeError(Error::Code::NotFound, "One or more tracks for metadata undo no longer exist");
+        break;
+      case rt::TrackAuthoringStatus::Unavailable:
+        result = makeError(Error::Code::InvalidState, "Metadata undo is currently unavailable");
+        break;
+    }
+
+    if (!result)
+    {
+      APP_LOG_ERROR("Metadata undo failed: {}", result.error().message);
     }
 
     clear();
+    return result;
   }
 
   sigc::signal<void()>& TrackDetailUndoController::signalChanged()

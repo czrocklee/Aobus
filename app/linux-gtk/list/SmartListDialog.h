@@ -66,6 +66,7 @@ namespace ao::gtk
     std::string presentationId() const;
 
     void setLocalExpression(std::string_view expression);
+    void showError(std::string_view message);
 
   private:
     void buildUi();

@@ -90,7 +90,7 @@ They must return promptly and cannot call `Engine::shutdown()` or destroy the En
 Player repeats this separation at the application boundary.
 Engine/provider callbacks queue work onto Player's executor, and Player callbacks to application runtime run from that executor.
 Queued work first checks the shared teardown gate.
-The current non-realtime Engine event deque and Player executor-task stream have no combined capacity or coalescing contract; [RFC 0028](../../rfc/0028-bounded-audio-observation-delivery.md) proposes classified bounded delivery.
+The current non-realtime Engine event deque and Player executor-task stream have no combined capacity or coalescing contract.
 
 ### Realtime rendering and natural end
 
@@ -148,6 +148,8 @@ Lossy/unknown codecs or format mismatch drain and close; no resampling, channel 
 
 `stagePlayback` opens a source without publishing it to the render timeline.
 `commitPlayback` publishes only if the active generation and start context still match.
+Source opening and initial preparation currently run synchronously on the caller, normally the runtime callback executor.
+[RFC 0033](../../rfc/0033-nonblocking-playback-preparation.md) proposes worker preparation followed by generation-checked Engine adoption.
 
 Engine keeps a weak staged-source registry so a candidate decode failure is not discarded as a stale timeline event.
 If the event worker wins, it latches the original error and commit returns it before changing callback floor, lookahead, or active source.
@@ -261,5 +263,4 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [Playback succession cursor](cursor.md)
 - [Decoder session](decoder-session.md)
 - [Audio quality analysis](quality-analysis.md)
-- [RFC 0027: loop executor for non-toolkit hosts](../../rfc/0027-loop-executor.md)
-- [RFC 0028: bounded audio observation delivery](../../rfc/0028-bounded-audio-observation-delivery.md)
+- [RFC 0033: non-blocking playback preparation](../../rfc/0033-nonblocking-playback-preparation.md)

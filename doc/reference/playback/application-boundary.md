@@ -167,6 +167,5 @@ keeps no source-compatibility constraint for it.
 
 - [Playback architecture](../../architecture/playback.md)
 - [Playback application commits](../../spec/playback/application-commit.md)
-- [RFC 0005](../../rfc/0005-coherent-playback-boundary.md)
 - [Playback session state](session-state.md)
 - [Audio quality surface](quality-surface.md)

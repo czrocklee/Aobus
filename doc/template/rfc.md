@@ -54,3 +54,4 @@ List decisions that still block acceptance.
 ## Promotion plan
 
 List the architecture, specification, reference, decision, and user/development documents this RFC will create or update if accepted.
+After implementation or rejection, migrate every retained fact and inbound link, then delete the RFC.

@@ -121,7 +121,7 @@ MPRIS ResourceId -> synchronous read -> extension sniff -> cache file -> file UR
 CLI ResourceId -> scoped read -> raw output file
 ```
 
-[RFC 0021](../rfc/0021-bounded-resource-delivery.md) proposes a shared bounded asynchronous byte-delivery boundary and moves full-size GTK, TUI, and MPRIS I/O off their event-loop threads.
+[RFC 0021](../rfc/0021-nonblocking-cover-art.md) proposes one asynchronous byte-read operation on the existing library task service and moves full-size GTK, TUI, and MPRIS transforms off their event-loop threads.
 That proposal is not current behavior.
 
 ## Structural constraints
@@ -148,7 +148,7 @@ Full-size GTK, TUI, and MPRIS paths currently perform potentially blocking read/
 
 Image byte size and decoded pixel allocation have no shared product-level budget at the resource boundary.
 Frontend decoders apply their own format and dimension checks, but current architecture does not provide one cross-frontend decompression-bomb or memory-pressure policy.
-RFC 0021 proposes that missing operational boundary.
+RFC 0021 proposes encoded-byte, decoded-pixel, and generated-output limits while keeping transforms and caches frontend-local.
 
 ## Implementation map
 
@@ -182,4 +182,4 @@ RFC 0021 proposes that missing operational boundary.
 - [Cover-art resource delivery specification](../spec/resource/cover-art-delivery.md)
 - [Resource blob reference](../reference/resource/blob.md)
 - [Track model reference](../reference/library/model/track.md)
-- [RFC 0021: bounded asynchronous resource delivery](../rfc/0021-bounded-resource-delivery.md)
+- [RFC 0021: non-blocking cover-art delivery](../rfc/0021-nonblocking-cover-art.md)

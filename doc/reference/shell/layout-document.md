@@ -189,4 +189,3 @@ There is no automatic migration, quarantine, or normalization policy.
 - [Layout catalog and action reference](layout-catalog.md)
 - [Layout component-state reference](layout-state.md)
 - [Application managed-state surface](../persistence/application-config.md)
-- [RFC 0025: bounded shell layout documents](../../rfc/0025-bounded-shell-layout-documents.md)

@@ -25,7 +25,8 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
 
-The database is a host-local rebuildable index rather than an interchange format.
+The database is host-local rather than an interchange format.
+It combines regenerable scan facts with user-authored lists, membership, curated metadata, tags, covers, custom metadata, and stable library/track identities; the complete environment is therefore not rebuildable from media files.
 Its path must reside on a filesystem local to the host. Network filesystems and
 shares are unsupported because neither the writer lease nor LMDB's mapped-file
 locking provides cross-host safety for this database.
@@ -149,7 +150,7 @@ It cannot turn an underlying mapped-file fault into a recoverable record-validat
 ## Compatibility and versioning
 
 Opening a database whose metadata magic or stored library version is invalid returns `CorruptData`.
-There is no in-place migration path; reset and rescan rebuild the host-local index.
+There is no migration path today; the current reset-and-rescan recovery instruction loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
 
 Version `4` also gates the interpretation of Smart List `filter` text.
 The exact accepted surface belongs to the [predicate language reference](../../query/predicate-language.md), and membership meaning belongs to the [predicate evaluation specification](../../../spec/query/predicate-evaluation.md).

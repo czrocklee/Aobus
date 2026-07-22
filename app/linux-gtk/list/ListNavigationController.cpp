@@ -3,11 +3,13 @@
 
 #include "list/ListNavigationController.h"
 
+#include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationPanel.h"
 #include "list/SmartListDialog.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
@@ -30,6 +32,7 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <string>
@@ -205,7 +208,11 @@ namespace ao::gtk
         {
           auto const presId = dialog->presentationId();
 
-          submitListDraft(dialog->draft(), presId);
+          if (auto const submitted = submitListDraft(dialog->draft(), presId); !submitted)
+          {
+            dialog->showError(submitted.error().message);
+            return;
+          }
         }
 
         dialog->close();
@@ -243,7 +250,11 @@ namespace ao::gtk
           {
             if (auto const draft = dialog->draft(); draft.listId != kInvalidListId)
             {
-              submitListDraft(draft, dialog->presentationId());
+              if (auto const submitted = submitListDraft(draft, dialog->presentationId()); !submitted)
+              {
+                dialog->showError(submitted.error().message);
+                return;
+              }
             }
           }
 
@@ -255,14 +266,18 @@ namespace ao::gtk
     }
   }
 
-  ListId ListNavigationController::submitListDraft(rt::LibraryListDraft const& draft, std::string presentationId)
+  Result<ListId> ListNavigationController::submitListDraft(rt::LibraryListDraft const& draft,
+                                                           std::string presentationId)
   {
     if (draft.listId != kInvalidListId)
     {
-      if (!updateList(draft))
+      if (auto const updateResult = _runtime.library().updateList(draft); !updateResult)
       {
-        return kInvalidListId;
+        APP_LOG_ERROR("Failed to update list: {}", updateResult.error().message);
+        return std::unexpected{updateResult.error()};
       }
+
+      _pendingSelectId = draft.listId;
 
       if (_callbacks.onListPresentationSaved)
       {
@@ -272,43 +287,23 @@ namespace ao::gtk
       return draft.listId;
     }
 
-    auto const newListId = createList(draft);
-
-    if (_callbacks.onListPresentationSaved && newListId != kInvalidListId)
-    {
-      _callbacks.onListPresentationSaved(newListId, std::move(presentationId));
-    }
-
-    return newListId;
-  }
-
-  ListId ListNavigationController::createList(rt::LibraryListDraft const& draft)
-  {
     auto const listResult = _runtime.library().createList(draft);
 
     if (!listResult)
     {
       APP_LOG_ERROR("Failed to create list: {}", listResult.error().message);
-      return kInvalidListId;
+      return std::unexpected{listResult.error()};
     }
 
-    auto const listId = *listResult;
-    _pendingSelectId = listId;
-    return listId;
-  }
+    auto const newListId = *listResult;
+    _pendingSelectId = newListId;
 
-  bool ListNavigationController::updateList(rt::LibraryListDraft const& draft)
-  {
-    auto const updateResult = _runtime.library().updateList(draft);
-
-    if (!updateResult)
+    if (_callbacks.onListPresentationSaved)
     {
-      APP_LOG_ERROR("Failed to update list: {}", updateResult.error().message);
-      return false;
+      _callbacks.onListPresentationSaved(newListId, std::move(presentationId));
     }
 
-    _pendingSelectId = draft.listId;
-    return true;
+    return newListId;
   }
 
   void ListNavigationController::handleEditListActivated()
@@ -351,6 +346,15 @@ namespace ao::gtk
     if (auto const deleteResult = _runtime.library().deleteList(listId); !deleteResult)
     {
       APP_LOG_ERROR("Failed to delete list {}: {}", listId, deleteResult.error().message);
+      auto* const dialog = AppDialog::presentMessage(
+        _parent,
+        "Unable to Delete List",
+        deleteResult.error().message,
+        {AppDialogAction{
+          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+        Gtk::ResponseType::CLOSE);
+      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
+      dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
       return;
     }
 

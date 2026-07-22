@@ -15,7 +15,7 @@ namespace ao::rt
 {
   using PlaybackSnapshotObserver = std::move_only_function<void(PlaybackSnapshot const&)>;
 
-  /** Temporary navigation request retained until RFC 0005 stage 6. */
+  /** Transient application-navigation request emitted by the playback boundary. */
   struct PlaybackRevealTrackRequest final
   {
     TrackId trackId = kInvalidTrackId;

@@ -4,8 +4,10 @@
 #include "list/ListNavigationController.h"
 
 #include "../../TestUtils.h"
+#include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationPanel.h"
+#include "list/SmartListDialog.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
@@ -21,6 +23,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/simpleaction.h>
 #include <giomm/simpleactiongroup.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/label.h>
 #include <gtkmm/listview.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/singleselection.h>
@@ -55,6 +59,19 @@ namespace ao::gtk::test
       auto transaction = library.readTransaction();
       auto reader = library.lists().reader(transaction);
       return reader.get(listId);
+    }
+
+    AppDialog* findAppDialog(std::string const& title)
+    {
+      for (auto* const window : Gtk::Window::list_toplevels())
+      {
+        if (auto* const dialog = dynamic_cast<AppDialog*>(window); dialog != nullptr && dialog->get_title() == title)
+        {
+          return dialog;
+        }
+      }
+
+      return nullptr;
     }
   } // namespace
 
@@ -162,7 +179,9 @@ namespace ao::gtk::test
       draft.description = "Tracks touched this week";
       draft.expression = "$title ~ \"Recent\"";
 
-      auto const listId = controller.submitListDraft(draft, "compact");
+      auto const listResult = controller.submitListDraft(draft, "compact");
+      REQUIRE(listResult);
+      auto const listId = *listResult;
 
       auto const optList = findList(fixture.runtime().musicLibrary(), listId);
       REQUIRE(optList);
@@ -187,11 +206,12 @@ namespace ao::gtk::test
       draft.description = "Updated description";
       draft.expression = "$title ~ \"Energy\"";
 
-      auto const savedId = controller.submitListDraft(draft, "wide");
+      auto const savedResult = controller.submitListDraft(draft, "wide");
+      REQUIRE(savedResult);
 
       auto const optList = findList(fixture.runtime().musicLibrary(), listId);
       REQUIRE(optList);
-      CHECK(savedId == listId);
+      CHECK(*savedResult == listId);
       CHECK_FALSE(optList->name().empty());
       CHECK(savedPresentationListId == listId);
       CHECK(savedPresentationId == "wide");
@@ -209,11 +229,49 @@ namespace ao::gtk::test
       draft.name = "Invalid";
       draft.expression = "(";
 
-      auto const listId = controller.submitListDraft(draft, "wide");
+      auto const listResult = controller.submitListDraft(draft, "wide");
 
-      CHECK(listId == kInvalidListId);
+      REQUIRE_FALSE(listResult);
       CHECK(savedPresentationListId == kInvalidListId);
       CHECK(savedPresentationId.empty());
+    }
+
+    SECTION("stale edit response keeps the dialog and draft visible")
+    {
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+      auto const editActionPtr = simpleAction(*groupPtr, "list-edit");
+      REQUIRE(editActionPtr);
+      auto const listId = createList(fixture.runtime().library(), "Draft to Preserve");
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+      controller.select(listId);
+      drainGtkEvents();
+
+      editActionPtr->activate();
+      drainGtkEvents();
+      auto* const dialog = dynamic_cast<SmartListDialog*>(findAppDialog("Edit List"));
+      REQUIRE(dialog != nullptr);
+      REQUIRE(dialog->get_visible());
+      CHECK(dialog->draft().name == "Draft to Preserve");
+      REQUIRE(fixture.runtime().library().deleteList(listId));
+
+      dialog->response(Gtk::ResponseType::OK);
+      drainGtkEvents();
+
+      CHECK(dialog->get_visible());
+      CHECK(dialog->draft().name == "Draft to Preserve");
+      bool visibleError = false;
+
+      for (auto* const label : collectAll<Gtk::Label>(*dialog))
+      {
+        visibleError = visibleError ||
+                       (label->get_visible() && label->has_css_class("ao-layout-error") && !label->get_text().empty());
+      }
+
+      CHECK(visibleError);
+      dialog->close();
+      drainGtkEvents();
     }
 
     SECTION("delete action removes the selected leaf list")
@@ -242,6 +300,31 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(selectedId == rt::kAllTracksListId);
+    }
+
+    SECTION("failed delete shows a parent-bound dialog and keeps the selected tree row")
+    {
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+      auto const deleteActionPtr = simpleAction(*groupPtr, "list-delete");
+      REQUIRE(deleteActionPtr);
+      auto const listId = createList(fixture.runtime().library(), "Stale Delete Target");
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+      controller.select(listId);
+      drainGtkEvents();
+      REQUIRE(selectedId == listId);
+      REQUIRE(fixture.runtime().library().deleteList(listId));
+
+      deleteActionPtr->activate();
+      drainGtkEvents();
+
+      auto* const dialog = findAppDialog("Unable to Delete List");
+      REQUIRE(dialog != nullptr);
+      CHECK(dialog->get_transient_for() == &window);
+      CHECK(selectedId == listId);
+      dialog->response(Gtk::ResponseType::CLOSE);
+      drainGtkEvents();
     }
   }
 

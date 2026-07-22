@@ -82,4 +82,3 @@ Canceling the dialog leaves the target unchanged.
 - [Library YAML transfer specification](../spec/library/runtime/yaml-transfer.md)
 - [Library YAML format reference](../reference/library/format/yaml.md)
 - [CLI command reference](../reference/cli/command.md)
-- [RFC 0001: Safe library transfer](../rfc/0001-safe-library-transfer.md)

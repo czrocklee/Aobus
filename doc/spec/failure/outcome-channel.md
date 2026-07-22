@@ -148,4 +148,3 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 - [Error value reference](../../reference/failure/error.md)
 - [Runtime execution architecture](../../architecture/runtime-execution.md)
 - [Notification feed specification](../reporting/notification-feed.md)
-- [RFC 0012: injected asynchronous exception diagnostics](../../rfc/0012-structured-async-fault-diagnostics.md)

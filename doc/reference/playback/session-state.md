@@ -84,7 +84,8 @@ Version `3` also includes the current numeric `TrackSortField` mapping.
 Changing a sort-field raw value requires a playback schema version or an explicit version-3 compatibility implementation; the stable text ids used by presentation documents do not silently migrate this payload.
 
 List and track ids are scoped to one library, but version 3 stores no library UUID.
-The current GTK lifecycle prevents cross-library interpretation by discarding the group before replacement; RFC 0019 proposes a durable library binding.
+The current GTK lifecycle prevents cross-library interpretation by discarding the group before replacement.
+[RFC 0019](../../rfc/0019-safe-active-library-replacement.md) keeps that behavior and only changes replacement ordering.
 
 ## Examples
 

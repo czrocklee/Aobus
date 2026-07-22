@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
 #include <sigc++/connection.h>
@@ -48,7 +49,7 @@ namespace ao::gtk::layout
                                           std::unique_ptr<uimodel::TrackAuthoringSession> sessionPtr);
     void clearIfAffectsCustomMetadata(std::string_view key, std::vector<TrackId> const& trackIds);
     void clear();
-    void undo();
+    Result<> undo();
 
     sigc::signal<void()>& signalChanged();
 

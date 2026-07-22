@@ -190,7 +190,8 @@ Once synchronous transfer work begins it has no internal stop checkpoint; after 
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
 Version 2 currently defines no transfer-specific total-document, aggregate-cover, or per-cover byte budget beyond the exact field and core-storage limits in the format reference.
-Configurable prepared-memory ceilings, streaming, and bounded transfer execution remain part of [RFC 0004](../../../rfc/0004-scalable-library-tasks.md), rather than an arbitrary limit that would let the current exporter produce a file the importer cannot read back.
+No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
+Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
 

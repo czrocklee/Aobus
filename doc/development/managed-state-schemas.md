@@ -126,4 +126,3 @@ Historical RFC text may describe a removed mechanism; current architecture, spec
 - [Testing policy](test.md)
 - [Validation and review](test/validation-and-review.md)
 - [Linting](linting.md)
-- [RFC 0032: explicit managed-state schemas](../rfc/0032-explicit-managed-state-schemas.md)

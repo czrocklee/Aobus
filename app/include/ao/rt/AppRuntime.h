@@ -35,6 +35,7 @@ namespace ao::rt
     std::filesystem::path musicRoot{};
     std::filesystem::path databasePath{};
     std::size_t musicLibraryMapSize = 0;
+    /// Required owning store for workspace persistence and the default playback-session store.
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr{};
     ConfigStore* playbackSessionConfigStore = nullptr;
     async::Sleeper* sleeper = nullptr;

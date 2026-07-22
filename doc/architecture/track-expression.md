@@ -199,7 +199,8 @@ Completion is synchronous and tolerant of incomplete text.
 Execution and format plans own no dictionary state.
 `PlanBinding` and `FormatBinding` borrow their plan and a synchronous `DictionaryReadContext`; those bindings and the context cannot outlive the backing `MusicLibrary`.
 The optional dictionary read cache is batch-local acceleration over stable borrowed values, not plan state or a transaction snapshot.
-Current evaluation still reports a missing required track tier as `false` or empty output; typed insufficient-data/context outcomes and worker-valid immutable contexts remain proposed by [RFC 0009](../rfc/0009-pure-expression-binding.md).
+Callers choose load mode from the compiled access profile, provide every required track tier, and keep the borrowed dictionary context valid for synchronous evaluation.
+The evaluator enforces the tier requirement as a caller precondition before predicate shortcuts or format-output mutation; ordinary missing fields within a present tier retain their false or empty-value semantics.
 Source leases and projections retain their ordinary lifetime rules from the [library architecture](library.md).
 
 ## Implementation map
@@ -239,5 +240,3 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [Predicate language](../reference/query/predicate-language.md)
 - [Format evaluation](../spec/query/format-evaluation.md)
 - [Format language](../reference/query/format-language.md)
-- [RFC 0009: pure expression binding and evaluation context](../rfc/0009-pure-expression-binding.md)
-- [RFC 0024: versioned predicate dialect](../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership

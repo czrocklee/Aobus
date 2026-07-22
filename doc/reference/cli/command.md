@@ -172,7 +172,7 @@ Plain `lib import` output identifies whether the operation is a preview, then pr
 The command surface and DTOs are unversioned.
 Any syntax or field change requires updating this reference and `CliSmokeTest` in the same change.
 Library YAML and database versioning are independent.
-[RFC 0029](../../rfc/0029-versioned-cli-automation-protocol.md) proposes a separate CLI automation version and migration from these legacy top-level DTOs.
+There is no separate CLI protocol version or migration layer.
 
 ## Examples
 
@@ -200,4 +200,3 @@ aobus lib import backup.yaml --mode restore --confirm-destructive-restore
 - [Predicate language reference](../query/predicate-language.md)
 - [Format language reference](../query/format-language.md)
 - [Library YAML format reference](../library/format/yaml.md)
-- [RFC 0029: versioned CLI automation protocol](../../rfc/0029-versioned-cli-automation-protocol.md)

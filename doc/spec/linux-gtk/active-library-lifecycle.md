@@ -117,11 +117,12 @@ Selecting a path that is not a directory is a no-op.
 Selecting the active root can still request a scan; scan failure and progress belong to the library task contract.
 
 Playback-session discard failure aborts replacement and keeps the old pair active.
+The old window presents the discard diagnostic in a parent-bound transient message and returns the same failure to the replacement callback.
 Current global, workspace, layout, and several other save wrappers contain void or best-effort paths, so their failure does not currently abort replacement or shutdown.
 Playback checkpoint failure is logged by the coordinator.
-[RFC 0018](../../rfc/0018-interactive-session-lifecycle.md) proposes a shared result-bearing runtime lifecycle, and [RFC 0019](../../rfc/0019-transactional-active-library-switch.md) proposes candidate preparation, global selection receipts, and rollback-safe activation.
+[RFC 0019](../../rfc/0019-safe-active-library-replacement.md) proposes preparing the replacement pair before the old pair's final checkpoint and release, then saving the selected path only after activation.
 
-The file-dialog callback silently consumes expected cancellation or dismissal; other `Glib::Error` values are logged and create no replacement.
+The file-dialog callback silently consumes expected cancellation or dismissal; other native chooser failures are logged, presented in a parent-bound transient message, and create no replacement.
 Every native completion must enter the callback scope owned by its `ImportExportCoordinator` before it can hand a path to this lifecycle.
 Coordinator teardown closes that scope before requesting native cancellation, so a late completion performs no handoff.
 The idle replacement callback has no explicit cancellation token and relies on GTK application/window lifetime.
@@ -144,7 +145,7 @@ Successful same-root open presents the existing window.
 Successful different-root open removes the old window and presents a newly initialized window.
 There is no public intermediate switching snapshot or progress model.
 
-Preparation failure is currently diagnostic logging at the application callback and leaves the visible old library in place.
+Preparation failure is visible in a parent-bound transient message and leaves the old window/runtime and visible library in place.
 Bootstrap scanning reports through the runtime library task and notification surfaces after the new pair is active.
 
 ## Implementation map
@@ -165,7 +166,7 @@ Bootstrap scanning reports through the runtime library task and notification sur
 - [`AppRuntimeTest.cpp`](../../../test/unit/runtime/AppRuntimeTest.cpp) protects runtime service and teardown lifetime below the GTK pair.
 
 The internal `main.cpp` replacement sequence does not currently have a focused end-to-end test; the window preparation and component policies above protect its principal state boundaries.
-[RFC 0019](../../rfc/0019-transactional-active-library-switch.md) proposes extracting that sequence behind a typed host/factory boundary with deterministic transition tests.
+[RFC 0019](../../rfc/0019-safe-active-library-replacement.md) proposes private prepare/activate operations with focused transition tests.
 
 ## Related documents
 
@@ -178,4 +179,4 @@ The internal `main.cpp` replacement sequence does not currently have a focused e
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Managed file locations](../../reference/persistence/location.md)
-- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../../rfc/0026-lifetime-safe-file-dialog-callbacks.md)
+- [RFC 0019: safe active-library replacement](../../rfc/0019-safe-active-library-replacement.md)

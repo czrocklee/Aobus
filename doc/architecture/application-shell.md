@@ -55,7 +55,7 @@ The controller is the current GTK shell composition owner: it selects and loads 
 
 This is a broad current responsibility set, not a general-purpose runtime facade.
 Customized-layout load/save/remove operations and candidate preparation return typed results; component-state persistence retains its narrower optional/Boolean contract.
-The underlying grouped store provides fail-closed one-shot replacement; [RFC 0015](../rfc/0015-fail-closed-config-store.md) records why broader generic receipts and recovery were rejected.
+The underlying grouped store provides fail-closed one-shot replacement without generic commit receipts or a blocked-store recovery mode.
 
 ### Component and action registries
 
@@ -163,11 +163,11 @@ Unknown or recursive templates become error nodes.
 Unknown component types become visible layout-error widgets.
 Malformed, unsupported, or over-budget customized layouts fall back to the matching built-in document without rewriting the rejected file.
 Missing customization is normal absence rather than rejection.
-The grouped store preserves the previous document on returned failure, while [RFC 0015](../rfc/0015-fail-closed-config-store.md) records the rejected broader transaction and receipt design.
+The grouped store preserves the previous document on returned failure.
 
 Document preparation and detached GTK construction happen before active session/tree replacement.
 A failed preparation keeps the old generation live.
-[RFC 0025](../rfc/0025-bounded-shell-layout-documents.md) records the implemented narrow safety kernel and the broader migration/candidate mechanisms that were deliberately omitted.
+Strict version dispatch, preparation budgets, and rejected-file preservation form the complete layout-document safety boundary; there is no migration or generic candidate framework.
 
 During teardown the controller clears the host while runtime state, stores, registries, and borrowed dependencies are still alive.
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
@@ -204,4 +204,3 @@ Editor theme and callback tokens are released before the controller's collaborat
 - [Layout component-state reference](../reference/shell/layout-state.md)
 - [Layout catalog and action reference](../reference/shell/layout-catalog.md)
 - [Keyboard map reference](../reference/shell/keymap.md)
-- [RFC 0025: bounded shell layout documents](../rfc/0025-bounded-shell-layout-documents.md)

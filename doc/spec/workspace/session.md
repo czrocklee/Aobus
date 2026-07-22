@@ -89,7 +89,8 @@ Candidate ids are appended in serialized order and the custom-preset collection 
 Focus resolution scans the restored candidates for the active-list hint.
 A matching unfiltered view remains a fallback while a later matching filtered view wins immediately.
 If no restored candidate matches and any view is open, the first open view is focused.
-This preserves the current append behavior when restore is called on a nonempty workspace; [RFC 0017](../../rfc/0017-versioned-workspace-session.md) proposes explicit replacement and exact active-view identity.
+This preserves the current append behavior when restore is called on a nonempty workspace, but the list-based hint cannot distinguish multiple views over the same list.
+[RFC 0017](../../rfc/0017-exact-active-workspace-view.md) proposes indexing the exact serialized entry instead.
 
 The final active semantic view is committed into the history candidate.
 That initial point is deduplicated normally and has no previous entry in the ordinary empty-runtime restore path.
@@ -107,6 +108,7 @@ Consumers never receive a sequence of partially added views or a separate preset
 
 GTK restores workspace state after constructing the library-bound runtime and before restoring playback state.
 It applies GTK per-list presentation preferences after workspace restore.
+[RFC 0018](../../rfc/0018-preserve-restored-view-presentation.md) proposes removing that overwrite while retaining preferences for new views.
 If the restored snapshot has no open view, GTK navigates to All Tracks with the resolved default presentation and immediately requests a workspace checkpoint.
 That automatic first-view checkpoint occurs only after a successful empty restore; a rejected workspace document may produce an in-memory default view but is not overwritten during initialization.
 
@@ -115,7 +117,7 @@ The [GTK active-library lifecycle specification](../linux-gtk/active-library-lif
 
 TUI currently injects a workspace store but does not restore or save it around the event loop.
 Its `LibraryController` constructs an initial All Tracks view instead.
-[RFC 0018](../../rfc/0018-interactive-session-lifecycle.md) proposes a shared interactive lifecycle owner.
+No shared frontend lifecycle owner is proposed; this remains an explicit GTK/TUI product difference.
 
 ## Failure, execution, and lifetime
 
@@ -127,7 +129,7 @@ Workspace persistence uses an explicit recursively strict schema plus semantic p
 Missing or extra fields and malformed vector elements reject the complete document instead of retaining defaults or being skipped.
 Unsupported `presentationVersion` values return `NotSupported` before version-specific siblings are interpreted; unknown closed presentation tokens are `FormatRejected`.
 
-Resource limits, full root versioning, library binding, exact active-view identity, and recovery remain [RFC 0017](../../rfc/0017-versioned-workspace-session.md) concerns.
+The current schema has no resource limits, full root version, or exact active-view identity.
 
 Save remains best effort at the workspace wrapper.
 Its lower `ConfigStore` operation is fail closed, but a failed checkpoint does not currently block shutdown or library replacement.
@@ -140,7 +142,7 @@ Exact locations belong to the [managed file locations reference](../../reference
 
 The payload carries required `presentationVersion: 1` and stable textual field, sort, group, and direction values.
 That marker covers nested presentation vocabulary only.
-The payload still has no complete root schema version, library identity, migration aliases, resource budgets, or exact persisted active-view identity.
+The payload still has no complete root schema version, resource budgets, or exact persisted active-view identity.
 The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact inventory and compatibility boundary.
 
 ## Implementation map
@@ -169,3 +171,5 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Grouped configuration store](../persistence/config-store.md)
 - [GTK active-library lifecycle](../linux-gtk/active-library-lifecycle.md)
+- [RFC 0017: exact active workspace view](../../rfc/0017-exact-active-workspace-view.md)
+- [RFC 0018: preserve restored view presentation](../../rfc/0018-preserve-restored-view-presentation.md)

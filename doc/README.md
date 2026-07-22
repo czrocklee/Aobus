@@ -88,11 +88,13 @@ Allowed status values:
 |---|---|
 | `index`, `user-guide`, `architecture`, `spec`, `reference`, `development` | `draft`, `current`, `deprecated` |
 | `decision` | `proposed`, `accepted`, `superseded`, `rejected` |
-| `rfc` | `draft`, `in-review`, `accepted`, `rejected`, `implemented` |
+| `rfc` | `draft`, `in-review`, `accepted` |
 
 Status is explicit; absence never implies current behavior in the new structure.
 For an RFC, `draft` means a durable proposal candidate in the repository inventory; it does not mean that review, scheduling, or implementation is active.
-Change an RFC to `in-review` only when adjudication is active, then record its accepted, rejected, or implemented outcome rather than inferring progress from its sequence number.
+Change an RFC to `in-review` only when adjudication is active and to `accepted` only while accepted work remains unimplemented.
+After rejection or implementation, move any durable rationale to a decision, promote current facts to their authoritative documents, update inbound links, and delete the RFC.
+Do not retain completed proposal text as a second current or historical architecture archive.
 Supersession relationships belong in the document body until the decision/RFC workflow needs machine-readable graph validation.
 RFC dependency metadata follows the additional contract below.
 
@@ -127,13 +129,15 @@ Early private exploration belongs in a local plan or an issue, not in a current 
 A durable proposal starts as an RFC.
 
 ```text
-idea -> RFC -> accepted decision (when rationale is durable)
+idea -> RFC -> accepted decision (only when rationale is durable)
             -> architecture/spec/reference updates
             -> local implementation plan
-            -> implemented current documentation
+            -> implementation
+            -> delete completed RFC
 ```
 
-An accepted or implemented RFC links to the current documents it produced but never replaces them.
+A temporarily accepted RFC links to the current documents it will update but never replaces them.
+A rejected RFC is deleted after any durable rationale moves to a decision; an implemented RFC is deleted after current facts and inbound links move to their authoritative owners.
 A decision remains historical evidence after its resulting specification changes; mark it superseded and link the replacing decision.
 
 `doc/plan/` remains ignored by Git.

@@ -14,7 +14,7 @@ It owns launch capture, cursor and anchor behavior, next/previous resolution, re
 
 Playback ownership and execution domains belong to the [playback architecture](../../architecture/playback.md).
 Ordered source membership belongs to [track sources](../library/source/track-source.md), projection delta production belongs to the [track-list projection](../library/projection/track-list.md), presentation ordering belongs to [track-list presentation](../presentation/track-presentation.md), and persisted payload and restore behavior belong to [playback session persistence](session-persistence.md).
-The public application boundary from [RFC 0005](../../rfc/0005-coherent-playback-boundary.md) does not replace the succession behavior owned here; its later coordinator stage must preserve or explicitly update this specification.
+The public application boundary coordinates commits without replacing the succession behavior owned here.
 
 ## Code boundary
 
@@ -250,7 +250,7 @@ Before clear, stop, exhaustion, or invalidation removes succession authority, th
 Composite persistence rejects a cursor/transport current-subject mismatch instead of combining different playback generations.
 
 The restore matrix and event-driven save timing belong to [playback session persistence](session-persistence.md); exact fields and schema compatibility belong to the [session-state reference](../../reference/playback/session-state.md).
-RFC 0005 Stage 3 moved application coordination and persistence installation into the `PlaybackService` commit boundary without moving cursor policy out of succession.
+Application coordination and persistence installation belong to the `PlaybackService` commit boundary; cursor policy remains in succession.
 
 ## Frontend observations
 
@@ -293,4 +293,3 @@ Observers are observational and do not choose succession policy.
 - [Track presentation preset reference](../../reference/presentation/track-preset.md)
 - [Playback session persistence](session-persistence.md)
 - [Playback session state reference](../../reference/playback/session-state.md)
-- [RFC 0005: Coherent playback application boundary](../../rfc/0005-coherent-playback-boundary.md)

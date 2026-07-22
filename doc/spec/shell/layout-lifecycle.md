@@ -123,7 +123,7 @@ Load work observes the shell lifetime stop token at executor transitions.
 Component construction and rebuild are callback-executor GTK operations and have no independent cancellation point.
 Preparation, layout load/save/remove, and detached GTK construction return existing typed `Error` values.
 The layout store preserves its prior live document and backing bytes on a returned failure; component-state operations retain their existing optional/Boolean reporting contract.
-[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why a larger generic receipt and recovery system was rejected.
+The shell does not add generic commit receipts or a blocked-store recovery mode.
 
 ## Persistence and versioning
 
@@ -172,4 +172,3 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - [Layout component-state reference](../../reference/shell/layout-state.md)
 - [Layout catalog and action reference](../../reference/shell/layout-catalog.md)
 - [Keyboard shortcut specification](keyboard-shortcut.md)
-- [RFC 0025: bounded shell layout documents](../../rfc/0025-bounded-shell-layout-documents.md)

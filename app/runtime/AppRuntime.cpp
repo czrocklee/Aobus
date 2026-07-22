@@ -7,6 +7,7 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendProvider.h>
@@ -31,6 +32,19 @@
 
 namespace ao::rt
 {
+  namespace
+  {
+    std::unique_ptr<ConfigStore> checkedWorkspaceConfigStore(std::unique_ptr<ConfigStore> storePtr)
+    {
+      if (storePtr == nullptr)
+      {
+        throwException<Exception>("AppRuntime requires a workspace config store");
+      }
+
+      return storePtr;
+    }
+  } // namespace
+
   struct AppRuntime::Impl final
   {
     ViewService viewService;
@@ -95,7 +109,7 @@ namespace ao::rt
                   dependencies.sleeper,
                   std::move(dependencies.asyncExceptionHandler)}
     , _implPtr{std::make_unique<Impl>(*this,
-                                      std::move(dependencies.workspaceConfigStorePtr),
+                                      checkedWorkspaceConfigStore(std::move(dependencies.workspaceConfigStorePtr)),
                                       dependencies.playbackSessionConfigStore)}
   {
   }

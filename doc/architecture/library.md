@@ -57,6 +57,7 @@ UIModel and frontends begin above these stages and consume runtime values rather
 
 `ao::library::MusicLibrary` owns the LMDB environment and coordinates specialized track, list, resource, dictionary, and file-manifest stores.
 It creates public read transactions and owns the physical library metadata header and revision source.
+The environment combines user-authored library truth with scan-derived facts; media rescan cannot reconstruct the complete database.
 Committing writes require a separately acquired `WritableMusicLibrary`; `MusicLibrary` keeps transaction construction private to that capability.
 Acquisition takes a non-blocking OS file lease for the database path, so a second writable process receives `Conflict` while the first capability or any transaction anchored to it remains active.
 The capability borrows its `MusicLibrary`; storage composition keeps that library alive until the capability and all transactions anchored to its lease are destroyed.
@@ -122,7 +123,7 @@ Applying consumes that plan once and revalidates every binding before opening th
 Frontends may present the report or drop the plan, but cannot manufacture or retarget commit evidence.
 
 The coordinator publishes `LibraryAuthoringAvailability` as `Available`, `Maintenance`, or terminal `Faulted` state.
-Maintenance identifies import, scan apply, or audio-identity backfill and rejects every interactive command for the whole operation, including slow preparation between bounded write transactions.
+Maintenance identifies import, scan apply, or audio-identity backfill and rejects every interactive command for the whole operation, including slow preparation outside writer ownership.
 Metadata and tag authoring additionally requires runtime-created `BoundTrackTargets` containing the runtime instance id, committed library revision, and exact target order.
 
 ### Sources
@@ -182,7 +183,7 @@ runtime command
   -> Available(runtimeInstanceId, committedRevision)
 ```
 
-An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a bounded coordinator mutation only for preview or apply/commit.
+An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a coordinator mutation only for preview or apply/commit.
 Export and scan-plan construction remain independent read snapshots.
 Progress and completion return through `LibraryChanges`, while committed content changes use `LibraryChangeSet`.
 
@@ -197,7 +198,10 @@ strict parse + prepared data + uncommitted preview
 ```
 
 A scan plan is an opaque move-only runtime value whose immutable items are bound to the persisted library id and committed revision from the planner's read snapshot.
-Scan apply validates that evidence after maintenance admission and again at its bounded write boundary, so callers cannot fabricate items, cross libraries, or replay an already superseded snapshot.
+Scan apply validates that evidence after maintenance admission and again at its single write boundary, so callers cannot fabricate items, cross libraries, or replay an already superseded snapshot.
+The current write transaction covers every prepared item and preserves whole-plan atomicity.
+New and changed items currently retain plan-time file facts after preparation, while missing items are not checked for reappearance.
+[RFC 0004](../rfc/0004-scan-file-revalidation.md) proposes a final per-item path check without changing the transaction model.
 Explicit relink is a constrained plan derivation that preserves the same binding rather than a separate caller-authored mutation description.
 
 A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
@@ -309,5 +313,4 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [LMDB operation specification](../spec/storage/lmdb-operation.md)
 - [Library YAML transfer specification](../spec/library/runtime/yaml-transfer.md) and [format reference](../reference/library/format/yaml.md)
 - [Media file reading specification](../spec/media/file-reading.md) and [supported audio files reference](../reference/media/audio-file.md)
-- [RFC 0022: transaction-coherent library dictionary](../rfc/0022-transaction-coherent-library-dictionary.md)
-- [RFC 0023: revision-bound metadata authoring](../rfc/0023-revision-bound-metadata-authoring.md)
+- [RFC 0004: scan file revalidation](../rfc/0004-scan-file-revalidation.md)

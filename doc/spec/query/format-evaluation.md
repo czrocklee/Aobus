@@ -59,8 +59,8 @@ Callers normally create one binding per output batch and reuse it for the tracks
 A later binding can resolve a custom key introduced by a newer committed dictionary generation without recompiling the plan.
 When the batch evaluates transaction-backed track views, the caller opens the read transaction before creating the binding so the binding cannot be older than the evaluated storage snapshot.
 
-`FormatEvaluator::evaluate(binding, track)` first verifies that the supplied `TrackView` contains every tier required by the plan.
-If a required tier is missing, evaluation returns an empty result for the entire expression rather than partially formatting available fields.
+Supplying every tier required by the plan is a caller precondition of every `FormatEvaluator::evaluate()` overload.
+The evaluator enforces that contract before clearing caller-owned output or appending any instruction.
 
 Otherwise, it appends each instruction:
 
@@ -84,7 +84,7 @@ Supplying an explicit `DictionaryReadContext` or `FormatBinding` is a preconditi
 Evaluation is synchronous and non-throwing for ordinary missing track values.
 It has no cancellation point.
 Malformed internal instruction indices are ignored defensively rather than exposing user input as memory access.
-Typed insufficient-data and invalid-context outcomes remain proposed by [RFC 0009](../../rfc/0009-pure-expression-binding.md).
+Evaluation has no insufficient-data result: a missing required hot/cold tier is a caller contract failure, while an ordinary missing value inside a present tier still contributes empty text.
 
 ## Persistence and versioning
 

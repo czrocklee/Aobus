@@ -122,7 +122,7 @@ The workspace group carries `presentationVersion: 1` and uses the same stable fi
 Its root and nested fields are exhaustively defined by the [workspace session-state reference](../workspace/session-state.md).
 
 `presentationVersion` versions only the nested presentation serialization.
-It is not the complete workspace schema version proposed by [RFC 0017](../../rfc/0017-versioned-workspace-session.md).
+It is not a complete workspace root schema version.
 
 ## Validation rules
 

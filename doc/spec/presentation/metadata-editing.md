@@ -99,6 +99,9 @@ Suggested tags are a presentation aid; only the final add/remove command is auth
 
 Runtime mutation failure rejects the edit and exposes the recoverable diagnostic to the frontend workflow.
 No partial frontend state is treated as committed merely because an editor closed.
+GTK table inline edits place parsing, operational, stale, missing, and unavailable failures in the table's existing status surface and update the row only after `Applied`.
+GTK detail-grid parsing and submission failures create an error notification and restore the pre-edit display value; the backing library remains unchanged on rejection.
+Custom-metadata undo returns its terminal failure, clears the expired action, and the undo bar publishes that failure as an error notification.
 The current synchronous mutation boundary has no cancellation token; cancellation before submission discards the local draft, while a returned successful mutation is committed.
 
 Stale and unavailable outcomes tell the frontend to reload rather than retry the same session.
@@ -146,4 +149,3 @@ Custom keys are queryable through the custom-variable syntax in the predicate la
 - [Track field reference](../../reference/library/model/track-field.md)
 - [Predicate language reference](../../reference/query/predicate-language.md)
 - [GTK track-detail specification](../linux-gtk/track-detail.md)
-- [RFC 0023: revision-bound metadata authoring](../../rfc/0023-revision-bound-metadata-authoring.md)

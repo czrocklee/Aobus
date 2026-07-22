@@ -136,10 +136,9 @@ Malformed data or an unresolvable view returns a recoverable error, and candidat
 Strict document and presentation deserialization finishes before candidate view creation.
 Unsupported presentation versions, missing or extra fields, malformed vector elements, and unknown closed presentation tokens therefore cannot partially populate `ViewService`.
 
-[RFC 0016](../rfc/0016-coherent-workspace-transactions.md) records the implemented command, snapshot, history, observation, and application-navigation boundary.
-[RFC 0010](../rfc/0010-versioned-presentation-state.md) records the implemented stable nested presentation schema.
-[RFC 0017](../rfc/0017-versioned-workspace-session.md) proposes full root versioning, library binding, bounded validation, and stable session-local identities.
-RFC 0017 is not current behavior.
+The current command, snapshot, history, observation, application-navigation, and stable nested presentation boundaries are authoritative behavior rather than pending proposals.
+The persisted workspace has no complete root version or collection budgets and identifies the active view by an ambiguous list id rather than an exact open-view entry.
+[RFC 0017](../rfc/0017-exact-active-workspace-view.md) proposes replacing only that ambiguous focus hint.
 
 ## Implementation map
 
@@ -170,3 +169,4 @@ RFC 0017 is not current behavior.
 - [Workspace navigation specification](../spec/workspace/navigation.md)
 - [Workspace session specification](../spec/workspace/session.md)
 - [Workspace session state reference](../reference/workspace/session-state.md)
+- [RFC 0017: exact active workspace view](../rfc/0017-exact-active-workspace-view.md)

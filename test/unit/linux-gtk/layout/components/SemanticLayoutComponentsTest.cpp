@@ -344,6 +344,20 @@ namespace ao::gtk::layout::test
       drainGtkEvents();
 
       CHECK_FALSE(bar.get_visible());
+
+      auto rejectedSessionPtr =
+        ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{undoTrackId}));
+      undoController.presentCustomMetadataDeletedUndo(
+        "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(rejectedSessionPtr));
+      auto* const undoButton = findWidgetByClass<Gtk::Button>(bar, "ao-undo-button");
+      REQUIRE(undoButton != nullptr);
+      emitClicked(*undoButton);
+      drainGtkEvents();
+
+      auto const feed = fixture.runtime().notifications().feed();
+      REQUIRE_FALSE(feed.entries.empty());
+      CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
+      CHECK_FALSE(bar.get_visible());
     }
 
     SECTION("track.tagEditor creates tag editor container")
@@ -437,7 +451,7 @@ namespace ao::gtk::layout::test
       ao::test::requireValue(TrackAuthoringSession::begin(fixture.runtime().library(), std::array{trackId}));
 
     undoController.presentCustomMetadataDeletedUndo("Mood", "Bright", std::move(sessionPtr));
-    undoController.undo();
+    REQUIRE(undoController.undo());
 
     auto const transaction = musicLibrary.readTransaction();
     auto const optView =
@@ -499,8 +513,10 @@ namespace ao::gtk::layout::test
     REQUIRE(controller.pendingCustomMetadataUndo());
     CHECK_FALSE(controller.pendingCustomMetadataUndo()->sessionPtr->isCurrent());
 
-    controller.undo();
+    auto const undoResult = controller.undo();
 
+    REQUIRE_FALSE(undoResult);
+    CHECK(undoResult.error().message == "Library changed before metadata undo could be applied");
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
     CHECK(trackSpecFor(runtime.musicLibrary(), trackId).customMetadata.empty());
   }
@@ -523,8 +539,9 @@ namespace ao::gtk::layout::test
       "Mood", std::string(kOversizedMetadataLength, 'x'), std::move(sessionPtr));
     REQUIRE(controller.pendingCustomMetadataUndo());
 
-    controller.undo();
+    auto const undoResult = controller.undo();
 
+    REQUIRE_FALSE(undoResult);
     CHECK_FALSE(controller.pendingCustomMetadataUndo());
     CHECK(changedCount == 2);
     CHECK(trackSpecFor(fixture.runtime().musicLibrary(), trackId).customMetadata.empty());
@@ -604,6 +621,60 @@ namespace ao::gtk::layout::test
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
     CHECK(std::get<std::string>(feed.entries.back().message) ==
           "Library changed while this edit was open. Reload the value and try again.");
+
+    drainGtkEvents();
+    fixture.window().unset_child();
+  }
+
+  TEST_CASE("TrackFieldGrid - built-in parse and submission failures restore display and notify",
+            "[gtk][regression][layout-component][library-authoring]")
+  {
+    auto trackId = kInvalidTrackId;
+    auto fixture =
+      LayoutRuntimeFixture{"io.github.aobus.detail_builtin_metadata_failure_test",
+                           [&trackId](library::MusicLibrary& musicLibrary)
+                           { trackId = library::test::addTrack(musicLibrary, {.title = "Before", .year = 2020}); }};
+    auto& runtime = fixture.runtime();
+    auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    REQUIRE(runtime.views().setSelection(navigation, {trackId}));
+    drainGtkEvents();
+    auto const componentPtr =
+      fixture.create(LayoutNode{.type = "track.detailScope", .children = {LayoutNode{.type = "track.fieldGrid"}}});
+    REQUIRE(componentPtr != nullptr);
+    auto& root = componentPtr->widget();
+    fixture.window().set_child(root);
+    auto const editors = collectAll<track_field_grid::DetailFieldEditor>(root);
+    auto const titleEditorIter =
+      std::ranges::find_if(editors, [](auto const* editor) { return editor->text().raw() == "Before"; });
+    auto const yearEditorIter =
+      std::ranges::find_if(editors, [](auto const* editor) { return editor->text().raw() == "2020"; });
+    REQUIRE(titleEditorIter != editors.end());
+    REQUIRE(yearEditorIter != editors.end());
+    auto* const titleEditor = *titleEditorIter;
+    auto* const yearEditor = *yearEditorIter;
+
+    titleEditor->startEditing();
+    titleEditor->entry().set_text("After");
+    REQUIRE(runtime.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
+    titleEditor->stopEditing(true);
+
+    CHECK(titleEditor->text().raw() == "Before");
+    CHECK(trackSpecFor(runtime.musicLibrary(), trackId).title == "Before");
+    auto feed = runtime.notifications().feed();
+    REQUIRE_FALSE(feed.entries.empty());
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
+    auto const notificationCount = feed.entries.size();
+
+    yearEditor->startEditing();
+    yearEditor->entry().set_text("not-a-year");
+    yearEditor->stopEditing(true);
+
+    CHECK(yearEditor->text().raw() == "2020");
+    CHECK(trackSpecFor(runtime.musicLibrary(), trackId).year == 2020);
+    feed = runtime.notifications().feed();
+    REQUIRE(feed.entries.size() == notificationCount + 1);
+    CHECK(feed.entries.back().severity == rt::NotificationSeverity::Error);
 
     drainGtkEvents();
     fixture.window().unset_child();

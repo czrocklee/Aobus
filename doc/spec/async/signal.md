@@ -91,4 +91,3 @@ Destroying the signal before a posted callback runs turns that callback into a s
 - [Runtime execution architecture](../../architecture/runtime-execution.md)
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
 - [Notification feed specification](../reporting/notification-feed.md)
-- [RFC 0031: Shared signal primitives](../../rfc/0031-shared-signal-primitives.md)

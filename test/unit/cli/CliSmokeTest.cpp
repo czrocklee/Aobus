@@ -392,10 +392,15 @@ namespace ao::cli::test
     auto result = fixture.run({"init"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"track", "show", "--filter", "$title ~ \"Test\"", "--format", R"($artist + " - " + $title)"});
+    result = fixture.run({"track",
+                          "show",
+                          "--filter",
+                          "$title ~ \"Test\"",
+                          "--format",
+                          R"format($artist + " - " + $title + " (" + @codec + ")")format"});
     REQUIRE(result.status == 0);
     CHECK(result.err.empty());
-    CHECK(result.out == "Test Artist - Test Title\n");
+    CHECK(result.out == "Test Artist - Test Title (FLAC)\n");
 
     checkDomainFailure(fixture.run({"track", "show", "--format", "#fav"}), "format error:");
     checkDomainFailure(fixture.run({"-O", "json", "track", "show", "--format", "$title"}),

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <string_view>
 
 namespace ao::rt
 {
@@ -82,6 +83,7 @@ namespace ao::gtk::portal
     void handleExportFileSelected(Glib::RefPtr<Gio::AsyncResult>& resultPtr,
                                   rt::ExportMode mode,
                                   Glib::RefPtr<Gtk::FileDialog> const& fileDialogPtr);
+    void presentFileDialogError(std::string_view operation, std::string_view message);
 
     Gtk::Window& _parent;
     ImportExportCallbacks _callbacks;

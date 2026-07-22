@@ -557,6 +557,7 @@ namespace ao::gtk
     if (!replyResult)
     {
       APP_LOG_ERROR("Metadata update failed: {}", replyResult.error().message);
+      setStatusMessage(replyResult.error().message);
       return;
     }
 

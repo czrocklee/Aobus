@@ -60,8 +60,8 @@ namespace ao::rt
     virtual void setVolume(float volume) = 0;
     virtual void setMuted(bool muted) = 0;
 
-    // Reveal remains on the boundary temporarily; RFC 0005 stage 6 moves it to
-    // an explicit navigation command above playback.
+    // Reveal emits an application-navigation request without mutating transport
+    // or succession state.
     virtual void revealPlayingTrack() = 0;
     virtual void revealTrack(TrackId trackId,
                              ViewId preferredViewId = kInvalidViewId,

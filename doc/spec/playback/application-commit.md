@@ -67,7 +67,8 @@ depth, and one weak deferred-task gate.
 
 This state is confined to the runtime callback executor. The command queue adds
 no worker or mutex. Audio preparation remains synchronous once a command begins
-executing.
+executing; [RFC 0033](../../rfc/0033-nonblocking-playback-preparation.md) proposes
+isolating decoder/source preparation on the existing worker pool.
 
 ## Commands and transitions
 
@@ -184,4 +185,4 @@ producers while succession and the remaining runtime graph are alive.
 
 - [Playback architecture](../../architecture/playback.md)
 - [Playback application boundary reference](../../reference/playback/application-boundary.md)
-- [RFC 0005](../../rfc/0005-coherent-playback-boundary.md)
+- [RFC 0033: non-blocking playback preparation](../../rfc/0033-nonblocking-playback-preparation.md)

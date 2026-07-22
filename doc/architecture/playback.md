@@ -140,7 +140,7 @@ Frontend widgets and platform endpoints issue runtime/UIModel commands and rende
 Consumers borrow the last boundary-committed coherent value through `PlaybackService::snapshot()` and obtain its narrow `PlaybackCommands` mutation role or `PlaybackEvents` subscription role; they cannot obtain `PlaybackTransport` or `PlaybackSuccession` from `AppRuntime`.
 `PlaybackCommandSurface` derives availability from one coherent snapshot and delegates every transport and succession command through `PlaybackCommands`.
 
-Since [RFC 0005](../rfc/0005-coherent-playback-boundary.md) Stage 3, `PlaybackService` is the application commit authority over the internal `PlaybackTransport` and `PlaybackSuccession` owners.
+`PlaybackService` is the application commit authority over the internal `PlaybackTransport` and `PlaybackSuccession` owners.
 Its private implementation assigns command generations, serializes commands requested by observers, and publishes at most one coherent snapshot after each logical mutation settles.
 Independent lower-layer observations are coalesced at the end of the callback-executor turn.
 The internal headers live under `app/runtime/playback/`; build guardrails reject those owner names in public runtime headers, UIModel, and frontend sources.
@@ -230,7 +230,7 @@ backend / decoder / render signal
 
 Engine callbacks are observational until Player accepts their generation and the callback-executor task runs.
 Synchronous Engine control returns do not require an asynchronous callback to make their immediate result visible to the caller.
-The realtime signal ring is bounded, but the non-realtime Engine queue and one-task-per-Player-callback path currently have no end-to-end capacity/coalescing contract; [RFC 0028](../rfc/0028-bounded-audio-observation-delivery.md) proposes typed event classes and one bounded drain.
+The realtime signal ring is bounded, but the non-realtime Engine queue and one-task-per-Player-callback path have no end-to-end capacity or coalescing contract.
 
 ### Persistence protocol
 
@@ -294,6 +294,7 @@ Player is the intentional bridge between the callback-executor domain and the th
 Engine is the intentional bridge between serialized control and the dedicated event, decode, and render domains.
 The Engine control domain is a synchronization domain, not a dedicated control thread: public control calls execute synchronously on their caller and are serialized internally.
 Through Player the caller is normally the runtime callback executor, so current track opening, source construction, preroll, and route activation performed during staging remain on that synchronous call path; only later event delivery, streaming decode, and rendering use dedicated threads.
+[RFC 0033](../rfc/0033-nonblocking-playback-preparation.md) proposes moving only decoder/source preparation to a worker and revalidating adoption on the callback executor.
 The playback-session debounce delay sleeps outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
 
 Runtime lower-layer signals are delivered synchronously within the callback domain and are exception-contained by their owner.
@@ -392,4 +393,4 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [Decoder session specification](../spec/playback/decoder-session.md)
 - [Audio execution and concurrency specification](../spec/playback/audio-execution.md)
 - [Playback session persistence specification](../spec/playback/session-persistence.md) and [state reference](../reference/playback/session-state.md)
-- [RFC 0028: bounded audio observation delivery](../rfc/0028-bounded-audio-observation-delivery.md)
+- [RFC 0033: non-blocking playback preparation](../rfc/0033-nonblocking-playback-preparation.md)

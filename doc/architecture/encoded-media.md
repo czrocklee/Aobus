@@ -110,8 +110,8 @@ path
 ```
 
 The media boundary performs synchronous reading inside the calling library workflow and never begins a library transaction or emits runtime change events itself.
-Transaction timing belongs to that workflow: direct creation reads before opening its transaction, while current scan application and YAML transfer may already hold a transaction around media reading.
-[RFC 0004](../rfc/0004-scalable-library-tasks.md) proposes moving scan and transfer preparation outside long-lived write transactions; that proposal is not current behavior.
+Transaction timing belongs to that workflow: direct creation and scan preparation read before opening their write transaction, while YAML transfer retains its own one-commit apply behavior.
+Scan application writes the complete prepared plan in one transaction, preserving whole-plan atomicity.
 
 ### Audio identity
 
@@ -198,4 +198,3 @@ Decoder mappings, demux state, and packet views instead belong to each decoder s
 - [Supported audio files reference](../reference/media/audio-file.md)
 - [Library scan and audio identity specification](../spec/library/runtime/scan-and-identity.md)
 - [Decoder session specification](../spec/playback/decoder-session.md)
-- [RFC 0020: decoupled media interpretation](../rfc/0020-decoupled-media-interpretation.md)

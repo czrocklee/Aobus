@@ -98,7 +98,8 @@ A scaled result that is not an integer is rejected during compilation.
 Compilation classifies a plan as `NoTrackData`, `HotOnly`, `ColdOnly`, or `HotAndCold`.
 The profile is the union of the storage tiers required by all field loads in the predicate.
 
-`PlanEvaluator::matches()` returns false when the supplied `TrackView` lacks a required tier.
+Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `evaluateFull()`.
+The evaluator enforces that contract before any constant-plan shortcut; absence of an individual field within a supplied tier remains ordinary predicate data and follows the field semantics above.
 Smart-list evaluation uses the plan profile to choose the minimum track-store load mode across the plans evaluated in one batch.
 Constant true and false predicates require no track data.
 
@@ -131,8 +132,9 @@ Presence-only field probes used by completion return absence rather than a user-
 Predicate compilation and evaluation are synchronous and have no cancellation point.
 Longer-running source rebuild cancellation and atomic publication belong to the consuming runtime source contract.
 
-The current boolean convenience API returns false when required hot/cold track data is absent.
-Typed insufficient-data and invalid-context outcomes remain proposed by [RFC 0009](../../rfc/0009-pure-expression-binding.md); callers that choose load mode must use the plan access profile.
+The boolean evaluation API has no insufficient-data result.
+Callers that choose load mode must use the plan access profile and provide the required hot/cold tiers; violating that precondition is a caller contract failure, not a non-match.
+Ordinary missing values inside a present tier remain non-matching according to the field rules.
 
 ## Persistence and versioning
 
@@ -145,7 +147,7 @@ A change that expands the storable predicate surface beyond what an existing sam
 The old version is then rejected or explicitly migrated; the current database accepts only an exact version match and provides no in-place migration.
 
 Runtime view filters use the compatibility policy of the workspace, playback-session, or CLI surface that retains or accepts them.
-Expressions carry no independent dialect id or version; [RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) rejected that design in favor of containing-surface ownership.
+Expressions carry no independent dialect id or version; the containing surface owns compatibility.
 
 ## Frontend observations
 
@@ -182,4 +184,3 @@ Presentation consumes resulting membership but cannot reinterpret predicate trut
 - [Track filtering](../presentation/track-filter.md)
 - [Track model](../../reference/library/model/track.md)
 - [Library database](../../reference/library/storage/database.md)
-- [RFC 0024: versioned predicate dialect](../../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership

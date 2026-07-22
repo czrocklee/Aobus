@@ -58,4 +58,3 @@ Smart Lists keep a predicate rather than a copied membership list, so their resu
 - [Track-filter specification](../spec/presentation/track-filter.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
 - [Library scan and audio identity](../spec/library/runtime/scan-and-identity.md)
-- [Derived track-view RFC](../rfc/0006-coherent-derived-track-views.md)

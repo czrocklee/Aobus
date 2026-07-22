@@ -241,6 +241,3 @@ No single test currently enumerates every registered group across all logical do
 - [Application shell architecture](../../architecture/application-shell.md)
 - [Shell layout lifecycle specification](../../spec/shell/layout-lifecycle.md)
 - [Keyboard shortcut specification](../../spec/shell/keyboard-shortcut.md)
-- [RFC 0010: versioned presentation state](../../rfc/0010-versioned-presentation-state.md)
-- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md), rejected after the narrower candidate-save boundary was implemented
-- [RFC 0032: explicit managed-state schemas](../../rfc/0032-explicit-managed-state-schemas.md), implemented across every registry entry

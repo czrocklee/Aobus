@@ -203,5 +203,3 @@ A runtime or frontend workflow decides how to report or recover from a store fai
 - [Managed-state schema development guide](../../development/managed-state-schemas.md)
 - [Managed file locations reference](../../reference/persistence/location.md)
 - [Failure and reporting architecture](../../architecture/failure-and-reporting.md)
-- [RFC 0015: fail-closed grouped configuration transactions](../../rfc/0015-fail-closed-config-store.md), rejected after candidate installation and complete-document saves closed the verified destructive paths
-- [RFC 0032: explicit managed-state schemas](../../rfc/0032-explicit-managed-state-schemas.md), implemented by the explicit owner-schema boundary specified here

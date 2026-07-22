@@ -11,6 +11,7 @@
 #include "app/MouseNavigationPolicy.h"
 #include "app/PlaybackShortcutPolicy.h"
 #include "app/ShellLayoutComponentStateStore.h"
+#include "app/ThemeCoordinator.h"
 #include "app/WindowActionRegistry.h"
 #include "app/WindowState.h"
 #include "list/ListNavigationController.h"
@@ -183,6 +184,21 @@ namespace ao::gtk
 
     if (auto discarded = _runtime.discardRestorablePlaybackSession(); !discarded)
     {
+      APP_LOG_ERROR("Failed to prepare active library for replacement: {}", discarded.error().message);
+      auto* const dialog = AppDialog::presentMessage(
+        *this,
+        "Unable to Switch Libraries",
+        discarded.error().message,
+        {AppDialogAction{
+          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+        Gtk::ResponseType::CLOSE);
+
+      if (auto* const themeCoordinator = _mainWindowCoordinatorPtr->themeCoordinator(); themeCoordinator != nullptr)
+      {
+        auto tokenPtr = std::make_shared<ThemeRegistrationToken>(themeCoordinator->registerToplevel(*dialog));
+        dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
+      }
+
       return discarded;
     }
 

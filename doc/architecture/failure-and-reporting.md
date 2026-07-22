@@ -174,6 +174,8 @@ frontend or CLI command
 
 A command-scoped failure does not automatically enter `NotificationService`.
 The workflow owner chooses whether persistent or cross-view visibility is also required.
+Current GTK adapters keep feedback local to the initiating workflow: table edits use their status surface, detail edits and undo use the notification feed, draft editors use their existing error label, and destructive, chooser, presentation, or lifecycle commands use parent-bound transient messages.
+These adapters retain the original `Result`, committed-state, and logging boundaries; they do not introduce a shared outcome presenter or infer recovery from message text.
 
 ### Failure after asynchronous acceptance
 

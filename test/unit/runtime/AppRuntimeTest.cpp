@@ -114,6 +114,45 @@ namespace ao::rt::test
     }
   } // namespace
 
+  TEST_CASE("AppRuntime - missing workspace config store is rejected", "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+
+    try
+    {
+      auto runtime = AppRuntime{AppRuntimeDependencies{
+        .executorPtr = std::make_unique<InlineExecutor>(),
+        .musicRoot = tempDir.path(),
+        .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+        .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      }};
+      FAIL("AppRuntime construction should reject a missing workspace config store");
+    }
+    catch (Exception const& error)
+    {
+      CHECK(std::string_view{error.what()} == "AppRuntime requires a workspace config store");
+    }
+  }
+
+  TEST_CASE("AppRuntime - playback session store uses fallback and explicit override", "[runtime][unit][app-runtime]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto overrideStore = ConfigStore{tempDir.path() / "playback.yaml"};
+
+    SECTION("null override uses the workspace store")
+    {
+      auto runtime = makeRuntime(tempDir);
+      CHECK(&runtime.playbackSessionConfigStore() == &runtime.workspaceConfigStore());
+    }
+
+    SECTION("explicit override is preserved")
+    {
+      auto runtime = makeRuntime(tempDir, &overrideStore);
+      CHECK(&runtime.playbackSessionConfigStore() == &overrideStore);
+      CHECK(&runtime.playbackSessionConfigStore() != &runtime.workspaceConfigStore());
+    }
+  }
+
   TEST_CASE("AppRuntime - dependencies expose services and empty selection is safe", "[runtime][unit][app-runtime]")
   {
     auto tempDir = ao::test::TempDir{};

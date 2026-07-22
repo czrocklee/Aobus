@@ -107,7 +107,7 @@ During teardown, CLI stops and joins runtime workers before draining already-rea
 CLI output is a source-level automation contract but currently has no explicit schema version.
 Changing a structured field requires updating the [CLI command reference](../../reference/cli/command.md) and smoke tests.
 Library and transfer formats retain their own independent versioning.
-[RFC 0029](../../rfc/0029-versioned-cli-automation-protocol.md) proposes an explicit negotiated envelope, stable result/error kinds, and mechanically checked schema inventory.
+No negotiated protocol envelope or compatibility layer is planned for the current CLI surface.
 
 ## Frontend observations
 
@@ -138,5 +138,3 @@ YAML/JSON are intended for parsed automation.
 - [Track expression architecture](../../architecture/track-expression.md)
 - [CLI command reference](../../reference/cli/command.md)
 - [Library YAML transfer](../library/runtime/yaml-transfer.md)
-- [RFC 0027: loop executor for non-toolkit hosts](../../rfc/0027-loop-executor.md)
-- [RFC 0029: versioned CLI automation protocol](../../rfc/0029-versioned-cli-automation-protocol.md)

@@ -3,6 +3,7 @@
 
 #include "track/TrackPresentationButton.h"
 
+#include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "track/TrackCustomViewDialog.h"
 #include <ao/rt/AppRuntime.h>
@@ -16,6 +17,7 @@
 
 #include <glibmm/main.h>
 #include <gtkmm/button.h>
+#include <gtkmm/dialog.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/object.h>
 #include <gtkmm/separator.h>
@@ -138,17 +140,50 @@ namespace ao::gtk
       return;
     }
 
+    auto const targetViewId = _state.activeViewId;
     _applyPresentationConn.disconnect();
     _applyPresentationConn = Glib::signal_idle().connect(
-      [this, spec = std::move(*optSpec)]
+      [this, targetViewId, spec = std::move(*optSpec)]
       {
+        if (_runtime.workspace().snapshot().activeViewId != targetViewId)
+        {
+          auto const message = std::string{"The selected track view is no longer active."};
+          APP_LOG_ERROR("Failed to apply track presentation: {}", message);
+          showPresentationError(message);
+          return false;
+        }
+
         if (auto const result = _runtime.workspace().setActivePresentation(spec); !result)
         {
           APP_LOG_ERROR("Failed to apply track presentation: {}", result.error().message);
+          showPresentationError(result.error().message);
         }
 
         return false;
       });
+  }
+
+  void TrackPresentationButton::showPresentationError(std::string_view message)
+  {
+    auto* const parentWindow = dynamic_cast<Gtk::Window*>(get_root());
+
+    if (parentWindow == nullptr)
+    {
+      return;
+    }
+
+    auto* const dialog = AppDialog::presentMessage(
+      *parentWindow,
+      "Unable to Change Track View",
+      std::string{message},
+      {AppDialogAction{.label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+      Gtk::ResponseType::CLOSE);
+
+    if (_themeCoordinator != nullptr)
+    {
+      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator->registerToplevel(*dialog));
+      dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
+    }
   }
 
   void TrackPresentationButton::handleCreateCustomViewClicked()

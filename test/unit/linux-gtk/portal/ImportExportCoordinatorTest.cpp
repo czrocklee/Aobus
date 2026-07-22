@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/dialog.h>
+#include <gtkmm/error.h>
 #include <gtkmm/window.h>
 
 #include <cstdint>
@@ -27,6 +28,14 @@ namespace ao::gtk::test
     CHECK(portal::exportModeForSelection(2U) == rt::ExportMode::Full);
     CHECK(portal::exportModeForSelection(3U) == rt::ExportMode::ListOnly);
     CHECK(portal::exportModeForSelection(99U) == rt::ExportMode::Metadata);
+  }
+
+  TEST_CASE("ImportExportCoordinator - native chooser policy reports failures but not cancellation",
+            "[gtk][unit][portal][import-export]")
+  {
+    CHECK_FALSE(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::FAILED));
+    CHECK(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::CANCELLED));
+    CHECK(portal::isExpectedNativeChooserCancellation(Gtk::DialogError::DISMISSED));
   }
 
   TEST_CASE("ImportExportCoordinator - openMusicLibrary routes to the callback", "[gtk][unit][portal][import-export]")

@@ -69,13 +69,16 @@ Ambiguous duplicate groups remain `Missing` plus `New` for explicit resolution.
 
 ## Plan application
 
-Runtime application enters `ScanApply` maintenance, prepares plan items on a worker without writer ownership, then opens one bounded coordinator mutation to revalidate prepared state and apply every successful content change atomically.
+Runtime application enters `ScanApply` maintenance, prepares plan items on a worker without writer ownership, then opens one coordinator mutation to revalidate prepared state and apply every successful content change atomically.
 It reports updating and fingerprinting progress during preparation.
 The runtime-private operation enforces `Created → Prepared → Revalidated → Applied/Terminal`; callers cannot skip final file revalidation or apply the same operation twice.
 
 After maintenance closes interactive admission, application validates the plan binding before reporting item progress, opening media, or fingerprinting.
-The bounded write transaction validates the same library id again and requires its newly allocated revision to immediately follow the plan revision before it touches track or manifest rows.
+The write transaction validates the same library id again and requires its newly allocated revision to immediately follow the plan revision before it touches track or manifest rows.
 A foreign binding returns `InvalidInput`; a superseded or replayed binding returns `Conflict`; both paths abort without a durable revision or content change.
+
+The transaction currently covers the complete prepared plan and has no item or byte bound.
+This preserves whole-plan all-or-nothing behavior; writer hold time and rollback cost scale with the prepared plan.
 
 - `New` parses metadata and technical properties, creates a track, and writes an available manifest row.
 - `Changed` preserves curated metadata, refreshes technical properties, and refreshes file and identity facts.
@@ -86,6 +89,8 @@ A foreign binding returns `InvalidInput`; a superseded or replayed binding retur
 
 After preparation and immediately before opening the coordinator mutation, application fingerprints every moved destination again and compares it with both the prepared and planned identities.
 A mismatch or a failure after relink processing begins aborts the complete transaction.
+New and changed files do not receive an equivalent final stat check, and missing paths are not checked for reappearance.
+[RFC 0004](../../../rfc/0004-scan-file-revalidation.md) proposes that narrow revalidation.
 
 Successful explicit relink derivation consumes an unresolved plan and produces one `Moved` item only when the selected `Missing` and `New` items carry the same non-pending planned identity.
 The derived plan preserves the source library and revision binding, and live destination fingerprinting remains mandatory during apply.
@@ -149,3 +154,4 @@ Cancellation is cooperative during payload hashing and before commit.
 - [Library architecture](../../../architecture/library.md)
 - [Library change publication](change-publication.md)
 - [Supported audio files](../../../reference/media/audio-file.md)
+- [RFC 0004: scan file revalidation](../../../rfc/0004-scan-file-revalidation.md)

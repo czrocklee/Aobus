@@ -618,6 +618,8 @@ namespace ao::gtk::layout
         {
           APP_LOG_ERROR(
             "Failed to parse edit value for {}: {}", rt::trackFieldId(field), editValueResult.error().message);
+          _notifications.post(
+            rt::NotificationSeverity::Error, editValueResult.error().message, rt::NotificationLifetime::history());
           return false;
         }
 
@@ -630,9 +632,8 @@ namespace ao::gtk::layout
 
         auto const replyResult = _editSessionPtr->submitMetadata(patch);
 
-        if (!replyResult)
+        if (reportMetadataSubmissionFailure(replyResult, "Metadata update"))
         {
-          APP_LOG_ERROR("Metadata update failed: {}", replyResult.error().message);
           return false;
         }
 
@@ -641,14 +642,8 @@ namespace ao::gtk::layout
           case rt::TrackAuthoringStatus::Applied: editor.setText(newText); return true;
           case rt::TrackAuthoringStatus::NoOp: editor.setText(oldText); return true;
           case rt::TrackAuthoringStatus::Stale:
-            APP_LOG_ERROR("Metadata update unavailable: Library changed while this edit was open");
-            return false;
           case rt::TrackAuthoringStatus::Missing:
-            APP_LOG_ERROR("Metadata update unavailable: one or more selected tracks no longer exist");
-            return false;
-          case rt::TrackAuthoringStatus::Unavailable:
-            APP_LOG_ERROR("Metadata update unavailable: library editing is currently unavailable");
-            return false;
+          case rt::TrackAuthoringStatus::Unavailable: return false;
         }
 
         return false;

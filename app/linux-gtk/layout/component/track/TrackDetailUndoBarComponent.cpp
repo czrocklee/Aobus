@@ -6,6 +6,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
+#include <ao/rt/AppRuntime.h>
+#include <ao/rt/NotificationService.h>
+#include <ao/rt/NotificationState.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -28,7 +31,7 @@ namespace ao::gtk::layout
     {
     public:
       TrackDetailUndoBarComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
-        : _undoController{ctx.detailUndo}
+        : _undoController{ctx.detailUndo}, _notifications{ctx.runtime.notifications()}
       {
         _bar.set_orientation(Gtk::Orientation::HORIZONTAL);
         _bar.set_spacing(8);
@@ -47,7 +50,11 @@ namespace ao::gtk::layout
           {
             if (_undoController != nullptr)
             {
-              _undoController->undo();
+              if (auto const result = _undoController->undo(); !result)
+              {
+                _notifications.post(
+                  rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+              }
             }
           });
         _bar.append(_undoButton);
@@ -90,6 +97,7 @@ namespace ao::gtk::layout
       }
 
       TrackDetailUndoController* _undoController = nullptr;
+      rt::NotificationService& _notifications;
       Gtk::Box _bar{Gtk::Orientation::HORIZONTAL, 0};
       Gtk::Label _label;
       Gtk::Button _undoButton{"Undo"};

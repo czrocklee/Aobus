@@ -195,6 +195,23 @@ class DocCheckTest(unittest.TestCase):
         self.assertIn(("metadata", "governed documents must start with YAML front matter"), messages)
         self.assertTrue(any("does not belong under spec/" in message for _, message in messages))
 
+    def test_rejects_terminal_rfc_statuses(self):
+        for terminal_status in ("implemented", "rejected"):
+            with self.subTest(status=terminal_status), tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                _, base, _ = self._valid_rfc_pair(root)
+                base.write_text(
+                    base.read_text(encoding="utf-8").replace("status: draft", f"status: {terminal_status}"),
+                    encoding="utf-8",
+                )
+
+                messages = [issue.message for issue in doccheck.check_tree(root)]
+
+            self.assertIn(
+                f"status '{terminal_status}' is invalid for rfc (accepted, draft, in-review)",
+                messages,
+            )
+
     def test_reports_duplicate_ids_broken_links_anchors_and_plan_links(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

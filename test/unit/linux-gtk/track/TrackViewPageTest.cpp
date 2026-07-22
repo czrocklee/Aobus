@@ -21,12 +21,15 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
+#include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -204,5 +207,71 @@ namespace ao::gtk::test
     auto const groupedRows = materializedRowsForPage();
     CHECK(groupedRows > 0);
     CHECK(groupedRows < kMaximumPrefetchedRows);
+  }
+
+  TEST_CASE("TrackViewPage - stale inline metadata keeps the row value and shows status",
+            "[gtk][regression][track-view][metadata]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto trackId = kInvalidTrackId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     { trackId = library::test::addTrack(musicLibrary, {.title = "Before"}); }};
+    auto& runtime = fixture.runtime();
+    auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
+    sourcePtr->addInitial(trackId);
+    auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
+      rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+    auto rowCache = TrackRowCache{runtime.library()};
+    auto modelPtr = TrackListModel::create(rowCache);
+    modelPtr->bindProjection(projectionPtr);
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto imageCache = ImageCache{200};
+    auto thumbnailLoader = ThumbnailLoader{runtime.library(), imageCache, runtime.async()};
+    auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};
+    auto window = Gtk::Window{};
+    window.set_child(page);
+    window.set_default_size(720, 320);
+    window.present();
+    drainGtkEvents();
+
+    Gtk::Stack* titleStack = nullptr;
+
+    for (auto* const stack : collectAll<Gtk::Stack>(page))
+    {
+      auto* const label = dynamic_cast<Gtk::Label*>(stack->get_child_by_name("display"));
+
+      if (label != nullptr && label->get_text() == "Before")
+      {
+        titleStack = stack;
+        break;
+      }
+    }
+
+    REQUIRE(titleStack != nullptr);
+    auto* const entry = dynamic_cast<Gtk::Entry*>(titleStack->get_child_by_name("edit"));
+    REQUIRE(entry != nullptr);
+    titleStack->set_visible_child("edit");
+    REQUIRE(emitFocusEnter(*entry));
+    entry->set_text("After");
+    REQUIRE(runtime.library().writer().createList(
+      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
+    emitActivate(*entry);
+    drainGtkEvents();
+
+    auto* const statusLabel = findWidgetByClass<Gtk::Label>(page, "ao-track-status-message");
+    REQUIRE(statusLabel != nullptr);
+    CHECK(statusLabel->get_visible());
+    CHECK(statusLabel->get_text() == "Library changed while this edit was open. Reload the value and try again.");
+    auto const rowPtr = rowCache.trackRow(trackId);
+    REQUIRE(rowPtr);
+    CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Before");
+    auto const transaction = runtime.musicLibrary().readTransaction();
+    auto const optView =
+      runtime.musicLibrary().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optView);
+    CHECK(library::test::trackSpecFromView(runtime.musicLibrary(), *optView).title == "Before");
+
+    window.close();
+    drainGtkEvents();
   }
 } // namespace ao::gtk::test

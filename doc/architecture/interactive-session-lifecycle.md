@@ -40,6 +40,8 @@ GTK coordinates a restorable, replaceable window/runtime pair, while TUI creates
 
 `AppRuntime` extends `CoreRuntime` with `ViewService`, `WorkspaceService`, playback transport and succession, the workspace `ConfigStore`, and playback-session persistence.
 It is the lifetime root for these services rather than a universal behavioral facade.
+Construction requires an owning workspace `ConfigStore` and rejects its absence before building the internal service graph.
+An omitted playback-session store uses that workspace store; an explicit playback-session store remains a separate override.
 
 `CoreRuntime` remains the smaller composition used by CLI workflows and owns no interactive session lifecycle.
 
@@ -50,6 +52,8 @@ Application-global configuration, shell layout stores, component state, and appl
 The library database, per-library workspace state, views, sources, playback stack, runtime observers, and window are replaced together.
 
 `MainWindowCoordinator` currently sequences library-backed page initialization, workspace restoration, presentation preference application, default-view creation, playback restoration, and checkpoints.
+The preference pass currently replaces exact presentations on restored views.
+[RFC 0018](../rfc/0018-preserve-restored-view-presentation.md) proposes removing that pass while keeping GTK as the lifecycle owner.
 `app/linux-gtk/main.cpp` owns active-library replacement because the operation destroys and recreates the window-owned runtime graph.
 
 ### TUI composition root
@@ -126,9 +130,10 @@ TUI exits its event loop, stops runtime work, and releases its single compositio
 ## Failure, cancellation, and lifetime boundaries
 
 GTK aborts active-library replacement when preparation cannot discard the old restorable playback session.
+The old window presents the preparation error in a parent-bound message and remains the active, usable pair; the failure also returns to the replacement caller so it cannot proceed.
 Several current checkpoint paths remain best-effort or log-only, so successful preparation is not proof that every old payload became durable.
 The grouped store now makes each requested mutation a fail-closed one-shot replacement, but it does not add workflow acknowledgement.
-[RFC 0015](../rfc/0015-fail-closed-config-store.md) records why a generic transaction receipt and recovery state machine were rejected.
+There is no generic transaction receipt or recovery state machine.
 
 GTK defers replacement until after the portal callback returns so a dialog callback does not synchronously destroy its own window and coordinator.
 A prepared old window cannot later overwrite the new global selection during hide or destruction.
@@ -136,9 +141,8 @@ Before a native Open Library completion can request replacement, it must enter t
 Replacing the pair destroys that coordinator; a completion delivered afterward cannot enter the closed scope or reach the old pair.
 Native cancellation is requested during teardown but is not the lifetime proof.
 
-[RFC 0018](../rfc/0018-interactive-session-lifecycle.md) proposes one frontend-neutral lifecycle state machine.
-[RFC 0019](../rfc/0019-transactional-active-library-switch.md) proposes prepared runtime candidates and rollback-safe activation.
-Neither proposal is current, and both update this owner only after implementation.
+[RFC 0019](../rfc/0019-safe-active-library-replacement.md) proposes preparing a replacement GTK pair before releasing the working pair.
+That proposal is not current behavior; GTK and TUI lifecycle ownership remains separate.
 
 ## Implementation map
 
@@ -169,4 +173,5 @@ Neither proposal is current, and both update this owner only after implementatio
 - [Presentation architecture](presentation.md)
 - [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
 - [Workspace session specification](../spec/workspace/session.md)
-- [RFC 0026: lifetime-safe GTK file-dialog callbacks](../rfc/0026-lifetime-safe-file-dialog-callbacks.md)
+- [RFC 0018: preserve restored view presentation](../rfc/0018-preserve-restored-view-presentation.md)
+- [RFC 0019: safe active-library replacement](../rfc/0019-safe-active-library-replacement.md)

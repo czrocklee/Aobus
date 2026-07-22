@@ -42,14 +42,6 @@
 
 namespace ao::gtk::portal
 {
-  namespace
-  {
-    bool isExpectedDialogCancellation(Gtk::DialogError const& error) noexcept
-    {
-      return error.code() == Gtk::DialogError::CANCELLED || error.code() == Gtk::DialogError::DISMISSED;
-    }
-  } // namespace
-
   ImportExportCoordinator::ImportExportCoordinator(Gtk::Window& parent,
                                                    rt::AppRuntime& runtime,
                                                    ImportExportCallbacks callbacks,
@@ -87,14 +79,16 @@ namespace ao::gtk::portal
                                  }
                                  catch (Gtk::DialogError const& e)
                                  {
-                                   if (!isExpectedDialogCancellation(e))
+                                   if (!isExpectedNativeChooserCancellation(e.code()))
                                    {
                                      APP_LOG_ERROR("Error selecting folder: {}", e.what());
+                                     presentFileDialogError("Could not select a music library folder", e.what());
                                    }
                                  }
                                  catch (Glib::Error const& e)
                                  {
                                    APP_LOG_ERROR("Error selecting folder: {}", e.what());
+                                   presentFileDialogError("Could not select a music library folder", e.what());
                                  }
                                }),
                              _fileDialogCancellablePtr);
@@ -200,14 +194,16 @@ namespace ao::gtk::portal
     }
     catch (Gtk::DialogError const& e)
     {
-      if (!isExpectedDialogCancellation(e))
+      if (!isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting export file: {}", e.what());
+        presentFileDialogError("Could not select an export file", e.what());
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting export file: {}", e.what());
+      presentFileDialogError("Could not select an export file", e.what());
     }
   }
 
@@ -288,14 +284,28 @@ namespace ao::gtk::portal
     }
     catch (Gtk::DialogError const& e)
     {
-      if (!isExpectedDialogCancellation(e))
+      if (!isExpectedNativeChooserCancellation(e.code()))
       {
         APP_LOG_ERROR("Error selecting import file: {}", e.what());
+        presentFileDialogError("Could not select a library backup", e.what());
       }
     }
     catch (Glib::Error const& e)
     {
       APP_LOG_ERROR("Error selecting import file: {}", e.what());
+      presentFileDialogError("Could not select a library backup", e.what());
     }
+  }
+
+  void ImportExportCoordinator::presentFileDialogError(std::string_view operation, std::string_view message)
+  {
+    auto* const dialog = AppDialog::presentMessage(
+      _parent,
+      "File Selection Failed",
+      std::format("{}: {}", operation, message),
+      {AppDialogAction{.label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+      Gtk::ResponseType::CLOSE);
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
   }
 } // namespace ao::gtk::portal

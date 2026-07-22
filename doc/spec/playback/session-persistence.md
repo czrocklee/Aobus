@@ -139,7 +139,8 @@ Only schema version `3` is accepted; older or newer values are rejected rather t
 
 GTK injects the global application config as the playback-session store, while current TUI composition uses its runtime workspace config when no separate store is injected.
 The payload itself contains library-scoped track/list ids but no durable library identity.
-The current GTK switch workflow discards it before replacing the active library; RFC 0019 proposes library-bound sessions and transactional switching.
+The current GTK switch workflow discards it before replacing the active library.
+[RFC 0019](../../rfc/0019-safe-active-library-replacement.md) preserves that idle-start policy while preparing the replacement pair before releasing the working pair.
 
 ## Frontend observations
 

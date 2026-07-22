@@ -58,6 +58,7 @@ namespace ao::query
   public:
     PlanEvaluator() = default;
 
+    /// @pre @p track provides every storage tier required by the bound plan's access profile.
     bool matches(PlanBinding const& binding, library::TrackView const& track) const;
 
     /**
@@ -66,11 +67,13 @@ namespace ao::query
      * Requires `plan.requiresDictionary == false`. This constructs a binding per
      * call; reuse PlanBinding when evaluating a batch.
      */
+    /// @pre `plan.requiresDictionary == false` and @p track satisfies `plan.accessProfile`.
     bool matches(ExecutionPlan const& plan, library::TrackView const& track) const;
 
+    /// @pre @p track provides every storage tier required by the bound plan's access profile.
     bool evaluateFull(PlanBinding const& binding, library::TrackView const& track) const;
 
-    /// @pre `plan.requiresDictionary == false`.
+    /// @pre `plan.requiresDictionary == false` and @p track satisfies `plan.accessProfile`.
     bool evaluateFull(ExecutionPlan const& plan, library::TrackView const& track) const;
 
   private:

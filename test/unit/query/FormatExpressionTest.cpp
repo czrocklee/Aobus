@@ -221,33 +221,6 @@ namespace ao::query::test
     output += " appended garbage";
     evaluator.evaluate(binding, fixture.view(), output);
     CHECK(output == "Johann Sebastian Bach|Cello Suite|Archiv 123|1720|FLAC");
-
-    evaluator.evaluate(binding, fixture.coldOnlyView(), output);
-    CHECK(output.empty());
-  }
-
-  TEST_CASE("FormatExpression - returns empty when required track data is missing", "[query][unit][format-expression]")
-  {
-    auto fixture = TrackFixture{formatTrackSpec()};
-    auto evaluator = FormatEvaluator{};
-
-    SECTION("Hot plan with cold-only track")
-    {
-      auto ast = parseOk("$artist");
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
-      auto context = library::DictionaryReadContext{fixture.dictionary()};
-      auto const binding = FormatBinding{plan, context};
-      CHECK(evaluator.evaluate(binding, fixture.coldOnlyView()).empty());
-    }
-
-    SECTION("Cold plan with hot-only track")
-    {
-      auto ast = parseOk("$trackNumber");
-      auto compiler = FormatCompiler{};
-      auto plan = compileOk(compiler, ast);
-      CHECK(evaluator.evaluate(plan, fixture.hotOnlyView()).empty());
-    }
   }
 
   TEST_CASE("FormatExpression - rejects query-only expressions", "[query][unit][format-expression]")

@@ -4,10 +4,13 @@
 #include "app/MainWindow.h"
 
 #include "app/AppConfigStore.h"
+#include "app/AppDialog.h"
+#include "app/GtkMainContextExecutor.h"
 #include "app/WindowState.h"
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
@@ -15,9 +18,12 @@
 #include <ao/rt/AppPrefsState.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/actionmap.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -126,6 +132,57 @@ namespace ao::gtk::test
     auto persistedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(persistedSession);
     CHECK(persistedSession.lastLibraryPath == "/tmp/new-library");
+  }
+
+  TEST_CASE("MainWindow - failed library preparation stays visible and keeps the active window usable",
+            "[gtk][regression][main-window][session]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto tempDir = ao::test::TempDir{};
+    auto const musicRoot = tempDir.path() / "music";
+    auto const databasePath = tempDir.path() / "database";
+    auto const invalidPlaybackStorePath = tempDir.path() / "playback-store-directory";
+    std::filesystem::create_directories(musicRoot);
+    std::filesystem::create_directories(databasePath);
+    std::filesystem::create_directories(invalidPlaybackStorePath);
+    auto invalidPlaybackStore = rt::ConfigStore{invalidPlaybackStorePath};
+    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+      .executorPtr = std::make_unique<GtkMainContextExecutor>(),
+      .musicRoot = musicRoot,
+      .databasePath = databasePath,
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
+      .playbackSessionConfigStore = &invalidPlaybackStore,
+    }};
+    auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
+    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    window.applyTheme(uimodel::ThemePreset::Modern);
+
+    auto const prepared = window.prepareForLibrarySwitch();
+
+    REQUIRE_FALSE(prepared);
+    CHECK(window.musicRoot() == runtime.musicRoot());
+    CHECK_NOTHROW(window.playback());
+    AppDialog* errorDialog = nullptr;
+
+    for (auto* const topLevel : Gtk::Window::list_toplevels())
+    {
+      if (auto* const dialog = dynamic_cast<AppDialog*>(topLevel);
+          dialog != nullptr && dialog->get_title() == "Unable to Switch Libraries")
+      {
+        errorDialog = dialog;
+        break;
+      }
+    }
+
+    REQUIRE(errorDialog != nullptr);
+    CHECK(errorDialog->get_transient_for() == &window);
+    CHECK(errorDialog->has_css_class("ao-theme-modern"));
+    window.applyTheme(uimodel::ThemePreset::Classic);
+    CHECK_FALSE(errorDialog->has_css_class("ao-theme-modern"));
+    CHECK(errorDialog->has_css_class("ao-theme-classic"));
+    errorDialog->response(Gtk::ResponseType::CLOSE);
+    drainGtkEvents();
   }
 
   TEST_CASE("MainWindow - restores saved output when audio provider is bootstrapped before session load",

@@ -231,7 +231,8 @@ Library database failures remain core/runtime library failures above that adapte
 
 `ConfigStore` work is synchronous and has no cancellation boundary.
 Owners that schedule persistence asynchronously capture state under their own executor and must not move a shared mutable store to a worker while other clients continue to access it directly.
-The [runtime execution architecture](runtime-execution.md) owns executor and teardown direction, and RFC 0005 tracks the proposed serialized asynchronous writer.
+The [runtime execution architecture](runtime-execution.md) owns executor and teardown direction.
+No shared asynchronous configuration writer is proposed; each semantic owner decides whether its small synchronous save belongs on the callback executor or needs a private asynchronous boundary.
 
 Before a runtime or library switch ends, owners that require a final checkpoint run while the referenced runtime state and stores still exist.
 Playback-session shutdown precedes destruction of its sequence, transport, async runtime, and borrowed config store.
@@ -287,10 +288,4 @@ The specialized layout component-state store provides its own mutex-protected op
 - [List presentation preference specification](../spec/presentation/list-preference.md)
 - [LMDB operation specification](../spec/storage/lmdb-operation.md)
 - [Library database reference](../reference/library/storage/database.md)
-- [RFC 0005: coherent playback application boundary](../rfc/0005-coherent-playback-boundary.md), including the proposed serialized configuration writer
-- [RFC 0010: versioned presentation state](../rfc/0010-versioned-presentation-state.md), implemented with layered strict schemas, stable ids, and no legacy numeric migration
-- [RFC 0014: observable atomic replacement](../rfc/0014-observable-atomic-replacement.md), rejected after narrower private-file, RAII-cleanup, and fault-test hardening was implemented
-- [RFC 0015: fail-closed grouped configuration transactions](../rfc/0015-fail-closed-config-store.md), rejected after a narrower candidate-save boundary removed the destructive split API without blocked-store recovery or commit receipts
-- [RFC 0025: bounded shell layout documents](../rfc/0025-bounded-shell-layout-documents.md), including strict version dispatch, resource budgets, and unsupported-file preservation
-- [RFC 0032: explicit managed-state schemas](../rfc/0032-explicit-managed-state-schemas.md), implemented by the owner-local schemas and schema-neutral Core/store boundaries
 - [Playback session persistence specification](../spec/playback/session-persistence.md) and [state reference](../reference/playback/session-state.md)

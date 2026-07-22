@@ -99,6 +99,7 @@ namespace ao::query
   class FormatEvaluator final
   {
   public:
+    /// @pre @p track provides every storage tier required by the bound plan's access profile.
     std::string evaluate(FormatBinding const& binding, library::TrackView const& track) const;
 
     /**
@@ -107,18 +108,20 @@ namespace ao::query
      * Requires `plan.requiresDictionary == false`. This constructs a binding per
      * call; reuse FormatBinding when evaluating a batch.
      */
+    /// @pre `plan.requiresDictionary == false` and @p track satisfies `plan.accessProfile`.
     std::string evaluate(FormatPlan const& plan, library::TrackView const& track) const;
 
     /**
      * Evaluate into caller-owned storage.
      *
-     * Clears @p output before evaluation, including when @p track does not
-     * provide the data required by @p plan. Retained string capacity may be
-     * reused by later calls.
+     * Clears @p output before evaluation. Retained string capacity may be reused
+     * by later calls.
+     *
+     * @pre @p track provides every storage tier required by the bound plan's access profile.
      */
     void evaluate(FormatBinding const& binding, library::TrackView const& track, std::string& output) const;
 
-    /// @pre `plan.requiresDictionary == false`.
+    /// @pre `plan.requiresDictionary == false` and @p track satisfies `plan.accessProfile`.
     void evaluate(FormatPlan const& plan, library::TrackView const& track, std::string& output) const;
   };
 

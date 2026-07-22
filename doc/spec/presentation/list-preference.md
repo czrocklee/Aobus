@@ -57,6 +57,9 @@ The active runtime view separately retains:
 
 The preference map is a default-selection authority, not a mirror of every active or historical view.
 
+GTK startup currently deviates from this rule by applying the default to every restored view.
+[RFC 0018](../../rfc/0018-preserve-restored-view-presentation.md) proposes removing that post-restore pass.
+
 ## Resolution
 
 Presentation resolution for a list follows this order:
@@ -143,3 +146,4 @@ Quick-filter controls and Smart List editors may display the current presentatio
 - [Track presentation presets](../../reference/presentation/track-preset.md)
 - [Persisted presentation state](../../reference/presentation/persisted-state.md)
 - [Workspace navigation](../workspace/navigation.md)
+- [RFC 0018: preserve restored view presentation](../../rfc/0018-preserve-restored-view-presentation.md)

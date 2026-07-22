@@ -455,15 +455,11 @@ namespace ao::query
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
+    gsl_Expects(hasRequiredTrackData(plan.accessProfile, track));
 
     if (plan.matchesAll)
     {
       return true;
-    }
-
-    if (!hasRequiredTrackData(plan.accessProfile, track))
-    {
-      return false;
     }
 
     if (state.tagBloomMask != 0 && (track.tags().bloom() & state.tagBloomMask) != state.tagBloomMask)
@@ -485,15 +481,11 @@ namespace ao::query
   {
     auto const& state = *binding._implPtr;
     auto const& plan = *state.plan;
+    gsl_Expects(hasRequiredTrackData(plan.accessProfile, track));
 
     if (plan.matchesAll)
     {
       return true;
-    }
-
-    if (!hasRequiredTrackData(plan.accessProfile, track))
-    {
-      return false;
     }
 
     _registers.assign(plan.instructions.size() + kReservedRegisters, 0);

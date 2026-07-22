@@ -84,7 +84,8 @@ Worker tasks operate on thread-safe/core facilities or isolated values and publi
 
 Mutating library tasks enter coordinator maintenance on the callback executor before slow preparation begins.
 The maintenance guard may accompany worker preparation, but it carries no LMDB transaction and no writer mutex.
-Worker code acquires a coordinator-owned mutation only for a bounded apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before maintenance exit can advertise authoring availability.
+Worker code acquires a coordinator-owned mutation only for its apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before maintenance exit can advertise authoring availability.
+Identity backfill already commits bounded batches, while scan apply currently commits its complete prepared plan at once.
 Read-only export and scan-plan construction need no maintenance admission.
 
 ### Dedicated subsystem threads
@@ -126,7 +127,7 @@ A mutating library task refines the round trip:
 ```text
 callback executor: enter Maintenance(operationKind)
   -> worker pool: parse, walk, hash, or otherwise prepare without writer ownership
-  -> bounded coordinator mutation: revalidate, apply, commit revision R
+  -> coordinator mutation: revalidate, apply, commit revision R
   -> callback executor: publish LibraryChangeSet R and run synchronous reducers
   -> exit maintenance and publish Available(runtimeInstanceId, R)
 ```
@@ -150,7 +151,7 @@ backend/decoder callback
 ```
 
 The callback executor is therefore the convergence point for application-visible state even when the work originates on several independent threads.
-The current Engine non-realtime queue and Player-to-executor task stream do not form one bounded/coalescing observation boundary; [RFC 0028](../rfc/0028-bounded-audio-observation-delivery.md) proposes that refinement.
+The current Engine non-realtime queue and Player-to-executor task stream have no combined capacity or coalescing contract.
 
 ## Structural constraints
 
@@ -233,5 +234,3 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Audio execution and concurrency specification](../spec/playback/audio-execution.md)
 - [Concurrency and sanitizer guidance](../development/test/concurrency-and-sanitizer.md) for contributor validation workflow
-- [RFC 0027: loop executor for non-toolkit hosts](../rfc/0027-loop-executor.md)
-- [RFC 0028: bounded audio observation delivery](../rfc/0028-bounded-audio-observation-delivery.md)

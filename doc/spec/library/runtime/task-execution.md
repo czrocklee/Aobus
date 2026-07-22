@@ -27,7 +27,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 - Maintenance closes interactive admission for the whole interval but does not itself hold coordinator writer ownership or an LMDB write transaction.
 - YAML export and scan-plan construction rely on one LMDB read snapshot and do not enter maintenance.
 - Parsing, filesystem walking, media interpretation, and identity fingerprinting run without writer ownership.
-- Import and scan apply acquire one bounded maintenance mutation for prepared apply; identity backfill acquires one per write-back batch.
+- Import and scan apply acquire one maintenance mutation for prepared apply; identity backfill acquires one per bounded write-back batch.
 - Every effective maintenance mutation commits and completes ordered change publication through the same coordinator as an interactive command.
 
 ## Maintenance states

@@ -30,7 +30,7 @@ TYPE_STATUSES: dict[str, frozenset[str]] = {
     "reference": frozenset({"draft", "current", "deprecated"}),
     "development": frozenset({"draft", "current", "deprecated"}),
     "decision": frozenset({"proposed", "accepted", "superseded", "rejected"}),
-    "rfc": frozenset({"draft", "in-review", "accepted", "rejected", "implemented"}),
+    "rfc": frozenset({"draft", "in-review", "accepted"}),
 }
 
 REQUIRED_METADATA = ("id", "type", "status", "domain", "summary")

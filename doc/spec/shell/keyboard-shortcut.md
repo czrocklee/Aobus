@@ -68,7 +68,7 @@ Unknown action ids are reportable by the model and cannot become valid catalog-b
 The editor never silently steals a conflicting binding.
 The grouped store makes each requested save a fail-closed complete-document replacement, but the application wrapper reports failure only through logging.
 A live accelerator update can therefore precede proof of durable storage; this workflow-level acknowledgement and reporting policy remains owned by the shell rather than the generic store.
-[RFC 0015](../../rfc/0015-fail-closed-config-store.md) records why a generic commit-receipt system was rejected.
+The store does not expose a generic commit-receipt system.
 
 Shortcut operations are synchronous and expose no cancellation.
 The transient capture popup defers self-destruction through an idle callback whose connection is cancelled by its destructor.

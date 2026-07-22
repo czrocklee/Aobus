@@ -183,7 +183,7 @@ A change that expands the storable predicate surface beyond what an existing sam
 The old version is then rejected or explicitly migrated; the current database implementation accepts only an exact version match and has no in-place migration path.
 
 Library YAML, playback-session state, workspace state, and CLI automation independently own the compatibility of predicate text they contain or accept.
-An expression carries no nested dialect id or version; [RFC 0024](../../rfc/0024-versioned-predicate-dialect.md) rejected that additional version axis.
+An expression carries no nested dialect id or version; the containing surface owns compatibility.
 
 The public typed core variable descriptor catalog is also used by runtime field bridges, completion, generated CLI help, canonical diagnostic field names, and unknown-field diagnostics.
 Those consumers must change with this surface rather than maintaining parallel inventories.
@@ -240,4 +240,3 @@ Representative invalid forms are:
 - [Format language](format-language.md)
 - [Track field catalog](../library/model/track-field.md)
 - [Library database](../library/storage/database.md)
-- [RFC 0024: versioned predicate dialect](../../rfc/0024-versioned-predicate-dialect.md), rejected in favor of containing-surface version ownership
