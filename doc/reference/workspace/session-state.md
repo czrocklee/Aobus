@@ -14,15 +14,16 @@ It enumerates the private persistence document, nested view presentations and cu
 
 The required `presentationVersion` is currently `1`.
 It versions the nested presentation vocabulary, not the complete workspace document.
-The payload has no root workspace schema version, exact active-view index, or resource budget.
+The payload has no root workspace schema version or resource budget.
 
-The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, focus fallback, commit, and failures after deserialization.
+The [workspace session specification](../../spec/workspace/session.md) owns capture, candidate creation, exact focus selection, commit, and failures after deserialization.
 The [application managed-state surface](../persistence/application-config.md) owns document and writer registration.
 
 ## Code boundary
 
 This surface belongs to the application runtime layer from the [system architecture](../../architecture/system-overview.md), as refined by the [workspace architecture](../../architecture/workspace.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
 `WorkspaceSessionState` remains the runtime semantic candidate.
+Its `activeViewIndex` is a `std::size_t`; the private persistence DTO stores the field as `std::uint32_t`.
 The private `WorkspaceSessionDocument` and nested stored DTOs in `app/runtime/WorkspaceSessionYamlSchema.h` are the exact YAML model.
 `WorkspaceSessionYamlSchema.cpp` converts between that document and runtime `TrackListViewConfig`, `TrackPresentationSpec`, and custom-preset values.
 
@@ -41,12 +42,11 @@ Its value is one mapping with these required fields in canonical emitted order:
 |---|---|---|
 | `presentationVersion` | Unsigned 32-bit scalar. | Required and exactly `1`. |
 | `openViews` | Sequence of view mappings. | Ordered semantic view reconstruction records. |
-| `activeListId` | Unsigned 32-bit scalar. | Advisory focus hint; `0` is invalid/no hint. |
+| `activeViewIndex` | Unsigned 32-bit scalar. | Zero-based position of the exact active entry in `openViews`. |
 | `customPresets` | Sequence of custom-preset mappings. | Complete workspace custom-preset collection. |
 
 The session stores no `ViewId`.
-`activeListId` cannot uniquely identify two views over the same base list and follows the focus heuristic in the workspace session specification.
-[RFC 0017](../../rfc/0017-exact-active-workspace-view.md) proposes replacing it with an index into `openViews`.
+`activeViewIndex` identifies an ordered semantic entry, so multiple filtered or differently presented views over one base list remain unambiguous across runtime lifetimes.
 
 ### Track-list view entry
 
@@ -100,10 +100,14 @@ Every `customPresets` entry contains:
 - The explicit schema validates each mapping and sequence recursively; every listed member is required.
 - Unknown members, missing members, wrong node kinds, malformed scalar values, and malformed vector elements reject the whole workspace document.
 - `presentationVersion` must be `1`.
+- When `openViews` is empty, `activeViewIndex` must be `0`.
+- When `openViews` is nonempty, `activeViewIndex` must be smaller than `openViews.size()`.
+- Deserialization violations of either active-index rule return `FormatRejected` before candidate-view creation.
 - View list ids must be nonzero; existence in the active library is checked while candidate views are created.
 - Closed field, sort, group, and direction tokens must resolve exactly and case-sensitively.
 - Duplicate sort fields and duplicate values within either field collection reject the document.
 - Presentation ids must be nonempty and deserialized presentations must have at least one visible field.
+- Serialization requires the semantic active-view index to fit the unsigned 32-bit DTO and satisfy the empty/nonempty bounds; violations return `InvalidState`.
 - Serialization requires every live view to supply an exact presentation and rejects invalid enum values, duplicate sort fields, invalid list ids, and empty ids as `InvalidState`.
 - Serialization normalizes permitted live defaults, deduplicates field collections, and supplies `title` for an empty visible set, so canonical output always has a nonempty `visibleFields` sequence.
 - Structural and semantic deserialize completes before `WorkspaceService` creates or installs candidate views.
@@ -118,8 +122,11 @@ Unversioned legacy workspace state, numeric enums, unknown closed tokens, and un
 An unsupported presentation version returns `NotSupported` before version-specific sibling fields are interpreted.
 
 Strict deserialization fixes the current root member set, so changing those keys cannot remain an unnoticed version-1 edit.
-However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no complete root version, exact active-view identity, or collection budgets.
+However, `presentationVersion` promises only the nested presentation vocabulary; it supplies no complete root version or collection budgets.
 Those remaining compatibility limits are why this payload is not described as a complete version-1 workspace envelope.
+
+The root field set is exact.
+Alternate root field names are not parsed, migrated, retained as aliases, or emitted.
 
 Changing a stable presentation token requires an explicit compatibility decision.
 Built-in and custom presentation ids remain opaque references, while the exact field/sort/group/direction vocabulary is closed for a given presentation version.
@@ -148,7 +155,7 @@ workspace:
           - duration
         redundantFields:
           - album
-  activeListId: 4294967295
+  activeViewIndex: 0
   customPresets:
     - label: Works
       basePresetId: library
@@ -177,8 +184,8 @@ Mapping order is not semantically significant; canonical explicit emission follo
 
 ## Test authority
 
-- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects exact semantic conversion, canonical tokens, and invalid-object rejection.
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, unsupported, strict-schema, fallback, and transactional restoration outcomes.
+- [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects exact semantic conversion, canonical root emission, active-index bounds and representation, stable tokens, and invalid-object rejection.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) protects missing, malformed, unsupported, strict-schema, exact-focus, bounds, empty-candidate, and transactional restoration outcomes.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects canonical persisted text and presentation reconstruction across runtime instances.
 - [`TrackFieldTest.cpp`](../../../test/unit/runtime/TrackFieldTest.cpp) protects exhaustive stable token lookup.
 
@@ -192,4 +199,3 @@ Mapping order is not semantically significant; canonical explicit emission follo
 - [Grouped configuration store](../../spec/persistence/config-store.md)
 - [Runtime track field catalog](../library/model/track-field.md)
 - [Track presentation presets](../presentation/track-preset.md)
-- [RFC 0017: exact active workspace view](../../rfc/0017-exact-active-workspace-view.md)

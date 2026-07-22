@@ -54,7 +54,7 @@ namespace ao::rt::detail
   {
     std::uint32_t presentationVersion = kWorkspacePresentationVersion;
     std::vector<StoredTrackListViewConfig> openViews{};
-    std::uint32_t activeListId = 0;
+    std::uint32_t activeViewIndex = 0;
     std::vector<StoredCustomTrackPresentationPreset> customPresets{};
   };
 

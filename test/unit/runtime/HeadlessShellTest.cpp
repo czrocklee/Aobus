@@ -109,6 +109,7 @@ namespace ao::rt::test
 
         auto const encoded = ao::test::readFile(workspaceConfigPath);
         CHECK(encoded.contains("presentationVersion: 1"));
+        CHECK(encoded.contains("activeViewIndex: 1"));
         CHECK(encoded.contains("group: \"none\""));
         CHECK(encoded.contains("display-track-number"));
       }

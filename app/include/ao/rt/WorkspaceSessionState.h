@@ -7,6 +7,7 @@
 #include "ViewState.h"
 #include <ao/CoreIds.h>
 
+#include <cstddef>
 #include <vector>
 
 namespace ao::rt
@@ -14,7 +15,7 @@ namespace ao::rt
   struct WorkspaceSessionState final
   {
     std::vector<TrackListViewConfig> openViews{};
-    ListId activeListId = kInvalidListId;
+    std::size_t activeViewIndex = 0;
     std::vector<CustomTrackPresentationPreset> customPresets{};
   };
 } // namespace ao::rt

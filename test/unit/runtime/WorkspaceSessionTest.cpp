@@ -5,6 +5,7 @@
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ConfigStore.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
@@ -14,26 +15,37 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
 #include <ios>
 #include <memory>
+#include <string>
 #include <string_view>
 
 namespace
 {
   void writeWorkspaceConfig(std::filesystem::path const& path,
                             std::initializer_list<std::uint32_t> listIds,
-                            std::uint32_t activeListId,
+                            std::uint32_t activeViewIndex,
                             std::string_view group = "none",
                             std::uint32_t presentationVersion = 1)
   {
     auto file = std::ofstream{path};
     file << "workspace:\n";
     file << "  presentationVersion: " << presentationVersion << "\n";
-    file << "  openViews:\n";
+    file << "  openViews:";
+
+    if (listIds.size() == 0)
+    {
+      file << " []\n";
+    }
+    else
+    {
+      file << "\n";
+    }
 
     for (auto const listId : listIds)
     {
@@ -48,7 +60,7 @@ namespace
       file << "        redundantFields: []\n";
     }
 
-    file << "  activeListId: " << activeListId << "\n";
+    file << "  activeViewIndex: " << activeViewIndex << "\n";
     file << "  customPresets: []\n";
   }
 } // namespace
@@ -138,6 +150,84 @@ namespace ao::rt::test
     CHECK(state.listId == firstListId);
   }
 
+  TEST_CASE("WorkspaceService - session round-trip restores the exact active view over one list",
+            "[runtime][unit][workspace][session]")
+  {
+    std::size_t expectedActiveIndex = 0;
+
+    SECTION("First ordered view is active")
+    {
+      expectedActiveIndex = 0;
+    }
+
+    SECTION("Second ordered view is active")
+    {
+      expectedActiveIndex = 1;
+    }
+
+    auto tempDir = TempDir{};
+    auto listId = kInvalidListId;
+    auto nextListId = kInvalidListId;
+    auto firstPresentation = TrackPresentationSpec{};
+    auto secondPresentation = TrackPresentationSpec{};
+
+    {
+      auto runtime = makeRuntime(tempDir);
+      listId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Shared list"}));
+      nextListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "After restore"}));
+      auto const* songsPreset = builtinTrackPresentationPreset("songs");
+      auto const* albumsPreset = builtinTrackPresentationPreset("albums");
+      REQUIRE(songsPreset != nullptr);
+      REQUIRE(albumsPreset != nullptr);
+      firstPresentation = normalizeTrackPresentationSpec(songsPreset->spec);
+      secondPresentation = normalizeTrackPresentationSpec(albumsPreset->spec);
+      auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({
+        .target = FilteredListTarget{.listId = listId, .filterExpression = "$title ~ \"First\""},
+        .optPresentation =
+          NavigationPresentation{.mode = NavigationPresentationMode::Override, .spec = firstPresentation},
+      }));
+      auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({
+        .target = FilteredListTarget{.listId = listId, .filterExpression = "$title ~ \"Second\""},
+        .optPresentation =
+          NavigationPresentation{.mode = NavigationPresentationMode::Override, .spec = secondPresentation},
+      }));
+
+      if (expectedActiveIndex == 0)
+      {
+        REQUIRE(runtime.workspace().focusView(firstViewId));
+      }
+      else
+      {
+        CHECK(runtime.workspace().snapshot().activeViewId == secondViewId);
+      }
+
+      runtime.workspace().saveSession(runtime.workspaceConfigStore());
+    }
+
+    auto runtime = makeRuntime(tempDir);
+    REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
+    auto const restored = runtime.workspace().snapshot();
+    REQUIRE(restored.openViews.size() == 2);
+    CHECK(restored.activeViewId == restored.openViews[expectedActiveIndex]);
+    auto const firstState = runtime.views().trackListState(restored.openViews[0]);
+    auto const secondState = runtime.views().trackListState(restored.openViews[1]);
+    CHECK(firstState.listId == listId);
+    CHECK(firstState.filterExpression == "$title ~ \"First\"");
+    CHECK(firstState.presentation == firstPresentation);
+    CHECK(secondState.listId == listId);
+    CHECK(secondState.filterExpression == "$title ~ \"Second\"");
+    CHECK(secondState.presentation == secondPresentation);
+
+    REQUIRE(runtime.workspace().navigate({.target = nextListId}));
+    REQUIRE(runtime.workspace().goBack());
+    CHECK(runtime.workspace().snapshot().activeViewId == restored.openViews[expectedActiveIndex]);
+    auto const replayed = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    CHECK(replayed.filterExpression == (expectedActiveIndex == 0 ? "$title ~ \"First\"" : "$title ~ \"Second\""));
+    CHECK(replayed.presentation == (expectedActiveIndex == 0 ? firstPresentation : secondPresentation));
+  }
+
   TEST_CASE("WorkspaceService - multi-view restore publishes one complete snapshot",
             "[runtime][unit][workspace][session]")
   {
@@ -196,24 +286,79 @@ namespace ao::rt::test
     CHECK(result.error().code == Error::Code::FormatRejected);
   }
 
-  TEST_CASE("WorkspaceService - session restore falls back to front view if active is lost",
+  TEST_CASE("WorkspaceService - out-of-bounds active index rejects before mutation",
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
     auto runtime = makeRuntime(tempDir);
 
-    auto const listId = ao::test::requireValue(runtime.library().writer().createList(
-      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "A list"}));
+    auto const existingListId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Existing"}));
+    auto const storedListId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Stored"}));
+    auto const nextListId = ao::test::requireValue(runtime.library().writer().createList(
+      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Next"}));
+    auto const existingViewId = ao::test::requireValue(runtime.workspace().navigate({.target = existingListId}));
+    auto const* songsPreset = builtinTrackPresentationPreset("songs");
+    REQUIRE(songsPreset != nullptr);
+    auto customSpec = songsPreset->spec;
+    customSpec.id = "custom.keep";
+    REQUIRE(runtime.workspace().addCustomPreset(
+      CustomTrackPresentationPreset{.label = "Keep", .basePresetId = "songs", .spec = customSpec}));
+    auto const beforeSnapshot = runtime.workspace().snapshot();
+    auto const beforeViews = runtime.views().listViews();
     auto const configPath = tempDir.path() / "config.yaml";
-
-    writeWorkspaceConfig(configPath, {listId.raw()}, 9999);
+    writeWorkspaceConfig(configPath, {storedListId.raw()}, 1);
+    std::int32_t changeCount = 0;
+    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const&) { ++changeCount; });
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
-    REQUIRE(runtime.workspace().restoreSession(*storePtr));
+    auto const result = runtime.workspace().restoreSession(*storePtr);
 
-    auto layout = runtime.workspace().snapshot();
-    CHECK(layout.openViews.size() == 1);
-    CHECK(layout.activeViewId == layout.openViews.front());
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::FormatRejected);
+    CHECK(runtime.workspace().snapshot() == beforeSnapshot);
+    CHECK(runtime.views().listViews() == beforeViews);
+    CHECK(runtime.workspace().customPresets().size() == 1);
+    CHECK(changeCount == 0);
+
+    REQUIRE(runtime.workspace().navigate({.target = nextListId}));
+    REQUIRE(runtime.workspace().goBack());
+    CHECK(runtime.workspace().snapshot().activeViewId == existingViewId);
+  }
+
+  TEST_CASE("WorkspaceService - empty session preserves empty focus and selects an existing front view",
+            "[runtime][unit][workspace][session]")
+  {
+    auto tempDir = TempDir{};
+    auto const configPath = tempDir.path() / "empty.yaml";
+    writeWorkspaceConfig(configPath, {}, 0);
+    auto store = ConfigStore{configPath, ConfigStore::OpenMode::ReadOnly};
+
+    SECTION("Empty workspace remains unfocused")
+    {
+      auto runtime = makeRuntime(tempDir);
+      REQUIRE(runtime.workspace().restoreSession(store));
+      CHECK(runtime.workspace().snapshot().openViews.empty());
+      CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
+      CHECK(runtime.workspace().snapshot().revision == 0);
+    }
+
+    SECTION("Existing workspace selects its first view")
+    {
+      auto runtime = makeRuntime(tempDir);
+      auto const firstListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First existing"}));
+      auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
+        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second existing"}));
+      auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = firstListId}));
+      REQUIRE(runtime.workspace().navigate({.target = secondListId}));
+      auto const beforeViews = runtime.views().listViews();
+
+      REQUIRE(runtime.workspace().restoreSession(store));
+      CHECK(runtime.workspace().snapshot().activeViewId == firstViewId);
+      CHECK(runtime.views().listViews() == beforeViews);
+    }
   }
 
   TEST_CASE("WorkspaceService - failed session restore leaves workspace views focus and history unchanged",
@@ -225,7 +370,7 @@ namespace ao::rt::test
       LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Valid"}));
     auto const configPath = tempDir.path() / "partial.yaml";
 
-    writeWorkspaceConfig(configPath, {listId.raw(), 999999}, listId.raw());
+    writeWorkspaceConfig(configPath, {listId.raw(), 999999}, 0);
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     auto const result = runtime.workspace().restoreSession(*storePtr);
@@ -251,18 +396,18 @@ namespace ao::rt::test
 
     SECTION("Unsupported presentation version")
     {
-      writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw(), "none", 2);
+      writeWorkspaceConfig(configPath, {listId.raw()}, 0, "none", 2);
       expectedCode = Error::Code::NotSupported;
     }
 
     SECTION("Unknown group id")
     {
-      writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw(), "future-group");
+      writeWorkspaceConfig(configPath, {listId.raw()}, 0, "future-group");
     }
 
     SECTION("Unknown root field")
     {
-      writeWorkspaceConfig(configPath, {listId.raw()}, listId.raw());
+      writeWorkspaceConfig(configPath, {listId.raw()}, 0);
       std::ofstream{configPath, std::ios::app} << "  unexpected: true\n";
     }
 
@@ -283,7 +428,7 @@ namespace ao::rt::test
     auto const configPath = tempDir.path() / "unversioned.yaml";
     std::ofstream{configPath} << "workspace:\n"
                                  "  openViews: []\n"
-                                 "  activeListId: 0\n"
+                                 "  activeViewIndex: 0\n"
                                  "  customPresets: []\n";
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);

@@ -106,7 +106,7 @@ workspace aggregate
 ```
 
 The session excludes projections, source leases, selections, widget state, and runtime identities.
-The [workspace session specification](../spec/workspace/session.md) owns current capture, validation, fallback, and commit behavior; the [session-state reference](../reference/workspace/session-state.md) owns exact fields.
+The [workspace session specification](../spec/workspace/session.md) owns current capture, validation, exact focus selection, and commit behavior; the [session-state reference](../reference/workspace/session-state.md) owns exact fields.
 Runtime converts between semantic session state and a private strict document whose nested presentation vocabulary is explicitly versioned and uses stable textual ids.
 
 ## Structural constraints
@@ -118,6 +118,7 @@ Runtime converts between semantic session state and a private strict document wh
 - `ListId` is interpreted only within the active library bound to that runtime.
 - Navigation history is runtime aid state and is not itself persisted workspace session state.
 - Workspace restoration reconstructs semantic views instead of resurrecting runtime objects.
+- Session focus is represented by the zero-based position of the active semantic entry in ordered `openViews`, so views over the same list remain distinct.
 - Frontend observers cannot become a second source of workspace truth.
 - Workspace commands, reads, subscriptions, and commits remain on the callback executor.
 - Observer callbacks receive owned snapshot values and cannot turn their own failure into a command failure.
@@ -138,9 +139,8 @@ Malformed data or an unresolvable view returns a recoverable error, and candidat
 Strict document and presentation deserialization finishes before candidate view creation.
 Unsupported presentation versions, missing or extra fields, malformed vector elements, and unknown closed presentation tokens therefore cannot partially populate `ViewService`.
 
-The current command, snapshot, history, observation, application-navigation, and stable nested presentation boundaries are authoritative behavior rather than pending proposals.
-The persisted workspace has no complete root version or collection budgets and identifies the active view by an ambiguous list id rather than an exact open-view entry.
-[RFC 0017](../rfc/0017-exact-active-workspace-view.md) proposes replacing only that ambiguous focus hint.
+The current command, snapshot, history, observation, application-navigation, exact session-focus, and stable nested presentation boundaries are authoritative behavior.
+The persisted workspace has no complete root version or collection budgets.
 
 ## Implementation map
 
@@ -155,7 +155,7 @@ The persisted workspace has no complete root version or collection budgets and i
 
 - [`ViewServiceLifecycleTest.cpp`](../../test/unit/runtime/ViewServiceLifecycleTest.cpp) protects view allocation, lifecycle, and resource release.
 - [`WorkspaceNavigationTest.cpp`](../../test/unit/runtime/WorkspaceNavigationTest.cpp), [`WorkspaceHistoryTest.cpp`](../../test/unit/runtime/WorkspaceHistoryTest.cpp), and [`NavigationHistoryTest.cpp`](../../test/unit/runtime/NavigationHistoryTest.cpp) protect navigation ownership and replay.
-- [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protect semantic reconstruction and fallback.
+- [`WorkspaceSessionTest.cpp`](../../test/unit/runtime/WorkspaceSessionTest.cpp) and [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protect ordered semantic reconstruction, exact focus, and initial history.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) protects versioned stable vocabulary and semantic candidate validation.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects TUI use of the runtime workspace authority.
 
@@ -171,4 +171,3 @@ The persisted workspace has no complete root version or collection budgets and i
 - [Workspace navigation specification](../spec/workspace/navigation.md)
 - [Workspace session specification](../spec/workspace/session.md)
 - [Workspace session state reference](../reference/workspace/session-state.md)
-- [RFC 0017: exact active workspace view](../rfc/0017-exact-active-workspace-view.md)

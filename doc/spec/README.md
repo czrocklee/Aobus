@@ -77,7 +77,7 @@ Use the [specification template](../template/spec.md).
 ## Workspace
 
 - [Workspace navigation](workspace/navigation.md) defines semantic targets, open/focused views, history commit, replay, closure, and observations.
-- [Workspace session](workspace/session.md) defines snapshot capture, checkpointing, candidate restoration, fallback, and initial history.
+- [Workspace session](workspace/session.md) defines snapshot capture, checkpointing, candidate restoration, exact active-view selection, and initial history.
 
 ## Linux GTK
 

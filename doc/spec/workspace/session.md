@@ -3,14 +3,14 @@ id: workspace.session
 type: spec
 status: current
 domain: workspace
-summary: Defines workspace snapshot capture, candidate restoration, one-commit installation, fallback, and initial history.
+summary: Defines workspace snapshot capture, exact active-view restoration, one-commit installation, and initial history.
 ---
 # Workspace session
 
 ## Scope
 
 This specification defines current save and restore behavior for the runtime workspace session.
-It owns capture from live views, use of the `workspace` configuration group, candidate-view preparation, atomic aggregate installation, active-view fallback, custom-preset restoration, and initial history.
+It owns capture from live views, use of the `workspace` configuration group, candidate-view preparation, exact active-view selection, atomic aggregate installation, custom-preset restoration, and initial history.
 
 It does not enumerate serialized fields, generic `ConfigStore` mechanics, managed paths, playback-session restoration, GTK preferences, or presentation semantics.
 
@@ -28,7 +28,7 @@ Frontends choose lifecycle points and inject the store but do not deserialize wo
 - **Live workspace** is the current revisioned workspace snapshot plus the view-local state identified by its open ids.
 - **Session snapshot** is one `WorkspaceSessionState` captured from that live state.
 - **Candidate view** is a view created during restore before its id is installed in the workspace snapshot.
-- **Active-list hint** is the persisted `ListId` used to choose a focused candidate without persisting `ViewId`.
+- **Active-view index** is the zero-based position of the focused semantic view in ordered `openViews`.
 - **Checkpoint** is one synchronous save attempt at a frontend lifecycle point.
 
 ## Invariants
@@ -40,7 +40,8 @@ Frontends choose lifecycle points and inject the store but do not deserialize wo
 - A failed candidate creation destroys every view created by that restore and preserves snapshot, revision, focus, presets, and history.
 - A missing `workspace` group is a successful no-op restore.
 - One successful nonempty restore advances one workspace revision and publishes one complete `Restore` observation.
-- The active-list hint is advisory; unmatched state falls back to the first open view.
+- A nonempty session identifies exactly one active entry by an in-bounds active-view index.
+- An empty session uses active-view index `0` and never dereferences it as an entry.
 - The restored active view becomes one initial navigation point; old history is never persisted.
 - Custom presentation presets are captured and installed in the same workspace commit as restored views and focus.
 - Playback-session state remains a separate semantic owner even when it shares a physical store.
@@ -50,7 +51,7 @@ Frontends choose lifecycle points and inject the store but do not deserialize wo
 The live `WorkspaceSnapshot` contains ordered open ids, active id, custom presets, and workspace revision.
 Each open id identifies `TrackListViewState` owned by `ViewService`.
 
-The persistence candidate contains ordered semantic `TrackListViewConfig` values, one active-list hint, and custom presets.
+The persistence candidate contains ordered semantic `TrackListViewConfig` values, one active-view index, and custom presets.
 Each deserialized config carries base list, filter, and a required exact presentation; the derived group and sort fields mirror that presentation for view creation.
 The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact current serialization.
 
@@ -60,7 +61,9 @@ The [workspace session state reference](../../reference/workspace/session-state.
 
 `saveSession(store)` copies the current workspace snapshot and walks its open views in order.
 For each live view it records list, filter, group, sort, and exact presentation.
-The active view contributes its base list as the active-list hint.
+For a nonempty workspace, the active view contributes its position in that ordered sequence.
+An empty workspace contributes the canonical index `0`.
+If a nonempty live snapshot does not contain its active id, the candidate is invalid and the best-effort save leaves the previous file unchanged.
 The session also copies the snapshot's complete custom-preset collection.
 
 The command passes the captured semantic state and `WorkspaceSessionYamlSchema` to one `ConfigStore::save("workspace", state, schema)` call.
@@ -75,6 +78,8 @@ The schema strictly deserializes its private document and returns one complete s
 
 - A missing group returns success without creating a view or publishing an event.
 - File, parse, node-shape, missing/extra field, sequence-element, version, or stable-vocabulary failure returns before view creation.
+- An empty candidate requires active-view index `0`; a nonempty candidate requires an index smaller than `openViews.size()`.
+- Index validation completes before the first candidate view is created.
 - Successful deserialize attempts to create every configured view through `ViewService`.
 - If a later creation fails, all earlier candidate ids are destroyed and the error returns.
 
@@ -86,14 +91,12 @@ Candidate ids may exist briefly inside `ViewService`, but they do not enter `Wor
 After all candidate views exist, restore prepares one copy of the current workspace snapshot and history.
 Candidate ids are appended in serialized order and the custom-preset collection is replaced by the restored collection.
 
-Focus resolution scans the restored candidates for the active-list hint.
-A matching unfiltered view remains a fallback while a later matching filtered view wins immediately.
-If no restored candidate matches and any view is open, the first open view is focused.
-This preserves the current append behavior when restore is called on a nonempty workspace, but the list-based hint cannot distinguish multiple views over the same list.
-[RFC 0017](../../rfc/0017-exact-active-workspace-view.md) proposes indexing the exact serialized entry instead.
+For a nonempty candidate, focus is exactly `createdViewIds[activeViewIndex]`.
+No list identity, filter shape, or presentation property participates in focus selection.
+For an empty candidate, restore does not dereference the index: an empty aggregate remains unfocused, while restore onto an existing workspace selects its first existing open view.
 
 The final active semantic view is committed into the history candidate.
-That initial point is deduplicated normally and has no previous entry in the ordinary empty-runtime restore path.
+That exact view, including filter and presentation, is deduplicated normally and has no previous entry in the ordinary empty-runtime restore path.
 
 ### Commit
 
@@ -133,7 +136,7 @@ Workspace persistence uses an explicit recursively strict schema plus semantic p
 Missing or extra fields and malformed vector elements reject the complete document instead of retaining defaults or being skipped.
 Unsupported `presentationVersion` values return `NotSupported` before version-specific siblings are interpreted; unknown closed presentation tokens are `FormatRejected`.
 
-The current schema has no resource limits, full root version, or exact active-view identity.
+The current schema has no resource limits or full root version.
 
 Save remains best effort at the workspace wrapper.
 Its lower `ConfigStore` operation is fail closed, but a failed checkpoint does not currently block shutdown or library replacement.
@@ -146,7 +149,7 @@ Exact locations belong to the [managed file locations reference](../../reference
 
 The payload carries required `presentationVersion: 1` and stable textual field, sort, group, and direction values.
 That marker covers nested presentation vocabulary only.
-The payload still has no complete root schema version, resource budgets, or exact persisted active-view identity.
+The payload still has no complete root schema version or resource budgets.
 The [workspace session state reference](../../reference/workspace/session-state.md) owns the exact inventory and compatibility boundary.
 
 ## Implementation map
@@ -161,7 +164,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 
 ## Test map
 
-- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, one-event multi-view restore, initial history, fallback, malformed rejection, and candidate cleanup.
+- [`WorkspaceSessionTest.cpp`](../../../test/unit/runtime/WorkspaceSessionTest.cpp) proves missing-group no-op behavior, exact same-list view focus, one-event multi-view restore, initial history, index rejection, empty candidates, and candidate cleanup.
 - [`WorkspaceSessionYamlSchemaTest.cpp`](../../../test/unit/runtime/WorkspaceSessionYamlSchemaTest.cpp) proves canonical stable vocabulary, semantic round trip, and invalid-document rejection.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
@@ -176,4 +179,3 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Grouped configuration store](../persistence/config-store.md)
 - [GTK active-library lifecycle](../linux-gtk/active-library-lifecycle.md)
-- [RFC 0017: exact active workspace view](../../rfc/0017-exact-active-workspace-view.md)

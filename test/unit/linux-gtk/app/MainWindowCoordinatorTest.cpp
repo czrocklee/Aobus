@@ -105,7 +105,7 @@ namespace ao::gtk::test
     auto const rejected = std::string{"workspace:\n"
                                       "  presentationVersion: 2\n"
                                       "  openViews: []\n"
-                                      "  activeListId: 0\n"
+                                      "  activeViewIndex: 0\n"
                                       "  customPresets: []\n"};
     std::ofstream{workspacePath} << rejected;
     auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";

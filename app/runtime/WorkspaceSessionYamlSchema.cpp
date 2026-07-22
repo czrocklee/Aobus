@@ -13,9 +13,11 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,6 +29,18 @@ namespace ao::rt::detail
   {
     constexpr std::string_view kAscending = "ascending";
     constexpr std::string_view kDescending = "descending";
+
+    Result<> validateActiveViewIndex(std::size_t const activeViewIndex,
+                                     std::size_t const openViewCount,
+                                     Error::Code const errorCode)
+    {
+      if ((openViewCount == 0 && activeViewIndex != 0) || (openViewCount != 0 && activeViewIndex >= openViewCount))
+      {
+        return makeError(errorCode, "Workspace active view index is out of bounds");
+      }
+
+      return {};
+    }
 
     template<typename Enum, typename IdFunction>
     Result<std::string> storedIdFor(Enum value, IdFunction idFunction, std::string_view context)
@@ -301,7 +315,7 @@ namespace ao::rt::detail
       auto writer = yaml::MapWriter{node};
       writer.scalar("presentationVersion", document.presentationVersion)
         .sequence("openViews", document.openViews, writeView)
-        .scalar("activeListId", document.activeListId)
+        .scalar("activeViewIndex", document.activeViewIndex)
         .sequence("customPresets", document.customPresets, writePreset);
       return std::move(writer).finish();
     }
@@ -329,12 +343,12 @@ namespace ao::rt::detail
       }
 
       constexpr auto kKeys =
-        std::to_array<std::string_view>({"presentationVersion", "openViews", "activeListId", "customPresets"});
+        std::to_array<std::string_view>({"presentationVersion", "openViews", "activeViewIndex", "customPresets"});
 
       auto document = WorkspaceSessionDocument{.presentationVersion = *presentationVersion};
       auto reader = yaml::MapReader{node, kKeys, kContext};
       reader.requiredSequence("openViews", document.openViews, readView)
-        .requiredScalar("activeListId", document.activeListId)
+        .requiredScalar("activeViewIndex", document.activeViewIndex)
         .requiredSequence("customPresets", document.customPresets, readPreset);
       return std::move(reader).finish(std::move(document));
     }
@@ -342,9 +356,21 @@ namespace ao::rt::detail
 
   Result<WorkspaceSessionDocument> toWorkspaceSessionDocument(WorkspaceSessionState const& state)
   {
+    if (state.activeViewIndex > std::numeric_limits<std::uint32_t>::max())
+    {
+      return makeError(Error::Code::InvalidState, "Workspace active view index is not representable");
+    }
+
+    if (auto const result =
+          validateActiveViewIndex(state.activeViewIndex, state.openViews.size(), Error::Code::InvalidState);
+        !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
     auto document = WorkspaceSessionDocument{
       .presentationVersion = kWorkspacePresentationVersion,
-      .activeListId = state.activeListId.raw(),
+      .activeViewIndex = static_cast<std::uint32_t>(state.activeViewIndex),
     };
     document.openViews.reserve(state.openViews.size());
 
@@ -403,7 +429,14 @@ namespace ao::rt::detail
                        std::format("Unsupported workspace presentation version {}", document.presentationVersion));
     }
 
-    auto state = WorkspaceSessionState{.activeListId = ListId{document.activeListId}};
+    if (auto const result =
+          validateActiveViewIndex(document.activeViewIndex, document.openViews.size(), Error::Code::FormatRejected);
+        !result)
+    {
+      return std::unexpected{result.error()};
+    }
+
+    auto state = WorkspaceSessionState{.activeViewIndex = document.activeViewIndex};
     state.openViews.reserve(document.openViews.size());
 
     for (auto const& stored : document.openViews)

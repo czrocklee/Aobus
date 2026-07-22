@@ -13,6 +13,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -51,8 +54,15 @@ namespace ao::rt::test
             .sortBy = presentation.sortBy,
             .optPresentation = presentation,
           },
+          TrackListViewConfig{
+            .listId = ListId{11},
+            .filterExpression = "$genre = \"Classical\"",
+            .groupBy = presentation.groupBy,
+            .sortBy = presentation.sortBy,
+            .optPresentation = presentation,
+          },
         },
-      .activeListId = ListId{10},
+      .activeViewIndex = 1,
       .customPresets =
         {
           CustomTrackPresentationPreset{
@@ -67,7 +77,8 @@ namespace ao::rt::test
 
     REQUIRE(document);
     CHECK(document->presentationVersion == 1);
-    REQUIRE(document->openViews.size() == 1);
+    REQUIRE(document->openViews.size() == 2);
+    CHECK(document->activeViewIndex == 1);
     auto const& stored = document->openViews[0].presentation;
     CHECK(stored.group == "album");
     REQUIRE(stored.sort.size() == 2);
@@ -81,14 +92,29 @@ namespace ao::rt::test
     auto const decoded = detail::workspaceSessionStateFromDocument(*document);
 
     REQUIRE(decoded);
-    REQUIRE(decoded->openViews.size() == 1);
+    REQUIRE(decoded->openViews.size() == 2);
     REQUIRE(decoded->openViews[0].optPresentation);
     CHECK(*decoded->openViews[0].optPresentation == presentation);
     CHECK(decoded->openViews[0].groupBy == presentation.groupBy);
     CHECK(decoded->openViews[0].sortBy == presentation.sortBy);
-    CHECK(decoded->activeListId == ListId{10});
+    CHECK(decoded->activeViewIndex == 1);
     REQUIRE(decoded->customPresets.size() == 1);
     CHECK(decoded->customPresets[0] == state.customPresets[0]);
+  }
+
+  TEST_CASE("WorkspaceSessionYamlSchema - empty workspace uses active view index zero",
+            "[runtime][unit][workspace][session-schema]")
+  {
+    auto const document = detail::toWorkspaceSessionDocument(WorkspaceSessionState{});
+
+    REQUIRE(document);
+    CHECK(document->openViews.empty());
+    CHECK(document->activeViewIndex == 0);
+
+    auto const decoded = detail::workspaceSessionStateFromDocument(*document);
+    REQUIRE(decoded);
+    CHECK(decoded->openViews.empty());
+    CHECK(decoded->activeViewIndex == 0);
   }
 
   TEST_CASE("WorkspaceSessionYamlSchema - canonicalizes permitted live presentation state",
@@ -119,7 +145,7 @@ namespace ao::rt::test
     CHECK(document->openViews[1].presentation.redundantFields == std::vector<std::string>{"album"});
   }
 
-  TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid presentation objects",
+  TEST_CASE("WorkspaceSessionYamlSchema - rejects invalid persisted state",
             "[runtime][unit][workspace][session-schema]")
   {
     auto const validState = WorkspaceSessionState{
@@ -143,6 +169,17 @@ namespace ao::rt::test
     SECTION("Invalid list id")
     {
       document.openViews[0].listId = kInvalidListId.raw();
+    }
+
+    SECTION("Nonempty workspace active index is out of bounds")
+    {
+      document.activeViewIndex = 1;
+    }
+
+    SECTION("Empty workspace active index is nonzero")
+    {
+      document.openViews.clear();
+      document.activeViewIndex = 1;
     }
 
     SECTION("Empty presentation id")
@@ -206,6 +243,29 @@ namespace ao::rt::test
       state.openViews[0].listId = kInvalidListId;
     }
 
+    SECTION("Nonempty workspace active index is out of bounds")
+    {
+      state.activeViewIndex = 1;
+    }
+
+    SECTION("Empty workspace active index is nonzero")
+    {
+      state.openViews.clear();
+      state.activeViewIndex = 1;
+    }
+
+    SECTION("Active index is not representable by the persistence DTO")
+    {
+      if constexpr (std::numeric_limits<std::size_t>::max() > std::numeric_limits<std::uint32_t>::max())
+      {
+        state.activeViewIndex = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) + 1;
+      }
+      else
+      {
+        state.activeViewIndex = state.openViews.size();
+      }
+    }
+
     SECTION("Missing exact presentation")
     {
       state.openViews[0].optPresentation.reset();
@@ -246,12 +306,26 @@ namespace ao::rt::test
             .optPresentation = presentation,
           },
         },
-      .activeListId = ListId{10},
+      .activeViewIndex = 0,
     };
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(detail::WorkspaceSessionYamlSchema{}.serialize(tree.rootref(), state));
+    auto const encoded = ryml::emitrs_yaml<std::string>(tree);
+    auto const versionPosition = encoded.find("presentationVersion:");
+    auto const viewsPosition = encoded.find("openViews:");
+    auto const activePosition = encoded.find("activeViewIndex:");
+    auto const presetsPosition = encoded.find("customPresets:");
+    REQUIRE(versionPosition != std::string::npos);
+    REQUIRE(viewsPosition != std::string::npos);
+    REQUIRE(activePosition != std::string::npos);
+    REQUIRE(presetsPosition != std::string::npos);
+    CHECK(tree.rootref().num_children() == 4);
+    CHECK(versionPosition < viewsPosition);
+    CHECK(viewsPosition < activePosition);
+    CHECK(activePosition < presetsPosition);
     CHECK(yaml::scalarView(tree.rootref()["presentationVersion"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["activeViewIndex"]) == "0");
     CHECK(yaml::scalarView(tree.rootref()["openViews"][0]["presentation"]["sort"][0]["field"]) == "disc-number");
 
     auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
@@ -266,7 +340,7 @@ namespace ao::rt::test
   {
     SECTION("Future version is reported before interpreting its payload")
     {
-      auto const* source = "presentationVersion: 99\nopenViews: malformed\nactiveListId: malformed\ncustomPresets: "
+      auto const* source = "presentationVersion: 99\nopenViews: malformed\nactiveViewIndex: malformed\ncustomPresets: "
                            "malformed\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
@@ -278,7 +352,7 @@ namespace ao::rt::test
 
     SECTION("Missing required fields are rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveListId: 0\n";
+      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
@@ -288,9 +362,22 @@ namespace ao::rt::test
       CHECK(decoded.error().message.contains("customPresets"));
     }
 
+    SECTION("Missing active view index is rejected")
+    {
+      auto const* source = "presentationVersion: 1\nopenViews: []\ncustomPresets: []\n";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("activeViewIndex"));
+    }
+
     SECTION("Unknown structural keys are rejected")
     {
-      auto const* source = "presentationVersion: 1\nopenViews: []\nactiveListId: 0\ncustomPresets: []\nfuture: true\n";
+      auto const* source =
+        "presentationVersion: 1\nopenViews: []\nactiveViewIndex: 0\ncustomPresets: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decoded = detail::WorkspaceSessionYamlSchema{}.deserialize(tree.rootref(), WorkspaceSessionState{});
@@ -308,7 +395,7 @@ namespace ao::rt::test
           - listId: 10
             filterExpression: ""
             presentation: malformed
-        activeListId: 10
+        activeViewIndex: 0
         customPresets: []
       )";
       auto tree = ryml::Tree{yaml::callbacks()};

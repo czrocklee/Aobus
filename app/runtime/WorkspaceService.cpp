@@ -770,15 +770,18 @@ namespace ao::rt
     _implPtr->ensureOnExecutor();
     auto const snapshotValue = _implPtr->currentSnapshot;
     auto state = WorkspaceSessionState{};
+    // A nonempty snapshot starts one past the valid range so the schema rejects a missing active id.
+    state.activeViewIndex = snapshotValue.openViews.empty() ? 0 : snapshotValue.openViews.size();
     state.customPresets = snapshotValue.customPresets;
 
-    for (auto const viewId : snapshotValue.openViews)
+    for (std::size_t index = 0; index < snapshotValue.openViews.size(); ++index)
     {
+      auto const viewId = snapshotValue.openViews[index];
       auto const viewState = _implPtr->views.trackListState(viewId);
 
       if (viewId == snapshotValue.activeViewId)
       {
-        state.activeListId = viewState.listId;
+        state.activeViewIndex = index;
       }
 
       state.openViews.push_back(TrackListViewConfig{
@@ -845,20 +848,11 @@ namespace ao::rt
       nextSnapshot.customPresets = std::move(state.customPresets);
       auto focused = kInvalidViewId;
 
-      for (auto const viewId : createdViewIds)
+      if (!createdViewIds.empty())
       {
-        if (auto const viewState = _implPtr->views.trackListState(viewId); viewState.listId == state.activeListId)
-        {
-          focused = viewId;
-
-          if (!viewState.filterExpression.empty())
-          {
-            break;
-          }
-        }
+        focused = createdViewIds[state.activeViewIndex];
       }
-
-      if (focused == kInvalidViewId && !nextSnapshot.openViews.empty())
+      else if (!nextSnapshot.openViews.empty())
       {
         focused = nextSnapshot.openViews.front();
       }
