@@ -57,9 +57,6 @@ The active runtime view separately retains:
 
 The preference map is a default-selection authority, not a mirror of every active or historical view.
 
-GTK startup currently deviates from this rule by applying the default to every restored view.
-[RFC 0018](../../rfc/0018-preserve-restored-view-presentation.md) proposes removing that post-restore pass.
-
 ## Resolution
 
 Presentation resolution for a list follows this order:
@@ -78,7 +75,14 @@ An invalid Smart List expression falls back to `albums` recommendation and does 
 
 ## Commands and transitions
 
-Opening a list resolves its preferred/recommended presentation and supplies that spec when creating or updating the runtime view.
+When GTK opens a plain list target, it always resolves the preferred or recommended presentation and submits it to `WorkspaceService` as `NewViewDefault` intent.
+`WorkspaceService` alone decides whether an existing unfiltered view is reusable.
+Reuse ignores that default and retains the view's exact active presentation; creation applies the resolved default to the new plain view.
+A filtered view over the same list is not a reusable plain target, so `WorkspaceService` creates the plain view with the resolved default and does not alter the filtered view.
+
+Workspace restoration installs the exact presentation stored with each view and does not apply the preference map afterward.
+Navigation-history replay likewise restores the recorded exact presentation without resolving a new default.
+Playback restoration submits the same `NewViewDefault` request as ordinary GTK navigation: an existing plain view keeps its exact presentation, while a newly created plain view receives the preference or recommendation.
 Changing the presentation through a normal user-selection path installs the new runtime spec and may update the base list's saved preference.
 
 Applying a quick filter changes only `filterExpression` and active source/projection resources.
@@ -135,6 +139,7 @@ Quick-filter controls and Smart List editors may display the current presentatio
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
 - [`TrackPresentationRecommenderTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp) proves source-aware recommendations.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) proves per-library persistence.
+- [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves GTK creation, reuse, workspace restoration, history replay, and playback-restoration precedence.
 - Workspace history tests under [`test/unit/runtime/`](../../../test/unit/runtime/) prove snapshot replay semantics.
 
 ## Related documents
@@ -146,4 +151,3 @@ Quick-filter controls and Smart List editors may display the current presentatio
 - [Track presentation presets](../../reference/presentation/track-preset.md)
 - [Persisted presentation state](../../reference/presentation/persisted-state.md)
 - [Workspace navigation](../workspace/navigation.md)
-- [RFC 0018: preserve restored view presentation](../../rfc/0018-preserve-restored-view-presentation.md)

@@ -51,9 +51,9 @@ GTK owns one replaceable main-window/runtime pair for the active library.
 Application-global configuration, shell layout stores, component state, and application preferences survive a library replacement.
 The library database, per-library workspace state, views, sources, playback stack, runtime observers, and window are replaced together.
 
-`MainWindowCoordinator` currently sequences library-backed page initialization, workspace restoration, presentation preference application, default-view creation, playback restoration, and checkpoints.
-The preference pass currently replaces exact presentations on restored views.
-[RFC 0018](../rfc/0018-preserve-restored-view-presentation.md) proposes removing that pass while keeping GTK as the lifecycle owner.
+`MainWindowCoordinator` sequences per-library presentation-preference loading, library-backed page initialization, workspace restoration, default-view creation, playback restoration, and checkpoints.
+Workspace restoration retains the exact presentation stored with every restored view.
+GTK resolves a per-list preference or recommendation and submits it as new-view-default intent; `WorkspaceService` decides whether navigation reuses a plain view or creates one.
 `app/linux-gtk/main.cpp` owns active-library replacement because the operation destroys and recreates the window-owned runtime graph.
 
 ### TUI composition root
@@ -82,14 +82,17 @@ load global application session
   -> derive database and per-library workspace paths
   -> construct stores, providers, and AppRuntime
   -> construct MainWindow, UIModel, controllers, and adapters
+  -> load per-library presentation preferences
   -> initialize library-backed pages and subscriptions
-  -> restore workspace and presentation state
-  -> create a default All Tracks view when restoration is empty
+  -> restore workspace views with their exact presentation state
+  -> create a default All Tracks view with its resolved default when restoration is empty
   -> restore playback against the active library
   -> load shell layout and present the window
 ```
 
 Workspace restoration precedes playback reveal so playback intent can be associated with a valid runtime view.
+Playback restoration submits the resolved list default as new-view-default intent, so workspace reuse preserves an existing unfiltered view while creation applies that default.
+Filtered views over the same list remain distinct and do not prevent creation of a plain playback-reveal target.
 The behavior details remain in the workspace, playback, and GTK lifecycle specifications.
 
 ### GTK active-library replacement
@@ -157,6 +160,7 @@ That proposal is not current behavior; GTK and TUI lifecycle ownership remains s
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive composition and callback-producer teardown.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects final checkpoints and the stale-write guard.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK restoration and checkpoint ordering.
+- [`MainWindowSessionPresentationTest.cpp`](../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) protects presentation precedence across GTK workspace and playback restoration.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects completion invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
@@ -173,5 +177,4 @@ That proposal is not current behavior; GTK and TUI lifecycle ownership remains s
 - [Presentation architecture](presentation.md)
 - [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
 - [Workspace session specification](../spec/workspace/session.md)
-- [RFC 0018: preserve restored view presentation](../rfc/0018-preserve-restored-view-presentation.md)
 - [RFC 0019: safe active-library replacement](../rfc/0019-safe-active-library-replacement.md)

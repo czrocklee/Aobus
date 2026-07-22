@@ -155,7 +155,7 @@ namespace ao::gtk::test
       auto const activeListId = createList(fixture.runtime().library(), "Active List");
       auto const browsedListId = createList(fixture.runtime().library(), "Browsed List");
       controller.rebuildTree(cache);
-      REQUIRE(fixture.runtime().workspace().navigateTo(activeListId));
+      REQUIRE(fixture.runtime().workspace().navigate({.target = activeListId}));
       drainGtkEvents();
 
       controller.select(browsedListId);

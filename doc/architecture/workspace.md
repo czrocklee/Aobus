@@ -47,7 +47,7 @@ History and sessions therefore retain semantic reconstruction inputs instead of 
 ### Workspace service
 
 `WorkspaceService` is the canonical aggregate for open views and focus within one `AppRuntime`.
-It owns semantic target resolution, browser-like navigation history, custom presentation presets associated with the workspace, and the workspace snapshot and restore boundary.
+It owns semantic target resolution, the reuse-or-create decision, navigation presentation intent, browser-like navigation history, custom presentation presets associated with the workspace, and the workspace snapshot and restore boundary.
 
 The service borrows `ViewService` to create, focus, replay, and destroy views and borrows the callback executor to enforce serialized ownership and queue observations.
 It observes committed list deletion through `LibraryChanges` and closes views whose base list no longer exists.
@@ -83,8 +83,9 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 
 ```text
 frontend or UIModel command
-  -> WorkspaceService resolves a semantic target
-  -> ViewService reuses or creates a view and projection
+  -> WorkspaceService resolves a semantic target and decides reuse or creation
+  -> WorkspaceService preserves or applies presentation intent for a reused view
+  -> ViewService creates a view and projection when required
   -> WorkspaceService prepares snapshot and history candidates
   -> one commit installs open views, focus, presets, and revision
   -> one complete workspace observation reaches presentation consumers
@@ -111,6 +112,7 @@ Runtime converts between semantic session state and a private strict document wh
 ## Structural constraints
 
 - One `WorkspaceService` is the canonical open and focused view aggregate for one `AppRuntime`.
+- `WorkspaceService` is the only authority that decides whether navigation reuses a plain view or creates a new view.
 - Every live workspace view belongs to the same runtime's `ViewService`.
 - `ViewId` is valid only within its allocating `ViewService` lifetime.
 - `ListId` is interpreted only within the active library bound to that runtime.

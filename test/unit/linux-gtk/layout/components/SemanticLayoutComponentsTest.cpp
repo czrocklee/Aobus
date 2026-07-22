@@ -555,7 +555,8 @@ namespace ao::gtk::layout::test
                                         [&trackId](library::MusicLibrary& musicLibrary)
                                         { trackId = library::test::addTrack(musicLibrary, {.title = "Before"}); }};
     auto& runtime = fixture.runtime();
-    auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    auto const navigation =
+      ao::test::requireValue(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
     REQUIRE(runtime.views().setSelection(navigation, {trackId}));
     drainGtkEvents();
 
@@ -590,7 +591,8 @@ namespace ao::gtk::layout::test
       [&trackId](library::MusicLibrary& musicLibrary)
       { trackId = library::test::addTrack(musicLibrary, {.customMetadata = {{"Mood", "Bright"}}}); }};
     auto& runtime = fixture.runtime();
-    auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    auto const navigation =
+      ao::test::requireValue(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
     REQUIRE(runtime.views().setSelection(navigation, {trackId}));
     drainGtkEvents();
 
@@ -635,7 +637,8 @@ namespace ao::gtk::layout::test
                            [&trackId](library::MusicLibrary& musicLibrary)
                            { trackId = library::test::addTrack(musicLibrary, {.title = "Before", .year = 2020}); }};
     auto& runtime = fixture.runtime();
-    auto const navigation = ao::test::requireValue(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    auto const navigation =
+      ao::test::requireValue(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
     REQUIRE(runtime.views().setSelection(navigation, {trackId}));
     drainGtkEvents();
     auto const componentPtr =
@@ -694,7 +697,7 @@ namespace ao::gtk::layout::test
                                         }};
     auto& runtime = fixture.runtime();
 
-    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {firstTrackId}));
     drainGtkEvents();
 
@@ -736,7 +739,7 @@ namespace ao::gtk::layout::test
     auto& runtime = fixture.runtime();
     auto const& musicLibrary = runtime.musicLibrary();
 
-    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
 
@@ -784,7 +787,7 @@ namespace ao::gtk::layout::test
     auto& runtime = fixture.runtime();
     auto const& musicLibrary = runtime.musicLibrary();
 
-    auto const viewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     REQUIRE(runtime.views().setSelection(viewId, {trackId}));
     drainGtkEvents();
 
@@ -850,7 +853,7 @@ namespace ao::gtk::layout::test
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto pageHost = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};
 
-    REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
 
     pageHost.rebuild(cache);

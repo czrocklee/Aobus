@@ -20,9 +20,12 @@ namespace ao::uimodel
   class TrackPresentationCatalog;
   class ListPresentationPreferenceStore;
 }
+namespace Gtk
+{
+  class Window;
+}
 namespace ao::gtk
 {
-  class MainWindow;
   class AppConfigStore;
   class GtkLayoutStateStore;
   class TrackRowCache;
@@ -40,7 +43,7 @@ namespace ao::gtk
   class MainWindowCoordinator final
   {
   public:
-    MainWindowCoordinator(MainWindow& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfigStore> configStorePtr);
+    MainWindowCoordinator(Gtk::Window& window, rt::AppRuntime& runtime, std::shared_ptr<AppConfigStore> configStorePtr);
     ~MainWindowCoordinator();
 
     // Not copyable or movable
@@ -75,7 +78,7 @@ namespace ao::gtk
     void saveColumnLayout();
     void saveColumnLayoutIfNotRestoring();
 
-    MainWindow& _window;
+    Gtk::Window& _window;
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfigStore> _configStorePtr;
     struct Impl;

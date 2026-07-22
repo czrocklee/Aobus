@@ -37,7 +37,7 @@ namespace ao::uimodel::test
 
       rt::ViewId focusAllTracksView()
       {
-        return ao::test::requireValue(workspaceService.navigateTo(rt::GlobalViewKind::AllTracks));
+        return ao::test::requireValue(workspaceService.navigate({.target = rt::GlobalViewKind::AllTracks}));
       }
     };
   } // namespace
@@ -105,7 +105,7 @@ namespace ao::uimodel::test
   TEST_CASE("TrackFilterViewModel - focused track view enables filtering", "[uimodel][unit][track-filter]")
   {
     auto fixture = TrackFilterFixture{};
-    REQUIRE(fixture.workspaceService.navigateTo(rt::GlobalViewKind::AllTracks));
+    REQUIRE(fixture.workspaceService.navigate({.target = rt::GlobalViewKind::AllTracks}));
 
     REQUIRE(!fixture.renderLog.empty());
     CHECK(fixture.renderLog.last().enabled == true);
@@ -160,8 +160,14 @@ namespace ao::uimodel::test
     auto config = rt::TrackListViewConfig{.listId = rt::kAllTracksListId};
     config.optPresentation = rt::defaultTrackPresentationSpec();
     config.optPresentation->id = "custom";
-    auto const viewId = ao::test::requireValue(
-      fixture.workspaceService.navigateTo(rt::GlobalViewKind::AllTracks, {.optPresentation = config.optPresentation}));
+    auto const viewId = ao::test::requireValue(fixture.workspaceService.navigate({
+      .target = rt::GlobalViewKind::AllTracks,
+      .optPresentation =
+        rt::NavigationPresentation{
+          .mode = rt::NavigationPresentationMode::Override,
+          .spec = *config.optPresentation,
+        },
+    }));
 
     fixture.viewModel.updateFilter("$artist = \"Muse\"");
 

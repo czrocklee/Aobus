@@ -17,6 +17,123 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
+  TEST_CASE("WorkspaceService - NewViewDefault applies to a newly created view",
+            "[runtime][unit][workspace][presentation]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime;
+    auto const* albumsPreset = builtinTrackPresentationPreset("albums");
+    REQUIRE(albumsPreset != nullptr);
+
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = fixture.firstListId,
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::NewViewDefault,
+          .spec = albumsPreset->spec,
+        },
+    }));
+
+    CHECK(runtime.views().trackListState(viewId).presentation == normalizeTrackPresentationSpec(albumsPreset->spec));
+  }
+
+  TEST_CASE("WorkspaceService - NewViewDefault preserves a reused view's exact presentation",
+            "[runtime][unit][workspace][presentation]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime;
+    auto const* songsPreset = builtinTrackPresentationPreset("songs");
+    auto const* albumsPreset = builtinTrackPresentationPreset("albums");
+    REQUIRE(songsPreset != nullptr);
+    REQUIRE(albumsPreset != nullptr);
+    auto const firstViewId = requireNavigation(runtime, fixture.firstListId);
+    REQUIRE(runtime.workspace().setActivePresentation(songsPreset->spec));
+    requireNavigation(runtime, fixture.secondListId);
+
+    auto const reusedViewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = fixture.firstListId,
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::NewViewDefault,
+          .spec = albumsPreset->spec,
+        },
+    }));
+
+    CHECK(reusedViewId == firstViewId);
+    CHECK(runtime.views().trackListState(reusedViewId).presentation ==
+          normalizeTrackPresentationSpec(songsPreset->spec));
+
+    requireBackNavigation(runtime);
+    CHECK(runtime.views().trackListState(runtime.workspace().snapshot().activeViewId).listId == fixture.secondListId);
+    requireForwardNavigation(runtime);
+    auto const replayedState = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    CHECK(replayedState.id == firstViewId);
+    CHECK(replayedState.presentation == normalizeTrackPresentationSpec(songsPreset->spec));
+  }
+
+  TEST_CASE("WorkspaceService - NewViewDefault creates a plain view beside a filtered view",
+            "[runtime][unit][workspace][presentation]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime;
+    auto const* songsPreset = builtinTrackPresentationPreset("songs");
+    auto const* albumsPreset = builtinTrackPresentationPreset("albums");
+    REQUIRE(songsPreset != nullptr);
+    REQUIRE(albumsPreset != nullptr);
+    auto const filteredViewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target =
+        FilteredListTarget{
+          .listId = fixture.firstListId,
+          .filterExpression = "$title ~ \"Needle\"",
+        },
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::Override,
+          .spec = songsPreset->spec,
+        },
+    }));
+
+    auto const plainViewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = fixture.firstListId,
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::NewViewDefault,
+          .spec = albumsPreset->spec,
+        },
+    }));
+
+    CHECK(plainViewId != filteredViewId);
+    auto const filteredState = runtime.views().trackListState(filteredViewId);
+    CHECK(filteredState.filterExpression == "$title ~ \"Needle\"");
+    CHECK(filteredState.presentation == normalizeTrackPresentationSpec(songsPreset->spec));
+    auto const plainState = runtime.views().trackListState(plainViewId);
+    CHECK(plainState.filterExpression.empty());
+    CHECK(plainState.presentation == normalizeTrackPresentationSpec(albumsPreset->spec));
+  }
+
+  TEST_CASE("WorkspaceService - Override changes a reused view's presentation",
+            "[runtime][unit][workspace][presentation]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime;
+    auto const* albumsPreset = builtinTrackPresentationPreset("albums");
+    REQUIRE(albumsPreset != nullptr);
+    auto const firstViewId = requireNavigation(runtime, fixture.firstListId);
+
+    auto const reusedViewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = fixture.firstListId,
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::Override,
+          .spec = albumsPreset->spec,
+        },
+    }));
+
+    CHECK(reusedViewId == firstViewId);
+    CHECK(runtime.views().trackListState(reusedViewId).presentation ==
+          normalizeTrackPresentationSpec(albumsPreset->spec));
+  }
+
   TEST_CASE("WorkspaceService - setActivePresentation records presentation history",
             "[runtime][unit][workspace][presentation]")
   {

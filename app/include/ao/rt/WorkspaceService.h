@@ -11,6 +11,7 @@
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -30,10 +31,16 @@ namespace ao::rt
   class LibraryChanges;
   class ConfigStore;
 
-  struct NavigationOptions final
+  enum class NavigationPresentationMode : std::uint8_t
   {
-    bool recordHistory = true;
-    std::optional<TrackPresentationSpec> optPresentation = std::nullopt;
+    Override,
+    NewViewDefault,
+  };
+
+  struct NavigationPresentation final
+  {
+    NavigationPresentationMode mode = NavigationPresentationMode::Override;
+    TrackPresentationSpec spec{};
   };
 
   struct FilteredListTarget
@@ -43,6 +50,18 @@ namespace ao::rt
   };
 
   using NavigationTarget = std::variant<ListId, FilteredListTarget, GlobalViewKind>;
+
+  struct NavigationRequest final
+  {
+    NavigationTarget target = ListId{kInvalidListId};
+    bool recordHistory = true;
+    std::optional<NavigationPresentation> optPresentation = std::nullopt;
+  };
+
+  struct PresentationChangeOptions final
+  {
+    bool recordHistory = true;
+  };
 
   class WorkspaceService final
   {
@@ -58,12 +77,12 @@ namespace ao::rt
     WorkspaceSnapshot snapshot() const;
 
     Result<> focusView(ViewId viewId);
-    Result<ViewId> navigateTo(NavigationTarget const& target, NavigationOptions options = {});
+    Result<ViewId> navigate(NavigationRequest const& request);
     Result<> closeView(ViewId viewId);
 
-    Result<> setActivePresentation(TrackPresentationSpec const& presentation, NavigationOptions options = {});
+    Result<> setActivePresentation(TrackPresentationSpec const& presentation, PresentationChangeOptions options = {});
     Result<TrackPresentationSpec> setActivePresentation(std::string_view presentationId,
-                                                        NavigationOptions options = {});
+                                                        PresentationChangeOptions options = {});
 
     Result<> goBack();
     Result<> goForward();

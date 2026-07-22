@@ -31,12 +31,12 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("WorkspaceService - first navigateTo opens the target list", "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - first navigate opens the target list", "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    REQUIRE(runtime.workspace().navigateTo(fixture.firstListId));
+    REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
 
     auto const layout = runtime.workspace().snapshot();
     CHECK(layout.activeViewId != kInvalidViewId);
@@ -44,13 +44,13 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - navigateTo AllTracks opens the global list", "[runtime][unit][workspace][navigation]")
+  TEST_CASE("WorkspaceService - navigate AllTracks opens the global list", "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    REQUIRE(runtime.workspace().navigateTo(fixture.firstListId));
-    REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
+    REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
+    REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == kAllTracksListId);
@@ -62,8 +62,13 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    REQUIRE(runtime.workspace().navigateTo(
-      FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$genre = \"Rock\""}));
+    REQUIRE(runtime.workspace().navigate({
+      .target =
+        FilteredListTarget{
+          .listId = kAllTracksListId,
+          .filterExpression = "$genre = \"Rock\"",
+        },
+    }));
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == rt::kAllTracksListId);
@@ -75,7 +80,7 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    REQUIRE(runtime.workspace().navigateTo(fixture.firstListId));
+    REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto const result = runtime.jumpToAlbum(kInvalidTrackId);
 
     REQUIRE_FALSE(result);
@@ -93,7 +98,7 @@ namespace ao::rt::test
     auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const& changed)
                                                    { focusedViewId = changed.snapshot.activeViewId; });
 
-    REQUIRE(runtime.workspace().navigateTo(fixture.firstListId));
+    REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
     CHECK(focusedViewId == activeViewId);
   }
@@ -105,7 +110,7 @@ namespace ao::rt::test
 
     auto listId = ao::test::requireValue(runtime.library().writer().createList(
       LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Test List"}));
-    REQUIRE(runtime.workspace().navigateTo(listId));
+    REQUIRE(runtime.workspace().navigate({.target = listId}));
 
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
     CHECK(activeViewId != kInvalidViewId);
@@ -145,6 +150,16 @@ namespace ao::rt::test
 
     auto const trackId =
       TrackId{100}; // jumpToAlbum doesn't validate if track exists in library, it just passes the ID to playback
+    auto const* songsPreset = builtinTrackPresentationPreset("songs");
+    REQUIRE(songsPreset != nullptr);
+    auto const existingViewId = ao::test::requireValue(runtime.workspace().navigate({
+      .target = GlobalViewKind::AllTracks,
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::Override,
+          .spec = songsPreset->spec,
+        },
+    }));
 
     bool revealCalled = false;
     auto const sub = runtime.playback().events().onRevealTrackRequested(
@@ -161,6 +176,7 @@ namespace ao::rt::test
     CHECK(revealCalled == true);
 
     auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    CHECK(runtime.workspace().snapshot().activeViewId == existingViewId);
     CHECK(state.listId == kAllTracksListId);
     CHECK(state.presentation.id == "albums");
   }
@@ -170,11 +186,25 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    auto const result = runtime.workspace().navigateTo(static_cast<GlobalViewKind>(999));
+    auto const result = runtime.workspace().navigate({.target = static_cast<GlobalViewKind>(999)});
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidInput);
     CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
+  }
+
+  TEST_CASE("WorkspaceService - empty navigation request rejects its invalid default target",
+            "[runtime][unit][workspace][navigation]")
+  {
+    auto fixture = WorkspaceRuntimeFixture{};
+    auto& runtime = fixture.runtime;
+
+    auto const result = runtime.workspace().navigate({});
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(runtime.workspace().snapshot().activeViewId == kInvalidViewId);
+    CHECK(runtime.workspace().snapshot().openViews.empty());
   }
 
   TEST_CASE("WorkspaceService - missing-list navigation leaves views focus and history unchanged",
@@ -182,11 +212,11 @@ namespace ao::rt::test
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
-    REQUIRE(runtime.workspace().navigateTo(fixture.firstListId));
+    REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto const beforeLayout = runtime.workspace().snapshot();
     auto const beforeViews = runtime.views().listViews();
 
-    auto const result = runtime.workspace().navigateTo(ListId{999999});
+    auto const result = runtime.workspace().navigate({.target = ListId{999999}});
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
@@ -269,7 +299,7 @@ namespace ao::rt::test
     auto const receivingSub =
       runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received.push_back(changed); });
 
-    REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
+    REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     CHECK(received.empty());
     CHECK_NOTHROW(executor->drain());
@@ -298,11 +328,11 @@ namespace ao::rt::test
 
         if (received.size() == 1)
         {
-          REQUIRE(runtime.workspace().navigateTo(secondListId));
+          REQUIRE(runtime.workspace().navigate({.target = secondListId}));
         }
       });
 
-    REQUIRE(runtime.workspace().navigateTo(firstListId));
+    REQUIRE(runtime.workspace().navigate({.target = firstListId}));
     auto const firstRevision = runtime.workspace().snapshot().revision;
     REQUIRE(executor->drainUntil([&] { return received.size() == 1; }));
 

@@ -77,7 +77,7 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir);
     auto const listId = ao::test::requireValue(runtime.library().writer().createList(
       LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Existing"}));
-    REQUIRE(runtime.workspace().navigateTo(listId));
+    REQUIRE(runtime.workspace().navigate({.target = listId}));
     auto const before = runtime.workspace().snapshot();
     auto const configPath = tempDir.path() / "other-group.yaml";
     std::ofstream{configPath} << "other:\n"
@@ -99,7 +99,7 @@ namespace ao::rt::test
       auto runtime = makeRuntime(tempDir);
       listId = ao::test::requireValue(runtime.library().writer().createList(
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Restored"}));
-      REQUIRE(runtime.workspace().navigateTo(listId));
+      REQUIRE(runtime.workspace().navigate({.target = listId}));
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
@@ -125,13 +125,13 @@ namespace ao::rt::test
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First restored"}));
       secondListId = ao::test::requireValue(runtime.library().writer().createList(
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "After restore"}));
-      REQUIRE(runtime.workspace().navigateTo(firstListId));
+      REQUIRE(runtime.workspace().navigate({.target = firstListId}));
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 
     auto runtime = makeRuntime(tempDir);
     REQUIRE(runtime.workspace().restoreSession(runtime.workspaceConfigStore()));
-    REQUIRE(runtime.workspace().navigateTo(secondListId));
+    REQUIRE(runtime.workspace().navigate({.target = secondListId}));
 
     REQUIRE(runtime.workspace().goBack());
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
@@ -149,8 +149,8 @@ namespace ao::rt::test
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First snapshot"}));
       auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second snapshot"}));
-      REQUIRE(runtime.workspace().navigateTo(firstListId));
-      REQUIRE(runtime.workspace().navigateTo(secondListId));
+      REQUIRE(runtime.workspace().navigate({.target = firstListId}));
+      REQUIRE(runtime.workspace().navigate({.target = secondListId}));
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
     }
 

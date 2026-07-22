@@ -32,7 +32,7 @@ namespace ao::gtk::test
     CHECK(filter.entry().has_css_class("ao-quick-filter-entry"));
 
     // Just verify it wires up and doesn't crash
-    REQUIRE(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+    REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
 
     drainGtkEvents();
   }

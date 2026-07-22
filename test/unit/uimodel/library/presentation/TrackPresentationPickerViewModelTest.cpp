@@ -43,7 +43,7 @@ namespace ao::uimodel::test
     "[uimodel][unit][workflow]")
   {
     auto fixture = TrackPresentationFixture{};
-    REQUIRE(fixture.workspace.navigateTo(rt::kAllTracksListId));
+    REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
     auto rendered = std::vector<TrackPresentationPickerState>{};
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,
@@ -68,7 +68,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][workflow]")
   {
     auto fixture = TrackPresentationFixture{};
-    REQUIRE(fixture.workspace.navigateTo(rt::kAllTracksListId));
+    REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
     auto workflow = TrackPresentationPickerViewModel{
       fixture.viewService, fixture.workspace, fixture.catalog, fixture.preferences, [](auto const&) {}};
 
@@ -82,7 +82,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][workflow]")
   {
     auto fixture = TrackPresentationFixture{};
-    REQUIRE(fixture.workspace.navigateTo(rt::kAllTracksListId));
+    REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
     auto rendered = std::vector<TrackPresentationPickerState>{};
     auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
                                                      fixture.workspace,

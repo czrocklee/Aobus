@@ -87,8 +87,13 @@ namespace ao::gtk
 
       case Type::Navigate:
         APP_LOG_DEBUG("[PID {}] NowPlayingFieldLabel: Navigating to query: {}", getpid(), cmd.navigateQuery);
-        std::ignore = _runtime.workspace().navigateTo(
-          rt::FilteredListTarget{.listId = rt::kAllTracksListId, .filterExpression = cmd.navigateQuery});
+        std::ignore = _runtime.workspace().navigate({
+          .target =
+            rt::FilteredListTarget{
+              .listId = rt::kAllTracksListId,
+              .filterExpression = cmd.navigateQuery,
+            },
+        });
         break;
 
       case Type::None:

@@ -389,7 +389,7 @@ namespace ao::gtk::test
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
       auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Restored", .uri = fixturePath});
       runtime.reloadAllTracks();
-      auto const view = runtime.workspace().navigateTo(rt::kAllTracksListId);
+      auto const view = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(view);
       REQUIRE(playback.commands().startFromView(*view, trackId));
       playback.commands().seek(std::chrono::milliseconds{50});

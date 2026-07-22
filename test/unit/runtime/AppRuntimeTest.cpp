@@ -186,7 +186,7 @@ namespace ao::rt::test
     CHECK(withoutFocus.error().code == Error::Code::InvalidState);
 
     // Add a view and focus it
-    REQUIRE(appPtr->workspace().navigateTo(GlobalViewKind::AllTracks));
+    REQUIRE(appPtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     // playSelectionInFocusedView (with focused view but no selection)
     auto const withoutSelection = appPtr->playSelectionInFocusedView();

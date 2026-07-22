@@ -42,13 +42,16 @@ namespace ao::rt::test
     ListId fourthListId;
   };
 
-  inline ViewId requireNavigation(AppRuntime& runtime,
-                                  NavigationTarget const& target,
-                                  NavigationOptions const options = {})
+  inline ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)
   {
-    auto result = runtime.workspace().navigateTo(target, options);
+    auto result = runtime.workspace().navigate(request);
     REQUIRE(result);
     return *result;
+  }
+
+  inline ViewId requireNavigation(AppRuntime& runtime, NavigationTarget const& target)
+  {
+    return requireNavigation(runtime, NavigationRequest{.target = target});
   }
 
   inline ViewId requireBackNavigation(AppRuntime& runtime)

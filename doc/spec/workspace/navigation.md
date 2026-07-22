@@ -28,6 +28,8 @@ It does not depend on playback.
 
 - **Workspace snapshot** is the complete revisioned value containing open views, focus, and custom presets.
 - **Navigation target** is a base list, a base list plus filter expression, or a supported global-view kind.
+- **Navigation request** combines one target, history-recording policy, and an optional presentation intent.
+- **Presentation intent** is either `Override`, which applies to reused and new views, or `NewViewDefault`, which applies only when navigation creates a view.
 - **Navigation point** is `{listId, filterExpression, presentation}` stored in transient history.
 - **Command result** carries only a value needed by the caller; navigation returns its active `ViewId`, presentation lookup returns its resolved specification, and other mutations return empty success.
 - **Workspace change** is one post-commit observation containing a complete snapshot and a typed cause.
@@ -62,13 +64,24 @@ Invalid input and preparation failure use `Result` errors.
 
 ### Navigate to a target
 
-`navigateTo(target, options)` resolves and prepares the target before changing the aggregate.
+`navigate(request)` resolves and prepares the request's target before changing the aggregate.
 
 - A plain `ListId` reuses an existing live, unfiltered view for that list when one exists.
-- A supplied presentation is normalized and applied to a reused view before workspace commit.
 - A plain list without a reusable view creates a view with an empty filter.
 - A filtered-list target creates a distinct view from its explicit list and filter.
 - `GlobalViewKind::AllTracks` resolves to the All Tracks virtual list; unsupported global values return `InvalidInput`.
+
+`WorkspaceService` is the sole authority for the reuse-or-create decision.
+Presentation intent follows this matrix:
+
+| Request presentation | Reused view | Newly created view |
+|---|---|---|
+| Absent | Preserve the exact current presentation. | Use the `ViewService` default. |
+| `Override` | Normalize and apply the supplied specification. | Normalize and apply the supplied specification. |
+| `NewViewDefault` | Ignore the supplied specification and preserve the exact current presentation. | Normalize and apply the supplied specification. |
+
+A filtered target is never reusable, so a supplied `NewViewDefault` applies to its newly created view.
+When the request records history, its navigation point stores the final effective presentation after this decision.
 
 The command then prepares the next open set, focus, and history candidate and commits them once.
 Navigation returns the resulting active `ViewId`.
@@ -86,7 +99,8 @@ Opening and adopting a view is part of semantic navigation or session restoratio
 
 ### Change active presentation
 
-`setActivePresentation(spec, options)` requires an active live view, normalizes the complete specification, applies it through `ViewService`, and optionally commits the resulting navigation point.
+`setActivePresentation(spec, presentationChangeOptions)` requires an active live view, normalizes the complete specification, applies it through `ViewService`, and optionally commits the resulting navigation point.
+Presentation-change options contain only the history-recording policy and cannot carry navigation target or presentation-mode fields.
 The complete presentation value participates in equality, including visible and redundant fields.
 
 The id overload resolves built-in presets and then workspace custom presets.
@@ -121,7 +135,7 @@ Stable preset identity and versioned persistence remain owned by the presentatio
 ### Reveal an album
 
 Album reveal is not a `WorkspaceService` command.
-`AppRuntime::jumpToAlbum(trackId)` rejects the invalid track id, navigates to All Tracks with the built-in albums presentation, and submits playback reveal for the returned active view.
+`AppRuntime::jumpToAlbum(trackId)` rejects the invalid track id, navigates to All Tracks with an explicit `Override` carrying the built-in albums presentation, and submits playback reveal for the returned active view.
 The command returns empty success after submitting reveal.
 Workspace navigation remains committed if a future reveal boundary gains a separate asynchronous failure after submission.
 

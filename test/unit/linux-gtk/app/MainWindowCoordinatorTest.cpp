@@ -5,7 +5,6 @@
 
 #include "../GtkTestSupport.h"
 #include "app/AppConfigStore.h"
-#include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCoordinator.h"
 #include "test/unit/RuntimeTestSupport.h"
@@ -37,6 +36,7 @@
 #include <ao/uimodel/preference/ThemePreset.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/window.h>
 
 #include <chrono>
 #include <filesystem>
@@ -76,7 +76,7 @@ namespace ao::gtk::test
     initialPrefs.lastOutputProfileId = "preference-profile";
     configStorePtr->saveAppPrefs(initialPrefs);
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
 
@@ -110,7 +110,7 @@ namespace ao::gtk::test
     std::ofstream{workspacePath} << rejected;
     auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
@@ -139,7 +139,7 @@ namespace ao::gtk::test
     std::ofstream{layoutPath} << stored;
     auto const appConfigPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(appConfigPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.loadSession();
@@ -158,7 +158,7 @@ namespace ao::gtk::test
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     auto const trackId = addTrackWithTitle(runtime, "Before Import");
@@ -198,7 +198,7 @@ namespace ao::gtk::test
     session.lastOutputProfileId = audio::kProfileShared.raw();
     configStorePtr->saveAppSession(session);
 
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
 
@@ -229,7 +229,7 @@ namespace ao::gtk::test
       .trackIds = {trackId},
     }));
     runtime.reloadAllTracks();
-    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigateTo(sourceListId));
+    auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));
     REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
     playback.commands().seek(std::chrono::milliseconds{500});
     playback.commands().setShuffleMode(rt::ShuffleMode::On);
@@ -240,7 +240,7 @@ namespace ao::gtk::test
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();
@@ -275,7 +275,7 @@ namespace ao::gtk::test
 
     auto const configPath = std::filesystem::path{fixture.tempDir().path()} / "app_config.yaml";
     auto configStorePtr = std::make_shared<AppConfigStore>(configPath);
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
     coordinator.initializeSession();

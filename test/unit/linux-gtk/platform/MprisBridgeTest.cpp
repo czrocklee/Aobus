@@ -93,8 +93,14 @@ namespace ao::gtk::platform::test
       runtime.reloadAllTracks();
       auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
       REQUIRE(listOrder != nullptr);
-      auto const result =
-        runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks, {.optPresentation = listOrder->spec});
+      auto const result = runtime.workspace().navigate({
+        .target = rt::GlobalViewKind::AllTracks,
+        .optPresentation =
+          rt::NavigationPresentation{
+            .mode = rt::NavigationPresentationMode::Override,
+            .spec = listOrder->spec,
+          },
+      });
       REQUIRE(result);
       return *result;
     }

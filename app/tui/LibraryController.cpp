@@ -479,11 +479,11 @@ namespace ao::tui
 
     if (listId == rt::kAllTracksListId)
     {
-      navigationResult = _runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks);
+      navigationResult = _runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks});
     }
     else
     {
-      navigationResult = _runtime.workspace().navigateTo(listId);
+      navigationResult = _runtime.workspace().navigate({.target = listId});
     }
 
     if (!navigationResult)

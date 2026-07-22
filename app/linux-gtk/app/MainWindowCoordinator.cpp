@@ -6,7 +6,6 @@
 #include "app/AppConfigStore.h"
 #include "app/GtkLayoutStateStore.h"
 #include "app/GtkUiDependencies.h"
-#include "app/MainWindow.h"
 #include "app/ThemeCoordinator.h"
 #include "app/WindowState.h"
 #include "image/ImageCache.h"
@@ -25,7 +24,6 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -42,6 +40,7 @@
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gtkmm/stack.h>
+#include <gtkmm/window.h>
 
 #include <filesystem>
 #include <memory>
@@ -56,7 +55,7 @@ namespace ao::gtk
 {
   struct MainWindowCoordinator::Impl final
   {
-    Impl(MainWindowCoordinator* coordinator, MainWindow& window, rt::AppRuntime& runtime)
+    Impl(MainWindowCoordinator* coordinator, Gtk::Window& window, rt::AppRuntime& runtime)
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library()}
       , imageCache{100}
@@ -67,12 +66,8 @@ namespace ao::gtk
       , listNavigationController{window,
                                  runtime,
                                  ListNavigationController::Callbacks{
-                                   .onListSelected =
-                                     [&runtime, this](ListId listId)
-                                   {
-                                     auto const spec = presentationForList(listId, runtime);
-                                     std::ignore = runtime.workspace().navigateTo(listId, {.optPresentation = spec});
-                                   },
+                                   .onListSelected = [&runtime, this](ListId listId)
+                                   { std::ignore = navigateToList(listId, runtime); },
                                    .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
                                    { trackPresentationPreferences.setPresentationIdForList(listId, presentationId); },
                                    .listPresentationCallback = [this](ListId listId) -> std::optional<std::string>
@@ -134,22 +129,17 @@ namespace ao::gtk
       });
     }
 
-    void applyPresentationPreferencesToOpenViews(rt::AppRuntime& runtime) const
+    Result<rt::ViewId> navigateToList(ListId listId, rt::AppRuntime& runtime) const
     {
-      for (auto const viewId : runtime.workspace().snapshot().openViews)
-      {
-        auto const state = runtime.views().trackListState(viewId);
-
-        if (state.listId == kInvalidListId)
-        {
-          continue;
-        }
-
-        if (auto result = runtime.views().setPresentation(viewId, presentationForList(state.listId, runtime)); !result)
-        {
-          APP_LOG_ERROR("Failed to apply presentation preference: {}", result.error().message);
-        }
-      }
+      auto const spec = presentationForList(listId, runtime);
+      return runtime.workspace().navigate({
+        .target = listId,
+        .optPresentation =
+          rt::NavigationPresentation{
+            .mode = rt::NavigationPresentationMode::NewViewDefault,
+            .spec = spec,
+          },
+      });
     }
 
     void restorePlaybackSession(rt::AppRuntime& runtime) const
@@ -167,8 +157,7 @@ namespace ao::gtk
         return;
       }
 
-      auto const spec = presentationForList(restored->sourceListId, runtime);
-      std::ignore = runtime.workspace().navigateTo(restored->sourceListId, {.optPresentation = spec});
+      std::ignore = navigateToList(restored->sourceListId, runtime);
       runtime.playback().commands().revealTrack(restored->trackId, rt::kInvalidViewId, restored->sourceListId);
     }
 
@@ -187,7 +176,7 @@ namespace ao::gtk
     portal::ImportExportCoordinator importExportCoordinator;
   };
 
-  MainWindowCoordinator::MainWindowCoordinator(MainWindow& window,
+  MainWindowCoordinator::MainWindowCoordinator(Gtk::Window& window,
                                                rt::AppRuntime& runtime,
                                                std::shared_ptr<AppConfigStore> configStorePtr)
     : _window{window}, _runtime{runtime}, _configStorePtr{std::move(configStorePtr)}
@@ -269,12 +258,9 @@ namespace ao::gtk
       APP_LOG_WARN("MainWindowCoordinator: Failed to restore workspace session - {}", restored.error().message);
     }
 
-    _implPtr->applyPresentationPreferencesToOpenViews(_runtime);
-
     if (_runtime.workspace().snapshot().openViews.empty())
     {
-      auto const spec = _implPtr->presentationForList(rt::kAllTracksListId, _runtime);
-      auto const navigated = _runtime.workspace().navigateTo(rt::kAllTracksListId, {.optPresentation = spec});
+      auto const navigated = _implPtr->navigateToList(rt::kAllTracksListId, _runtime);
 
       if (restored && navigated)
       {

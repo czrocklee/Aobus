@@ -107,10 +107,14 @@ Consumers never receive a sequence of partially added views or a separate preset
 ## Frontend lifecycle integration
 
 GTK restores workspace state after constructing the library-bound runtime and before restoring playback state.
-It applies GTK per-list presentation preferences after workspace restore.
-[RFC 0018](../../rfc/0018-preserve-restored-view-presentation.md) proposes removing that overwrite while retaining preferences for new views.
+Every restored view retains the exact presentation carried by the workspace candidate, and GTK does not reinterpret that state through its per-list default preference.
+The restored active view therefore seeds history with the same presentation that remains visible after initialization; later history replay restores that exact point.
 If the restored snapshot has no open view, GTK navigates to All Tracks with the resolved default presentation and immediately requests a workspace checkpoint.
 That automatic first-view checkpoint occurs only after a successful empty restore; a rejected workspace document may produce an in-memory default view but is not overwritten during initialization.
+
+For ordinary list navigation and playback restoration, GTK always resolves the per-list preference or recommendation and submits it as `NewViewDefault` presentation intent.
+`WorkspaceService` decides whether to reuse an existing unfiltered view or create one: reuse preserves the exact active presentation, while creation applies the supplied default.
+A filtered view over the same list is not reusable for this purpose, retains its own exact presentation, and does not prevent creation of a plain view with the supplied default.
 
 GTK saves workspace state with its other explicit save, hide, shutdown, and active-library preparation checkpoints.
 The [GTK active-library lifecycle specification](../linux-gtk/active-library-lifecycle.md) owns those transitions.
@@ -162,6 +166,7 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) proves cross-runtime view and presentation reconstruction.
 - [`WorkspaceHistoryTest.cpp`](../../../test/unit/runtime/WorkspaceHistoryTest.cpp) protects the history seeded by restore.
 - [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK workspace/playback restore composition.
+- [`MainWindowSessionPresentationTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) proves restored presentation preservation, initial history replay, and new-view default selection.
 
 ## Related documents
 
@@ -172,4 +177,3 @@ The [workspace session state reference](../../reference/workspace/session-state.
 - [Grouped configuration store](../persistence/config-store.md)
 - [GTK active-library lifecycle](../linux-gtk/active-library-lifecycle.md)
 - [RFC 0017: exact active workspace view](../../rfc/0017-exact-active-workspace-view.md)
-- [RFC 0018: preserve restored view presentation](../../rfc/0018-preserve-restored-view-presentation.md)

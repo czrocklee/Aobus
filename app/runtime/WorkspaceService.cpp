@@ -280,7 +280,7 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    Result<ViewId> navigateToReusableView(ViewId const viewId, NavigationOptions const& options)
+    Result<ViewId> navigateToReusableView(ViewId const viewId, NavigationRequest const& request)
     {
       auto stateResult = liveViewState(viewId);
 
@@ -290,8 +290,13 @@ namespace ao::rt
       }
 
       auto const& state = *stateResult;
-      auto const presentation =
-        options.optPresentation ? normalizeTrackPresentationSpec(*options.optPresentation) : state.presentation;
+      auto presentation = state.presentation;
+
+      if (request.optPresentation && request.optPresentation->mode == NavigationPresentationMode::Override)
+      {
+        presentation = normalizeTrackPresentationSpec(request.optPresentation->spec);
+      }
+
       auto nextSnapshot = currentSnapshot;
       auto nextHistory = navigationHistory;
       bool changed = false;
@@ -311,7 +316,7 @@ namespace ao::rt
       auto const presentationChanged = state.presentation != presentation;
       changed = changed || presentationChanged;
 
-      if (options.recordHistory)
+      if (request.recordHistory)
       {
         changed = nextHistory.commit(navigationPoint(state, presentation)) || changed;
       }
@@ -335,9 +340,9 @@ namespace ao::rt
       return viewId;
     }
 
-    Result<ViewId> navigate(NavigationTarget const& target, NavigationOptions const& options)
+    Result<ViewId> navigate(NavigationRequest const& request)
     {
-      auto targetResult = resolveNavigationTarget(target);
+      auto targetResult = resolveNavigationTarget(request.target);
 
       if (!targetResult)
       {
@@ -346,7 +351,7 @@ namespace ao::rt
 
       if (auto const optViewId = reusableView(*targetResult); optViewId)
       {
-        return navigateToReusableView(*optViewId, options);
+        return navigateToReusableView(*optViewId, request);
       }
 
       auto nextSnapshot = currentSnapshot;
@@ -356,7 +361,12 @@ namespace ao::rt
         .listId = targetResult->listId,
         .filterExpression = targetResult->filterExpression,
       };
-      config.optPresentation = options.optPresentation;
+
+      if (request.optPresentation)
+      {
+        config.optPresentation = request.optPresentation->spec;
+      }
+
       auto viewResult = views.createView(config);
 
       if (!viewResult)
@@ -372,7 +382,7 @@ namespace ao::rt
         nextSnapshot.openViews.push_back(viewId);
         nextSnapshot.activeViewId = viewId;
 
-        if (options.recordHistory)
+        if (request.recordHistory)
         {
           std::ignore = nextHistory.commit(navigationPoint(state, state.presentation));
         }
@@ -456,7 +466,7 @@ namespace ao::rt
       return closeViews(ids, WorkspaceChangeCause::Close);
     }
 
-    Result<> applyPresentation(TrackPresentationSpec const& requested, NavigationOptions const& options)
+    Result<> applyPresentation(TrackPresentationSpec const& requested, PresentationChangeOptions const& options)
     {
       auto const viewId = currentSnapshot.activeViewId;
 
@@ -679,10 +689,10 @@ namespace ao::rt
     return _implPtr->focus(viewId);
   }
 
-  Result<ViewId> WorkspaceService::navigateTo(NavigationTarget const& target, NavigationOptions const options)
+  Result<ViewId> WorkspaceService::navigate(NavigationRequest const& request)
   {
     _implPtr->ensureOnExecutor();
-    return _implPtr->navigate(target, options);
+    return _implPtr->navigate(request);
   }
 
   Result<> WorkspaceService::closeView(ViewId const viewId)
@@ -692,14 +702,14 @@ namespace ao::rt
   }
 
   Result<> WorkspaceService::setActivePresentation(TrackPresentationSpec const& presentation,
-                                                   NavigationOptions const options)
+                                                   PresentationChangeOptions const options)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->applyPresentation(presentation, options);
   }
 
   Result<TrackPresentationSpec> WorkspaceService::setActivePresentation(std::string_view const presentationId,
-                                                                        NavigationOptions const options)
+                                                                        PresentationChangeOptions const options)
   {
     _implPtr->ensureOnExecutor();
     auto const optPresentation = _implPtr->presentationForId(presentationId);

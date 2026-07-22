@@ -184,7 +184,7 @@ namespace ao::rt::test
 
     auto const reply1 = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));
     REQUIRE(env.views.setSelection(reply1, {id1}));
-    REQUIRE(env.workspace.navigateTo(GlobalViewKind::AllTracks));
+    REQUIRE(env.workspace.navigate({.target = GlobalViewKind::AllTracks}));
 
     CHECK(callCount >= 2);
     CHECK(aggregateString(projPtr->snapshot().fields[static_cast<std::size_t>(F::Title)]) == "Song A");
@@ -213,7 +213,7 @@ namespace ao::rt::test
     auto env = TrackDetailProjectionFixture{};
     auto const id1 = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Already Selected"});
 
-    auto const viewId = ao::test::requireValue(env.workspace.navigateTo(GlobalViewKind::AllTracks));
+    auto const viewId = ao::test::requireValue(env.workspace.navigate({.target = GlobalViewKind::AllTracks}));
     REQUIRE(env.views.setSelection(viewId, {id1}));
 
     auto const projPtr = env.views.detailProjection(FocusedViewTarget{}, env.workspace, env.changes);

@@ -227,8 +227,14 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "The albums presentation is unavailable");
     }
 
-    auto navigation = _implPtr->workspaceService.navigateTo(
-      GlobalViewKind::AllTracks, {.recordHistory = true, .optPresentation = albums->spec});
+    auto navigation = _implPtr->workspaceService.navigate(NavigationRequest{
+      .target = GlobalViewKind::AllTracks,
+      .optPresentation =
+        NavigationPresentation{
+          .mode = NavigationPresentationMode::Override,
+          .spec = albums->spec,
+        },
+    });
 
     if (!navigation)
     {

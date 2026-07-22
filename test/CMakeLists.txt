@@ -461,6 +461,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp
     unit/linux-gtk/app/MainWindowCoordinatorTest.cpp
+    unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp
     unit/linux-gtk/app/MenuControllerTest.cpp
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp

@@ -53,7 +53,7 @@ namespace ao::gtk::test
 
     SECTION("rebuild creating pages")
     {
-      REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
+      REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       drainGtkEvents();
 
       host.rebuild(cache);
@@ -69,7 +69,7 @@ namespace ao::gtk::test
       auto const trackId = addRuntimeTrack(
         runtime, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       runtime.reloadAllTracks();
-      REQUIRE(runtime.workspace().navigateTo(rt::GlobalViewKind::AllTracks));
+      REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
       auto const viewId = runtime.workspace().snapshot().activeViewId;
       REQUIRE(viewId != rt::kInvalidViewId);
 

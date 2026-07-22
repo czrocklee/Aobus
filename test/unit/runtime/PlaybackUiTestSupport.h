@@ -21,7 +21,7 @@ namespace ao::rt::test
   {
     PlaybackUiFixture()
       : runtime{makeRuntime(tempDir)}
-      , viewId{ao::test::requireValue(runtime.workspace().navigateTo(GlobalViewKind::AllTracks))}
+      , viewId{ao::test::requireValue(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}))}
     {
     }
 

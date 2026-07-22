@@ -21,7 +21,7 @@ namespace ao::rt::test
 {
   using namespace ao::test;
 
-  TEST_CASE("WorkspaceService - navigateTo deduplicates the current list", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigate deduplicates the current list", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
@@ -35,21 +35,20 @@ namespace ao::rt::test
     CHECK(state.listId == fixture.firstListId);
   }
 
-  TEST_CASE("WorkspaceService - navigateTo can skip recording history", "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigate request can skip recording history", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
     requireNavigation(runtime, fixture.firstListId);
-    requireNavigation(runtime, fixture.secondListId, {.recordHistory = false});
+    requireNavigation(runtime, NavigationRequest{.target = fixture.secondListId, .recordHistory = false});
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
     CHECK(state.listId == fixture.secondListId);
     CHECK_FALSE(runtime.workspace().goBack());
   }
 
-  TEST_CASE("WorkspaceService - navigateTo filtered target records filter history",
-            "[runtime][unit][workspace][history]")
+  TEST_CASE("WorkspaceService - navigate filtered target records filter history", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
@@ -240,10 +239,10 @@ namespace ao::rt::test
     auto const listB = ao::test::requireValue(runtime.library().writer().createList(
       LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "B"}));
 
-    requireNavigation(runtime, listA, {.recordHistory = true});
+    requireNavigation(runtime, NavigationRequest{.target = listA, .recordHistory = true});
     auto const viewA = runtime.workspace().snapshot().activeViewId;
 
-    requireNavigation(runtime, listB, {.recordHistory = true});
+    requireNavigation(runtime, NavigationRequest{.target = listB, .recordHistory = true});
     auto const viewB = runtime.workspace().snapshot().activeViewId;
 
     CHECK(viewA != viewB);

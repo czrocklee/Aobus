@@ -45,7 +45,7 @@ namespace ao::gtk::test
     button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
     window.set_child(button);
 
-    REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
 
     auto* const menuButton = findWidget<Gtk::MenuButton>(button);
@@ -78,7 +78,7 @@ namespace ao::gtk::test
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
 
-    REQUIRE(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
     auto const activeViewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(activeViewId != rt::kInvalidViewId);
@@ -116,7 +116,7 @@ namespace ao::gtk::test
     auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
     auto window = Gtk::Window{};
 
-    auto const firstViewId = ao::test::requireValue(runtime.workspace().navigateTo(rt::kAllTracksListId));
+    auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();
     auto button = TrackPresentationButton{runtime};
     button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
@@ -134,7 +134,7 @@ namespace ao::gtk::test
     emitClicked(*albumsButton);
     auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
       rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Other"}));
-    auto const secondViewId = ao::test::requireValue(runtime.workspace().navigateTo(secondListId));
+    auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
     auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
     drainGtkEvents();
 

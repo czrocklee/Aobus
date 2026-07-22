@@ -40,7 +40,7 @@ namespace ao::rt::test
       auto runtime = makeRuntime(tempDir);
       auto const listId = ao::test::requireValue(runtime.library().writer().createList(
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Headless"}));
-      REQUIRE(runtime.workspace().navigateTo(listId));
+      REQUIRE(runtime.workspace().navigate({.target = listId}));
 
       auto const layout = runtime.workspace().snapshot();
       REQUIRE(layout.openViews.size() == 1);
@@ -54,9 +54,14 @@ namespace ao::rt::test
     SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
     {
       auto runtime = makeRuntime(tempDir);
-      auto const filteredViewId = ao::test::requireValue(runtime.workspace().navigateTo(
-        FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "$artist ~ \"A\""}));
-      REQUIRE(runtime.workspace().navigateTo(GlobalViewKind::AllTracks));
+      auto const filteredViewId = ao::test::requireValue(runtime.workspace().navigate({
+        .target =
+          FilteredListTarget{
+            .listId = kAllTracksListId,
+            .filterExpression = "$artist ~ \"A\"",
+          },
+      }));
+      REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
       auto const layout = runtime.workspace().snapshot();
       CHECK(layout.openViews.size() == 2);
@@ -74,8 +79,8 @@ namespace ao::rt::test
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First"}));
       auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second"}));
-      REQUIRE(runtime.workspace().navigateTo(firstListId));
-      REQUIRE(runtime.workspace().navigateTo(secondListId));
+      REQUIRE(runtime.workspace().navigate({.target = firstListId}));
+      REQUIRE(runtime.workspace().navigate({.target = secondListId}));
 
       auto layout1 = runtime.workspace().snapshot();
       REQUIRE(layout1.openViews.size() == 2);
@@ -98,8 +103,8 @@ namespace ao::rt::test
           LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First saved"}));
         auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
           LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second saved"}));
-        REQUIRE(runtime.workspace().navigateTo(firstListId));
-        REQUIRE(runtime.workspace().navigateTo(secondListId));
+        REQUIRE(runtime.workspace().navigate({.target = firstListId}));
+        REQUIRE(runtime.workspace().navigate({.target = secondListId}));
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
 
         auto const encoded = ao::test::readFile(workspaceConfigPath);
@@ -124,7 +129,7 @@ namespace ao::rt::test
         auto runtime = makeRuntime(tempDir);
         auto const listId = ao::test::requireValue(runtime.library().writer().createList(
           LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Grouped saved"}));
-        REQUIRE(runtime.workspace().navigateTo(listId));
+        REQUIRE(runtime.workspace().navigate({.target = listId}));
         auto const viewId = runtime.workspace().snapshot().activeViewId;
         auto const* artistPreset = builtinTrackPresentationPreset("artists");
         REQUIRE(artistPreset != nullptr);
@@ -159,7 +164,7 @@ namespace ao::rt::test
         auto runtime = makeRuntime(tempDir);
         auto const listId = ao::test::requireValue(runtime.library().writer().createList(
           LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Flat saved"}));
-        REQUIRE(runtime.workspace().navigateTo(listId));
+        REQUIRE(runtime.workspace().navigate({.target = listId}));
         runtime.workspace().saveSession(runtime.workspaceConfigStore());
       }
 
