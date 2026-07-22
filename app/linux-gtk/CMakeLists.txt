@@ -23,6 +23,7 @@ add_library(aobus-gtk-lib STATIC
     app/GtkAccelTranslator.cpp
     app/GtkMainContextExecutor.cpp
     app/KeymapApplicator.cpp
+    app/LibraryWindowLifecycle.cpp
     app/MainWindow.cpp
     app/MenuController.cpp
     app/MouseNavigationPolicy.cpp

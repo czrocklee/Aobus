@@ -3,22 +3,19 @@
 
 #include "app/AppConfigStore.h"
 #include "app/AppDialog.h"
-#include "app/GtkMainContextExecutor.h"
 #include "app/GtkStyleRuntime.h"
 #include "app/KeymapApplicator.h"
+#include "app/LibraryWindowLifecycle.h"
 #include "app/MainWindow.h"
 #include "app/ShellLayoutComponentStateStore.h"
 #include "app/ShellLayoutStore.h"
 #include "common/MainContextCallbackScope.h"
-#include "platform/AudioBackendBootstrap.h"
 #include "portal/ImportExportCoordinator.h"
 #include "portal/LibraryImportExportWorkflow.h"
 #include "preference/PreferencesWindow.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
 #include <ao/rt/AppPrefsState.h>
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/uimodel/input/KeymapModel.h>
@@ -86,44 +83,6 @@ namespace
     auto const emptyPath = std::filesystem::temp_directory_path() / "aobus-empty";
     std::filesystem::create_directories(emptyPath);
     return {.musicRoot = emptyPath, .databasePath = rt::LibraryPaths{emptyPath}.databasePath()};
-  }
-
-  Glib::RefPtr<MainWindow> createWindow(Gtk::Application& app,
-                                        ResolvedLibraryPaths paths,
-                                        std::shared_ptr<AppConfigStore> appConfigStorePtr,
-                                        std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
-                                        std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr)
-  {
-    auto asyncExceptionHandler = rt::Log::asyncExceptionHandler();
-    auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-
-    auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
-    auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);
-
-    auto appRuntimePtr = std::make_unique<rt::AppRuntime>(
-      rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
-                                 .musicRoot = paths.musicRoot,
-                                 .databasePath = paths.databasePath,
-                                 .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
-                                 .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore(),
-                                 .asyncExceptionHandler = std::move(asyncExceptionHandler)});
-
-    registerPlatformAudioBackends(*appRuntimePtr);
-
-    auto windowPtr = Glib::make_refptr_for_instance<MainWindow>(
-      new MainWindow{*appRuntimePtr, appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr});
-
-    // Store AppRuntime alongside window (lifetime tied to window via pointer)
-    windowPtr->set_data("app-runtime",
-                        new std::unique_ptr<rt::AppRuntime>{std::move(appRuntimePtr)},
-                        [](void* data) { delete static_cast<std::unique_ptr<rt::AppRuntime>*>(data); });
-
-    windowPtr->initializeSession();
-
-    app.add_window(*windowPtr);
-    windowPtr->present();
-
-    return windowPtr;
   }
 
   struct CliOptions final
@@ -210,7 +169,7 @@ namespace
                             std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
                             bool const scanAfterOpen)
   {
-    if (!std::filesystem::is_directory(path))
+    if (!mainWindowPtr || !std::filesystem::is_directory(path))
     {
       return;
     }
@@ -218,52 +177,62 @@ namespace
     auto const requestedPath = std::filesystem::absolute(path).lexically_normal();
     auto const libraryPaths = rt::LibraryPaths{requestedPath};
 
-    if (mainWindowPtr && mainWindowPtr->musicRoot() == requestedPath)
-    {
-      if (scanAfterOpen)
-      {
-        mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
-      }
+    auto candidateWindowPtr = Glib::RefPtr<MainWindow>{};
+    auto retiredWindowPtr = Glib::RefPtr<MainWindow>{};
+    auto const activeRoot = mainWindowPtr->musicRoot();
 
-      mainWindowPtr->present();
-      return;
-    }
-
-    if (mainWindowPtr)
-    {
-      if (auto const prepared = mainWindowPtr->prepareForLibrarySwitch(); !prepared)
-      {
-        APP_LOG_ERROR("Failed to prepare active library for replacement: {}", prepared.error().message);
-        return;
-      }
-
-      appPtr->remove_window(*mainWindowPtr);
-      mainWindowPtr.reset();
-    }
-
-    auto appSession = rt::AppSessionState{};
-    appConfigStorePtr->loadAppSession(appSession);
-    appSession.lastLibraryPath = requestedPath.string();
-    appConfigStorePtr->saveAppSession(appSession);
-
-    mainWindowPtr = createWindow(
-      *appPtr,
-      {.musicRoot = requestedPath, .databasePath = libraryPaths.databasePath(), .scanAfterOpen = scanAfterOpen},
-      appConfigStorePtr,
-      shellLayoutStorePtr,
-      componentStateStorePtr);
-    configureOpenLibraryCallback(mainWindowPtr,
-                                 appPtr,
-                                 mainWindowPtr,
-                                 callbackScope,
-                                 openLibraryIdleRegistration,
+    auto const opened = openLibraryWindow(
+      activeRoot,
+      requestedPath,
+      scanAfterOpen,
+      LibraryWindowReplacementCallbacks{
+        .prepareCandidate =
+          [&]
+        {
+          candidateWindowPtr =
+            prepareLibraryWindow({.musicRoot = requestedPath, .databasePath = libraryPaths.databasePath()},
                                  appConfigStorePtr,
                                  shellLayoutStorePtr,
                                  componentStateStorePtr);
+        },
+        .configureCandidate =
+          [&]
+        {
+          configureOpenLibraryCallback(candidateWindowPtr,
+                                       appPtr,
+                                       mainWindowPtr,
+                                       callbackScope,
+                                       openLibraryIdleRegistration,
+                                       appConfigStorePtr,
+                                       shellLayoutStorePtr,
+                                       componentStateStorePtr);
+        },
+        .retireActive = [&] { return mainWindowPtr->retireForLibrarySwitch(); },
+        .activateCandidate = [&]
+        { activateLibraryWindow(*appPtr, candidateWindowPtr, MainWindow::PlaybackRestoreMode::StartIdle); },
+        .replaceActiveSlot = [&] { retiredWindowPtr = std::exchange(mainWindowPtr, candidateWindowPtr); },
+        .releaseRetired =
+          [&]
+        {
+          appPtr->remove_window(*retiredWindowPtr);
+          retiredWindowPtr.reset();
+        },
+        .persistSelectedPath =
+          [&]
+        {
+          auto appSession = rt::AppSessionState{};
+          appConfigStorePtr->loadAppSession(appSession);
+          appSession.lastLibraryPath = requestedPath.string();
+          appConfigStorePtr->saveAppSession(appSession);
+        },
+        .scanActive = [&]
+        { mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap); },
+        .presentActive = [&] { mainWindowPtr->present(); },
+      });
 
-    if (scanAfterOpen)
+    if (!opened)
     {
-      mainWindowPtr->importExportCoordinator().scanLibrary(portal::ScanRequestMode::FastBootstrap);
+      APP_LOG_ERROR("Failed to retire active library for replacement: {}", opened.error().message);
     }
   }
 
@@ -578,7 +547,10 @@ namespace
 
     auto const scanAfterOpen = paths.scanAfterOpen;
     mainWindowPtr =
-      createWindow(*appPtr, std::move(paths), appConfigStorePtr, shellLayoutStorePtr, componentStateStorePtr);
+      prepareLibraryWindow({.musicRoot = std::move(paths.musicRoot), .databasePath = std::move(paths.databasePath)},
+                           appConfigStorePtr,
+                           shellLayoutStorePtr,
+                           componentStateStorePtr);
     configureOpenLibraryCallback(mainWindowPtr,
                                  appPtr,
                                  mainWindowPtr,
@@ -587,6 +559,8 @@ namespace
                                  appConfigStorePtr,
                                  shellLayoutStorePtr,
                                  componentStateStorePtr);
+
+    activateLibraryWindow(*appPtr, mainWindowPtr, MainWindow::PlaybackRestoreMode::Restore);
 
     if (scanAfterOpen)
     {

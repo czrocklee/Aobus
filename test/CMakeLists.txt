@@ -466,6 +466,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/app/PlaybackShortcutPolicyTest.cpp
     unit/linux-gtk/app/GtkAccelTranslatorTest.cpp
     unit/linux-gtk/app/KeymapApplicatorTest.cpp
+    unit/linux-gtk/app/LibraryWindowLifecycleTest.cpp
     unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp
     unit/linux-gtk/app/MouseNavigationPolicyTest.cpp
     unit/linux-gtk/app/AobusSoulTest.cpp

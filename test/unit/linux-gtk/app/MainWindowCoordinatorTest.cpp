@@ -113,7 +113,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
-    coordinator.initializeSession();
+    coordinator.prepareSession();
 
     CHECK(ao::test::readFile(workspacePath) == rejected);
     CHECK(runtime.workspace().snapshot().openViews.size() == 1);
@@ -243,7 +243,8 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
-    coordinator.initializeSession();
+    coordinator.prepareSession();
+    coordinator.restorePlaybackSession();
 
     auto const snapshot = playback.snapshot();
     auto const& sequenceState = snapshot.succession;
@@ -278,7 +279,8 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
 
-    coordinator.initializeSession();
+    coordinator.prepareSession();
+    coordinator.restorePlaybackSession();
     auto const viewId = runtime.workspace().snapshot().activeViewId;
     REQUIRE(viewId != rt::kInvalidViewId);
     auto const* const listOrder = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);

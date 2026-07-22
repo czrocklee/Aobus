@@ -200,7 +200,9 @@ Workspace, GTK preference, layout, and presentation owners currently use their o
 
 ### Library switching
 
-Library switching in GTK tears down the current library runtime and its per-library stores, records the newly selected library in global application state, and constructs a replacement runtime for that library.
+Library switching in GTK prepares a candidate runtime and its per-library stores while the current pair remains active, then retires the old pair and activates the candidate.
+Only after the candidate is active and the old pair is released does GTK record the newly selected library in global application state.
+That selected-path save is best-effort: failure retains the previous durable path without rolling back the usable in-process candidate.
 Global layout customization and application preferences survive the replacement; library database, workspace, and per-library presentation state change with the selected root.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns the orchestration and lifetime order; this document owns which state and stores survive that transition, while the [workspace architecture](workspace.md) owns the workspace candidate's semantics.
 

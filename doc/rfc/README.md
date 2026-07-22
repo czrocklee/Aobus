@@ -25,13 +25,11 @@ Each row records the outgoing direct edges of one active proposal; sequence numb
 | RFC | Hard | Conditional | Integration |
 |---|---|---|---|
 | [0004](0004-scan-file-revalidation.md) | None | None | None |
-| [0019](0019-safe-active-library-replacement.md) | None | None | None |
 | [0021](0021-nonblocking-cover-art.md) | None | None | None |
 | [0033](0033-nonblocking-playback-preparation.md) | None | None | None |
 
 ## Proposal inventory
 
 - [RFC 0004: Scan file revalidation](0004-scan-file-revalidation.md) rechecks actionable paths before a prepared scan mutates the library.
-- [RFC 0019: Safe active-library replacement](0019-safe-active-library-replacement.md) prepares a GTK replacement pair before releasing the working pair.
 - [RFC 0021: Non-blocking cover-art delivery](0021-nonblocking-cover-art.md) moves interactive resource reads and transforms off frontend event-loop threads.
 - [RFC 0033: Non-blocking playback preparation](0033-nonblocking-playback-preparation.md) opens and prepares audio candidates away from the runtime callback executor.

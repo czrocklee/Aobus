@@ -18,7 +18,7 @@ Those facts belong to the linked workspace, playback, library, presentation, and
 ## Code boundary
 
 This is a **GTK frontend composition-root** contract under the [system architecture](../../architecture/system-overview.md) and [interactive session lifecycle architecture](../../architecture/interactive-session-lifecycle.md).
-Its implementation is `app/linux-gtk/main.cpp`, `app/linux-gtk/app/MainWindow.cpp`, and `MainWindowCoordinator.cpp`.
+Its implementation is `app/linux-gtk/main.cpp`, `LibraryWindowLifecycle.cpp`, `MainWindow.cpp`, and `MainWindowCoordinator.cpp`.
 
 GTK may select platform paths, construct stores and executors, register audio providers, own windows, and coordinate lifecycle commands.
 It cannot redefine runtime workspace, playback, library, or persistence payload semantics.
@@ -27,22 +27,25 @@ It cannot redefine runtime workspace, playback, library, or persistence payload 
 
 - **Active library** is the music root bound to the current main-window `AppRuntime`.
 - **Window/runtime pair** is one `MainWindow` and the `AppRuntime` whose lifetime is attached to it.
-- **Prepare for switch** is the old pair's checkpoint, playback-session discard, and stale-write guard transition.
+- **Prepared candidate** is a fully constructed pair whose library, workspace, default view, and shell layout are ready but whose playback has not been restored, MPRIS has not started, and window has not joined the application.
+- **Retire for switch** is the old pair's checkpoint, playback-session discard, and stale-write transition.
 - **Bootstrap scan** is the optional scan requested after opening a root whose database policy requires it.
 - **Empty fallback root** is the temporary `aobus-empty` directory used when no saved existing root can be opened at startup.
 
 ## Invariants
 
-- GTK has at most one active main-window/runtime pair in ordinary application composition.
+- GTK has at most one active pair; a prepared candidate may coexist outside application window membership during replacement.
 - One pair remains bound to one music root and database path for its lifetime.
 - Selecting a different root replaces the complete pair; it never retargets the existing runtime or storage graph.
 - Application-global configuration and shell-layout stores survive replacement; per-library runtime, database, workspace store, sources, views, and playback state do not.
-- The old window is prepared before its runtime is destroyed.
-- A prepared old window cannot later overwrite the new global `lastLibraryPath` during hide or destruction.
+- Candidate preparation completes before the old pair is retired or released.
+- A retired old window cannot later overwrite the new global `lastLibraryPath` during hide or destruction.
 - The globally stored restorable playback session is discarded before a different library becomes active, preventing old library identities from being restored against the new root.
 - Frontend observers and GTK objects are released before the window-owned runtime.
 - Opening a selected root whose normalized requested path equals the current runtime root reuses the pair rather than creating a duplicate runtime.
 - A native Open Library completion cannot request replacement after its owning coordinator has been destroyed.
+- Candidate construction or configuration failure leaves the active pair, application membership, visibility, playback, and saved selected path unchanged.
+- The selected path is saved only after candidate activation, active-slot replacement, and old-pair release.
 
 ## State model
 
@@ -51,11 +54,15 @@ The GTK lifecycle retains:
 - an optional active `MainWindow` reference;
 - application-global `AppConfigStore`, shell-layout store, and component-state store shared across pair replacement;
 - global application session state containing the last selected path and output identities;
-- one window-local `librarySwitchPrepared` guard;
+- one window-local phase in `Constructed`, `Prepared`, `Active`, or `Retired`;
 - one runtime-local music root, database, workspace store, and playback-session owner.
 
-`librarySwitchPrepared` begins false.
-It becomes true only after save and successful playback-session discard, and makes subsequent `MainWindow::saveSession()` calls no-ops for that old pair.
+Construction creates the frontend graph without lifecycle writes.
+Preparation restores library-backed and shell state and moves only from `Constructed` to `Prepared`.
+Activation moves only from `Prepared` to `Active`, using either startup restore or replacement idle-start mode.
+Retirement moves only from `Active` to `Retired` after save and successful playback-session discard; repeated retirement is idempotent.
+Only `Active` permits `MainWindow::saveSession()`, so prepared candidates and retired windows cannot write through hide or destruction.
+Other phase transitions return `InvalidState`.
 
 ## Commands and transitions
 
@@ -72,8 +79,12 @@ The empty fallback is an application bootstrap workspace, not a persisted replac
 GTK creates a main-context executor, a per-library workspace `ConfigStore`, and `AppRuntime` with the selected root and database.
 It injects the application-global playback-session store separately, registers platform audio providers, constructs `MainWindow`, and attaches runtime ownership to the window.
 
-Window construction loads window, output, theme, layout preference, action, and controller state needed before runtime session initialization.
-Initialization then rebuilds library pages, restores workspace, creates a default All Tracks view when necessary, restores playback intent, refreshes exported actions, and loads the shell layout.
+Window construction loads window, output, theme, layout preference, action, and controller state needed before runtime session preparation.
+Preparation rebuilds library pages, restores workspace, creates a default All Tracks view when necessary, refreshes exported actions, and loads the shell layout.
+It does not restore playback, start MPRIS, join the application, present the window, or request app/workspace/playback lifecycle checkpoints.
+
+GTK first adds the prepared startup window to the application, then activates it by restoring playback intent and starting MPRIS best-effort, and finally presents it.
+Playback restoration retains its existing log-and-continue failure policy.
 
 ### Open the active root
 
@@ -84,28 +95,34 @@ When it equals the current runtime root, GTK keeps the existing pair, optionally
 
 For a different valid directory, GTK performs:
 
-1. `MainWindow::prepareForLibrarySwitch()` on the old pair.
-2. Abort without removing the pair when preparation returns failure.
-3. Remove the old window from the application and release the last main-window reference.
-4. Load global application session state, replace `lastLibraryPath`, and save it.
-5. Construct and initialize a new pair for the selected root.
-6. Install its Open Library callback.
-7. Request a bootstrap scan when selected by path policy.
+1. Construct and prepare a candidate pair in a local owning reference while the old pair remains active.
+2. Install the candidate's Open Library callback.
+3. Destroy only the candidate if construction or post-construction configuration throws.
+4. Call `MainWindow::retireForLibrarySwitch()` on the old pair to checkpoint, discard its restorable playback payload, and retire it.
+5. Destroy only the candidate and retain the active old pair when retirement returns failure.
+6. Add the candidate to the application, activate it with `StartIdle`, present it, and replace the active slot.
+7. Remove and release the old pair, preserving frontend-observer-before-runtime destruction.
+8. Load global application session state, replace `lastLibraryPath`, and save it best-effort.
+9. Request a bootstrap scan when selected by path policy.
+
+Replacement activation never restores the global playback payload and therefore cannot interpret old-library track or list identities.
+Playback starts Idle.
+MPRIS activation failures are logged and do not turn the committed replacement into a recoverable rollback.
 
 The Open Library callback schedules this replacement through one GLib idle callback.
 The dialog/portal callback therefore returns before it can trigger destruction of its owning window and coordinator.
 
-### Prepare the old pair
+### Retire the old pair
 
-Preparation is idempotent after success.
+Retirement is idempotent after success.
 On its first call it requests the ordinary window/session checkpoint, then removes the current `playback-session` group through `AppRuntime::discardRestorablePlaybackSession()`.
 
-If discard fails, preparation returns that failure and leaves the stale-write guard false so the old pair remains active and can be retried.
-If discard succeeds, preparation sets the guard true.
+If discard fails, retirement returns that failure and leaves the old pair `Active`, usable, and able to save or retry.
+If discard succeeds, the window enters `Retired` and all later save triggers become no-ops.
 
 ### Ordinary save and shutdown
 
-An unprepared window requests session save on explicit save, hide, destruction, and application release.
+An active window requests session save on explicit save, hide, destruction, and application release.
 The coordinator captures window geometry, per-library column/presentation state, global active-library/output session values, playback session, and workspace session through their respective owners.
 
 Application quit and handled `SIGINT` or `SIGTERM` exit through the GTK quit path.
@@ -118,14 +135,18 @@ Selecting the active root can still request a scan; scan failure and progress be
 
 Playback-session discard failure aborts replacement and keeps the old pair active.
 The old window presents the discard diagnostic in a parent-bound transient message and returns the same failure to the replacement callback.
+Candidate preparation/configuration exceptions destroy the candidate during stack unwinding and reach the existing GLib signal exception boundary, which presents the error against the still-active old window.
 Current global, workspace, layout, and several other save wrappers contain void or best-effort paths, so their failure does not currently abort replacement or shutdown.
 Playback checkpoint failure is logged by the coordinator.
-[RFC 0019](../../rfc/0019-safe-active-library-replacement.md) proposes preparing the replacement pair before the old pair's final checkpoint and release, then saving the selected path only after activation.
+After retirement succeeds, playback restore and MPRIS activation retain their expected log-and-continue behavior and cannot roll the lifecycle back.
+There is no rollback contract for an unexpected invariant or platform exception after retirement: the old playback payload has already been discarded, so the old pair cannot be made active again reliably.
+Selected-path persistence failure is logged after commit; the new pair remains active while disk retains the previous path.
 
 The file-dialog callback silently consumes expected cancellation or dismissal; other native chooser failures are logged, presented in a parent-bound transient message, and create no replacement.
 Every native completion must enter the callback scope owned by its `ImportExportCoordinator` before it can hand a path to this lifecycle.
 Coordinator teardown closes that scope before requesting native cancellation, so a late completion performs no handoff.
-The idle replacement callback has no explicit cancellation token and relies on GTK application/window lifetime.
+The replacement handoff uses one idle registration.
+Shutdown first closes callback admission, whose close action cancels that pending idle registration, and only then saves and releases the active pair.
 
 Unexpected exceptions during final release save are caught and logged so window release can continue.
 Runtime-internal worker and audio quiescence belong to the [runtime execution](../../architecture/runtime-execution.md) and [playback](../../architecture/playback.md) architectures.
@@ -142,7 +163,7 @@ Changing the selected root changes lifecycle association and store composition e
 ## Frontend observations
 
 Successful same-root open presents the existing window.
-Successful different-root open removes the old window and presents a newly initialized window.
+Successful different-root open prepares a hidden candidate, activates it with idle playback, removes the old window, and leaves the application with only the new window.
 There is no public intermediate switching snapshot or progress model.
 
 Preparation failure is visible in a parent-bound transient message and leaves the old window/runtime and visible library in place.
@@ -150,23 +171,22 @@ Bootstrap scanning reports through the runtime library task and notification sur
 
 ## Implementation map
 
-- [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) owns startup path resolution, pair construction, open callbacks, active-pair replacement, application actions, signals, and release.
-- [`MainWindow`](../../../app/linux-gtk/app/MainWindow.h) and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) own switch preparation, the stale-write guard, hide, and destruction save triggers.
-- [`MainWindowCoordinator`](../../../app/linux-gtk/app/MainWindowCoordinator.h) and [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) own current restore and checkpoint sequencing inside a pair.
+- [`app/linux-gtk/main.cpp`](../../../app/linux-gtk/main.cpp) owns startup path resolution, open callbacks, active-slot storage, application actions, signals, and shutdown release.
+- [`LibraryWindowLifecycle`](../../../app/linux-gtk/app/LibraryWindowLifecycle.h) owns pair preparation, application activation, same-root reuse, and different-root replacement ordering through narrow callbacks.
+- [`MainWindow`](../../../app/linux-gtk/app/MainWindow.h) and [`MainWindow.cpp`](../../../app/linux-gtk/app/MainWindow.cpp) own lifecycle phases, activation mode, retirement, hide, and destruction save triggers.
+- [`MainWindowCoordinator`](../../../app/linux-gtk/app/MainWindowCoordinator.h) and [`MainWindowCoordinator.cpp`](../../../app/linux-gtk/app/MainWindowCoordinator.cpp) own prepare, optional playback restore, and checkpoint sequencing inside a pair.
 - [`AppRuntime`](../../../app/include/ao/rt/AppRuntime.h) owns the interactive runtime graph and playback-session discard command.
 - [`ImportExportCoordinator`](../../../app/linux-gtk/portal/ImportExportCoordinator.h) owns the platform file-dialog entry and callback handoff.
 - [`ImportExportCoordinatorPolicy`](../../../app/linux-gtk/portal/ImportExportCoordinatorPolicy.h) owns default database paths and bootstrap-scan selection.
 
 ## Test map
 
-- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) proves hide and explicit save triggers, successful switch preparation, playback-session discard, and prevention of stale path writes.
+- [`MainWindowTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowTest.cpp) proves phase transitions, candidate isolation, activation, finalization, save triggers, retirement, discard failure, and prevention of stale path writes.
+- [`LibraryWindowLifecycleTest.cpp`](../../../test/unit/linux-gtk/app/LibraryWindowLifecycleTest.cpp) proves candidate failure isolation, exact replacement order, same-root reuse, persistence timing/failure, idle activation, and scan timing.
 - [`MainWindowCoordinatorTest.cpp`](../../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) proves global session preservation, workspace/playback initialization, and checkpoint composition.
 - [`AppConfigStoreTest.cpp`](../../../test/unit/linux-gtk/app/AppConfigStoreTest.cpp) proves global session storage behavior.
 - [`ImportExportCoordinatorTest.cpp`](../../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects callback-scope teardown, native cancellation, default database paths, bootstrap-scan policy, and open-callback forwarding.
 - [`AppRuntimeTest.cpp`](../../../test/unit/runtime/AppRuntimeTest.cpp) protects runtime service and teardown lifetime below the GTK pair.
-
-The internal `main.cpp` replacement sequence does not currently have a focused end-to-end test; the window preparation and component policies above protect its principal state boundaries.
-[RFC 0019](../../rfc/0019-safe-active-library-replacement.md) proposes private prepare/activate operations with focused transition tests.
 
 ## Related documents
 
@@ -179,4 +199,3 @@ The internal `main.cpp` replacement sequence does not currently have a focused e
 - [Persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Managed file locations](../../reference/persistence/location.md)
-- [RFC 0019: safe active-library replacement](../../rfc/0019-safe-active-library-replacement.md)

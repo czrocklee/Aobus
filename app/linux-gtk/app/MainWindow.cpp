@@ -104,8 +104,6 @@ namespace ao::gtk
         .artUrlForResource = [cachePtr = std::move(mprisArtUrlCachePtr)](ResourceId const resourceId)
         { return cachePtr->urlForResource(resourceId); },
       });
-    _mprisBridgePtr->start();
-
     _shellLayout.setConfirmPromotionCallback(
       [this](std::string const& presetId, ShellLayoutController::ConfirmPromotionAnswer answer)
       {
@@ -165,7 +163,7 @@ namespace ao::gtk
 
   void MainWindow::saveSession()
   {
-    if (_librarySwitchPrepared)
+    if (_sessionPhase != SessionPhase::Active)
     {
       return;
     }
@@ -173,18 +171,23 @@ namespace ao::gtk
     _mainWindowCoordinatorPtr->saveSession();
   }
 
-  Result<> MainWindow::prepareForLibrarySwitch()
+  Result<> MainWindow::retireForLibrarySwitch()
   {
-    if (_librarySwitchPrepared)
+    if (_sessionPhase == SessionPhase::Retired)
     {
       return {};
+    }
+
+    if (_sessionPhase != SessionPhase::Active)
+    {
+      return makeError(Error::Code::InvalidState, "Only an active GTK session can be retired");
     }
 
     saveSession();
 
     if (auto discarded = _runtime.discardRestorablePlaybackSession(); !discarded)
     {
-      APP_LOG_ERROR("Failed to prepare active library for replacement: {}", discarded.error().message);
+      APP_LOG_ERROR("Failed to retire active library for replacement: {}", discarded.error().message);
       auto* const dialog = AppDialog::presentMessage(
         *this,
         "Unable to Switch Libraries",
@@ -202,13 +205,23 @@ namespace ao::gtk
       return discarded;
     }
 
-    _librarySwitchPrepared = true;
+    _sessionPhase = SessionPhase::Retired;
     return {};
   }
 
   std::filesystem::path const& MainWindow::musicRoot() const noexcept
   {
     return _runtime.musicRoot();
+  }
+
+  MainWindow::SessionPhase MainWindow::sessionPhase() const noexcept
+  {
+    return _sessionPhase;
+  }
+
+  bool MainWindow::isMprisStarted() const noexcept
+  {
+    return _mprisStarted;
   }
 
   void MainWindow::on_hide()
@@ -222,13 +235,62 @@ namespace ao::gtk
     return _mainWindowCoordinatorPtr->importExport();
   }
 
-  void MainWindow::initializeSession()
+  Result<> MainWindow::prepareSession()
   {
-    _mainWindowCoordinatorPtr->initializeSession();
+    if (_sessionPhase != SessionPhase::Constructed)
+    {
+      return makeError(Error::Code::InvalidState, "Only a constructed GTK session can be prepared");
+    }
+
+    _mainWindowCoordinatorPtr->prepareSession();
 
     _shellLayout.refreshExportedActions();
 
     _shellLayout.loadLayout();
+    _sessionPhase = SessionPhase::Prepared;
+    return {};
+  }
+
+  Result<> MainWindow::activateSession(PlaybackRestoreMode const restoreMode)
+  {
+    if (_sessionPhase != SessionPhase::Prepared)
+    {
+      return makeError(Error::Code::InvalidState, "Only a prepared GTK session can be activated");
+    }
+
+    _sessionPhase = SessionPhase::Active;
+
+    if (restoreMode == PlaybackRestoreMode::Restore)
+    {
+      try
+      {
+        _mainWindowCoordinatorPtr->restorePlaybackSession();
+      }
+      catch (std::exception const& e)
+      {
+        APP_LOG_WARN("Failed to restore GTK playback session during activation: {}", e.what());
+      }
+      catch (...)
+      {
+        APP_LOG_WARN("Failed to restore GTK playback session during activation: unknown exception");
+      }
+    }
+
+    try
+    {
+      _mprisBridgePtr->start();
+      _mprisStarted = true;
+    }
+    catch (std::exception const& e)
+    {
+      APP_LOG_WARN("Failed to activate MPRIS for GTK session: {}", e.what());
+    }
+    catch (...)
+    {
+      APP_LOG_WARN("Failed to activate MPRIS for GTK session: unknown exception");
+    }
+
+    return {};
   }
 
   void MainWindow::rebuildLayout()

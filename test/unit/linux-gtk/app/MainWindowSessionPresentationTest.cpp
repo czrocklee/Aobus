@@ -11,6 +11,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -115,7 +116,8 @@ namespace ao::gtk::test
 
     auto runtime = makeRuntime(tempDir);
     auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
-    window.initializeSession();
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
     auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
@@ -142,7 +144,8 @@ namespace ao::gtk::test
 
     auto runtime = makeRuntime(tempDir);
     auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
-    window.initializeSession();
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
@@ -168,7 +171,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
     coordinator.loadSession();
-    coordinator.initializeSession();
+    coordinator.prepareSession();
 
     coordinator.listNavigationController()->select(listId);
     drainGtkEvents();
@@ -217,7 +220,8 @@ namespace ao::gtk::test
     auto runtime = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(runtime);
     auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
-    window.initializeSession();
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
     auto const listViews = viewsForList(runtime, listId);
@@ -226,6 +230,35 @@ namespace ao::gtk::test
     CHECK(state.filterExpression.empty());
     CHECK(state.presentation.id == "songs");
     CHECK(state.selection == std::vector<TrackId>{trackId});
+  }
+
+  TEST_CASE("MainWindow - replacement activation leaves stored playback identity idle and unrestored",
+            "[gtk][regression][session-presentation]")
+  {
+    auto const appPtr = ensureGtkApplication();
+    auto tempDir = ao::test::TempDir{};
+
+    {
+      auto runtime = makeRuntime(tempDir);
+      rt::test::addReadyAudioProvider(runtime);
+      auto const trackId = addPlayableTrack(runtime, "Old library playback");
+      runtime.reloadAllTracks();
+      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+      REQUIRE(runtime.savePlaybackSession());
+      runtime.playback().commands().stop();
+    }
+
+    auto runtime = makeRuntime(tempDir);
+    rt::test::addReadyAudioProvider(runtime);
+    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
+
+    auto const& snapshot = runtime.playback().snapshot();
+    CHECK(snapshot.transport.transport == audio::Transport::Idle);
+    CHECK(snapshot.transport.nowPlaying.trackId == kInvalidTrackId);
+    CHECK(snapshot.succession.currentTrackId == kInvalidTrackId);
   }
 
   TEST_CASE("MainWindowCoordinator - playback restore creates a preferred plain view beside a filtered view",
@@ -263,7 +296,8 @@ namespace ao::gtk::test
     auto runtime = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(runtime);
     auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
-    window.initializeSession();
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
     auto const listViews = viewsForList(runtime, listId);
@@ -313,7 +347,8 @@ namespace ao::gtk::test
     auto runtime = makeRuntime(tempDir);
     rt::test::addReadyAudioProvider(runtime);
     auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
-    window.initializeSession();
+    REQUIRE(window.prepareSession());
+    REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
     auto const listViews = viewsForList(runtime, listId);

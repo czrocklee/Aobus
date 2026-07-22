@@ -11,6 +11,7 @@
 
 #include <gtkmm/applicationwindow.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 
@@ -40,6 +41,20 @@ namespace ao::gtk
   class MainWindow final : public Gtk::ApplicationWindow
   {
   public:
+    enum class PlaybackRestoreMode : std::uint8_t
+    {
+      Restore,
+      StartIdle,
+    };
+
+    enum class SessionPhase : std::uint8_t
+    {
+      Constructed,
+      Prepared,
+      Active,
+      Retired,
+    };
+
     explicit MainWindow(rt::AppRuntime& runtime,
                         std::shared_ptr<AppConfigStore> configStorePtr,
                         std::shared_ptr<ShellLayoutStore> shellLayoutStorePtr,
@@ -52,12 +67,15 @@ namespace ao::gtk
     MainWindow& operator=(MainWindow&&) = delete;
 
     void saveSession();
-    Result<> prepareForLibrarySwitch();
+    Result<> prepareSession();
+    Result<> activateSession(PlaybackRestoreMode restoreMode);
+    Result<> retireForLibrarySwitch();
     std::filesystem::path const& musicRoot() const noexcept;
+    SessionPhase sessionPhase() const noexcept;
+    bool isMprisStarted() const noexcept;
 
     portal::ImportExportCoordinator& importExportCoordinator();
 
-    void initializeSession();
     void rebuildLayout();
     void openLayoutEditor();
     void resetRuntimeLayoutState();
@@ -81,6 +99,7 @@ namespace ao::gtk
     std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
     std::unique_ptr<MenuController> _menuControllerPtr;
     std::unique_ptr<platform::MprisBridge> _mprisBridgePtr;
-    bool _librarySwitchPrepared = false;
+    SessionPhase _sessionPhase = SessionPhase::Constructed;
+    bool _mprisStarted = false;
   };
 } // namespace ao::gtk

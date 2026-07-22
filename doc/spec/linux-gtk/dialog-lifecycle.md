@@ -60,7 +60,7 @@ Default layout-preset choice affects the next layout load; structural edits use 
 Open Library launches a native folder chooser.
 A successful folder selection is normalized and handed to the single active-library host.
 Same-root selection may trigger a fast bootstrap scan and presents the existing window.
-Different-root selection prepares the current pair, removes it, records the new global path, constructs one replacement pair, configures its callbacks, and optionally begins bootstrap scan.
+Different-root selection prepares and configures a candidate while the current pair remains active, retires and releases the old pair, activates the candidate, records the new global path, and optionally begins bootstrap scan.
 
 The layout editor uses:
 
@@ -77,7 +77,7 @@ Other native file-dialog failures are logged and presented in a parent-bound tra
 A Smart List preview-source acquisition failure uses the editor's existing error label.
 Smart List create or edit rejection retains the draft and editor, while delete rejection presents a parent-bound transient message without changing the tree or selection.
 Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
-Active-library preparation failure presents a parent-bound transient message and leaves the old pair visible, as specified by the active-library lifecycle.
+Candidate preparation failure or active-pair retirement failure presents a parent-bound transient message and leaves the old pair visible, as specified by the active-library lifecycle.
 Layout-editor validation or persistence failure retains the draft and keeps the editor open.
 A persistence failure presents a transient error message; partial multi-preset persistence and retry behavior belong to the [shell layout lifecycle](../shell/layout-lifecycle.md).
 

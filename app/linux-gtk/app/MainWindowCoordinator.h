@@ -52,7 +52,8 @@ namespace ao::gtk
     MainWindowCoordinator(MainWindowCoordinator&&) = delete;
     MainWindowCoordinator& operator=(MainWindowCoordinator&&) = delete;
 
-    void initializeSession();
+    void prepareSession();
+    void restorePlaybackSession();
 
     void saveSession();
     void loadSession();

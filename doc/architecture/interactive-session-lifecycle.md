@@ -52,6 +52,7 @@ Application-global configuration, shell layout stores, component state, and appl
 The library database, per-library workspace state, views, sources, playback stack, runtime observers, and window are replaced together.
 
 `MainWindowCoordinator` sequences per-library presentation-preference loading, library-backed page initialization, workspace restoration, default-view creation, playback restoration, and checkpoints.
+`MainWindow` separates preparation from activation: preparation builds library-backed views and shell layout without restoring playback or starting process-wide adapters, while activation selects startup restore or replacement idle-start behavior and starts MPRIS.
 Workspace restoration retains the exact presentation stored with every restored view.
 GTK resolves a per-list preference or recommendation and submits it as new-view-default intent; `WorkspaceService` decides whether navigation reuses a plain view or creates one.
 `app/linux-gtk/main.cpp` owns active-library replacement because the operation destroys and recreates the window-owned runtime graph.
@@ -82,12 +83,10 @@ load global application session
   -> derive database and per-library workspace paths
   -> construct stores, providers, and AppRuntime
   -> construct MainWindow, UIModel, controllers, and adapters
-  -> load per-library presentation preferences
-  -> initialize library-backed pages and subscriptions
-  -> restore workspace views with their exact presentation state
-  -> create a default All Tracks view with its resolved default when restoration is empty
-  -> restore playback against the active library
-  -> load shell layout and present the window
+  -> prepare library pages, workspace, default view, and shell layout
+  -> add the window to the application
+  -> activate with playback restoration and MPRIS
+  -> present the window
 ```
 
 Workspace restoration precedes playback reveal so playback intent can be associated with a valid runtime view.
@@ -99,17 +98,20 @@ The behavior details remain in the workspace, playback, and GTK lifecycle specif
 
 ```text
 validated root request
-  -> checkpoint old frontend and runtime state
-  -> discard the old restorable playback payload
-  -> mark the old window prepared against stale later saves
+  -> prepare and configure a candidate pair while the old pair remains active
+  -> checkpoint and retire the old pair, including playback-session discard
+  -> activate the candidate with idle playback and replace the active slot
   -> destroy old observers, window, and AppRuntime
-  -> record the new root in global application state
-  -> construct and initialize a new pair
+  -> record the new root in global application state best-effort
   -> optionally scan the selected root
 ```
 
 The current implementation reuses the runtime for the same normalized root and replaces the complete pair for a different root.
 It does not retarget a live `MusicLibrary` in place.
+Candidate preparation does not add the window to the application, restore playback, start MPRIS, or write lifecycle checkpoints.
+Construction or post-construction configuration failure destroys only the candidate.
+The old pair becomes retired only after its checkpoint and playback-session discard succeed; after candidate activation the old frontend graph is released before its attached runtime.
+Selected-path persistence occurs only after the new pair is active and the old pair has been released, and its failure does not roll back the usable in-process pair.
 The [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md) owns exact current transitions and failure outcomes.
 
 ### Shutdown
@@ -132,25 +134,24 @@ TUI exits its event loop, stops runtime work, and releases its single compositio
 
 ## Failure, cancellation, and lifetime boundaries
 
-GTK aborts active-library replacement when preparation cannot discard the old restorable playback session.
-The old window presents the preparation error in a parent-bound message and remains the active, usable pair; the failure also returns to the replacement caller so it cannot proceed.
+GTK aborts active-library replacement when candidate preparation/configuration fails or when retirement cannot discard the old restorable playback session.
+Candidate failures leave the old pair and saved selected path unchanged.
+The old window presents the retirement error in a parent-bound message and remains the active, usable pair; the failure also returns to the replacement caller so it cannot proceed.
 Several current checkpoint paths remain best-effort or log-only, so successful preparation is not proof that every old payload became durable.
 The grouped store now makes each requested mutation a fail-closed one-shot replacement, but it does not add workflow acknowledgement.
 There is no generic transaction receipt or recovery state machine.
 
 GTK defers replacement until after the portal callback returns so a dialog callback does not synchronously destroy its own window and coordinator.
-A prepared old window cannot later overwrite the new global selection during hide or destruction.
+A retired old window cannot later overwrite the new global selection during hide or destruction.
 Before a native Open Library completion can request replacement, it must enter the callback scope owned by its `ImportExportCoordinator`.
 Replacing the pair destroys that coordinator; a completion delivered afterward cannot enter the closed scope or reach the old pair.
 Native cancellation is requested during teardown but is not the lifetime proof.
-
-[RFC 0019](../rfc/0019-safe-active-library-replacement.md) proposes preparing a replacement GTK pair before releasing the working pair.
-That proposal is not current behavior; GTK and TUI lifecycle ownership remains separate.
+Application shutdown closes the outer callback scope and cancels its single pending idle registration before saving and releasing the active pair.
 
 ## Implementation map
 
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) and [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) own interactive composition and playback-first teardown.
-- [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK startup, checkpoint, replacement, and pair lifetime.
+- [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK prepare/activate composition, replacement ordering, checkpointing, and pair lifetime.
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) owns the lower non-interactive composition and async shutdown boundary.
@@ -161,6 +162,7 @@ That proposal is not current behavior; GTK and TUI lifecycle ownership remains s
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects final checkpoints and the stale-write guard.
 - [`MainWindowCoordinatorTest.cpp`](../../test/unit/linux-gtk/app/MainWindowCoordinatorTest.cpp) protects GTK restoration and checkpoint ordering.
 - [`MainWindowSessionPresentationTest.cpp`](../../test/unit/linux-gtk/app/MainWindowSessionPresentationTest.cpp) protects presentation precedence across GTK workspace and playback restoration.
+- [`LibraryWindowLifecycleTest.cpp`](../../test/unit/linux-gtk/app/LibraryWindowLifecycleTest.cpp) protects candidate isolation, replacement ordering, same-root reuse, persistence timing, and failure outcomes.
 - [`MainContextCallbackScopeTest.cpp`](../../test/unit/linux-gtk/common/MainContextCallbackScopeTest.cpp) protects completion invalidation and teardown ordering.
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
@@ -177,4 +179,3 @@ That proposal is not current behavior; GTK and TUI lifecycle ownership remains s
 - [Presentation architecture](presentation.md)
 - [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
 - [Workspace session specification](../spec/workspace/session.md)
-- [RFC 0019: safe active-library replacement](../rfc/0019-safe-active-library-replacement.md)

@@ -198,7 +198,7 @@ namespace ao::gtk
     _trackColumnLayoutChangedSubscription.reset();
   }
 
-  void MainWindowCoordinator::initializeSession()
+  void MainWindowCoordinator::prepareSession()
   {
     _runtime.reloadAllTracks();
 
@@ -260,15 +260,14 @@ namespace ao::gtk
 
     if (_runtime.workspace().snapshot().openViews.empty())
     {
-      auto const navigated = _implPtr->navigateToList(rt::kAllTracksListId, _runtime);
-
-      if (restored && navigated)
-      {
-        _runtime.workspace().saveSession(_runtime.workspaceConfigStore());
-      }
+      std::ignore = _implPtr->navigateToList(rt::kAllTracksListId, _runtime);
     }
 
     rebuildListPages();
+  }
+
+  void MainWindowCoordinator::restorePlaybackSession()
+  {
     _implPtr->restorePlaybackSession(_runtime);
   }
 
