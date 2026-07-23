@@ -71,6 +71,8 @@ The first task in a pending burst owns the wake request, and drain completion re
 
 `ao::async::Runtime` owns a general-purpose worker pool for asynchronous application tasks.
 Library scans, import/export, identity indexing, delayed checkpoints, and other potentially blocking work run there and explicitly resume on the callback executor before touching executor-affine state or returning UI-facing completion.
+Interactive resource delivery follows the same boundary without entering library maintenance: `LibraryTaskService` copies bounded immutable bytes under a worker-side read transaction, then GTK, TUI, and MPRIS perform their platform transforms or file work on workers and return through the frontend callback executor.
+Those consumers carry copied values across suspension and revalidate owner lifetime plus current resource identity before publication.
 
 Boost.Asio owns coroutine exception transport and passes an escaping exception to the terminal `co_spawn` completion handler as `std::exception_ptr`.
 For fire-and-forget roots, `Runtime` filters expected cancellation and forwards every other exception to an injected thread-safe diagnostic handler.

@@ -52,7 +52,7 @@ namespace ao::uimodel
 namespace ao::gtk
 {
   class AppConfigStore;
-  class ImageCache;
+  class ResourceImageLoader;
   class ListNavigationController;
   struct GtkUiDependencies;
   class ShellLayoutComponentStateStore;
@@ -159,7 +159,7 @@ namespace ao::gtk
     layout::ActionRegistry _actionRegistry;
     layout::LayoutRuntimeState _runtimeState;
     TrackRowCache* _trackRowCache;
-    ImageCache* _imageCache;
+    ResourceImageLoader* _imageLoader;
     uimodel::PlaybackCommandSurface* _playbackCommandSurface;
     TagEditController* _tagEditController;
     portal::ImportExportActions* _importExportActions;

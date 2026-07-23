@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
@@ -10,11 +11,14 @@
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stop_token>
+#include <vector>
 
 namespace ao::library
 {
@@ -35,6 +39,8 @@ namespace ao::rt
   class LibraryTaskService final
   {
   public:
+    static constexpr std::size_t kMaximumInteractiveResourceBytes = std::size_t{32U} * 1024U * 1024U;
+
     ~LibraryTaskService();
 
     // Returning a Result, including an error Result, resumes the caller on the callback executor.
@@ -63,6 +69,9 @@ namespace ao::rt
       std::stop_token stopToken = {},
       AudioIdentityIndexer::ProgressCallback progressCallback = {},
       AudioIdentityIndexer::ItemFailureCallback failureCallback = {});
+    // Read-only interactive delivery: no maintenance admission or task-progress publication.
+    async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceAsync(ResourceId resourceId,
+                                                                                 std::stop_token stopToken = {});
 
     LibraryTaskService(LibraryTaskService const&) = delete;
     LibraryTaskService& operator=(LibraryTaskService const&) = delete;

@@ -340,6 +340,7 @@ add_executable(ao_tui_test
     unit/tui/AnchoredOverlayTest.cpp
     unit/tui/CommandCompletionTest.cpp
     unit/tui/CommandCompletionStateTest.cpp
+    unit/tui/CoverArtLoaderTest.cpp
     unit/tui/CoverArtTest.cpp
     unit/tui/EventControllerTest.cpp
     unit/tui/ExecutorTest.cpp
@@ -456,7 +457,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/image/ImageWidgetTest.cpp
     unit/linux-gtk/image/ImageRenderPolicyTest.cpp
     unit/linux-gtk/image/ImageCacheTest.cpp
-    unit/linux-gtk/image/ThumbnailLoaderTest.cpp
+    unit/linux-gtk/image/ResourceImageLoaderTest.cpp
     unit/linux-gtk/app/AppDialogTest.cpp
     unit/linux-gtk/app/ThemeCoordinatorTest.cpp
     unit/linux-gtk/app/ThemePresetTest.cpp

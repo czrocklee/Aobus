@@ -7,6 +7,7 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <chrono>
 #include <cstdint>
@@ -32,13 +33,14 @@ namespace ao::gtk::platform
   {
   public:
     using RootCommand = std::function<bool()>;
-    using ArtUrlResolver = std::function<std::string(ResourceId)>;
+    using OnArtUrlReady = std::function<void(std::string)>;
+    using ArtUrlRequester = std::function<utility::ScopedRegistration(ResourceId, OnArtUrlReady)>;
 
     struct Callbacks final
     {
       RootCommand raise{};
       RootCommand quit{};
-      ArtUrlResolver artUrlForResource{};
+      ArtUrlRequester requestArtUrl{};
     };
 
     struct MetadataSnapshot final
@@ -62,6 +64,7 @@ namespace ao::gtk::platform
     void start();
 
     bool isActive() const noexcept;
+    MetadataSnapshot metadataSnapshot() const;
 
     static std::string_view playbackStatus(audio::Transport transport) noexcept;
     static std::string_view loopStatus(rt::RepeatMode mode) noexcept;

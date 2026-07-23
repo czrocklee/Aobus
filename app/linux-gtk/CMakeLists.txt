@@ -89,8 +89,8 @@ add_library(aobus-gtk-lib STATIC
 
     image/ImageCache.cpp
     image/ResourceImageController.cpp
+    image/ResourceImageLoader.cpp
     image/ImageWidget.cpp
-    image/ThumbnailLoader.cpp
 
     tag/TagEditController.cpp
     tag/TagPopover.cpp

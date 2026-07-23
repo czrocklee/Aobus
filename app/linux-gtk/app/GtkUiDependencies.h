@@ -18,7 +18,7 @@ namespace ao::uimodel
 namespace ao::gtk
 {
   class TrackRowCache;
-  class ImageCache;
+  class ResourceImageLoader;
   class TagEditController;
   namespace portal
   {
@@ -43,7 +43,7 @@ namespace ao::gtk
   struct GtkUiDependencies final
   {
     TrackRowCache* trackRowCache = nullptr;
-    ImageCache* imageCache = nullptr;
+    ResourceImageLoader* imageLoader = nullptr;
     uimodel::PlaybackCommandSurface* playbackCommandSurface = nullptr;
     TagEditController* tagEditController = nullptr;
     portal::ImportExportActions* importExportActions = nullptr;

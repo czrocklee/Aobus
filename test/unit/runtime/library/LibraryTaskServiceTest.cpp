@@ -5,6 +5,8 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/library/WritableLibraryTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/Executor.h>
@@ -13,6 +15,7 @@
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -37,6 +40,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -227,7 +231,125 @@ namespace ao::rt::test
     {
       return completedPtr->load();
     }
+
+    ResourceId writeResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
+    {
+      auto transaction = library::test::writeTransaction(library);
+      auto result = library.resources().writer(transaction).create(bytes);
+      REQUIRE(result);
+      REQUIRE(transaction.commit());
+      return *result;
+    }
+
+    async::Task<bool> loadResourceAndCheckExecutor(LibraryTaskService* service,
+                                                   async::Executor* executor,
+                                                   ResourceId resourceId)
+    {
+      auto result = co_await service->loadResourceAsync(resourceId);
+      REQUIRE(result);
+      REQUIRE(*result);
+      co_return executor->isCurrent();
+    }
   } // namespace
+
+  TEST_CASE("LibraryTaskService - interactive resource reads return owned bytes on the callback executor",
+            "[runtime][unit][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const bytes = std::array{std::byte{0x10}, std::byte{0x20}, std::byte{0x30}};
+    auto const resourceId = writeResource(libraryFixture.library(), bytes);
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto completionStatuses = std::vector<LibraryChanges::LibraryTaskCompletionStatus>{};
+    auto completionSub = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event)
+                                                        { completionStatuses.push_back(event.status); });
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = spawnFuture(
+      runtime, loadResourceAndCheckExecutor(&runtimeLibrary.taskService(), &executor, resourceId), completedPtr);
+
+    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+    CHECK(future.get());
+    CHECK(completionStatuses.empty());
+
+    auto missingCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto missingFuture =
+      spawnFuture(runtime, runtimeLibrary.taskService().loadResourceAsync(ResourceId{987654}), missingCompletedPtr);
+    REQUIRE(executor.drainUntil([&missingCompletedPtr] { return isReady(missingCompletedPtr); }));
+    auto missingResult = missingFuture.get();
+    REQUIRE(missingResult);
+    CHECK_FALSE(*missingResult);
+
+    auto invalidCompletedPtr = std::make_shared<std::atomic_bool>(false);
+    auto invalidFuture =
+      spawnFuture(runtime, runtimeLibrary.taskService().loadResourceAsync(kInvalidResourceId), invalidCompletedPtr);
+    REQUIRE(executor.drainUntil([&invalidCompletedPtr] { return isReady(invalidCompletedPtr); }));
+    auto invalidResult = invalidFuture.get();
+    REQUIRE(invalidResult);
+    CHECK_FALSE(*invalidResult);
+
+    runtime.requestStop();
+    runtime.join();
+  }
+
+  TEST_CASE("LibraryTaskService - interactive resource encoded-byte limit is exact", "[runtime][unit][library-task]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibraryPtr = std::unique_ptr<Library>{};
+
+    SECTION("resource at the limit is returned")
+    {
+      auto bytes = std::vector<std::byte>(LibraryTaskService::kMaximumInteractiveResourceBytes, std::byte{0x4A});
+      auto const resourceId = writeResource(libraryFixture.library(), bytes);
+      runtimeLibraryPtr = std::make_unique<Library>(runtime, libraryFixture.library(), changes);
+      auto result = runtime.spawn(runtimeLibraryPtr->taskService().loadResourceAsync(resourceId)).get();
+
+      REQUIRE(result);
+      REQUIRE(*result);
+      CHECK((*result)->size() == LibraryTaskService::kMaximumInteractiveResourceBytes);
+      CHECK((*result)->front() == std::byte{0x4A});
+      CHECK((*result)->back() == std::byte{0x4A});
+    }
+
+    SECTION("resource above the limit is rejected before publication")
+    {
+      auto bytes = std::vector<std::byte>(LibraryTaskService::kMaximumInteractiveResourceBytes + 1, std::byte{0x5B});
+      auto const resourceId = writeResource(libraryFixture.library(), bytes);
+      runtimeLibraryPtr = std::make_unique<Library>(runtime, libraryFixture.library(), changes);
+      auto result = runtime.spawn(runtimeLibraryPtr->taskService().loadResourceAsync(resourceId)).get();
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::ValueTooLarge);
+    }
+  }
+
+  TEST_CASE("LibraryTaskService - cancelling an interactive resource read suppresses completion",
+            "[runtime][regression][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const bytes = std::array{std::byte{0x01}, std::byte{0x02}};
+    auto const resourceId = writeResource(libraryFixture.library(), bytes);
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = LibraryChanges{};
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto stopSource = std::stop_source{};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = spawnFuture(
+      runtime, runtimeLibrary.taskService().loadResourceAsync(resourceId, stopSource.get_token()), completedPtr);
+    executor.checkQueued();
+
+    REQUIRE(stopSource.request_stop());
+    REQUIRE(executor.drainUntil([&completedPtr] { return isReady(completedPtr); }));
+    CHECK_THROWS_AS(std::ignore = future.get(), async::OperationCancelled);
+
+    runtime.requestStop();
+    runtime.join();
+  }
 
   TEST_CASE("LibraryTaskService - prepareLibraryImportAsync returns failure for invalid path",
             "[runtime][unit][library][task]")

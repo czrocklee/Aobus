@@ -7,7 +7,7 @@
 #include "image/ImageWidget.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
-#include "image/ThumbnailLoader.h"
+#include "image/ResourceImageLoader.h"
 #include "layout/LayoutConstants.h"
 #include "tag/TagPopover.h"
 #include "track/TrackColumnFactoryBuilder.h"
@@ -24,7 +24,6 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
@@ -136,15 +135,15 @@ namespace ao::gtk
     class TrackSectionHeaderWidget final : public Gtk::Box
     {
     public:
-      TrackSectionHeaderWidget(rt::Library const& reads, ThumbnailLoader& thumbnailLoader)
+      explicit TrackSectionHeaderWidget(ResourceImageLoader& thumbnailLoader)
         : Gtk::Box{Gtk::Orientation::HORIZONTAL}
         , _coverArtSlot{_coverArt, layout::kSectionCoverLogicalSize}
-        , _coverArtController{_coverArt, reads, thumbnailLoader.cache()}
+        , _coverArtController{_coverArt, thumbnailLoader}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
 
-        _coverArtController.enableThumbnailMode(thumbnailLoader, layout::kSectionCoverLogicalSize);
+        _coverArtController.enableThumbnailMode(layout::kSectionCoverLogicalSize);
         _coverArtSlot.add_css_class("ao-track-section-cover");
         _coverArtSlot.set_valign(Gtk::Align::CENTER);
         append(_coverArtSlot);
@@ -232,7 +231,7 @@ namespace ao::gtk
                                Glib::RefPtr<TrackListModel> modelPtr,
                                uimodel::TrackColumnLayoutStore& layoutStore,
                                rt::AppRuntime& runtime,
-                               ThumbnailLoader& thumbnailLoader,
+                               ResourceImageLoader& thumbnailLoader,
                                rt::ViewId viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
@@ -341,7 +340,7 @@ namespace ao::gtk
           return;
         }
 
-        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_runtime.library(), _thumbnailLoader);
+        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_thumbnailLoader);
         headerPtr->set_child(*widget);
       });
 
@@ -374,7 +373,7 @@ namespace ao::gtk
             {
               auto const nextImageId = proj->groupAt(nextGroupIndex).imageId;
               auto const scale = std::max(1, _viewHostPtr->columnView().get_scale_factor());
-              _thumbnailLoader.prefetch(nextImageId, layout::kSectionCoverLogicalSize * scale);
+              _thumbnailLoader.prefetchThumbnail(nextImageId, layout::kSectionCoverLogicalSize * scale);
             }
           }
         }

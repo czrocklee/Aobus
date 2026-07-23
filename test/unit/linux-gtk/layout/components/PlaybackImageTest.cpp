@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/image/ImageCache.h"
+#include "app/linux-gtk/image/ResourceImageLoader.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "portal/ImportExportCallbacks.h"
@@ -136,8 +137,10 @@ namespace ao::gtk::layout::test
                                                                                  });
                                         }};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
+      fixture.runtime().library().taskService(), *imageCachePtr, fixture.runtime().async());
     auto& ctx = fixture.context();
-    fixture.dependencies().imageCache = imageCachePtr.get();
+    fixture.dependencies().imageLoader = imageLoaderPtr.get();
 
     SECTION("default image has no extra styling")
     {

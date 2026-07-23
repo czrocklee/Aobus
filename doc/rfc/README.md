@@ -24,8 +24,7 @@ Each row records the outgoing direct edges of one active proposal; sequence numb
 
 | RFC | Hard | Conditional | Integration |
 |---|---|---|---|
-| [0021](0021-nonblocking-cover-art.md) | None | None | None |
 
 ## Proposal inventory
 
-- [RFC 0021: Non-blocking cover-art delivery](0021-nonblocking-cover-art.md) moves interactive resource reads and transforms off frontend event-loop threads.
+There are no active proposals.

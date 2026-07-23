@@ -11,7 +11,6 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -122,14 +121,13 @@ namespace ao::gtk::layout
       TrackCoverArtComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _slot{_imageWidget}
       {
-        if (ctx.dependencies.imageCache == nullptr)
+        if (ctx.dependencies.imageLoader == nullptr)
         {
-          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
+          _error = Gtk::make_managed<Gtk::Label>("Error: imageLoader missing");
           return;
         }
 
-        _imageControllerPtr =
-          std::make_unique<ResourceImageController>(_imageWidget, ctx.runtime.library(), *ctx.dependencies.imageCache);
+        _imageControllerPtr = std::make_unique<ResourceImageController>(_imageWidget, *ctx.dependencies.imageLoader);
         _imageWidget.set_halign(Gtk::Align::CENTER);
         _imageWidget.set_valign(Gtk::Align::CENTER);
         _imageWidget.set_expand(false);

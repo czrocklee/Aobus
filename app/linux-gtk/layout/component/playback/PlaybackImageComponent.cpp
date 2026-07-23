@@ -105,16 +105,16 @@ namespace ao::gtk::layout
       PlaybackImageComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _runtime{ctx.runtime}
       {
-        if (ctx.dependencies.imageCache == nullptr)
+        if (ctx.dependencies.imageLoader == nullptr)
         {
-          APP_LOG_ERROR("[PID {}] PlaybackImage: FAILED to create - imageCache is NULL in context!", getpid());
-          _error = Gtk::make_managed<Gtk::Label>("Error: imageCache missing");
+          APP_LOG_ERROR("[PID {}] PlaybackImage: FAILED to create - imageLoader is NULL in context!", getpid());
+          _error = Gtk::make_managed<Gtk::Label>("Error: imageLoader missing");
           return;
         }
 
         _imageWidgetPtr = std::make_unique<ImageWidget>();
-        _imageControllerPtr = std::make_unique<ResourceImageController>(
-          *_imageWidgetPtr, ctx.runtime.library(), *ctx.dependencies.imageCache);
+        _imageControllerPtr =
+          std::make_unique<ResourceImageController>(*_imageWidgetPtr, *ctx.dependencies.imageLoader);
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
         auto const targetSize = node.propertyOr<std::int64_t>("targetSize", kThumbnailSize);

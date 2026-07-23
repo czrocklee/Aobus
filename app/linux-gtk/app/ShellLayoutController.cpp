@@ -175,7 +175,7 @@ namespace ao::gtk
     , _registry{}
     , _actionRegistry{}
     , _trackRowCache{dependencies.trackRowCache}
-    , _imageCache{dependencies.imageCache}
+    , _imageLoader{dependencies.imageLoader}
     , _playbackCommandSurface{dependencies.playbackCommandSurface}
     , _tagEditController{dependencies.tagEditController}
     , _importExportActions{dependencies.importExportActions}
@@ -502,7 +502,7 @@ namespace ao::gtk
   {
     auto const dependencies = GtkUiDependencies{
       .trackRowCache = _trackRowCache,
-      .imageCache = _imageCache,
+      .imageLoader = _imageLoader,
       .playbackCommandSurface = _playbackCommandSurface,
       .tagEditController = _tagEditController,
       .importExportActions = _importExportActions,

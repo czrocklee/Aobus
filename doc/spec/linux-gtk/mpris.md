@@ -20,7 +20,7 @@ Core audio and runtime remain D-Bus-free.
 
 The bridge reads the coherent `rt::PlaybackService` snapshot and executes transport and succession commands through `uimodel::PlaybackCommandSurface`.
 It never calls transport widgets or layout components, because those surfaces are optional and rebuildable.
-GTK application lifetime enters only through injected raise and quit callbacks; cover art enters only through an injected `ResourceId` to URL resolver.
+GTK application lifetime enters only through injected raise and quit callbacks; cover art enters only through an injected cancellable asynchronous `ResourceId` to URL request.
 
 ## Terminology
 
@@ -49,6 +49,7 @@ Its active state means the canonical name was acquired, not merely requested.
 Protocol properties are derived from current runtime and command-surface state on demand.
 Metadata snapshot construction derives a stable object path from `TrackId` and copies current title, artist, album, duration, and resolved art URL.
 It is not a second now-playing store.
+The bridge retains only the current cover resource id, its delayed request interest, an owner-local generation, and the last resolved URL for that same id.
 
 ## Commands and transitions
 
@@ -64,15 +65,20 @@ Volume, shuffle, and loop writes route to their runtime authorities.
 Transport, now-playing, volume, repeat, shuffle, and command-availability observations emit property-change signals for only the affected protocol fields.
 Final runtime seeks emit `Seeked`; preview updates do not.
 
+When now-playing cover identity changes, the bridge cancels the old URL interest, clears its published URL, and emits current metadata immediately without `mpris:artUrl`.
+The cache validates or writes the derived file off the GTK thread.
+A non-stale completion stores the URL and emits `Metadata` again; a completion for an older resource or generation is ignored.
+
 ## Failure and cancellation
 
 Bus connection, introspection, object registration, and name-ownership failures disable MPRIS for that instance and log a warning.
 They do not post a user notification, change playback, or disturb an instance that already owns the name.
 Unknown methods and unsupported writable properties return protocol errors.
 
-The bridge has no independent cancellation token.
-Its scoped registrations and runtime subscriptions are cleared during stop/destruction before bridge state is released.
-D-Bus callbacks execute on the GTK main context and cannot block on decoder or storage work.
+The bridge uses scoped cancellation for the current art URL interest.
+Its art interest, D-Bus registrations, and runtime subscriptions are cleared during stop/destruction before bridge state is released.
+The cache owns a lifetime scope for worker materialization and returns only through the GTK callback executor.
+D-Bus callbacks execute on the GTK main context and do not perform database reads, file validation, or file writes.
 
 ## Persistence and versioning
 

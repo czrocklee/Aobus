@@ -48,6 +48,7 @@ namespace ao::gtk
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _layoutStore{layoutStore}
+    , _thumbnailLoader{_runtime.library().taskService(), _thumbnailCache, _runtime.async()}
   {
     _revealSub =
       _runtime.playback().events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));

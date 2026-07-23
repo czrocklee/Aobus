@@ -20,6 +20,7 @@
 #pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 #define STB_IMAGE_IMPLEMENTATION
+#define STBI_MAX_DIMENSIONS 8192 // NOLINT(cppcoreguidelines-macro-usage): stb_image requires a configuration macro.
 #define STBI_NO_STDIO
 #include <stb_image.h>
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
@@ -76,13 +77,32 @@ namespace ao::tui
       std::int32_t height = 0;
     };
 
+    struct PngOutput final
+    {
+      std::vector<std::byte> bytes;
+      std::size_t maximumBytes = 0;
+      bool exceeded = false;
+    };
+
     stbi_uc const* asStbiBytes(std::byte const* encodedBytes) noexcept
     {
       // stb's C API accepts an unsigned-byte view over the encoded byte buffer.
       return reinterpret_cast<stbi_uc const*>(encodedBytes); // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
     }
 
-    std::optional<DecodedImage> decodeImage(std::vector<std::byte> const& bytes)
+    bool dimensionsWithinLimits(std::int32_t const width, std::int32_t const height, CoverArtDecodeLimits const& limits)
+    {
+      if (width <= 0 || height <= 0 || limits.maximumDimension <= 0 || width > limits.maximumDimension ||
+          height > limits.maximumDimension)
+      {
+        return false;
+      }
+
+      auto const pixelCount = static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height);
+      return pixelCount <= limits.maximumPixels;
+    }
+
+    std::optional<DecodedImage> decodeImage(std::vector<std::byte> const& bytes, CoverArtDecodeLimits const& limits)
     {
       if (bytes.empty() || bytes.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
       {
@@ -92,6 +112,15 @@ namespace ao::tui
       int width = 0;
       int height = 0;
       int sourceChannels = 0;
+
+      if (::stbi_info_from_memory(
+            asStbiBytes(bytes.data()), static_cast<std::int32_t>(bytes.size()), &width, &height, &sourceChannels) ==
+            0 ||
+          !dimensionsWithinLimits(width, height, limits))
+      {
+        return std::nullopt;
+      }
+
       auto pixelsPtr = StbiPixelsPtr{::stbi_load_from_memory(asStbiBytes(bytes.data()),
                                                              static_cast<std::int32_t>(bytes.size()),
                                                              &width,
@@ -99,7 +128,7 @@ namespace ao::tui
                                                              &sourceChannels,
                                                              kDecodedChannels)};
 
-      if (pixelsPtr == nullptr || width <= 0 || height <= 0)
+      if (pixelsPtr == nullptr || !dimensionsWithinLimits(width, height, limits))
       {
         return std::nullopt;
       }
@@ -138,7 +167,8 @@ namespace ao::tui
 
   std::optional<CoverArtRows> decodeCoverArtPreview(std::vector<std::byte> const& bytes,
                                                     std::size_t const columns,
-                                                    std::size_t const rows)
+                                                    std::size_t const rows,
+                                                    CoverArtDecodeLimits const limits)
   {
     if (columns == 0 || rows == 0 ||
         columns > static_cast<std::size_t>(std::numeric_limits<int>::max() / kDecodedChannels) ||
@@ -147,7 +177,7 @@ namespace ao::tui
       return std::nullopt;
     }
 
-    auto const optImage = decodeImage(bytes);
+    auto const optImage = decodeImage(bytes, limits);
 
     if (!optImage)
     {
@@ -219,14 +249,15 @@ namespace ao::tui
 
   std::optional<std::vector<std::byte>> decodeCoverArtPng(std::vector<std::byte> const& bytes,
                                                           std::int32_t const pixelWidth,
-                                                          std::int32_t const pixelHeight)
+                                                          std::int32_t const pixelHeight,
+                                                          CoverArtDecodeLimits const limits)
   {
     if (pixelWidth <= 0 || pixelHeight <= 0 || pixelWidth > std::numeric_limits<int>::max() / kDecodedChannels)
     {
       return std::nullopt;
     }
 
-    auto const optImage = decodeImage(bytes);
+    auto const optImage = decodeImage(bytes, limits);
 
     if (!optImage)
     {
@@ -269,24 +300,36 @@ namespace ao::tui
       return std::nullopt;
     }
 
-    auto png = std::vector<std::byte>{};
+    auto png = PngOutput{
+      .bytes = {},
+      .maximumBytes = limits.maximumGeneratedBytes,
+      .exceeded = false,
+    };
     // stb owns this callback signature and requires its exact C `int` size.
     // NOLINTNEXTLINE(aobus-modernize-use-std-numbers)
     auto const appendChunk = [](void* context, void* data, int size)
     {
-      auto* out = static_cast<std::vector<std::byte>*>(context);
+      auto* out = static_cast<PngOutput*>(context);
       auto const chunk = std::span{static_cast<std::byte const*>(data), static_cast<std::size_t>(size)};
-      out->insert(out->end(), chunk.begin(), chunk.end());
+
+      if (out->exceeded || chunk.size() > out->maximumBytes - std::min(out->bytes.size(), out->maximumBytes))
+      {
+        out->exceeded = true;
+        return;
+      }
+
+      out->bytes.insert(out->bytes.end(), chunk.begin(), chunk.end());
     };
 
     if (::stbi_write_png_to_func(
           appendChunk, &png, pixelWidth, pixelHeight, kDecodedChannels, scaled.data(), pixelWidth * kDecodedChannels) ==
-        0)
+          0 ||
+        png.exceeded)
     {
       return std::nullopt;
     }
 
-    return png;
+    return std::move(png.bytes);
   }
 
   std::string kittyDeleteVisibleImagesEscape()

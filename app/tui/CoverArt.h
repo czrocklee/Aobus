@@ -31,6 +31,16 @@ namespace ao::tui
 
   using CoverArtRows = std::vector<std::vector<CoverArtCell>>;
   constexpr std::uint32_t kKittyCoverArtImageId = 1;
+  constexpr std::int32_t kMaximumCoverArtDimension = 8192;
+  constexpr std::uint64_t kMaximumCoverArtPixels = 32'000'000;
+  constexpr std::size_t kMaximumGeneratedCoverArtBytes = std::size_t{8U} * 1024U * 1024U;
+
+  struct CoverArtDecodeLimits final
+  {
+    std::int32_t maximumDimension = kMaximumCoverArtDimension;
+    std::uint64_t maximumPixels = kMaximumCoverArtPixels;
+    std::size_t maximumGeneratedBytes = kMaximumGeneratedCoverArtBytes;
+  };
 
   /**
    * Decodes embedded raster artwork supported by stb_image: PNG, JPEG, BMP,
@@ -42,11 +52,13 @@ namespace ao::tui
    */
   std::optional<CoverArtRows> decodeCoverArtPreview(std::vector<std::byte> const& bytes,
                                                     std::size_t columns,
-                                                    std::size_t rows);
+                                                    std::size_t rows,
+                                                    CoverArtDecodeLimits limits = {});
   /** Converts the same portable raster formats to a square-cropped PNG. */
   std::optional<std::vector<std::byte>> decodeCoverArtPng(std::vector<std::byte> const& bytes,
                                                           std::int32_t pixelWidth,
-                                                          std::int32_t pixelHeight);
+                                                          std::int32_t pixelHeight,
+                                                          CoverArtDecodeLimits limits = {});
 
   std::string kittyDeleteVisibleImagesEscape();
   std::string kittyDeleteImageEscape(std::uint32_t imageId);

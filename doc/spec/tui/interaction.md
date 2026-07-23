@@ -21,6 +21,7 @@ It consumes `AppRuntime` and shared UIModel policies for presentation, seek gest
 `LibraryController` adapts runtime workspace/views into terminal rows but does not become library storage or playback authority.
 Its list chooser consumes the shared [list-navigation tree](../presentation/list-tree.md) instead of deriving parent relationships or sibling order.
 `EventController` translates terminal events into runtime/UIModel commands.
+`CoverArtLoader` owns one cancellable selected-resource request; byte reads and cover transforms run off the screen executor and publish only for the current resource generation.
 
 ## Terminology
 
@@ -126,11 +127,13 @@ Exact startup paths/options belong to the TUI reference.
 
 The detail pane remains beside the track workspace and shows a terminal cover-art representation plus selected-track fields.
 Kitty, block, automatic, and disabled cover modes are selected at startup.
+On a cover change, the pane renders its empty placeholder until asynchronous delivery completes; an older selection cannot replace the current cover.
 The notification center can be opened explicitly even when compact status is not the only visible affordance.
 
 ## Implementation map
 
 - [`App.cpp`](../../../app/tui/App.cpp) composes runtime, screen, render, controllers, and lifetime.
+- [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp) owns asynchronous selected-resource delivery and stale-result suppression; [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp) owns bounded decode and terminal transforms.
 - [`ShellInteractionModel.cpp`](../../../app/tui/ShellInteractionModel.cpp) owns command and overlay state.
 - [`CommandCompletion.cpp`](../../../app/tui/CommandCompletion.cpp) owns command, presentation, and shared filter-completion routing.
 - [`EventController.cpp`](../../../app/tui/EventController.cpp) owns keyboard/mouse dispatch.

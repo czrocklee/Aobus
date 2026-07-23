@@ -29,7 +29,6 @@ namespace ao::gtk
   class AppConfigStore;
   class GtkLayoutStateStore;
   class TrackRowCache;
-  class ImageCache;
   class TagEditController;
   class ListNavigationController;
   class TrackPageHost;
@@ -63,7 +62,6 @@ namespace ao::gtk
     void rebuildListPages();
 
     TrackRowCache* trackRowCache();
-    ImageCache* imageCache();
     uimodel::PlaybackCommandSurface* playbackCommandSurface();
     TagEditController* tagEditController();
     portal::ImportExportCoordinator* importExportCoordinator();

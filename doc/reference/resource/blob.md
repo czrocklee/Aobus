@@ -49,6 +49,21 @@ LMDB supplies the row length.
 `LibraryReader::loadResource(id)` returns `optional<vector<byte>>` and copies before its scoped transaction ends.
 CLI resource export writes that exact vector without interpretation.
 
+`LibraryTaskService::loadResourceAsync(id, stopToken)` is the interactive owned-byte operation:
+
+| Input/result | Exact behavior |
+| --- | --- |
+| `kInvalidResourceId` | successful `nullopt` |
+| missing id | successful `nullopt` |
+| encoded size `<= 33,554,432` bytes | successful owned byte vector |
+| encoded size `> 33,554,432` bytes | `ValueTooLarge` |
+| cancellation at an executor transition | throws `OperationCancelled` |
+| successful or error result affinity | callback executor |
+| library task progress/completion events | none |
+
+The transaction-borrowed span is never returned or retained.
+This operation does not decode, cache, or mutate resources.
+
 ## Validation rules
 
 - Create never returns id `0`.
@@ -79,12 +94,14 @@ If id `42` contains different bytes and `43` is free, creation writes and return
 - [`ResourceStore.h`](../../../include/ao/library/ResourceStore.h) defines reader and writer operations.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp) defines create, deduplication, and probing.
 - [`LibraryReader.cpp`](../../../app/runtime/library/LibraryReader.cpp) defines the owned runtime read.
+- [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) defines the bounded interactive owned-byte read.
 
 ## Test authority
 
 - [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) protects id creation, deduplication, collision probing, reads, removal, clear, and errors.
 - [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects valid references in track preparation.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects exact raw export and missing-id reporting.
+- [`LibraryTaskServiceTest.cpp`](../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects interactive size, ownership, affinity, absence, event silence, and cancellation.
 
 ## Related documents
 

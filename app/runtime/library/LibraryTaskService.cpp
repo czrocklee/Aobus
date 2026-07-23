@@ -5,6 +5,7 @@
 #include "LibraryMutationService.h"
 #include "LibraryYamlImportOperation.h"
 #include "ScanApplyOperation.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
@@ -13,6 +14,7 @@
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryAuthoring.h>
@@ -36,6 +38,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -368,6 +371,42 @@ namespace ao::rt
   }
 
   LibraryTaskService::~LibraryTaskService() = default;
+
+  async::Task<Result<std::optional<std::vector<std::byte>>>> LibraryTaskService::loadResourceAsync(
+    ResourceId const resourceId,
+    std::stop_token const stopToken)
+  {
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+
+    if (resourceId == kInvalidResourceId)
+    {
+      co_return std::optional<std::vector<std::byte>>{};
+    }
+
+    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+    auto result = Result<std::optional<std::vector<std::byte>>>{};
+
+    {
+      auto transaction = _implPtr->library.readTransaction();
+      auto const optBytes = _implPtr->library.resources().reader(transaction).get(resourceId);
+
+      if (!optBytes)
+      {
+        result = std::optional<std::vector<std::byte>>{};
+      }
+      else if (optBytes->size() > kMaximumInteractiveResourceBytes)
+      {
+        result = makeError(Error::Code::ValueTooLarge, "Interactive resource exceeds the encoded-byte limit");
+      }
+      else
+      {
+        result = std::optional{std::vector<std::byte>{optBytes->begin(), optBytes->end()}};
+      }
+    }
+
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_return result;
+  }
 
   async::Task<Result<LibraryImportPlan>> LibraryTaskService::prepareLibraryImportAsync(std::filesystem::path path,
                                                                                        ImportMode const mode,

@@ -5,7 +5,7 @@
 
 #include "image/ImageCache.h"
 #include "image/ResourceImageController.h"
-#include "image/ThumbnailLoader.h"
+#include "image/ResourceImageLoader.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/CoreIds.h>
@@ -230,9 +230,12 @@ namespace ao::gtk::test
   TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto fixture = GtkRuntimeFixture{};
+    auto fullResourceId = kInvalidResourceId;
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     { fullResourceId = writeCoverResource(musicLibrary, 128); }};
     auto& runtime = fixture.runtime();
     auto imageCache = ImageCache{200};
+    auto loader = ResourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()};
 
     SECTION("loads a cached resource into the widget")
     {
@@ -240,7 +243,7 @@ namespace ao::gtk::test
       imageCache.put(ImageCacheKey::full(resourceId), makePixbuf(80, 80));
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, runtime.library(), imageCache};
+      auto controller = ResourceImageController{widget, loader};
 
       widget.setTargetSize(56);
       controller.load(resourceId);
@@ -258,7 +261,7 @@ namespace ao::gtk::test
       auto* mock = mockProjPtr.get();
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, runtime.library(), imageCache};
+      auto controller = ResourceImageController{widget, loader};
 
       controller.bindToDetailProjection(std::move(mockProjPtr));
 
@@ -272,6 +275,40 @@ namespace ao::gtk::test
 
       CHECK_FALSE(widget.get_paintable());
     }
+
+    SECTION("full-size cache miss clears the placeholder and completes asynchronously")
+    {
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, loader};
+      widget.setTargetSize(56);
+
+      controller.load(fullResourceId);
+
+      CHECK_FALSE(widget.get_paintable());
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
+      CHECK(loader.getFull(fullResourceId));
+    }
+
+    SECTION("stale full-size completion cannot clear a newer cached image")
+    {
+      auto const missingId = ResourceId{987654};
+      auto const cachedId = ResourceId{4242};
+      imageCache.put(ImageCacheKey::full(cachedId), makePixbuf(96));
+      auto widget = ImageWidget{};
+      auto controller = ResourceImageController{widget, loader};
+      widget.setTargetSize(56);
+
+      controller.load(missingId);
+      bool missingSettled = false;
+      [[maybe_unused]] auto const settlementProbe =
+        loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
+      controller.load(cachedId);
+
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
+      REQUIRE(pumpUntil([&] { return missingSettled; }));
+      drainGtkEvents();
+      CHECK(widget.get_paintable());
+    }
   }
 
   TEST_CASE("ResourceImageController - async thumbnail mode updates the widget image",
@@ -283,7 +320,7 @@ namespace ao::gtk::test
                                      { thumbnailResourceId = writeCoverResource(musicLibrary, makePixbuf(256, 256)); }};
     auto& runtime = fixture.runtime();
     auto thumbnailCache = ImageCache{200};
-    auto loader = ThumbnailLoader{runtime.library(), thumbnailCache, runtime.async()};
+    auto loader = ResourceImageLoader{runtime.library().taskService(), thumbnailCache, runtime.async()};
 
     constexpr std::int32_t kLogicalSize = 48;
 
@@ -293,8 +330,8 @@ namespace ao::gtk::test
       auto const resourceId = thumbnailResourceId;
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
-      controller.enableThumbnailMode(loader, kLogicalSize);
+      auto controller = ResourceImageController{widget, loader};
+      controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
 
       auto const scaleFactor = widget.get_scale_factor();
@@ -302,9 +339,9 @@ namespace ao::gtk::test
 
       auto const physicalSize =
         std::max(1, static_cast<std::int32_t>(std::ceil(static_cast<double>(kLogicalSize) * widget.displayScale())));
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, physicalSize)); }));
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, physicalSize)); }));
 
-      auto const cachedPtr = loader.get(resourceId, physicalSize);
+      auto const cachedPtr = loader.getThumbnail(resourceId, physicalSize);
       REQUIRE(cachedPtr);
       // Decode-at-scale: the stored thumbnail is bounded by the logical size
       // times the display scale, never the full 256px source.
@@ -324,8 +361,8 @@ namespace ao::gtk::test
       thumbnailCache.put(ImageCacheKey::thumbnail(resourceId, kLogicalSize), makePixbuf(kLogicalSize, kLogicalSize));
 
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
-      controller.enableThumbnailMode(loader, kLogicalSize);
+      auto controller = ResourceImageController{widget, loader};
+      controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
       drainGtkEvents();
 
@@ -335,8 +372,8 @@ namespace ao::gtk::test
     SECTION("invalid resource id clears the image")
     {
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
-      controller.enableThumbnailMode(loader, kLogicalSize);
+      auto controller = ResourceImageController{widget, loader};
+      controller.enableThumbnailMode(kLogicalSize);
       controller.load(kInvalidResourceId);
       drainGtkEvents();
 
@@ -349,8 +386,8 @@ namespace ao::gtk::test
 
       {
         auto widget = ImageWidget{};
-        auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
-        controller.enableThumbnailMode(loader, kLogicalSize);
+        auto controller = ResourceImageController{widget, loader};
+        controller.enableThumbnailMode(kLogicalSize);
         controller.load(resourceId);
         // Leave the scope immediately: the decode is likely still in flight on a
         // worker thread. The shared loader outlives the widget and still completes
@@ -360,12 +397,12 @@ namespace ao::gtk::test
 
       // The shared loader still salvages the decode into the cache, while the
       // controller's destroyed request handle prevents the callback from touching it.
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.get(resourceId, kLogicalSize)); }));
+      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kLogicalSize)); }));
 
       // The runtime remains usable afterwards.
       auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, runtime.library(), thumbnailCache};
-      controller.enableThumbnailMode(loader, kLogicalSize);
+      auto controller = ResourceImageController{widget, loader};
+      controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
       REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
       CHECK(widget.get_paintable());

@@ -48,7 +48,7 @@ namespace ao::uimodel
 
 namespace ao::gtk
 {
-  class ThumbnailLoader;
+  class ResourceImageLoader;
   class TagPopover;
 
   class TrackViewPage final : public Gtk::Box
@@ -64,7 +64,7 @@ namespace ao::gtk
                            Glib::RefPtr<TrackListModel> modelPtr,
                            uimodel::TrackColumnLayoutStore& layoutStore,
                            rt::AppRuntime& runtime,
-                           ThumbnailLoader& thumbnailLoader,
+                           ResourceImageLoader& thumbnailLoader,
                            rt::ViewId viewId = rt::kInvalidViewId);
     ~TrackViewPage() override;
 
@@ -124,7 +124,7 @@ namespace ao::gtk
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::TrackColumnLayoutStore& _layoutStore;
     rt::AppRuntime& _runtime;
-    ThumbnailLoader& _thumbnailLoader;
+    ResourceImageLoader& _thumbnailLoader;
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;
     TrackId _playingTrackId{kInvalidTrackId};

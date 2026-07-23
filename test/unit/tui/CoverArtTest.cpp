@@ -3,6 +3,8 @@
 
 #include "tui/CoverArt.h"
 
+#include "CoverArtTestSupport.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -27,18 +29,6 @@ namespace ao::tui::test
       }
 
       return result;
-    }
-
-    std::vector<std::byte> onePixelRedPng()
-    {
-      constexpr auto kBytes = std::to_array<std::uint8_t>({
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
-        0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00,
-        0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18,
-        0xDD, 0x8D, 0xB0, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-      });
-
-      return toBytes(kBytes);
     }
 
     std::vector<std::byte> onePixelRedBmp()
@@ -107,7 +97,7 @@ namespace ao::tui::test
 
   TEST_CASE("CoverArt - decoded image is sampled into terminal cells", "[tui][unit][cover-art]")
   {
-    auto const optPreview = decodeCoverArtPreview(onePixelRedPng(), 3, 2);
+    auto const optPreview = decodeCoverArtPreview(support::onePixelRedPng(), 3, 2);
 
     REQUIRE(optPreview);
     REQUIRE(optPreview->size() == 2);
@@ -192,7 +182,7 @@ namespace ao::tui::test
 
   TEST_CASE("CoverArt - decoded image can be converted to PNG payload", "[tui][unit][cover-art]")
   {
-    auto const optPng = decodeCoverArtPng(onePixelRedPng(), 8, 4);
+    auto const optPng = decodeCoverArtPng(support::onePixelRedPng(), 8, 4);
 
     REQUIRE(optPng);
     REQUIRE(optPng->size() >= 24);
@@ -209,10 +199,39 @@ namespace ao::tui::test
     auto const malformed = std::vector{std::byte{0x42}, std::byte{0x4D}};
 
     CHECK_FALSE(decodeCoverArtPreview(malformed, 1, 1));
-    CHECK_FALSE(decodeCoverArtPreview(onePixelRedPng(), 0, 1));
+    CHECK_FALSE(decodeCoverArtPreview(support::onePixelRedPng(), 0, 1));
     CHECK_FALSE(decodeCoverArtPng(malformed, 1, 1));
-    CHECK_FALSE(decodeCoverArtPng(onePixelRedPng(), 0, 1));
-    CHECK_FALSE(decodeCoverArtPng(onePixelRedPng(), 1, -1));
+    CHECK_FALSE(decodeCoverArtPng(support::onePixelRedPng(), 0, 1));
+    CHECK_FALSE(decodeCoverArtPng(support::onePixelRedPng(), 1, -1));
+  }
+
+  TEST_CASE("CoverArt - encoded dimensions and generated output are bounded", "[tui][unit][cover-art]")
+  {
+    auto const source = twoByTwoRedBlueBmp();
+
+    SECTION("exact dimension and pixel limits are accepted")
+    {
+      auto limits = CoverArtDecodeLimits{.maximumDimension = 2, .maximumPixels = 4};
+      CHECK(decodeCoverArtPreview(source, 1, 1, limits));
+    }
+
+    SECTION("source dimensions are checked before full decode")
+    {
+      auto limits = CoverArtDecodeLimits{.maximumDimension = 1};
+      CHECK_FALSE(decodeCoverArtPreview(source, 1, 1, limits));
+    }
+
+    SECTION("source pixel count is bounded")
+    {
+      auto limits = CoverArtDecodeLimits{.maximumPixels = 3};
+      CHECK_FALSE(decodeCoverArtPng(source, 1, 1, limits));
+    }
+
+    SECTION("PNG callback output stops retaining bytes at the configured limit")
+    {
+      auto limits = CoverArtDecodeLimits{.maximumGeneratedBytes = 8};
+      CHECK_FALSE(decodeCoverArtPng(support::onePixelRedPng(), 8, 4, limits));
+    }
   }
 
   TEST_CASE("CoverArt - Kitty escape advertises image dimensions", "[tui][unit][cover-art]")

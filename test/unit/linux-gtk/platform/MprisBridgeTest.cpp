@@ -23,6 +23,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
@@ -44,6 +45,8 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::platform::test
 {
@@ -143,6 +146,71 @@ namespace ao::gtk::platform::test
     CHECK(MprisBridge::metadataForState(rt::PlaybackTransportSnapshot{}).trackObjectPath.empty());
   }
 
+  TEST_CASE("MprisBridge - delayed art URL completion cannot publish for a replaced track",
+            "[gtk][regression][mpris][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ao::gtk::test::ensureGtkApplication();
+    auto firstTrackId = kInvalidTrackId;
+    auto secondTrackId = kInvalidTrackId;
+    auto firstResourceId = kInvalidResourceId;
+    auto secondResourceId = kInvalidResourceId;
+    constexpr auto kFirstBytes = std::array{std::byte{0x01}};
+    constexpr auto kSecondBytes = std::array{std::byte{0x02}};
+    auto fixture = ao::gtk::test::GtkRuntimeFixture{
+      [&](library::MusicLibrary& musicLibrary)
+      {
+        auto const fixtureUri =
+          audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "mpris-track.flac");
+        firstResourceId = addResource(musicLibrary, kFirstBytes);
+        secondResourceId = addResource(musicLibrary, kSecondBytes);
+        firstTrackId = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "First", .uri = fixtureUri, .coverArtId = firstResourceId});
+        secondTrackId = library::test::addTrack(
+          musicLibrary, library::test::TrackSpec{.title = "Second", .uri = fixtureUri, .coverArtId = secondResourceId});
+      }};
+    auto& runtime = fixture.runtime();
+    rt::test::addReadyAudioProvider(runtime);
+    auto& playback = runtime.playback();
+    auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
+    struct PendingArt final
+    {
+      ResourceId resourceId = kInvalidResourceId;
+      MprisBridge::OnArtUrlReady complete;
+    };
+    auto pending = std::vector<PendingArt>{};
+    std::int32_t cancellationCount = 0;
+    auto bridge = MprisBridge{playback,
+                              commands,
+                              MprisBridge::Callbacks{
+                                .requestArtUrl =
+                                  [&](ResourceId const resourceId, MprisBridge::OnArtUrlReady complete)
+                                {
+                                  pending.push_back({.resourceId = resourceId, .complete = std::move(complete)});
+                                  return utility::ScopedRegistration{[&cancellationCount] { ++cancellationCount; }};
+                                },
+                              }};
+    bridge.start();
+    auto const viewId = prepareAllTracksView(runtime);
+
+    REQUIRE(playback.commands().startFromView(viewId, firstTrackId));
+    REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return pending.size() == 1; }));
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == firstTrackId);
+    CHECK(pending[0].resourceId == firstResourceId);
+    CHECK(bridge.metadataSnapshot().artUrl.empty());
+
+    REQUIRE(playback.commands().startFromView(viewId, secondTrackId));
+    REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return pending.size() == 2; }));
+    CHECK(playback.snapshot().transport.nowPlaying.trackId == secondTrackId);
+    CHECK(pending[1].resourceId == secondResourceId);
+    CHECK(cancellationCount == 1);
+
+    pending[0].complete("file:///tmp/stale.png");
+    CHECK(bridge.metadataSnapshot().artUrl.empty());
+
+    pending[1].complete("file:///tmp/current.png");
+    CHECK(bridge.metadataSnapshot().artUrl == "file:///tmp/current.png");
+  }
+
   TEST_CASE("toUString - UTF-8 conversion preserves multibyte metadata", "[gtk][regression][mpris]")
   {
     constexpr auto kTitle = std::string_view{"龙卷风"};
@@ -193,15 +261,31 @@ namespace ao::gtk::platform::test
       output.put('\0');
     }
 
-    auto cache = MprisArtUrlCache{runtime.library(), cacheDir};
+    auto cache = MprisArtUrlCache{runtime.library().taskService(), runtime.async(), cacheDir};
+    bool callbackOnExecutor = false;
+    auto const requestUrl = [&](ResourceId const requestedResourceId)
+    {
+      auto url = std::string{};
+      bool completed = false;
+      auto request = cache.requestUrl(requestedResourceId,
+                                      [&](std::string resolvedUrl)
+                                      {
+                                        callbackOnExecutor = runtime.async().callbackExecutor().isCurrent();
+                                        url = std::move(resolvedUrl);
+                                        completed = true;
+                                      });
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return completed; }));
+      return url;
+    };
 
     auto const viewId = prepareAllTracksView(runtime);
     REQUIRE(playback.commands().startFromView(viewId, trackId));
     REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
     CHECK(playback.snapshot().transport.nowPlaying.coverArtId == resourceId);
 
-    auto const url = cache.urlForResource(playback.snapshot().transport.nowPlaying.coverArtId);
+    auto const url = requestUrl(playback.snapshot().transport.nowPlaying.coverArtId);
     REQUIRE(url.starts_with("file://"));
+    CHECK(callbackOnExecutor);
 
     auto const exportedPath = pathFromFileUrl(url);
     CHECK(exportedPath.extension() == ".png");
@@ -211,11 +295,11 @@ namespace ao::gtk::platform::test
     auto cachedWriteTime = std::filesystem::file_time_type::clock::now() - std::chrono::hours{24};
     std::filesystem::last_write_time(exportedPath, cachedWriteTime);
     cachedWriteTime = std::filesystem::last_write_time(exportedPath);
-    CHECK(cache.urlForResource(resourceId) == url);
+    CHECK(requestUrl(resourceId) == url);
     CHECK(std::filesystem::last_write_time(exportedPath) == cachedWriteTime);
 
     REQUIRE(std::filesystem::remove(exportedPath));
-    CHECK(cache.urlForResource(resourceId) == url);
+    CHECK(requestUrl(resourceId) == url);
     CHECK(std::filesystem::is_regular_file(exportedPath));
     CHECK(fileBytesEqual(exportedPath, kPngBytes));
 
@@ -225,13 +309,22 @@ namespace ao::gtk::platform::test
       output.put('\0');
     }
 
-    CHECK(cache.urlForResource(resourceId) == url);
+    CHECK(requestUrl(resourceId) == url);
     CHECK(fileBytesEqual(exportedPath, kPngBytes));
 
     auto const metadata = MprisBridge::metadataForState(playback.snapshot().transport, url);
     CHECK(metadata.artUrl == url);
-    CHECK(cache.urlForResource(kInvalidResourceId).empty());
-    CHECK(cache.urlForResource(ResourceId{999999}).empty());
+    CHECK(requestUrl(kInvalidResourceId).empty());
+    CHECK(requestUrl(ResourceId{999999}).empty());
+
+    std::int32_t cancelledCallbackCount = 0;
+    bool activeWaiterCompleted = false;
+    auto cancelledRequest = cache.requestUrl(ResourceId{999998}, [&](std::string) { ++cancelledCallbackCount; });
+    [[maybe_unused]] auto activeRequest =
+      cache.requestUrl(ResourceId{999998}, [&](std::string) { activeWaiterCompleted = true; });
+    cancelledRequest.reset();
+    REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return activeWaiterCompleted; }));
+    CHECK(cancelledCallbackCount == 0);
   }
 
   TEST_CASE("MprisBridge - elapsed helpers convert and clamp MPRIS time", "[gtk][unit][mpris]")

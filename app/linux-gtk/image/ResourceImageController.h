@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "image/ThumbnailLoader.h"
+#include "image/ResourceImageLoader.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -11,20 +11,14 @@
 #include <cstdint>
 #include <memory>
 
-namespace ao::rt
-{
-  class Library;
-}
-
 namespace ao::gtk
 {
-  class ImageCache;
   class ImageWidget;
 
   class ResourceImageController final
   {
   public:
-    ResourceImageController(ImageWidget& widget, rt::Library const& reads, ImageCache& cache);
+    ResourceImageController(ImageWidget& widget, ResourceImageLoader& loader);
     ~ResourceImageController() = default;
 
     ResourceImageController(ResourceImageController const&) = delete;
@@ -32,7 +26,7 @@ namespace ao::gtk
     ResourceImageController(ResourceImageController&&) = delete;
     ResourceImageController& operator=(ResourceImageController&&) = delete;
 
-    void enableThumbnailMode(ThumbnailLoader& loader, std::int32_t logicalSizePx);
+    void enableThumbnailMode(std::int32_t logicalSizePx);
     void load(ResourceId resourceId);
     void clear();
 
@@ -40,20 +34,18 @@ namespace ao::gtk
 
   private:
     void handleDetailSnapshot(rt::TrackDetailSnapshot const& snap);
-    void loadFullSize(ResourceId resourceId);
+    void loadFullSize(ResourceId resourceId, std::uint64_t generation);
     void loadThumbnail(ResourceId resourceId, std::uint64_t generation);
     std::int32_t thumbnailPhysicalSize() const;
 
     ImageWidget& _widget;
-    rt::Library const& _reads;
-    ImageCache& _cache;
+    ResourceImageLoader& _loader;
     std::unique_ptr<rt::TrackDetailProjection> _detailProjectionPtr;
     async::Subscription _detailSub;
 
     bool _thumbnailMode = false;
-    ThumbnailLoader* _thumbnailLoader = nullptr;
     std::int32_t _thumbnailLogicalSize = 0;
-    std::uint64_t _thumbnailGeneration = 0;
-    ThumbnailLoader::Request _thumbnailRequest;
+    std::uint64_t _generation = 0;
+    ResourceImageLoader::Request _request;
   };
 } // namespace ao::gtk

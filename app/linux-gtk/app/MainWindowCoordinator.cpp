@@ -9,6 +9,7 @@
 #include "app/ThemeCoordinator.h"
 #include "app/WindowState.h"
 #include "image/ImageCache.h"
+#include "image/ResourceImageLoader.h"
 #include "list/ListNavigationController.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinator.h"
@@ -59,6 +60,7 @@ namespace ao::gtk
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library()}
       , imageCache{100}
+      , resourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()}
       , playbackCommandSurface{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
@@ -165,6 +167,7 @@ namespace ao::gtk
     ThemeCoordinator themeCoordinator;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
+    ResourceImageLoader resourceImageLoader;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
     ao::uimodel::ListPresentationPreferenceStore trackPresentationPreferences;
@@ -357,7 +360,7 @@ namespace ao::gtk
   {
     return GtkUiDependencies{
       .trackRowCache = &_implPtr->trackRowCache,
-      .imageCache = &_implPtr->imageCache,
+      .imageLoader = &_implPtr->resourceImageLoader,
       .playbackCommandSurface = &_implPtr->playbackCommandSurface,
       .tagEditController = &_implPtr->tagEditController,
       .importExportActions = &_implPtr->importExportCoordinator,
@@ -401,10 +404,6 @@ namespace ao::gtk
   TrackRowCache* MainWindowCoordinator::trackRowCache()
   {
     return &_implPtr->trackRowCache;
-  }
-  ImageCache* MainWindowCoordinator::imageCache()
-  {
-    return &_implPtr->imageCache;
   }
   uimodel::PlaybackCommandSurface* MainWindowCoordinator::playbackCommandSurface()
   {

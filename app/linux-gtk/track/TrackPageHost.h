@@ -4,7 +4,7 @@
 #pragma once
 
 #include "image/ImageCache.h"
-#include "image/ThumbnailLoader.h"
+#include "image/ResourceImageLoader.h"
 #include "layout/LayoutConstants.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
@@ -110,7 +110,7 @@ namespace ao::gtk
     ImageCache _thumbnailCache{layout::kSectionThumbnailCacheCapacity};
 
     // Shared, off-thread thumbnail decoder over the cache above.
-    ThumbnailLoader _thumbnailLoader{_runtime.library(), _thumbnailCache, _runtime.async()};
+    ResourceImageLoader _thumbnailLoader;
 
     std::map<rt::ViewId, TrackPageEntry> _trackPages;
     TrackId _playingTrackId{kInvalidTrackId};

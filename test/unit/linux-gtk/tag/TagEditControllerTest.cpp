@@ -5,7 +5,7 @@
 
 #include "app/ThemeCoordinator.h"
 #include "image/ImageCache.h"
-#include "image/ThumbnailLoader.h"
+#include "image/ResourceImageLoader.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackListModel.h"
@@ -122,7 +122,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
-    auto thumbnailLoader = ThumbnailLoader{runtime.library(), imageCache, runtime.async()};
+    auto thumbnailLoader = ResourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};

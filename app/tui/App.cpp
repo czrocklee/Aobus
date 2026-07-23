@@ -8,6 +8,7 @@
 #include "CommandCompletionProvider.h"
 #include "CommandPalettePanel.h"
 #include "CoverArt.h"
+#include "CoverArtLoader.h"
 #include "EventController.h"
 #include "Executor.h"
 #include "FrameTimer.h"
@@ -39,7 +40,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
@@ -79,10 +79,6 @@ namespace ao::tui
   namespace
   {
     constexpr auto kPlaybackTickInterval = std::chrono::milliseconds{250};
-    constexpr std::int32_t kBlockCoverArtColumns = 24;
-    constexpr std::int32_t kBlockCoverArtRows = 12;
-    constexpr std::int32_t kKittyCoverArtColumns = 768;
-    constexpr std::int32_t kKittyCoverArtRows = 384;
     constexpr std::int32_t kNotificationCenterPanelRows = 12;
 
     ftxui::Element commandPalettePopover(ShellInteractionModel const& shell,
@@ -268,42 +264,6 @@ namespace ao::tui
       std::thread _thread;
     };
 
-    std::optional<CoverArtRows> loadCoverArtPreview(rt::AppRuntime& runtime, ResourceId const resourceId)
-    {
-      if (resourceId == kInvalidResourceId)
-      {
-        return std::nullopt;
-      }
-
-      auto const reader = runtime.library().reader();
-      auto optBytes = reader.loadResource(resourceId);
-
-      if (!optBytes)
-      {
-        return std::nullopt;
-      }
-
-      return decodeCoverArtPreview(*optBytes, kBlockCoverArtColumns, kBlockCoverArtRows);
-    }
-
-    std::optional<std::vector<std::byte>> loadCoverArtPng(rt::AppRuntime& runtime, ResourceId const resourceId)
-    {
-      if (resourceId == kInvalidResourceId)
-      {
-        return std::nullopt;
-      }
-
-      auto const reader = runtime.library().reader();
-      auto optBytes = reader.loadResource(resourceId);
-
-      if (!optBytes)
-      {
-        return std::nullopt;
-      }
-
-      return decodeCoverArtPng(*optBytes, kKittyCoverArtColumns, kKittyCoverArtRows);
-    }
-
     uimodel::FrameClock::TimePoint monotonicFrameTime()
     {
       auto const frameTime = std::chrono::steady_clock::now().time_since_epoch();
@@ -370,11 +330,8 @@ namespace ao::tui
       std::vector<TrackColumnWidthOverride>& trackColumnWidthOverrides;
       uimodel::PlaybackPositionInterpolator& playbackClock;
       std::optional<std::chrono::milliseconds>& optPreviewElapsed;
-      ResourceId& cachedCoverArtId;
-      std::optional<CoverArtRows>& optCoverArtPreview;
-      std::optional<std::vector<std::byte>>& optKittyCoverArtPng;
+      CoverArtLoader& coverArt;
       bool kittyCoverArt = false;
-      bool blockCoverArt = false;
 
       ftxui::Element operator()()
       {
@@ -385,11 +342,9 @@ namespace ao::tui
         auto const selectedCoverArtId = selectedTrackView.coverArtId;
         auto const detailVisible = shell.overlay() == Overlay::DetailPanel;
 
-        if (detailVisible && selectedCoverArtId != cachedCoverArtId)
+        if (detailVisible)
         {
-          cachedCoverArtId = selectedCoverArtId;
-          optCoverArtPreview = blockCoverArt ? loadCoverArtPreview(runtime, cachedCoverArtId) : std::nullopt;
-          optKittyCoverArtPng = kittyCoverArt ? loadCoverArtPng(runtime, cachedCoverArtId) : std::nullopt;
+          coverArt.request(selectedCoverArtId);
         }
 
         if (!detailVisible)
@@ -397,9 +352,9 @@ namespace ao::tui
           hitRegions.coverBox = ftxui::Box{};
         }
 
-        auto coverElementPtr = kittyCoverArt ? renderKittyCoverArtPlaceholder(optKittyCoverArtPng != std::nullopt) |
+        auto coverElementPtr = kittyCoverArt ? renderKittyCoverArtPlaceholder(coverArt.kittyPng() != std::nullopt) |
                                                  reflect(hitRegions.coverBox)
-                                             : renderCoverArtPreview(optCoverArtPreview) | reflect(hitRegions.coverBox);
+                                             : renderCoverArtPreview(coverArt.preview()) | reflect(hitRegions.coverBox);
         auto const currentListTitle = library.currentListTitle();
         auto const& state = playback.snapshot().transport;
         hitRegions.clearFrameLocalRows();
@@ -596,6 +551,16 @@ namespace ao::tui
     auto const coverArtMode = parseCoverArtMode(options.coverArtMode);
     auto const kittyCoverArt = shouldUseKittyCoverArt(coverArtMode);
     auto const blockCoverArt = shouldUseBlockCoverArt(coverArtMode);
+    auto coverArtDeliveryMode = CoverArtDeliveryMode::Off;
+
+    if (kittyCoverArt)
+    {
+      coverArtDeliveryMode = CoverArtDeliveryMode::Kitty;
+    }
+    else if (blockCoverArt)
+    {
+      coverArtDeliveryMode = CoverArtDeliveryMode::Blocks;
+    }
 
     std::filesystem::create_directories(options.configPath.parent_path());
     rt::Log::initialize(
@@ -618,15 +583,14 @@ namespace ao::tui
 
     auto library = LibraryController{runtime};
     auto shell = ShellInteractionModel{};
-    auto cachedCoverArtId = kInvalidResourceId;
-    auto optCoverArtPreview = std::optional<CoverArtRows>{};
-    auto optKittyCoverArtPng = std::optional<std::vector<std::byte>>{};
     auto hitRegions = TuiHitRegions{};
     auto trackColumnWidthOverrides = std::vector<TrackColumnWidthOverride>{};
     auto kittyPaintState = KittyPaintState{};
 
     auto& playback = runtime.playback();
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
+    auto coverArt =
+      CoverArtLoader{runtime.library().taskService(), runtime.async(), coverArtDeliveryMode, requestRefresh};
     auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
@@ -698,11 +662,8 @@ namespace ao::tui
       .trackColumnWidthOverrides = trackColumnWidthOverrides,
       .playbackClock = playbackClock,
       .optPreviewElapsed = optPreviewElapsed,
-      .cachedCoverArtId = cachedCoverArtId,
-      .optCoverArtPreview = optCoverArtPreview,
-      .optKittyCoverArtPng = optKittyCoverArtPng,
+      .coverArt = coverArt,
       .kittyCoverArt = kittyCoverArt,
-      .blockCoverArt = blockCoverArt,
     };
     auto rendererPtr = ftxui::Renderer([&frameRenderer] { return frameRenderer(); });
 
@@ -727,7 +688,7 @@ namespace ao::tui
 
       if (kittyCoverArt)
       {
-        updateKittyCoverArt(kittyPaintState, shell, cachedCoverArtId, hitRegions.coverBox, optKittyCoverArtPng);
+        updateKittyCoverArt(kittyPaintState, shell, coverArt.resourceId(), hitRegions.coverBox, coverArt.kittyPng());
       }
     }
 
@@ -737,6 +698,7 @@ namespace ao::tui
       std::fflush(stdout);
     }
 
+    coverArt.cancel();
     playback.commands().stop();
     runtime.async().requestStop();
     runtime.async().join();

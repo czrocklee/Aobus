@@ -28,9 +28,10 @@ media file reading or YAML import
   -> ResourceStore immutable blob + ResourceId
   -> ordered Track cover references
   -> primary ResourceId in runtime rows/detail/playback state
-       |-> GTK ImageCache / ThumbnailLoader / ImageWidget
-       |-> TUI block preview or Kitty PNG
-       |-> MPRIS cache file -> file:// URL
+       |-> LibraryTaskService owned-byte read
+            |-> GTK ImageCache / ResourceImageLoader / ImageWidget
+            |-> TUI CoverArtLoader -> block preview or Kitty PNG
+            `-> MPRIS cache file -> file:// URL
        `-> CLI resource list/export
 ```
 
@@ -51,30 +52,33 @@ The library model owns cover ordering and reference integrity; resource delivery
 
 ### Runtime materialization and identity flow
 
-`LibraryReader::loadResource()` reads under its scoped transaction and copies the transaction-borrowed span into an owned byte vector.
+`LibraryReader::loadResource()` remains the synchronous owned-copy boundary for administrative consumers.
+`LibraryTaskService::loadResourceAsync()` is the interactive boundary: it enters on the callback executor, copies immutable bytes under a worker-side read transaction, rejects encoded payloads above 32 MiB, and returns owned bytes on the callback executor.
 Runtime track rows, list/detail projections, and playback state carry only `ResourceId`, not decoded images or URLs.
 
-This keeps platform formats out of runtime but means each current consumer initiates its own byte read and transform.
-There is no shared asynchronous runtime resource service or byte cache.
+The task service does not cache, decode, publish maintenance progress, or introduce a resource-state owner.
+Each frontend retains its own request lifetime, transform, cache, and stale-result policy.
 
 ### GTK image delivery
 
 GTK `ImageCache` owns an in-process LRU of decoded pixbufs keyed by resource id plus full-size or requested physical thumbnail size.
-`ThumbnailLoader` performs byte read and scaled pixbuf decoding on the shared worker pool, coalesces equal in-flight keys, returns completion on the callback executor, and permits a successful decode to populate the cache after individual interest is cancelled.
+`ResourceImageLoader` serves both key kinds, coalesces equal in-flight keys, reads through `LibraryTaskService`, checks decoded dimensions before accepting allocation, decodes on the shared worker pool, and returns completion on the GTK callback executor.
+Successful shared work may populate the cache after one callback interest is cancelled.
 
-`ResourceImageController` binds a resource or detail projection to one `ImageWidget` and rejects stale thumbnail completions with a generation.
-Its full-size path currently reads and decodes synchronously on the GTK thread.
+`ResourceImageController` binds a resource or detail projection to one `ImageWidget`, clears an uncached replacement immediately, and rejects stale full-size or thumbnail completion with one generation.
 
 ### TUI delivery
 
-TUI reads resource bytes synchronously from the runtime library when selected cover identity changes.
-It decodes through stb into either half-block RGB cells or a square PNG for the Kitty graphics protocol.
-The chosen transformed result is retained for the current resource id, and Kitty paint state tracks the fixed image id and terminal cell box.
+`CoverArtLoader` clears its current transform when selected cover identity changes, reads bytes asynchronously, and performs stb decode plus block or Kitty conversion on a worker.
+It publishes only when the resource id and local generation still match.
+The decoder checks source dimensions and pixels before full decode and bounds generated PNG retention.
+Kitty paint state separately tracks the fixed image id and terminal cell box.
 
 ### External and administrative delivery
 
-The GTK MPRIS adapter reads the primary resource synchronously, sniffs a filename extension, writes original bytes under the user cache directory, removes stale sibling extensions, and returns a `file://` URI.
-Its process-local entry is reused only while the file exists with the recorded size.
+The GTK MPRIS adapter validates or materializes its derived cache file on a worker.
+It sniffs a filename extension, writes original bytes under the user cache directory, removes stale sibling extensions, and returns a `file://` URI on the GTK callback executor.
+The bridge publishes metadata without `mpris:artUrl` immediately and emits replacement metadata only when the delayed URL still belongs to the current now-playing resource.
 
 CLI resource commands expose raw ids and bytes for inspection and export without interpreting image content.
 
@@ -102,27 +106,24 @@ borrowed cover bytes
   -> projections/playback refresh primary ResourceId
 ```
 
-### GTK thumbnail
+### GTK image
 
 ```text
 ResourceId + logical allocation + display scale
   -> physical-size cache key
-  -> cache hit OR coalesced worker read/decode
+  -> cache hit OR coalesced async byte read and worker decode
   -> callback-executor cache insertion
   -> request interest + widget generation check
   -> ImageWidget source pixbuf and render policy
 ```
 
-### Other current paths
+### Other paths
 
 ```text
-TUI ResourceId -> synchronous read -> stb crop/scale -> blocks or Kitty PNG
-MPRIS ResourceId -> synchronous read -> extension sniff -> cache file -> file URI
+TUI ResourceId -> async owned bytes -> worker stb crop/scale -> current-generation blocks or Kitty PNG
+MPRIS ResourceId -> async owned bytes -> worker cache validation/write -> current-resource file URI
 CLI ResourceId -> scoped read -> raw output file
 ```
-
-[RFC 0021](../rfc/0021-nonblocking-cover-art.md) proposes one asynchronous byte-read operation on the existing library task service and moves full-size GTK, TUI, and MPRIS transforms off their event-loop threads.
-That proposal is not current behavior.
 
 ## Structural constraints
 
@@ -142,21 +143,23 @@ Core resource creation returns typed storage or id-exhaustion errors.
 Missing reads are ordinary absence; LMDB operational faults follow the storage failure boundary.
 The runtime reader copies bytes before releasing its transaction.
 
-GTK thumbnail requests have per-interest cancellation plus a loader lifetime scope.
-Worker cancellation prevents the loader from being touched after destruction; decode failure yields no pixbuf and does not poison unrelated keys.
-Full-size GTK, TUI, and MPRIS paths currently perform potentially blocking read/decode/write work on their frontend thread and degrade to an empty image/URL on absence or decode/export failure.
+GTK and MPRIS shared requests have per-interest cancellation plus a loader lifetime scope; TUI owns one cancellable selected-resource task.
+Worker cancellation prevents a frontend owner from being touched after destruction.
+Resource replacement invalidates the old callback interest or generation before new output is published.
+Absence, an over-budget payload, decode failure, or file-export failure yields no image/URL and does not mutate stored bytes or poison unrelated cache keys.
 
-Image byte size and decoded pixel allocation have no shared product-level budget at the resource boundary.
-Frontend decoders apply their own format and dimension checks, but current architecture does not provide one cross-frontend decompression-bomb or memory-pressure policy.
-RFC 0021 proposes encoded-byte, decoded-pixel, and generated-output limits while keeping transforms and caches frontend-local.
+Interactive reads reject encoded payloads above 32 MiB before copying them out of storage.
+GTK and TUI reject source dimensions above 8192 or decoded images above 32,000,000 pixels before accepting a full decode.
+TUI generated PNG output retains at most 8 MiB.
+These delivery limits do not constrain CLI raw export or change stored bytes.
 
 ## Implementation map
 
 - [`ResourceStore`](../../include/ao/library/ResourceStore.h), [`ResourceStore.cpp`](../../lib/library/ResourceStore.cpp), and [`CoverArt.h`](../../include/ao/library/CoverArt.h) own Core identities and references.
-- [`LibraryReader::loadResource`](../../app/runtime/library/LibraryReader.cpp) owns runtime byte materialization.
+- [`LibraryReader::loadResource`](../../app/runtime/library/LibraryReader.cpp) owns synchronous administrative materialization; [`LibraryTaskService::loadResourceAsync`](../../app/runtime/library/LibraryTaskService.cpp) owns interactive materialization.
 - [`TrackRow.h`](../../app/include/ao/rt/TrackRow.h), [`TrackListProjection.h`](../../app/include/ao/rt/projection/TrackListProjection.h), [`TrackDetailProjection.h`](../../app/include/ao/rt/projection/TrackDetailProjection.h), and [`PlaybackState.h`](../../app/include/ao/rt/PlaybackState.h) carry identities.
-- [`ImageCache`](../../app/linux-gtk/image/ImageCache.h), [`ThumbnailLoader`](../../app/linux-gtk/image/ThumbnailLoader.h), [`ResourceImageController`](../../app/linux-gtk/image/ResourceImageController.h), and [`ImageWidget`](../../app/linux-gtk/image/ImageWidget.h) own GTK delivery.
-- [`CoverArt.cpp`](../../app/tui/CoverArt.cpp) and [`app/tui/App.cpp`](../../app/tui/App.cpp) own TUI transforms and paint state.
+- [`ImageCache`](../../app/linux-gtk/image/ImageCache.h), [`ResourceImageLoader`](../../app/linux-gtk/image/ResourceImageLoader.h), [`ResourceImageController`](../../app/linux-gtk/image/ResourceImageController.h), and [`ImageWidget`](../../app/linux-gtk/image/ImageWidget.h) own GTK delivery.
+- [`CoverArtLoader`](../../app/tui/CoverArtLoader.h), [`CoverArt.cpp`](../../app/tui/CoverArt.cpp), and [`app/tui/App.cpp`](../../app/tui/App.cpp) own TUI delivery, transforms, and paint state.
 - [`MprisArtUrlCache`](../../app/linux-gtk/platform/MprisArtUrlCache.h) owns file-URL export.
 - [`LibCommand.cpp`](../../app/cli/LibCommand.cpp) owns CLI inspection/export adaptation.
 
@@ -182,4 +185,3 @@ RFC 0021 proposes encoded-byte, decoded-pixel, and generated-output limits while
 - [Cover-art resource delivery specification](../spec/resource/cover-art-delivery.md)
 - [Resource blob reference](../reference/resource/blob.md)
 - [Track model reference](../reference/library/model/track.md)
-- [RFC 0021: non-blocking cover-art delivery](../rfc/0021-nonblocking-cover-art.md)

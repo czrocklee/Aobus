@@ -34,6 +34,7 @@ add_library(aobus-tui-lib STATIC
     SoulButton.cpp
     TextCell.cpp
     CoverArt.cpp
+    CoverArtLoader.cpp
 )
 
 if(WIN32)

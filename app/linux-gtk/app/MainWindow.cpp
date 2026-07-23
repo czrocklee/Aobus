@@ -23,6 +23,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -79,7 +80,8 @@ namespace ao::gtk
     _shellLayout.setMenuModel(_menuControllerPtr->menuModel());
     _shellLayout.attachToWindow();
 
-    auto mprisArtUrlCachePtr = std::make_shared<platform::MprisArtUrlCache>(_runtime.library());
+    auto mprisArtUrlCachePtr =
+      std::make_shared<platform::MprisArtUrlCache>(_runtime.library().taskService(), _runtime.async());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
       *_mainWindowCoordinatorPtr->playbackCommandSurface(),
@@ -101,8 +103,9 @@ namespace ao::gtk
 
           return false;
         },
-        .artUrlForResource = [cachePtr = std::move(mprisArtUrlCachePtr)](ResourceId const resourceId)
-        { return cachePtr->urlForResource(resourceId); },
+        .requestArtUrl = [cachePtr = std::move(mprisArtUrlCachePtr)](
+                           ResourceId const resourceId, platform::MprisBridge::OnArtUrlReady onReady)
+        { return cachePtr->requestUrl(resourceId, std::move(onReady)); },
       });
     _shellLayout.setConfirmPromotionCallback(
       [this](std::string const& presetId, ShellLayoutController::ConfirmPromotionAnswer answer)

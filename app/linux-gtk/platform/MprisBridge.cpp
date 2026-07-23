@@ -177,6 +177,10 @@ namespace ao::gtk::platform
     bool nameAcquired = false;
     std::vector<async::Subscription> subscriptions{};
     rt::PlaybackSnapshot lastSnapshot{};
+    utility::ScopedRegistration artRequest{};
+    ResourceId artResourceId = kInvalidResourceId;
+    std::string artUrl{};
+    std::uint64_t artGeneration = 0;
 
     Impl(rt::PlaybackService& playbackRef, uimodel::PlaybackCommandSurface& commandsRef, Callbacks callbacksIn)
       : playback{playbackRef}
@@ -215,6 +219,7 @@ namespace ao::gtk::platform
 
       if (ownerId == 0)
       {
+        clearArt();
         subscriptions.clear();
         APP_LOG_WARN("MPRIS disabled: failed to request D-Bus name ownership");
         return;
@@ -225,8 +230,17 @@ namespace ao::gtk::platform
 
     void stop()
     {
+      clearArt();
       subscriptions.clear();
       releaseBusState();
+    }
+
+    void clearArt()
+    {
+      artRequest.reset();
+      ++artGeneration;
+      artResourceId = kInvalidResourceId;
+      artUrl.clear();
     }
 
     void subscribePlayback()
@@ -234,6 +248,7 @@ namespace ao::gtk::platform
       subscriptions.push_back(commands.onAvailabilityChanged(
         [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
       lastSnapshot = playback.snapshot();
+      refreshArt(lastSnapshot.transport);
       subscriptions.push_back(playback.events().onSnapshot(
         [this](rt::PlaybackSnapshot const& snapshot)
         {
@@ -245,6 +260,7 @@ namespace ao::gtk::platform
           if (snapshot.transport.nowPlaying != lastSnapshot.transport.nowPlaying ||
               snapshot.transport.duration != lastSnapshot.transport.duration)
           {
+            refreshArt(snapshot.transport);
             emitPlayerPropertiesChanged({"Metadata", "CanSeek"});
           }
 
@@ -301,26 +317,53 @@ namespace ao::gtk::platform
 
     std::string artUrlForState(rt::PlaybackTransportSnapshot const& state) const
     {
-      if (state.nowPlaying.coverArtId == kInvalidResourceId || !callbacks.artUrlForResource)
+      return state.nowPlaying.coverArtId == artResourceId ? artUrl : std::string{};
+    }
+
+    void refreshArt(rt::PlaybackTransportSnapshot const& state)
+    {
+      auto const resourceId = state.nowPlaying.coverArtId;
+
+      if (resourceId == artResourceId)
       {
-        return {};
+        return;
       }
+
+      artRequest.reset();
+      ++artGeneration;
+      artResourceId = resourceId;
+      artUrl.clear();
+
+      if (resourceId == kInvalidResourceId || !callbacks.requestArtUrl)
+      {
+        return;
+      }
+
+      auto const generation = artGeneration;
 
       try
       {
-        return callbacks.artUrlForResource(state.nowPlaying.coverArtId);
+        artRequest = callbacks.requestArtUrl(resourceId,
+                                             [this, resourceId, generation](std::string resolvedUrl)
+                                             {
+                                               if (artResourceId != resourceId || artGeneration != generation)
+                                               {
+                                                 return;
+                                               }
+
+                                               artUrl = std::move(resolvedUrl);
+                                               artRequest.reset();
+                                               emitPlayerPropertiesChanged({"Metadata"});
+                                             });
       }
       catch (std::exception const& e)
       {
-        APP_LOG_WARN("MPRIS art URL resolver failed for resource {}: {}", state.nowPlaying.coverArtId.raw(), e.what());
+        APP_LOG_WARN("MPRIS art URL request failed for resource {}: {}", resourceId.raw(), e.what());
       }
       catch (...)
       {
-        APP_LOG_WARN(
-          "MPRIS art URL resolver failed for resource {}: unknown exception", state.nowPlaying.coverArtId.raw());
+        APP_LOG_WARN("MPRIS art URL request failed for resource {}: unknown exception", resourceId.raw());
       }
-
-      return {};
     }
 
     void emitPlayerPropertiesChanged(std::initializer_list<std::string_view> propertyNames) const
@@ -600,6 +643,7 @@ namespace ao::gtk::platform
       if (!rootObjectRegistration || !playerObjectRegistration)
       {
         APP_LOG_WARN("MPRIS disabled: D-Bus name {} acquired without registered objects", name.raw());
+        clearArt();
         subscriptions.clear();
         releaseBusState();
         return;
@@ -611,6 +655,7 @@ namespace ao::gtk::platform
 
     void handleNameLost(Glib::RefPtr<Gio::DBus::Connection> const& /*connection*/, Glib::ustring const& name)
     {
+      clearArt();
       subscriptions.clear();
       releaseBusState();
       APP_LOG_WARN("MPRIS disabled: failed to acquire D-Bus name {}", name.raw());
@@ -764,6 +809,12 @@ namespace ao::gtk::platform
   bool MprisBridge::isActive() const noexcept
   {
     return _implPtr->nameAcquired;
+  }
+
+  MprisBridge::MetadataSnapshot MprisBridge::metadataSnapshot() const
+  {
+    auto const& state = _implPtr->playback.snapshot().transport;
+    return metadataForState(state, _implPtr->artUrlForState(state));
   }
 
   std::string_view MprisBridge::playbackStatus(audio::Transport const transport) noexcept

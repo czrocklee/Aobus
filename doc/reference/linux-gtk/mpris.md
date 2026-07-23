@@ -108,12 +108,13 @@ Present non-empty values use:
 | `xesam:artist` | one-element artist string array |
 | `xesam:album` | current album string |
 | `mpris:length` | positive duration in microseconds |
-| `mpris:artUrl` | resolved non-empty local file URL |
+| `mpris:artUrl` | resolved non-empty local file URL; omitted while asynchronous materialization is pending |
 
 ### Signals
 
 The bridge emits `org.freedesktop.DBus.Properties.PropertiesChanged` for affected player fields.
 It emits `org.mpris.MediaPlayer2.Player.Seeked(position)` in microseconds for non-preview runtime seek updates.
+For a new cover resource, the first `Metadata` change may omit `mpris:artUrl`; successful current-resource materialization emits a later `Metadata` change containing it.
 
 ## Validation rules
 

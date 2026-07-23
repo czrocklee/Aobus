@@ -3,6 +3,7 @@
 
 #include "app/ThemeCoordinator.h"
 #include "app/linux-gtk/image/ImageCache.h"
+#include "app/linux-gtk/image/ResourceImageLoader.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
@@ -137,14 +138,14 @@ namespace ao::gtk::layout::test
       CHECK(label->get_label().raw().contains("trackPageHost missing"));
     }
 
-    SECTION("track.coverArt shows error when imageCache missing")
+    SECTION("track.coverArt shows error when image loader is missing")
     {
       auto const compPtr = fixture.create(LayoutNode{.type = "track.coverArt"});
 
       REQUIRE(compPtr != nullptr);
       auto* const label = dynamic_cast<Gtk::Label*>(&compPtr->widget());
       REQUIRE(label != nullptr);
-      CHECK(label->get_label().raw().contains("imageCache missing"));
+      CHECK(label->get_label().raw().contains("imageLoader missing"));
     }
   }
 
@@ -159,9 +160,11 @@ namespace ao::gtk::layout::test
 
     int const cacheSize = 10;
     auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
+      fixture.runtime().library().taskService(), *imageCachePtr, fixture.runtime().async());
     auto menuModelPtr = Gio::Menu::create();
     menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
-    fixture.dependencies().imageCache = imageCachePtr.get();
+    fixture.dependencies().imageLoader = imageLoaderPtr.get();
     fixture.dependencies().menuModelPtr = menuModelPtr;
 
     {
