@@ -50,7 +50,6 @@ namespace ao::tui
     }
 
     _task.reset();
-    ++_generation;
     _resourceId = resourceId;
     _optPreview.reset();
     _optKittyPng.reset();
@@ -65,11 +64,9 @@ namespace ao::tui
       return;
     }
 
-    auto const generation = _generation;
     _task = _runtime.spawnCancellable(
-      [loader = this, tasks = &_tasks, runtime = &_runtime, mode = _mode, resourceId, generation](
-        std::stop_token const stopToken)
-      { return load(loader, tasks, runtime, mode, resourceId, generation, stopToken); });
+      [loader = this, tasks = &_tasks, runtime = &_runtime, mode = _mode, resourceId](std::stop_token const stopToken)
+      { return load(loader, tasks, runtime, mode, resourceId, stopToken); });
   }
 
   void CoverArtLoader::clear()
@@ -80,7 +77,6 @@ namespace ao::tui
     }
 
     _task.reset();
-    ++_generation;
     _resourceId = kInvalidResourceId;
     _optPreview.reset();
     _optKittyPng.reset();
@@ -94,7 +90,6 @@ namespace ao::tui
   void CoverArtLoader::cancel() noexcept
   {
     _task.reset();
-    ++_generation;
   }
 
   async::Task<void> CoverArtLoader::load(CoverArtLoader* const loader,
@@ -102,7 +97,6 @@ namespace ao::tui
                                          async::Runtime* const runtime,
                                          CoverArtDeliveryMode const mode,
                                          ResourceId const resourceId,
-                                         std::uint64_t const generation,
                                          std::stop_token const stopToken)
   {
     auto optPreview = std::optional<CoverArtRows>{};
@@ -141,11 +135,6 @@ namespace ao::tui
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
-
-    if (loader->_resourceId != resourceId || loader->_generation != generation)
-    {
-      co_return;
-    }
 
     loader->_optPreview = std::move(optPreview);
     loader->_optKittyPng = std::move(optKittyPng);

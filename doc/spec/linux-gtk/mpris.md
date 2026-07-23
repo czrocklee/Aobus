@@ -49,7 +49,7 @@ Its active state means the canonical name was acquired, not merely requested.
 Protocol properties are derived from current runtime and command-surface state on demand.
 Metadata snapshot construction derives a stable object path from `TrackId` and copies current title, artist, album, duration, and resolved art URL.
 It is not a second now-playing store.
-The bridge retains only the current cover resource id, its delayed request interest, an owner-local generation, and the last resolved URL for that same id.
+The bridge retains only the current cover resource id, its delayed request interest, a per-request callback scope, and the last resolved URL for that same id.
 
 ## Commands and transitions
 
@@ -67,7 +67,7 @@ Final runtime seeks emit `Seeked`; preview updates do not.
 
 When now-playing cover identity changes, the bridge cancels the old URL interest, clears its published URL, and emits current metadata immediately without `mpris:artUrl`.
 The cache validates or writes the derived file off the GTK thread.
-A non-stale completion stores the URL and emits `Metadata` again; a completion for an older resource or generation is ignored.
+A completion guarded by the current callback scope stores the URL and emits `Metadata` again; closing the old scope before request cancellation suppresses older and unregister-reentrant callbacks.
 
 ## Failure and cancellation
 
@@ -75,7 +75,7 @@ Bus connection, introspection, object registration, and name-ownership failures 
 They do not post a user notification, change playback, or disturb an instance that already owns the name.
 Unknown methods and unsupported writable properties return protocol errors.
 
-The bridge uses scoped cancellation for the current art URL interest.
+The bridge uses scoped cancellation for the current art URL interest and closes its callback scope before cancelling that interest.
 Its art interest, D-Bus registrations, and runtime subscriptions are cleared during stop/destruction before bridge state is released.
 The cache owns a lifetime scope for worker materialization and returns only through the GTK callback executor.
 D-Bus callbacks execute on the GTK main context and do not perform database reads, file validation, or file writes.

@@ -232,7 +232,6 @@ namespace ao::rt
     {
       TrackId trackId = kInvalidTrackId;
       ListId sourceListId = kInvalidListId;
-      std::uint64_t generation = 0;
       std::vector<TrackId> failedTrackIds;
     };
 
@@ -365,8 +364,7 @@ namespace ao::rt
 
     void cancelPendingLookahead()
     {
-      ++lookaheadPreparationGeneration;
-      optPendingLookahead.reset();
+      pendingLookaheadPtr.reset();
       transport.cancelSuccessionLookaheadPreparation();
     }
 
@@ -378,10 +376,9 @@ namespace ao::rt
              sessionPtr->indexOf(pending.trackId).has_value();
     }
 
-    bool isPendingLookaheadCurrent(std::uint64_t const generation) const
+    bool isPendingLookaheadCurrent(std::shared_ptr<PendingLookahead> const& pendingPtr) const
     {
-      return optPendingLookahead && optPendingLookahead->generation == generation &&
-             isLookaheadCandidateCurrent(*optPendingLookahead);
+      return pendingLookaheadPtr == pendingPtr && isLookaheadCandidateCurrent(*pendingPtr);
     }
 
     bool acceptPendingStart()
@@ -615,15 +612,15 @@ namespace ao::rt
       return prepareLookahead(std::move(pending));
     }
 
-    bool completeLookahead(std::uint64_t const generation, Result<PreparedNextToken> prepared)
+    bool completeLookahead(std::shared_ptr<PendingLookahead> const& pendingPtr, Result<PreparedNextToken> prepared)
     {
-      if (!optPendingLookahead || optPendingLookahead->generation != generation)
+      if (pendingLookaheadPtr != pendingPtr)
       {
         return false;
       }
 
-      auto pending = std::move(*optPendingLookahead);
-      optPendingLookahead.reset();
+      auto pending = std::move(*pendingPtr);
+      pendingLookaheadPtr.reset();
 
       if (!prepared)
       {
@@ -642,22 +639,31 @@ namespace ao::rt
 
     bool prepareLookahead(PendingLookahead pending)
     {
-      pending.generation = ++lookaheadPreparationGeneration;
-      auto const generation = pending.generation;
       auto const successor = pending.trackId;
       auto const sourceListId = pending.sourceListId;
-      optPendingLookahead = std::move(pending);
+      auto pendingPtr = std::make_shared<PendingLookahead>(std::move(pending));
+      auto const pendingWeakPtr = std::weak_ptr{pendingPtr};
+      pendingLookaheadPtr = pendingPtr;
 
       auto admitted = transport.prepareSuccessionNextAsync(
         successor,
         sourceListId,
-        [this, generation] { return isPendingLookaheadCurrent(generation); },
-        [this, generation](Result<PreparedNextToken> prepared)
-        { std::ignore = completeLookahead(generation, std::move(prepared)); });
+        [this, pendingWeakPtr]
+        {
+          auto const lockedPendingPtr = pendingWeakPtr.lock();
+          return lockedPendingPtr && isPendingLookaheadCurrent(lockedPendingPtr);
+        },
+        [this, pendingWeakPtr](Result<PreparedNextToken> prepared)
+        {
+          if (auto const lockedPendingPtr = pendingWeakPtr.lock(); lockedPendingPtr)
+          {
+            std::ignore = completeLookahead(lockedPendingPtr, std::move(prepared));
+          }
+        });
 
       if (!admitted)
       {
-        return completeLookahead(generation, std::unexpected{admitted.error()});
+        return completeLookahead(pendingPtr, std::unexpected{admitted.error()});
       }
 
       return true;
@@ -1174,8 +1180,7 @@ namespace ao::rt
     RepeatMode repeatMode = RepeatMode::Off;
     std::unique_ptr<PlaybackCursorSession> sessionPtr;
     std::optional<PendingViewStart> optPendingViewStart;
-    std::optional<PendingLookahead> optPendingLookahead;
-    std::uint64_t lookaheadPreparationGeneration = 0;
+    std::shared_ptr<PendingLookahead> pendingLookaheadPtr;
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
     async::Signal<PlaybackSuccessionState const&> changedSignal;
     async::Signal<> explicitStartSettledSignal;

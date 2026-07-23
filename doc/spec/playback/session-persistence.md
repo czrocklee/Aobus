@@ -39,7 +39,7 @@ This contract belongs to the **application runtime** layer in the [system archit
 
 ## State model
 
-The owner retains started/shutdown/restoring/discarded flags, the last observed `PlaybackService` snapshot, subscriptions to succession restorable-state changes and committed snapshots, one scheduled debounce task, and its schedule generation.
+The owner retains started/shutdown/restoring/discarded flags, the last observed `PlaybackService` snapshot, subscriptions to succession restorable-state changes and committed snapshots, and one scheduled debounce task.
 
 The succession and transport services each retain a last-restorable snapshot after ordinary stop, exhaustion, or invalidation removes live state.
 A later successful launch replaces those snapshots.
@@ -129,7 +129,8 @@ Explicit and lifecycle checkpoints remain no-ops while discarded until a later d
 Malformed structural deserialize, unsupported versions, schema semantic validation, source/filter/projection construction, transport preparation, and store failures return typed results.
 Restore and discard are fail-closed with respect to live/restorable state as described above.
 
-Scheduled debounce uses the shared async runtime and owner lifetime; automatic failures do not create background retry work.
+Scheduled debounce uses one cancellable shared-runtime task and a cancellation-checked callback-executor hop; replacement or checkpoint retires that task before admitting another.
+Automatic failures do not create background retry work.
 Shutdown cancels pending debounce, then performs its final checkpoint while borrowed services and store still exist.
 
 ## Persistence and versioning

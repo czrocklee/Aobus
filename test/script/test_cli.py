@@ -695,6 +695,7 @@ class CliParseTest(unittest.TestCase):
                 "called_from_lib:libglibmm-2.68.so",
                 "called_from_lib:libgtk-4.so",
                 "called_from_lib:libgdk_pixbuf-2.0.so",
+                "called_from_lib:libcairo.so",
                 "called_from_lib:libpango-1.0.so",
                 "called_from_lib:libpangoft2-1.0.so",
                 "called_from_lib:libpangocairo-1.0.so",

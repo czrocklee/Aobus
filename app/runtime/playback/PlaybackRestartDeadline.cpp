@@ -123,18 +123,18 @@ namespace ao::rt
     void synchronize(Elapsed const elapsed)
     {
       cancelDeadline();
-      auto const synchronizeGeneration = generation;
+      auto const synchronizeRevision = synchronizationRevision;
       setRestartAvailable(elapsed > kRestartThreshold);
 
-      if (generation != synchronizeGeneration || shuttingDown || !active || !running || restartAvailable)
+      if (synchronizationRevision != synchronizeRevision || shuttingDown || !active || !running || restartAvailable)
       {
         return;
       }
 
-      scheduleDeadline(elapsed, synchronizeGeneration);
+      scheduleDeadline(elapsed);
     }
 
-    void scheduleDeadline(Elapsed const elapsed, std::uint64_t const scheduleGeneration)
+    void scheduleDeadline(Elapsed const elapsed)
     {
       auto const delay = kFirstRestartAvailableElapsed - elapsed;
       auto const weakStatePtr = weak_from_this();
@@ -143,8 +143,8 @@ namespace ao::rt
       try
       {
         deadlineTask = asyncRuntime.spawnCancellable(
-          [asyncRuntime = &asyncRuntime, weakStatePtr, delay, scheduleGeneration](std::stop_token const stopToken)
-          { return waitForDeadline(asyncRuntime, weakStatePtr, delay, scheduleGeneration, stopToken); });
+          [asyncRuntime = &asyncRuntime, weakStatePtr, delay](std::stop_token const stopToken)
+          { return waitForDeadline(asyncRuntime, weakStatePtr, delay, stopToken); });
       }
       catch (...)
       {
@@ -156,7 +156,6 @@ namespace ao::rt
     static async::Task<void> waitForDeadline(async::Runtime* asyncRuntime,
                                              std::weak_ptr<SharedState> weakStatePtr,
                                              Elapsed const delay,
-                                             std::uint64_t const scheduleGeneration,
                                              std::stop_token const stopToken)
     {
       co_await asyncRuntime->sleepFor(delay, stopToken);
@@ -164,13 +163,13 @@ namespace ao::rt
 
       if (auto const statePtr = weakStatePtr.lock(); statePtr != nullptr)
       {
-        statePtr->handleDeadline(scheduleGeneration);
+        statePtr->handleDeadline();
       }
     }
 
-    void handleDeadline(std::uint64_t const scheduleGeneration)
+    void handleDeadline()
     {
-      if (shuttingDown || scheduleGeneration != generation || !active || !running || !deadlineScheduled)
+      if (shuttingDown || !active || !running || !deadlineScheduled)
       {
         return;
       }
@@ -189,7 +188,7 @@ namespace ao::rt
 
     void cancelDeadline() noexcept
     {
-      ++generation;
+      ++synchronizationRevision;
 
       if (deadlineScheduled)
       {
@@ -213,7 +212,7 @@ namespace ao::rt
     async::TaskHandle deadlineTask;
     LiveElapsedReader liveElapsedReader;
     AvailabilityChangedHandler availabilityChangedHandler;
-    std::uint64_t generation = 0;
+    std::uint64_t synchronizationRevision = 0;
     bool active = false;
     bool running = false;
     bool restartAvailable = false;

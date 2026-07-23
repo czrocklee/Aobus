@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/RequestCoalescer.h"
 #include "image/ImageCache.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Task.h>
@@ -11,13 +12,10 @@
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 
-#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <stop_token>
-#include <unordered_map>
-#include <vector>
 
 namespace ao::rt
 {
@@ -64,17 +62,6 @@ namespace ao::gtk
     void prefetchThumbnail(ResourceId resourceId, std::int32_t physicalPixelSize);
 
   private:
-    struct RequestState final
-    {
-      std::atomic_bool active{true};
-    };
-
-    struct RequestWaiter final
-    {
-      std::shared_ptr<RequestState> statePtr;
-      OnImageReady onReady;
-    };
-
     Glib::RefPtr<Gdk::Pixbuf> get(ImageCacheKey key);
     Request request(ImageCacheKey key, OnImageReady onReady);
     void prefetch(ImageCacheKey key);
@@ -89,6 +76,6 @@ namespace ao::gtk
     ImageCache& _cache;
     async::Runtime& _runtime;
     std::unique_ptr<async::LifetimeScope> _scopePtr;
-    std::unordered_map<ImageCacheKey, std::vector<RequestWaiter>, ImageCacheKeyHash> _inFlight;
+    RequestCoalescer<ImageCacheKey, Glib::RefPtr<Gdk::Pixbuf>, ImageCacheKeyHash> _requests;
   };
 } // namespace ao::gtk

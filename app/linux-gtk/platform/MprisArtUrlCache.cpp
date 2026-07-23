@@ -18,7 +18,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <exception>
 #include <filesystem>
@@ -74,30 +73,6 @@ namespace ao::gtk::platform
       return {};
     }
 
-    auto statePtr = std::shared_ptr<RequestState>{};
-    auto request = Request{};
-
-    if (onReady)
-    {
-      statePtr = std::make_shared<RequestState>();
-      request = Request{[statePtr] { statePtr->active.store(false, std::memory_order_relaxed); }};
-    }
-
-    if (auto const it = _inFlight.find(resourceId); it != _inFlight.end())
-    {
-      if (onReady)
-      {
-        it->second.push_back({.statePtr = std::move(statePtr), .onReady = std::move(onReady)});
-      }
-
-      return request;
-    }
-
-    if (auto& waiters = _inFlight[resourceId]; onReady)
-    {
-      waiters.push_back({.statePtr = std::move(statePtr), .onReady = std::move(onReady)});
-    }
-
     auto optCachedEntry = std::optional<CacheEntry>{};
 
     if (auto const it = _cache.find(resourceId); it != _cache.end())
@@ -105,8 +80,17 @@ namespace ao::gtk::platform
       optCachedEntry = it->second;
     }
 
-    spawnMaterialization(resourceId, std::move(optCachedEntry));
-    return request;
+    auto callback = decltype(_requests)::Callback{};
+
+    if (onReady)
+    {
+      callback = [onReady = std::move(onReady)](std::string const& url) { onReady(url); };
+    }
+
+    return _requests.request(resourceId,
+                             std::move(callback),
+                             [this, resourceId, optCachedEntry = std::move(optCachedEntry)] mutable
+                             { spawnMaterialization(resourceId, std::move(optCachedEntry)); });
   }
 
   std::filesystem::path MprisArtUrlCache::defaultCacheDirectory()
@@ -234,23 +218,8 @@ namespace ao::gtk::platform
       cache->_cache.erase(resourceId);
     }
 
-    auto waiters = std::vector<RequestWaiter>{};
-
-    if (auto const it = cache->_inFlight.find(resourceId); it != cache->_inFlight.end())
-    {
-      waiters = std::move(it->second);
-      cache->_inFlight.erase(it);
-    }
-
     auto const url = optResult ? optResult->url : std::string{};
-
-    for (auto const& waiter : waiters)
-    {
-      if (waiter.statePtr->active.load(std::memory_order_relaxed))
-      {
-        waiter.onReady(url);
-      }
-    }
+    cache->_requests.complete(resourceId, url);
   }
 
   std::optional<MprisArtUrlCache::CacheEntry> MprisArtUrlCache::exportResource(std::filesystem::path const& cacheDir,

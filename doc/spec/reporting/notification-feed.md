@@ -34,7 +34,7 @@ observer callbacks are confined to the runtime callback executor.
 - Commands return `void`. Invalid or over-capacity requests leave the feed unchanged and write an application-log diagnostic.
 - Every request explicitly chooses `Transient(duration)`, `History`, or `Pinned`; severity does not imply lifetime.
 - `Transient` entries expire authoritatively after a positive duration. `History` entries are retained but may be evicted for capacity. `Pinned` entries are retained and never evicted automatically.
-- A transient period has a generation. Expiry removes an entry only when its id and generation still match.
+- Every live entry has an expiry registration. Expiry removes a transient entry only when its id and registration identity are still current.
 - Observer-initiated mutations are queued until the current update has reached every observer, so nested publication cannot change an earlier snapshot.
 - Observer failure cannot roll back committed state or prevent later updates. It is reported through the owning `async::Runtime`.
 - The service does not infer domain failures, aggregate unrelated reports, or resolve presentation text.
@@ -61,7 +61,7 @@ Rejected posts do not consume an id.
 | `post(severity, message, lifetime)` | Builds a request and applies `post(request)`. |
 | `post(request)` | Validates the request, evicts oldest eligible history if required, appends a new entry, schedules transient expiry when applicable, and publishes `Posted`. |
 | `createOrUpdate(key, request)` | Updates the entry with that key without reordering it, or performs a keyed post when absent. An effective replacement publishes `ReportUpdated`. |
-| Scheduled expiry | Removes the matching transient id and generation, then publishes `Expired`. Stale callbacks do nothing. |
+| Scheduled expiry | Removes the matching transient id and current registration, then publishes `Expired`. Stale callbacks do nothing. |
 
 The update identifies the command target with one `id`.
 Its immutable snapshot is the authority for any history eviction caused by that commit.
@@ -83,8 +83,8 @@ After commit, observer delivery is synchronous.
 A mutation requested by an observer appends a later immutable update to the publication queue and is drained only after the current emission returns.
 
 Expiry waits are cancellable tasks, but cancellation is only an optimization.
-The id-generation check is the correctness guard when a timer callback was already queued.
-Queued callbacks retain a weak control block; service teardown retires that block before cancelling timers, so late callbacks become no-ops.
+The id-registration identity check is the correctness guard when a timer callback was already queued.
+Expiry returns through the cancellation-checked callback-executor hop and retains only weak owner-control and registration references; service teardown retires those references before cancelling timers, so late callbacks become no-ops.
 
 ## Frontend boundary
 
@@ -102,7 +102,7 @@ The feed contains no frontend actions, icons, progress widgets, presentation mod
 ## Test map
 
 - [`NotificationServiceTest.cpp`](../../../test/unit/runtime/NotificationServiceTest.cpp) protects identity, bounds, history eviction, keyed replacement, observer faults, and reentrant FIFO delivery.
-- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects executor-returned expiry, generation checks, cancellation, and teardown safety.
+- [`NotificationServiceExpiryTest.cpp`](../../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects executor-returned expiry, registration-identity checks, cancellation, and teardown safety.
 
 ## Related documents
 

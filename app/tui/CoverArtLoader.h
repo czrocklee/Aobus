@@ -33,7 +33,7 @@ namespace ao::tui
    * Callback-executor-confined owner for TUI cover-art delivery.
    *
    * Resource reads and decoding run asynchronously. A replacement request
-   * clears the published result immediately, and generation checks prevent a
+   * clears the published result immediately, and task cancellation prevents a
    * stale decode from publishing over the current selection.
    */
   class CoverArtLoader final
@@ -66,7 +66,6 @@ namespace ao::tui
                                   async::Runtime* runtime,
                                   CoverArtDeliveryMode mode,
                                   ResourceId resourceId,
-                                  std::uint64_t generation,
                                   std::stop_token stopToken);
 
     rt::LibraryTaskService& _tasks;
@@ -76,7 +75,6 @@ namespace ao::tui
     ResourceId _resourceId = kInvalidResourceId;
     std::optional<CoverArtRows> _optPreview;
     std::optional<std::vector<std::byte>> _optKittyPng;
-    std::uint64_t _generation = 0;
     async::TaskHandle _task;
   };
 } // namespace ao::tui

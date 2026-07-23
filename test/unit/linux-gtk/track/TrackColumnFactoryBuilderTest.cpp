@@ -200,8 +200,14 @@ namespace ao::gtk::test
         REQUIRE(emitFocusEnter(*entry));
         REQUIRE(fixture.runtime().library().writer().createList(
           rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
+
+        // Replace the invalidated session before its deferred teardown runs.
+        // Clearing the old session must disconnect that exact idle callback.
+        REQUIRE(emitFocusEnter(*entry));
         drainGtkEvents();
 
+        CHECK(stack->get_visible_child_name() == "edit");
+        REQUIRE(emitFocusLeave(*entry));
         CHECK(stack->get_visible_child_name() == "display");
 
         // A terminal authoring session is detached before the editor can submit

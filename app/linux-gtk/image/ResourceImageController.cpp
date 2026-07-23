@@ -33,21 +33,19 @@ namespace ao::gtk
 
   void ResourceImageController::load(ResourceId const resourceId)
   {
-    ++_generation;
     _request.reset();
 
     if (_thumbnailMode)
     {
-      loadThumbnail(resourceId, _generation);
+      loadThumbnail(resourceId);
       return;
     }
 
-    loadFullSize(resourceId, _generation);
+    loadFullSize(resourceId);
   }
 
   void ResourceImageController::clear()
   {
-    ++_generation;
     _request.reset();
     _widget.clearImage();
   }
@@ -69,7 +67,7 @@ namespace ao::gtk
     load(snap.singleCoverArtId);
   }
 
-  void ResourceImageController::loadFullSize(ResourceId const resourceId, std::uint64_t const generation)
+  void ResourceImageController::loadFullSize(ResourceId const resourceId)
   {
     if (resourceId == kInvalidResourceId)
     {
@@ -85,13 +83,8 @@ namespace ao::gtk
 
     _widget.clearImage();
     _request = _loader.requestFull(resourceId,
-                                   [this, generation](Glib::RefPtr<Gdk::Pixbuf> const& decodedPtr)
+                                   [this](Glib::RefPtr<Gdk::Pixbuf> const& decodedPtr)
                                    {
-                                     if (generation != _generation)
-                                     {
-                                       return;
-                                     }
-
                                      if (!decodedPtr)
                                      {
                                        _widget.clearImage();
@@ -102,7 +95,7 @@ namespace ao::gtk
                                    });
   }
 
-  void ResourceImageController::loadThumbnail(ResourceId const resourceId, std::uint64_t const generation)
+  void ResourceImageController::loadThumbnail(ResourceId const resourceId)
   {
     if (resourceId == kInvalidResourceId)
     {
@@ -124,13 +117,8 @@ namespace ao::gtk
 
     _request = _loader.requestThumbnail(resourceId,
                                         physicalSize,
-                                        [this, generation](Glib::RefPtr<Gdk::Pixbuf> const& decodedPtr)
+                                        [this](Glib::RefPtr<Gdk::Pixbuf> const& decodedPtr)
                                         {
-                                          if (generation != _generation)
-                                          {
-                                            return;
-                                          }
-
                                           if (!decodedPtr)
                                           {
                                             _widget.clearImage();

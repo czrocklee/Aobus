@@ -4,6 +4,7 @@
 #include "MprisBridge.h"
 
 #include "MprisPlaybackEndpoint.h"
+#include "common/MainContextCallbackScope.h"
 #include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
@@ -178,9 +179,9 @@ namespace ao::gtk::platform
     std::vector<async::Subscription> subscriptions{};
     rt::PlaybackSnapshot lastSnapshot{};
     utility::ScopedRegistration artRequest{};
+    std::unique_ptr<MainContextCallbackScope> artCallbackScopePtr;
     ResourceId artResourceId = kInvalidResourceId;
     std::string artUrl{};
-    std::uint64_t artGeneration = 0;
 
     Impl(rt::PlaybackService& playbackRef, uimodel::PlaybackCommandSurface& commandsRef, Callbacks callbacksIn)
       : playback{playbackRef}
@@ -237,8 +238,8 @@ namespace ao::gtk::platform
 
     void clearArt()
     {
+      artCallbackScopePtr.reset();
       artRequest.reset();
-      ++artGeneration;
       artResourceId = kInvalidResourceId;
       artUrl.clear();
     }
@@ -329,8 +330,8 @@ namespace ao::gtk::platform
         return;
       }
 
+      artCallbackScopePtr.reset();
       artRequest.reset();
-      ++artGeneration;
       artResourceId = resourceId;
       artUrl.clear();
 
@@ -339,29 +340,33 @@ namespace ao::gtk::platform
         return;
       }
 
-      auto const generation = artGeneration;
+      artCallbackScopePtr = std::make_unique<MainContextCallbackScope>();
+      auto onReady = artCallbackScopePtr->guard(
+        [this](std::string resolvedUrl)
+        {
+          artUrl = std::move(resolvedUrl);
+          artCallbackScopePtr.reset();
+          artRequest.reset();
+          emitPlayerPropertiesChanged({"Metadata"});
+        });
 
       try
       {
-        artRequest = callbacks.requestArtUrl(resourceId,
-                                             [this, resourceId, generation](std::string resolvedUrl)
-                                             {
-                                               if (artResourceId != resourceId || artGeneration != generation)
-                                               {
-                                                 return;
-                                               }
+        auto request = callbacks.requestArtUrl(resourceId, std::move(onReady));
 
-                                               artUrl = std::move(resolvedUrl);
-                                               artRequest.reset();
-                                               emitPlayerPropertiesChanged({"Metadata"});
-                                             });
+        if (artCallbackScopePtr)
+        {
+          artRequest = std::move(request);
+        }
       }
       catch (std::exception const& e)
       {
+        artCallbackScopePtr.reset();
         APP_LOG_WARN("MPRIS art URL request failed for resource {}: {}", resourceId.raw(), e.what());
       }
       catch (...)
       {
+        artCallbackScopePtr.reset();
         APP_LOG_WARN("MPRIS art URL request failed for resource {}: unknown exception", resourceId.raw());
       }
     }

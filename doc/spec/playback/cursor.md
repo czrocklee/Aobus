@@ -147,7 +147,8 @@ Previous is different: when neither restart nor a predecessor exists, it is a no
 - `hasNext` and `hasPrevious` report the exact availability implied by these rules and the current restart policy.
 
 The previous restart threshold is strict: exactly 3000 ms remains unavailable and elapsed time greater than 3000 ms enables restart.
-Pause, resume, final seek, current-track change, session replacement, and shutdown reschedule or cancel the executor-affine deadline so obsolete timer callbacks cannot change availability.
+Pause, resume, final seek, current-track change, session replacement, and shutdown reschedule or cancel the executor-affine deadline.
+The deadline returns through a cancellation-checked callback-executor hop, so an obsolete task cannot change availability; a separate synchronization revision detects only synchronous reentrancy from availability publication.
 
 ### Source invalidation
 
@@ -235,6 +236,7 @@ Shuffle-forward failure excludes attempted candidates before rerolling; shuffle-
 Current shuffle lookahead preparation failure silently excludes that candidate from the preparation attempt chain, rerolls, and prepares another eligible successor.
 The chain attempts at most three candidates; a non-shuffle failure, exhausted chain, or absence of another eligible candidate leaves recovery to the normal boundary path.
 Lookahead cancellation, supersession, and `Conflict` completion clear only matching pending preparation state and never reroll.
+Acceptance and completion carry a weak reference to the pending lookahead object and may mutate succession only while that exact object remains current.
 
 Three consecutive unplayable candidates terminate transport and succession.
 A successful start resets the failure streak.
@@ -283,7 +285,7 @@ Observers are observational and do not choose succession policy.
 - [`ProjectionAnchorTest.cpp`](../../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) proves insertion/removal boundaries, move reconciliation, reset, empty gaps, and range invariants.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
-- [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, timer generations, pause/resume/seek control, session replacement, and shutdown.
+- [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, queued-task cancellation, synchronous reentrancy, pause/resume/seek control, session replacement, and shutdown.
 - [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 

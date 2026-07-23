@@ -73,7 +73,7 @@ namespace ao::rt::test
     REQUIRE(fixture.service.feed().entries.size() == 2);
   }
 
-  TEST_CASE("NotificationService expiry - keyed update generation rejects an already queued timer",
+  TEST_CASE("NotificationService expiry - keyed update registration identity rejects an already queued timer",
             "[runtime][regression][notification][concurrency]")
   {
     auto fixture = NotificationExpiryFixture{};

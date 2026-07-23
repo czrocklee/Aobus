@@ -32,6 +32,7 @@
 #include <stop_token>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -256,28 +257,31 @@ namespace ao::audio
 
     void cancelLookaheadPreparation() { lookaheadPreparationTask.reset(); }
 
-    static async::Task<void> runStartPreparation(async::Runtime* runtime,
-                                                 std::shared_ptr<CallbackGate> callbackGatePtr,
-                                                 detail::TrackPreparation preparation,
-                                                 Player::PreparationAcceptance acceptance,
-                                                 Player::PreparedStartCompletion completion,
-                                                 std::stop_token stopToken)
+    template<typename Acceptance, typename Completion, typename Adopter>
+    static void settlePreparation(std::shared_ptr<CallbackGate> const& callbackGatePtr,
+                                  async::TaskHandle Impl::* taskSlot,
+                                  detail::TrackPreparation preparation,
+                                  Result<> prepared,
+                                  Acceptance acceptance,
+                                  Completion completion,
+                                  Adopter adopter)
     {
-      auto const prepared = preparation.prepare();
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
-
       if (!callbackGatePtr->canAcceptCallbacks())
       {
-        co_return;
+        return;
       }
 
       auto* owner = callbackGatePtr->owner;
       gsl_Expects(owner != nullptr);
 
-      // Retire Player's registration before either outward callback. A
-      // reentrant replacement may then install its own task without being
-      // cleared by this completion path.
-      owner->startPreparationTask = {};
+      if (taskSlot != nullptr)
+      {
+        // Retire Player's registration before either outward callback. A
+        // reentrant replacement may then install its own task without being
+        // cleared by this completion path.
+        owner->*taskSlot = {};
+      }
+
       auto publicationStatePtr = owner->outwardPublicationStatePtr;
       bool accepted = false;
 
@@ -288,12 +292,13 @@ namespace ao::audio
 
       if (!callbackGatePtr->canAcceptCallbacks())
       {
-        co_return;
+        return;
       }
 
       owner = callbackGatePtr->owner;
       gsl_Expects(owner != nullptr);
-      auto outcome = Result<Engine::PreparedPlaybackStart>{preparationRejectedError()};
+      using Outcome = std::invoke_result_t<Adopter&, detail::TrackPreparation&&, Engine&>;
+      auto outcome = Outcome{preparationRejectedError()};
 
       if (accepted)
       {
@@ -303,7 +308,7 @@ namespace ao::audio
         }
         else
         {
-          outcome = std::move(preparation).adoptStart(*owner->enginePtr);
+          outcome = std::invoke(adopter, std::move(preparation), *owner->enginePtr);
         }
       }
 
@@ -312,60 +317,25 @@ namespace ao::audio
       completion(std::move(outcome));
     }
 
-    static async::Task<void> runLookaheadPreparation(async::Runtime* runtime,
-                                                     std::shared_ptr<CallbackGate> callbackGatePtr,
-                                                     detail::TrackPreparation preparation,
-                                                     Player::PreparationAcceptance acceptance,
-                                                     Player::PreparedNextCompletion completion,
-                                                     std::stop_token stopToken)
+    template<typename Acceptance, typename Completion, typename Adopter>
+    static async::Task<void> runPreparation(async::Runtime* runtime,
+                                            std::shared_ptr<CallbackGate> callbackGatePtr,
+                                            async::TaskHandle Impl::* taskSlot,
+                                            detail::TrackPreparation preparation,
+                                            Acceptance acceptance,
+                                            Completion completion,
+                                            Adopter adopter,
+                                            std::stop_token stopToken)
     {
-      auto const prepared = preparation.prepare();
+      auto prepared = preparation.prepare();
       co_await runtime->resumeOnCallbackExecutor(stopToken);
-
-      if (!callbackGatePtr->canAcceptCallbacks())
-      {
-        co_return;
-      }
-
-      auto* owner = callbackGatePtr->owner;
-      gsl_Expects(owner != nullptr);
-
-      // Retire Player's registration before either outward callback. A
-      // reentrant replacement may then install its own task without being
-      // cleared by this completion path.
-      owner->lookaheadPreparationTask = {};
-      auto publicationStatePtr = owner->outwardPublicationStatePtr;
-      bool accepted = false;
-
-      {
-        auto publication = OutwardPublicationScope{publicationStatePtr};
-        accepted = acceptance();
-      }
-
-      if (!callbackGatePtr->canAcceptCallbacks())
-      {
-        co_return;
-      }
-
-      owner = callbackGatePtr->owner;
-      gsl_Expects(owner != nullptr);
-      auto outcome = Result<Engine::PreparedNextResult>{preparationRejectedError()};
-
-      if (accepted)
-      {
-        if (!prepared)
-        {
-          outcome = std::unexpected{prepared.error()};
-        }
-        else
-        {
-          outcome = std::move(preparation).adoptNext(*owner->enginePtr);
-        }
-      }
-
-      publicationStatePtr = owner->outwardPublicationStatePtr;
-      auto publication = OutwardPublicationScope{publicationStatePtr};
-      completion(std::move(outcome));
+      settlePreparation(callbackGatePtr,
+                        taskSlot,
+                        std::move(preparation),
+                        std::move(prepared),
+                        std::move(acceptance),
+                        std::move(completion),
+                        std::move(adopter));
     }
 
     void ensureOnExecutor() const noexcept { gsl_Expects(executor.isCurrent()); }
@@ -1036,12 +1006,15 @@ namespace ao::audio
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
-        return Impl::runStartPreparation(runtime,
-                                         std::move(callbackGatePtr),
-                                         std::move(preparation),
-                                         std::move(acceptance),
-                                         std::move(completion),
-                                         stopToken);
+        return Impl::runPreparation(
+          runtime,
+          std::move(callbackGatePtr),
+          &Impl::startPreparationTask,
+          std::move(preparation),
+          std::move(acceptance),
+          std::move(completion),
+          [](detail::TrackPreparation&& ready, Engine& engine) { return std::move(ready).adoptStart(engine); },
+          stopToken);
       });
     return {};
   }
@@ -1115,43 +1088,16 @@ namespace ao::audio
 
     if (!preparation->requiresWorker())
     {
-      auto const prepared = preparation->prepare();
+      auto prepared = preparation->prepare();
       auto const callbackGatePtr = _implPtr->gatePtr;
-      auto publicationStatePtr = _implPtr->outwardPublicationStatePtr;
-      bool accepted = false;
-
-      {
-        auto publication = Impl::OutwardPublicationScope{publicationStatePtr};
-        accepted = acceptance();
-      }
-
-      if (!callbackGatePtr->canAcceptCallbacks())
-      {
-        return {};
-      }
-
-      auto* const owner = callbackGatePtr->owner;
-      gsl_Expects(owner != nullptr);
-      auto outcome = Result<Engine::PreparedNextResult>{preparationRejectedError()};
-
-      if (accepted)
-      {
-        if (!prepared)
-        {
-          outcome = std::unexpected{prepared.error()};
-        }
-        else
-        {
-          outcome = std::move(*preparation).adoptNext(*owner->enginePtr);
-        }
-      }
-
-      publicationStatePtr = owner->outwardPublicationStatePtr;
-
-      {
-        auto publication = Impl::OutwardPublicationScope{publicationStatePtr};
-        completion(std::move(outcome));
-      }
+      Impl::settlePreparation(callbackGatePtr,
+                              nullptr,
+                              std::move(*preparation),
+                              std::move(prepared),
+                              std::move(acceptance),
+                              std::move(completion),
+                              [](detail::TrackPreparation&& ready, Engine& engine)
+                              { return std::move(ready).adoptNext(engine); });
 
       return {};
     }
@@ -1165,12 +1111,15 @@ namespace ao::audio
        acceptance = std::move(acceptance),
        completion = std::move(completion)](std::stop_token const stopToken) mutable
       {
-        return Impl::runLookaheadPreparation(runtime,
-                                             std::move(callbackGatePtr),
-                                             std::move(preparation),
-                                             std::move(acceptance),
-                                             std::move(completion),
-                                             stopToken);
+        return Impl::runPreparation(
+          runtime,
+          std::move(callbackGatePtr),
+          &Impl::lookaheadPreparationTask,
+          std::move(preparation),
+          std::move(acceptance),
+          std::move(completion),
+          [](detail::TrackPreparation&& ready, Engine& engine) { return std::move(ready).adoptNext(engine); },
+          stopToken);
       });
     return {};
   }

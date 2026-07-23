@@ -11,7 +11,6 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
-#include <cstdint>
 #include <memory>
 #include <stop_token>
 
@@ -58,12 +57,11 @@ namespace ao::rt
     bool hasActiveSession() const;
     bool hasRestorableSession() const;
     void scheduleSave(Delay delay);
-    void handleScheduledSave(std::uint64_t scheduleGeneration);
+    void handleScheduledSave();
     void cancelScheduledSave() noexcept;
     static async::Task<void> waitForScheduledSave(async::Runtime* asyncRuntime,
                                                   std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
                                                   Delay delay,
-                                                  std::uint64_t scheduleGeneration,
                                                   std::stop_token stopToken);
 
     ConfigStore& _config;
@@ -76,7 +74,6 @@ namespace ao::rt
     async::Subscription _snapshotSubscription;
     PlaybackSnapshot _lastSnapshot{};
     async::TaskHandle _scheduledTask;
-    std::uint64_t _scheduleGeneration = 0;
     bool _sessionDiscarded = false;
     bool _restorePublicationPending = false;
     bool _restoring = false;

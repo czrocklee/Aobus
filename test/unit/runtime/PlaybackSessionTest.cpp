@@ -589,6 +589,38 @@ namespace ao::rt::test
     CHECK(storedSession(runtime.playbackSessionConfigStore()).volume == 0.6F);
   }
 
+  TEST_CASE("PlaybackSession - replacing a debounce suppresses its queued callback",
+            "[runtime][regression][playback-session][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
+    auto sleeper = ControlledSleeper{};
+    auto executorPtr = std::make_unique<ManualExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtime = makeRuntime(tempDir, std::move(executorPtr), &playbackSessionStore, &sleeper);
+
+    addReadyAudioProvider(runtime);
+    executor->runUntilIdle();
+    auto const trackId = addPlayableTrack(runtime, *executor, "Replaced debounce", 2020);
+    auto const viewId = createView(runtime);
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
+    REQUIRE(runtime.savePlaybackSession());
+    executor->runUntilIdle();
+
+    runtime.playback().commands().setVolume(0.4F);
+    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    executor->checkQueued();
+
+    runtime.playback().commands().setVolume(0.6F);
+    REQUIRE(executor->runOne());
+    CHECK(storedSession(playbackSessionStore).volume == 1.0F);
+
+    REQUIRE(sleeper.fireNext(std::chrono::seconds{1}));
+    executor->checkQueued();
+    REQUIRE(executor->runOne());
+    CHECK(storedSession(playbackSessionStore).volume == 0.6F);
+  }
+
   TEST_CASE("PlaybackSession - shuffle debounce samples the latest elapsed position",
             "[runtime][regression][playback-session][timing]")
   {

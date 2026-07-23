@@ -34,8 +34,8 @@ namespace ao::gtk
 
   private:
     void handleDetailSnapshot(rt::TrackDetailSnapshot const& snap);
-    void loadFullSize(ResourceId resourceId, std::uint64_t generation);
-    void loadThumbnail(ResourceId resourceId, std::uint64_t generation);
+    void loadFullSize(ResourceId resourceId);
+    void loadThumbnail(ResourceId resourceId);
     std::int32_t thumbnailPhysicalSize() const;
 
     ImageWidget& _widget;
@@ -45,7 +45,6 @@ namespace ao::gtk
 
     bool _thumbnailMode = false;
     std::int32_t _thumbnailLogicalSize = 0;
-    std::uint64_t _generation = 0;
     ResourceImageLoader::Request _request;
   };
 } // namespace ao::gtk

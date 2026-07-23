@@ -39,6 +39,7 @@ They do not construct storage, call `LibraryWriter`, or create a competing detai
 - One detail editor is active at a time; opening another commits the previous editor first.
 - Enter and outside click commit; Escape cancels; literal `<Multiple Values>` is not saved.
 - A session binds targets when editing begins; selection/revision change, maintenance, or runtime fault makes it stale and prevents commit.
+- Inline-session invalidation defers teardown until observer delivery unwinds; replacing or clearing the session disconnects that exact idle callback before releasing session state.
 - Custom deletion undo is offered only when the prior value is unambiguous across the complete selection.
 - Detail selection change, timeout, successful undo, stale undo, or overlapping rewrite clears pending undo.
 - The field grid, tag flow, and cover slot report compressible horizontal minima and cannot widen the collapsible detail pane from content.
@@ -136,6 +137,7 @@ The detail cover slot is a deterministic responsive square capped by its target 
 - [`TrackFieldGridTextTest.cpp`](../../../test/unit/linux-gtk/layout/components/TrackFieldGridTextTest.cpp) protects mixed/unknown/display text.
 - [`SemanticLayoutComponentsTest.cpp`](../../../test/unit/linux-gtk/layout/components/SemanticLayoutComponentsTest.cpp) protects scope, mutations, undo, and shell binding.
 - [`TagEditorTest.cpp`](../../../test/unit/linux-gtk/tag/TagEditorTest.cpp) and [`TagEditControllerTest.cpp`](../../../test/unit/linux-gtk/tag/TagEditControllerTest.cpp) protect chip flow and edit interaction.
+- [`TrackColumnFactoryBuilderTest.cpp`](../../../test/unit/linux-gtk/track/TrackColumnFactoryBuilderTest.cpp) protects inline-session invalidation, deferred teardown cancellation, and recycled-cell editing.
 
 ## Related documents
 

@@ -96,7 +96,7 @@ There is no process-wide recovery manager.
 The service owns an executor-confined in-memory feed, explicit notification lifetimes, post and keyed create-or-update commands, and service-owned transient expiry.
 Each effective mutation publishes one canonical update carrying a complete immutable snapshot on the callback executor.
 Reentrant commands enter a small FIFO until the current update reaches every observer; observer exceptions are contained after commit and forwarded to the async-runtime diagnostic handler.
-Matching id-plus-generation evidence prevents cancelled or superseded timers from expiring newer state.
+Matching the id and current expiry-registration identity prevents cancelled or superseded timers from expiring newer state.
 History and pinned entries do not schedule expiry.
 Construction-time entry and text bounds keep retained state finite.
 Capacity pressure removes only oldest history; exhaustion by transient or pinned entries rejects the command without consuming identity.
@@ -279,7 +279,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`UiWorkflowTest.cpp`](../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
 - [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects the retained application-log adapter.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, configured bounds, atomic history eviction, keyed correlation, immutable snapshots, executor-owned observation, reentrant FIFO publication, and observer-fault containment.
-- [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects transient scheduling, unchanged suppression, keyed lifetime transitions, callback-executor expiry, generation races, cancellation, and teardown.
+- [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects transient scheduling, unchanged suppression, keyed lifetime transitions, callback-executor expiry, registration-identity races, cancellation, and teardown.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackTransportTest.cpp`](../../test/unit/runtime/PlaybackTransportTest.cpp), and [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp) protect typed failure correlation, recovery ownership, and notification aggregation.
 - Activity-status tests under [`test/unit/uimodel/status/activity/`](../../test/unit/uimodel/status/activity) protect the runtime-feed to UIModel boundary and presentation-local suppression.
 - [`ActivityStatusWidgetTest.cpp`](../../test/unit/linux-gtk/status/ActivityStatusWidgetTest.cpp) protects GTK rendering, and [`CommandErrorTest.cpp`](../../test/unit/cli/CommandErrorTest.cpp) protects the CLI command adapter.

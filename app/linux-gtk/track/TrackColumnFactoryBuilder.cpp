@@ -50,11 +50,11 @@ namespace ao::gtk
       sigc::scoped_connection playingChangedConnection; // now-playing highlight
       std::unique_ptr<uimodel::TrackAuthoringSession> editSessionPtr;
       async::Subscription editSessionInvalidatedSubscription;
-      std::uint64_t editSessionGeneration = 0;
+      sigc::scoped_connection editSessionInvalidationIdleConnection;
 
       void clearEditSession()
       {
-        ++editSessionGeneration;
+        editSessionInvalidationIdleConnection.disconnect();
         editSessionInvalidatedSubscription.reset();
         editSessionPtr.reset();
       }
@@ -277,24 +277,17 @@ namespace ao::gtk
       stack.set_visible_child("display");
     }
 
-    void handleEditSessionInvalidated(Gtk::ListItem& item,
-                                      Gtk::Stack& stack,
-                                      CellBindingState& bindingState,
-                                      std::uint64_t editSessionGeneration)
+    void handleEditSessionInvalidated(Gtk::ListItem& item, Gtk::Stack& stack, CellBindingState& bindingState)
     {
       // Defer teardown until the invalidation callback has unwound: the subscription
-      // being reset owns this callback. Tracking the ListItem prevents the
-      // deferred raw-state access after cell destruction, while the generation
-      // protects a replacement edit session installed before the idle callback.
-      Glib::signal_idle().connect_once(sigc::track_object(
-        [stackRaw = &stack, bindingStateRaw = &bindingState, editSessionGeneration]
+      // being reset owns this callback. Tracking the ListItem prevents deferred
+      // raw-state access after cell destruction; replacing the edit session
+      // disconnects this exact idle callback.
+      bindingState.editSessionInvalidationIdleConnection = Glib::signal_idle().connect(sigc::track_object(
+        [stackRaw = &stack, bindingStateRaw = &bindingState]
         {
-          if (bindingStateRaw->editSessionGeneration != editSessionGeneration)
-          {
-            return;
-          }
-
           closeInlineEditor(*stackRaw, *bindingStateRaw);
+          return false;
         },
         item));
     }
@@ -322,10 +315,9 @@ namespace ao::gtk
       }
 
       bindingState.editSessionPtr = std::move(*sessionResult);
-      auto const editSessionGeneration = bindingState.editSessionGeneration;
       bindingState.editSessionInvalidatedSubscription = bindingState.editSessionPtr->onInvalidated(
-        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState, editSessionGeneration]
-        { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw, editSessionGeneration); });
+        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState]
+        { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw); });
     }
 
     void installInlineEditControllers(Gtk::ListItem& item,

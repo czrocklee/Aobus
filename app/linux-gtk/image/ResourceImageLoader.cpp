@@ -19,7 +19,6 @@
 #include <glibmm/refptr.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -194,32 +193,14 @@ namespace ao::gtk
       return {};
     }
 
-    auto statePtr = std::shared_ptr<RequestState>{};
-    auto requestHandle = Request{};
+    auto callback = decltype(_requests)::Callback{};
 
     if (onReady)
     {
-      statePtr = std::make_shared<RequestState>();
-      requestHandle = Request{[statePtr] { statePtr->active.store(false, std::memory_order_relaxed); }};
+      callback = [onReady = std::move(onReady)](Glib::RefPtr<Gdk::Pixbuf> const& imagePtr) { onReady(imagePtr); };
     }
 
-    if (auto const it = _inFlight.find(key); it != _inFlight.end())
-    {
-      if (onReady)
-      {
-        it->second.push_back({.statePtr = std::move(statePtr), .onReady = std::move(onReady)});
-      }
-
-      return requestHandle;
-    }
-
-    if (auto& waiters = _inFlight[key]; onReady)
-    {
-      waiters.push_back({.statePtr = std::move(statePtr), .onReady = std::move(onReady)});
-    }
-
-    spawnDecode(key);
-    return requestHandle;
+    return _requests.request(key, std::move(callback), [this, key] { spawnDecode(key); });
   }
 
   void ResourceImageLoader::prefetch(ImageCacheKey const key)
@@ -231,13 +212,12 @@ namespace ao::gtk
 
     auto const cachedPtr = key.fullSize ? getFull(key.resourceId) : getThumbnail(key.resourceId, key.physicalPixelSize);
 
-    if (cachedPtr || _inFlight.contains(key))
+    if (cachedPtr)
     {
       return;
     }
 
-    _inFlight.try_emplace(key);
-    spawnDecode(key);
+    _requests.prefetch(key, [this, key] { spawnDecode(key); });
   }
 
   void ResourceImageLoader::spawnDecode(ImageCacheKey const key)
@@ -297,20 +277,6 @@ namespace ao::gtk
       loader->_cache.put(key, decodedPtr);
     }
 
-    auto waiters = std::vector<RequestWaiter>{};
-
-    if (auto const it = loader->_inFlight.find(key); it != loader->_inFlight.end())
-    {
-      waiters = std::move(it->second);
-      loader->_inFlight.erase(it);
-    }
-
-    for (auto const& waiter : waiters)
-    {
-      if (waiter.statePtr->active.load(std::memory_order_relaxed))
-      {
-        waiter.onReady(decodedPtr);
-      }
-    }
+    loader->_requests.complete(key, decodedPtr);
   }
 } // namespace ao::gtk

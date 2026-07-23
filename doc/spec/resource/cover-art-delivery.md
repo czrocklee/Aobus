@@ -42,8 +42,8 @@ The Core store maps nonzero resource ids to raw blobs.
 A track stores zero or more ordered references.
 Runtime rows, detail snapshots, and now-playing state hold one primary id or the invalid sentinel.
 
-GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one in-flight waiter set per key.
-A `ResourceImageController` maintains a monotonically increasing binding generation and optional active image interest.
+GTK maintains an LRU pixbuf cache with distinct full-size and physical-thumbnail keys plus one coalesced flight per key.
+A `ResourceImageController` maintains one optional active image interest.
 
 TUI retains one cancellable selected-resource load, transformed cover data for that id, and separate Kitty paint state for image id `1` and the last terminal box.
 MPRIS retains process-local id-to-file/URL/byte-size entries and one delayed current-resource request in the bridge.
@@ -86,15 +86,16 @@ Cache lookup rejects a pixbuf whose largest decoded dimension is below that size
 On a miss, an equal in-flight `(id, physical size)` request is shared.
 The shared loader reads through `LibraryTaskService` and asks Gdk to decode at scale on a worker; callback-executor completion inserts a valid pixbuf into the cache before notifying active interests.
 Resetting one request deactivates only its callback interest.
+Completion erases the flight before ordered callback fanout, so a callback may request the same key as new work.
 
-The widget controller increments its generation on every full-size or thumbnail load and clear, cancels the old interest, clears a recycled image on miss, and accepts completion only when the captured generation remains current.
+The widget controller cancels its old interest on every full-size or thumbnail load and clear, clears a recycled image on miss, and accepts completion only through its current interest.
 
 ### TUI
 
 When the selected primary id changes and cover display is active, TUI clears its prior transform and starts a cancellable asynchronous byte read.
-Block mode decodes on a worker, center-crops to a square, scales to two samples per terminal row, composites alpha over the fixed background, and renders upper-half blocks after a current-generation completion.
+Block mode decodes on a worker, center-crops to a square, scales to two samples per terminal row, composites alpha over the fixed background, and renders upper-half blocks after a cancellation-checked callback-executor hop.
 
-Kitty mode decodes the same supported raster set on a worker, center-crops and scales it, encodes bounded PNG output, base64-chunks it into Kitty transmission escapes, and paints fixed image id `1` into the current cover box after current-generation completion.
+Kitty mode decodes the same supported raster set on a worker, center-crops and scales it, encodes bounded PNG output, base64-chunks it into Kitty transmission escapes, and paints fixed image id `1` into the current cover box after the same current-task hop.
 Moving, hiding, replacing, or exiting deletes the previously visible Kitty image as required by paint state.
 
 ### MPRIS and CLI
@@ -114,7 +115,7 @@ Core read absence is not an error; operational storage faults follow the LMDB co
 GTK decode catches `Glib::Error` and publishes an empty result.
 GTK and MPRIS loader destruction cancels their lifetime scopes, TUI destruction cancels its selected task, and every owner access follows a cancellation-checked callback-executor transition.
 Individual GTK/MPRIS interests may be cancelled without discarding successful shared cache work.
-Resource or now-playing replacement rejects stale completion by current id plus owner-local generation or request identity.
+Resource or now-playing replacement rejects stale completion through the current request interest, task, or callback-scope identity.
 
 Unexpected async workflow exceptions go to the runtime diagnostic boundary.
 Decode or file-export failure degrades to no image/URL and logs where the adapter owns diagnostics.
@@ -142,7 +143,7 @@ Frontend cache-key and transform changes require no library migration because de
 
 ## Frontend observations
 
-GTK clears stale imagery immediately on any image miss and updates only on a current callback generation.
+GTK clears stale imagery immediately on any image miss and updates only through the current callback interest.
 TUI shows its no-cover placeholder while delivery is pending and when the resource is absent, over-budget, or undecodable.
 MPRIS omits `mpris:artUrl` while file materialization is pending and when no valid file URL can be produced.
 
@@ -160,7 +161,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 ## Test map
 
 - [`ResourceStoreTest.cpp`](../../../test/unit/library/ResourceStoreTest.cpp) and [`TrackBuilderCoverArtTest.cpp`](../../../test/unit/library/TrackBuilderCoverArtTest.cpp) protect Core behavior.
-- [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery.
+- [`RequestCoalescerTest.cpp`](../../../test/unit/linux-gtk/common/RequestCoalescerTest.cpp), [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery.
 - [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, supported decode, limits, block preview, PNG, and Kitty escapes.
 - [`MprisBridgeTest.cpp`](../../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects file extensions, rewriting, stale siblings, missing ids, and URL metadata.
 - [`CliSmokeTest.cpp`](../../../test/unit/cli/CliSmokeTest.cpp) protects raw list/export.

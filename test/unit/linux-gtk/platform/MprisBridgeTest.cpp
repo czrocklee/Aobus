@@ -179,27 +179,35 @@ namespace ao::gtk::platform::test
     };
     auto pending = std::vector<PendingArt>{};
     std::int32_t cancellationCount = 0;
-    auto bridge = MprisBridge{playback,
-                              commands,
-                              MprisBridge::Callbacks{
-                                .requestArtUrl =
-                                  [&](ResourceId const resourceId, MprisBridge::OnArtUrlReady complete)
-                                {
-                                  pending.push_back({.resourceId = resourceId, .complete = std::move(complete)});
-                                  return utility::ScopedRegistration{[&cancellationCount] { ++cancellationCount; }};
-                                },
-                              }};
+    auto bridge = MprisBridge{
+      playback,
+      commands,
+      MprisBridge::Callbacks{
+        .requestArtUrl =
+          [&](ResourceId const resourceId, MprisBridge::OnArtUrlReady complete)
+        {
+          pending.push_back({.resourceId = resourceId, .complete = std::move(complete)});
+          auto const pendingIndex = pending.size() - 1;
+          return utility::ScopedRegistration{[&cancellationCount, &pending, pendingIndex]
+                                             {
+                                               ++cancellationCount;
+                                               pending[pendingIndex].complete("file:///tmp/unregister-stale.png");
+                                             }};
+        },
+      }};
     bridge.start();
     auto const viewId = prepareAllTracksView(runtime);
 
     REQUIRE(playback.commands().startFromView(viewId, firstTrackId));
-    REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return pending.size() == 1; }));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, firstTrackId));
+    REQUIRE(pending.size() == 1);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == firstTrackId);
     CHECK(pending[0].resourceId == firstResourceId);
     CHECK(bridge.metadataSnapshot().artUrl.empty());
 
     REQUIRE(playback.commands().startFromView(viewId, secondTrackId));
-    REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return pending.size() == 2; }));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, secondTrackId));
+    REQUIRE(pending.size() == 2);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == secondTrackId);
     CHECK(pending[1].resourceId == secondResourceId);
     CHECK(cancellationCount == 1);
@@ -209,6 +217,7 @@ namespace ao::gtk::platform::test
 
     pending[1].complete("file:///tmp/current.png");
     CHECK(bridge.metadataSnapshot().artUrl == "file:///tmp/current.png");
+    CHECK(cancellationCount == 2);
   }
 
   TEST_CASE("toUString - UTF-8 conversion preserves multibyte metadata", "[gtk][regression][mpris]")

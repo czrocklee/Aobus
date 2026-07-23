@@ -194,7 +194,6 @@ namespace ao::rt
 
     struct ExpiryRegistration final
     {
-      std::uint64_t generation = 0;
       async::TaskHandle task{};
     };
 
@@ -288,69 +287,49 @@ namespace ao::rt
     }
 
     static async::Task<void> waitForExpiry(async::Runtime* runtime,
-                                           async::Executor* executor,
                                            std::weak_ptr<ExpiryControl> expiryControlWeakPtr,
+                                           std::weak_ptr<ExpiryRegistration> expiryRegistrationWeakPtr,
                                            NotificationId const id,
-                                           std::uint64_t const generation,
                                            std::chrono::milliseconds const duration,
                                            std::stop_token const stopToken)
     {
       co_await runtime->sleepFor(duration, stopToken);
-      executor->defer(
-        [expiryControlWeakPtr = std::move(expiryControlWeakPtr), id, generation]
-        {
-          if (auto const controlPtr = expiryControlWeakPtr.lock(); controlPtr)
-          {
-            controlPtr->owner->expireTransient(id, generation);
-          }
-        });
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
+
+      auto const controlPtr = expiryControlWeakPtr.lock();
+      auto const registrationPtr = expiryRegistrationWeakPtr.lock();
+
+      if (controlPtr && registrationPtr)
+      {
+        controlPtr->owner->expireTransient(id, registrationPtr);
+      }
     }
 
     async::TaskHandle scheduleExpiry(NotificationId const id,
-                                     std::uint64_t const generation,
+                                     std::weak_ptr<ExpiryRegistration> expiryRegistrationWeakPtr,
                                      std::chrono::milliseconds const duration)
     {
       gsl_Expects(duration > std::chrono::milliseconds::zero());
       return runtime.spawnCancellable(
         [runtime = &runtime,
-         executor = &executor,
          expiryControlWeakPtr = std::weak_ptr{expiryControlPtr},
+         expiryRegistrationWeakPtr = std::move(expiryRegistrationWeakPtr),
          id,
-         generation,
          duration](std::stop_token const stopToken)
-        { return waitForExpiry(runtime, executor, expiryControlWeakPtr, id, generation, duration, stopToken); });
+        { return waitForExpiry(runtime, expiryControlWeakPtr, expiryRegistrationWeakPtr, id, duration, stopToken); });
     }
 
-    async::TaskHandle prepareExpiry(NotificationEntry const& entry, std::uint64_t const generation)
+    std::shared_ptr<ExpiryRegistration> prepareExpiry(NotificationEntry const& entry)
     {
+      auto registrationPtr = std::make_shared<ExpiryRegistration>();
       auto const optDuration = entry.lifetime.optTransientDuration();
 
-      if (!optDuration)
+      if (optDuration)
       {
-        return {};
+        registrationPtr->task = scheduleExpiry(entry.id, registrationPtr, *optDuration);
       }
 
-      return scheduleExpiry(entry.id, generation, *optDuration);
-    }
-
-    void installPreparedExpiry(NotificationId const id,
-                               std::uint64_t const generation,
-                               NotificationLifetime const expectedLifetime,
-                               async::TaskHandle expiryTask)
-    {
-      auto const& entries = feedPtr->entries;
-      auto const entryIter = std::ranges::find(entries, id, &NotificationEntry::id);
-      auto const registrationIter = expiryRegistrations.find(id);
-
-      // Publication is synchronous and reentrant. A nested update
-      // may already have superseded this timer before the outer command returns.
-      if (entryIter == entries.end() || entryIter->lifetime != expectedLifetime ||
-          registrationIter == expiryRegistrations.end() || registrationIter->second.generation != generation)
-      {
-        return;
-      }
-
-      registrationIter->second.task = std::move(expiryTask);
+      return registrationPtr;
     }
 
     bool feedFitsBounds(NotificationFeedState const& candidate) const noexcept
@@ -413,7 +392,7 @@ namespace ao::rt
       APP_LOG_ERROR("NotificationService rejected {} for notification {}: {}", mutationName(mutationKind), id, reason);
     }
 
-    void expireTransient(NotificationId const id, std::uint64_t const generation)
+    void expireTransient(NotificationId const id, std::shared_ptr<ExpiryRegistration> const& registrationPtr)
     {
       ensureOnExecutor();
       auto const& entries = feedPtr->entries;
@@ -421,7 +400,7 @@ namespace ao::rt
 
       if (auto const registrationIter = expiryRegistrations.find(id);
           entryIter == entries.end() || entryIter->lifetime.kind() != NotificationLifetimeKind::Transient ||
-          registrationIter == expiryRegistrations.end() || registrationIter->second.generation != generation)
+          registrationIter == expiryRegistrations.end() || registrationIter->second != registrationPtr)
       {
         return;
       }
@@ -429,7 +408,12 @@ namespace ao::rt
       auto candidatePtr = mutableFeedCopy();
       candidatePtr->entries.erase(candidatePtr->entries.begin() + (entryIter - entries.begin()));
       commit(std::move(candidatePtr), NotificationFeedMutationKind::Expired, id, nextId);
-      expiryRegistrations.erase(id);
+
+      if (auto const registrationIter = expiryRegistrations.find(id);
+          registrationIter != expiryRegistrations.end() && registrationIter->second == registrationPtr)
+      {
+        expiryRegistrations.erase(registrationIter);
+      }
     }
 
     void commitCandidateMutation(std::shared_ptr<NotificationFeedState> candidatePtr,
@@ -447,19 +431,7 @@ namespace ao::rt
 
       auto const registrationIter = expiryRegistrations.find(id);
       gsl_Expects(registrationIter != expiryRegistrations.end());
-      auto const previousGeneration = registrationIter->second.generation;
-      auto generation = previousGeneration;
-
-      if (candidateEntryIter->lifetime.kind() == NotificationLifetimeKind::Transient)
-      {
-        if (generation == std::numeric_limits<std::uint64_t>::max())
-        {
-          rejectMutation(mutationKind, id, "lifetime generation is exhausted");
-          return;
-        }
-
-        ++generation;
-      }
+      auto previousRegistrationPtr = registrationIter->second;
 
       auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
 
@@ -471,13 +443,11 @@ namespace ao::rt
 
       candidateEntryIter = std::ranges::find(candidatePtr->entries, id, &NotificationEntry::id);
       gsl_Expects(candidateEntryIter != candidatePtr->entries.end());
-      auto const expectedLifetime = candidateEntryIter->lifetime;
-      auto expiryTask = prepareExpiry(*candidateEntryIter, generation);
+      auto candidateRegistrationPtr = prepareExpiry(*candidateEntryIter);
 
-      // Advance the control generation before synchronous publication so a
-      // reentrant update starts from this mutation. Commit can throw only
-      // before publication, in which case restoring the generation is safe.
-      registrationIter->second.generation = generation;
+      // Install the candidate identity before synchronous publication so a
+      // reentrant update supersedes this exact registration.
+      registrationIter->second = candidateRegistrationPtr;
 
       try
       {
@@ -485,12 +455,16 @@ namespace ao::rt
       }
       catch (...)
       {
-        registrationIter->second.generation = previousGeneration;
+        if (auto const currentIter = expiryRegistrations.find(id);
+            currentIter != expiryRegistrations.end() && currentIter->second == candidateRegistrationPtr)
+        {
+          currentIter->second = std::move(previousRegistrationPtr);
+        }
+
         throw;
       }
 
       eraseExpiryRegistrations(*optEvictedIds);
-      installPreparedExpiry(id, generation, expectedLifetime, std::move(expiryTask));
     }
 
     void post(std::optional<NotificationReportKey> optReportKey, NotificationRequest request)
@@ -528,12 +502,8 @@ namespace ao::rt
       }
 
       auto& candidateEntry = candidatePtr->entries.back();
-      auto const generation =
-        candidateEntry.lifetime.kind() == NotificationLifetimeKind::Transient ? std::uint64_t{1} : std::uint64_t{0};
-      auto expiryTask = prepareExpiry(candidateEntry, generation);
-      auto const [registrationIter, inserted] = expiryRegistrations.try_emplace(
-        id, ExpiryRegistration{.generation = generation, .task = std::move(expiryTask)});
-      std::ignore = registrationIter;
+      auto expiryRegistrationPtr = prepareExpiry(candidateEntry);
+      auto const [registrationIter, inserted] = expiryRegistrations.try_emplace(id, expiryRegistrationPtr);
       gsl_Expects(inserted);
 
       try
@@ -542,7 +512,11 @@ namespace ao::rt
       }
       catch (...)
       {
-        expiryRegistrations.erase(id);
+        if (registrationIter->second == expiryRegistrationPtr)
+        {
+          expiryRegistrations.erase(registrationIter);
+        }
+
         throw;
       }
 
@@ -559,7 +533,7 @@ namespace ao::rt
     async::Signal<NotificationFeedUpdate const&> feedUpdatedSignal;
     // Every live entry owns one slot. Retained entries hold an empty task so a
     // keyed lifetime transition never needs to allocate control state after commit.
-    std::unordered_map<NotificationId, ExpiryRegistration> expiryRegistrations;
+    std::unordered_map<NotificationId, std::shared_ptr<ExpiryRegistration>> expiryRegistrations;
     std::shared_ptr<ExpiryControl> expiryControlPtr;
   };
 

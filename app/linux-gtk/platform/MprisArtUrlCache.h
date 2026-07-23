@@ -3,11 +3,11 @@
 
 #pragma once
 
+#include "common/RequestCoalescer.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Task.h>
 #include <ao/utility/ScopedRegistration.h>
 
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -19,7 +19,6 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <vector>
 
 namespace ao::rt
 {
@@ -64,17 +63,6 @@ namespace ao::gtk::platform
       std::uintmax_t byteSize = 0;
     };
 
-    struct RequestState final
-    {
-      std::atomic_bool active{true};
-    };
-
-    struct RequestWaiter final
-    {
-      std::shared_ptr<RequestState> statePtr;
-      OnUrlReady onReady;
-    };
-
     void spawnMaterialization(ResourceId resourceId, std::optional<CacheEntry> optCachedEntry);
     static async::Task<void> materialize(MprisArtUrlCache* cache,
                                          rt::LibraryTaskService* tasks,
@@ -97,6 +85,6 @@ namespace ao::gtk::platform
     std::filesystem::path _cacheDir;
     std::unique_ptr<async::LifetimeScope> _scopePtr;
     std::unordered_map<ResourceId, CacheEntry> _cache;
-    std::unordered_map<ResourceId, std::vector<RequestWaiter>> _inFlight;
+    RequestCoalescer<ResourceId, std::string> _requests;
   };
 } // namespace ao::gtk::platform

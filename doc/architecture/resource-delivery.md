@@ -63,14 +63,15 @@ Each frontend retains its own request lifetime, transform, cache, and stale-resu
 
 GTK `ImageCache` owns an in-process LRU of decoded pixbufs keyed by resource id plus full-size or requested physical thumbnail size.
 `ResourceImageLoader` serves both key kinds, coalesces equal in-flight keys, reads through `LibraryTaskService`, checks decoded dimensions before accepting allocation, decodes on the shared worker pool, and returns completion on the GTK callback executor.
-Successful shared work may populate the cache after one callback interest is cancelled.
+The GTK request coalescer keeps one flight per key and ordered, independently cancellable callback interests.
+Successful shared work may populate the cache after one or every callback interest is cancelled.
 
-`ResourceImageController` binds a resource or detail projection to one `ImageWidget`, clears an uncached replacement immediately, and rejects stale full-size or thumbnail completion with one generation.
+`ResourceImageController` binds a resource or detail projection to one `ImageWidget`, clears an uncached replacement immediately, and cancels its previous callback interest before replacement.
 
 ### TUI delivery
 
 `CoverArtLoader` clears its current transform when selected cover identity changes, reads bytes asynchronously, and performs stb decode plus block or Kitty conversion on a worker.
-It publishes only when the resource id and local generation still match.
+It owns one cancellable task; replacement retires that task, and publication follows a cancellation-checked callback-executor hop.
 The decoder checks source dimensions and pixels before full decode and bounds generated PNG retention.
 Kitty paint state separately tracks the fixed image id and terminal cell box.
 
@@ -113,14 +114,14 @@ ResourceId + logical allocation + display scale
   -> physical-size cache key
   -> cache hit OR coalesced async byte read and worker decode
   -> callback-executor cache insertion
-  -> request interest + widget generation check
+  -> current widget request interest
   -> ImageWidget source pixbuf and render policy
 ```
 
 ### Other paths
 
 ```text
-TUI ResourceId -> async owned bytes -> worker stb crop/scale -> current-generation blocks or Kitty PNG
+TUI ResourceId -> cancellable async owned bytes -> worker stb crop/scale -> current-task blocks or Kitty PNG
 MPRIS ResourceId -> async owned bytes -> worker cache validation/write -> current-resource file URI
 CLI ResourceId -> scoped read -> raw output file
 ```
@@ -145,7 +146,7 @@ The runtime reader copies bytes before releasing its transaction.
 
 GTK and MPRIS shared requests have per-interest cancellation plus a loader lifetime scope; TUI owns one cancellable selected-resource task.
 Worker cancellation prevents a frontend owner from being touched after destruction.
-Resource replacement invalidates the old callback interest or generation before new output is published.
+Resource replacement invalidates the old callback interest, callback scope, or task before new output is published.
 Absence, an over-budget payload, decode failure, or file-export failure yields no image/URL and does not mutate stored bytes or poison unrelated cache keys.
 
 Interactive reads reject encoded payloads above 32 MiB before copying them out of storage.
@@ -167,7 +168,8 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 
 - [`ResourceStoreTest.cpp`](../../test/unit/library/ResourceStoreTest.cpp) protects identity, deduplication, collisions, reads, removal, and exhaustion behavior.
 - [`TrackBuilderCoverArtTest.cpp`](../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects ordered references and primary selection.
-- GTK image tests under [`test/unit/linux-gtk/image/`](../../test/unit/linux-gtk/image/) protect cache, coalescing, scaling, cancellation, widget generation, and render targets.
+- [`RequestCoalescerTest.cpp`](../../test/unit/linux-gtk/common/RequestCoalescerTest.cpp) protects shared-flight ordering, interest cancellation, reentrancy, failure rollback, and owner-independent request handles.
+- GTK image tests under [`test/unit/linux-gtk/image/`](../../test/unit/linux-gtk/image/) protect cache, coalescing, scaling, cancellation, current-request publication, and render targets.
 - [`PlaybackImageTest.cpp`](../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) and [`TrackRowCacheTest.cpp`](../../test/unit/linux-gtk/track/TrackRowCacheTest.cpp) protect runtime identity-to-widget consumers.
 - [`CoverArtTest.cpp`](../../test/unit/tui/CoverArtTest.cpp) protects TUI decode and Kitty protocol transforms.
 - [`MprisBridgeTest.cpp`](../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects cache-file export and URL publication.

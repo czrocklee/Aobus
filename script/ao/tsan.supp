@@ -15,6 +15,9 @@ called_from_lib:libglibmm-2.68.so
 # GTK image and text stack.
 called_from_lib:libgtk-4.so
 called_from_lib:libgdk_pixbuf-2.0.so
+# Cairo recycles clip objects through an atomic freed pool. The dependency is
+# uninstrumented, so TSan cannot observe that cross-thread handoff.
+called_from_lib:libcairo.so
 called_from_lib:libpango-1.0.so
 called_from_lib:libpangoft2-1.0.so
 called_from_lib:libpangocairo-1.0.so
