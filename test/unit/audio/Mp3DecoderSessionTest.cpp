@@ -116,6 +116,28 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
   }
 
+  TEST_CASE("Mp3DecoderSession - scans VBR streams without seek tables before validating seeks",
+            "[audio][regression][mp3]")
+  {
+    auto const testFile = requireAudioFixture("vbr_no_seek_table.mp3");
+    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+
+    REQUIRE(decoder.open(testFile));
+    auto const info = decoder.streamInfo();
+    CHECK(info.sourceFormat.sampleRate == 44100);
+    CHECK(info.duration == std::chrono::milliseconds{20088});
+
+    REQUIRE(decoder.seek(std::chrono::seconds{10}));
+    auto const soughtBlock = decoder.readNextBlock();
+    REQUIRE(soughtBlock);
+    CHECK(soughtBlock->firstFrameIndex == 441000);
+    CHECK(soughtBlock->frames > 0);
+
+    REQUIRE(decoder.seek(std::chrono::milliseconds{0}));
+    CHECK(readUntilStableEndOfStream(decoder, 1024) == 885888);
+    CHECK_FALSE(decoder.seek(info.duration + std::chrono::milliseconds{1}));
+  }
+
   TEST_CASE("Mp3DecoderSession - rejects a midstream format change", "[audio][unit][mp3][error]")
   {
     auto const firstFile = requireAudioFixture("basic_metadata.mp3");

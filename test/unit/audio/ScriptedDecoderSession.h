@@ -63,6 +63,7 @@ namespace ao::audio::test
     {
       _seekObserver = std::move(observer);
     }
+    void setReadObserver(std::function<void(std::size_t)> observer) { _readObserver = std::move(observer); }
 
     void setDestroyCounter(std::shared_ptr<std::atomic<std::size_t>> counterPtr)
     {
@@ -101,6 +102,11 @@ namespace ao::audio::test
     Result<PcmBlock> readNextBlock() noexcept override
     {
       _readCount++;
+
+      if (_readObserver)
+      {
+        _readObserver(_readCount);
+      }
 
       if (_scriptIndex >= _script.size())
       {
@@ -141,6 +147,7 @@ namespace ao::audio::test
     std::vector<ReadScriptEntry> _script;
     std::optional<std::vector<ReadScriptEntry>> _optSeekScript;
     std::function<void(std::chrono::milliseconds)> _seekObserver;
+    std::function<void(std::size_t)> _readObserver;
     std::size_t _scriptIndex = 0;
     std::size_t _seekCount = 0;
 

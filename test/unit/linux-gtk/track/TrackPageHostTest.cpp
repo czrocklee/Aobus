@@ -79,6 +79,7 @@ namespace ao::gtk::test
       auto* const context = host.currentVisible();
       REQUIRE(context != nullptr);
       context->pagePtr->signalTrackActivated().emit(trackId);
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
 
       auto const snapshot = runtime.playback().snapshot();
       CHECK(snapshot.succession.currentTrackId == trackId);

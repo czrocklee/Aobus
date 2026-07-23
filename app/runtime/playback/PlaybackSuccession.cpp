@@ -27,6 +27,7 @@
 #include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
+#include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -221,6 +222,20 @@ namespace ao::rt
       ProjectionAnchor anchor;
     };
 
+    struct PendingViewStart final
+    {
+      TrackId trackId = kInvalidTrackId;
+      std::unique_ptr<PlaybackCursorSession> sessionPtr;
+    };
+
+    struct PendingLookahead final
+    {
+      TrackId trackId = kInvalidTrackId;
+      ListId sourceListId = kInvalidListId;
+      std::uint64_t generation = 0;
+      std::vector<TrackId> failedTrackIds;
+    };
+
     Impl(async::Executor& executor,
          ViewService& views,
          TrackSourceCache& sources,
@@ -342,8 +357,92 @@ namespace ao::rt
       }
     }
 
+    void cancelPendingStart()
+    {
+      optPendingViewStart.reset();
+      transport.cancelSuccessionStartPreparation();
+    }
+
+    void cancelPendingLookahead()
+    {
+      ++lookaheadPreparationGeneration;
+      optPendingLookahead.reset();
+      transport.cancelSuccessionLookaheadPreparation();
+    }
+
+    bool isLookaheadCandidateCurrent(PendingLookahead const& pending) const
+    {
+      return !isClosing() && sessionPtr && sessionPtr->cursor().launchSpec().sourceListId == pending.sourceListId &&
+             sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Live &&
+             sessionPtr->cursor().semanticTuple().optResolvedSuccessor == pending.trackId &&
+             sessionPtr->indexOf(pending.trackId).has_value();
+    }
+
+    bool isPendingLookaheadCurrent(std::uint64_t const generation) const
+    {
+      return optPendingLookahead && optPendingLookahead->generation == generation &&
+             isLookaheadCandidateCurrent(*optPendingLookahead);
+    }
+
+    bool acceptPendingStart()
+    {
+      return !isClosing() && optPendingViewStart && optPendingViewStart->sessionPtr &&
+             optPendingViewStart->sessionPtr->cursor().sourceState() == PlaybackCursor::SourceState::Live &&
+             optPendingViewStart->sessionPtr->indexOf(optPendingViewStart->trackId).has_value();
+    }
+
+    void completePendingStart(Result<PreparedPlaybackStart> preparedStart)
+    {
+      if (!optPendingViewStart)
+      {
+        return;
+      }
+
+      if (!preparedStart)
+      {
+        optPendingViewStart.reset();
+        return;
+      }
+
+      auto pending = std::move(*optPendingViewStart);
+      optPendingViewStart.reset();
+      auto barrier = transport.commitStagedPlayback(std::move(*preparedStart), false);
+
+      if (!barrier || isClosing())
+      {
+        return;
+      }
+
+      if (sessionPtr)
+      {
+        sessionPtr->clearPreparedCoveredBy(*barrier);
+        captureRestorableSnapshot();
+      }
+
+      // The candidate was built at admission time. Mode commands remain live
+      // while preparation runs, so settle it against the latest preferences
+      // before the candidate becomes the authoritative cursor.
+      std::ignore = pending.sessionPtr->setRepeatMode(repeatMode);
+      std::ignore = pending.sessionPtr->setShuffleMode(shuffleMode);
+      sessionPtr = std::move(pending.sessionPtr);
+      startObservingCurrentSession();
+      resetFailureState();
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
+      reprepareNext(false);
+      synchronizeState();
+      notifyRestorableStateChanged();
+
+      if (!isClosing())
+      {
+        publishSequenceObserverSafely("explicit-start-settled", [this] { explicitStartSettledSignal.emit(); });
+      }
+    }
+
     void deactivateSession()
     {
+      cancelPendingStart();
+      cancelPendingLookahead();
+
       if (!sessionPtr)
       {
         return;
@@ -360,6 +459,9 @@ namespace ao::rt
 
     void stopTerminal(bool postNotification)
     {
+      cancelPendingStart();
+      cancelPendingLookahead();
+
       if (!sessionPtr)
       {
         return;
@@ -483,10 +585,89 @@ namespace ao::rt
       }
     }
 
+    bool retryLookahead(PendingLookahead pending)
+    {
+      if (!isLookaheadCandidateCurrent(pending) || sessionPtr->cursor().shuffleMode() != ShuffleMode::On)
+      {
+        return false;
+      }
+
+      pending.failedTrackIds.push_back(pending.trackId);
+
+      if (pending.failedTrackIds.size() >= kMaxConsecutivePlaybackFailures)
+      {
+        return false;
+      }
+
+      auto const optRetry = sessionPtr->rerollShuffleForward(pending.failedTrackIds);
+
+      if (!optRetry)
+      {
+        return false;
+      }
+
+      if (auto const effect = sessionPtr->refreshSemanticState(); effect.semanticChanged)
+      {
+        synchronizeState();
+      }
+
+      pending.trackId = *optRetry;
+      return prepareLookahead(std::move(pending));
+    }
+
+    bool completeLookahead(std::uint64_t const generation, Result<PreparedNextToken> prepared)
+    {
+      if (!optPendingLookahead || optPendingLookahead->generation != generation)
+      {
+        return false;
+      }
+
+      auto pending = std::move(*optPendingLookahead);
+      optPendingLookahead.reset();
+
+      if (!prepared)
+      {
+        return prepared.error().code != Error::Code::Conflict && retryLookahead(std::move(pending));
+      }
+
+      if (!isLookaheadCandidateCurrent(pending))
+      {
+        return false;
+      }
+
+      sessionPtr->preparedNextRegistry().activate(
+        *prepared, sessionPtr->anchorFor(pending.trackId, sessionPtr->cursor().anchor().anchorIndex()));
+      return true;
+    }
+
+    bool prepareLookahead(PendingLookahead pending)
+    {
+      pending.generation = ++lookaheadPreparationGeneration;
+      auto const generation = pending.generation;
+      auto const successor = pending.trackId;
+      auto const sourceListId = pending.sourceListId;
+      optPendingLookahead = std::move(pending);
+
+      auto admitted = transport.prepareSuccessionNextAsync(
+        successor,
+        sourceListId,
+        [this, generation] { return isPendingLookaheadCurrent(generation); },
+        [this, generation](Result<PreparedNextToken> prepared)
+        { std::ignore = completeLookahead(generation, std::move(prepared)); });
+
+      if (!admitted)
+      {
+        return completeLookahead(generation, std::unexpected{admitted.error()});
+      }
+
+      return true;
+    }
+
     bool reprepareNext(bool const force)
     {
       if (!sessionPtr)
       {
+        cancelPendingLookahead();
         std::ignore = transport.clearSuccessionPreparedNext();
         return false;
       }
@@ -507,40 +688,19 @@ namespace ao::rt
         }
       }
 
+      cancelPendingLookahead();
       auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
       registry.invalidate(optDisarmedToken);
 
-      for (std::size_t attempt = 0; optSuccessor && attempt < kMaxConsecutivePlaybackFailures; ++attempt)
+      if (!optSuccessor)
       {
-        auto const successor = *optSuccessor;
-        auto prepared = transport.prepareSuccessionNext(successor, session.cursor().launchSpec().sourceListId);
-
-        if (prepared)
-        {
-          registry.activate(*prepared, session.anchorFor(successor, session.cursor().anchor().anchorIndex()));
-          return true;
-        }
-
-        if (session.cursor().shuffleMode() != ShuffleMode::On ||
-            !session.shuffleHistory().discardForwardCandidate(successor))
-        {
-          return false;
-        }
-
-        if (auto const effect = session.refreshSemanticState(); effect.semanticChanged)
-        {
-          synchronizeState();
-        }
-
-        optSuccessor = session.cursor().semanticTuple().optResolvedSuccessor;
-
-        if (optSuccessor == successor)
-        {
-          return false;
-        }
+        return false;
       }
 
-      return false;
+      auto const successor = *optSuccessor;
+      auto const sourceListId = session.cursor().launchSpec().sourceListId;
+      return prepareLookahead(
+        PendingLookahead{.trackId = successor, .sourceListId = sourceListId, .failedTrackIds = {}});
     }
 
     Result<> startTrack(TrackId const trackId, ShuffleHistory::TransitionOrigin const origin)
@@ -815,6 +975,10 @@ namespace ao::rt
         return;
       }
 
+      // A natural transition that settles before a pending explicit start
+      // establishes the winning live context. Prevent that older candidate
+      // from committing over the accepted transition.
+      cancelPendingStart();
       resetFailureState();
       restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
@@ -928,6 +1092,7 @@ namespace ao::rt
         {
           if (!isClosing())
           {
+            cancelPendingStart();
             reprepareNext(true);
           }
         });
@@ -936,8 +1101,13 @@ namespace ao::rt
         {
           if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
+            cancelPendingStart();
             restartDeadline.seek(transport.elapsed());
             reprepareNext(true);
+          }
+          else if (!isClosing() && event.mode == PlaybackTransport::SeekMode::Final)
+          {
+            cancelPendingStart();
           }
         });
       startedSubscription = transport.onStarted(
@@ -973,6 +1143,9 @@ namespace ao::rt
         return;
       }
 
+      cancelPendingStart();
+      cancelPendingLookahead();
+
       transport.unbindPlaybackFailureRecovery();
       idleSubscription.reset();
       nowPlayingSubscription.reset();
@@ -984,6 +1157,7 @@ namespace ao::rt
       restartDeadline.shutdown();
       sessionPtr.reset();
       changedSignal.disconnectAll();
+      explicitStartSettledSignal.disconnectAll();
       shuffleModeChangedSignal.disconnectAll();
       repeatModeChangedSignal.disconnectAll();
       restorableStateChangedSignal.disconnectAll();
@@ -999,8 +1173,12 @@ namespace ao::rt
     ShuffleMode shuffleMode = ShuffleMode::Off;
     RepeatMode repeatMode = RepeatMode::Off;
     std::unique_ptr<PlaybackCursorSession> sessionPtr;
+    std::optional<PendingViewStart> optPendingViewStart;
+    std::optional<PendingLookahead> optPendingLookahead;
+    std::uint64_t lookaheadPreparationGeneration = 0;
     std::optional<RestorableCursorSnapshot> optLastRestorableSnapshot;
     async::Signal<PlaybackSuccessionState const&> changedSignal;
+    async::Signal<> explicitStartSettledSignal;
     async::Signal<PlaybackSuccession::ShuffleModeChanged const&> shuffleModeChangedSignal;
     async::Signal<PlaybackSuccession::RepeatModeChanged const&> repeatModeChangedSignal;
     async::Signal<> restorableStateChangedSignal;
@@ -1037,6 +1215,8 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
+    impl->cancelPendingStart();
+    impl->cancelPendingLookahead();
 
     auto launchSpec = impl->views.capturePlaybackLaunchSpec(viewId);
 
@@ -1065,45 +1245,23 @@ namespace ao::rt
       return std::unexpected{request.error()};
     }
 
-    auto preparedStart = impl->transport.stagePlayback(*request, launchSpec->sourceListId);
+    impl->optPendingViewStart.emplace(Impl::PendingViewStart{
+      .trackId = startTrackId,
+      .sessionPtr = std::move(*candidateSession),
+    });
+    auto admitted = impl->transport.stageSuccessionPlaybackAsync(
+      *request,
+      launchSpec->sourceListId,
+      [impl] { return impl->acceptPendingStart(); },
+      [impl](Result<PreparedPlaybackStart> preparedStart) mutable
+      { impl->completePendingStart(std::move(preparedStart)); });
 
-    if (!preparedStart)
+    if (!admitted)
     {
-      return std::unexpected{preparedStart.error()};
+      impl->optPendingViewStart.reset();
+      return std::unexpected{admitted.error()};
     }
 
-    if (impl->isClosing())
-    {
-      return makeError(Error::Code::InvalidState, "Playback sequence closed during preparation");
-    }
-
-    auto barrier = impl->transport.commitStagedPlayback(std::move(*preparedStart), false);
-
-    if (!barrier)
-    {
-      return std::unexpected{barrier.error()};
-    }
-
-    if (impl->isClosing())
-    {
-      return {};
-    }
-
-    if (impl->sessionPtr)
-    {
-      impl->sessionPtr->clearPreparedCoveredBy(*barrier);
-      impl->captureRestorableSnapshot();
-    }
-
-    impl->sessionPtr = std::move(*candidateSession);
-
-    impl->startObservingCurrentSession();
-
-    impl->resetFailureState();
-    impl->restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
-    impl->reprepareNext(false);
-    impl->synchronizeState();
-    impl->notifyRestorableStateChanged();
     return {};
   }
 
@@ -1125,6 +1283,8 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
+    impl->cancelPendingStart();
+    impl->cancelPendingLookahead();
 
     if (!impl->sessionPtr)
     {
@@ -1142,6 +1302,8 @@ namespace ao::rt
   {
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
+    impl->cancelPendingStart();
+    impl->cancelPendingLookahead();
 
     if (!impl->sessionPtr)
     {
@@ -1241,6 +1403,13 @@ namespace ao::rt
     auto* const impl = _implPtr.get();
     impl->ensureOnExecutor();
     return impl->changedSignal.connect(std::move(handler));
+  }
+
+  async::Subscription PlaybackSuccession::onExplicitStartSettled(std::move_only_function<void()> handler)
+  {
+    auto* const impl = _implPtr.get();
+    impl->ensureOnExecutor();
+    return impl->explicitStartSettledSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onShuffleModeChanged(

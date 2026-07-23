@@ -40,6 +40,7 @@ namespace ao::gtk::test
     auto const view = fixture.runtime().views().createView({.listId = rt::kAllTracksListId});
     REQUIRE(view);
     REQUIRE(playback.commands().startFromView(*view, trackId));
+    REQUIRE(waitForPlaybackSettlement(fixture.runtime(), trackId));
     drainGtkEvents();
     CHECK_FALSE(gtkLabel->get_text().empty());
 

@@ -258,7 +258,10 @@ namespace ao::rt::test
       .trackIds = {firstTrackId, secondTrackId},
     }));
     auto const viewId = ao::test::requireValue(appPtr->views().createView({.listId = listId}));
+    auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;
     REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
+    REQUIRE(waitForPlaybackSettlement(
+      *executor, previousPositionRevision, [&] { return appPtr->playback().snapshot().transport.positionRevision; }));
     REQUIRE(audioStatePtr->renderTarget != nullptr);
 
     bool callbackEntered = false;
@@ -272,8 +275,7 @@ namespace ao::rt::test
 
     executor->drain();
     auto output = std::array<std::byte, 4096>{};
-    REQUIRE(driveRenderUntilTaskQueued(*audioStatePtr->renderTarget, *executor, output));
-    REQUIRE(executor->drainUntil([&] { return callbackEntered; }));
+    REQUIRE(driveRenderUntil(*audioStatePtr->renderTarget, *executor, output, [&] { return callbackEntered; }));
     CHECK(callbackCompleted);
     REQUIRE(appPtr);
 

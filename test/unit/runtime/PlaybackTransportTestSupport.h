@@ -90,7 +90,12 @@ namespace ao::rt::test
   template<typename ExecutorT>
   struct PlaybackTransportFixture final
   {
-    PlaybackTransportFixture()
+    explicit PlaybackTransportFixture(audio::DecoderFactoryFn decoderFactory = {})
+      : playbackTransport{executor,
+                          libraryFixture.library(),
+                          notificationService,
+                          decoderFactory ? std::make_unique<audio::Player>(asyncRuntime, std::move(decoderFactory))
+                                         : std::make_unique<audio::Player>(asyncRuntime)}
     {
       fakeit::Fake(Method(mockProvider, shutdown));
 
@@ -180,9 +185,6 @@ namespace ao::rt::test
     audio::BackendProvider::OnGraphChangedCallback onGraphChangedCb;
     audio::RenderTarget* renderTarget = nullptr;
 
-    PlaybackTransport playbackTransport{executor,
-                                        libraryFixture.library(),
-                                        notificationService,
-                                        std::make_unique<audio::Player>(executor)};
+    PlaybackTransport playbackTransport;
   };
 } // namespace ao::rt::test

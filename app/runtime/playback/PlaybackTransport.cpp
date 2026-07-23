@@ -818,6 +818,29 @@ namespace ao::rt
 
     void rememberPreparedRequest(PreparedPlaybackRequest request) { preparedRequests.push_back(std::move(request)); }
 
+    Result<PreparedNextToken> installPreparedNext(PlaybackRequest request,
+                                                  ListId const sourceListId,
+                                                  audio::Engine::PreparedNextResult const& prepared)
+    {
+      auto const token = issuePreparedNextToken(prepared.generation);
+
+      if (!token)
+      {
+        std::ignore = playerPtr->clearPreparedNext();
+        return std::unexpected{token.error()};
+      }
+
+      rememberPreparedRequest(PreparedPlaybackRequest{
+        .request = std::move(request),
+        .sourceListId = sourceListId,
+        .itemId = prepared.itemId,
+        .token = *token,
+        .transition = prepared.transition,
+      });
+      optActivePreparedToken = *token;
+      return *token;
+    }
+
     std::optional<PreparedPlaybackRequest> takePreparedRequest(audio::Engine::PlaybackItemId const itemId,
                                                                std::uint64_t const generation)
     {
@@ -1472,6 +1495,142 @@ namespace ao::rt
     impl->playbackFailureRecoveryHandlerPtr.reset();
   }
 
+  Result<> PlaybackTransport::stageSuccessionPlaybackAsync(
+    PlaybackRequest request,
+    ListId const sourceListId,
+    std::move_only_function<bool()> acceptance,
+    std::move_only_function<void(Result<PreparedPlaybackStart>)> completion)
+  {
+    auto* const impl = _implPtr.get();
+    impl->ensureOnExecutor();
+    impl->ensureReady();
+    impl->enqueueOutbound(Impl::PreparingEvent{});
+
+    if (impl->isClosing())
+    {
+      return makeError(Error::Code::InvalidState, "Playback transport is closing");
+    }
+
+    auto item = impl->makePlaybackItem(request.input);
+    auto const expectedInput = request.input;
+    auto const trackId = request.item.trackId;
+    auto const admitted = impl->playerPtr->stagePlaybackAsync(
+      item,
+      {},
+      [impl, expectedInput, trackId, acceptance = std::move(acceptance)] mutable
+      {
+        if (impl->isClosing() || !acceptance())
+        {
+          return false;
+        }
+
+        auto const currentRequest = playbackRequestForTrack(impl->library, trackId);
+        return currentRequest && currentRequest->input == expectedInput;
+      },
+      [impl, request = std::move(request), sourceListId, completion = std::move(completion)](
+        Result<audio::Engine::PreparedPlaybackStart> prepared) mutable
+      {
+        if (impl->isClosing())
+        {
+          return;
+        }
+
+        if (!prepared)
+        {
+          if (prepared.error().code != Error::Code::Conflict)
+          {
+            impl->postOrUpdateFailureNotification(PlaybackFailure{
+              .kind = PlaybackFailureKind::TrackOpen,
+              .trackId = request.item.trackId,
+              .sourceListId = sourceListId,
+              .error = prepared.error(),
+              .recoverable = false,
+              .title = request.item.title,
+            });
+          }
+
+          completion(std::unexpected{prepared.error()});
+          return;
+        }
+
+        completion(PreparedPlaybackStart{
+          std::make_unique<PreparedPlaybackStart::Impl>(std::move(*prepared), std::move(request), sourceListId)});
+      });
+
+    return admitted;
+  }
+
+  Result<> PlaybackTransport::prepareSuccessionNextAsync(
+    TrackId const trackId,
+    ListId const sourceListId,
+    std::move_only_function<bool()> acceptance,
+    std::move_only_function<void(Result<PreparedNextToken>)> completion)
+  {
+    auto* const impl = _implPtr.get();
+    impl->ensureOnExecutor();
+    impl->ensureReady();
+
+    if (impl->optActivePreparedToken)
+    {
+      return makeError(
+        Error::Code::InvalidState, "Prepared-next request must be cleared before preparing a replacement");
+    }
+
+    auto request = playbackRequestForTrack(impl->library, trackId);
+
+    if (!request)
+    {
+      return std::unexpected{request.error()};
+    }
+
+    auto item = impl->makePlaybackItem(request->input);
+    auto const expectedInput = request->input;
+    auto const admitted = impl->playerPtr->prepareNextAsync(
+      item,
+      [impl, expectedInput, trackId, acceptance = std::move(acceptance)] mutable
+      {
+        if (impl->isClosing() || impl->optActivePreparedToken || !acceptance())
+        {
+          return false;
+        }
+
+        auto const currentRequest = playbackRequestForTrack(impl->library, trackId);
+        return currentRequest && currentRequest->input == expectedInput;
+      },
+      [impl, request = std::move(*request), sourceListId, completion = std::move(completion)](
+        Result<audio::Engine::PreparedNextResult> prepared) mutable
+      {
+        if (impl->isClosing())
+        {
+          return;
+        }
+
+        if (!prepared)
+        {
+          completion(std::unexpected{prepared.error()});
+          return;
+        }
+
+        completion(impl->installPreparedNext(std::move(request), sourceListId, *prepared));
+      });
+
+    return admitted;
+  }
+
+  void PlaybackTransport::cancelSuccessionStartPreparation()
+  {
+    auto* const impl = _implPtr.get();
+    impl->ensureOnExecutor();
+    impl->playerPtr->cancelStartPreparation();
+  }
+
+  void PlaybackTransport::cancelSuccessionLookaheadPreparation()
+  {
+    auto* const impl = _implPtr.get();
+    impl->ensureOnExecutor();
+    impl->playerPtr->cancelLookaheadPreparation();
+  }
+
   Result<PreparedCancellationBarrier> PlaybackTransport::playSuccessionTrack(TrackId const trackId,
                                                                              ListId const sourceListId)
   {
@@ -1630,15 +1789,19 @@ namespace ao::rt
 
     if (!commitResult)
     {
-      APP_LOG_WARN("Playback not committed: {}", commitResult.error().message);
-      impl->postOrUpdateFailureNotification(PlaybackFailure{
-        .kind = PlaybackFailureKind::RouteActivation,
-        .trackId = preparedImplPtr->request.item.trackId,
-        .sourceListId = preparedImplPtr->sourceListId,
-        .error = commitResult.error(),
-        .recoverable = false,
-        .title = preparedImplPtr->request.item.title,
-      });
+      if (commitResult.error().code != Error::Code::Conflict)
+      {
+        APP_LOG_WARN("Playback not committed: {}", commitResult.error().message);
+        impl->postOrUpdateFailureNotification(PlaybackFailure{
+          .kind = PlaybackFailureKind::RouteActivation,
+          .trackId = preparedImplPtr->request.item.trackId,
+          .sourceListId = preparedImplPtr->sourceListId,
+          .error = commitResult.error(),
+          .recoverable = false,
+          .title = preparedImplPtr->request.item.title,
+        });
+      }
+
       return std::unexpected{commitResult.error()};
     }
 
@@ -1727,23 +1890,7 @@ namespace ao::rt
       return std::unexpected{result.error()};
     }
 
-    auto const tokenResult = impl->issuePreparedNextToken(result->generation);
-
-    if (!tokenResult)
-    {
-      std::ignore = impl->playerPtr->clearPreparedNext();
-      return std::unexpected{tokenResult.error()};
-    }
-
-    impl->rememberPreparedRequest(Impl::PreparedPlaybackRequest{
-      .request = request,
-      .sourceListId = sourceListId,
-      .itemId = result->itemId,
-      .token = *tokenResult,
-      .transition = result->transition,
-    });
-    impl->optActivePreparedToken = *tokenResult;
-    return *tokenResult;
+    return impl->installPreparedNext(request, sourceListId, *result);
   }
 
   Result<PreparedNextToken> PlaybackTransport::prepareNext(PlaybackRequest const& request, ListId const sourceListId)

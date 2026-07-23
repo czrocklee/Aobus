@@ -197,6 +197,7 @@ namespace ao::gtk::platform::test
 
     auto const viewId = prepareAllTracksView(runtime);
     REQUIRE(playback.commands().startFromView(viewId, trackId));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
     CHECK(playback.snapshot().transport.nowPlaying.coverArtId == resourceId);
 
     auto const url = cache.urlForResource(playback.snapshot().transport.nowPlaying.coverArtId);
@@ -305,6 +306,7 @@ namespace ao::gtk::platform::test
     CHECK(playSelectionCount == 2);
 
     REQUIRE(playback.commands().startFromView(viewId, firstTrack));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, firstTrack));
     CHECK(endpoint.dispatchPlayerMethod("Next"));
     CHECK(playback.snapshot().succession.currentTrackId == secondTrack);
     CHECK(endpoint.dispatchPlayerMethod("Previous"));
@@ -383,6 +385,7 @@ namespace ao::gtk::platform::test
     };
 
     REQUIRE(playback.commands().startFromView(viewId, firstTrack));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, firstTrack));
 
     checkCapability("CanPlay", uimodel::PlaybackCommand::Play);
     checkCapability("CanPause", uimodel::PlaybackCommand::Pause);
@@ -434,6 +437,7 @@ namespace ao::gtk::platform::test
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
     REQUIRE(playback.commands().startFromView(viewId, trackId));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
     REQUIRE(playback.snapshot().transport.transport == audio::Transport::Playing);
 
     CHECK(endpoint.dispatchSetRate(2.0));
@@ -491,6 +495,7 @@ namespace ao::gtk::platform::test
 
     auto const viewId = prepareAllTracksView(runtime);
     REQUIRE(playback.commands().startFromView(viewId, track2));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, track2));
     REQUIRE_FALSE(playback.snapshot().succession.hasNext);
 
     auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
@@ -525,6 +530,7 @@ namespace ao::gtk::platform::test
 
     auto const viewId = prepareAllTracksView(runtime);
     REQUIRE(playback.commands().startFromView(viewId, trackId));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
     playback.commands().seek(std::chrono::milliseconds{500});
 
     auto commands = uimodel::PlaybackCommandSurface{playback, [] {}};
@@ -547,6 +553,7 @@ namespace ao::gtk::platform::test
     CHECK(playback.snapshot().transport.elapsed == std::chrono::milliseconds{150});
 
     REQUIRE(playback.commands().startFromView(viewId, trackId));
+    REQUIRE(ao::gtk::test::waitForPlaybackSettlement(runtime, trackId));
     CHECK(endpoint.dispatchSeek(99'000'000));
     CHECK(playback.snapshot().succession.currentTrackId == nextTrackId);
     CHECK(playback.snapshot().transport.nowPlaying.trackId == nextTrackId);

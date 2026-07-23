@@ -17,5 +17,7 @@ namespace ao::audio
     std::uint32_t sampleRateHint = 0;
     std::uint8_t channelsHint = 0;
     std::uint8_t bitDepthHint = 0;
+
+    bool operator==(PlaybackInput const&) const = default;
   };
 } // namespace ao::audio

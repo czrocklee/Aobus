@@ -39,6 +39,8 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
   currently connected observers.
 - **Command generation** is the internal ordering value used to discard an old
   queued start or navigation command after a newer invalidating command.
+- **Pending view start** is the private candidate succession session and request
+  retained after synchronous validation while audio preparation runs on a worker.
 
 ## Invariants
 
@@ -63,12 +65,13 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
 The service retains the last committed snapshot, position and final-seek
 counters, command generations, one FIFO, at most one scheduled drain, lower
 subscriptions, pending seek previews and reveal requests, commit/publication
-depth, and one weak deferred-task gate.
+depth, and one weak deferred-task gate. Succession additionally retains at most
+one pending view start and one pending lookahead successor identity.
 
 This state is confined to the runtime callback executor. The command queue adds
-no worker or mutex. Audio preparation remains synchronous once a command begins
-executing; [RFC 0033](../../rfc/0033-nonblocking-playback-preparation.md) proposes
-isolating decoder/source preparation on the existing worker pool.
+no worker or mutex. Player owns the cancellable `async::Runtime` tasks used for
+view-start and gapless-lookahead decoder/source preparation; workers carry
+isolated audio values and do not own application state.
 
 ## Commands and transitions
 
@@ -79,10 +82,12 @@ synchronously. During a commit or publication, or while a backlog exists, it is
 appended to the FIFO. One deferred task consumes one command and schedules the
 next drain after settlement.
 
-`startFromView` returns the lower result when it executes immediately. When
-called by an observer it reports successful queue admission; it has no separate
-completion token. Session restore keeps its call-level result on `AppRuntime`
-and is rejected while a commit, publication, or backlog is active.
+`startFromView` reports synchronous view, membership, request, readiness, and
+worker-task admission. Success does not mean that the decoder opened or that a
+new current subject was installed. When called by an observer it initially
+reports successful command-queue admission; it has no separate public completion
+token. Session restore keeps its call-level result on `AppRuntime` and is
+rejected while a commit, publication, or backlog is active.
 
 ### Supersession
 
@@ -93,10 +98,30 @@ discarded before touching either lower owner when it reaches the queue head.
 
 ### Explicit start and navigation
 
-Succession prepares a cursor candidate and transport stages the audio start
-without replacing public state. Transport silently installs the accepted
-request, succession installs the candidate and prepares its successor, then the
-service composes the settled snapshot. Next and previous use the same path.
+Succession synchronously validates and constructs a cursor candidate, then
+admits audio preparation without replacing public state. Decoder open, format
+negotiation, initial seek, and preroll run on an async worker while the previous
+succession session, transport subject, snapshot, and audio generation remain
+current.
+The lower preparing observation may mark an in-progress commit, but it does not
+replace the current public snapshot with a `Preparing` transport snapshot.
+
+Completion returns to the callback executor. Succession revalidates its pending
+candidate, live source, and membership; transport re-resolves the track and
+compares `PlaybackInput`; Engine revalidates playback generation, route, and
+start context. Player task-handle cancellation and the callback-resumption
+stop-token checkpoint prevent a superseded worker completion from reaching
+those acceptance checks. Only then may Engine adopt the source, transport
+commit the start, succession install the candidate and request best-effort
+lookahead, and the service publish the settled snapshot. Format evidence is
+revalidated for gapless lookahead, where compatibility with the current stream
+determines whether Engine may arm a splice; it is not separate explicit-start
+evidence.
+Before installation, succession reapplies the current repeat and shuffle modes
+to the candidate so policy changes accepted during worker preparation are not
+lost.
+
+Unprepared Next and Previous retain their synchronous navigation start path.
 
 Natural advance remains driven by accepted Engine/Player evidence. Its lower
 observations are coalesced into one external-settlement publication.
@@ -142,6 +167,21 @@ validation errors return to the caller. A queued command has no later public
 result channel; playback execution failures continue through the internal
 recovery and notification owners.
 
+An admitted view-start decoder failure is asynchronous: it publishes the
+existing track-open notification and leaves the previous session and snapshot
+unchanged. A newer start, stop, navigation command, final seek, output change,
+clear, source or membership mutation, or shutdown invalidates the pending
+start. A semantic acceptance veto completes once as `Conflict`, allowing start
+or lookahead completion to clear the matching pending state deterministically;
+task cancellation, replacement, or teardown may suppress completion entirely.
+Engine reports captured playback, route, or start-context evidence that became
+stale as `Conflict`; transport treats that result as supersession and does not
+publish a track-open or route-activation notification.
+Lookahead preparation is best-effort: completion clears only its matching
+pending bookkeeping, and stale or `Conflict` completion has no semantic effect.
+The [playback cursor](cursor.md) owns current preparation-failure reroll and
+boundary recovery policy.
+
 An unexpected exception is an invariant fault. Before propagating it, the
 service settles observed state, closes commit bookkeeping, and attempts to keep
 the queue drain live. If scheduling a drain throws, its marker is rolled back so
@@ -175,6 +215,9 @@ producers while succession and the remaining runtime graph are alive.
 - [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp)
   protects coherent publication, observer deferral, FIFO ordering, supersession,
   exception recovery, scheduler rejection, and queued-command lifetime.
+- [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp)
+  protects asynchronous admission, failure isolation, candidate installation,
+  and prepared-next correlation.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp)
   protects coherent restore, repeated-restore baselines, backlog/reentrant restore
   rejection, and deferred nested commands.
@@ -185,4 +228,3 @@ producers while succession and the remaining runtime graph are alive.
 
 - [Playback architecture](../../architecture/playback.md)
 - [Playback application boundary reference](../../reference/playback/application-boundary.md)
-- [RFC 0033: non-blocking playback preparation](../../rfc/0033-nonblocking-playback-preparation.md)

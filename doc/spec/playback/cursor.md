@@ -170,7 +170,8 @@ Runtime shutdown may destroy the graph without publishing a user-visible invalid
 
 Shuffle forward selection is random and memoryless across accepted transitions, but its pending candidate is sticky while it remains eligible.
 Unrelated projection changes do not reroll it.
-Departure, a relevant repeat/shuffle mode change, explicit invalidation, or preparation/playback failure rerolls it.
+Departure, a relevant repeat/shuffle mode change, explicit invalidation, or a current preparation/playback failure rerolls it.
+A cancelled, superseded, or stale lookahead completion does not mutate the sticky candidate.
 
 A Bound current is excluded from the forward candidate set; a Gap current excludes nothing.
 When no alternative exists, repeat-all may select the sole projected Bound current.
@@ -231,6 +232,9 @@ Expected missing view, source, projected start, invalid filter, missing library 
 Navigation and recoverable current-track open/decode failure walk candidates in the requested direction against the latest live projection.
 Each candidate is resolved immediately before its attempt.
 Shuffle-forward failure excludes attempted candidates before rerolling; shuffle-previous failure continues through popped history rather than falling through to sequential previous.
+Current shuffle lookahead preparation failure silently excludes that candidate from the preparation attempt chain, rerolls, and prepares another eligible successor.
+The chain attempts at most three candidates; a non-shuffle failure, exhausted chain, or absence of another eligible candidate leaves recovery to the normal boundary path.
+Lookahead cancellation, supersession, and `Conflict` completion clear only matching pending preparation state and never reroll.
 
 Three consecutive unplayable candidates terminate transport and succession.
 A successful start resets the failure streak.

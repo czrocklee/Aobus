@@ -52,6 +52,12 @@ Successful `open()` therefore supplies complete source and output formats.
 Decoder blocks containing PCM remain consumable before a later empty end-of-stream block.
 `firstFrameIndex` identifies the actual first PCM frame in a block, including after decoder-level seek adjustment.
 
+MP3 open scans the complete stream with mpg123 before reporting stream
+information. The scan builds an exact frame index and duration even when the
+stream has no Xing or VBRI seek table. Seek rejects negative offsets and offsets
+beyond a known exact duration; sequential decode and stable EOF behavior remain
+unchanged. The scan performs file-size-linear work during decoder preparation.
+
 ## Codec and gapless observations
 
 `DecodedStreamInfo::codec` and `isLossy` are conservative.

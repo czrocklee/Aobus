@@ -231,6 +231,7 @@ namespace ao::gtk::test
     runtime.reloadAllTracks();
     auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));
     REQUIRE(playback.commands().startFromView(sourceViewId, trackId));
+    REQUIRE(waitForPlaybackSettlement(runtime, trackId));
     playback.commands().seek(std::chrono::milliseconds{500});
     playback.commands().setShuffleMode(rt::ShuffleMode::On);
     playback.commands().setRepeatMode(rt::RepeatMode::All);
@@ -287,6 +288,7 @@ namespace ao::gtk::test
     REQUIRE(listOrder != nullptr);
     REQUIRE(runtime.views().setPresentation(viewId, listOrder->spec));
     REQUIRE(playback.commands().startFromView(viewId, track1));
+    REQUIRE(waitForPlaybackSettlement(runtime, track1));
     playback.commands().seek(std::chrono::milliseconds{250});
     playback.commands().next();
     playback.commands().seek(std::chrono::milliseconds{550});

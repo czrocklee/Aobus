@@ -97,6 +97,18 @@ namespace ao::tui::test
         rt::test::addReadyAudioProvider(runtime, std::move(status));
         executor->drain();
       }
+
+      bool waitForPlayback(TrackId const trackId)
+      {
+        auto const settled = rt::test::waitForPlaybackSettlement(
+          *executor,
+          observedPositionRevision,
+          [this] { return runtime.playback().snapshot().transport.positionRevision; });
+        observedPositionRevision = runtime.playback().snapshot().transport.positionRevision;
+        return settled && runtime.playback().snapshot().transport.nowPlaying.trackId == trackId;
+      }
+
+      rt::PlaybackPositionRevision observedPositionRevision{};
     };
 
     rt::PlaybackSnapshot currentPlayback(EventControllerFixture& fixture)
@@ -118,6 +130,7 @@ namespace ao::tui::test
       auto const startTrackId = library.tracks()[0].id;
       auto& playback = fixture.runtime.playback();
       REQUIRE(playback.commands().startFromView(library.activeViewId(), startTrackId));
+      REQUIRE(fixture.waitForPlayback(startTrackId));
       REQUIRE(playback.snapshot().transport.duration > std::chrono::milliseconds{0});
     }
 
@@ -469,6 +482,7 @@ namespace ao::tui::test
     CHECK(library.tracks().size() == 2);
 
     enterCommand(controller, "play");
+    REQUIRE(fixture.waitForPlayback(library.tracks()[library.selectedTrack()].id));
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
 
     enterCommand(controller, "toggle");
@@ -665,6 +679,7 @@ namespace ao::tui::test
                                         .x = hitRegions.soulButtonBox.x_min,
                                         .y = hitRegions.soulButtonBox.y_min};
     CHECK(controller.handleEvent(ftxui::Event::Mouse("", clickSoulButton)));
+    REQUIRE(fixture.waitForPlayback(library.tracks()[library.selectedTrack()].id));
     CHECK(currentPlayback(fixture).transport.transport == audio::Transport::Playing);
     CHECK(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[library.selectedTrack()].id);
 
@@ -723,7 +738,9 @@ namespace ao::tui::test
     REQUIRE_FALSE(library.tracks().empty());
     auto& playback = fixture.runtime.playback();
     auto& commands = playback.commands();
-    REQUIRE(commands.startFromView(library.activeViewId(), library.tracks()[0].id));
+    auto const trackId = library.tracks()[0].id;
+    REQUIRE(commands.startFromView(library.activeViewId(), trackId));
+    REQUIRE(fixture.waitForPlayback(trackId));
     auto controller = EventController{
       fixture.screen,
       fixture.shell,
@@ -1377,6 +1394,7 @@ namespace ao::tui::test
     CHECK(controller.handleEvent(ftxui::Event::ArrowDown));
     REQUIRE(library.selectedTrack() == 1);
     CHECK(controller.handleEvent(ftxui::Event::Character("p")));
+    REQUIRE(fixture.waitForPlayback(library.tracks()[1].id));
     REQUIRE(currentPlayback(fixture).transport.nowPlaying.trackId == library.tracks()[1].id);
 
     CHECK(controller.handleEvent(ftxui::Event::Home));

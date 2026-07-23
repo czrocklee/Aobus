@@ -416,6 +416,38 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
+  TEST_CASE("Engine - lossy current track chooses logical drain fallback without opening its successor",
+            "[audio][unit][engine][gapless]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const data = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
+    auto decoderFactoryCallCount = std::atomic<std::size_t>{0};
+    auto engine = Engine{std::move(backendPtr),
+                         device,
+                         [&](std::filesystem::path const& path, Format const&)
+                         {
+                           decoderFactoryCallCount.fetch_add(1, std::memory_order_relaxed);
+                           auto const codec = path.extension() == ".mp3" ? AudioCodec::Mp3 : AudioCodec::Flac;
+                           auto decoderPtr = std::make_unique<ScriptedDecoderSession>(
+                             makeScriptedStreamInfo(format, codec, codec == AudioCodec::Mp3));
+                           decoderPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
+                           return decoderPtr;
+                         }};
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current.mp3"}));
+    auto const callsAfterCurrentOpen = decoderFactoryCallCount.load(std::memory_order_relaxed);
+    auto const successor = makePlaybackItem(PlaybackInput{.filePath = "successor.flac"});
+
+    auto const prepared = engine.setNext(successor);
+
+    REQUIRE(prepared);
+    CHECK(prepared->itemId == successor.id);
+    CHECK(prepared->transition == Engine::PreparedTransitionMode::DrainFallback);
+    CHECK(decoderFactoryCallCount.load(std::memory_order_relaxed) == callsAfterCurrentOpen);
+  }
+
   TEST_CASE("Engine - prepared unknown codec track takes drain fallback", "[audio][unit][engine][gapless]")
   {
     auto const device = makeEngineTestDevice();
@@ -535,6 +567,39 @@ namespace ao::audio::test
     REQUIRE(endedLatch.waitForCount(1));
     CHECK(advancedLatch.count() == 0);
     CHECK(engine.status().transport == Transport::Idle);
+  }
+
+  TEST_CASE("Engine - an unchanged device snapshot preserves the prepared successor",
+            "[audio][unit][engine-gapless][cancel]")
+  {
+    auto const device = makeEngineTestDevice();
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const firstData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
+    auto const secondData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
+    auto engine = Engine{std::move(backendPtr),
+                         device,
+                         makePathScriptedDecoderFactory({
+                           {.path = "first.flac", .info = makeScriptedStreamInfo(format), .data = firstData},
+                           {.path = "second.flac", .info = makeScriptedStreamInfo(format), .data = secondData},
+                         })};
+
+    auto advancedLatch = CallbackLatch{};
+    engine.setOnTrackAdvanced([&](Engine::TrackAdvanced const&) { advancedLatch.notify(); });
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
+    REQUIRE(engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"})));
+
+    engine.updateDevice(device);
+
+    auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 4>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == firstData);
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == secondData);
+    REQUIRE(advancedLatch.waitForCount(1));
   }
 
   TEST_CASE("Engine - clearNext before end of stream restores drain fallback", "[audio][unit][engine][gapless]")

@@ -41,6 +41,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <semaphore>
 #include <string>
 #include <string_view>
@@ -113,9 +114,30 @@ namespace ao::audio::test
         return subscribedRoutes.size();
       }
 
+      void setDevicesCallback(BackendProvider::OnDevicesChangedCallback callback)
+      {
+        auto const lock = std::scoped_lock{mutex};
+        devicesCallback = std::move(callback);
+      }
+
+      void emitDevices(std::vector<Device> devices)
+      {
+        auto callback = BackendProvider::OnDevicesChangedCallback{};
+        {
+          auto const lock = std::scoped_lock{mutex};
+          callback = devicesCallback;
+        }
+
+        if (callback)
+        {
+          callback(devices);
+        }
+      }
+
       mutable std::mutex mutex;
       RenderTarget* renderTarget = nullptr;
       std::vector<std::string> subscribedRoutes;
+      BackendProvider::OnDevicesChangedCallback devicesCallback;
     };
 
     class BarrierBackend final : public NullBackend
@@ -154,6 +176,7 @@ namespace ao::audio::test
       Subscription subscribeDevices(OnDevicesChangedCallback callback) override
       {
         callback(devices());
+        _probePtr->setDevicesCallback(std::move(callback));
         return {};
       }
 
@@ -188,20 +211,6 @@ namespace ao::audio::test
     };
 
     using rt::test::QueuedExecutor;
-
-    bool waitForQueuedCount(QueuedExecutor const& executor,
-                            std::size_t const expected,
-                            std::chrono::milliseconds const timeout = std::chrono::seconds{5})
-    {
-      auto const deadline = std::chrono::steady_clock::now() + timeout;
-
-      while (executor.queuedCount() < expected && std::chrono::steady_clock::now() < deadline)
-      {
-        std::this_thread::yield();
-      }
-
-      return executor.queuedCount() >= expected;
-    }
 
     Device pipeWireDevice(std::string displayName = "System Default")
     {
@@ -1085,6 +1094,465 @@ namespace ao::audio::test
     CHECK(player.clearPreparedNext() == nextItem.id);
   }
 
+  TEST_CASE("Player - blocked asynchronous preparation leaves executor and stop responsive",
+            "[audio][unit][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "blocked.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 100}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    executor.drain();
+
+    bool completionCalled = false;
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 101}, .input = PlaybackInput{.filePath = "blocked.flac"}},
+      {},
+      [] { return true; },
+      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    bool heartbeat = false;
+    executor.defer([&] { heartbeat = true; });
+    executor.drain();
+    CHECK(heartbeat);
+    CHECK(player.transport() == Transport::Playing);
+
+    player.stop();
+    CHECK(player.transport() == Transport::Idle);
+    gatePtr->release.release();
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK_FALSE(completionCalled);
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
+  }
+
+  TEST_CASE("Player - explicit cancellation discards a blocked start preparation",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "blocked-start.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    bool acceptanceCalled = false;
+    bool completionCalled = false;
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 102}, .input = PlaybackInput{.filePath = "blocked-start.flac"}},
+      {},
+      [&]
+      {
+        acceptanceCalled = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    player.cancelStartPreparation();
+    gatePtr->release.release();
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK_FALSE(acceptanceCalled);
+    CHECK_FALSE(completionCalled);
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
+  }
+
+  TEST_CASE("Player - explicit cancellation discards a blocked lookahead preparation",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "blocked-next.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 103}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    bool acceptanceCalled = false;
+    bool completionCalled = false;
+    REQUIRE(player.prepareNextAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 104}, .input = PlaybackInput{.filePath = "blocked-next.flac"}},
+      [&]
+      {
+        acceptanceCalled = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedNextResult>) { completionCalled = true; }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    player.cancelLookaheadPreparation();
+    gatePtr->release.release();
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK_FALSE(acceptanceCalled);
+    CHECK_FALSE(completionCalled);
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
+  }
+
+  TEST_CASE("Player - replacement suppresses a blocked lookahead for the same item",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "same-next.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 105}, .input = PlaybackInput{.filePath = "current.flac"}}));
+
+    auto const successor = Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 106}, .input = PlaybackInput{.filePath = "same-next.flac"}};
+    bool firstAccepted = false;
+    bool firstCompleted = false;
+    REQUIRE(player.prepareNextAsync(
+      successor,
+      [&]
+      {
+        firstAccepted = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedNextResult>) { firstCompleted = true; }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    bool secondAccepted = false;
+    bool secondCompleted = false;
+    REQUIRE(player.prepareNextAsync(
+      successor,
+      [&]
+      {
+        secondAccepted = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedNextResult> prepared)
+      {
+        REQUIRE(prepared);
+        secondCompleted = true;
+      }));
+
+    gatePtr->release.release();
+    REQUIRE(executor.drainUntil([&] { return secondCompleted; }, std::chrono::seconds{5}));
+
+    CHECK_FALSE(firstAccepted);
+    CHECK_FALSE(firstCompleted);
+    CHECK(secondAccepted);
+
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+  }
+
+  TEST_CASE("Player - start acceptance veto completes exactly once with conflict",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "vetoed-start.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    std::uint32_t acceptanceCount = 0;
+    auto completions = std::vector<Result<Engine::PreparedPlaybackStart>>{};
+
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 107}, .input = PlaybackInput{.filePath = "vetoed-start.flac"}},
+      {},
+      [&]
+      {
+        ++acceptanceCount;
+        return false;
+      },
+      [&](Result<Engine::PreparedPlaybackStart> prepared) { completions.push_back(std::move(prepared)); }));
+    REQUIRE(gatePtr->waitForEntry());
+    gatePtr->release.release();
+    REQUIRE(executor.drainUntil([&] { return !completions.empty(); }, std::chrono::seconds{5}));
+
+    CHECK(acceptanceCount == 1);
+    REQUIRE(completions.size() == 1);
+    REQUIRE_FALSE(completions.front());
+    CHECK(completions.front().error().code == Error::Code::Conflict);
+  }
+
+  TEST_CASE("Player - worker lookahead acceptance veto completes exactly once with conflict",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "vetoed-next.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 108}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    std::uint32_t acceptanceCount = 0;
+    auto completions = std::vector<Result<Engine::PreparedNextResult>>{};
+
+    REQUIRE(player.prepareNextAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 109}, .input = PlaybackInput{.filePath = "vetoed-next.flac"}},
+      [&]
+      {
+        ++acceptanceCount;
+        return false;
+      },
+      [&](Result<Engine::PreparedNextResult> prepared) { completions.push_back(std::move(prepared)); }));
+    REQUIRE(gatePtr->waitForEntry());
+    gatePtr->release.release();
+    REQUIRE(executor.drainUntil([&] { return !completions.empty(); }, std::chrono::seconds{5}));
+
+    CHECK(acceptanceCount == 1);
+    REQUIRE(completions.size() == 1);
+    REQUIRE_FALSE(completions.front());
+    CHECK(completions.front().error().code == Error::Code::Conflict);
+  }
+
+  TEST_CASE("Player - logical drain-fallback acceptance veto completes exactly once with conflict",
+            "[audio][regression][player][concurrency]")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    auto player =
+      Player{runtime,
+             [format](std::filesystem::path const& path, Format const&)
+             {
+               auto const lossy = path.extension() == ".mp3";
+               auto decoderPtr = std::make_unique<ScriptedDecoderSession>(
+                 makeScriptedStreamInfo(format, lossy ? AudioCodec::Mp3 : AudioCodec::Flac, lossy));
+               decoderPtr->setReadScript(
+                 {{.data = std::vector<std::byte>(4096, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+               return decoderPtr;
+             }};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 110}, .input = PlaybackInput{.filePath = "current.mp3"}}));
+    std::uint32_t acceptanceCount = 0;
+    auto completions = std::vector<Result<Engine::PreparedNextResult>>{};
+
+    REQUIRE(player.prepareNextAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 111}, .input = PlaybackInput{.filePath = "fallback.flac"}},
+      [&]
+      {
+        ++acceptanceCount;
+        return false;
+      },
+      [&](Result<Engine::PreparedNextResult> prepared) { completions.push_back(std::move(prepared)); }));
+
+    CHECK(acceptanceCount == 1);
+    REQUIRE(completions.size() == 1);
+    REQUIRE_FALSE(completions.front());
+    CHECK(completions.front().error().code == Error::Code::Conflict);
+  }
+
+  TEST_CASE("Player - asynchronous start distinguishes unchanged and stale device evidence",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "device-evidence.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    auto optCompletion = std::optional<Result<Engine::PreparedPlaybackStart>>{};
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 105}, .input = PlaybackInput{.filePath = "device-evidence.flac"}},
+      {},
+      [] { return true; },
+      [&](Result<Engine::PreparedPlaybackStart> prepared) { optCompletion.emplace(std::move(prepared)); }));
+    REQUIRE(gatePtr->waitForEntry());
+    auto device = Device{.id = DeviceId{"barrier-device"},
+                         .displayName = "Barrier Device",
+                         .description = "Controlled test output",
+                         .isDefault = true,
+                         .backendId = kBarrierBackend};
+
+    SECTION("unchanged snapshot")
+    {
+      probePtr->emitDevices({device});
+      executor.drain();
+      gatePtr->release.release();
+      REQUIRE(executor.drainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
+      REQUIRE(*optCompletion);
+      CHECK(player.commitPlayback(std::move(**optCompletion)));
+    }
+
+    SECTION("changed snapshot")
+    {
+      device.description = "Changed output capabilities";
+      probePtr->emitDevices({device});
+      executor.drain();
+      gatePtr->release.release();
+      REQUIRE(executor.drainUntil([&] { return optCompletion.has_value(); }, std::chrono::seconds{5}));
+      REQUIRE_FALSE(*optCompletion);
+      CHECK(optCompletion->error().code == Error::Code::Conflict);
+    }
+  }
+
+  TEST_CASE("Player - asynchronous start adopts before commit and preserves the old session until settlement",
+            "[audio][unit][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "replacement.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 110}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    executor.drain();
+    auto const oldGeneration = player.audioPlaybackGeneration();
+    auto* const oldTarget = probePtr->target();
+
+    bool accepted = false;
+    bool committed = false;
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 111}, .input = PlaybackInput{.filePath = "replacement.flac"}},
+      {},
+      [&]
+      {
+        accepted = true;
+        CHECK(player.transport() == Transport::Playing);
+        CHECK(player.audioPlaybackGeneration() == oldGeneration);
+        CHECK(probePtr->target() == oldTarget);
+        return true;
+      },
+      [&](Result<Engine::PreparedPlaybackStart> preparedStart)
+      {
+        REQUIRE(preparedStart);
+        CHECK(player.transport() == Transport::Playing);
+        CHECK(player.audioPlaybackGeneration() == oldGeneration);
+        CHECK(probePtr->target() == oldTarget);
+        REQUIRE(player.commitPlayback(std::move(*preparedStart)));
+        committed = true;
+      }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    CHECK(player.transport() == Transport::Playing);
+    CHECK(player.audioPlaybackGeneration() == oldGeneration);
+    CHECK(probePtr->target() == oldTarget);
+    gatePtr->release.release();
+
+    REQUIRE(executor.drainUntil([&] { return committed; }, std::chrono::seconds{5}));
+    CHECK(accepted);
+    CHECK(player.audioPlaybackGeneration() > oldGeneration);
+  }
+
+  TEST_CASE("Player - shutdown rejects a blocked preparation completion without owner access",
+            "[audio][unit][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, makeBlockingPreparationDecoderFactory(gatePtr, "blocked.flac")};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    bool completionCalled = false;
+
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 120}, .input = PlaybackInput{.filePath = "blocked.flac"}},
+      {},
+      [] { return true; },
+      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    player.shutdown();
+    gatePtr->release.release();
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK_FALSE(completionCalled);
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
+  }
+
+  TEST_CASE("Player - queued preparation completion is harmless after owner destruction",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto playerPtr = std::make_unique<Player>(runtime, makeBlockingPreparationDecoderFactory(gatePtr, "queued.flac"));
+    playerPtr->addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(playerPtr->setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    executor.drain();
+
+    bool acceptanceCalled = false;
+    bool completionCalled = false;
+    REQUIRE(playerPtr->stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 121}, .input = PlaybackInput{.filePath = "queued.flac"}},
+      {},
+      [&]
+      {
+        acceptanceCalled = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
+    REQUIRE(gatePtr->waitForEntry());
+
+    gatePtr->release.release();
+    REQUIRE(executor.waitUntilQueuedCount(1, std::chrono::seconds{5}));
+    playerPtr.reset();
+    executor.drain();
+    runtime.requestStop();
+    runtime.join();
+
+    CHECK_FALSE(acceptanceCalled);
+    CHECK_FALSE(completionCalled);
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
+          gatePtr->createdPtr->load(std::memory_order_relaxed));
+  }
+
   TEST_CASE("Player - staged decode error processed before commit preserves active generations and lookahead",
             "[audio][unit][player][staged]")
   {
@@ -1203,7 +1671,7 @@ namespace ao::audio::test
     auto* const oldTarget = probePtr->target();
     REQUIRE(oldTarget != nullptr);
     oldTarget->handleRouteReady("old-route");
-    REQUIRE(waitForQueuedCount(executor, 2));
+    REQUIRE(executor.waitUntilQueuedCount(2, std::chrono::seconds{5}));
 
     auto barrier = Engine::PreparedCancellationBarrier{};
 
@@ -1255,7 +1723,7 @@ namespace ao::audio::test
     REQUIRE(oldTarget->renderPcm(output).bytesWritten == output.size());
     REQUIRE(oldTarget->renderPcm(output).drained);
     oldTarget->handleDrainComplete();
-    REQUIRE(waitForQueuedCount(executor, 3));
+    REQUIRE(executor.waitUntilQueuedCount(3, std::chrono::seconds{5}));
 
     auto barrier = Engine::PreparedCancellationBarrier{};
 

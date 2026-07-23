@@ -442,7 +442,8 @@ namespace ao::audio
           return makeError(Error::Code::SeekFailed, "MP3 decoder is not open");
         }
 
-        if (offset > _implPtr->info.duration)
+        if (offset < std::chrono::milliseconds{0} ||
+            (_implPtr->info.duration > std::chrono::milliseconds{0} && offset > _implPtr->info.duration))
         {
           return makeError(Error::Code::SeekFailed, "Seek offset out of bounds");
         }

@@ -112,7 +112,7 @@ namespace ao::audio::test
     };
   }
 
-  // Tracks how many decoder sessions are live. `TrackSession::create` opens a
+  // Tracks how many decoder sessions are live. Track preparation opens a
   // short-lived probe decoder and then the streaming decoder per track, so
   // only `live()` measured at a settled point (never mid-open) equals the
   // number of streaming sources currently alive.
@@ -126,6 +126,71 @@ namespace ao::audio::test
       return created.load(std::memory_order_relaxed) - destroyed.load(std::memory_order_relaxed);
     }
   };
+
+  struct BlockingPreparationGate final
+  {
+    void enterAndWait()
+    {
+      if (blocked.exchange(true, std::memory_order_relaxed))
+      {
+        return;
+      }
+
+      entered.release();
+      release.acquire();
+    }
+
+    bool waitForEntry(std::chrono::milliseconds timeout = std::chrono::seconds{5})
+    {
+      return entered.try_acquire_for(timeout);
+    }
+
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release{0};
+    std::atomic<bool> blocked{false};
+    std::shared_ptr<std::atomic<std::size_t>> createdPtr = std::make_shared<std::atomic<std::size_t>>(0);
+    std::shared_ptr<std::atomic<std::size_t>> destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
+  };
+
+  inline auto makeBlockingPreparationDecoderFactory(std::shared_ptr<BlockingPreparationGate> gatePtr,
+                                                    std::filesystem::path blockedPath)
+  {
+    return [gatePtr = std::move(gatePtr), blockedPath = std::move(blockedPath)](
+             std::filesystem::path const& path, Format const&)
+    {
+      auto const isBlockedPath =
+        path == blockedPath || (!blockedPath.has_parent_path() && path.filename() == blockedPath);
+
+      if (isBlockedPath)
+      {
+        gatePtr->enterAndWait();
+      }
+
+      auto const format = Format{
+        .sampleRate = 44100,
+        .channels = 2,
+        .bitDepth = 16,
+        .isInterleaved = true,
+      };
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = format,
+        .outputFormat = format,
+        .duration = std::chrono::seconds{2},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+
+      if (isBlockedPath)
+      {
+        gatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
+        decoderPtr->setDestroyCounter(gatePtr->destroyedPtr);
+      }
+
+      return decoderPtr;
+    };
+  }
 
   // Like makePathScriptedDecoderFactory, but every decoder it creates bumps the
   // shared life counters, so a test can observe that retired gapless sources

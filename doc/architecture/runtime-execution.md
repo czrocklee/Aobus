@@ -82,6 +82,11 @@ The [outcome channel specification](../spec/failure/outcome-channel.md) owns the
 The worker pool is not a second application-state owner.
 Worker tasks operate on thread-safe/core facilities or isolated values and publish results back through the callback boundary.
 
+Interactive playback uses the same rule for view-based starts and gapless lookahead.
+Player captures an isolated move-only preparation value containing copied route, decoder-factory, input, and generation evidence; a worker may open, negotiate, seek, and preroll through that value without accessing Player, Engine, runtime services, or frontend state.
+After resuming on the callback executor, upper request/source identity and Engine playback/route context are revalidated before adoption can allocate a source generation or publish any state.
+The old playback session remains authoritative during this round trip.
+
 Mutating library tasks enter coordinator maintenance on the callback executor before slow preparation begins.
 The maintenance guard may accompany worker preparation, but it carries no LMDB transaction and no writer mutex.
 Worker code acquires a coordinator-owned mutation only for its apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before maintenance exit can advertise authoring availability.
@@ -120,6 +125,15 @@ callback executor
   -> worker pool performs blocking/core work
   -> resume on callback executor
   -> update runtime state and notify observers
+```
+
+Playback preparation specializes that round trip:
+
+```text
+callback executor: validate request and capture isolated audio evidence
+  -> worker pool: decoder open, format negotiation, initial seek, preroll
+  -> callback executor: reject stale request or ask Engine to adopt
+  -> explicit start only: commit transport and succession as one settled subject
 ```
 
 A mutating library task refines the round trip:
@@ -170,8 +184,28 @@ The current Engine non-realtime queue and Player-to-executor task stream have no
 `Runtime::spawnCancellable` owns a stop source through its returned scoped registration.
 Higher-level owners retain that handle or use a lifetime scope so cancellation is requested when the operation or owner ends.
 Cancellation is cooperative and checked at executor switches, timers, and subsystem-specific checkpoints.
+Playback preparation has independent start and lookahead handles.
+Its decoder call may not observe a stop token, so cancellation prevents executor adoption but does not promise that an in-progress file or codec call returns immediately.
+The callback-resumption checkpoint is the task-level supersession fence;
+application acceptance checks semantic candidate identity, and Engine separately
+revalidates captured playback and route evidence.
+If the callback gate remains open, an acceptance veto produces exactly one
+`Conflict` completion. Cancellation, replacement, or teardown can end the task
+path earlier and suppress completion.
+Player closes its callback gate and cancels both handles before Engine teardown; a worker that returns after Player teardown then owns and destroys only its detached preparation value.
+Runtime teardown closes callback admission before stopping and joining its
+worker pool. A callback-executor resumption queued before that boundary is
+discarded instead of resuming application code; destroying its Asio handler
+unwinds the suspended coroutine frame, while shared callback state keeps the
+worker executor alive until that destruction completes.
+Because pool join is final rather than detached, a decoder open that does not
+return can extend `CoreRuntime` shutdown even though cancellation has already
+made its result inadmissible.
 
-`spawnLogged`, `spawnCancellable`, and lifetime-bound completion use the same injected exception handler after their terminal ownership bookkeeping.
+`spawnLogged`, `spawnCancellable`, and lifetime-bound completion capture shared
+diagnostic state that is independent of the `Runtime` object, so terminal
+closures never borrow `this`.
+They use the same injected exception handler after their terminal ownership bookkeeping.
 The handler may run concurrently on worker threads and therefore must synchronize its own mutable state.
 A frontend workflow that catches an unexpected exception before a cancellable callback hop reports it immediately, then performs only generic presentation on the callback executor; later cancellation may suppress presentation but cannot erase the diagnostic.
 

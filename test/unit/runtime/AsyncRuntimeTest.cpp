@@ -52,6 +52,24 @@ namespace ao::rt::test
       co_return std::this_thread::get_id();
     }
 
+    Task<void> callbackAfterRuntimeShutdown(Runtime* runtime,
+                                            AsyncTestState<bool> resumed,
+                                            [[maybe_unused]] std::shared_ptr<void> lifetimePtr)
+    {
+      co_await runtime->resumeOnCallbackExecutor();
+      resumed.set(true);
+    }
+
+    struct DiagnosticLifetimeHandler final
+    {
+      void operator()([[maybe_unused]] std::exception_ptr exceptionPtr,
+                      [[maybe_unused]] std::string_view context) const noexcept
+      {
+      }
+
+      std::shared_ptr<void> lifetimePtr;
+    };
+
     Task<void> failingTask(Runtime* runtime)
     {
       co_await runtime->resumeOnWorker();
@@ -317,6 +335,34 @@ namespace ao::rt::test
 
     runtime.requestStop();
     runtime.join();
+  }
+
+  TEST_CASE("AsyncRuntime - teardown discards queued callback and destroys its suspended frame",
+            "[runtime][regression][async][concurrency]")
+  {
+    auto executor = QueuedExecutor{};
+    auto resumed = AsyncTestState<bool>::create(false);
+    auto lifetimePtr = std::make_shared<std::uint8_t>(0);
+    auto const weakLifetimePtr = std::weak_ptr<void>{lifetimePtr};
+    auto diagnosticLifetimePtr = std::make_shared<std::uint8_t>(0);
+    auto const weakDiagnosticLifetimePtr = std::weak_ptr<void>{diagnosticLifetimePtr};
+
+    {
+      auto runtimePtr = std::make_unique<Runtime>(executor, 1, DiagnosticLifetimeHandler{diagnosticLifetimePtr});
+      diagnosticLifetimePtr.reset();
+      runtimePtr->spawnLogged(callbackAfterRuntimeShutdown(runtimePtr.get(), resumed, lifetimePtr));
+      lifetimePtr.reset();
+      executor.checkQueued();
+      CHECK_FALSE(weakLifetimePtr.expired());
+      CHECK_FALSE(weakDiagnosticLifetimePtr.expired());
+    }
+
+    CHECK_FALSE(weakLifetimePtr.expired());
+    CHECK_FALSE(weakDiagnosticLifetimePtr.expired());
+    executor.drain();
+    CHECK_FALSE(resumed.load());
+    CHECK(weakLifetimePtr.expired());
+    CHECK(weakDiagnosticLifetimePtr.expired());
   }
 
   TEST_CASE("AsyncRuntime - unobserved and future task failures have one owner", "[runtime][unit][async]")

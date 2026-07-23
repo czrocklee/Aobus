@@ -3,6 +3,7 @@
 
 #include "app/AppDialog.h"
 
+#include <glib-object.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
@@ -28,6 +29,11 @@ namespace ao::gtk
     constexpr int kMessageMinWidth = 360;
     constexpr int kMessageMaxWidth = 520;
     constexpr int kActionSpacing = 8;
+
+    void markFinalized(void* const data, GObject* /*whereTheObjectWas*/)
+    {
+      *static_cast<bool*>(data) = true;
+    }
   } // namespace
 
   AppDialog::AppDialog()
@@ -72,8 +78,18 @@ namespace ao::gtk
 
   void AppDialog::response(std::int32_t id)
   {
+    bool finalized = false;
+    auto* const object = G_OBJECT(gobj());
+    ::g_object_weak_ref(object, markFinalized, &finalized);
     _responseInProgress = true;
     _signalResponse.emit(id);
+
+    if (finalized)
+    {
+      return;
+    }
+
+    ::g_object_weak_unref(object, markFinalized, &finalized);
     _responseInProgress = false;
   }
 

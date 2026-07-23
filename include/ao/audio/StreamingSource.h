@@ -44,10 +44,21 @@ namespace ao::audio
 
     ~StreamingSource() override;
 
+    /// Fills the initial PCM buffer without installing callbacks or starting
+    /// the source-owned decode thread. The source may be moved between owners
+    /// only by moving its owning pointer after this call returns.
+    Result<> prepare();
+
+    /// Installs the source-error callback and starts steady-state decoding.
+    /// Must be called exactly once after successful prepare().
+    Result<> activate(std::function<void(Error const&)> onError);
+
+    /// Compatibility helper that performs prepare() followed by activate().
     Result<> initialize();
 
-    // The caller quiesces render and query consumers. This method separately
-    // stops and joins the source-owned decode producer before resetting PCM.
+    // Requires successful prepare() and activate(). The caller quiesces render
+    // and query consumers. This method separately stops and joins the
+    // source-owned decode producer before resetting PCM.
     Result<> seek(std::chrono::milliseconds offset) noexcept override;
 
     std::size_t read(std::span<std::byte> output) noexcept override;
@@ -78,6 +89,8 @@ namespace ao::audio
     std::uint64_t _bytesPerSecond = 0;
     std::chrono::milliseconds _prerollDuration{0};
     std::size_t _decodeHighWatermarkByteCount = 0;
+    bool _prepared = false;
+    bool _activated = false;
 
     // Producer-confined. initialize()/seek() run before the decode worker, and
     // seek stops and joins that worker before resetting this value.

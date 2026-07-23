@@ -63,13 +63,12 @@ namespace ao::audio::detail
     }
   } // namespace
 
-  Result<TrackSession::OpenedTrack> TrackSession::create(PlaybackInput const& input,
-                                                         Device const& device,
-                                                         BackendId const& backendId,
-                                                         ProfileId const& profileId,
-                                                         DecoderFactoryFn const& decoderFactory,
-                                                         OnSourceErrorFn onSourceError,
-                                                         std::chrono::milliseconds const initialOffset)
+  Result<TrackSession::PreparedTrack> TrackSession::prepare(PlaybackInput const& input,
+                                                            Device const& device,
+                                                            BackendId const& backendId,
+                                                            ProfileId const& profileId,
+                                                            DecoderFactoryFn const& decoderFactory,
+                                                            std::chrono::milliseconds const initialOffset)
   {
     auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
 
@@ -103,14 +102,31 @@ namespace ao::audio::detail
         }
       }
 
-      auto sourcePtr = createPcmSource(std::move(decoderPtr), info, std::move(onSourceError));
+      auto sourcePtr = preparePcmSource(std::move(decoderPtr), info);
 
-      return OpenedTrack{.sourcePtr = std::move(sourcePtr), .backendFormat = backendFormat, .info = info};
+      return PreparedTrack{.sourcePtr = std::move(sourcePtr), .backendFormat = backendFormat, .info = info};
     }
     catch (DecoderException const& ex)
     {
       return std::unexpected{ex.error()};
     }
+  }
+
+  Result<TrackSession::OpenedTrack> TrackSession::activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError)
+  {
+    if (!preparedTrack.sourcePtr)
+    {
+      return makeError(Error::Code::InvalidState, "Prepared track has no streaming source");
+    }
+
+    if (auto activated = preparedTrack.sourcePtr->activate(std::move(onSourceError)); !activated)
+    {
+      return std::unexpected{activated.error()};
+    }
+
+    return OpenedTrack{.sourcePtr = std::shared_ptr<PcmSource>{std::move(preparedTrack.sourcePtr)},
+                       .backendFormat = preparedTrack.backendFormat,
+                       .info = preparedTrack.info};
   }
 
   void TrackSession::negotiateFormat(std::filesystem::path const& path,
@@ -162,16 +178,15 @@ namespace ao::audio::detail
     backendFormat = plan.deviceFormat;
   }
 
-  std::shared_ptr<PcmSource> TrackSession::createPcmSource(std::unique_ptr<DecoderSession> decoderPtr,
-                                                           DecodedStreamInfo const& info,
-                                                           OnSourceErrorFn onSourceError)
+  std::unique_ptr<StreamingSource> TrackSession::preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,
+                                                                  DecodedStreamInfo const& info)
   {
-    auto streamingSourcePtr = std::make_shared<StreamingSource>(
-      std::move(decoderPtr), info, std::move(onSourceError), kPrerollDuration, kDecodeHighWatermarkThreshold);
+    auto streamingSourcePtr = std::make_unique<StreamingSource>(
+      std::move(decoderPtr), info, OnSourceErrorFn{}, kPrerollDuration, kDecodeHighWatermarkThreshold);
 
-    if (auto const initResult = streamingSourcePtr->initialize(); !initResult)
+    if (auto const prepareResult = streamingSourcePtr->prepare(); !prepareResult)
     {
-      throwDecoderError(initResult.error());
+      throwDecoderError(prepareResult.error());
     }
 
     return streamingSourcePtr;

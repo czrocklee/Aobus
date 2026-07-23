@@ -174,6 +174,14 @@ namespace ao::rt::test
     return PlaybackTransport{executor, library, notifications, std::make_unique<audio::Player>(executor)};
   }
 
+  inline PlaybackTransport makePlaybackTransport(async::Runtime& runtime,
+                                                 library::MusicLibrary& library,
+                                                 NotificationService& notifications)
+  {
+    return PlaybackTransport{
+      runtime.callbackExecutor(), library, notifications, std::make_unique<audio::Player>(runtime)};
+  }
+
   // Injectable delay strategy for tests: pass a pointer to one into the Runtime
   // (directly, or via makeRuntime/AppRuntimeDependencies) at construction, then
   // drive its pending sleeps deterministically. The Sleeper must outlive the
@@ -922,6 +930,28 @@ namespace ao::rt::test
       }
     }
 
+    template<typename Predicate>
+    bool drainUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::seconds{2})
+    {
+      auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+      while (!predicate())
+      {
+        if (runOne())
+        {
+          continue;
+        }
+
+        if (auto const now = std::chrono::steady_clock::now();
+            now >= deadline || !waitUntilQueued(std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now)))
+        {
+          return predicate();
+        }
+      }
+
+      return true;
+    }
+
     std::size_t queuedCount() const
     {
       auto const lock = std::scoped_lock{_mutex};
@@ -978,6 +1008,7 @@ namespace ao::rt::test
 
     Library& library() { return ensureLibrary(); }
     auto& writer() { return ensureLibrary().writer(); }
+    void releaseLibrary() { _libraryPtr.reset(); }
     BoundTrackTargets bind(std::span<TrackId const> trackIds)
     {
       return ao::test::requireValue(ensureLibrary().bindTrackTargets(trackIds));
@@ -1122,6 +1153,13 @@ namespace ao::rt::test
       return _cv.wait_for(lock, timeout, [this] { return _queuedCount != 0; });
     }
 
+    bool waitUntilQueuedCount(std::size_t const expected,
+                              std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
+    {
+      auto lock = std::unique_lock{_mutex};
+      return _cv.wait_for(lock, timeout, [this, expected] { return _queuedCount >= expected; });
+    }
+
     void checkQueued(std::chrono::milliseconds timeout = std::chrono::seconds{2}) const
     {
       INFO("Timed out waiting for queued executor task");
@@ -1169,6 +1207,36 @@ namespace ao::rt::test
     async::LoopExecutor _loopExecutor;
   };
 
+  template<typename ExecutorT, typename PositionRevisionFn>
+  bool waitForPlaybackSettlement(ExecutorT& executor,
+                                 PlaybackPositionRevision const previousRevision,
+                                 PositionRevisionFn positionRevision,
+                                 std::chrono::milliseconds const timeout = std::chrono::seconds{2})
+  {
+    return executor.drainUntil([&] { return positionRevision() != previousRevision; }, timeout);
+  }
+
+  template<typename ExecutorT, typename AdmissionFn, typename PositionRevisionFn>
+  Result<> admitPlaybackAndWait(ExecutorT& executor,
+                                AdmissionFn admit,
+                                PositionRevisionFn positionRevision,
+                                std::chrono::milliseconds const timeout = std::chrono::seconds{2})
+  {
+    auto const previousRevision = positionRevision();
+
+    if (auto admitted = admit(); !admitted)
+    {
+      return admitted;
+    }
+
+    if (!waitForPlaybackSettlement(executor, previousRevision, std::move(positionRevision), timeout))
+    {
+      return makeError(Error::Code::InvalidState, "Timed out waiting for playback settlement");
+    }
+
+    return {};
+  }
+
   template<typename Predicate>
   bool runLoopUntil(async::LoopExecutor& executor,
                     Predicate predicate,
@@ -1211,6 +1279,40 @@ namespace ao::rt::test
       {
         return true;
       }
+    }
+
+    return true;
+  }
+
+  template<typename Predicate>
+  bool driveRenderUntil(audio::RenderTarget& renderTarget,
+                        QueuedExecutor& executor,
+                        std::span<std::byte> output,
+                        Predicate predicate,
+                        std::chrono::milliseconds timeout = std::chrono::seconds{5})
+  {
+    auto const deadline = std::chrono::steady_clock::now() + timeout;
+
+    while (!predicate())
+    {
+      executor.drain();
+
+      if (predicate())
+      {
+        return true;
+      }
+
+      renderTarget.renderPcm(output);
+      auto const now = std::chrono::steady_clock::now();
+
+      if (now >= deadline)
+      {
+        return predicate();
+      }
+
+      auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+      auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
+      std::ignore = executor.waitUntilQueued(pollInterval);
     }
 
     return true;
@@ -1281,7 +1383,7 @@ namespace ao::rt::test
     TrackSourceCache sources{libraryFixture.library(), changes};
     ViewService views{executor, libraryFixture.library(), sources};
     NotificationService notifications{asyncRuntime};
-    PlaybackTransport playbackTransport{makePlaybackTransport(executor, libraryFixture.library(), notifications)};
+    PlaybackTransport playbackTransport{makePlaybackTransport(asyncRuntime, libraryFixture.library(), notifications)};
     PlaybackSuccession
       succession{executor, views, sources, libraryFixture.library(), playbackTransport, notifications, asyncRuntime};
     PlaybackBootstrap playbackBootstrap{playbackTransport};

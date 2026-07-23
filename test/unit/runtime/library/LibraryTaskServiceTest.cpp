@@ -111,10 +111,18 @@ namespace ao::rt::test
     };
 
     template<typename Future>
-    void requireInjectedFailure(Future& future)
+    void requireInjectedFailure(Future& future, async::Runtime& runtime)
     {
       auto const exceptionPtr = captureTaskFutureException(future);
       REQUIRE(exceptionPtr);
+
+      // std::future becomes ready before Asio has finished releasing its copy
+      // of the exception_ptr. Join before inspecting the exception object so
+      // ThreadSanitizer does not observe that terminal-handler destruction
+      // racing the test's what() read.
+      runtime.requestStop();
+      runtime.join();
+
       bool sawInjectedFailure = false;
 
       try
@@ -132,11 +140,12 @@ namespace ao::rt::test
 
     template<typename Future>
     void requireFaultCleanupOrdering(Future& future,
+                                     async::Runtime& runtime,
                                      std::stop_source& stopSource,
                                      FaultOrderingExecutor& executor,
                                      std::vector<LibraryChanges::LibraryTaskCompletionStatus>& completionStatuses)
     {
-      requireInjectedFailure(future);
+      requireInjectedFailure(future, runtime);
 
       CHECK(completionStatuses.empty());
       CHECK(executor.dispatchCount() == 5);
@@ -717,9 +726,7 @@ namespace ao::rt::test
 
     auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan), {}, stopSource.get_token()));
 
-    requireFaultCleanupOrdering(future, stopSource, executor, completionStatuses);
-    runtime.requestStop();
-    runtime.join();
+    requireFaultCleanupOrdering(future, runtime, stopSource, executor, completionStatuses);
   }
 
   TEST_CASE("LibraryTaskService - backfill fault queues cleanup before preserving the exception",
@@ -755,8 +762,6 @@ namespace ao::rt::test
 
     auto future = runtime.spawn(service.backfillAudioIdentityAsync(stopSource.get_token()));
 
-    requireFaultCleanupOrdering(future, stopSource, executor, completionStatuses);
-    runtime.requestStop();
-    runtime.join();
+    requireFaultCleanupOrdering(future, runtime, stopSource, executor, completionStatuses);
   }
 } // namespace ao::rt::test

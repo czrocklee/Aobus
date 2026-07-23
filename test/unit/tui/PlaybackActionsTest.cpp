@@ -34,6 +34,7 @@ namespace ao::tui::test
     auto& commands = playback.commands();
 
     CHECK(playSelected(commands, tracks, -4, fixture.viewId));
+    REQUIRE(fixture.waitForPlayback(firstId));
     auto snapshot = playback.snapshot();
     CHECK(snapshot.transport.nowPlaying.trackId == firstId);
     CHECK(snapshot.transport.nowPlaying.sourceListId == rt::kAllTracksListId);
@@ -41,6 +42,7 @@ namespace ao::tui::test
     CHECK(snapshot.succession.currentTrackId == firstId);
 
     CHECK(playSelected(commands, tracks, 12, fixture.viewId));
+    REQUIRE(fixture.waitForPlayback(secondId));
     snapshot = playback.snapshot();
     CHECK(snapshot.transport.nowPlaying.trackId == secondId);
     CHECK(snapshot.transport.nowPlaying.sourceListId == rt::kAllTracksListId);

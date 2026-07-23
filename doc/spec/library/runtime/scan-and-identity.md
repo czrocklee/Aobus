@@ -90,7 +90,6 @@ This preserves whole-plan all-or-nothing behavior; writer hold time and rollback
 After preparation and immediately before opening the coordinator mutation, application fingerprints every moved destination again and compares it with both the prepared and planned identities.
 A mismatch or a failure after relink processing begins aborts the complete transaction.
 New and changed files do not receive an equivalent final stat check, and missing paths are not checked for reappearance.
-[RFC 0004](../../../rfc/0004-scan-file-revalidation.md) proposes that narrow revalidation.
 
 Successful explicit relink derivation consumes an unresolved plan and produces one `Moved` item only when the selected `Missing` and `New` items carry the same non-pending planned identity.
 The derived plan preserves the source library and revision binding, and live destination fingerprinting remains mandatory during apply.
@@ -154,4 +153,3 @@ Cancellation is cooperative during payload hashing and before commit.
 - [Library architecture](../../../architecture/library.md)
 - [Library change publication](change-publication.md)
 - [Supported audio files](../../../reference/media/audio-file.md)
-- [RFC 0004: scan file revalidation](../../../rfc/0004-scan-file-revalidation.md)

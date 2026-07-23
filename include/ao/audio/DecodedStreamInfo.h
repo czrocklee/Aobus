@@ -20,5 +20,7 @@ namespace ao::audio
     std::chrono::milliseconds duration{0};
     bool isLossy = false;
     AudioCodec codec = AudioCodec::Unknown;
+
+    bool operator==(DecodedStreamInfo const&) const = default;
   };
 } // namespace ao::audio

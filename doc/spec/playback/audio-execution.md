@@ -65,6 +65,11 @@ PlaybackTransport owns runtime metadata separately; `audio::PlaybackInput` conta
 
 Concurrent calls to `play`, `stagePlayback`, `commitPlayback`, `setNext`, `clearNext`, `pause`, `resume`, `stop`, `seek`, `setBackend`, `updateDevice`, `setVolume`, and `setMuted` enter the Engine control serialization.
 This order guarantees safety and a coherent final state, not user-intent priority between racing callers.
+The synchronous compatibility forms of `stagePlayback` and `setNext` retain
+that serialization across decoder open, activation, and registration or
+lookahead publication. Only their explicit asynchronous capture/prepare/adopt
+forms release serialization while worker preparation is pending and therefore
+revalidate captured evidence during adoption.
 
 The complete `status()` snapshot enters control serialization because it observes the current source's PCM queue.
 It waits for an in-flight command such as seek to finish before reading buffered duration, but unlike control-command entry it does not settle pending realtime signals and may still return the pre-splice snapshot.
@@ -75,6 +80,10 @@ They may observe an intermediate transport until the active control command or e
 Every public control command settles pending splice signals at entry under the control lock.
 This closes the window after the realtime cursor changed but before status and current-format state caught up.
 Callbacks produced by a control-thread settle are forwarded to the event worker rather than invoked on the caller thread.
+The narrower transition-state lock is held only while copying or comparing
+current format evidence. Disarming or publishing lookahead and settling
+realtime splice signals occur outside that lock because splice settlement also
+updates the same transition state.
 
 Pending drain-complete signals are not materialized by command entry.
 A command may retire or reposition their render session, so they enter the normal event queue and are rechecked against render generation and drain epoch before notification.
@@ -129,8 +138,19 @@ The realtime consumer still performs only ring reads; it does not update a separ
 
 ### Prepared lookahead
 
-`setNext` opens the candidate through the same track-session path as `play` on the control thread.
-If the candidate and current route are gapless-capable, Engine retains the node as lookahead and arms its raw pointer for realtime consumption.
+Player captures lookahead input, route, current-format, playback-generation, and
+start-context evidence on the callback executor. When the current session is
+gapless-capable, decoder open, negotiation, and preroll run on an async worker.
+Engine adopts the result only after Player's task remains admissible and
+Engine's captured playback/route/format context still matches.
+If the candidate and current route are gapless-capable, adoption starts the
+decode thread, retains the node as lookahead, and arms its raw pointer for
+realtime consumption.
+
+When the current session is lossy, unknown, or otherwise not gapless-capable,
+preparation produces a logical `DrainFallback` result on the callback executor
+without invoking the successor decoder factory. Its application token fixes the
+successor identity but is not proof that the successor has opened successfully.
 
 The gapless verdict is fixed at arm time.
 The current negotiated format cannot change without consuming or clearing lookahead, so the render thread performs no format read or capability test.
@@ -138,18 +158,50 @@ The current negotiated format cannot change without consuming or clearing lookah
 `clearNext` returns the disarmed opaque item id when the render thread has not consumed it.
 If already consumed, it returns empty and upper runtime retains matching metadata for the later advanced callback.
 Explicit `play`, `stop`, `seek`, and output-device changes clear unconsumed lookahead.
+An `updateDevice` call carrying the unchanged device snapshot is a no-op and
+does not invalidate pending starts or prepared lookahead.
 Prepared-source failure clears lookahead without changing the current track; after splice, that source generation is current and fails as current.
 
 A splice is permitted only when both sessions are gapless-capable and negotiated backend formats are identical.
 Current gapless-capable codecs are lossless FLAC, ALAC, and WAV.
 Lossy/unknown codecs or format mismatch drain and close; no resampling, channel remapping, or artificial silence forces compatibility.
+Lookahead open failure, cancellation, or stale completion leaves the current
+session and successor choice unchanged; it neither skips nor redraws a shuffle
+candidate.
 
 ### Explicit staged start
 
-`stagePlayback` opens a source without publishing it to the render timeline.
-`commitPlayback` publishes only if the active generation and start context still match.
-Source opening and initial preparation currently run synchronously on the caller, normally the runtime callback executor.
-[RFC 0033](../../rfc/0033-nonblocking-playback-preparation.md) proposes worker preparation followed by generation-checked Engine adoption.
+Track-session construction is split into preparation and activation.
+Preparation opens the decoder, reads stream metadata, negotiates and possibly
+reopens the decoder, applies the initial seek, and prerolls a `StreamingSource`
+without installing an Engine error callback or starting its decode thread.
+Activation installs that callback and starts the thread.
+The synchronous compatibility path composes both phases.
+
+For `startFromView`, Player captures a move-only preparation value from Engine
+and runs preparation on the async worker pool. That value owns copied device,
+backend/profile, input, decoder factory, and generation evidence and holds no
+Player, Engine, runtime, or frontend reference. Completion resumes on Player's
+executor through a stop-token checkpoint and then checks the upper acceptance
+predicate. Engine revalidates playback generation, start context, and route
+before it allocates source/playback generations, registers the staged source,
+and activates it.
+Player retires the applicable task handle before invoking acceptance. Acceptance
+and completion are outward publications; after acceptance Player rechecks its
+callback gate and reacquires the owner, then computes the complete adoption or
+error result before invoking completion without later Player access.
+When the gate remains open, an acceptance veto completes exactly once with
+`Conflict`. The same rule applies to worker lookahead and callback-executor
+logical `DrainFallback` lookahead.
+An evidence mismatch returns `Conflict`; upper playback owners discard that
+stale preparation without presenting it as a media-open or route failure.
+If activation or candidate construction fails, adoption removes the staged
+registration before returning the error.
+
+The adopted source is still not published to the render timeline.
+`commitPlayback` publishes only if the active generation and start context still
+match. The old source remains active through worker preparation and adoption;
+backend stop/close/open and the transport subject change occur only at commit.
 
 Engine keeps a weak staged-source registry so a candidate decode failure is not discarded as a stale timeline event.
 If the event worker wins, it latches the original error and commit returns it before changing callback floor, lookahead, or active source.
@@ -208,7 +260,10 @@ Commands admitted after lifecycle transition do not enter backend/timeline logic
 Concurrent shutdown callers wait for the single teardown; repeated completed shutdown is a no-op.
 
 Player public methods and destruction run on its executor, which outlives Player.
-Destruction closes the shared gate before providers and Engine stop, so already queued tasks return without touching Player state.
+Destruction closes the shared gate and cancels start/lookahead task handles before providers and Engine stop, so already queued tasks return without touching Player state.
+Decoder open is not forcibly interruptible; a blocked worker may finish after Player teardown, but after cancellation it can only destroy its own isolated preparation value.
+Final runtime teardown stops and joins the worker pool, so the same blocked call
+can extend application shutdown until it returns.
 `BackendProvider::shutdown()` is `noexcept`; after it returns, provider-owned asynchronous sources cannot initiate new device or graph callbacks.
 
 ## Failure and cancellation
@@ -220,6 +275,13 @@ Terminal events remain asynchronous relative to the producer callback, so querie
 
 Engine control has no general stop-token cancellation.
 Decoder/source workers and runtime orchestration own their more specific cancellation.
+Stop, replacement start, seek, output change, clear, and shutdown invalidate the
+applicable Player task handle. The callback-resumption stop-token checkpoint
+prevents its late result from reaching acceptance or Engine adoption, but
+cancellation does not guarantee immediate return from a decoder or filesystem
+call.
+Because cancellation, replacement, and teardown end the task path rather than
+vetoing acceptance, they may suppress completion entirely.
 Shutdown is the terminal lifetime operation and must not originate from an Engine/Player notification stack.
 
 Realtime ring overflow and violated single-producer assumptions are invariant failures, not recoverable media outcomes.
@@ -263,4 +325,3 @@ Frontends do not add locks around backend calls or reconstruct gapless/successio
 - [Playback succession cursor](cursor.md)
 - [Decoder session](decoder-session.md)
 - [Audio quality analysis](quality-analysis.md)
-- [RFC 0033: non-blocking playback preparation](../../rfc/0033-nonblocking-playback-preparation.md)

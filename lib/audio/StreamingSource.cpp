@@ -64,16 +64,33 @@ namespace ao::audio
 
   Result<> StreamingSource::initialize()
   {
+    auto callback = std::move(_onError);
+
+    if (auto prepared = prepare(); !prepared)
+    {
+      if (callback)
+      {
+        callback(prepared.error());
+      }
+
+      return prepared;
+    }
+
+    return activate(std::move(callback));
+  }
+
+  Result<> StreamingSource::prepare()
+  {
+    if (_prepared || _activated)
+    {
+      return makeError(Error::Code::InvalidState, "Streaming source preparation may only run once");
+    }
+
     auto const seekToken = _seekStopSource.get_token();
 
     try
     {
       fillUntil(_prerollDuration, seekToken);
-
-      if (!_decoderReachedEof.load(std::memory_order_relaxed))
-      {
-        startDecodeThread();
-      }
 
       if (_failed.load(std::memory_order_relaxed))
       {
@@ -82,6 +99,7 @@ namespace ao::audio
           Error{.code = Error::Code::InvalidState, .message = "Streaming source failed during initialization"}));
       }
 
+      _prepared = true;
       return {};
     }
     catch (detail::DecoderException const& ex)
@@ -100,6 +118,24 @@ namespace ao::audio
 
       return std::unexpected{ex.error()};
     }
+  }
+
+  Result<> StreamingSource::activate(std::function<void(Error const&)> onError)
+  {
+    if (!_prepared || _activated)
+    {
+      return makeError(Error::Code::InvalidState, "Streaming source activation requires one prepared source");
+    }
+
+    _onError = std::move(onError);
+    _activated = true;
+
+    if (!_decoderReachedEof.load(std::memory_order_relaxed))
+    {
+      startDecodeThread();
+    }
+
+    return {};
   }
 
   std::size_t StreamingSource::read(std::span<std::byte> output) noexcept
@@ -121,6 +157,11 @@ namespace ao::audio
   // streaming source intentionally fails fast if that escapes its noexcept contract.
   Result<> StreamingSource::seek(std::chrono::milliseconds offset) noexcept
   {
+    if (!_prepared || !_activated)
+    {
+      return makeError(Error::Code::InvalidState, "Streaming source seek requires an activated source");
+    }
+
     stopDecodeThread();
 
     _seekStopSource.request_stop();

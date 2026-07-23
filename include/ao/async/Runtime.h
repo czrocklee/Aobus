@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <exception>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string_view>
@@ -88,16 +89,19 @@ namespace ao::async
     void spawnWithLifetime(LifetimeScope* scope, CancellableTask task);
 
   private:
-    void handleUnhandledException(std::exception_ptr exceptionPtr, std::string_view context) const noexcept;
+    struct CallbackState;
+    struct DiagnosticState;
+
+    static void handleUnhandledException(DiagnosticState const& state,
+                                         std::exception_ptr exceptionPtr,
+                                         std::string_view context) noexcept;
 
     std::move_only_function<void()> startCancellable(CancellableTask task,
                                                      std::function<void(std::exception_ptr)> completion);
 
     Executor& _callbackExecutor;
-    // Terminal completion closures borrow this Runtime. The destructor stops
-    // and joins _workerPool before member teardown.
-    AsyncExceptionHandler _exceptionHandler;
-    boost::asio::thread_pool _workerPool;
+    std::shared_ptr<DiagnosticState> _diagnosticStatePtr;
+    std::shared_ptr<CallbackState> _callbackStatePtr;
     Sleeper* _sleeper;
   };
 } // namespace ao::async

@@ -64,7 +64,7 @@ namespace ao::rt
       , playbackTransport{runtime.async().callbackExecutor(),
                           runtime.musicLibrary(),
                           runtime.notifications(),
-                          std::make_unique<audio::Player>(runtime.async().callbackExecutor())}
+                          std::make_unique<audio::Player>(runtime.async())}
       , playbackSuccession{runtime.async().callbackExecutor(),
                            viewService,
                            runtime.sources(),

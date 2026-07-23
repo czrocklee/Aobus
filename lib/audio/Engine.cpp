@@ -3,6 +3,7 @@
 
 #include "detail/RenderPath.h"
 #include "detail/RenderTimeline.h"
+#include "detail/TrackPreparation.h"
 #include "detail/TrackSession.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -672,14 +673,18 @@ namespace ao::audio
 
     void discardSpliceSignalNode(TrackNode* node) noexcept { timeline.dropDisarmedLookahead(node); }
 
-    // Arm `session` as the gapless successor. Control thread only. Any previous
-    // successor is first disarmed or, if the render thread has already consumed
-    // it, settled through the splice signal path before the new node is
-    // published.
-    void armPreparedNext(TrackNode&& session)
+    bool currentTransitionMatches(std::optional<Format> const& optBackendFormat,
+                                  std::optional<DecodedStreamInfo> const& optStreamInfo) const
     {
-      clearPreparedNext();
-      timeline.armLookahead(std::make_unique<TrackNode>(std::move(session)));
+      auto const lock = std::scoped_lock{transitionMutex};
+      return optCurrentBackendFormat == optBackendFormat && optCurrentStreamInfo == optStreamInfo;
+    }
+
+    void publishPreparedNext(std::unique_ptr<TrackNode> nodePtr)
+    {
+      gsl_Expects(nodePtr != nullptr);
+      gsl_Expects(timeline.lookaheadNode() == nullptr);
+      timeline.armLookahead(std::move(nodePtr));
     }
 
     void resetTransitionState()
@@ -1559,35 +1564,51 @@ namespace ao::audio
     }
 
     // ── Track opening ──────────────────────────────────────────────
+    detail::TrackSession::OnSourceErrorFn makeSourceErrorHandler(std::uint64_t const sourceGeneration,
+                                                                 std::uint64_t const playbackGeneration)
+    {
+      return [this, sourceGeneration, playbackGeneration](Error const& error)
+      {
+        enqueuePlaybackEvent(SourceErrorEvent{
+          .sourceGeneration = sourceGeneration, .playbackGeneration = playbackGeneration, .error = error});
+      };
+    }
+
+    static TrackNode makeTrackNode(PlaybackItem const& item,
+                                   detail::TrackSession::OpenedTrack session,
+                                   std::uint64_t const sourceGeneration,
+                                   std::uint64_t const playbackGeneration)
+    {
+      return TrackNode{.item = item,
+                       .sourcePtr = std::move(session.sourcePtr),
+                       .backendFormat = session.backendFormat,
+                       .info = session.info,
+                       .sourceGeneration = sourceGeneration,
+                       .playbackGeneration = playbackGeneration};
+    }
+
     Result<TrackNode> openTrackSession(PlaybackItem const& item,
                                        std::uint64_t sourceGeneration,
                                        std::uint64_t playbackGeneration,
                                        std::chrono::milliseconds initialOffset = {})
     {
-      auto session = detail::TrackSession::create(
-        item.input,
-        currentDevice,
-        backendPtr->backendId(),
-        backendPtr->profileId(),
-        decoderFactory,
-        [this, sourceGeneration, playbackGeneration](Error const& err)
-        {
-          enqueuePlaybackEvent(SourceErrorEvent{
-            .sourceGeneration = sourceGeneration, .playbackGeneration = playbackGeneration, .error = err});
-        },
-        initialOffset);
+      auto prepared = detail::TrackSession::prepare(
+        item.input, currentDevice, backendPtr->backendId(), backendPtr->profileId(), decoderFactory, initialOffset);
+
+      if (!prepared)
+      {
+        return std::unexpected{prepared.error()};
+      }
+
+      auto session = detail::TrackSession::activate(
+        std::move(*prepared), makeSourceErrorHandler(sourceGeneration, playbackGeneration));
 
       if (!session)
       {
         return std::unexpected{session.error()};
       }
 
-      return TrackNode{.item = item,
-                       .sourcePtr = std::move(session->sourcePtr),
-                       .backendFormat = session->backendFormat,
-                       .info = session->info,
-                       .sourceGeneration = sourceGeneration,
-                       .playbackGeneration = playbackGeneration};
+      return makeTrackNode(item, std::move(*session), sourceGeneration, playbackGeneration);
     }
 
     void registerStagedPlayback(std::shared_ptr<StagedPlaybackState> const& stagedStatePtr)
@@ -1633,9 +1654,9 @@ namespace ao::audio
 
     void publishCurrentTrackState(TrackNode const& session)
     {
-      // TrackSession::create() ran lock-free above; only the status/routeTracker
-      // publication needs the lock, which status() also takes when it reads them
-      // concurrently from the UI thread.
+      // Track preparation and activation ran lock-free above; only the
+      // status/routeTracker publication needs the lock, which status() also
+      // takes when it reads them concurrently from the UI thread.
       auto const lock = std::scoped_lock{stateMutex};
       optCurrentItem = session.item;
       status.duration = session.info.duration;
@@ -1664,7 +1685,6 @@ namespace ao::audio
     void updateDeviceUnlocked(Device const& device);
     Result<> applyInitialOffset(TrackNode& node, std::chrono::milliseconds initialOffset);
     void playUnlocked(PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
-    Result<PreparedNextResult> setNextUnlocked(PlaybackItem const& item);
     std::optional<PlaybackItemId> clearNextUnlocked();
     void pauseUnlocked();
     void resumeUnlocked();
@@ -1722,6 +1742,89 @@ namespace ao::audio
   Engine::PreparedPlaybackStart::PreparedPlaybackStart(PreparedPlaybackStart&&) noexcept = default;
   Engine::PreparedPlaybackStart& Engine::PreparedPlaybackStart::operator=(PreparedPlaybackStart&&) noexcept = default;
 
+  struct detail::TrackPreparation::Impl final
+  {
+    Engine::PlaybackItem item;
+    Device device;
+    BackendId backendId;
+    ProfileId profileId;
+    DecoderFactoryFn decoderFactory;
+    std::chrono::milliseconds initialOffset{0};
+    std::uint64_t basePlaybackGeneration = 0;
+    std::uint64_t startContextRevision = 0;
+    Purpose purpose = Purpose::ExplicitStart;
+    std::optional<Format> optCurrentBackendFormat;
+    std::optional<DecodedStreamInfo> optCurrentStreamInfo;
+    std::optional<detail::TrackSession::PreparedTrack> optPreparedTrack;
+    bool logicalDrainFallback = false;
+    bool preparationAttempted = false;
+  };
+
+  detail::TrackPreparation::TrackPreparation(std::unique_ptr<Impl> implPtr)
+    : _implPtr{std::move(implPtr)}
+  {
+  }
+
+  detail::TrackPreparation::~TrackPreparation() = default;
+  detail::TrackPreparation::TrackPreparation(TrackPreparation&&) noexcept = default;
+  detail::TrackPreparation& detail::TrackPreparation::operator=(TrackPreparation&&) noexcept = default;
+
+  bool detail::TrackPreparation::requiresWorker() const noexcept
+  {
+    return _implPtr != nullptr && !_implPtr->logicalDrainFallback;
+  }
+
+  bool detail::TrackPreparation::matchesControlContext(Engine const& engine,
+                                                       std::uint64_t const currentGeneration) const
+  {
+    return _implPtr != nullptr && _implPtr->basePlaybackGeneration == currentGeneration &&
+           _implPtr->startContextRevision == engine._implPtr->startContextRevision &&
+           _implPtr->device == engine._implPtr->currentDevice &&
+           _implPtr->backendId == engine._implPtr->backendPtr->backendId() &&
+           _implPtr->profileId == engine._implPtr->backendPtr->profileId();
+  }
+
+  Result<> detail::TrackPreparation::prepare()
+  {
+    if (!_implPtr || _implPtr->preparationAttempted)
+    {
+      return makeError(Error::Code::InvalidState, "Track preparation may only run once");
+    }
+
+    _implPtr->preparationAttempted = true;
+
+    if (_implPtr->logicalDrainFallback)
+    {
+      return {};
+    }
+
+    try
+    {
+      auto prepared = detail::TrackSession::prepare(_implPtr->item.input,
+                                                    _implPtr->device,
+                                                    _implPtr->backendId,
+                                                    _implPtr->profileId,
+                                                    _implPtr->decoderFactory,
+                                                    _implPtr->initialOffset);
+
+      if (!prepared)
+      {
+        return std::unexpected{prepared.error()};
+      }
+
+      _implPtr->optPreparedTrack.emplace(std::move(*prepared));
+      return {};
+    }
+    catch (std::exception const& error)
+    {
+      return makeError(Error::Code::Generic, error.what());
+    }
+    catch (...)
+    {
+      return makeError(Error::Code::Generic, "Unknown failure during track preparation");
+    }
+  }
+
   Engine::Impl::ControlLock::~ControlLock() = default;
 
   void Engine::Impl::setBackendUnlocked(std::unique_ptr<Backend> nextBackendPtr, Device const& device)
@@ -1773,6 +1876,11 @@ namespace ao::audio
 
   void Engine::Impl::updateDeviceUnlocked(Device const& device)
   {
+    if (device == currentDevice)
+    {
+      return;
+    }
+
     ++startContextRevision;
     currentDevice = device;
     clearPreparedNext();
@@ -2081,73 +2189,6 @@ namespace ao::audio
     backendPtr->start();
   }
 
-  Result<Engine::PreparedNextResult> Engine::Impl::setNextUnlocked(PlaybackItem const& item)
-  {
-    bool haveActive = false;
-    {
-      auto const lock = std::scoped_lock{transitionMutex};
-      haveActive = optCurrentBackendFormat && optCurrentStreamInfo;
-    }
-
-    if (!haveActive)
-    {
-      clearPreparedNext();
-      return makeError(Error::Code::InvalidState, "No active playback to prepare next track");
-    }
-
-    auto const sourceGeneration = nextSourceGeneration++;
-    auto const playbackGeneration = currentPlaybackGeneration.load(std::memory_order_acquire);
-    auto openedTrack = openTrackSession(item, sourceGeneration, playbackGeneration);
-
-    if (!openedTrack)
-    {
-      clearPreparedNext();
-      return std::unexpected{openedTrack.error()};
-    }
-
-    // Decide gapless capability now, on the control thread, against the track
-    // that is currently playing. The current format only changes on a splice
-    // (which consumes the lookahead cursor) or a control command (which clears
-    // it), so this verdict stays valid until the render thread consumes the
-    // successor.
-    bool stillActive = false;
-    bool capable = false;
-    {
-      auto const lock = std::scoped_lock{transitionMutex};
-      stillActive = optCurrentBackendFormat && optCurrentStreamInfo;
-
-      if (stillActive)
-      {
-        capable = canSplice(*optCurrentStreamInfo, *optCurrentBackendFormat, *openedTrack);
-      }
-    }
-
-    if (!stillActive)
-    {
-      clearPreparedNext();
-      return makeError(Error::Code::InvalidState, "Active playback changed before the next track was prepared");
-    }
-
-    if (capable)
-    {
-      armPreparedNext(std::move(*openedTrack));
-    }
-    else
-    {
-      // Not gapless-capable (lossy source, or a format the current route cannot
-      // hold): leave the lookahead cursor empty so the render thread drains and the
-      // caller performs an ordinary (re-opening) transition. The item id is still
-      // returned so the caller knows the successor is playable.
-      clearPreparedNext();
-    }
-
-    return PreparedNextResult{
-      .itemId = item.id,
-      .transition = capable ? PreparedTransitionMode::Gapless : PreparedTransitionMode::DrainFallback,
-      .generation = playbackGeneration,
-    };
-  }
-
   std::optional<Engine::PlaybackItemId> Engine::Impl::clearNextUnlocked()
   {
     return clearPreparedNext();
@@ -2443,6 +2484,262 @@ namespace ao::audio
                        .generation = _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire)};
   }
 
+  Result<detail::TrackPreparation> detail::TrackPreparation::capture(Engine& engine,
+                                                                     Engine::PlaybackItem const& item,
+                                                                     std::chrono::milliseconds const initialOffset,
+                                                                     Purpose const purpose)
+  {
+    auto const controlLock = engine._implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return makeError(Error::Code::InvalidState, "Engine is shut down");
+    }
+
+    return captureUnlocked(engine, item, initialOffset, purpose);
+  }
+
+  Result<detail::TrackPreparation> detail::TrackPreparation::captureUnlocked(
+    Engine& engine,
+    Engine::PlaybackItem const& item,
+    std::chrono::milliseconds const initialOffset,
+    Purpose const purpose)
+  {
+    auto preparationImplPtr = std::make_unique<Impl>();
+    preparationImplPtr->item = item;
+    preparationImplPtr->device = engine._implPtr->currentDevice;
+    preparationImplPtr->backendId = engine._implPtr->backendPtr->backendId();
+    preparationImplPtr->profileId = engine._implPtr->backendPtr->profileId();
+    preparationImplPtr->decoderFactory = engine._implPtr->decoderFactory;
+    preparationImplPtr->initialOffset = initialOffset;
+    preparationImplPtr->basePlaybackGeneration =
+      engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
+    preparationImplPtr->startContextRevision = engine._implPtr->startContextRevision;
+    preparationImplPtr->purpose = purpose;
+
+    if (purpose == Purpose::GaplessLookahead)
+    {
+      auto const transitionLock = std::scoped_lock{engine._implPtr->transitionMutex};
+
+      if (!engine._implPtr->optCurrentBackendFormat || !engine._implPtr->optCurrentStreamInfo)
+      {
+        return makeError(Error::Code::InvalidState, "No active playback to prepare next track");
+      }
+
+      preparationImplPtr->optCurrentBackendFormat = engine._implPtr->optCurrentBackendFormat;
+      preparationImplPtr->optCurrentStreamInfo = engine._implPtr->optCurrentStreamInfo;
+      preparationImplPtr->logicalDrainFallback =
+        !Engine::Impl::isGaplessCapable(*preparationImplPtr->optCurrentStreamInfo);
+    }
+
+    return TrackPreparation{std::move(preparationImplPtr)};
+  }
+
+  Result<Engine::PreparedPlaybackStart> detail::TrackPreparation::adoptStart(Engine& engine) &&
+  {
+    auto const controlLock = engine._implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return makeError(Error::Code::InvalidState, "Engine is shut down");
+    }
+
+    return std::move(*this).adoptStartUnlocked(engine);
+  }
+
+  Result<Engine::PreparedPlaybackStart> detail::TrackPreparation::adoptStartUnlocked(Engine& engine) &&
+  {
+    auto consumedPreparation = std::move(*this);
+    auto* const preparationImpl = consumedPreparation._implPtr.get();
+
+    if (preparationImpl == nullptr || preparationImpl->purpose != Purpose::ExplicitStart ||
+        !preparationImpl->preparationAttempted || !preparationImpl->optPreparedTrack)
+    {
+      return makeError(Error::Code::InvalidState, "Explicit playback preparation is incomplete");
+    }
+
+    auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
+
+    if (!consumedPreparation.matchesControlContext(engine, currentGeneration))
+    {
+      return makeError(Error::Code::Conflict, "Playback or output route changed during track preparation");
+    }
+
+    auto const candidateGeneration = engine._implPtr->reservePlaybackGeneration();
+    auto const sourceGeneration = engine._implPtr->nextSourceGeneration++;
+    using EngineImpl = Engine::Impl;
+    auto stagedStatePtr = std::make_shared<EngineImpl::StagedPlaybackState>(EngineImpl::StagedPlaybackState{
+      .sourceGeneration = sourceGeneration,
+      .playbackGeneration = candidateGeneration,
+    });
+
+    class [[nodiscard]] StagedRegistrationGuard final
+    {
+    public:
+      StagedRegistrationGuard(EngineImpl& owner, std::shared_ptr<EngineImpl::StagedPlaybackState> statePtr)
+        : _owner{owner}, _statePtr{std::move(statePtr)}, _active{true}
+      {
+        _owner.registerStagedPlayback(_statePtr);
+      }
+
+      ~StagedRegistrationGuard()
+      {
+        if (_active)
+        {
+          _owner.releaseStagedPlaybackRegistrationUnlocked(_statePtr);
+        }
+      }
+
+      void dismiss() noexcept { _active = false; }
+
+      StagedRegistrationGuard(StagedRegistrationGuard const&) = delete;
+      StagedRegistrationGuard& operator=(StagedRegistrationGuard const&) = delete;
+      StagedRegistrationGuard(StagedRegistrationGuard&&) = delete;
+      StagedRegistrationGuard& operator=(StagedRegistrationGuard&&) = delete;
+
+    private:
+      EngineImpl& _owner;
+      std::shared_ptr<EngineImpl::StagedPlaybackState> _statePtr;
+      bool _active = false;
+    };
+
+    auto registration = StagedRegistrationGuard{*engine._implPtr, stagedStatePtr};
+
+    try
+    {
+      auto activated =
+        detail::TrackSession::activate(std::move(*preparationImpl->optPreparedTrack),
+                                       engine._implPtr->makeSourceErrorHandler(sourceGeneration, candidateGeneration));
+      preparationImpl->optPreparedTrack.reset();
+
+      if (!activated)
+      {
+        return std::unexpected{activated.error()};
+      }
+
+      auto preparedImplPtr = std::make_unique<Engine::PreparedPlaybackStart::Impl>();
+      preparedImplPtr->owner = engine._implPtr.get();
+      preparedImplPtr->nodePtr = std::make_unique<EngineImpl::TrackNode>(
+        EngineImpl::makeTrackNode(preparationImpl->item, std::move(*activated), sourceGeneration, candidateGeneration));
+      preparedImplPtr->stagedStatePtr = std::move(stagedStatePtr);
+      preparedImplPtr->initialOffset = preparationImpl->initialOffset;
+      preparedImplPtr->baseGeneration = preparationImpl->basePlaybackGeneration;
+      preparedImplPtr->candidateGeneration = candidateGeneration;
+      preparedImplPtr->startContextRevision = preparationImpl->startContextRevision;
+      preparedImplPtr->stagedRegistrationActive = true;
+      registration.dismiss();
+      return Engine::PreparedPlaybackStart{std::move(preparedImplPtr)};
+    }
+    catch (std::exception const& error)
+    {
+      return makeError(Error::Code::Generic, error.what());
+    }
+    catch (...)
+    {
+      return makeError(Error::Code::Generic, "Unknown failure during track activation");
+    }
+  }
+
+  Result<Engine::PreparedNextResult> detail::TrackPreparation::adoptNext(Engine& engine) &&
+  {
+    auto const controlLock = engine._implPtr->lockControl();
+
+    if (!controlLock)
+    {
+      return makeError(Error::Code::InvalidState, "Engine is shut down");
+    }
+
+    return std::move(*this).adoptNextUnlocked(engine);
+  }
+
+  Result<Engine::PreparedNextResult> detail::TrackPreparation::adoptNextUnlocked(Engine& engine) &&
+  {
+    auto consumedPreparation = std::move(*this);
+    auto* const preparationImpl = consumedPreparation._implPtr.get();
+
+    if (preparationImpl == nullptr || preparationImpl->purpose != Purpose::GaplessLookahead ||
+        !preparationImpl->preparationAttempted)
+    {
+      return makeError(Error::Code::InvalidState, "Lookahead preparation is incomplete");
+    }
+
+    auto const currentGeneration = engine._implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
+    auto const currentMatches = engine._implPtr->currentTransitionMatches(
+      preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo);
+
+    if (!consumedPreparation.matchesControlContext(engine, currentGeneration) || !currentMatches)
+    {
+      return makeError(Error::Code::Conflict, "Playback or output route changed during lookahead preparation");
+    }
+
+    if (!preparationImpl->logicalDrainFallback && !preparationImpl->optPreparedTrack)
+    {
+      return makeError(Error::Code::InvalidState, "Lookahead source preparation is missing");
+    }
+
+    bool capable = false;
+    auto nodePtr = std::unique_ptr<Engine::Impl::TrackNode>{};
+
+    if (preparationImpl->optPreparedTrack)
+    {
+      auto const& preparedTrack = *preparationImpl->optPreparedTrack;
+      capable = Engine::Impl::isGaplessCapable(preparedTrack.info) &&
+                preparationImpl->optCurrentBackendFormat == preparedTrack.backendFormat;
+
+      if (capable)
+      {
+        auto const sourceGeneration = engine._implPtr->nextSourceGeneration++;
+
+        try
+        {
+          auto activated = detail::TrackSession::activate(
+            std::move(*preparationImpl->optPreparedTrack),
+            engine._implPtr->makeSourceErrorHandler(sourceGeneration, currentGeneration));
+          preparationImpl->optPreparedTrack.reset();
+
+          if (!activated)
+          {
+            return std::unexpected{activated.error()};
+          }
+
+          nodePtr = std::make_unique<Engine::Impl::TrackNode>(Engine::Impl::makeTrackNode(
+            preparationImpl->item, std::move(*activated), sourceGeneration, currentGeneration));
+        }
+        catch (std::exception const& error)
+        {
+          return makeError(Error::Code::Generic, error.what());
+        }
+        catch (...)
+        {
+          return makeError(Error::Code::Generic, "Unknown failure during lookahead activation");
+        }
+      }
+    }
+
+    // Once the old cursor is disarmed, clearPreparedNext settles a splice that
+    // raced adoption. With no armed lookahead left, the refreshed transition
+    // snapshot cannot change again before this control command publishes.
+    engine._implPtr->clearPreparedNext();
+
+    if (!engine._implPtr->currentTransitionMatches(
+          preparationImpl->optCurrentBackendFormat, preparationImpl->optCurrentStreamInfo))
+    {
+      return makeError(Error::Code::Conflict, "Playback changed while adopting lookahead preparation");
+    }
+
+    if (!capable)
+    {
+      return Engine::PreparedNextResult{.itemId = preparationImpl->item.id,
+                                        .transition = Engine::PreparedTransitionMode::DrainFallback,
+                                        .generation = currentGeneration};
+    }
+
+    engine._implPtr->publishPreparedNext(std::move(nodePtr));
+    return Engine::PreparedNextResult{.itemId = preparationImpl->item.id,
+                                      .transition = Engine::PreparedTransitionMode::Gapless,
+                                      .generation = currentGeneration};
+  }
+
   Result<Engine::PreparedPlaybackStart> Engine::stagePlayback(PlaybackItem const& item,
                                                               std::chrono::milliseconds const initialOffset)
   {
@@ -2453,31 +2750,20 @@ namespace ao::audio
       return makeError(Error::Code::InvalidState, "Engine is shut down");
     }
 
-    auto const baseGeneration = _implPtr->currentPlaybackGeneration.load(std::memory_order_acquire);
-    auto const candidateGeneration = _implPtr->reservePlaybackGeneration();
-    auto const sourceGeneration = _implPtr->nextSourceGeneration++;
-    auto openedTrack = _implPtr->openTrackSession(item, sourceGeneration, candidateGeneration, initialOffset);
+    auto preparation = detail::TrackPreparation::captureUnlocked(
+      *this, item, initialOffset, detail::TrackPreparation::Purpose::ExplicitStart);
 
-    if (!openedTrack)
+    if (!preparation)
     {
-      return std::unexpected{openedTrack.error()};
+      return std::unexpected{preparation.error()};
     }
 
-    auto preparedImplPtr = std::make_unique<PreparedPlaybackStart::Impl>();
-    auto stagedStatePtr = std::make_shared<Impl::StagedPlaybackState>(Impl::StagedPlaybackState{
-      .sourceGeneration = sourceGeneration,
-      .playbackGeneration = candidateGeneration,
-    });
-    preparedImplPtr->owner = _implPtr.get();
-    preparedImplPtr->nodePtr = std::make_unique<Impl::TrackNode>(std::move(*openedTrack));
-    preparedImplPtr->stagedStatePtr = stagedStatePtr;
-    preparedImplPtr->initialOffset = initialOffset;
-    preparedImplPtr->baseGeneration = baseGeneration;
-    preparedImplPtr->candidateGeneration = candidateGeneration;
-    preparedImplPtr->startContextRevision = _implPtr->startContextRevision;
-    preparedImplPtr->stagedRegistrationActive = true;
-    _implPtr->registerStagedPlayback(stagedStatePtr);
-    return PreparedPlaybackStart{std::move(preparedImplPtr)};
+    if (auto prepared = preparation->prepare(); !prepared)
+    {
+      return std::unexpected{prepared.error()};
+    }
+
+    return std::move(*preparation).adoptStartUnlocked(*this);
   }
 
   Result<Engine::PlaybackStartReceipt> Engine::commitPlayback(PreparedPlaybackStart&& preparedStart)
@@ -2504,7 +2790,7 @@ namespace ao::audio
       if (preparedImpl->baseGeneration != currentGeneration ||
           preparedImpl->startContextRevision != _implPtr->startContextRevision)
       {
-        return makeError(Error::Code::InvalidState, "Playback changed after this start was staged");
+        return makeError(Error::Code::Conflict, "Playback changed after this start was staged");
       }
 
       if (preparedImpl->stagedStatePtr && preparedImpl->stagedStatePtr->optError)
@@ -2625,7 +2911,25 @@ namespace ao::audio
       return makeError(Error::Code::InvalidState, "Engine is shut down");
     }
 
-    return _implPtr->setNextUnlocked(item);
+    // Settle a splice already claimed by render before capturing the current
+    // transition. Adoption repeats this step to cover a splice that races the
+    // synchronous decoder open.
+    _implPtr->clearPreparedNext();
+
+    auto preparation =
+      detail::TrackPreparation::captureUnlocked(*this, item, {}, detail::TrackPreparation::Purpose::GaplessLookahead);
+
+    if (!preparation)
+    {
+      return std::unexpected{preparation.error()};
+    }
+
+    if (auto prepared = preparation->prepare(); !prepared)
+    {
+      return std::unexpected{prepared.error()};
+    }
+
+    return std::move(*preparation).adoptNextUnlocked(*this);
   }
 
   std::optional<Engine::PlaybackItemId> Engine::clearNext()

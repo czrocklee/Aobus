@@ -201,7 +201,6 @@ A scan plan is an opaque move-only runtime value whose immutable items are bound
 Scan apply validates that evidence after maintenance admission and again at its single write boundary, so callers cannot fabricate items, cross libraries, or replay an already superseded snapshot.
 The current write transaction covers every prepared item and preserves whole-plan atomicity.
 New and changed items currently retain plan-time file facts after preparation, while missing items are not checked for reappearance.
-[RFC 0004](../rfc/0004-scan-file-revalidation.md) proposes a final per-item path check without changing the transaction model.
 Explicit relink is a constrained plan derivation that preserves the same binding rather than a separate caller-authored mutation description.
 
 A read-oriented workflow obtains one `LibraryReader`, performs the related reads under its single transaction snapshot, and releases the reader before retaining application values.
@@ -313,4 +312,3 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [LMDB operation specification](../spec/storage/lmdb-operation.md)
 - [Library YAML transfer specification](../spec/library/runtime/yaml-transfer.md) and [format reference](../reference/library/format/yaml.md)
 - [Media file reading specification](../spec/media/file-reading.md) and [supported audio files reference](../reference/media/audio-file.md)
-- [RFC 0004: scan file revalidation](../rfc/0004-scan-file-revalidation.md)

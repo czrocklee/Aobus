@@ -120,7 +120,10 @@ namespace ao::rt
             return std::unexpected{started.error()};
           }
 
-          return true;
+          // Admission starts worker preparation but does not establish a new
+          // playback clock anchor. The accepted completion publishes that
+          // anchor after transport and succession commit together.
+          return false;
         },
         true,
         true);
@@ -454,6 +457,16 @@ namespace ao::rt
         }));
 
       subscriptions.push_back(succession.onChanged([this](PlaybackSuccessionState const&) { onSourceChanged(); }));
+      subscriptions.push_back(succession.onExplicitStartSettled(
+        [this]
+        {
+          if (commitDepth == 0)
+          {
+            pendingExternalPositionAnchor = true;
+          }
+
+          onSourceChanged();
+        }));
       subscriptions.push_back(
         succession.onShuffleModeChanged([this](PlaybackSuccession::ShuffleModeChanged const&) { onSourceChanged(); }));
       subscriptions.push_back(

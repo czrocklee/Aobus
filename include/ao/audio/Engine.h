@@ -27,7 +27,12 @@ namespace ao::audio
   class DecoderSession;
   struct PlaybackInput;
   using DecoderFactoryFn = std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, Format)>;
-}
+
+  namespace detail
+  {
+    class TrackPreparation;
+  }
+} // namespace ao::audio
 
 namespace ao::audio
 {
@@ -143,6 +148,7 @@ namespace ao::audio
       std::unique_ptr<Impl> _implPtr;
 
       friend class Engine;
+      friend class detail::TrackPreparation;
     };
 
     struct PlaybackStartReceipt final
@@ -265,5 +271,7 @@ namespace ao::audio
   private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
+
+    friend class detail::TrackPreparation;
   };
 } // namespace ao::audio

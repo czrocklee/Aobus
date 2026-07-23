@@ -211,6 +211,7 @@ namespace ao::gtk::test
           },
       }));
       REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
       REQUIRE(runtime.savePlaybackSession());
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
       savePresentationPreference(tempDir, listId, "albums");
@@ -245,6 +246,7 @@ namespace ao::gtk::test
       runtime.reloadAllTracks();
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
       REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
       REQUIRE(runtime.savePlaybackSession());
       runtime.playback().commands().stop();
     }
@@ -287,6 +289,7 @@ namespace ao::gtk::test
       }));
       drainGtkEvents();
       REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
       REQUIRE(runtime.savePlaybackSession());
       runtime.workspace().saveSession(runtime.workspaceConfigStore());
       savePresentationPreference(tempDir, listId, "albums");
@@ -339,6 +342,7 @@ namespace ao::gtk::test
       listId = createManualList(runtime, "Restored new-view list", {trackId});
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
       REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
       REQUIRE(runtime.savePlaybackSession());
       savePresentationPreference(tempDir, listId, "albums");
       runtime.playback().commands().stop();

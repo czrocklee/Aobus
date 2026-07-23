@@ -114,7 +114,7 @@ new value; copy it when an older value is needed for comparison.
 
 | Command | Signature | Result |
 |---|---|---|
-| `startFromView` | `(ViewId, TrackId)` | `Result<>`; immediate execution result or queued admission. |
+| `startFromView` | `(ViewId, TrackId)` | `Result<>`; synchronous validation and async-task admission, or queued command admission. Success does not prove that the decoder opened. |
 | `next` / `previous` / `clearSequence` | `()` | `void` |
 | `setShuffleMode` / `setRepeatMode` | `(mode)` | `void` |
 | `pause` / `resume` / `stop` | `()` | `void` |

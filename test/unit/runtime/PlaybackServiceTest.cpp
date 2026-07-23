@@ -166,7 +166,7 @@ namespace ao::rt::test
       Status _status;
     };
 
-    template<typename ExecutorT = InlineExecutor>
+    template<typename ExecutorT = QueuedExecutor>
     struct PlaybackServiceFixture final
     {
       PlaybackServiceFixture() = default;
@@ -200,10 +200,20 @@ namespace ao::rt::test
         }));
         viewId = ao::test::requireValue(application.views.createView({.listId = listId}));
         application.addReadyProvider();
+        application.executor.drain();
       }
 
       PlaybackCommands& commands() { return application.commands(); }
       PlaybackService& playback() { return application.playback; }
+      bool waitForTrack(TrackId const trackId)
+      {
+        auto const settled =
+          waitForPlaybackSettlement(application.executor,
+                                    observedPositionRevision,
+                                    [this] { return playback().snapshot().transport.positionRevision; });
+        observedPositionRevision = playback().snapshot().transport.positionRevision;
+        return settled && playback().snapshot().transport.nowPlaying.trackId == trackId;
+      }
 
       ApplicationPlaybackFixtureT<ExecutorT> application;
 
@@ -213,6 +223,7 @@ namespace ao::rt::test
       ListId listId = kInvalidListId;
       ViewId viewId = kInvalidViewId;
       std::uint32_t nextPlayableFile = 0;
+      PlaybackPositionRevision observedPositionRevision{};
     };
   } // namespace
 
@@ -245,6 +256,7 @@ namespace ao::rt::test
 
     auto const started = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
     REQUIRE(started);
+    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
 
     // One accepted command publishes exactly one snapshot even though it drives
     // several lower transport and succession signals.
@@ -278,6 +290,7 @@ namespace ao::rt::test
                                                                      { snapshots.push_back(snapshot); });
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
 
     fixture.commands().setShuffleMode(ShuffleMode::On);
@@ -319,6 +332,7 @@ namespace ao::rt::test
                                                                      { snapshots.push_back(snapshot); });
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
     REQUIRE(snapshots.size() == 1);
     auto const started = snapshots.back();
     CHECK(started.transport.positionRevision.value == 1);
@@ -456,6 +470,7 @@ namespace ao::rt::test
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
+    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
     fixture.commands().setRepeatMode(RepeatMode::One);
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
@@ -478,7 +493,7 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     fixture.application.executor.drain();
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
-    fixture.application.executor.drain();
+    REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
     auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)

@@ -350,7 +350,7 @@ namespace ao::rt::test
     auto const staleCommit = fixture.playbackTransport.commitPlayback(std::move(*staged));
 
     REQUIRE_FALSE(staleCommit);
-    CHECK(staleCommit.error().code == Error::Code::InvalidState);
+    CHECK(staleCommit.error().code == Error::Code::Conflict);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == replacement.item.trackId);
     CHECK(fixture.playbackTransport.clearPreparedNext() == liveToken);
   }

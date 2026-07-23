@@ -10,6 +10,7 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Format.h>
 #include <ao/audio/PcmSource.h>
+#include <ao/audio/StreamingSource.h>
 
 #include <chrono>
 #include <filesystem>
@@ -40,16 +41,21 @@ namespace ao::audio::detail
       DecodedStreamInfo info;
     };
 
-    /**
-     * @brief Creates a new track session by opening and negotiating the decoder.
-     */
-    static Result<OpenedTrack> create(PlaybackInput const& input,
-                                      Device const& device,
-                                      BackendId const& backendId,
-                                      ProfileId const& profileId,
-                                      DecoderFactoryFn const& decoderFactory,
-                                      OnSourceErrorFn onSourceError,
-                                      std::chrono::milliseconds initialOffset = {});
+    struct PreparedTrack
+    {
+      std::unique_ptr<StreamingSource> sourcePtr;
+      Format backendFormat;
+      DecodedStreamInfo info;
+    };
+
+    static Result<PreparedTrack> prepare(PlaybackInput const& input,
+                                         Device const& device,
+                                         BackendId const& backendId,
+                                         ProfileId const& profileId,
+                                         DecoderFactoryFn const& decoderFactory,
+                                         std::chrono::milliseconds initialOffset = {});
+
+    static Result<OpenedTrack> activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError);
 
   private:
     static void negotiateFormat(std::filesystem::path const& path,
@@ -61,8 +67,7 @@ namespace ao::audio::detail
                                 ProfileId const& profileId,
                                 DecoderFactoryFn const& decoderFactory);
 
-    static std::shared_ptr<PcmSource> createPcmSource(std::unique_ptr<DecoderSession> decoderPtr,
-                                                      DecodedStreamInfo const& info,
-                                                      OnSourceErrorFn onSourceError);
+    static std::unique_ptr<StreamingSource> preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,
+                                                             DecodedStreamInfo const& info);
   };
 } // namespace ao::audio::detail

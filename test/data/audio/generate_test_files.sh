@@ -322,7 +322,24 @@ ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
     -y "$OUTPUT_DIR/classical_fallback.mp3" 2>/dev/null
 echo "  Created classical_fallback.mp3"
 
+# MP3 VBR without Xing/VBRI: the high-bitrate first segment makes a
+# header/file-size duration estimate much shorter than the real stream.
+VBR_TMP_DIR=$(mktemp -d)
+ffmpeg -f lavfi -i "sine=frequency=440:duration=1" \
+    -map_metadata -1 \
+    -codec:a libmp3lame -b:a 320k -ar 44100 \
+    -write_xing 0 -id3v2_version 0 \
+    -y "$VBR_TMP_DIR/high.mp3" 2>/dev/null
+ffmpeg -f lavfi -i "sine=frequency=440:duration=19" \
+    -map_metadata -1 \
+    -codec:a libmp3lame -b:a 32k -ar 44100 \
+    -write_xing 0 -id3v2_version 0 \
+    -y "$VBR_TMP_DIR/low.mp3" 2>/dev/null
+cat "$VBR_TMP_DIR/high.mp3" "$VBR_TMP_DIR/low.mp3" > "$OUTPUT_DIR/vbr_no_seek_table.mp3"
+rm -r "$VBR_TMP_DIR"
+echo "  Created vbr_no_seek_table.mp3 (VBR without Xing/VBRI)"
+
 # Cleanup cover image
 rm -f "$COVER_PNG"
 
-echo "Done. Generated 24 test audio files."
+echo "Done. Generated 25 test audio files."

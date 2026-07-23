@@ -68,12 +68,14 @@ namespace ao::async
   {
     auto statePtr = scope->state();
     auto taskPtr = std::make_shared<LifetimeScopeTask>();
-    taskPtr->cancel = startCancellable(std::move(task),
-                                       [this, statePtr, taskPtr](std::exception_ptr exceptionPtr)
-                                       {
-                                         retireCoroutine(statePtr, taskPtr);
-                                         handleUnhandledException(std::move(exceptionPtr), "lifetime-bound coroutine");
-                                       });
+    auto diagnosticStatePtr = _diagnosticStatePtr;
+    taskPtr->cancel = startCancellable(
+      std::move(task),
+      [diagnosticStatePtr = std::move(diagnosticStatePtr), statePtr, taskPtr](std::exception_ptr exceptionPtr)
+      {
+        retireCoroutine(statePtr, taskPtr);
+        handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "lifetime-bound coroutine");
+      });
 
     bool cancelImmediately = false;
 

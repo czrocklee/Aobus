@@ -392,6 +392,7 @@ namespace ao::gtk::test
       auto const view = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(view);
       REQUIRE(playback.commands().startFromView(*view, trackId));
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
       playback.commands().seek(std::chrono::milliseconds{50});
       REQUIRE(runtime.savePlaybackSession());
       playback.commands().stop();

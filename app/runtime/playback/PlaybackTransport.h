@@ -189,6 +189,16 @@ namespace ao::rt
     void bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler);
     void unbindPlaybackFailureRecovery();
     Result<PreparedCancellationBarrier> commitStagedPlayback(PreparedPlaybackStart&& preparedStart, bool announce);
+    Result<> stageSuccessionPlaybackAsync(PlaybackRequest request,
+                                          ListId sourceListId,
+                                          std::move_only_function<bool()> acceptance,
+                                          std::move_only_function<void(Result<PreparedPlaybackStart>)> completion);
+    Result<> prepareSuccessionNextAsync(TrackId trackId,
+                                        ListId sourceListId,
+                                        std::move_only_function<bool()> acceptance,
+                                        std::move_only_function<void(Result<PreparedNextToken>)> completion);
+    void cancelSuccessionStartPreparation();
+    void cancelSuccessionLookaheadPreparation();
     Result<PreparedNextToken> prepareNextRequest(PlaybackRequest const& request, ListId sourceListId);
     Result<PreparedCancellationBarrier> playSuccessionTrack(TrackId trackId, ListId sourceListId);
     Result<PreparedNextToken> prepareSuccessionNext(TrackId trackId, ListId sourceListId);

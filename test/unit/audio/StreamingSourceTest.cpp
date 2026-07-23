@@ -15,6 +15,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -79,6 +80,61 @@ namespace ao::audio::test
     CHECK(errorCount.load() == 0);
   }
 
+  TEST_CASE("StreamingSource - preparation prerolls without starting the decode thread",
+            "[audio][unit][streaming-source][concurrency]")
+  {
+    auto const info = testStreamInfo();
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto* const decoderRaw = decoderPtr.get();
+    auto block = silenceBlock(400); // 200ms, enough for the 100ms preroll.
+    decoderPtr->setReadScript({{block, false}, {{}, true}});
+    auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr),
+                                                       info,
+                                                       std::function<void(Error const&)>{},
+                                                       std::chrono::milliseconds{100},
+                                                       std::chrono::milliseconds{500});
+
+    REQUIRE(sourcePtr->prepare());
+
+    CHECK(decoderRaw->readCount() == 1);
+    CHECK(sourcePtr->bufferedDuration() == std::chrono::milliseconds{200});
+    CHECK(sourcePtr->activate([](Error const&) {}));
+  }
+
+  TEST_CASE("StreamingSource - activation enforces the prepared source lifecycle", "[audio][unit][streaming-source]")
+  {
+    auto const info = testStreamInfo();
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto* const decoderRaw = decoderPtr.get();
+    decoderPtr->setReadScript({{silenceBlock(200), true}});
+    auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr),
+                                                       info,
+                                                       std::function<void(Error const&)>{},
+                                                       std::chrono::milliseconds{50},
+                                                       std::chrono::milliseconds{500});
+
+    SECTION("activate without prepare")
+    {
+      auto const result = sourcePtr->activate([](Error const&) {});
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidState);
+      CHECK(decoderRaw->readCount() == 0);
+    }
+
+    SECTION("activate twice")
+    {
+      REQUIRE(sourcePtr->prepare());
+      REQUIRE(sourcePtr->activate([](Error const&) {}));
+      auto const readCount = decoderRaw->readCount();
+
+      auto const result = sourcePtr->activate([](Error const&) {});
+
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidState);
+      CHECK(decoderRaw->readCount() == readCount);
+    }
+  }
+
   TEST_CASE("StreamingSource - initialize reports preroll decode failure", "[audio][unit][streaming-source]")
   {
     auto const info = testStreamInfo();
@@ -140,6 +196,36 @@ namespace ao::audio::test
     REQUIRE(sourcePtr->read(output) == output.size());
     CHECK(output == afterSeekBlock);
     CHECK(errorCount.load() == 0);
+  }
+
+  TEST_CASE("StreamingSource - seek rejects a source before activation", "[audio][unit][streaming-source]")
+  {
+    auto const info = testStreamInfo();
+    auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
+    auto* const decoderRaw = decoderPtr.get();
+    decoderPtr->setReadScript({{silenceBlock(400), false}, {{}, true}});
+    auto sourcePtr = std::make_unique<StreamingSource>(std::move(decoderPtr),
+                                                       info,
+                                                       std::function<void(Error const&)>{},
+                                                       std::chrono::milliseconds{100},
+                                                       std::chrono::milliseconds{500});
+
+    SECTION("before preparation")
+    {
+      auto const result = sourcePtr->seek(std::chrono::milliseconds{50});
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidState);
+    }
+
+    SECTION("after preparation")
+    {
+      REQUIRE(sourcePtr->prepare());
+      auto const result = sourcePtr->seek(std::chrono::milliseconds{50});
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidState);
+    }
+
+    CHECK(decoderRaw->seekCount() == 0);
   }
 
   TEST_CASE("StreamingSource - seek reports decoder failure", "[audio][unit][streaming-source]")

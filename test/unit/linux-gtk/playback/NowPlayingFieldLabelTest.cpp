@@ -43,6 +43,7 @@ namespace ao::gtk::test
       auto const view = runtime.views().createView({.listId = rt::kAllTracksListId});
       REQUIRE(view);
       REQUIRE(runtime.playback().commands().startFromView(*view, trackId));
+      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
     }
   } // namespace
 

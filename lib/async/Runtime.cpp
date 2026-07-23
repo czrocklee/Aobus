@@ -22,6 +22,7 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
@@ -32,12 +33,55 @@
 #include <stop_token>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 
 namespace ao::async
 {
+  struct Runtime::DiagnosticState final
+  {
+    explicit DiagnosticState(AsyncExceptionHandler handlerValue)
+      : handler{std::move(handlerValue)}
+    {
+    }
+
+    AsyncExceptionHandler handler;
+  };
+
+  struct Runtime::CallbackState final
+  {
+    explicit CallbackState(std::size_t const workerCount)
+      : workerPool{workerCount}
+    {
+    }
+
+    std::atomic_bool acceptsCallbacks{true};
+    boost::asio::thread_pool workerPool;
+  };
+
   namespace
   {
+    template<typename State, typename Handler>
+    struct CallbackDispatch final
+    {
+      void operator()()
+      {
+        if (statePtr->acceptsCallbacks.load(std::memory_order_acquire))
+        {
+          std::move(handler)();
+        }
+        // Dropping the Asio awaitable handler is the cancellation path after
+        // Runtime teardown. Its destructor unwinds the suspended coroutine on
+        // the handler executor; statePtr keeps that worker pool alive through
+        // this object's reverse member destruction.
+      }
+
+      // Destruction is reversed, so the handler releases its Asio executor
+      // before the state releases the worker pool.
+      std::shared_ptr<State> statePtr;
+      Handler handler;
+    };
+
     void writeUnhandledExceptionToStderr(std::exception_ptr const& exceptionPtr,
                                          std::string_view const context) noexcept
     {
@@ -112,18 +156,20 @@ namespace ao::async
     }
   } // namespace
 
-  void Runtime::handleUnhandledException(std::exception_ptr exceptionPtr, std::string_view const context) const noexcept
+  void Runtime::handleUnhandledException(DiagnosticState const& state,
+                                         std::exception_ptr exceptionPtr,
+                                         std::string_view const context) noexcept
   {
     if (!exceptionPtr || isOperationCancelled(exceptionPtr))
     {
       return;
     }
 
-    if (_exceptionHandler)
+    if (state.handler)
     {
       try
       {
-        _exceptionHandler(exceptionPtr, context);
+        state.handler(exceptionPtr, context);
         return;
       }
       // NOLINTNEXTLINE(bugprone-empty-catch): A failed handler falls through to the stderr fallback below.
@@ -146,14 +192,15 @@ namespace ao::async
                    AsyncExceptionHandler exceptionHandler,
                    Sleeper* sleeper)
     : _callbackExecutor{callbackExecutor}
-    , _exceptionHandler{std::move(exceptionHandler)}
-    , _workerPool{workerCount}
+    , _diagnosticStatePtr{std::make_shared<DiagnosticState>(std::move(exceptionHandler))}
+    , _callbackStatePtr{std::make_shared<CallbackState>(workerCount)}
     , _sleeper{sleeper}
   {
   }
 
   Runtime::~Runtime()
   {
+    _callbackStatePtr->acceptsCallbacks.store(false, std::memory_order_release);
     requestStop();
     join();
   }
@@ -165,22 +212,22 @@ namespace ao::async
 
   void Runtime::reportUnhandledException(std::exception_ptr exceptionPtr, std::string_view const context) const noexcept
   {
-    handleUnhandledException(std::move(exceptionPtr), context);
+    handleUnhandledException(*_diagnosticStatePtr, std::move(exceptionPtr), context);
   }
 
   void Runtime::requestStop() noexcept
   {
-    _workerPool.stop();
+    _callbackStatePtr->workerPool.stop();
   }
 
   void Runtime::join()
   {
-    _workerPool.join();
+    _callbackStatePtr->workerPool.join();
   }
 
   boost::asio::thread_pool& Runtime::workerPool() noexcept
   {
-    return _workerPool;
+    return _callbackStatePtr->workerPool;
   }
 
   Task<void> Runtime::resumeOnCallbackExecutor(std::stop_token const stopToken)
@@ -190,7 +237,11 @@ namespace ao::async
     try
     {
       co_await boost::asio::async_initiate<decltype(boost::asio::use_awaitable), void()>(
-        [this](auto handler) { callbackExecutor().dispatch([cb = std::move(handler)] mutable { cb(); }); },
+        [this](auto handler)
+        {
+          using Dispatch = CallbackDispatch<CallbackState, std::decay_t<decltype(handler)>>;
+          callbackExecutor().dispatch(Dispatch{_callbackStatePtr, std::move(handler)});
+        },
         boost::asio::use_awaitable);
     }
     catch (boost::system::system_error const& e)
@@ -238,10 +289,12 @@ namespace ao::async
 
   void Runtime::spawnLogged(Task<void> task)
   {
-    boost::asio::co_spawn(workerPool(),
-                          std::move(task),
-                          [this](std::exception_ptr exceptionPtr)
-                          { handleUnhandledException(std::move(exceptionPtr), "root coroutine"); });
+    auto diagnosticStatePtr = _diagnosticStatePtr;
+    boost::asio::co_spawn(
+      workerPool(),
+      std::move(task),
+      [diagnosticStatePtr = std::move(diagnosticStatePtr)](std::exception_ptr exceptionPtr)
+      { handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "root coroutine"); });
   }
 
   std::move_only_function<void()> Runtime::startCancellable(CancellableTask task,
@@ -256,9 +309,10 @@ namespace ao::async
 
   TaskHandle Runtime::spawnCancellable(CancellableTask task)
   {
-    return TaskHandle{
-      startCancellable(std::move(task),
-                       [this](std::exception_ptr exceptionPtr)
-                       { handleUnhandledException(std::move(exceptionPtr), "cancellable coroutine"); })};
+    auto diagnosticStatePtr = _diagnosticStatePtr;
+    return TaskHandle{startCancellable(
+      std::move(task),
+      [diagnosticStatePtr = std::move(diagnosticStatePtr)](std::exception_ptr exceptionPtr)
+      { handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "cancellable coroutine"); })};
   }
 } // namespace ao::async

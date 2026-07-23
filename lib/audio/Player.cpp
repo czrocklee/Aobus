@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "detail/TrackPreparation.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
@@ -26,6 +29,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -42,6 +46,11 @@ namespace ao::audio
                            .overall = status.quality,
                            .fullyVerified = status.qualityFullyVerified,
                            .assessments = status.qualityAssessments};
+    }
+
+    std::unexpected<Error> preparationRejectedError()
+    {
+      return makeError(Error::Code::Conflict, "Playback preparation was superseded during acceptance");
     }
   } // namespace
 
@@ -113,26 +122,34 @@ namespace ao::audio
       }
     };
 
+    struct OutwardPublicationState final
+    {
+      std::atomic_size_t depth{0};
+    };
+
     struct [[nodiscard]] OutwardPublicationScope final
     {
-      explicit OutwardPublicationScope(Impl& owner)
-        : owner{owner}
+      explicit OutwardPublicationScope(std::shared_ptr<OutwardPublicationState> statePtr)
+        : statePtr{std::move(statePtr)}
       {
-        owner.outwardPublicationDepth.fetch_add(1, std::memory_order_acq_rel);
+        this->statePtr->depth.fetch_add(1, std::memory_order_acq_rel);
       }
 
-      ~OutwardPublicationScope() { owner.outwardPublicationDepth.fetch_sub(1, std::memory_order_acq_rel); }
+      ~OutwardPublicationScope() { statePtr->depth.fetch_sub(1, std::memory_order_acq_rel); }
 
       OutwardPublicationScope(OutwardPublicationScope const&) = delete;
       OutwardPublicationScope& operator=(OutwardPublicationScope const&) = delete;
       OutwardPublicationScope(OutwardPublicationScope&&) = delete;
       OutwardPublicationScope& operator=(OutwardPublicationScope&&) = delete;
 
-      Impl& owner;
+      std::shared_ptr<OutwardPublicationState> statePtr;
     };
 
-    explicit Impl(async::Executor& exec)
-      : executor{exec}, gatePtr{std::make_shared<CallbackGate>(exec, *this)}
+    explicit Impl(async::Executor& exec, async::Runtime* runtime)
+      : executor{exec}
+      , asyncRuntime{runtime}
+      , outwardPublicationStatePtr{std::make_shared<OutwardPublicationState>()}
+      , gatePtr{std::make_shared<CallbackGate>(exec, *this)}
     {
     }
 
@@ -144,18 +161,21 @@ namespace ao::audio
     ~Impl()
     {
       shutdown();
-      gsl_Expects(outwardPublicationDepth.load(std::memory_order_acquire) == 0);
+      gsl_Expects(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
     }
 
     void shutdown() noexcept
     {
       gsl_Expects(executor.isCurrent());
-      gsl_Expects(outwardPublicationDepth.load(std::memory_order_acquire) == 0);
+      gsl_Expects(outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
 
       if (!gatePtr->shutdown())
       {
         return;
       }
+
+      cancelStartPreparation();
+      cancelLookaheadPreparation();
 
       // Teardown order:
       //   1. Unsubscribe graph and device callbacks so no new callbacks fire.
@@ -187,9 +207,12 @@ namespace ao::audio
     }
 
     async::Executor& executor;
+    async::Runtime* asyncRuntime = nullptr;
+    async::TaskHandle startPreparationTask;
+    async::TaskHandle lookaheadPreparationTask;
     std::atomic<std::uint64_t> playbackGeneration{1};
     std::atomic<std::uint64_t> audioCallbackGenerationFloor{1};
-    std::atomic_size_t outwardPublicationDepth{0};
+    std::shared_ptr<OutwardPublicationState> outwardPublicationStatePtr;
     std::vector<std::unique_ptr<ProviderRecord>> providers;
     std::optional<PendingOutputDeviceSelection> optPendingOutputDeviceSelection;
     BackendProvider* activeBackendProvider = nullptr;
@@ -215,6 +238,7 @@ namespace ao::audio
     std::function<void(QualityResult const&, bool)> onQualityChanged;
 
     void connectEngineCallbacks() const;
+    void initializeNullEngine(DecoderFactoryFn decoderFactory);
     void connectTrackEndedCallback() const;
     void connectTrackAdvancedCallback() const;
     void connectPlaybackFailureCallback() const;
@@ -227,6 +251,122 @@ namespace ao::audio
     Player::Status snapshot() const;
     bool isReady() const;
     void updateMergedGraph();
+
+    void cancelStartPreparation() { startPreparationTask.reset(); }
+
+    void cancelLookaheadPreparation() { lookaheadPreparationTask.reset(); }
+
+    static async::Task<void> runStartPreparation(async::Runtime* runtime,
+                                                 std::shared_ptr<CallbackGate> callbackGatePtr,
+                                                 detail::TrackPreparation preparation,
+                                                 Player::PreparationAcceptance acceptance,
+                                                 Player::PreparedStartCompletion completion,
+                                                 std::stop_token stopToken)
+    {
+      auto const prepared = preparation.prepare();
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
+
+      if (!callbackGatePtr->canAcceptCallbacks())
+      {
+        co_return;
+      }
+
+      auto* owner = callbackGatePtr->owner;
+      gsl_Expects(owner != nullptr);
+
+      // Retire Player's registration before either outward callback. A
+      // reentrant replacement may then install its own task without being
+      // cleared by this completion path.
+      owner->startPreparationTask = {};
+      auto publicationStatePtr = owner->outwardPublicationStatePtr;
+      bool accepted = false;
+
+      {
+        auto publication = OutwardPublicationScope{publicationStatePtr};
+        accepted = acceptance();
+      }
+
+      if (!callbackGatePtr->canAcceptCallbacks())
+      {
+        co_return;
+      }
+
+      owner = callbackGatePtr->owner;
+      gsl_Expects(owner != nullptr);
+      auto outcome = Result<Engine::PreparedPlaybackStart>{preparationRejectedError()};
+
+      if (accepted)
+      {
+        if (!prepared)
+        {
+          outcome = std::unexpected{prepared.error()};
+        }
+        else
+        {
+          outcome = std::move(preparation).adoptStart(*owner->enginePtr);
+        }
+      }
+
+      publicationStatePtr = owner->outwardPublicationStatePtr;
+      auto publication = OutwardPublicationScope{publicationStatePtr};
+      completion(std::move(outcome));
+    }
+
+    static async::Task<void> runLookaheadPreparation(async::Runtime* runtime,
+                                                     std::shared_ptr<CallbackGate> callbackGatePtr,
+                                                     detail::TrackPreparation preparation,
+                                                     Player::PreparationAcceptance acceptance,
+                                                     Player::PreparedNextCompletion completion,
+                                                     std::stop_token stopToken)
+    {
+      auto const prepared = preparation.prepare();
+      co_await runtime->resumeOnCallbackExecutor(stopToken);
+
+      if (!callbackGatePtr->canAcceptCallbacks())
+      {
+        co_return;
+      }
+
+      auto* owner = callbackGatePtr->owner;
+      gsl_Expects(owner != nullptr);
+
+      // Retire Player's registration before either outward callback. A
+      // reentrant replacement may then install its own task without being
+      // cleared by this completion path.
+      owner->lookaheadPreparationTask = {};
+      auto publicationStatePtr = owner->outwardPublicationStatePtr;
+      bool accepted = false;
+
+      {
+        auto publication = OutwardPublicationScope{publicationStatePtr};
+        accepted = acceptance();
+      }
+
+      if (!callbackGatePtr->canAcceptCallbacks())
+      {
+        co_return;
+      }
+
+      owner = callbackGatePtr->owner;
+      gsl_Expects(owner != nullptr);
+      auto outcome = Result<Engine::PreparedNextResult>{preparationRejectedError()};
+
+      if (accepted)
+      {
+        if (!prepared)
+        {
+          outcome = std::unexpected{prepared.error()};
+        }
+        else
+        {
+          outcome = std::move(preparation).adoptNext(*owner->enginePtr);
+        }
+      }
+
+      publicationStatePtr = owner->outwardPublicationStatePtr;
+      auto publication = OutwardPublicationScope{publicationStatePtr};
+      completion(std::move(outcome));
+    }
 
     void ensureOnExecutor() const noexcept { gsl_Expects(executor.isCurrent()); }
 
@@ -247,7 +387,7 @@ namespace ao::audio
         return;
       }
 
-      auto publication = OutwardPublicationScope{*this};
+      auto publication = OutwardPublicationScope{outwardPublicationStatePtr};
       std::invoke(callback, std::forward<Args>(args)...);
     }
 
@@ -326,6 +466,19 @@ namespace ao::audio
     connectPlaybackFailureCallback();
     connectStateChangedCallback();
     connectRouteChangedCallback();
+  }
+
+  void Player::Impl::initializeNullEngine(DecoderFactoryFn decoderFactory)
+  {
+    ensureOnExecutor();
+    // Start with a NullBackend until a provider provides something real
+    enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
+                                         Device{.id = DeviceId{"null"},
+                                                .displayName = "None",
+                                                .description = "No audio output device selected",
+                                                .backendId = kBackendNone},
+                                         std::move(decoderFactory));
+    connectEngineCallbacks();
   }
 
   void Player::Impl::connectTrackEndedCallback() const
@@ -709,18 +862,20 @@ namespace ao::audio
   }
 
   Player::Player(async::Executor& executor, DecoderFactoryFn decoderFactory)
-    : _implPtr{std::make_unique<Impl>(executor)}
+    : _implPtr{std::make_unique<Impl>(executor, nullptr)}
   {
-    _implPtr->ensureOnExecutor();
-    // Start with a NullBackend until a provider provides something real
-    _implPtr->enginePtr = std::make_unique<Engine>(std::make_unique<NullBackend>(),
-                                                   Device{.id = DeviceId{"null"},
-                                                          .displayName = "None",
-                                                          .description = "No audio output device selected",
-                                                          .backendId = kBackendNone},
-                                                   std::move(decoderFactory));
+    _implPtr->initializeNullEngine(std::move(decoderFactory));
+  }
 
-    _implPtr->connectEngineCallbacks();
+  Player::Player(async::Runtime& runtime)
+    : Player{runtime, nullptr}
+  {
+  }
+
+  Player::Player(async::Runtime& runtime, DecoderFactoryFn decoderFactory)
+    : _implPtr{std::make_unique<Impl>(runtime.callbackExecutor(), &runtime)}
+  {
+    _implPtr->initializeNullEngine(std::move(decoderFactory));
   }
 
   void Player::setOnTrackEnded(std::function<void(Engine::TrackEnded const&)> callback)
@@ -763,7 +918,7 @@ namespace ao::audio
   {
     gsl_Expects(_implPtr != nullptr);
     _implPtr->ensureOnExecutor();
-    gsl_Expects(_implPtr->outwardPublicationDepth.load(std::memory_order_acquire) == 0);
+    gsl_Expects(_implPtr->outwardPublicationStatePtr->depth.load(std::memory_order_acquire) == 0);
     shutdown();
   }
 
@@ -830,6 +985,8 @@ namespace ao::audio
                                                               std::chrono::milliseconds const initialOffset)
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
 
     if (!_implPtr->isReady())
     {
@@ -840,6 +997,53 @@ namespace ao::audio
     }
 
     return _implPtr->enginePtr->stagePlayback(item, initialOffset);
+  }
+
+  Result<> Player::stagePlaybackAsync(Engine::PlaybackItem const& item,
+                                      std::chrono::milliseconds const initialOffset,
+                                      PreparationAcceptance acceptance,
+                                      PreparedStartCompletion completion)
+  {
+    _implPtr->ensureOnExecutor();
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
+
+    if (_implPtr->asyncRuntime == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, "Asynchronous playback preparation requires an async runtime");
+    }
+
+    if (!_implPtr->isReady())
+    {
+      return makeError(
+        Error::Code::InvalidState, "Playback ignored: audio backend is not ready (pending device discovery)");
+    }
+
+    auto preparation = detail::TrackPreparation::capture(
+      *_implPtr->enginePtr, item, initialOffset, detail::TrackPreparation::Purpose::ExplicitStart);
+
+    if (!preparation)
+    {
+      return std::unexpected{preparation.error()};
+    }
+
+    auto* const runtime = _implPtr->asyncRuntime;
+    auto const callbackGatePtr = _implPtr->gatePtr;
+    _implPtr->startPreparationTask = runtime->spawnCancellable(
+      [runtime,
+       callbackGatePtr,
+       preparation = std::move(*preparation),
+       acceptance = std::move(acceptance),
+       completion = std::move(completion)](std::stop_token const stopToken) mutable
+      {
+        return Impl::runStartPreparation(runtime,
+                                         std::move(callbackGatePtr),
+                                         std::move(preparation),
+                                         std::move(acceptance),
+                                         std::move(completion),
+                                         stopToken);
+      });
+    return {};
   }
 
   Result<Engine::PlaybackStartReceipt> Player::commitPlayback(Engine::PreparedPlaybackStart&& preparedStart)
@@ -872,6 +1076,7 @@ namespace ao::audio
   Result<Engine::PreparedNextResult> Player::prepareNext(Engine::PlaybackItem const& item)
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->cancelLookaheadPreparation();
 
     if (!_implPtr->isReady())
     {
@@ -882,15 +1087,118 @@ namespace ao::audio
     return _implPtr->enginePtr->setNext(item);
   }
 
+  Result<> Player::prepareNextAsync(Engine::PlaybackItem const& item,
+                                    PreparationAcceptance acceptance,
+                                    PreparedNextCompletion completion)
+  {
+    _implPtr->ensureOnExecutor();
+    _implPtr->cancelLookaheadPreparation();
+
+    if (_implPtr->asyncRuntime == nullptr)
+    {
+      return makeError(Error::Code::InvalidState, "Asynchronous lookahead preparation requires an async runtime");
+    }
+
+    if (!_implPtr->isReady())
+    {
+      return makeError(
+        Error::Code::InvalidState, "Prepared playback ignored: audio backend is not ready (pending device discovery)");
+    }
+
+    auto preparation = detail::TrackPreparation::capture(
+      *_implPtr->enginePtr, item, {}, detail::TrackPreparation::Purpose::GaplessLookahead);
+
+    if (!preparation)
+    {
+      return std::unexpected{preparation.error()};
+    }
+
+    if (!preparation->requiresWorker())
+    {
+      auto const prepared = preparation->prepare();
+      auto const callbackGatePtr = _implPtr->gatePtr;
+      auto publicationStatePtr = _implPtr->outwardPublicationStatePtr;
+      bool accepted = false;
+
+      {
+        auto publication = Impl::OutwardPublicationScope{publicationStatePtr};
+        accepted = acceptance();
+      }
+
+      if (!callbackGatePtr->canAcceptCallbacks())
+      {
+        return {};
+      }
+
+      auto* const owner = callbackGatePtr->owner;
+      gsl_Expects(owner != nullptr);
+      auto outcome = Result<Engine::PreparedNextResult>{preparationRejectedError()};
+
+      if (accepted)
+      {
+        if (!prepared)
+        {
+          outcome = std::unexpected{prepared.error()};
+        }
+        else
+        {
+          outcome = std::move(*preparation).adoptNext(*owner->enginePtr);
+        }
+      }
+
+      publicationStatePtr = owner->outwardPublicationStatePtr;
+
+      {
+        auto publication = Impl::OutwardPublicationScope{publicationStatePtr};
+        completion(std::move(outcome));
+      }
+
+      return {};
+    }
+
+    auto* const runtime = _implPtr->asyncRuntime;
+    auto const callbackGatePtr = _implPtr->gatePtr;
+    _implPtr->lookaheadPreparationTask = runtime->spawnCancellable(
+      [runtime,
+       callbackGatePtr,
+       preparation = std::move(*preparation),
+       acceptance = std::move(acceptance),
+       completion = std::move(completion)](std::stop_token const stopToken) mutable
+      {
+        return Impl::runLookaheadPreparation(runtime,
+                                             std::move(callbackGatePtr),
+                                             std::move(preparation),
+                                             std::move(acceptance),
+                                             std::move(completion),
+                                             stopToken);
+      });
+    return {};
+  }
+
+  void Player::cancelStartPreparation()
+  {
+    _implPtr->ensureOnExecutor();
+    _implPtr->cancelStartPreparation();
+  }
+
+  void Player::cancelLookaheadPreparation()
+  {
+    _implPtr->ensureOnExecutor();
+    _implPtr->cancelLookaheadPreparation();
+  }
+
   std::optional<Engine::PlaybackItemId> Player::clearPreparedNext()
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->cancelLookaheadPreparation();
     return _implPtr->enginePtr->clearNext();
   }
 
   Result<> Player::setOutputDevice(BackendId const& backend, DeviceId const& deviceId, ProfileId const& profile)
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
     return _implPtr->setOutputDevice(backend, deviceId, profile);
   }
 
@@ -909,6 +1217,8 @@ namespace ao::audio
   Engine::PreparedCancellationBarrier Player::stopWithBarrier()
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
     auto const barrier = _implPtr->enginePtr->stopWithBarrier();
     _implPtr->acceptAudioBarrier(barrier);
     std::ignore = _implPtr->resetPlaybackGraph();
@@ -923,6 +1233,8 @@ namespace ao::audio
   void Player::seek(std::chrono::milliseconds offset)
   {
     _implPtr->ensureOnExecutor();
+    _implPtr->cancelStartPreparation();
+    _implPtr->cancelLookaheadPreparation();
     _implPtr->enginePtr->seek(offset);
   }
 

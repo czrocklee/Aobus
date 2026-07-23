@@ -175,15 +175,21 @@ ViewId + TrackId
   -> Sequence captures launch context from ViewService
   -> Sequence constructs a candidate leased source/projection/cursor
   -> PlaybackTransport resolves runtime metadata and PlaybackInput
-  -> Player/Engine stage decoder, source, route, and initial position
+  -> Player captures route, decoder factory, and generation evidence
+  -> async worker opens, negotiates, seeks, and prerolls an isolated source
+  -> callback executor revalidates request/source/route evidence
+  -> Engine adopts the source without publishing it
   -> Engine commit returns item generation + cancellation barrier
   -> PlaybackTransport installs the accepted current request silently
-  -> Sequence installs the candidate and prepares its successor
+  -> Sequence reapplies current repeat/shuffle policy, installs the candidate, and prepares its successor
   -> PlaybackService publishes the settled coherent snapshot
 ```
 
-The candidate session remains separate during staging.
-A failure before Engine accepts the start leaves the previous sequence session and transport authority in place; the exact publication and rollback contract belongs in the playback behavior specification that will own explicit starts.
+The candidate session and prepared audio remain separate while worker preparation is pending.
+The active sequence, transport subject, and audio session continue unchanged until callback-executor acceptance, Engine adoption, and transport commit all succeed.
+A preparation failure reports the existing track-open notification and leaves that previous state in place.
+An acceptance veto or stale captured evidence completes as a silent conflict so succession deterministically retires its pending candidate; task cancellation, replacement, or teardown may instead suppress completion entirely.
+Repeat or shuffle changes accepted during preparation are reapplied to the candidate before it becomes authoritative.
 
 ### Prepared-transition protocol
 
@@ -201,6 +207,9 @@ Sequence: TrackId + maintained projection anchor
 Sequence remains the successor authority while Engine owns whether a prepared audio transition can execute gaplessly or must drain.
 Generation barriers retire callbacks from superseded audio starts; prepared tokens correlate application preparation without exposing TrackId to Engine.
 Prepared audio is a best-effort cross-domain commitment, not a transaction with library membership.
+When the current stream is not gapless-capable, Engine returns a logical drain-fallback preparation without opening the successor; that token fixes successor identity but does not prove that its decoder can open later.
+An opened lookahead result returns to succession on the callback executor after acceptance checks.
+The [playback cursor specification](../spec/playback/cursor.md) owns candidate reroll and boundary recovery policy.
 
 The correlation values have separate owners and meanings:
 
@@ -284,7 +293,7 @@ Playback refines them as follows:
 | Domain | Authoritative owner | Access and synchronization | Exit toward another domain |
 |---|---|---|---|
 | Runtime callback executor | PlaybackService, PlaybackSuccession, PlaybackTransport, PlaybackSessionPersistence, Player application state | Executor affinity; no lower callback mutates these objects inline. | Values and commands enter Engine; observations publish to UIModel/frontends. |
-| Async runtime timer/worker | Persistence delays and cancellable scheduling | Stop tokens and weak/shared lifetime guards; it resumes on the callback executor before touching playback state. | A scheduled checkpoint returns to the callback domain. |
+| Async runtime timer/worker | Persistence delays, explicit-start preparation, and gapless lookahead preparation | Stop tokens and weak/shared lifetime guards; playback workers own isolated preparation values and resume on the callback executor before adoption. | A scheduled checkpoint or prepared audio value returns to the callback domain. |
 | Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant commands and complete status snapshots are serialized by Engine control/state synchronization; scalar state-only queries use the narrower state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
 | Engine event worker | Ordered backend/source events and realtime transition signals | One owned worker, synchronized event queue, bounded realtime signal ring. | Engine callbacks enter the Player callback gate. |
 | StreamingSource decode thread | Decoder progress and PCM production for one source | Owned `jthread`, decoder/error synchronization, stop tokens, capacity-bounded byte targets, and producer-confined block headroom over the PCM ring. | PCM enters the render plane; errors enqueue toward Engine. |
@@ -293,8 +302,9 @@ Playback refines them as follows:
 Player is the intentional bridge between the callback-executor domain and the thread-tolerant Engine.
 Engine is the intentional bridge between serialized control and the dedicated event, decode, and render domains.
 The Engine control domain is a synchronization domain, not a dedicated control thread: public control calls execute synchronously on their caller and are serialized internally.
-Through Player the caller is normally the runtime callback executor, so current track opening, source construction, preroll, and route activation performed during staging remain on that synchronous call path; only later event delivery, streaming decode, and rendering use dedicated threads.
-[RFC 0033](../rfc/0033-nonblocking-playback-preparation.md) proposes moving only decoder/source preparation to a worker and revalidating adoption on the callback executor.
+For view-based starts and gapless lookahead, Player captures immutable route and generation evidence on the callback executor, moves decoder open, format negotiation, initial seek, and preroll to an `async::Runtime` worker, then asks Engine to adopt the isolated result after executor-side and Engine-side revalidation.
+Adoption installs the source error callback and starts its decode thread; explicit commit and backend activation remain callback-executor control work.
+Session restore, an unprepared Next/Previous fallback, and output-route reopening retain their synchronous audio paths.
 The playback-session debounce delay sleeps outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
 
 Runtime lower-layer signals are delivered synchronously within the callback domain and are exception-contained by their owner.
@@ -319,7 +329,7 @@ Explicit start and restore use silent lower-owner installation, so succession ne
 - Decoder and backend implementations remain replaceable without changing succession or session-persistence policy.
 - Persisted playback state contains application semantics, not transient projections, prepared handles, audio generations, or thread state.
 - A coherent durable session requires matching sequence and transport current subjects; persistence reports an invariant failure rather than persisting split generations.
-- Synchronous callback-executor work includes current audio preflight and configuration save, so it remains part of interactive latency even though steady-state decode and render are off-thread.
+- Synchronous callback-executor work still includes backend activation, residual restore/navigation/output reopen paths, and configuration save, so those remain part of interactive latency even though view-start preparation, gapless lookahead, steady-state decode, and render are off-thread.
 
 ## Failure, cancellation, and lifetime boundaries
 
@@ -328,6 +338,17 @@ PlaybackSuccession owns recovery only when choosing another source member requir
 The persistence coordinator owns malformed-session rejection, best-effort save scheduling, and restore normalization.
 
 Cancellation evidence is scoped to its owner.
+Player owns independent cancellable task handles for explicit-start and
+lookahead preparation; stop, replacement positioning, route changes, clear,
+and shutdown cancel the applicable handle before Engine adoption. Succession
+retains only the pending cursor candidate or successor identity, while Engine's
+captured playback and route evidence remains the final adoption authority.
+Player invokes preparation acceptance and completion as outward publications on
+the callback executor. It retires task bookkeeping before either callback,
+rechecks the callback gate and owner after acceptance, computes the complete
+result before completion, and performs no Player access after completion.
+Decoder open cannot be forcibly interrupted, so cancellation guarantees only that a late result cannot commit; the worker may outlive Player teardown and destroy its isolated value when the call returns.
+Final `CoreRuntime` teardown stops and joins the worker pool, so an uninterruptible decoder call can extend application shutdown.
 Async persistence work uses stop tokens and lifetime guards; StreamingSource owns decode/seek stop sources; Engine and Player use playback generations and cancellation barriers to reject stale callbacks and prepared transitions.
 None of these mechanisms substitutes for another layer's lifetime proof.
 
@@ -336,7 +357,7 @@ Shutdown proceeds from callback producers toward their dependencies:
 1. `PlaybackSessionPersistence::shutdown` cancels scheduled work, releases subscriptions, and performs its final checkpoint policy while sequence, transport, ConfigStore, and async runtime remain alive.
 2. `PlaybackService::shutdown` closes public command admission, drops pending commands, disconnects lower observations, and revokes deferred service tasks.
 3. `PlaybackBootstrap::shutdown` asks PlaybackTransport and Player to quiesce lower activity while succession and other runtime consumers still exist.
-4. Player closes its callback gate, unsubscribes provider observations, shuts down provider event sources, then shuts down Engine while provider-owned dependencies still exist.
+4. Player closes its callback gate, cancels preparation tasks, unsubscribes provider observations, shuts down provider event sources, then shuts down Engine while provider-owned dependencies still exist.
 5. Engine stops and joins its event worker, retires render state, closes the backend, and releases track sources; StreamingSource destruction stops and joins decode workers.
 6. Sequence, transport, view, workspace, and persistence objects are destroyed before `CoreRuntime` stops its worker pool and releases the callback executor, library, and notifications.
 
@@ -393,4 +414,3 @@ Queued Player callbacks become no-ops after the gate closes, and every dedicated
 - [Decoder session specification](../spec/playback/decoder-session.md)
 - [Audio execution and concurrency specification](../spec/playback/audio-execution.md)
 - [Playback session persistence specification](../spec/playback/session-persistence.md) and [state reference](../reference/playback/session-state.md)
-- [RFC 0033: non-blocking playback preparation](../rfc/0033-nonblocking-playback-preparation.md)

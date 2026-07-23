@@ -10,6 +10,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/async/Sleeper.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
@@ -93,6 +94,24 @@ namespace ao::rt::test
                              std::move(settlePublication));
     }
 
+    void settlePublication(QueuedExecutor& executor)
+    {
+      executor.drain();
+    }
+    void settlePublication(ManualExecutor& executor)
+    {
+      executor.runUntilIdle();
+    }
+
+    template<typename ExecutorT>
+    TrackId addPlayableTrack(AppRuntime& runtime,
+                             ExecutorT& executor,
+                             std::string title,
+                             std::uint16_t const year = 2020)
+    {
+      return addPlayableTrack(runtime, std::move(title), year, [&executor] { settlePublication(executor); });
+    }
+
     ViewId createView(AppRuntime& runtime, std::string filterExpression = {}, std::vector<TrackSortTerm> sortBy = {})
     {
       runtime.reloadAllTracks();
@@ -103,6 +122,26 @@ namespace ao::rt::test
       });
       REQUIRE(created);
       return *created;
+    }
+
+    auto makePlaybackSessionRuntime(ao::test::TempDir const& tempDir,
+                                    QueuedExecutor*& executor,
+                                    ConfigStore* playbackSessionConfigStore = nullptr,
+                                    async::Sleeper* sleeper = nullptr)
+    {
+      auto executorPtr = std::make_unique<QueuedExecutor>();
+      executor = executorPtr.get();
+      return makeRuntime(tempDir, std::move(executorPtr), playbackSessionConfigStore, sleeper);
+    }
+
+    template<typename ExecutorT>
+    Result<> startFromViewAndWait(AppRuntime& runtime, ExecutorT& executor, ViewId const viewId, TrackId const trackId)
+    {
+      std::ignore = executor.drainUntil([&] { return runtime.playback().snapshot().transport.ready; });
+      return admitPlaybackAndWait(
+        executor,
+        [&] { return runtime.playback().commands().startFromView(viewId, trackId); },
+        [&] { return runtime.playback().snapshot().transport.positionRevision; });
     }
 
     PlaybackSessionState storedSession(ConfigStore& store)
@@ -472,15 +511,16 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto playbackSessionStore = ConfigStore{tempDir.path() / "application.yaml"};
-    auto runtime = makeRuntime(tempDir, &playbackSessionStore);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor, &playbackSessionStore);
     addReadyAudioProvider(runtime);
-    auto const alpha = addPlayableTrack(runtime, "Alpha", 2022);
-    std::ignore = addPlayableTrack(runtime, "Filtered", 1990);
-    std::ignore = addPlayableTrack(runtime, "Zulu", 2023);
+    auto const alpha = addPlayableTrack(runtime, *executor, "Alpha", 2022);
+    std::ignore = addPlayableTrack(runtime, *executor, "Filtered", 1990);
+    std::ignore = addPlayableTrack(runtime, *executor, "Zulu", 2023);
     auto const sortBy = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
     auto const viewId = createView(runtime, "$year > 2000", sortBy);
 
-    REQUIRE(runtime.playback().commands().startFromView(viewId, alpha));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, alpha));
     runtime.playback().commands().seek(std::chrono::milliseconds{500});
     runtime.playback().commands().setShuffleMode(ShuffleMode::On);
     runtime.playback().commands().setRepeatMode(RepeatMode::All);
@@ -529,9 +569,9 @@ namespace ao::rt::test
 
     addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(runtime, "Debounced Track", 2020, [executor] { executor->runUntilIdle(); });
+    auto const trackId = addPlayableTrack(runtime, *executor, "Debounced Track", 2020);
     auto const viewId = createView(runtime);
-    REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
 
@@ -563,9 +603,9 @@ namespace ao::rt::test
     auto captureStatePtr = std::make_shared<RenderCaptureState>();
     runtime.addAudioProvider(std::make_unique<RenderCaptureProvider>(captureStatePtr));
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(runtime, "Latent elapsed", 2020, [executor] { executor->runUntilIdle(); });
+    auto const trackId = addPlayableTrack(runtime, *executor, "Latent elapsed", 2020);
     auto const viewId = createView(runtime);
-    REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
     executor->runUntilIdle();
     REQUIRE(captureStatePtr->renderTarget != nullptr);
 
@@ -610,9 +650,9 @@ namespace ao::rt::test
 
     addReadyAudioProvider(runtime);
     executor->runUntilIdle();
-    auto const trackId = addPlayableTrack(runtime, "Deferred Save", 2020, [executor] { executor->runUntilIdle(); });
+    auto const trackId = addPlayableTrack(runtime, *executor, "Deferred Save", 2020);
     auto const viewId = createView(runtime);
-    REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
     executor->runUntilIdle();
     REQUIRE(std::filesystem::remove(configPath));
@@ -635,13 +675,15 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][launch]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const insertedBeforeCurrent = addPlayableTrack(runtime, "Inserted before current");
-    auto const current = addPlayableTrack(runtime, "Current");
-    auto const removedSuccessor = addPlayableTrack(runtime, "Removed successor");
-    auto const finalSuccessor = addPlayableTrack(runtime, "Final successor");
+    auto const insertedBeforeCurrent = addPlayableTrack(runtime, *executor, "Inserted before current");
+    auto const current = addPlayableTrack(runtime, *executor, "Current");
+    auto const removedSuccessor = addPlayableTrack(runtime, *executor, "Removed successor");
+    auto const finalSuccessor = addPlayableTrack(runtime, *executor, "Final successor");
     auto const manual = createManualView(runtime, {current, removedSuccessor, finalSuccessor});
+    executor->drain();
     auto const insertedIds = std::vector{insertedBeforeCurrent};
     auto const removedIds = std::vector{removedSuccessor};
     auto changedStates = std::vector<PlaybackSnapshot>{};
@@ -651,11 +693,12 @@ namespace ao::rt::test
     auto const inserted = runtime.library().writer().insertManualListTracks(manual.listId, 0, insertedIds);
     REQUIRE(inserted);
     REQUIRE(inserted->changed);
+    executor->drain();
     auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, removedIds);
     REQUIRE(removed);
     REQUIRE(removed->changed);
 
-    auto const launched = runtime.playback().commands().startFromView(manual.viewId, current);
+    auto const launched = startFromViewAndWait(runtime, *executor, manual.viewId, current);
 
     REQUIRE(launched);
     auto const accepted = runtime.playback().snapshot().succession;
@@ -686,12 +729,11 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir, std::move(executorPtr));
     addReadyAudioProvider(runtime);
     executor->drain();
-    auto const firstTrackId = addPlayableTrack(runtime, "First", 2020, [executor] { executor->drain(); });
-    auto const secondTrackId = addPlayableTrack(runtime, "Second", 2020, [executor] { executor->drain(); });
+    auto const firstTrackId = addPlayableTrack(runtime, *executor, "First", 2020);
+    auto const secondTrackId = addPlayableTrack(runtime, *executor, "Second", 2020);
     auto const viewId = createView(runtime, {}, {{.field = TrackSortField::Title, .ascending = true}});
     executor->drain();
-    REQUIRE(runtime.playback().commands().startFromView(viewId, firstTrackId));
-    executor->drain();
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, firstTrackId));
     REQUIRE(runtime.savePlaybackSession());
     runtime.playback().commands().stop();
     executor->drain();
@@ -766,11 +808,10 @@ namespace ao::rt::test
     auto runtime = makeRuntime(tempDir, std::move(executorPtr));
     addReadyAudioProvider(runtime);
     executor->drain();
-    auto const trackId = addPlayableTrack(runtime, "Pending restore", 2020, [executor] { executor->drain(); });
+    auto const trackId = addPlayableTrack(runtime, *executor, "Pending restore", 2020);
     auto const viewId = createView(runtime);
     executor->drain();
-    REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
-    executor->drain();
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, trackId));
     REQUIRE(runtime.savePlaybackSession());
 
     bool queuedRepeat = false;
@@ -1151,10 +1192,11 @@ namespace ao::rt::test
     SECTION("source invalidation and stop retain the frozen cursor")
     {
       auto tempDir = ao::test::TempDir{};
-      auto runtime = makeRuntime(tempDir);
+      auto* executor = static_cast<QueuedExecutor*>(nullptr);
+      auto runtime = makePlaybackSessionRuntime(tempDir, executor);
       addReadyAudioProvider(runtime);
-      auto const first = addPlayableTrack(runtime, "First");
-      auto const second = addPlayableTrack(runtime, "Second");
+      auto const first = addPlayableTrack(runtime, *executor, "First");
+      auto const second = addPlayableTrack(runtime, *executor, "Second");
       runtime.reloadAllTracks();
       auto const listId = ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{
         .kind = LibraryWriter::ListKind::Manual,
@@ -1163,12 +1205,13 @@ namespace ao::rt::test
       }));
       auto const view = runtime.views().createView({.listId = listId});
       REQUIRE(view);
-      REQUIRE(runtime.playback().commands().startFromView(*view, first));
+      REQUIRE(startFromViewAndWait(runtime, *executor, *view, first));
       REQUIRE(runtime.savePlaybackSession());
 
       auto const selected = runtime.playback().snapshot().transport.output.selectedDevice;
       runtime.playback().commands().setOutputDevice(selected.backendId, selected.deviceId, selected.profileId);
       REQUIRE(runtime.library().writer().deleteList(listId));
+      executor->drain();
       CHECK(runtime.playback().snapshot().succession.sourceState == PlaybackSourceState::Invalidated);
       CHECK(runtime.playback().snapshot().transport.nowPlaying.trackId == first);
       runtime.playback().commands().pause();
@@ -1188,11 +1231,12 @@ namespace ao::rt::test
     SECTION("terminal exhaustion preserves the final current")
     {
       auto tempDir = ao::test::TempDir{};
-      auto runtime = makeRuntime(tempDir);
+      auto* executor = static_cast<QueuedExecutor*>(nullptr);
+      auto runtime = makePlaybackSessionRuntime(tempDir, executor);
       addReadyAudioProvider(runtime);
-      auto const only = addPlayableTrack(runtime, "Only");
+      auto const only = addPlayableTrack(runtime, *executor, "Only");
       auto const viewId = createView(runtime);
-      REQUIRE(runtime.playback().commands().startFromView(viewId, only));
+      REQUIRE(startFromViewAndWait(runtime, *executor, viewId, only));
       runtime.playback().commands().seek(std::chrono::milliseconds{350});
       REQUIRE(runtime.savePlaybackSession());
 
@@ -1216,13 +1260,14 @@ namespace ao::rt::test
             "[runtime][unit][playback-session]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const first = addPlayableTrack(runtime, "First");
-    auto const current = addPlayableTrack(runtime, "Second");
-    std::ignore = addPlayableTrack(runtime, "Third");
+    auto const first = addPlayableTrack(runtime, *executor, "First");
+    auto const current = addPlayableTrack(runtime, *executor, "Second");
+    std::ignore = addPlayableTrack(runtime, *executor, "Third");
     auto const viewId = createView(runtime);
-    REQUIRE(runtime.playback().commands().startFromView(viewId, current));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, current));
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
 
@@ -1231,6 +1276,7 @@ namespace ao::rt::test
     CHECK(storedSession(runtime.playbackSessionConfigStore()).positionMs == 450);
 
     REQUIRE(runtime.library().writer().deleteTrack(first));
+    executor->drain();
     REQUIRE(runtime.savePlaybackSession());
     auto const moved = storedSession(runtime.playbackSessionConfigStore());
     CHECK(moved.currentTrackId == current);
@@ -1242,19 +1288,21 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][manual-list]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const current = addPlayableTrack(runtime, "Bravo");
-    auto const alpha = addPlayableTrack(runtime, "Alpha");
-    auto const charlie = addPlayableTrack(runtime, "Charlie");
+    auto const current = addPlayableTrack(runtime, *executor, "Bravo");
+    auto const alpha = addPlayableTrack(runtime, *executor, "Alpha");
+    auto const charlie = addPlayableTrack(runtime, *executor, "Charlie");
     auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
     auto const manual = createManualView(runtime, {current, alpha, charlie}, titleSort);
-    REQUIRE(runtime.playback().commands().startFromView(manual.viewId, current));
+    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, current));
 
     auto const currentIds = std::vector{current};
     auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, currentIds);
     REQUIRE(removed);
     REQUIRE(removed->changed);
+    executor->drain();
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
 
@@ -1280,6 +1328,7 @@ namespace ao::rt::test
     auto const moved = runtime.library().writer().moveManualListTracks(manual.listId, movedIds, 0);
     REQUIRE(moved);
     REQUIRE(moved->changed);
+    executor->drain();
 
     CHECK(projectionBatchCount == 0);
     CHECK(runtime.playback().snapshot().succession == beforeState);
@@ -1293,13 +1342,14 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][snapshot]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const first = addPlayableTrack(runtime, "First");
-    auto const insertedTrack = addPlayableTrack(runtime, "Inserted successor");
-    auto const originalSuccessor = addPlayableTrack(runtime, "Original successor");
+    auto const first = addPlayableTrack(runtime, *executor, "First");
+    auto const insertedTrack = addPlayableTrack(runtime, *executor, "Inserted successor");
+    auto const originalSuccessor = addPlayableTrack(runtime, *executor, "Original successor");
     auto const manual = createManualView(runtime, {first, originalSuccessor});
-    REQUIRE(runtime.playback().commands().startFromView(manual.viewId, first));
+    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, first));
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
 
@@ -1311,6 +1361,7 @@ namespace ao::rt::test
     auto const inserted = runtime.library().writer().insertManualListTracks(manual.listId, 1, insertedIds);
     REQUIRE(inserted);
     REQUIRE(inserted->changed);
+    executor->drain();
 
     auto const afterSnapshot = runtime.playback().snapshot();
     CHECK(afterSnapshot.succession.currentTrackId == first);
@@ -1325,14 +1376,15 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][shuffle]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const current = addPlayableTrack(runtime, "Current");
-    auto const second = addPlayableTrack(runtime, "Second");
-    auto const third = addPlayableTrack(runtime, "Third");
-    auto const fourth = addPlayableTrack(runtime, "Fourth");
+    auto const current = addPlayableTrack(runtime, *executor, "Current");
+    auto const second = addPlayableTrack(runtime, *executor, "Second");
+    auto const third = addPlayableTrack(runtime, *executor, "Third");
+    auto const fourth = addPlayableTrack(runtime, *executor, "Fourth");
     auto const manual = createManualView(runtime, {current, second, third, fourth});
-    REQUIRE(runtime.playback().commands().startFromView(manual.viewId, current));
+    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, current));
     runtime.playback().commands().setShuffleMode(ShuffleMode::On);
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
@@ -1345,6 +1397,7 @@ namespace ao::rt::test
     auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, removedIds);
     REQUIRE(removed);
     REQUIRE(removed->changed);
+    executor->drain();
 
     auto const afterSnapshot = runtime.playback().snapshot();
     CHECK(afterSnapshot.succession.currentTrackId == current);
@@ -1359,13 +1412,14 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][shuffle]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const historyTrack = addPlayableTrack(runtime, "History track");
-    auto const second = addPlayableTrack(runtime, "Second");
-    auto const third = addPlayableTrack(runtime, "Third");
+    auto const historyTrack = addPlayableTrack(runtime, *executor, "History track");
+    auto const second = addPlayableTrack(runtime, *executor, "Second");
+    auto const third = addPlayableTrack(runtime, *executor, "Third");
     auto const manual = createManualView(runtime, {historyTrack, second, third});
-    REQUIRE(runtime.playback().commands().startFromView(manual.viewId, historyTrack));
+    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, historyTrack));
     runtime.playback().commands().setShuffleMode(ShuffleMode::On);
     runtime.playback().commands().next();
     auto const current = runtime.playback().snapshot().succession.currentTrackId;
@@ -1377,6 +1431,7 @@ namespace ao::rt::test
     auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, removedIds);
     REQUIRE(removed);
     REQUIRE(removed->changed);
+    executor->drain();
     REQUIRE_FALSE(runtime.playback().snapshot().succession.hasPrevious);
     REQUIRE(runtime.savePlaybackSession());
 
@@ -1395,6 +1450,7 @@ namespace ao::rt::test
     auto const reinserted = runtime.library().writer().insertManualListTracks(manual.listId, 0, reinsertedIds);
     REQUIRE(reinserted);
     REQUIRE(reinserted->changed);
+    executor->drain();
     CHECK_FALSE(runtime.playback().snapshot().succession.hasPrevious);
   }
 
@@ -1402,11 +1458,12 @@ namespace ao::rt::test
             "[runtime][unit][playback-session][forget]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     addReadyAudioProvider(runtime);
-    auto const track = addPlayableTrack(runtime, "Track");
+    auto const track = addPlayableTrack(runtime, *executor, "Track");
     auto const viewId = createView(runtime);
-    REQUIRE(runtime.playback().commands().startFromView(viewId, track));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
     REQUIRE(runtime.savePlaybackSession());
     REQUIRE(runtime.discardRestorablePlaybackSession());
     CHECK_FALSE(*runtime.playbackSessionConfigStore().contains(kPlaybackSessionConfigGroup));
@@ -1433,11 +1490,12 @@ namespace ao::rt::test
             "[runtime][regression][playback-session]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
     runtime.addAudioProvider(std::make_unique<VolumeCapabilityProvider>());
-    auto const track = addPlayableTrack(runtime, "Track");
+    auto const track = addPlayableTrack(runtime, *executor, "Track");
     auto const viewId = createView(runtime);
-    REQUIRE(runtime.playback().commands().startFromView(viewId, track));
+    REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
     REQUIRE(runtime.savePlaybackSession());
 
     auto const volumeBefore = runtime.playback().snapshot().transport.volume;
@@ -1460,11 +1518,12 @@ namespace ao::rt::test
     SECTION("restore preparation failure is atomic")
     {
       auto tempDir = ao::test::TempDir{};
-      auto runtime = makeRuntime(tempDir);
+      auto* executor = static_cast<QueuedExecutor*>(nullptr);
+      auto runtime = makePlaybackSessionRuntime(tempDir, executor);
       addReadyAudioProvider(runtime);
-      auto const live = addPlayableTrack(runtime, "Live");
+      auto const live = addPlayableTrack(runtime, *executor, "Live");
       auto const viewId = createView(runtime);
-      REQUIRE(runtime.playback().commands().startFromView(viewId, live));
+      REQUIRE(startFromViewAndWait(runtime, *executor, viewId, live));
       runtime.playback().commands().setRepeatMode(RepeatMode::All);
       runtime.playback().commands().setVolume(0.25F);
       REQUIRE(runtime.savePlaybackSession());
@@ -1489,13 +1548,14 @@ namespace ao::rt::test
     SECTION("public commands keep cursor and transport matched for save")
     {
       auto tempDir = ao::test::TempDir{};
-      auto runtime = makeRuntime(tempDir);
+      auto* executor = static_cast<QueuedExecutor*>(nullptr);
+      auto runtime = makePlaybackSessionRuntime(tempDir, executor);
       addReadyAudioProvider(runtime);
-      auto const cursorTrack = addPlayableTrack(runtime, "Cursor");
-      auto const otherTrack = addPlayableTrack(runtime, "Other");
+      auto const cursorTrack = addPlayableTrack(runtime, *executor, "Cursor");
+      auto const otherTrack = addPlayableTrack(runtime, *executor, "Other");
       auto const viewId = createView(runtime);
-      REQUIRE(runtime.playback().commands().startFromView(viewId, cursorTrack));
-      REQUIRE(runtime.playback().commands().startFromView(viewId, otherTrack));
+      REQUIRE(startFromViewAndWait(runtime, *executor, viewId, cursorTrack));
+      REQUIRE(startFromViewAndWait(runtime, *executor, viewId, otherTrack));
       auto const snapshot = runtime.playback().snapshot();
       REQUIRE(snapshot.succession.currentTrackId == otherTrack);
       REQUIRE(snapshot.transport.nowPlaying.trackId == otherTrack);
@@ -1507,11 +1567,12 @@ namespace ao::rt::test
     {
       auto tempDir = ao::test::TempDir{};
       REQUIRE(std::filesystem::create_directory(tempDir.path() / "workspace.yaml"));
-      auto runtime = makeRuntime(tempDir);
+      auto* executor = static_cast<QueuedExecutor*>(nullptr);
+      auto runtime = makePlaybackSessionRuntime(tempDir, executor);
       addReadyAudioProvider(runtime);
-      auto const track = addPlayableTrack(runtime, "Track");
+      auto const track = addPlayableTrack(runtime, *executor, "Track");
       auto const viewId = createView(runtime);
-      REQUIRE(runtime.playback().commands().startFromView(viewId, track));
+      REQUIRE(startFromViewAndWait(runtime, *executor, viewId, track));
       auto const saved = runtime.savePlaybackSession();
       REQUIRE_FALSE(saved);
       CHECK(saved.error().code == Error::Code::IoError);

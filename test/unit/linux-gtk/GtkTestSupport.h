@@ -922,4 +922,12 @@ namespace ao::gtk::test
 
     return predicate();
   }
+
+  inline bool waitForPlaybackSettlement(rt::AppRuntime& runtime,
+                                        TrackId const trackId,
+                                        std::chrono::milliseconds timeout = std::chrono::seconds{2})
+  {
+    return pumpGtkEventsUntil(
+      [&] { return runtime.playback().snapshot().transport.nowPlaying.trackId == trackId; }, timeout);
+  }
 } // namespace ao::gtk::test

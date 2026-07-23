@@ -6,6 +6,7 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <glib-object.h>
 #include <gtkmm/headerbar.h>
 #include <gtkmm/label.h>
 #include <gtkmm/window.h>
@@ -80,6 +81,33 @@ namespace ao::gtk::test
     REQUIRE(responses.size() == 2U);
     CHECK(responses[0] == -3);
     CHECK(responses[1] == -6);
+  }
+
+  TEST_CASE("AppDialog - response tolerates managed dialog finalization from its handler",
+            "[gtk][regression][app][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+
+    auto parent = Gtk::Window{};
+    auto* const dialog = AppDialog::presentMessage(
+      parent,
+      "Finished",
+      "This dialog closes from its response handler.",
+      {AppDialogAction{.label = "OK", .responseId = -5, .role = AppDialogActionRole::Primary}},
+      -5);
+    bool finalized = false;
+    auto const markFinalized = +[](void* const data, GObject*) { *static_cast<bool*>(data) = true; };
+    ::g_object_weak_ref(G_OBJECT(dialog->gobj()), markFinalized, &finalized);
+
+    dialog->response(-5);
+    drainGtkEvents();
+
+    CHECK(finalized);
+
+    if (!finalized)
+    {
+      ::g_object_weak_unref(G_OBJECT(dialog->gobj()), markFinalized, &finalized);
+    }
   }
 
   TEST_CASE("AppDialog - content replacement detaches previous widget", "[gtk][unit][app][dialog]")

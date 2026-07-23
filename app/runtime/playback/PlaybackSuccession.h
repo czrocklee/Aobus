@@ -106,6 +106,7 @@ namespace ao::rt
     // Handlers run synchronously on the executor thread. Callers must defer
     // emitting-owner teardown to a later executor turn.
     async::Subscription onChanged(std::move_only_function<void(PlaybackSuccessionState const&)> handler);
+    async::Subscription onExplicitStartSettled(std::move_only_function<void()> handler);
     async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
     async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
 

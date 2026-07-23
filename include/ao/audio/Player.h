@@ -23,6 +23,7 @@
 namespace ao::async
 {
   class Executor;
+  class Runtime;
 }
 
 namespace ao::audio
@@ -72,6 +73,8 @@ namespace ao::audio
 
     explicit Player(async::Executor& executor);
     Player(async::Executor& executor, DecoderFactoryFn decoderFactory);
+    explicit Player(async::Runtime& runtime);
+    Player(async::Runtime& runtime, DecoderFactoryFn decoderFactory);
     ~Player();
 
     /// Stops providers and quiesces Engine callbacks before an owner releases Player.
@@ -90,8 +93,28 @@ namespace ao::audio
     Result<> play(Engine::PlaybackItem const& item, std::chrono::milliseconds initialOffset = {});
     Result<Engine::PreparedPlaybackStart> stagePlayback(Engine::PlaybackItem const& item,
                                                         std::chrono::milliseconds initialOffset = {});
+    using PreparationAcceptance = std::move_only_function<bool()>;
+    using PreparedStartCompletion = std::move_only_function<void(Result<Engine::PreparedPlaybackStart> preparedStart)>;
+    using PreparedNextCompletion = std::move_only_function<void(Result<Engine::PreparedNextResult> preparedNext)>;
+
+    /// Admits isolated source preparation on the async worker pool. Success
+    /// reports admission only. Acceptance runs on the Player executor before
+    /// Engine adoption. An acceptance veto completes once with `Conflict`;
+    /// cancellation, replacement, or teardown may suppress completion.
+    Result<> stagePlaybackAsync(Engine::PlaybackItem const& item,
+                                std::chrono::milliseconds initialOffset,
+                                PreparationAcceptance acceptance,
+                                PreparedStartCompletion completion);
     Result<Engine::PlaybackStartReceipt> commitPlayback(Engine::PreparedPlaybackStart&& preparedStart);
     Result<Engine::PreparedNextResult> prepareNext(Engine::PlaybackItem const& item);
+    /// Admits best-effort lookahead preparation. Success reports admission only;
+    /// an acceptance veto completes once with `Conflict`, while cancellation,
+    /// replacement, or teardown may suppress completion.
+    Result<> prepareNextAsync(Engine::PlaybackItem const& item,
+                              PreparationAcceptance acceptance,
+                              PreparedNextCompletion completion);
+    void cancelStartPreparation();
+    void cancelLookaheadPreparation();
     std::optional<Engine::PlaybackItemId> clearPreparedNext();
     /// @brief Selects the output device. Returns `NotFound` when no provider is
     /// registered for `backend`. A not-yet-discovered device is stored as pending
