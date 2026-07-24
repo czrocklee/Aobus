@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir
+from ..core import builddir, winui
 from ..core.proc import die
 from . import build
 
@@ -25,6 +25,7 @@ APPS = {
     "cli": AppSpec("aobus", Path("app/cli/aobus")),
     "tui": AppSpec("aobus-tui", Path("app/tui/aobus-tui")),
     "gtk": AppSpec("aobus-gtk", Path("app/linux-gtk/aobus-gtk")),
+    "winui": AppSpec("winui", Path("app/windows-winui")),
 }
 
 EPILOG = """\
@@ -42,6 +43,7 @@ WINDOWS_EPILOG = """\
 examples:
   ao.bat run cli                         # build and run the CLI in debug mode
   ao.bat run tui                         # build and run the TUI in debug mode
+  ao.bat run winui                       # build and run WinUI from an interactive desktop
   ao.bat run tui -n                      # run without rebuilding
   ao.bat run tui release                 # build and run the release TUI
   ao.bat run tui -- --library C:\\Music  # forward application options after --
@@ -79,15 +81,26 @@ def run_command(args: argparse.Namespace) -> int:
     if not args.no_build:
         build.do_build(args, [app.target])
 
-    build_dir = (
-        Path(args.path)
-        if getattr(args, "path", None)
-        else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
-    )
-    executable = builddir.executable(build_dir / app.executable)
+    if args.app == "winui":
+        build_dir = Path(args.path) if getattr(args, "path", None) else builddir.winui_build_dir()
+        configuration = "Debug" if args.flavor == "debug" else "Release"
+        executable = builddir.executable(build_dir / app.executable / configuration / "Aobus")
+        try:
+            winui.require_runtime()
+            winui.require_interactive_session()
+        except RuntimeError as exc:
+            raise die(str(exc)) from exc
+    else:
+        build_dir = (
+            Path(args.path)
+            if getattr(args, "path", None)
+            else builddir.build_dir(args.flavor, clang=args.clang, asan=args.asan, tsan=args.tsan)
+        )
+        executable = builddir.executable(build_dir / app.executable)
 
     if not executable.exists():
-        raise die(f"Executable not found at {executable}. Did you build the project? Run './ao build' first.")
+        command = "ao.bat build --target winui" if args.app == "winui" else "./ao build"
+        raise die(f"Executable not found at {executable}. Did you build the project? Run '{command}' first.")
 
     # Replaces the current process with the target executable
     os.execvp(str(executable), [str(executable), *args.app_args])

@@ -40,10 +40,10 @@ function(aobus_contract_optional_get output found)
 endfunction()
 
 aobus_contract_get(AOBUS_DEPENDENCY_SCHEMA_VERSION schemaVersion)
-if(NOT AOBUS_DEPENDENCY_SCHEMA_VERSION EQUAL 1)
+if(NOT AOBUS_DEPENDENCY_SCHEMA_VERSION EQUAL 2)
   message(FATAL_ERROR
     "Unsupported dependency contract schema ${AOBUS_DEPENDENCY_SCHEMA_VERSION} in "
-    "${AOBUS_DEPENDENCY_CONTRACT_FILE}; Aobus supports schema 1.")
+    "${AOBUS_DEPENDENCY_CONTRACT_FILE}; Aobus supports schema 2.")
 endif()
 
 if(WIN32)
@@ -125,6 +125,16 @@ endfunction()
 aobus_policy_find_arguments(boost AOBUS_BOOST_FIND_ARGUMENTS AOBUS_BOOST_REQUESTED_VERSION AOBUS_BOOST_EXCEPTION)
 aobus_policy_find_arguments(spdlog AOBUS_SPDLOG_FIND_ARGUMENTS AOBUS_SPDLOG_REQUESTED_VERSION AOBUS_SPDLOG_EXCEPTION)
 aobus_policy_find_arguments(ftxui AOBUS_FTXUI_FIND_ARGUMENTS AOBUS_FTXUI_REQUESTED_VERSION AOBUS_FTXUI_EXCEPTION)
+aobus_policy_find_arguments(
+  windows-app-sdk
+  AOBUS_WINDOWS_APP_SDK_FIND_ARGUMENTS
+  AOBUS_WINDOWS_APP_SDK_REQUESTED_VERSION
+  AOBUS_WINDOWS_APP_SDK_EXCEPTION)
+aobus_policy_find_arguments(
+  cppwinrt
+  AOBUS_CPPWINRT_FIND_ARGUMENTS
+  AOBUS_CPPWINRT_REQUESTED_VERSION
+  AOBUS_CPPWINRT_EXCEPTION)
 
 aobus_contract_optional_get(AOBUS_FTXUI_REQUIRED_WHEN AOBUS_FTXUI_HAS_CONDITION
   dependencies ftxui cmake requiredWhen)
@@ -132,6 +142,53 @@ if(NOT AOBUS_FTXUI_HAS_CONDITION OR NOT AOBUS_FTXUI_REQUIRED_WHEN STREQUAL "AOBU
   message(FATAL_ERROR
     "Invalid Aobus dependency contract ${AOBUS_DEPENDENCY_CONTRACT_FILE}: ftxui.requiredWhen "
     "must be the supported build option AOBUS_BUILD_TUI.")
+endif()
+
+aobus_contract_optional_get(AOBUS_WINDOWS_APP_SDK_REQUIRED_WHEN AOBUS_WINDOWS_APP_SDK_HAS_CONDITION
+  dependencies windows-app-sdk msbuild requiredWhen)
+aobus_contract_optional_get(AOBUS_CPPWINRT_REQUIRED_WHEN AOBUS_CPPWINRT_HAS_CONDITION
+  dependencies cppwinrt msbuild requiredWhen)
+if(NOT AOBUS_WINDOWS_APP_SDK_HAS_CONDITION
+   OR NOT AOBUS_WINDOWS_APP_SDK_REQUIRED_WHEN STREQUAL "AOBUS_BUILD_WINUI"
+   OR NOT AOBUS_CPPWINRT_HAS_CONDITION
+   OR NOT AOBUS_CPPWINRT_REQUIRED_WHEN STREQUAL "AOBUS_BUILD_WINUI")
+  message(FATAL_ERROR
+    "Windows App SDK and C++/WinRT must be conditioned by AOBUS_BUILD_WINUI.")
+endif()
+
+aobus_contract_get(AOBUS_WINDOWS_APP_SDK_LOCK_RELATIVE
+  dependencies windows-app-sdk nuget lock)
+aobus_contract_get(AOBUS_CPPWINRT_LOCK_RELATIVE
+  dependencies cppwinrt nuget lock)
+if(NOT AOBUS_WINDOWS_APP_SDK_LOCK_RELATIVE STREQUAL AOBUS_CPPWINRT_LOCK_RELATIVE)
+  message(FATAL_ERROR
+    "Governed NuGet dependencies must share one lock file; "
+    "windows-app-sdk uses '${AOBUS_WINDOWS_APP_SDK_LOCK_RELATIVE}' and "
+    "cppwinrt uses '${AOBUS_CPPWINRT_LOCK_RELATIVE}'.")
+endif()
+cmake_path(ABSOLUTE_PATH AOBUS_WINDOWS_APP_SDK_LOCK_RELATIVE
+  BASE_DIRECTORY "${CMAKE_SOURCE_DIR}"
+  NORMALIZE
+  OUTPUT_VARIABLE AOBUS_WINDOWS_APP_SDK_LOCK)
+cmake_path(GET AOBUS_WINDOWS_APP_SDK_LOCK PARENT_PATH AOBUS_WINDOWS_APP_SDK_LOCK_DIR)
+set(AOBUS_WINDOWS_APP_SDK_NUGET_CONFIG
+  "${AOBUS_WINDOWS_APP_SDK_LOCK_DIR}/NuGet.Config")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${AOBUS_WINDOWS_APP_SDK_LOCK}"
+  "${AOBUS_WINDOWS_APP_SDK_NUGET_CONFIG}")
+
+include("${CMAKE_SOURCE_DIR}/cmake/WindowsAppSdk.cmake")
+aobus_nuget_locked_version(Microsoft.WindowsAppSDK AOBUS_WINDOWS_APP_SDK_LOCKED_VERSION)
+aobus_nuget_locked_version(Microsoft.Windows.CppWinRT AOBUS_CPPWINRT_LOCKED_VERSION)
+if(NOT AOBUS_WINDOWS_APP_SDK_LOCKED_VERSION STREQUAL AOBUS_WINDOWS_APP_SDK_REQUESTED_VERSION
+   OR NOT AOBUS_CPPWINRT_LOCKED_VERSION STREQUAL AOBUS_CPPWINRT_REQUESTED_VERSION)
+  message(FATAL_ERROR
+    "Windows App SDK NuGet lock disagrees with dependency-contract.json: "
+    "Microsoft.WindowsAppSDK=${AOBUS_WINDOWS_APP_SDK_LOCKED_VERSION}, "
+    "Microsoft.Windows.CppWinRT=${AOBUS_CPPWINRT_LOCKED_VERSION}.")
+endif()
+if(AOBUS_BUILD_WINUI)
+  aobus_restore_windows_app_sdk()
 endif()
 
 find_package(Boost ${AOBUS_BOOST_FIND_ARGUMENTS} QUIET COMPONENTS headers process filesystem)
@@ -314,6 +371,42 @@ function(aobus_dependency_report_entry output dependency requested resolved exce
   set(${output} "${entry}" PARENT_SCOPE)
 endfunction()
 
+function(aobus_nuget_dependency_report output dependency requested resolved exception package active)
+  aobus_dependency_policy("${dependency}" policy_kind ignored_version ignored_exception)
+  set(entry "{}")
+  if(active)
+    aobus_json_set_string(entry "${entry}" status verified)
+    aobus_json_set_string(entry "${entry}" resolvedVersion "${resolved}")
+  else()
+    aobus_json_set_string(entry "${entry}" status not-applicable)
+    string(JSON entry SET "${entry}" resolvedVersion null)
+  endif()
+  aobus_json_set_string(entry "${entry}" policyKind "${policy_kind}")
+  aobus_json_set_string(entry "${entry}" requestedVersion "${requested}")
+  if(exception)
+    aobus_json_quote(quoted_exception "${exception}")
+    string(JSON entry SET "${entry}" exceptionId "${quoted_exception}")
+  else()
+    string(JSON entry SET "${entry}" exceptionId null)
+  endif()
+  string(JSON entry SET "${entry}" targets "{}")
+  string(JSON entry SET "${entry}" capabilities "{}")
+  set(packages "{}")
+  if(active)
+    string(JSON packages SET "${packages}" "${package}" true)
+  endif()
+  string(JSON entry SET "${entry}" packages "${packages}")
+  set(condition "{}")
+  aobus_json_set_string(condition "${condition}" name AOBUS_BUILD_WINUI)
+  if(active)
+    string(JSON condition SET "${condition}" value true)
+  else()
+    string(JSON condition SET "${condition}" value false)
+  endif()
+  string(JSON entry SET "${entry}" condition "${condition}")
+  set(${output} "${entry}" PARENT_SCOPE)
+endfunction()
+
 aobus_dependency_target_results(boost AOBUS_BOOST_TARGET_RESULTS)
 aobus_dependency_target_results(spdlog AOBUS_SPDLOG_TARGET_RESULTS)
 if(AOBUS_BUILD_TUI)
@@ -321,6 +414,20 @@ if(AOBUS_BUILD_TUI)
 else()
   set(AOBUS_FTXUI_TARGET_RESULTS "{}")
 endif()
+
+if(WIN32 AND AOBUS_BUILD_WINUI)
+  set(AOBUS_WINUI_DEPENDENCIES_ACTIVE TRUE)
+else()
+  set(AOBUS_WINUI_DEPENDENCIES_ACTIVE FALSE)
+endif()
+aobus_nuget_dependency_report(AOBUS_WINDOWS_APP_SDK_REPORT windows-app-sdk
+  "${AOBUS_WINDOWS_APP_SDK_REQUESTED_VERSION}" "${AOBUS_WINDOWS_APP_SDK_LOCKED_VERSION}"
+  "${AOBUS_WINDOWS_APP_SDK_EXCEPTION}" Microsoft.WindowsAppSDK
+  "${AOBUS_WINUI_DEPENDENCIES_ACTIVE}")
+aobus_nuget_dependency_report(AOBUS_CPPWINRT_REPORT cppwinrt
+  "${AOBUS_CPPWINRT_REQUESTED_VERSION}" "${AOBUS_CPPWINRT_LOCKED_VERSION}"
+  "${AOBUS_CPPWINRT_EXCEPTION}" Microsoft.Windows.CppWinRT
+  "${AOBUS_WINUI_DEPENDENCIES_ACTIVE}")
 
 set(AOBUS_SPDLOG_CAPABILITIES "{}")
 string(JSON AOBUS_SPDLOG_CAPABILITIES SET
@@ -365,7 +472,8 @@ else()
 endif()
 
 set(AOBUS_DEPENDENCY_REPORT "{}")
-string(JSON AOBUS_DEPENDENCY_REPORT SET "${AOBUS_DEPENDENCY_REPORT}" schemaVersion 1)
+string(JSON AOBUS_DEPENDENCY_REPORT SET
+  "${AOBUS_DEPENDENCY_REPORT}" schemaVersion ${AOBUS_DEPENDENCY_SCHEMA_VERSION})
 string(JSON AOBUS_DEPENDENCY_REPORT SET "${AOBUS_DEPENDENCY_REPORT}" contract "{}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" contract schemaVersion ${AOBUS_DEPENDENCY_SCHEMA_VERSION})
@@ -419,6 +527,22 @@ foreach(lock_file IN ITEMS vcpkg-configuration.json vcpkg.json)
   string(JSON AOBUS_DEPENDENCY_HOST SET
     "${AOBUS_DEPENDENCY_HOST}" "${lock_field}" "${quoted_lock_hash}")
 endforeach()
+file(SHA256 "${AOBUS_WINDOWS_APP_SDK_LOCK}" nuget_lock_hash)
+aobus_json_quote(quoted_nuget_lock_hash "${nuget_lock_hash}")
+string(JSON AOBUS_DEPENDENCY_HOST SET
+  "${AOBUS_DEPENDENCY_HOST}" nugetLockSha256 "${quoted_nuget_lock_hash}")
+file(SHA256 "${AOBUS_WINDOWS_APP_SDK_NUGET_CONFIG}" nuget_config_hash)
+aobus_json_quote(quoted_nuget_config_hash "${nuget_config_hash}")
+string(JSON AOBUS_DEPENDENCY_HOST SET
+  "${AOBUS_DEPENDENCY_HOST}" nugetConfigSha256 "${quoted_nuget_config_hash}")
+if(AOBUS_BUILD_WINUI AND AOBUS_NUGET_PACKAGES_DIR)
+  aobus_json_quote(quoted_nuget_packages_dir "${AOBUS_NUGET_PACKAGES_DIR}")
+  string(JSON AOBUS_DEPENDENCY_HOST SET
+    "${AOBUS_DEPENDENCY_HOST}" nugetPackagesDir "${quoted_nuget_packages_dir}")
+else()
+  string(JSON AOBUS_DEPENDENCY_HOST SET
+    "${AOBUS_DEPENDENCY_HOST}" nugetPackagesDir null)
+endif()
 
 if(WIN32)
   find_program(AOBUS_VCPKG_EXECUTABLE NAMES vcpkg.exe vcpkg HINTS "$ENV{VCPKG_ROOT}")
@@ -450,6 +574,10 @@ string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies ftxui "${AOBUS_FTXUI_REPORT}")
 string(JSON AOBUS_DEPENDENCY_REPORT SET
   "${AOBUS_DEPENDENCY_REPORT}" dependencies spdlog "${AOBUS_SPDLOG_REPORT}")
+string(JSON AOBUS_DEPENDENCY_REPORT SET
+  "${AOBUS_DEPENDENCY_REPORT}" dependencies windows-app-sdk "${AOBUS_WINDOWS_APP_SDK_REPORT}")
+string(JSON AOBUS_DEPENDENCY_REPORT SET
+  "${AOBUS_DEPENDENCY_REPORT}" dependencies cppwinrt "${AOBUS_CPPWINRT_REPORT}")
 file(WRITE "${CMAKE_BINARY_DIR}/aobus-dependencies.json" "${AOBUS_DEPENDENCY_REPORT}\n")
 
 find_program(GPERF_EXECUTABLE gperf REQUIRED)

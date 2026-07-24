@@ -4,8 +4,10 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/utility/ScopedRegistration.h>
 
@@ -36,6 +38,12 @@ namespace ao::gtk::platform
     using OnArtUrlReady = std::function<void(std::string)>;
     using ArtUrlRequester = std::function<utility::ScopedRegistration(ResourceId, OnArtUrlReady)>;
 
+    struct PlaybackSource final
+    {
+      std::function<rt::PlaybackSnapshot const&()> snapshot;
+      std::function<async::Subscription(rt::PlaybackSnapshotObserver)> onSnapshot;
+    };
+
     struct Callbacks final
     {
       RootCommand raise{};
@@ -54,6 +62,10 @@ namespace ao::gtk::platform
     };
 
     MprisBridge(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands, Callbacks callbacks);
+    MprisBridge(rt::PlaybackService& playback,
+                uimodel::PlaybackCommandSurface& commands,
+                Callbacks callbacks,
+                PlaybackSource playbackSource);
     ~MprisBridge();
 
     MprisBridge(MprisBridge const&) = delete;

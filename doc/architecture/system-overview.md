@@ -17,11 +17,13 @@ Those facts belong in specifications, reference documents, and the focused archi
 
 ## System context
 
-Aobus ships three frontends over a shared C++ core and application runtime.
+Aobus ships three established frontends over a shared C++ core and application
+runtime, plus a WinUI bootstrap used to grow the native Windows frontend.
 
 ```text
 GTK -> ao_app_uimodel -> ao_app_runtime -> core libraries
 TUI -> ao_app_uimodel -> ao_app_runtime -> core libraries
+WinUI bootstrap ------> ao_app_runtime -> core libraries
 CLI -----------------> ao_app_runtime -> core libraries
 
 core libraries: utility, async, lmdb, media, library, query, audio
@@ -33,6 +35,9 @@ The core libraries provide storage, encoded-media reading, query, asynchronous, 
 `ao_app_runtime` composes those primitives into frontend-neutral services.
 `ao_app_uimodel` turns runtime state and commands into platform-neutral presentation state and interaction policy.
 GTK and TUI bind runtime and UIModel state to their native event loops and rendering systems.
+The WinUI bootstrap proves the C++/WinRT, XAML, runtime, and shared-library
+composition path; product behavior added there must consume the same runtime
+and UIModel authorities rather than creating Windows-only policy.
 The CLI uses `ao_app_runtime` directly when an interactive presentation model is unnecessary.
 
 ## Responsibilities
@@ -73,6 +78,9 @@ Frontends use the runtime path contract for standard per-library locations while
 
 GTK additionally owns widgets, CSS, dialogs, portals, GLib integration, and GTK-specific layout construction.
 TUI owns FTXUI rendering, terminal input, overlays, and its event-loop adapter.
+WinUI owns Windows App SDK application/window lifetime, XAML resources, and
+Windows dispatcher adaptation. Its current bootstrap does not yet claim the
+complete interactive presentation behavior owned by GTK and TUI.
 The CLI owns argument parsing and output encoding around `CoreRuntime` operations.
 
 ## Boundaries and dependency direction
@@ -87,7 +95,9 @@ Dependencies follow the arrows toward core libraries and never reverse from runt
 - Shared signal mechanisms live in `ao_async`, while the runtime or UIModel service that owns an event remains responsible for its payload, execution domain, and exception-containment policy.
 
 Public runtime headers deliberately hide direct LMDB stores, library store/view types, and audio control-plane implementation types.
-The build attaches include-boundary checks to the runtime, UIModel, and GTK targets so these edges are executable constraints rather than diagram-only guidance.
+The build attaches include-boundary checks to the runtime, UIModel, GTK, and
+WinUI targets so these edges are executable constraints rather than
+diagram-only guidance.
 
 ## Data and control flow
 
@@ -160,7 +170,7 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
-- [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots.
+- [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), [`app/windows-winui/App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots or bootstrap roots.
 - [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) and [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) enforce application-layer boundaries.
 
 ## Test map

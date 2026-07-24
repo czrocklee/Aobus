@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir
+from ..core import builddir, winui
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -31,7 +31,10 @@ examples:
   ao.bat build release --clean       # clean release build
   ao.bat build --target aobus-tui    # build only the TUI target
   ao.bat build --target aobus        # build only the CLI target
+  ao.bat build --target winui        # build WinUI through the dedicated MSBuild tree
 """
+
+WINUI_TARGETS = frozenset({"winui", "aobus-winui"})
 
 
 def add_build_arguments(parser: argparse.ArgumentParser) -> None:
@@ -101,8 +104,8 @@ def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile
     return profile
 
 
-def parallel_build_arguments() -> list[str]:
-    """Return an explicit CMake parallelism limit, honoring the standard environment override."""
+def parallel_build_jobs() -> int:
+    """Return the shared build concurrency limit."""
     configured = os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL")
     if configured is not None:
         try:
@@ -113,17 +116,49 @@ def parallel_build_arguments() -> list[str]:
             raise die("CMAKE_BUILD_PARALLEL_LEVEL must be a positive integer.")
     else:
         jobs = max(1, (os.cpu_count() or 1) - 1)
+    return jobs
+
+
+def parallel_build_arguments() -> list[str]:
+    """Return the CMake arguments for the shared build concurrency limit."""
+    jobs = parallel_build_jobs()
     return ["--parallel", str(jobs)]
+
+
+def _winui_build_environment(jobs: int) -> dict[str, str]:
+    """Coordinate C++ compilation concurrency across MSBuild projects."""
+    return {
+        "UseMultiToolTask": "true",
+        "EnforceProcessCountAcrossBuilds": "true",
+        "MultiProcMaxCount": str(jobs),
+        "CL_MPCount": str(jobs),
+    }
 
 
 def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
     """Shared by `ao build` and `ao check`. Raises SystemExit on failure."""
     profile = validate_build_options(args)
 
-    preset = builddir.preset(args.flavor)
+    requested_winui = any(target in WINUI_TARGETS for target in targets)
+    if requested_winui and any(target not in WINUI_TARGETS for target in targets):
+        raise die("WinUI cannot be combined with Ninja targets in one build invocation.")
+    if requested_winui:
+        if profile.name != "windows":
+            raise die("The WinUI frontend is available only on native Windows.")
+        if args.clang or args.asan or args.tsan:
+            raise die("The initial WinUI MSBuild profile does not support compiler or sanitizer overrides.")
+        try:
+            winui.require_build_host()
+        except RuntimeError as exc:
+            raise die(str(exc)) from exc
+        preset = builddir.WINDOWS_WINUI_PRESET
+    else:
+        preset = builddir.preset(args.flavor)
     build_dir = (
         Path(args.path)
         if getattr(args, "path", None)
+        else builddir.winui_build_dir()
+        if requested_winui
         else builddir.build_dir(
             args.flavor,
             clang=args.clang,
@@ -158,14 +193,21 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         raise die("configure failed.")
 
     build = ["cmake", "--build", str(build_dir)]
-    build += parallel_build_arguments()
-    for target in targets:
+    if requested_winui:
+        build += ["--config", "Debug" if args.flavor == "debug" else "Release"]
+    parallel_jobs = parallel_build_jobs()
+    build += ["--parallel", str(parallel_jobs)]
+    canonical_targets = ["aobus-winui"] if requested_winui else targets
+    for target in canonical_targets:
         build += ["--target", target]
     if args.verbose:
         build.append("--verbose")
 
     print("Building Aobus...")
-    if run(build, env=env, log=log, append=True) != 0:
+    build_env = env
+    if requested_winui:
+        build_env = {**(env or {}), **_winui_build_environment(parallel_jobs)}
+    if run(build, env=build_env, log=log, append=True) != 0:
         raise die("build failed.")
 
     compiler = "clang" if args.clang else profile.compiler

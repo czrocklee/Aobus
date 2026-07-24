@@ -84,6 +84,24 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "windows-winui",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "$env{LOCALAPPDATA}/Aobus/build/cmake-preset/${sourceDirName}/windows-winui",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_MANIFEST_NO_DEFAULT_FEATURES": "ON",
+        "AOBUS_BUILD_CLI": "OFF",
+        "AOBUS_BUILD_GTK": "OFF",
+        "AOBUS_BUILD_TESTS": "OFF",
+        "AOBUS_BUILD_TOOLS": "OFF",
+        "AOBUS_BUILD_LINT_PLUGIN": "OFF",
+        "AOBUS_BUILD_TUI": "OFF",
+        "AOBUS_BUILD_WINUI": "ON"
+      }
     }
   ]
 }

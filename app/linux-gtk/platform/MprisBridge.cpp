@@ -3,14 +3,15 @@
 
 #include "MprisBridge.h"
 
+#include "MprisArtUrlSession.h"
 #include "MprisPlaybackEndpoint.h"
-#include "common/MainContextCallbackScope.h"
 #include "common/UStringConvert.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
+#include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
@@ -107,6 +108,15 @@ namespace ao::gtk::platform
     using PropertiesChangedPayload = std::tuple<Glib::ustring, MetadataVariantMap, std::vector<Glib::ustring>>;
     using SeekedPayload = std::tuple<std::int64_t>;
 
+    MprisBridge::PlaybackSource playbackSourceFor(rt::PlaybackService& playback)
+    {
+      return {
+        .snapshot = [&playback] -> rt::PlaybackSnapshot const& { return playback.snapshot(); },
+        .onSnapshot = [&playback](rt::PlaybackSnapshotObserver observer)
+        { return playback.events().onSnapshot(std::move(observer)); },
+      };
+    }
+
     [[noreturn]] void throwGioError(Gio::Error::Code const code, char const* const message)
     {
       throw Gio::Error{code, message};
@@ -169,6 +179,7 @@ namespace ao::gtk::platform
     rt::PlaybackService& playback;
     uimodel::PlaybackCommandSurface& commands;
     Callbacks callbacks;
+    PlaybackSource playbackSource;
     MprisPlaybackEndpoint endpoint;
     Glib::RefPtr<Gio::DBus::Connection> connectionPtr{};
     Glib::RefPtr<Gio::DBus::NodeInfo> nodeInfoPtr{};
@@ -178,17 +189,19 @@ namespace ao::gtk::platform
     bool nameAcquired = false;
     std::vector<async::Subscription> subscriptions{};
     rt::PlaybackSnapshot lastSnapshot{};
-    utility::ScopedRegistration artRequest{};
-    std::unique_ptr<MainContextCallbackScope> artCallbackScopePtr;
-    ResourceId artResourceId = kInvalidResourceId;
-    std::string artUrl{};
+    MprisArtUrlSession artUrlSession;
 
-    Impl(rt::PlaybackService& playbackRef, uimodel::PlaybackCommandSurface& commandsRef, Callbacks callbacksIn)
+    Impl(rt::PlaybackService& playbackRef,
+         uimodel::PlaybackCommandSurface& commandsRef,
+         Callbacks callbacksIn,
+         PlaybackSource playbackSourceIn)
       : playback{playbackRef}
       , commands{commandsRef}
       , callbacks{std::move(callbacksIn)}
+      , playbackSource{std::move(playbackSourceIn)}
       , endpoint{playback, commands, callbacks}
-      , lastSnapshot{playback.snapshot()}
+      , lastSnapshot{playbackSource.snapshot()}
+      , artUrlSession{callbacks.requestArtUrl, [this] { emitPlayerPropertiesChanged({"Metadata"}); }}
     {
     }
 
@@ -236,21 +249,15 @@ namespace ao::gtk::platform
       releaseBusState();
     }
 
-    void clearArt()
-    {
-      artCallbackScopePtr.reset();
-      artRequest.reset();
-      artResourceId = kInvalidResourceId;
-      artUrl.clear();
-    }
+    void clearArt() { artUrlSession.clear(); }
 
     void subscribePlayback()
     {
       subscriptions.push_back(commands.onAvailabilityChanged(
         [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
-      lastSnapshot = playback.snapshot();
+      lastSnapshot = playbackSource.snapshot();
       refreshArt(lastSnapshot.transport);
-      subscriptions.push_back(playback.events().onSnapshot(
+      subscriptions.push_back(playbackSource.onSnapshot(
         [this](rt::PlaybackSnapshot const& snapshot)
         {
           if (snapshot.transport.transport != lastSnapshot.transport.transport)
@@ -318,55 +325,23 @@ namespace ao::gtk::platform
 
     std::string artUrlForState(rt::PlaybackTransportSnapshot const& state) const
     {
-      return state.nowPlaying.coverArtId == artResourceId ? artUrl : std::string{};
+      return artUrlSession.urlFor(state.nowPlaying.coverArtId);
     }
 
     void refreshArt(rt::PlaybackTransportSnapshot const& state)
     {
       auto const resourceId = state.nowPlaying.coverArtId;
 
-      if (resourceId == artResourceId)
-      {
-        return;
-      }
-
-      artCallbackScopePtr.reset();
-      artRequest.reset();
-      artResourceId = resourceId;
-      artUrl.clear();
-
-      if (resourceId == kInvalidResourceId || !callbacks.requestArtUrl)
-      {
-        return;
-      }
-
-      artCallbackScopePtr = std::make_unique<MainContextCallbackScope>();
-      auto onReady = artCallbackScopePtr->guard(
-        [this](std::string resolvedUrl)
-        {
-          artUrl = std::move(resolvedUrl);
-          artCallbackScopePtr.reset();
-          artRequest.reset();
-          emitPlayerPropertiesChanged({"Metadata"});
-        });
-
       try
       {
-        auto request = callbacks.requestArtUrl(resourceId, std::move(onReady));
-
-        if (artCallbackScopePtr)
-        {
-          artRequest = std::move(request);
-        }
+        artUrlSession.refresh(resourceId);
       }
       catch (std::exception const& e)
       {
-        artCallbackScopePtr.reset();
         APP_LOG_WARN("MPRIS art URL request failed for resource {}: {}", resourceId.raw(), e.what());
       }
       catch (...)
       {
-        artCallbackScopePtr.reset();
         APP_LOG_WARN("MPRIS art URL request failed for resource {}: unknown exception", resourceId.raw());
       }
     }
@@ -429,7 +404,7 @@ namespace ao::gtk::platform
 
     Glib::VariantBase playerProperty(std::string_view const propertyName) const
     {
-      auto const& snapshot = playback.snapshot();
+      auto const& snapshot = playbackSource.snapshot();
       auto const& state = snapshot.transport;
 
       if (propertyName == "PlaybackStatus")
@@ -800,7 +775,15 @@ namespace ao::gtk::platform
   MprisBridge::MprisBridge(rt::PlaybackService& playback,
                            uimodel::PlaybackCommandSurface& commands,
                            Callbacks callbacks)
-    : _implPtr{std::make_unique<Impl>(playback, commands, std::move(callbacks))}
+    : MprisBridge{playback, commands, std::move(callbacks), playbackSourceFor(playback)}
+  {
+  }
+
+  MprisBridge::MprisBridge(rt::PlaybackService& playback,
+                           uimodel::PlaybackCommandSurface& commands,
+                           Callbacks callbacks,
+                           PlaybackSource playbackSource)
+    : _implPtr{std::make_unique<Impl>(playback, commands, std::move(callbacks), std::move(playbackSource))}
   {
   }
 
@@ -818,7 +801,7 @@ namespace ao::gtk::platform
 
   MprisBridge::MetadataSnapshot MprisBridge::metadataSnapshot() const
   {
-    auto const& state = _implPtr->playback.snapshot().transport;
+    auto const& state = _implPtr->playbackSource.snapshot().transport;
     return metadataForState(state, _implPtr->artUrlForState(state));
   }
 

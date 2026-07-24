@@ -17,6 +17,7 @@ Aobus resolves dependencies through different native ecosystems:
 
 - pinned Nixpkgs on Linux;
 - versioned vcpkg registries on Windows;
+- an exact, signed NuGet closure for Windows App SDK/MSBuild dependencies;
 - a managed Python environment for repository tooling.
 
 The ecosystems are not expected to produce identical transitive graphs. The
@@ -34,6 +35,7 @@ Each file owns a distinct question:
 | Which Nixpkgs package set does Linux resolve from? | `nixpkgs.json` |
 | Which vcpkg registry snapshots does Windows resolve from? | `vcpkg-configuration.json` |
 | Which vcpkg ports and features does Aobus consume? | `vcpkg.json` |
+| Which Windows App SDK packages and signing source does MSBuild consume? | `app/windows-winui/packages.config` and `app/windows-winui/NuGet.Config` |
 | Which Python, Ruff, and mypy versions does repository tooling require? | `script/ao/toolchain.json` |
 | Which Windows Python artifacts and transitive packages are accepted? | `script/ao/windows-requirements.txt` |
 | Did the configured build satisfy the contract? | CMake dependency checks and `./ao deps verify` |
@@ -49,7 +51,9 @@ The initial governed set is deliberately small:
 
 - Boost;
 - FTXUI;
-- spdlog.
+- spdlog;
+- Windows App SDK;
+- C++/WinRT.
 
 The contract records the alignment policy, native package mappings, required
 CMake targets, build-option condition, and behavior-affecting capabilities.
@@ -121,6 +125,17 @@ explicit reason and removal condition. It is not the default update mechanism.
 The Windows dependency report preserves the complete
 `version#port-version`, selected features, target triplet, registry baselines,
 and vcpkg tool version.
+
+Windows-only MSBuild dependencies use the same contract with a Windows platform
+scope, an exact NuGet package, and an `AOBUS_BUILD_WINUI` condition. The
+packages lock owns the complete transitive closure rather than letting Visual
+Studio restore an ambient version. NuGet source mapping limits the closure to
+nuget.org, required repository signatures authenticate that source, and
+dependency verification inspects each restored archive's nuspec identity.
+
+The Windows App Runtime installer is governed separately because it is host
+state. The contract records its exact runtime identity, URL, and SHA-256, while
+setup also verifies Microsoft Authenticode.
 
 ## Tooling contract
 

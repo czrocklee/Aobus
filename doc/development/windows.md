@@ -7,10 +7,10 @@ summary: Defines the native Windows setup, build, test, and local-state workflow
 ---
 # Windows development
 
-The native Windows build provides the CLI and FTXUI terminal applications, the
-shared core libraries, native tests, and a dedicated clang-tidy configuration.
-The GTK frontend and council tool are not available in the Windows development
-profile.
+The native Windows build provides the CLI and FTXUI terminal applications, a
+WinUI 3 bootstrap frontend, the shared core libraries, native tests, and a
+dedicated clang-tidy configuration. The GTK frontend and council tool are not
+available in the Windows development profile.
 
 The source checkout may live on a local disk, a mapped drive such as `Y:`, or a
 network-backed workspace. Build trees and managed development tools are kept on
@@ -20,9 +20,12 @@ filesystem.
 
 ## Prerequisites
 
-- Visual Studio Build Tools with the **Desktop development with C++** workload,
-  x64 compiler toolset, and **C++ AddressSanitizer** component. The Visual
-  Studio Clang component is not required.
+- Visual Studio Build Tools with the components declared by
+  `config/windows-build-tools.vsconfig`. This includes the desktop C++ and
+  Universal Windows build workloads, x64 compiler toolset, NuGet Build Tools,
+  Windows SDK 10.0.26100, and the C++ WinUI application build tools. Install the
+  optional **C++ AddressSanitizer** component for sanitizer gates. The Visual
+  Studio IDE and Visual Studio Clang component are not required.
 - Git with long-path support, recommended for vcpkg build trees.
 - Network access for the first managed Python and dependency bootstrap. A valid
   local state directory is reused on later runs.
@@ -62,6 +65,7 @@ Its relevant layout is:
 ```text
 %LOCALAPPDATA%\Aobus\
   build\<checkout-key>\<preset>\
+  n\<lock-id>\p\
   cache\llvm\
     toolchains\
     downloads\
@@ -83,7 +87,10 @@ before the portal switches to it. Build, run, test, and check commands share the
 uses the separate `windows-debug-asan` directory. Tests and their vcpkg
 dependencies are part of the normal development graph; selecting a CMake target
 limits what is compiled without changing presets. `tidy` uses the separate
-`windows-tidy` directory.
+`windows-tidy` directory. WinUI uses a dedicated multi-config Visual Studio
+generator tree named `windows-winui`; it cannot share the Ninja flavor trees.
+Its short `n\<lock-id>\p` NuGet cache avoids deep package paths even when the
+host has not enabled Windows long-path support.
 
 The portal normally stores an opaque ID in the checkout's private Git directory.
 For a read-only checkout or a linked worktree whose Git directory is not visible
@@ -123,8 +130,12 @@ Run all commands from the repository root, including when that root is mapped:
 ao.bat build                 rem debug build of all enabled targets
 ao.bat build release         rem release build of all enabled targets
 ao.bat build --target aobus-tui  rem build only the TUI target
+ao.bat doctor winui          rem inspect WinUI build/runtime prerequisites
+ao.bat setup winui-runtime   rem install the governed runtime when missing
+ao.bat build --target winui  rem build WinUI with CMake-generated MSBuild
 ao.bat run cli               rem incrementally build and run the CLI
 ao.bat run tui               rem incrementally build and run the TUI
+ao.bat run winui             rem build and launch WinUI in an interactive session
 ao.bat test                  rem core and TUI tests
 ao.bat test --all            rem all Windows suites, including tooling
 ao.bat check                 rem full Windows gate
@@ -143,6 +154,50 @@ command is selected; each command declares that need in its module under
 `start-msbuild-env.bat <command> [args...]` remains useful when another
 development tool needs to run inside that environment; it honors a preset
 `VCPKG_ROOT` and otherwise defaults to the Visual Studio bundled vcpkg.
+
+## Windows App SDK and WinUI
+
+The Windows App SDK is a repository dependency, not a machine-wide development
+SDK. `app/windows-winui/packages.config` locks the complete NuGet closure;
+`app/windows-winui/NuGet.Config` restricts restore to nuget.org, maps every
+package to that source, requires signed packages, and pins the accepted
+nuget.org repository signing certificates. CMake provisions NuGet through the
+bundled vcpkg, restores the exact closure to local state, and generates the
+MSBuild imports needed by the C++/WinRT and XAML compiler. No IDE restore step
+is required.
+
+The Windows App Runtime is different: framework-dependent WinUI executables need
+the matching runtime installed for the current user. Its version, installer URL,
+and SHA-256 are governed by `dependency-contract.json`. `ao.bat setup
+winui-runtime` is explicit and idempotent; it verifies both the file hash and
+Microsoft Authenticode signer before running the installer. Normal build and
+doctor commands never modify the host.
+
+`ao.bat build --target winui` configures `windows-winui` with the Visual Studio
+generator and builds `aobus-winui` through `cmake --build`; direct `msbuild`
+invocations and Visual Studio are unnecessary. `ao.bat check` includes this
+Debug/Release WinUI build after the normal Windows graph, except in the MSVC
+AddressSanitizer profile.
+
+The portal uses one concurrency limit for both CMake's project scheduling and
+MSBuild's cross-project C++ compiler scheduling. By default it leaves one
+logical processor available. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
+integer to override both limits:
+
+```powershell
+$env:CMAKE_BUILD_PARALLEL_LEVEL = 12
+ao.bat build --target winui
+```
+
+The WinUI build enables MSBuild MultiToolTask with a process-count semaphore, so
+the limit applies to concurrent `cl.exe` work across generated projects rather
+than multiplying project-level and translation-unit-level parallelism.
+
+The current target is unpackaged and framework-dependent. Developer Mode is not
+required. Launch must occur in an interactive desktop session: SSH service
+session 0 can build and verify the executable but cannot display it, and the
+portal asks the developer to run `ao.bat run winui` inside the active RDP
+session.
 
 The repository's `vcpkg-configuration.json` selects both the default registry
 snapshot and the Boost-scoped snapshot. `dependency-contract.json` owns the

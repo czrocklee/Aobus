@@ -320,7 +320,7 @@ add_dependencies(ao_app_runtime ao_shared_signal_boundary_check)
 
 add_custom_target(ao_playback_internal_boundary_check
   COMMAND ${CMAKE_COMMAND}
-          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/include/ao/uimodel;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/include/ao/rt;${CMAKE_SOURCE_DIR}/app/include/ao/uimodel;${CMAKE_SOURCE_DIR}/app/uimodel;${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_INTERNAL_PLAYBACK_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
@@ -453,9 +453,21 @@ if(AOBUS_BUILD_TUI)
   )
 endif()
 
+if(AOBUS_BUILD_WINUI)
+  add_custom_target(ao_windows_winui_core_boundary_report
+    COMMAND ${CMAKE_COMMAND}
+            "-DROOTS=${CMAKE_SOURCE_DIR}/app/windows-winui"
+            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+            -DMODE=enforce
+            -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+    COMMENT "Checking direct storage/library dependencies in the WinUI frontend"
+    VERBATIM
+  )
+endif()
+
 add_custom_target(ao_frontend_library_path_boundary_check
   COMMAND ${CMAKE_COMMAND}
-          "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/linux-gtk;${CMAKE_SOURCE_DIR}/app/windows-winui;${CMAKE_SOURCE_DIR}/app/tui;${CMAKE_SOURCE_DIR}/app/cli"
           "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_LIBRARY_PATH_REGEX_FILE}"
           -DMODE=enforce
           -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
@@ -481,6 +493,9 @@ endif()
 if(AOBUS_BUILD_TUI)
   add_dependencies(ao_layering_boundary_report ao_tui_core_boundary_report)
 endif()
+if(AOBUS_BUILD_WINUI)
+  add_dependencies(ao_layering_boundary_report ao_windows_winui_core_boundary_report)
+endif()
 
 # Configure-time check: ao_app_uimodel must not link platform UI targets
 get_target_property(_ao_uimodel_links ao_app_uimodel LINK_LIBRARIES)
@@ -501,6 +516,9 @@ endif()
 if(AOBUS_BUILD_TUI)
   add_subdirectory(tui)
 endif()
-
-# Placeholders for future platforms
-# add_subdirectory(windows-winui)
+if(AOBUS_BUILD_WINUI)
+  add_subdirectory(windows-winui)
+  add_dependencies(aobus-winui
+    ao_frontend_library_path_boundary_check
+    ao_windows_winui_core_boundary_report)
+endif()

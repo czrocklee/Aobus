@@ -1,8 +1,12 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "leadResolver": "nix",
   "dependencies": {
     "boost": {
+      "platforms": [
+        "linux",
+        "windows"
+      ],
       "policy": {
         "kind": "exact",
         "version": "1.89.0"
@@ -36,6 +40,10 @@
       }
     },
     "ftxui": {
+      "platforms": [
+        "linux",
+        "windows"
+      ],
       "policy": {
         "kind": "exact",
         "version": "6.1.9"
@@ -60,6 +68,10 @@
       }
     },
     "spdlog": {
+      "platforms": [
+        "linux",
+        "windows"
+      ],
       "policy": {
         "kind": "exact",
         "version": "1.17.0"
@@ -83,6 +95,45 @@
         "spdlog-std-format",
         "spdlog-no-external-fmt"
       ]
+    },
+    "windows-app-sdk": {
+      "platforms": [
+        "windows"
+      ],
+      "policy": {
+        "kind": "exact",
+        "version": "2.3.1"
+      },
+      "nuget": {
+        "package": "Microsoft.WindowsAppSDK",
+        "lock": "app/windows-winui/packages.config"
+      },
+      "msbuild": {
+        "requiredWhen": "AOBUS_BUILD_WINUI"
+      },
+      "runtime": {
+        "packageName": "Microsoft.WindowsAppRuntime.2",
+        "version": "2.3.1.0",
+        "architecture": "x64",
+        "installerUrl": "https://aka.ms/windowsappsdk/2.3/2.3.1/windowsappruntimeinstall-x64.exe",
+        "sha256": "4011748ddf472b7e856d909fdfb4e9b19c3d23fcd8121039ac91f99d5ffa65db"
+      }
+    },
+    "cppwinrt": {
+      "platforms": [
+        "windows"
+      ],
+      "policy": {
+        "kind": "exact",
+        "version": "3.0.260715.1"
+      },
+      "nuget": {
+        "package": "Microsoft.Windows.CppWinRT",
+        "lock": "app/windows-winui/packages.config"
+      },
+      "msbuild": {
+        "requiredWhen": "AOBUS_BUILD_WINUI"
+      }
     }
   },
   "exceptions": []

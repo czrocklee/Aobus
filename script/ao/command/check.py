@@ -1,8 +1,10 @@
 """ao check — the pre-commit gate: full build and every registered test suite."""
 
 import argparse
+import copy
+from pathlib import Path
 
-from ..core import dependency_policy
+from ..core import builddir, dependency_policy
 from ..core.proc import die
 from . import build, test
 
@@ -44,6 +46,22 @@ def run_command(args: argparse.Namespace) -> int:
         dependency_policy.verified_report(result.build_dir)
     except dependency_policy.DependencyPolicyError as exc:
         raise die(str(exc)) from exc
+
+    profile = builddir.platform_profile()
+    if profile.name == "windows" and not args.asan:
+        winui_args = copy.copy(args)
+        if args.path:
+            normal_path = Path(args.path)
+            winui_args.path = str(normal_path.with_name(f"{normal_path.name}-winui"))
+        winui_result = build.do_build(winui_args, targets=["winui"])
+        print("Verifying WinUI dependency resolution...")
+        try:
+            dependency_policy.verified_report(winui_result.build_dir)
+        except dependency_policy.DependencyPolicyError as exc:
+            raise die(str(exc)) from exc
+        print(f"WinUI {args.flavor} build: {winui_result.build_dir}")
+    elif profile.name == "windows" and args.asan:
+        print("WinUI build skipped for the MSVC AddressSanitizer profile.")
 
     print("Running tests...")
     if (status := test.run_suites(suites, result.build_dir, tsan=args.tsan, log=result.log)) != 0:

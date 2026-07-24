@@ -155,6 +155,7 @@ WINDOWS_PRESETS = {
     "debug": "windows-debug",
     "release": "windows-release",
 }
+WINDOWS_WINUI_PRESET = "windows-winui"
 
 TIDY_PRESETS = {
     "linux": "linux-debug",
@@ -194,7 +195,7 @@ WINDOWS_PROFILE = PlatformProfile(
     build_root=WINDOWS_BUILD_ROOT,
     presets=WINDOWS_PRESETS,
     executable_suffix=".exe",
-    apps=("cli", "tui"),
+    apps=("cli", "tui", "winui"),
     default_suites=("core", "tui"),
     all_suites=("core", "tui", "cli", "integration", "tooling"),
     tsan_suites=(),
@@ -241,6 +242,16 @@ def analyze_dir(os_name: str | None = None) -> Path:
     profile = platform_profile(os_name)
     name = "windows-analyzer" if profile.name == "windows" else "debug-clang-analyzer"
     return profile.build_root / name
+
+
+def winui_build_dir(os_name: str | None = None) -> Path:
+    """Return the dedicated multi-config Visual Studio build tree for WinUI."""
+    if override := os.environ.get("BUILD_DIR"):
+        return Path(override)
+    profile = platform_profile(os_name)
+    if profile.name != "windows":
+        raise RuntimeError("The WinUI build tree is available only on Windows.")
+    return profile.build_root / WINDOWS_WINUI_PRESET
 
 
 def preset(flavor: str, *, os_name: str | None = None) -> str:

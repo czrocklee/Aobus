@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import xml.etree.ElementTree as ET
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -14,9 +16,10 @@ from .paths import PROJECT_ROOT
 
 CONTRACT_FILE = PROJECT_ROOT / "dependency-contract.json"
 BUILD_REPORT_NAME = "aobus-dependencies.json"
-SUPPORTED_SCHEMA = 1
+SUPPORTED_SCHEMA = 2
+SUPPORTED_NIX_REPORT_SCHEMA = 1
 SUPPORTED_PLATFORMS = frozenset({"linux", "windows"})
-SUPPORTED_BUILD_CONDITIONS = frozenset({"AOBUS_BUILD_TUI"})
+SUPPORTED_BUILD_CONDITIONS = frozenset({"AOBUS_BUILD_TUI", "AOBUS_BUILD_WINUI"})
 _VERSION_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 
 
@@ -88,10 +91,39 @@ def _string_list(value: object, context: str) -> list[str]:
     return result
 
 
+def _dependency_platforms(definition: dict[str, Any], context: str) -> list[str]:
+    platforms = _string_list(definition.get("platforms"), f"{context}.platforms")
+    unknown = set(platforms) - SUPPORTED_PLATFORMS
+    if unknown:
+        raise DependencyPolicyError(f"{context}.platforms contains unsupported values {sorted(unknown)}")
+    return platforms
+
+
+def _dependency_condition(definition: dict[str, Any], context: str) -> str | None:
+    consumer_name = "cmake" if "cmake" in definition else "msbuild"
+    consumer = _mapping(definition.get(consumer_name), f"{context}.{consumer_name}")
+    condition = consumer.get("requiredWhen")
+    if condition is None:
+        return None
+    condition_name = _string(condition, f"{context}.{consumer_name}.requiredWhen")
+    if condition_name not in SUPPORTED_BUILD_CONDITIONS:
+        raise DependencyPolicyError(
+            f"{context}.{consumer_name}.requiredWhen names unsupported option {condition_name!r}"
+        )
+    return condition_name
+
+
 def _version_tuple(value: str) -> tuple[int, ...]:
     if not _VERSION_RE.fullmatch(value):
         raise DependencyPolicyError(f"unsupported governed version {value!r}; expected dotted numeric components")
     return tuple(int(component) for component in value.split("."))
+
+
+def _normalized_nuget_version(value: str) -> tuple[int, ...]:
+    components = _version_tuple(value)
+    while len(components) > 1 and components[-1] == 0:
+        components = components[:-1]
+    return components
 
 
 def _utc_today() -> date:
@@ -130,6 +162,7 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
     for name, raw_dependency in dependencies.items():
         _string(name, "dependency key")
         dependency = _mapping(raw_dependency, f"dependencies.{name}")
+        platforms = _dependency_platforms(dependency, f"dependencies.{name}")
         policy = _mapping(dependency.get("policy"), f"dependencies.{name}.policy")
         kind = policy.get("kind")
         if kind == "exact":
@@ -153,20 +186,37 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
         else:
             raise DependencyPolicyError(f"dependencies.{name}.policy.kind must be 'exact' or 'range'")
 
-        nix = _mapping(dependency.get("nix"), f"dependencies.{name}.nix")
-        _string(nix.get("attribute"), f"dependencies.{name}.nix.attribute")
-        vcpkg = _mapping(dependency.get("vcpkg"), f"dependencies.{name}.vcpkg")
-        _string(vcpkg.get("strategy"), f"dependencies.{name}.vcpkg.strategy")
-        _string_list(vcpkg.get("ports"), f"dependencies.{name}.vcpkg.ports")
-        cmake = _mapping(dependency.get("cmake"), f"dependencies.{name}.cmake")
-        _string(cmake.get("package"), f"dependencies.{name}.cmake.package")
-        _string_list(cmake.get("targets"), f"dependencies.{name}.cmake.targets")
-        if condition := cmake.get("requiredWhen"):
-            condition_name = _string(condition, f"dependencies.{name}.cmake.requiredWhen")
-            if condition_name not in SUPPORTED_BUILD_CONDITIONS:
-                raise DependencyPolicyError(
-                    f"dependencies.{name}.cmake.requiredWhen names unsupported option {condition_name!r}"
-                )
+        if "linux" in platforms:
+            nix = _mapping(dependency.get("nix"), f"dependencies.{name}.nix")
+            _string(nix.get("attribute"), f"dependencies.{name}.nix.attribute")
+        elif "nix" in dependency:
+            raise DependencyPolicyError(f"dependencies.{name}.nix is invalid for a Windows-only dependency")
+
+        has_vcpkg = "vcpkg" in dependency
+        has_nuget = "nuget" in dependency
+        if "windows" in platforms and has_vcpkg == has_nuget:
+            raise DependencyPolicyError(
+                f"dependencies.{name} must declare exactly one Windows resolver: vcpkg or nuget"
+            )
+        if "windows" not in platforms and (has_vcpkg or has_nuget):
+            raise DependencyPolicyError(f"dependencies.{name} declares a Windows resolver without Windows support")
+
+        if has_vcpkg:
+            vcpkg = _mapping(dependency["vcpkg"], f"dependencies.{name}.vcpkg")
+            _string(vcpkg.get("strategy"), f"dependencies.{name}.vcpkg.strategy")
+            _string_list(vcpkg.get("ports"), f"dependencies.{name}.vcpkg.ports")
+            cmake = _mapping(dependency.get("cmake"), f"dependencies.{name}.cmake")
+            _string(cmake.get("package"), f"dependencies.{name}.cmake.package")
+            _string_list(cmake.get("targets"), f"dependencies.{name}.cmake.targets")
+        if has_nuget:
+            if policy.get("kind") != "exact":
+                raise DependencyPolicyError(f"dependencies.{name} NuGet policy must be exact")
+            nuget = _mapping(dependency["nuget"], f"dependencies.{name}.nuget")
+            _string(nuget.get("package"), f"dependencies.{name}.nuget.package")
+            _string(nuget.get("lock"), f"dependencies.{name}.nuget.lock")
+            _mapping(dependency.get("msbuild"), f"dependencies.{name}.msbuild")
+
+        _dependency_condition(dependency, f"dependencies.{name}")
         if "capabilities" in dependency:
             _string_list(dependency["capabilities"], f"dependencies.{name}.capabilities")
 
@@ -187,6 +237,11 @@ def validate_contract(contract: dict[str, Any], *, today: date | None = None) ->
         platform = _string(exception.get("platform"), f"{context}.platform")
         if platform not in SUPPORTED_PLATFORMS:
             raise DependencyPolicyError(f"{context}.platform must be one of {sorted(SUPPORTED_PLATFORMS)}")
+        definition = _mapping(dependencies[exception_dependency], f"dependencies.{exception_dependency}")
+        if platform not in _dependency_platforms(definition, f"dependencies.{exception_dependency}"):
+            raise DependencyPolicyError(
+                f"{context}.platform {platform!r} is not supported by dependency {exception_dependency!r}"
+            )
         target = (exception_dependency, platform)
         if target in seen_targets:
             raise DependencyPolicyError(f"multiple active exceptions target {exception_dependency!r} on {platform!r}")
@@ -296,6 +351,22 @@ def _sha256(path: Path) -> str:
         raise DependencyPolicyError(f"cannot hash dependency input {path}: {exc}") from exc
 
 
+def _single_nuget_lock(contract: dict[str, Any]) -> Path | None:
+    lock_paths = {
+        Path(
+            _string(
+                _mapping(_mapping(definition, f"dependencies.{name}")["nuget"], f"dependencies.{name}.nuget")["lock"],
+                f"dependencies.{name}.nuget.lock",
+            )
+        )
+        for name, definition in _mapping(contract["dependencies"], "dependencies").items()
+        if "nuget" in _mapping(definition, f"dependencies.{name}")
+    }
+    if len(lock_paths) > 1:
+        raise DependencyPolicyError("governed NuGet dependencies must share one lock file")
+    return next(iter(lock_paths), None)
+
+
 def _verify_true_map(actual: object, expected_names: list[str], context: str) -> None:
     values = _mapping(actual, context)
     for name in expected_names:
@@ -333,17 +404,27 @@ def verify_build_report(
         expected = _sha256(project_root / filename)
         if host.get(field) != expected:
             raise DependencyPolicyError(f"dependency report is stale: {filename} changed; rebuild first")
+    nuget_lock = _single_nuget_lock(contract)
+    if nuget_lock is not None:
+        if host.get("nugetLockSha256") != _sha256(project_root / nuget_lock):
+            raise DependencyPolicyError(f"dependency report is stale: {nuget_lock} changed; rebuild first")
+        nuget_config = nuget_lock.with_name("NuGet.Config")
+        if host.get("nugetConfigSha256") != _sha256(project_root / nuget_config):
+            raise DependencyPolicyError(f"dependency report is stale: {nuget_config} changed; rebuild first")
 
     dependencies = _mapping(contract["dependencies"], "dependencies")
     reported = _mapping(report.get("dependencies"), "report.dependencies")
     for name, raw_definition in dependencies.items():
         definition = _mapping(raw_definition, f"dependencies.{name}")
+        platforms = _dependency_platforms(definition, f"dependencies.{name}")
         if name not in reported:
             raise DependencyPolicyError(f"dependency report is missing governed dependency {name!r}")
         entry = _mapping(reported[name], f"report.dependencies.{name}")
-        condition = _mapping(definition["cmake"], f"dependencies.{name}.cmake").get("requiredWhen")
+        condition = _dependency_condition(definition, f"dependencies.{name}")
         status = entry.get("status")
         if status == "not-applicable":
+            if platform not in platforms:
+                continue
             if condition is None:
                 raise DependencyPolicyError(f"unconditional governed dependency {name!r} is not applicable")
             condition_report = _mapping(entry.get("condition"), f"report.dependencies.{name}.condition")
@@ -369,8 +450,15 @@ def verify_build_report(
             )
         if entry.get("exceptionId") != policy.exception_id:
             raise DependencyPolicyError(f"{name}: report exception does not match the effective platform policy")
-        cmake = _mapping(definition["cmake"], f"dependencies.{name}.cmake")
-        _verify_true_map(entry.get("targets"), _string_list(cmake["targets"], "cmake.targets"), f"{name}.targets")
+        if "cmake" in definition:
+            cmake = _mapping(definition["cmake"], f"dependencies.{name}.cmake")
+            _verify_true_map(entry.get("targets"), _string_list(cmake["targets"], "cmake.targets"), f"{name}.targets")
+        else:
+            package = _string(
+                _mapping(definition["nuget"], f"dependencies.{name}.nuget").get("package"),
+                f"dependencies.{name}.nuget.package",
+            )
+            _verify_true_map(entry.get("packages"), [package], f"{name}.packages")
         capabilities = definition.get("capabilities", [])
         if capabilities:
             _verify_true_map(
@@ -393,13 +481,16 @@ def _verify_nix_resolution(
     host = _mapping(report["host"], "report.host")
     path_value = _string(host.get("nixReportPath"), "report.host.nixReportPath")
     nix_report = read_json(Path(path_value))
-    if nix_report.get("schemaVersion") != SUPPORTED_SCHEMA:
+    if nix_report.get("schemaVersion") != SUPPORTED_NIX_REPORT_SCHEMA:
         raise DependencyPolicyError("unsupported Nix dependency report schema")
     nixpkgs = read_json(project_root / "nixpkgs.json")
     if nix_report.get("nixpkgsRevision") != nixpkgs.get("rev"):
         raise DependencyPolicyError("Nix dependency report does not come from the current nixpkgs revision")
     resolved = _mapping(nix_report.get("dependencies"), "Nix report dependencies")
-    for name in _mapping(contract["dependencies"], "dependencies"):
+    for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
+        definition = _mapping(raw_definition, f"dependencies.{name}")
+        if "linux" not in _dependency_platforms(definition, f"dependencies.{name}"):
+            continue
         package = _mapping(resolved.get(name), f"Nix report dependency {name}")
         policy = effective_policy(contract, name, "linux", today=today)
         version = _string(package.get("version"), f"Nix report dependency {name}.version")
@@ -433,6 +524,8 @@ def _verify_vcpkg_resolution(
     result: dict[str, object] = {}
     for name, raw_definition in _mapping(contract["dependencies"], "dependencies").items():
         definition = _mapping(raw_definition, f"dependencies.{name}")
+        if "vcpkg" not in definition:
+            continue
         policy = effective_policy(contract, name, "windows", today=today)
         ports = _string_list(_mapping(definition["vcpkg"], f"dependencies.{name}.vcpkg")["ports"], "vcpkg.ports")
         port_results: dict[str, object] = {}
@@ -507,6 +600,7 @@ def _verify_vcpkg_resolution(
     governed_ports = {
         port
         for raw_definition in _mapping(contract["dependencies"], "dependencies").values()
+        if "vcpkg" in _mapping(raw_definition, "dependency")
         for port in _string_list(
             _mapping(_mapping(raw_definition, "dependency")["vcpkg"], "dependency.vcpkg")["ports"],
             "dependency.vcpkg.ports",
@@ -524,6 +618,106 @@ def _verify_vcpkg_resolution(
         }
     result["monitorOnly"] = monitor_only
     return result
+
+
+def _packages_config(path: Path) -> dict[str, str]:
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError) as exc:
+        raise DependencyPolicyError(f"cannot read NuGet lock {path}: {exc}") from exc
+    packages: dict[str, str] = {}
+    for node in root.findall("package"):
+        package_id = node.get("id")
+        version = node.get("version")
+        if not package_id or not version:
+            raise DependencyPolicyError(f"NuGet lock {path} contains a package without id and version")
+        if package_id.casefold() in (key.casefold() for key in packages):
+            raise DependencyPolicyError(f"NuGet lock {path} contains duplicate package {package_id!r}")
+        packages[package_id] = version
+    return packages
+
+
+def _verify_nuget_resolution(
+    contract: dict[str, Any],
+    report: dict[str, Any],
+    project_root: Path = PROJECT_ROOT,
+    *,
+    today: date | None = None,
+) -> dict[str, object]:
+    host = _mapping(report["host"], "report.host")
+    definitions = _mapping(contract["dependencies"], "dependencies")
+    reported = _mapping(report["dependencies"], "report.dependencies")
+    active = any(
+        "nuget" in _mapping(definition, f"dependencies.{name}")
+        and _mapping(reported.get(name), f"report.dependencies.{name}").get("status") == "verified"
+        for name, definition in definitions.items()
+    )
+    package_root_value = host.get("nugetPackagesDir")
+    if not package_root_value:
+        if active:
+            raise DependencyPolicyError("verified NuGet dependencies require report.host.nugetPackagesDir")
+        return {}
+    package_root = Path(_string(package_root_value, "report.host.nugetPackagesDir"))
+    nuget_lock = _single_nuget_lock(contract)
+    if nuget_lock is None:
+        return {}
+    lock_path = project_root / nuget_lock
+    locked = _packages_config(lock_path)
+    resolved: dict[str, object] = {}
+    for name, raw_definition in definitions.items():
+        definition = _mapping(raw_definition, f"dependencies.{name}")
+        if "nuget" not in definition:
+            continue
+        report_entry = _mapping(reported[name], f"dependencies.{name}")
+        if report_entry.get("status") != "verified":
+            continue
+        nuget = _mapping(definition["nuget"], f"dependencies.{name}.nuget")
+        package_id = _string(nuget["package"], f"dependencies.{name}.nuget.package")
+        policy = effective_policy(contract, name, "windows", today=today)
+        locked_version = next(
+            (version for locked_id, version in locked.items() if locked_id.casefold() == package_id.casefold()),
+            None,
+        )
+        if locked_version is None:
+            raise DependencyPolicyError(f"NuGet lock is missing governed package {package_id}")
+        if not policy.accepts(locked_version):
+            raise DependencyPolicyError(
+                f"NuGet lock resolves {package_id} {locked_version}; {name} requires {policy.requested}"
+            )
+        directory = package_root / f"{package_id}.{locked_version}"
+        archives = tuple(directory.glob("*.nupkg"))
+        if len(archives) != 1:
+            raise DependencyPolicyError(f"restored NuGet package {package_id} lacks one package archive in {directory}")
+        try:
+            with zipfile.ZipFile(archives[0]) as archive:
+                nuspec_names = [entry for entry in archive.namelist() if entry.lower().endswith(".nuspec")]
+                if len(nuspec_names) != 1:
+                    raise DependencyPolicyError(f"NuGet package {archives[0]} lacks one nuspec")
+                nuspec = ET.fromstring(archive.read(nuspec_names[0]))
+        except (OSError, zipfile.BadZipFile, ET.ParseError) as exc:
+            raise DependencyPolicyError(f"cannot inspect restored NuGet package {archives[0]}: {exc}") from exc
+        metadata = next((node for node in nuspec.iter() if node.tag.endswith("metadata")), None)
+        metadata_children = () if metadata is None else metadata
+        identity = {
+            child.tag.rsplit("}", maxsplit=1)[-1]: child.text
+            for child in metadata_children
+            if child.tag.endswith(("id", "version"))
+        }
+        identity_version = identity.get("version")
+        try:
+            version_matches = isinstance(identity_version, str) and _normalized_nuget_version(
+                identity_version
+            ) == _normalized_nuget_version(locked_version)
+        except DependencyPolicyError:
+            version_matches = False
+        if str(identity.get("id") or "").casefold() != package_id.casefold() or not version_matches:
+            raise DependencyPolicyError(f"restored NuGet identity does not match {package_id} {locked_version}")
+        resolved[name] = {
+            "package": package_id,
+            "version": locked_version,
+            "archive": str(archives[0]),
+        }
+    return resolved
 
 
 def verified_report(
@@ -551,10 +745,12 @@ def verified_report(
         }
     else:
         host = _mapping(report["host"], "report.host")
+        nuget = _verify_nuget_resolution(contract, report, project_root, today=today)
         enriched["nativeResolution"] = {
-            "kind": "vcpkg",
+            "kind": "vcpkg+nuget" if nuget else "vcpkg",
             "configuration": read_json(project_root / "vcpkg-configuration.json"),
             "packages": _verify_vcpkg_resolution(contract, report, build_dir, project_root, today=today),
+            "nuget": nuget,
             "triplet": host.get("vcpkgTriplet"),
             "vcpkgVersion": host.get("vcpkgVersion"),
         }

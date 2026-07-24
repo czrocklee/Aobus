@@ -27,6 +27,7 @@ option(AOBUS_BUILD_TESTS "Build test targets" ON)
 option(AOBUS_BUILD_TOOLS "Build developer tools" ${AOBUS_DEFAULT_BUILD_TOOLS})
 option(AOBUS_BUILD_LINT_PLUGIN "Build the Aobus clang-tidy plugin" ${AOBUS_BUILD_TOOLS})
 option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
+option(AOBUS_BUILD_WINUI "Build the Windows WinUI 3 frontend" OFF)
 
 include(cmake/CompilerOptions.cmake)
 include(cmake/Dependencies.cmake)

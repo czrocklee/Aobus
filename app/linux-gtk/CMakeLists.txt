@@ -40,6 +40,7 @@ add_library(aobus-gtk-lib STATIC
     app/GtkLayoutStateStore.cpp
     platform/AudioBackendBootstrap.cpp
     platform/MprisArtUrlCache.cpp
+    platform/MprisArtUrlSession.cpp
     platform/MprisBridge.cpp
 
     preference/ShortcutEditorWidget.cpp

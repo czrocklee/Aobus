@@ -70,11 +70,22 @@ class BuildDirTest(unittest.TestCase):
 
     def test_windows_profile_exposes_only_built_apps_and_suites(self):
         profile = builddir.platform_profile("nt")
-        self.assertEqual(profile.apps, ("cli", "tui"))
+        self.assertEqual(profile.apps, ("cli", "tui", "winui"))
         self.assertEqual(profile.default_suites, ("core", "tui"))
         self.assertEqual(profile.all_suites, ("core", "tui", "cli", "integration", "tooling"))
         self.assertEqual(profile.tsan_suites, ())
         self.assertEqual(builddir.flavors("nt"), ("debug", "release"))
+
+    def test_winui_uses_a_dedicated_visual_studio_tree(self):
+        environment = {
+            "AOBUS_STATE_ROOT": "C:/Users/Alice/AppData/Local/Aobus",
+            "AOBUS_CHECKOUT_ID": "checkout-a",
+        }
+        with mock.patch.dict("os.environ", environment, clear=True):
+            self.assertEqual(
+                builddir.winui_build_dir("nt"),
+                builddir.windows_build_root() / "windows-winui",
+            )
 
     def test_linux_profile_exposes_only_baselined_tsan_suites(self):
         profile = builddir.platform_profile("posix")

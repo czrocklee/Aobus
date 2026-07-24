@@ -74,9 +74,14 @@ class WindowsBatchPortalTest(unittest.TestCase):
         windows_presets = {preset["name"]: preset for preset in presets if preset["name"].startswith("windows-")}
         tidy_preset = next(preset for preset in presets if preset["name"] == "windows-tidy")
 
-        self.assertEqual(set(windows_presets), {"windows-base", "windows-debug", "windows-release", "windows-tidy"})
+        self.assertEqual(
+            set(windows_presets),
+            {"windows-base", "windows-debug", "windows-release", "windows-tidy", "windows-winui"},
+        )
         self.assertEqual(windows_presets["windows-debug"]["inherits"], "windows-base")
         self.assertEqual(windows_presets["windows-release"]["inherits"], "windows-base")
+        self.assertEqual(windows_presets["windows-winui"]["generator"], "Visual Studio 18 2026")
+        self.assertEqual(windows_presets["windows-winui"]["cacheVariables"]["AOBUS_BUILD_WINUI"], "ON")
         base_cache = windows_presets["windows-base"]["cacheVariables"]
         self.assertFalse(any(name.startswith("AOBUS_BUILD_") for name in base_cache))
         self.assertEqual(tidy_preset["inherits"], "windows-release")
@@ -120,6 +125,8 @@ class CliParseTest(unittest.TestCase):
             "name-audit",
             "coverage",
             "deps",
+            "doctor",
+            "setup",
             "docs",
             "tidy",
             "analyze",
@@ -167,6 +174,17 @@ class CliParseTest(unittest.TestCase):
             with mock.patch.object(build_command.os, "cpu_count", return_value=32):
                 self.assertEqual(build_command.parallel_build_arguments(), ["--parallel", "31"])
 
+    def test_winui_build_environment_uses_the_shared_parallel_limit(self):
+        self.assertEqual(
+            build_command._winui_build_environment(12),
+            {
+                "UseMultiToolTask": "true",
+                "EnforceProcessCountAcrossBuilds": "true",
+                "MultiProcMaxCount": "12",
+                "CL_MPCount": "12",
+            },
+        )
+
     def test_dependency_report_arguments(self):
         args = self.parse(["deps", "report", "-p", "/tmp/aobus-deps", "--json", "/tmp/aobus-deps.json"])
 
@@ -185,6 +203,10 @@ class CliParseTest(unittest.TestCase):
 
         self.assertEqual(args.docs_action, "check")
 
+    def test_winui_host_commands_parse(self):
+        self.assertEqual(self.parse(["doctor", "winui"]).area, "winui")
+        self.assertEqual(self.parse(["setup", "winui-runtime"]).component, "winui-runtime")
+
     def test_windows_build_selects_the_shared_flavor_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             args = self.parse(["build", "-p", temp_dir])
@@ -196,6 +218,29 @@ class CliParseTest(unittest.TestCase):
         self.assertIn("windows-debug", configure)
         self.assertEqual(result.preset, "windows-debug")
         self.assertEqual(result.compiler, "msvc")
+
+    def test_windows_winui_build_selects_the_visual_studio_preset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "-p", temp_dir, "--target", "winui"])
+            with mock.patch.dict(build_command.os.environ, {"CMAKE_BUILD_PARALLEL_LEVEL": "8"}):
+                with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                    with mock.patch.object(build_command.winui, "require_build_host"):
+                        with mock.patch.object(build_command, "run", return_value=0) as run:
+                            result = build_command.do_build(args, ["winui"])
+
+        configure = run.call_args_list[0].args[0]
+        build = run.call_args_list[1].args[0]
+        build_env = run.call_args_list[1].kwargs["env"]
+        self.assertIn("windows-winui", configure)
+        self.assertIn("--config", build)
+        self.assertIn("Debug", build)
+        self.assertIn("8", build)
+        self.assertIn("aobus-winui", build)
+        self.assertEqual(build_env["UseMultiToolTask"], "true")
+        self.assertEqual(build_env["EnforceProcessCountAcrossBuilds"], "true")
+        self.assertEqual(build_env["MultiProcMaxCount"], "8")
+        self.assertEqual(build_env["CL_MPCount"], "8")
+        self.assertEqual(result.preset, "windows-winui")
 
     def test_windows_clean_uses_extended_length_path(self):
         build_path = mock.MagicMock(spec=Path)
@@ -500,16 +545,28 @@ class CliParseTest(unittest.TestCase):
             compiler="msvc",
             preset="windows-debug",
         )
+        winui_result = BuildResult(
+            build_dir=builddir.WINDOWS_BUILD_ROOT / "windows-winui",
+            log=builddir.WINDOWS_BUILD_ROOT / "windows-winui" / "build.log",
+            compiler="msvc",
+            preset="windows-winui",
+        )
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-            with mock.patch.object(check_command.build, "do_build", return_value=result) as do_build:
+            with mock.patch.object(check_command.build, "do_build", side_effect=(result, winui_result)) as do_build:
                 with mock.patch.object(check_command.dependency_policy, "verified_report") as verify:
                     with mock.patch.object(check_command.test, "run_suites", return_value=0) as run_suites:
                         with mock.patch.object(check_command.build, "print_summary"):
                             self.assertEqual(check_command.run_command(args), 0)
 
-        do_build.assert_called_once_with(args, targets=[])
-        verify.assert_called_once_with(result.build_dir)
+        self.assertEqual(
+            do_build.call_args_list,
+            [mock.call(args, targets=[]), mock.call(mock.ANY, targets=["winui"])],
+        )
+        self.assertEqual(
+            verify.call_args_list,
+            [mock.call(result.build_dir), mock.call(winui_result.build_dir)],
+        )
         run_suites.assert_called_once_with(
             ("core", "tui", "cli", "integration", "tooling"),
             result.build_dir,

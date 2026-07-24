@@ -247,8 +247,8 @@ class TidyCommandTest(unittest.TestCase):
 
         invocations = run_parallel.call_args.args[0]
         self.assertEqual(len(invocations), 1)
-        self.assertEqual(invocations[0].selected, native.resolve())
-        self.assertEqual(invocations[0].compile_command_source, native.resolve())
+        self.assertEqual(invocations[0].selected, tidy.absolute_path(native))
+        self.assertEqual(invocations[0].compile_command_source, tidy.absolute_path(native))
         self.assertFalse(invocations[0].is_header)
         self.assertIn("Deferred files", stderr.getvalue())
         self.assertIn("not checked here", stderr.getvalue())
@@ -407,8 +407,8 @@ class TidyCommandTest(unittest.TestCase):
                     [
                         {
                             "directory": str(build_dir),
-                            "file": str(translation_unit.resolve()),
-                            "command": (f'clang++ -DAOBUS_NATIVE_FLAGS=1 -c "{translation_unit.resolve()}"'),
+                            "file": str(tidy.absolute_path(translation_unit)),
+                            "command": (f'clang++ -DAOBUS_NATIVE_FLAGS=1 -c "{tidy.absolute_path(translation_unit)}"'),
                         }
                     ]
                 ),
@@ -449,18 +449,18 @@ class TidyCommandTest(unittest.TestCase):
             database_dir = Path(command[command.index("-p") + 1])
             synthetic = json.loads((database_dir / "compile_commands.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(command[-1], str(header.resolve()))
+        self.assertEqual(command[-1], str(tidy.absolute_path(header)))
         self.assertNotEqual(database_dir, build_dir)
-        self.assertEqual(synthetic[0]["file"], header.resolve().as_posix())
+        self.assertEqual(synthetic[0]["file"], tidy.absolute_path(header).as_posix())
         self.assertIn("-DAOBUS_NATIVE_FLAGS=1", synthetic[0]["command"])
-        self.assertIn(str(header.resolve()), synthetic[0]["command"])
-        self.assertNotIn(str(translation_unit.resolve()), synthetic[0]["command"])
+        self.assertIn(str(tidy.absolute_path(header)), synthetic[0]["command"])
+        self.assertNotIn(str(tidy.absolute_path(translation_unit)), synthetic[0]["command"])
         self.assertIn(f"--extra-arg-before=-resource-dir={toolchain.resource_dir}", command)
         self.assertIn("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0", command)
         self.assertTrue(any(argument.startswith("-header-filter=^(") for argument in command))
         line_filter = next(argument for argument in command if argument.startswith("-line-filter="))
-        self.assertIn(header.resolve().as_posix(), line_filter)
-        self.assertNotIn(translation_unit.resolve().as_posix(), line_filter)
+        self.assertIn(tidy.absolute_path(header).as_posix(), line_filter)
+        self.assertNotIn(tidy.absolute_path(translation_unit).as_posix(), line_filter)
         self.assertFalse(any(argument.startswith("-load=") for argument in command))
 
 

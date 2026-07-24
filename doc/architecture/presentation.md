@@ -3,14 +3,14 @@ id: architecture.presentation
 type: architecture
 status: current
 domain: presentation
-summary: Defines responsibility boundaries among runtime state, platform-neutral UIModel policy, and GTK, TUI, and CLI adapters.
+summary: Defines responsibility boundaries among runtime state, platform-neutral UIModel policy, and GTK, WinUI, TUI, and CLI adapters.
 ---
 # Presentation architecture
 
 ## Scope
 
 This document owns the boundary between frontend-neutral application state, platform-neutral presentation policy, and platform-specific adapters.
-It defines what belongs in runtime, UIModel, GTK, TUI, and CLI and how state and commands cross those boundaries.
+It defines what belongs in runtime, UIModel, GTK, WinUI, TUI, and CLI and how state and commands cross those boundaries.
 
 It does not define exact layouts, widget behavior, terminal key bindings, command syntax, display strings, or editor validation rules.
 Those facts belong in specifications, reference documents, and user/development guides.
@@ -27,16 +27,17 @@ runtime state and commands
           |
           v
 platform-neutral UIModel
-       /       \
-      v         v
-    GTK         TUI
+     /    |     \
+    v     v      v
+  GTK   WinUI   TUI
 
 CLI -> runtime directly for non-interactive tasks
 ```
 
 Runtime remains authoritative for state that changes application behavior across frontends.
 UIModel turns that state into reusable view state and user-interaction policy.
-GTK and TUI adapt those values to toolkit lifecycle, rendering, input, timing, and native resources.
+GTK, WinUI, and TUI adapt those values to toolkit lifecycle, rendering, input,
+timing, and native resources.
 
 ## Responsibilities
 
@@ -120,6 +121,15 @@ It constructs the same `AppRuntime`, uses shared runtime services and selected U
 TUI-local interaction models may own transient shell/overlay state but cannot become authorities for runtime playback, source order, or persisted library data.
 Its list chooser consumes the shared UIModel list-tree projection, and its command palette consumes the same UIModel track-filter completer as GTK's Quick-filter entry, while retaining terminal-only rendering, command, and presentation routing.
 
+### WinUI
+
+WinUI owns Windows App SDK application/window lifetime, XAML resources,
+dispatcher adaptation, and Windows-native controls. The current target is a
+bootstrap shell that validates this composition path; it does not yet duplicate
+GTK/TUI product behavior. As behavior is added, it consumes runtime state and
+UIModel presentation policy under the same dependency direction and keeps
+Windows-only lifecycle and rendering details in the frontend.
+
 ### CLI
 
 CLI is an application adapter rather than an interactive presentation layer.
@@ -131,9 +141,9 @@ Its structured automation DTOs are unversioned source-level contracts; field cha
 
 - Runtime has no dependency on UIModel or frontend code.
 - UIModel depends on runtime interfaces and stable core value types, never platform UI libraries.
-- GTK and TUI may depend on runtime and UIModel and own all platform resources.
+- GTK, WinUI, and TUI may depend on runtime and UIModel and own all platform resources.
 - UIModel cannot include direct LMDB stores or audio player/engine/backend control headers.
-- GTK and TUI cannot call `LibraryWriter` directly; mutations cross a UIModel editor/session or a narrow semantic runtime surface.
+- GTK, WinUI, and TUI cannot call `LibraryWriter` directly; mutations cross a UIModel editor/session or a narrow semantic runtime surface.
 - A frontend adapter translates one platform event into a UIModel/runtime action and translates semantic state into platform representation.
 - UIModel exposes semantic presentation kinds; GTK maps those kinds to CSS classes and native icon names at its adapter boundary.
 - Core and runtime expose machine identities, structured absence, typed report/progress intent, and raw external data; shared authored copy resolves only after crossing into UIModel.

@@ -120,6 +120,23 @@ Verify all Boost library ports installed for Aobus, not only `boost-headers`.
 Record recipe helpers such as `vcpkg-boost`, but do not compare their independent
 version schemes to the Boost release number.
 
+### Windows App SDK and C++/WinRT
+
+For Windows App SDK or C++/WinRT upgrades:
+
+1. Select the exact top-level releases in `dependency-contract.json`.
+2. Regenerate `app/windows-winui/packages.config` with every transitive NuGet
+   package and exact version; do not leave transitive selection to an IDE.
+3. Confirm `NuGet.Config` still contains the current official nuget.org
+   repository signer fingerprints and source mapping.
+4. Update the Windows App Runtime identity, installer URL, and SHA-256 in the
+   contract when the SDK requires a new runtime.
+5. Run `ao.bat doctor winui`, a clean `ao.bat build --target winui`, dependency
+   verification for its build tree, and an interactive RDP smoke launch.
+
+The NuGet package graph and installed Windows App Runtime are related but
+separate. Updating one without auditing the other is incomplete.
+
 ### FTXUI and other single ports
 
 An exact override is acceptable when the target version exists in the selected

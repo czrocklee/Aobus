@@ -27,6 +27,8 @@ if(MSVC)
   add_compile_definitions(
     NOMINMAX
     WIN32_LEAN_AND_MEAN
+    UNICODE
+    _UNICODE
     _CRT_SECURE_NO_WARNINGS
     _WIN32_WINNT=0x0A00
     WINVER=0x0A00
@@ -165,8 +167,7 @@ add_compile_definitions(SPDLOG_USE_STD_FORMAT)
 # keeps assertion diagnostics; optimized builds terminate on violations rather
 # than compiling the checks out and continuing into undefined behavior.
 add_compile_definitions(gsl_CONFIG_CONTRACT_CHECKING_ON)
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS)
-else()
-  add_compile_definitions(gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES)
-endif()
+add_compile_definitions(
+  $<$<CONFIG:Debug>:gsl_CONFIG_CONTRACT_VIOLATION_ASSERTS>
+  $<$<NOT:$<CONFIG:Debug>>:gsl_CONFIG_CONTRACT_VIOLATION_TERMINATES>
+)
