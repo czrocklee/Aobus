@@ -80,9 +80,6 @@ namespace ao::rt
     Result<MoveManualListTracksReply> moveManualListTracks(ListId listId,
                                                            std::span<TrackId const> trackIds,
                                                            std::size_t insertionIndexAfterRemoval);
-    Result<MoveManualListTracksReply> previewMoveManualListTracks(ListId listId,
-                                                                  std::span<TrackId const> trackIds,
-                                                                  std::size_t insertionIndexAfterRemoval);
     Result<DeleteListReply> deleteList(ListId listId);
     Result<DeleteListReply> previewDeleteList(ListId listId);
 

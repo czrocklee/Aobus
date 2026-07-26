@@ -7,13 +7,9 @@
 
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <glibmm/refptr.h>
-#include <glibmm/ustring.h>
 
 #include <cstddef>
-#include <filesystem>
 #include <functional>
-#include <optional>
-#include <unordered_map>
 
 namespace ao::rt
 {
@@ -31,8 +27,10 @@ namespace ao::gtk
    * Responsibilities:
    * - Load track metadata from LMDB on first request.
    * - Cache and share Glib::RefPtr<TrackRowObject> instances across all playlists/tabs.
-   * - Efficiently resolve dictionary strings for UI display.
    * - Provider manages its own transactions internally.
+   *
+   * Rows are fully resolved at load time: display formatting never re-enters
+   * storage.
    */
   class TrackRowCache final
   {
@@ -48,32 +46,12 @@ namespace ao::gtk
     std::size_t cachedRowCount() const noexcept { return _rowCache.size(); }
 
     /**
-     * Resolve a dictionary string and cache it.
-     */
-    Glib::ustring const& resolveDictionaryString(DictionaryId id) const;
-
-    /**
-     * Get cover art resource ID for a track (direct from DB).
-     */
-    ResourceId coverArtId(TrackId id) const;
-
-    /**
-     * Get URI path for a track (direct from DB).
-     */
-    std::optional<std::filesystem::path> uriPath(TrackId id) const;
-
-    /**
-     * Invalidate entry for a track (after updates).
+     * Invalidate entry for a track (after updates or deletion).
      */
     void invalidate(TrackId id) const;
 
     /**
-     * Remove track from cache (after deletion).
-     */
-    void remove(TrackId id);
-
-    /**
-     * Clear all cached rows and strings without reloading.
+     * Clear all cached rows without reloading.
      * Subsequent trackRow() calls will lazily reload from the database.
      */
     void clearCache();
@@ -82,7 +60,6 @@ namespace ao::gtk
     rt::Library const& _reads;
 
     mutable boost::unordered_flat_map<TrackId, Glib::RefPtr<TrackRowObject>, std::hash<TrackId>> _rowCache;
-    mutable std::unordered_map<DictionaryId, Glib::ustring> _stringCache;
 
     Glib::RefPtr<TrackRowObject> createRowObject(rt::TrackRow row) const;
   };

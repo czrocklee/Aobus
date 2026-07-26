@@ -14,10 +14,6 @@
 namespace ao::uimodel
 {
   class PlaybackCommandSurface;
-}
-namespace ao::uimodel
-{
-  class TrackPresentationCatalog;
   class ListPresentationPreferenceStore;
 }
 namespace Gtk
@@ -27,12 +23,8 @@ namespace Gtk
 namespace ao::gtk
 {
   class AppConfigStore;
-  class GtkLayoutStateStore;
   class TrackRowCache;
-  class TagEditController;
   class ListNavigationController;
-  class TrackPageHost;
-  class ThemeCoordinator;
 
   namespace portal
   {
@@ -63,11 +55,7 @@ namespace ao::gtk
 
     TrackRowCache* trackRowCache();
     uimodel::PlaybackCommandSurface* playbackCommandSurface();
-    TagEditController* tagEditController();
-    portal::ImportExportCoordinator* importExportCoordinator();
-    TrackPageHost* trackPageHost();
     ListNavigationController* listNavigationController();
-    uimodel::TrackPresentationCatalog* trackPresentationCatalog();
     uimodel::ListPresentationPreferenceStore* trackPresentationPreferences();
     ThemeCoordinator* themeCoordinator();
 

@@ -14,13 +14,12 @@
 namespace ao::gtk
 {
   class TrackRowObject;
-  class TrackRowCache;
 
   using TrackFieldEditValue = uimodel::TrackFieldEditValue;
 
   constexpr auto kTagsCellCssClass = "ao-track-tags-cell";
 
-  using TrackRowTextReader = std::string (*)(TrackRowObject const&, TrackRowCache const&);
+  using TrackRowTextReader = std::string (*)(TrackRowObject const&);
   using TrackInlineEditParser = Result<TrackFieldEditValue> (*)(std::string_view);
   using TrackRowEditReader = TrackFieldEditValue (*)(TrackRowObject const&, rt::TrackField);
   using TrackRowEditWriter = bool (*)(TrackRowObject&, TrackFieldEditValue const&, rt::TrackField);

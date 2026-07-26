@@ -410,25 +410,9 @@ namespace ao::gtk
   {
     return &_implPtr->playbackCommandSurface;
   }
-  TagEditController* MainWindowCoordinator::tagEditController()
-  {
-    return &_implPtr->tagEditController;
-  }
-  portal::ImportExportCoordinator* MainWindowCoordinator::importExportCoordinator()
-  {
-    return &_implPtr->importExportCoordinator;
-  }
-  TrackPageHost* MainWindowCoordinator::trackPageHost()
-  {
-    return &_implPtr->trackPageHost;
-  }
   ListNavigationController* MainWindowCoordinator::listNavigationController()
   {
     return &_implPtr->listNavigationController;
-  }
-  uimodel::TrackPresentationCatalog* MainWindowCoordinator::trackPresentationCatalog()
-  {
-    return &_implPtr->trackPresentationCatalog;
   }
   uimodel::ListPresentationPreferenceStore* MainWindowCoordinator::trackPresentationPreferences()
   {

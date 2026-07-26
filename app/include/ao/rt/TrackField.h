@@ -163,6 +163,5 @@ namespace ao::rt
 
   std::optional<query::Field> trackFieldQueryField(TrackField field);
   std::string trackFieldFilterExpressionVariable(TrackField field);
-  bool supportsTrackFieldFilterExpression(TrackField field);
   bool supportsTrackFieldValueCompletion(TrackField field);
 } // namespace ao::rt

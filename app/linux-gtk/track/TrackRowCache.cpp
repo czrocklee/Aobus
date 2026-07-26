@@ -12,8 +12,6 @@
 #include <glibmm/refptr.h>
 #include <glibmm/ustring.h>
 
-#include <filesystem>
-#include <optional>
 #include <string>
 #include <utility>
 
@@ -34,7 +32,7 @@ namespace ao::gtk
 
   Glib::RefPtr<TrackRowObject> TrackRowCache::createRowObject(rt::TrackRow row) const
   {
-    auto const rowPtr = TrackRowObject::create(row.id, *this);
+    auto const rowPtr = TrackRowObject::create(row.id);
 
     rowPtr->populate(toUString(std::move(row.title)),
                      toUString(std::move(row.artist)),
@@ -48,6 +46,7 @@ namespace ao::gtk
                      toUString(std::move(row.movement)),
                      toUString(std::move(row.soloist)),
                      toUString(std::move(row.tags)),
+                     toUString(row.optUriPath ? row.optUriPath->string() : std::string{}),
                      row.duration,
                      row.year,
                      row.discNumber,
@@ -56,7 +55,6 @@ namespace ao::gtk
                      row.trackTotal,
                      row.movementNumber,
                      row.movementTotal,
-                     row.coverArtId,
                      row.sampleRate,
                      row.channels,
                      row.bitDepth,
@@ -89,24 +87,7 @@ namespace ao::gtk
     return rowPtr;
   }
 
-  ResourceId TrackRowCache::coverArtId(TrackId id) const
-  {
-    auto scope = _reads.reader();
-    return scope.trackCoverArtId(id);
-  }
-
-  std::optional<std::filesystem::path> TrackRowCache::uriPath(TrackId id) const
-  {
-    auto scope = _reads.reader();
-    return scope.trackUriPath(id);
-  }
-
   void TrackRowCache::invalidate(TrackId id) const
-  {
-    _rowCache.erase(id);
-  }
-
-  void TrackRowCache::remove(TrackId id)
   {
     _rowCache.erase(id);
   }
@@ -114,22 +95,5 @@ namespace ao::gtk
   void TrackRowCache::clearCache()
   {
     _rowCache.clear();
-    _stringCache.clear();
-  }
-
-  Glib::ustring const& TrackRowCache::resolveDictionaryString(DictionaryId id) const
-  {
-    // Check cache first
-    if (auto const it = _stringCache.find(id); it != _stringCache.end())
-    {
-      return it->second;
-    }
-
-    auto scope = _reads.reader();
-    auto const str = scope.resolve(id);
-    auto result = Glib::ustring{str.begin(), str.end()};
-
-    auto const insertResult = _stringCache.emplace(id, std::move(result));
-    return insertResult.first->second;
   }
 } // namespace ao::gtk

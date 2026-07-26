@@ -4,7 +4,6 @@
 #include "track/TrackRowObject.h"
 
 #include "track/TrackFieldUi.h"
-#include "track/TrackRowCache.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/library/FileManifestLayout.h>
@@ -37,7 +36,10 @@ namespace ao::gtk
         case rt::TrackField::Ensemble:
         case rt::TrackField::Work:
         case rt::TrackField::Movement:
-        case rt::TrackField::Soloist: return true;
+        case rt::TrackField::Soloist:
+        // Resolved by the read model and stored at populate(); never editable,
+        // so it is text-backed for display only.
+        case rt::TrackField::FilePath: return true;
 
         default: return false;
       }
@@ -49,11 +51,10 @@ namespace ao::gtk
   {
   }
 
-  Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id, TrackRowCache const& provider)
+  Glib::RefPtr<TrackRowObject> TrackRowObject::create(TrackId id)
   {
     auto objPtr = Glib::make_refptr_for_instance<TrackRowObject>(new TrackRowObject{});
     objPtr->_id = id;
-    objPtr->_provider = &provider;
     return objPtr;
   }
 
@@ -105,6 +106,7 @@ namespace ao::gtk
                                 Glib::ustring movement,
                                 Glib::ustring soloist,
                                 Glib::ustring tags,
+                                Glib::ustring filePath,
                                 std::chrono::milliseconds duration,
                                 std::uint16_t year,
                                 std::uint16_t discNumber,
@@ -113,7 +115,6 @@ namespace ao::gtk
                                 std::uint16_t trackTotal,
                                 std::uint16_t movementNumber,
                                 std::uint16_t movementTotal,
-                                ResourceId resourceId,
                                 std::uint32_t sampleRate,
                                 std::uint8_t channels,
                                 std::uint8_t bitDepth,
@@ -134,6 +135,7 @@ namespace ao::gtk
     _text[static_cast<std::size_t>(rt::TrackField::Work)] = std::move(work);
     _text[static_cast<std::size_t>(rt::TrackField::Movement)] = std::move(movement);
     _text[static_cast<std::size_t>(rt::TrackField::Soloist)] = std::move(soloist);
+    _text[static_cast<std::size_t>(rt::TrackField::FilePath)] = std::move(filePath);
 
     _tags = std::move(tags);
     _duration = duration;
@@ -144,7 +146,6 @@ namespace ao::gtk
     _trackTotal = trackTotal;
     _movementNumber = movementNumber;
     _movementTotal = movementTotal;
-    _resourceId = resourceId;
 
     _sampleRate = sampleRate;
     _channels = channels;
@@ -184,9 +185,8 @@ namespace ao::gtk
     if (auto const bit = std::uint32_t{1} << index; (_computedFilled & bit) == 0)
     {
       auto const* uiDef = trackFieldUiDefinition(field);
-      _text.at(index) = (uiDef != nullptr && uiDef->readRowText != nullptr)
-                          ? Glib::ustring{uiDef->readRowText(*this, *_provider)}
-                          : Glib::ustring{};
+      _text.at(index) = (uiDef != nullptr && uiDef->readRowText != nullptr) ? Glib::ustring{uiDef->readRowText(*this)}
+                                                                            : Glib::ustring{};
       _computedFilled |= bit;
     }
 

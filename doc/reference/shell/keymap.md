@@ -88,7 +88,7 @@ shortcuts:
 - A modifier segment must be recognized before the final key token.
 - Equivalent parsed chords compare equal and are deduplicated within one action.
 - The persistence schema requires a mapping with nonempty, nonduplicate action-id keys and sequence values whose every element is a non-null scalar string.
-- A structurally valid action id need not be known to the current catalog; catalog validation reports unknown ids later.
+- A structurally valid action id need not be known to the current catalog; it remains in the effective and persisted mapping but does not produce a catalog-backed editor row.
 - A structurally valid but unparsable chord string is skipped by semantic keymap application without discarding valid siblings.
 - Shortcut-editor eligibility excludes actions with `RequiresAnchor` or `PresentsMenu`.
 - GTK may skip a neutral key it cannot translate to a native accelerator without changing the stored neutral value.

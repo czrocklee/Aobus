@@ -4,7 +4,6 @@
 #include <ao/Exception.h>
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 
 #include <algorithm>
 #include <map>
@@ -107,26 +106,6 @@ namespace ao::uimodel
       if (entry.second.size() > 1)
       {
         result.push_back(KeymapConflict{.chord = entry.first, .actionIds = std::move(entry.second)});
-      }
-    }
-
-    return result;
-  }
-
-  std::vector<std::string> KeymapModel::unknownActionIds(LayoutActionCatalog const& catalog) const
-  {
-    auto result = std::vector<std::string>{};
-
-    for (auto const& [actionId, chords] : _effective)
-    {
-      if (chords.empty())
-      {
-        continue;
-      }
-
-      if (!catalog.descriptor(actionId))
-      {
-        result.push_back(actionId);
       }
     }
 

@@ -62,7 +62,9 @@ namespace ao::gtk
         _isMapped = false;
       });
 
-    reset();
+    // Nothing to install here: the view model already delivered the current
+    // playback state synchronously during member construction, and its
+    // zero-duration branch installs the disabled, zeroed scale itself.
   }
 
   SeekControlWidget::~SeekControlWidget()
@@ -229,17 +231,5 @@ namespace ao::gtk
     auto const value = std::clamp(_scale.get_value(), 0.0, upper);
 
     return std::chrono::milliseconds{static_cast<std::int64_t>(std::round(value))};
-  }
-
-  void SeekControlWidget::reset()
-  {
-    _interaction.reset();
-
-    setScaleRange(std::chrono::milliseconds{0});
-    setScaleValue(std::chrono::milliseconds{0});
-    _scale.set_sensitive(false);
-    _interpolator.reset();
-    updateTickState();
-    _debounceConnection.disconnect();
   }
 } // namespace ao::gtk

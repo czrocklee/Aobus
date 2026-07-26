@@ -60,8 +60,8 @@ Track preparation creates or reuses every byte-backed cover resource in the same
 
 ### Runtime read and propagation
 
-`LibraryReader::loadResource(id)` remains the synchronous administrative read.
-`LibraryTaskService::loadResourceAsync(id, stopToken)` is the interactive read: it copies under a worker-side read transaction, returns owned bytes on the callback executor, and publishes no library task progress or maintenance state.
+`LibraryTaskService::loadResourceAsync(id, stopToken)` is the only interactive runtime read: it copies under a worker-side read transaction, returns owned bytes on the callback executor, and publishes no library task progress or maintenance state.
+Administrative export reads `ResourceStore` directly under its own scoped transaction and is not part of this route.
 An invalid or absent id returns an engaged result containing `nullopt`; an encoded resource above 32 MiB returns `ValueTooLarge`; cancellation throws `OperationCancelled`.
 
 Track rows, list projections, detail projections, and playback state publish the selected primary id.
@@ -152,7 +152,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 ## Implementation map
 
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp), [`TrackBuilder.cpp`](../../../lib/library/TrackBuilder.cpp), and [`TrackView.cpp`](../../../lib/library/TrackView.cpp) own creation and primary selection.
-- [`LibraryReader.cpp`](../../../app/runtime/library/LibraryReader.cpp) owns synchronous administrative reads; [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) owns interactive reads.
+- [`LibraryReader.cpp`](../../../app/runtime/library/LibraryReader.cpp) owns synchronous cover identity reads; [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) owns interactive byte reads.
 - GTK image delivery lives under [`app/linux-gtk/image/`](../../../app/linux-gtk/image/).
 - [`CoverArtLoader.cpp`](../../../app/tui/CoverArtLoader.cpp), [`CoverArt.cpp`](../../../app/tui/CoverArt.cpp), and [`app/tui/App.cpp`](../../../app/tui/App.cpp) own TUI delivery, transform, and paint state.
 - [`MprisArtUrlCache.cpp`](../../../app/linux-gtk/platform/MprisArtUrlCache.cpp) owns file-URL artifacts.

@@ -386,18 +386,6 @@ namespace ao::rt::test
     CHECK(trackFieldFilterExpressionVariable(TrackField::Bitrate) == "@bitrate");
   }
 
-  TEST_CASE("TrackField - helpers report filter expression support", "[runtime][unit][trackfield]")
-  {
-    CHECK(supportsTrackFieldFilterExpression(TrackField::Artist));
-    CHECK(supportsTrackFieldFilterExpression(TrackField::AlbumArtist));
-    CHECK(supportsTrackFieldFilterExpression(TrackField::Duration));
-    CHECK(supportsTrackFieldFilterExpression(TrackField::Codec));
-
-    CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::Tags));
-    CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::TechnicalSummary));
-    CHECK_FALSE(supportsTrackFieldFilterExpression(TrackField::Quality));
-  }
-
   TEST_CASE("TrackField - helpers report value completion support", "[runtime][unit][trackfield]")
   {
     CHECK(supportsTrackFieldValueCompletion(TrackField::Artist));
@@ -441,7 +429,6 @@ namespace ao::rt::test
     for (auto const& definition : definitions)
     {
       INFO("Invalid query bridge for track field: " << definition.id);
-      CHECK(supportsTrackFieldFilterExpression(definition.field) == definition.optQueryField.has_value());
       CHECK(supportsTrackFieldValueCompletion(definition.field) == definition.valueCompletion);
 
       if (definition.valueCompletion)

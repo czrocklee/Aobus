@@ -37,8 +37,6 @@ namespace ao::uimodel
         }
 
         _observedViewId = changed.snapshot.activeViewId;
-        _optimisticViewId = rt::kInvalidViewId;
-        _optimisticPresentationId.clear();
         refresh();
       });
 
@@ -50,8 +48,6 @@ namespace ao::uimodel
           return;
         }
 
-        _optimisticViewId = rt::kInvalidViewId;
-        _optimisticPresentationId.clear();
         refresh();
       });
 
@@ -82,16 +78,9 @@ namespace ao::uimodel
       return result;
     }
 
-    auto presentationId = foundState->presentation.id;
-
-    if (_optimisticViewId == activeViewId && !_optimisticPresentationId.empty())
-    {
-      presentationId = _optimisticPresentationId;
-    }
-
     result.enabled = true;
     result.activeViewId = activeViewId;
-    result.label = _catalog.labelForId(presentationId);
+    result.label = _catalog.labelForId(foundState->presentation.id);
     return result;
   }
 
@@ -127,15 +116,17 @@ namespace ao::uimodel
       return {};
     }
 
-    if (foundState->listId != kInvalidListId)
+    return TrackPresentationSelection{
+      .targetViewId = activeViewId, .targetListId = foundState->listId, .spec = std::move(*optSpec)};
+  }
+
+  void TrackPresentationPickerViewModel::completeSelection(TrackPresentationSelection const& selection)
+  {
+    if (selection.targetListId == kInvalidListId)
     {
-      _preferences.setPresentationIdForList(foundState->listId, optSpec->id);
+      return;
     }
 
-    _optimisticViewId = activeViewId;
-    _optimisticPresentationId = optSpec->id;
-    refresh();
-
-    return TrackPresentationSelection{.targetViewId = activeViewId, .spec = std::move(*optSpec)};
+    _preferences.setPresentationIdForList(selection.targetListId, selection.spec.id);
   }
 } // namespace ao::uimodel

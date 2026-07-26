@@ -392,7 +392,6 @@ namespace ao::rt::test
     auto const first = fixture.addTrack("First");
     auto const second = fixture.addTrack("Second");
     auto const third = fixture.addTrack("Third");
-    auto const fourth = fixture.addTrack("Fourth");
 
     SECTION("insert")
     {
@@ -421,21 +420,6 @@ namespace ao::rt::test
       REQUIRE(commit);
       CHECK(*commit == *preview);
       CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, third});
-      CHECK(fixture.listEvents.size() == 1);
-    }
-
-    SECTION("move")
-    {
-      auto const listId = fixture.createManual(std::array{first, second, third, fourth});
-      auto const preview = fixture.writer().previewMoveManualListTracks(listId, std::array{second, fourth}, 0);
-      REQUIRE(preview);
-      CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, second, third, fourth});
-      CHECK(fixture.listEvents.empty());
-
-      auto const commit = fixture.writer().moveManualListTracks(listId, std::array{second, fourth}, 0);
-      REQUIRE(commit);
-      CHECK(*commit == *preview);
-      CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{second, fourth, first, third});
       CHECK(fixture.listEvents.size() == 1);
     }
   }

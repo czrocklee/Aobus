@@ -165,7 +165,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("LibraryReader - reads track, dictionary, and resource DTOs", "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibraryReader - reads track rows and dictionary values", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -212,9 +212,6 @@ namespace ao::rt::test
     CHECK(row.status == library::FileStatus::Missing);
 
     CHECK(scope.trackCoverArtId(seeded.trackId) == seeded.resourceId);
-    REQUIRE(scope.trackUriPath(seeded.trackId).has_value());
-    CHECK(*scope.trackUriPath(seeded.trackId) ==
-          (std::filesystem::path{tempDir.path()} / kTrackUri).lexically_normal());
 
     auto const title = scope.trackField(seeded.trackId, TrackField::Title);
     REQUIRE(std::holds_alternative<std::string>(title));
@@ -232,15 +229,9 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<std::monostate>(missingField));
     CHECK_FALSE(scope.trackRow(TrackId{999999}).has_value());
     CHECK(scope.trackCoverArtId(TrackId{999999}) == kInvalidResourceId);
-    CHECK_FALSE(scope.trackUriPath(TrackId{999999}).has_value());
 
     CHECK(scope.resolve(seeded.artistId) == "An Artist");
     CHECK(scope.resolve(seeded.albumId) == "The Album");
-
-    auto const optResource = scope.loadResource(seeded.resourceId);
-    REQUIRE(optResource);
-    CHECK(*optResource == std::vector<std::byte>{kCoverBytes.begin(), kCoverBytes.end()});
-    CHECK_FALSE(scope.loadResource(ResourceId{999999}).has_value());
   }
 
   TEST_CASE("LibraryReader - URI paths reject symlinks escaping the library root",
@@ -260,7 +251,6 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto runtimeLibrary = Library{asyncRuntime, ml, changes};
     auto reader = runtimeLibrary.reader();
-    CHECK_FALSE(reader.trackUriPath(trackId));
     auto const optRow = reader.trackRow(trackId);
     REQUIRE(optRow);
     CHECK_FALSE(optRow->optUriPath);

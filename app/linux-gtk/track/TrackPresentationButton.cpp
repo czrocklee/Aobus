@@ -57,6 +57,11 @@ namespace ao::gtk
                                                         uimodel::ListPresentationPreferenceStore* preferences,
                                                         ThemeCoordinator* themeCoordinator)
   {
+    // A pending apply belongs to the outgoing view model's session. Left
+    // connected it would apply a stale selection to the runtime and then hand
+    // the outgoing list id to whatever preference store is bound by then.
+    _applyPresentationConn.disconnect();
+
     _catalog = catalog;
     _themeCoordinator = themeCoordinator;
 
@@ -156,7 +161,12 @@ namespace ao::gtk
         {
           APP_LOG_ERROR("Failed to apply track presentation: {}", result.error().message);
           showPresentationError(result.error().message);
+          return false;
         }
+
+        // Rebinding disconnects this idle callback before replacing the view
+        // model, so the accepted selection belongs to the current session.
+        _viewModelPtr->completeSelection(selection);
 
         return false;
       });

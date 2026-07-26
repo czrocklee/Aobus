@@ -54,7 +54,6 @@ namespace ao::gtk
     void setScaleRange(std::chrono::milliseconds duration);
     void setScaleValue(std::chrono::milliseconds elapsed);
     std::chrono::milliseconds scaleElapsed() const noexcept;
-    void reset();
 
     Gtk::Scale _scale;
     uimodel::PlaybackPositionInterpolator _interpolator;

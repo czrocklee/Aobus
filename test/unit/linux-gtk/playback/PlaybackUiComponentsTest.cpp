@@ -12,8 +12,11 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <glibmm/refptr.h>
+#include <gtkmm/adjustment.h>
 #include <gtkmm/label.h>
 #include <gtkmm/scale.h>
 
@@ -117,6 +120,83 @@ namespace ao::gtk::test
       playback.commands().pause();
       drainGtkEvents();
       CHECK_FALSE(seekControl.isTickActive());
+    }
+  }
+
+  // Construction delivers the current playback state synchronously through the
+  // view model. The constructor body must not overwrite it with template/reset
+  // values, or a layout rebuilt during playback stays blank until the next
+  // transport change.
+  TEST_CASE("PlaybackUiComponents - construction during playback keeps live state", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = PlaybackUiComponentsFixture{};
+    auto& playback = env.runtime.playback();
+    rt::test::addReadyAudioProvider(env.runtime);
+    drainGtkEvents();
+
+    startPlayback(env.runtime);
+
+    auto const transport = playback.snapshot().transport;
+    REQUIRE(transport.duration > std::chrono::milliseconds{0});
+
+    SECTION("TimeLabel shows live time instead of the template")
+    {
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+
+      auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
+      REQUIRE(label != nullptr);
+      CHECK(label->get_text() ==
+            uimodel::formatPlaybackTime(uimodel::PlaybackTimeMode::Default, transport.elapsed, transport.duration));
+
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(timeLabel.widget());
+      windowFixture.present();
+      CHECK(timeLabel.isTickActive());
+    }
+
+    SECTION("SeekControlWidget shows the live range instead of a zeroed scale")
+    {
+      auto seekControl = SeekControlWidget{playback};
+
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+      REQUIRE(scale != nullptr);
+      Glib::RefPtr<Gtk::Adjustment> const adjustmentPtr = scale->get_adjustment();
+      CHECK(adjustmentPtr->get_upper() == static_cast<double>(transport.duration.count()));
+      CHECK(scale->get_sensitive());
+
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(seekControl.widget());
+      windowFixture.present();
+      CHECK(seekControl.isTickActive());
+    }
+  }
+
+  TEST_CASE("PlaybackUiComponents - construction without a track renders idle state", "[gtk][unit][playback]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto env = PlaybackUiComponentsFixture{};
+    auto& playback = env.runtime.playback();
+    rt::test::addReadyAudioProvider(env.runtime);
+    drainGtkEvents();
+
+    SECTION("TimeLabel renders the template")
+    {
+      auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
+
+      auto* const label = dynamic_cast<Gtk::Label*>(&timeLabel.widget());
+      REQUIRE(label != nullptr);
+      CHECK(label->get_text() == uimodel::describeTimeTemplate(uimodel::PlaybackTimeMode::Default));
+    }
+
+    SECTION("SeekControlWidget renders a disabled zeroed scale")
+    {
+      auto seekControl = SeekControlWidget{playback};
+
+      auto* const scale = dynamic_cast<Gtk::Scale*>(&seekControl.widget());
+      REQUIRE(scale != nullptr);
+      CHECK(scale->get_value() == 0.0);
+      CHECK_FALSE(scale->get_sensitive());
     }
   }
 } // namespace ao::gtk::test

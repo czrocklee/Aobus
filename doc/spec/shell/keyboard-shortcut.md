@@ -63,7 +63,7 @@ This reconciliation prevents removed or reset shortcuts from remaining active un
 The owner-local persistence schema rejects a non-mapping group, duplicate or empty action id, non-sequence binding, or null/non-scalar sequence element as one failed candidate; the existing effective map remains unchanged.
 After that structural boundary accepts the group, invalid chord strings are skipped and diagnosed while valid siblings still apply.
 Neutral keys that cannot map to GTK accelerators are skipped with a warning.
-Unknown action ids are reportable by the model and cannot become valid catalog-backed editor rows.
+Unknown action ids remain valid mapping keys but do not become catalog-backed editor rows.
 
 The editor never silently steals a conflicting binding.
 The grouped store makes each requested save a fail-closed complete-document replacement, but the application wrapper reports failure only through logging.

@@ -214,7 +214,6 @@ namespace ao::rt
     async::Signal<TrackListProjectionChanged const&> projectionChangedSignal;
     async::Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     async::Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
-    async::Signal<ViewService::ListChanged const&> listChangedSignal;
   };
 
   ViewService::ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources)
@@ -245,11 +244,6 @@ namespace ao::rt
     std::move_only_function<void(SelectionChanged const&) noexcept> handler)
   {
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
-  }
-
-  async::Subscription ViewService::onListChanged(std::move_only_function<void(ListChanged const&) noexcept> handler)
-  {
-    return _implPtr->listChangedSignal.connect(std::move(handler));
   }
 
   Result<ViewId> ViewService::createView(TrackListViewConfig const& initial)
@@ -370,24 +364,6 @@ namespace ao::rt
     return {};
   }
 
-  Result<TrackPresentationSpec> ViewService::setPresentation(ViewId viewId, std::string_view presentationId)
-  {
-    if (auto const it = _implPtr->views.find(viewId); it == _implPtr->views.end())
-    {
-      return missingViewError(viewId);
-    }
-
-    auto const* const preset = builtinTrackPresentationPreset(presentationId);
-    auto spec = (preset != nullptr) ? preset->spec : defaultTrackPresentationSpec();
-
-    if (auto result = setPresentation(viewId, spec); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    return spec;
-  }
-
   Result<> ViewService::setSelection(ViewId viewId, std::vector<TrackId> selection)
   {
     auto it = _implPtr->views.find(viewId);
@@ -401,51 +377,6 @@ namespace ao::rt
 
     _implPtr->selectionChangedSignal.emit(
       ViewService::SelectionChanged{.viewId = viewId, .selection = it->second.state.selection});
-    return {};
-  }
-
-  Result<> ViewService::openListInView(ViewId const viewId, ListId const listId)
-  {
-    auto it = _implPtr->views.find(viewId);
-
-    if (it == _implPtr->views.end())
-    {
-      return missingViewError(viewId);
-    }
-
-    auto& entry = it->second;
-
-    if (entry.state.listId == listId)
-    {
-      return {};
-    }
-
-    auto baseSourceResult = _implPtr->sources.acquire(listId);
-
-    if (!baseSourceResult)
-    {
-      return std::unexpected{baseSourceResult.error()};
-    }
-
-    auto resourcesResult = prepareViewResources(viewId,
-                                                listId,
-                                                std::move(*baseSourceResult),
-                                                entry.state.filterExpression,
-                                                entry.state.presentation,
-                                                _implPtr->library,
-                                                _implPtr->sources);
-
-    if (!resourcesResult)
-    {
-      return std::unexpected{resourcesResult.error()};
-    }
-
-    installResources(entry, std::move(*resourcesResult));
-    entry.state.listId = listId;
-    _implPtr->projectionChangedSignal.post(
-      _implPtr->executor, TrackListProjectionChanged{.viewId = viewId, .projectionPtr = entry.projectionPtr});
-
-    _implPtr->listChangedSignal.post(_implPtr->executor, ViewService::ListChanged{.viewId = viewId, .listId = listId});
     return {};
   }
 

@@ -11,6 +11,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
+#include <gtkmm/button.h>
+#include <gtkmm/entry.h>
 #include <gtkmm/label.h>
 #include <gtkmm/window.h>
 
@@ -24,10 +26,8 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{fixture.runtime().library()};
 
     auto dialog = SmartListDialog{window, fixture.runtime(), rt::kAllTracksListId, cache};
-    window.set_child(dialog);
 
     // Rebuild happens in idle task
-    drainGtkEvents();
     drainGtkEvents();
 
     CHECK(dialog.editListId() == kInvalidListId);
@@ -61,9 +61,7 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     auto cache = TrackRowCache{fixture.runtime().library()};
     auto dialog = SmartListDialog{window, fixture.runtime(), ListId{999999}, cache};
-    window.set_child(dialog);
 
-    drainGtkEvents();
     drainGtkEvents();
 
     bool visibleError = false;
@@ -75,5 +73,43 @@ namespace ao::gtk::test
     }
 
     CHECK(visibleError);
+  }
+
+  // The preview source is acquired from an idle task. Until it arrives the
+  // dialog treats the expression as unvalidated, so the readiness pass must
+  // re-run the full preview or naming a list never enables submission.
+  TEST_CASE("SmartListDialog - naming a list enables submission once the preview source is ready",
+            "[gtk][regression][list][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library()};
+
+    auto dialog = SmartListDialog{window, fixture.runtime(), rt::kAllTracksListId, cache};
+
+    drainGtkEvents();
+
+    Gtk::Entry* nameEntry = nullptr;
+
+    for (auto* const entry : collectAll<Gtk::Entry>(dialog))
+    {
+      if (entry->get_placeholder_text() == "List name")
+      {
+        nameEntry = entry;
+        break;
+      }
+    }
+
+    REQUIRE(nameEntry != nullptr);
+
+    auto* const okButton = findButtonByLabel(dialog, "Create");
+    REQUIRE(okButton != nullptr);
+    CHECK_FALSE(okButton->get_sensitive());
+
+    nameEntry->set_text("My List");
+    drainGtkEvents();
+
+    CHECK(okButton->get_sensitive());
   }
 } // namespace ao::gtk::test

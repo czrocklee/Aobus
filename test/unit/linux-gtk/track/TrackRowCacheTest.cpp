@@ -15,9 +15,7 @@
 #include <gtkmm/application.h>
 
 #include <chrono>
-#include <optional>
 #include <string>
-#include <vector>
 
 namespace ao::gtk::test
 {
@@ -30,56 +28,51 @@ namespace ao::gtk::test
     auto helperId = kInvalidTrackId;
     auto cachingId = kInvalidTrackId;
     auto invalidationId = kInvalidTrackId;
-    auto dictionaryId = kInvalidDictionaryId;
-    auto fixture = GtkRuntimeFixture{
-      [&](library::MusicLibrary& musicLibrary)
-      {
-        library::test::addTrack(musicLibrary, {.title = "Dictionary Track", .artist = "Test Dictionary String"});
-        dictionaryId = musicLibrary.dictionary().lookupId("Test Dictionary String");
+    auto fixture = GtkRuntimeFixture{[&](library::MusicLibrary& musicLibrary)
+                                     {
+                                       auto spec1 = library::test::TrackSpec{};
+                                       spec1.artist = "Artist 1";
+                                       spec1.album = "Album 1";
+                                       spec1.title = "Track 1";
+                                       spec1.genre = "Genre 1";
+                                       spec1.year = 2021;
+                                       spec1.trackNumber = 1;
+                                       spec1.duration = std::chrono::minutes{3};
+                                       basicId1 = library::test::addTrack(musicLibrary, spec1);
 
-        auto spec1 = library::test::TrackSpec{};
-        spec1.artist = "Artist 1";
-        spec1.album = "Album 1";
-        spec1.title = "Track 1";
-        spec1.genre = "Genre 1";
-        spec1.year = 2021;
-        spec1.trackNumber = 1;
-        spec1.duration = std::chrono::minutes{3};
-        basicId1 = library::test::addTrack(musicLibrary, spec1);
+                                       auto spec2 = library::test::TrackSpec{};
+                                       spec2.title = "Track 2";
+                                       spec2.duration = std::chrono::minutes{4};
+                                       basicId2 = library::test::addTrack(musicLibrary, spec2);
 
-        auto spec2 = library::test::TrackSpec{};
-        spec2.title = "Track 2";
-        spec2.duration = std::chrono::minutes{4};
-        basicId2 = library::test::addTrack(musicLibrary, spec2);
+                                       auto utf8Spec = library::test::TrackSpec{};
+                                       utf8Spec.title = "東京の歌";
+                                       utf8Spec.artist = "Björk";
+                                       utf8Spec.album = "Álbum del Niño";
+                                       utf8Spec.albumArtist = "Sigur Rós";
+                                       utf8Spec.genre = "Électronique";
+                                       utf8Spec.composer = "久石譲";
+                                       utf8Spec.conductor = "指揮者";
+                                       utf8Spec.ensemble = "東京交響楽団";
+                                       utf8Spec.work = "作品一";
+                                       utf8Spec.movement = "第一楽章";
+                                       utf8Spec.soloist = "独奏者";
+                                       utf8Spec.tags = {"夜", "ライブ"};
+                                       utf8Id = library::test::addTrack(musicLibrary, utf8Spec);
 
-        auto utf8Spec = library::test::TrackSpec{};
-        utf8Spec.title = "東京の歌";
-        utf8Spec.artist = "Björk";
-        utf8Spec.album = "Álbum del Niño";
-        utf8Spec.albumArtist = "Sigur Rós";
-        utf8Spec.genre = "Électronique";
-        utf8Spec.composer = "久石譲";
-        utf8Spec.conductor = "指揮者";
-        utf8Spec.ensemble = "東京交響楽団";
-        utf8Spec.work = "作品一";
-        utf8Spec.movement = "第一楽章";
-        utf8Spec.soloist = "独奏者";
-        utf8Spec.tags = {"夜", "ライブ"};
-        utf8Id = library::test::addTrack(musicLibrary, utf8Spec);
-
-        auto helperSpec = library::test::TrackSpec{};
-        helperSpec.duration = std::chrono::minutes{2};
-        helperId = library::test::addTrack(musicLibrary, helperSpec);
-        cachingId = library::test::addTrack(musicLibrary, {});
-        invalidationId = library::test::addTrack(musicLibrary, {});
-      }};
+                                       auto helperSpec = library::test::TrackSpec{};
+                                       helperSpec.duration = std::chrono::minutes{2};
+                                       helperId = library::test::addTrack(musicLibrary, helperSpec);
+                                       cachingId = library::test::addTrack(musicLibrary, {});
+                                       invalidationId = library::test::addTrack(musicLibrary, {});
+                                     }};
     auto& runtime = fixture.runtime();
 
     SECTION("Basic data loading")
     {
       auto provider = TrackRowCache{runtime.library()};
 
-      auto const row1Ptr = provider.trackRow(basicId1);
+      Glib::RefPtr<TrackRowObject> const row1Ptr = provider.trackRow(basicId1);
       REQUIRE(row1Ptr);
       CHECK(row1Ptr->fieldText(rt::TrackField::Artist) == "Artist 1");
       CHECK(row1Ptr->fieldText(rt::TrackField::Album) == "Album 1");
@@ -162,15 +155,9 @@ namespace ao::gtk::test
       CHECK(rowPtr->tags() == "夜, ライブ");
     }
 
-    SECTION("Cache helper methods")
+    SECTION("Clearing the cache discards loaded rows")
     {
       auto provider = TrackRowCache{runtime.library()};
-
-      auto const optUri = provider.uriPath(helperId);
-      REQUIRE(optUri);
-      CHECK(*optUri == runtime.musicLibrary().rootPath() / "test.flac");
-
-      CHECK(provider.coverArtId(helperId) == kInvalidResourceId);
 
       auto const rowBeforeClearPtr = provider.trackRow(helperId);
       REQUIRE(rowBeforeClearPtr);
@@ -180,12 +167,20 @@ namespace ao::gtk::test
       auto const rowAfterClearPtr = provider.trackRow(helperId);
       REQUIRE(rowAfterClearPtr);
       CHECK(rowAfterClearPtr != rowBeforeClearPtr);
+    }
 
-      provider.remove(helperId);
+    // FilePath is a text-backed value materialized from the read-model row.
+    SECTION("File path is materialized into the row")
+    {
+      auto provider = TrackRowCache{runtime.library()};
 
-      auto const rowAfterRemovePtr = provider.trackRow(helperId);
-      REQUIRE(rowAfterRemovePtr);
-      CHECK(rowAfterRemovePtr != rowAfterClearPtr);
+      auto const rowPtr = provider.trackRow(helperId);
+      REQUIRE(rowPtr);
+
+      auto const expected = Glib::ustring{(runtime.musicLibrary().rootPath() / "test.flac").string()};
+      REQUIRE(rowPtr->stringField(rt::TrackField::FilePath) != nullptr);
+      CHECK(*rowPtr->stringField(rt::TrackField::FilePath) == expected);
+      CHECK(rowPtr->fieldText(rt::TrackField::FilePath) == expected);
     }
 
     SECTION("Caching works")
@@ -210,16 +205,6 @@ namespace ao::gtk::test
 
       auto const row1NewPtr = provider.trackRow(invalidationId);
       CHECK(row1Ptr != row1NewPtr);
-    }
-
-    SECTION("Dictionary resolution")
-    {
-      auto provider = TrackRowCache{runtime.library()};
-
-      auto const& name = provider.resolveDictionaryString(dictionaryId);
-      CHECK_FALSE(name.empty());
-
-      provider.clearCache();
     }
 
     SECTION("Non-existent track")

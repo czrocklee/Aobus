@@ -12,7 +12,6 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/ListNode.h>
@@ -233,20 +232,6 @@ namespace ao::rt
       .value_or(kInvalidResourceId);
   }
 
-  std::optional<std::filesystem::path> LibraryReader::trackUriPath(TrackId id) const
-  {
-    auto const& library = _implPtr->library;
-    auto const reader = library.tracks().reader(_implPtr->transaction);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
-
-    if (!optView)
-    {
-      return std::nullopt;
-    }
-
-    return resolveLibraryPath(library.rootPath(), optView->property().uri());
-  }
-
   TrackFieldRawValue LibraryReader::trackField(TrackId id, TrackField field) const
   {
     auto const& library = _implPtr->library;
@@ -312,19 +297,6 @@ namespace ao::rt
     }
 
     return ids;
-  }
-
-  std::optional<std::vector<std::byte>> LibraryReader::loadResource(ResourceId id) const
-  {
-    auto const reader = _implPtr->library.resources().reader(_implPtr->transaction);
-    auto const optBytes = reader.get(id);
-
-    if (!optBytes)
-    {
-      return std::nullopt;
-    }
-
-    return std::vector<std::byte>{optBytes->begin(), optBytes->end()};
   }
 
   std::vector<std::string> LibraryReader::selectionTags(std::span<TrackId const> trackIds) const

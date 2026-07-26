@@ -27,7 +27,6 @@
 #include <gtkmm/widget.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -305,50 +304,6 @@ namespace ao::gtk
     return ids;
   }
 
-  std::vector<Glib::RefPtr<TrackRowObject>> TrackSelectionController::selectedRows() const noexcept
-  {
-    auto const modelPtr = _selectionModelPtr->get_model();
-
-    if (!modelPtr)
-    {
-      return {};
-    }
-
-    auto rows = std::vector<Glib::RefPtr<TrackRowObject>>{};
-
-    for (auto const position : selectedPositions(*_selectionModelPtr))
-    {
-      if (auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(position)); rowPtr)
-      {
-        rows.push_back(rowPtr);
-      }
-    }
-
-    return rows;
-  }
-
-  std::chrono::milliseconds TrackSelectionController::selectedTracksDuration() const noexcept
-  {
-    auto const modelPtr = _selectionModelPtr->get_model();
-
-    if (!modelPtr)
-    {
-      return std::chrono::milliseconds{0};
-    }
-
-    auto totalDuration = std::chrono::milliseconds{0};
-
-    for (auto const position : selectedPositions(*_selectionModelPtr))
-    {
-      if (auto const rowPtr = std::dynamic_pointer_cast<TrackRowObject>(modelPtr->get_object(position)); rowPtr)
-      {
-        totalDuration += rowPtr->duration();
-      }
-    }
-
-    return totalDuration;
-  }
-
   TrackId TrackSelectionController::primarySelectedTrackId() const noexcept
   {
     auto const bitsetPtr = _selectionModelPtr->get_selection();
@@ -398,25 +353,5 @@ namespace ao::gtk
   {
     _playingTrackId = trackId;
     _modelPtr->setPlayingTrackId(trackId);
-  }
-
-  std::vector<TrackId> TrackSelectionController::visibleTrackIds() const noexcept
-  {
-    auto* const proj = _modelPtr->projection();
-
-    if (proj == nullptr)
-    {
-      return {};
-    }
-
-    auto ids = std::vector<TrackId>{};
-    ids.reserve(proj->size());
-
-    for (std::size_t index = 0; index < proj->size(); ++index)
-    {
-      ids.push_back(proj->trackIdAt(index));
-    }
-
-    return ids;
   }
 } // namespace ao::gtk

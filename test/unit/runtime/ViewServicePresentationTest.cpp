@@ -271,22 +271,4 @@ namespace ao::rt::test
     CHECK(presentation.id == "albums");
     CHECK(presentation.id == service.trackListState(result).presentation.id);
   }
-
-  TEST_CASE("ViewService - setPresentation with preset string", "[runtime][unit][view][presentation]")
-  {
-    auto env = ViewServiceFixture{};
-    auto service = env.makeService();
-    auto const result = env.requireView(service);
-
-    auto const spec = service.setPresentation(result, "artists");
-    auto const snap = service.trackListState(result);
-
-    REQUIRE(spec);
-    CHECK(spec->id == "artists");
-    CHECK(snap.groupBy == TrackGroupKey::AlbumArtist);
-
-    auto const specInv = service.setPresentation(ViewId{999}, "artists");
-    CHECK_FALSE(specInv);
-    CHECK(specInv.error().code == Error::Code::NotFound);
-  }
 } // namespace ao::rt::test

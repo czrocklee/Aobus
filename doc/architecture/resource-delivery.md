@@ -26,13 +26,14 @@ The [system architecture](system-overview.md) places raw resource storage in Cor
 media file reading or YAML import
   -> TrackBuilder cover bytes
   -> ResourceStore immutable blob + ResourceId
-  -> ordered Track cover references
-  -> primary ResourceId in runtime rows/detail/playback state
-       |-> LibraryTaskService owned-byte read
-            |-> GTK ImageCache / ResourceImageLoader / ImageWidget
-            |-> TUI CoverArtLoader -> block preview or Kitty PNG
-            `-> MPRIS cache file -> file:// URL
-       `-> CLI resource list/export
+       |-> ordered Track cover references
+       |    -> primary ResourceId in runtime rows/detail/playback state
+       |         `-> LibraryTaskService owned-byte read
+       |              |-> GTK ImageCache / ResourceImageLoader / ImageWidget
+       |              |-> TUI CoverArtLoader -> block preview or Kitty PNG
+       |              `-> MPRIS cache file -> file:// URL
+       |-> YAML library export through a scoped read
+       `-> CLI resource list/export through a scoped read
 ```
 
 The store contains arbitrary raw bytes and no MIME, dimension, ownership-count, or rendering metadata.
@@ -52,8 +53,8 @@ The library model owns cover ordering and reference integrity; resource delivery
 
 ### Runtime materialization and identity flow
 
-`LibraryReader::loadResource()` remains the synchronous owned-copy boundary for administrative consumers.
-`LibraryTaskService::loadResourceAsync()` is the interactive boundary: it enters on the callback executor, copies immutable bytes under a worker-side read transaction, rejects encoded payloads above 32 MiB, and returns owned bytes on the callback executor.
+`LibraryTaskService::loadResourceAsync()` is the only interactive materialization boundary: it enters on the callback executor, copies immutable bytes under a worker-side read transaction, rejects encoded payloads above 32 MiB, and returns owned bytes on the callback executor.
+Administrative export is not routed through it: YAML export and CLI resource export each read `ResourceStore` directly under their own scoped transaction.
 Runtime track rows, list/detail projections, and playback state carry only `ResourceId`, not decoded images or URLs.
 
 The task service does not cache, decode, publish maintenance progress, or introduce a resource-state owner.
@@ -157,7 +158,7 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 ## Implementation map
 
 - [`ResourceStore`](../../include/ao/library/ResourceStore.h), [`ResourceStore.cpp`](../../lib/library/ResourceStore.cpp), and [`CoverArt.h`](../../include/ao/library/CoverArt.h) own Core identities and references.
-- [`LibraryReader::loadResource`](../../app/runtime/library/LibraryReader.cpp) owns synchronous administrative materialization; [`LibraryTaskService::loadResourceAsync`](../../app/runtime/library/LibraryTaskService.cpp) owns interactive materialization.
+- [`LibraryTaskService::loadResourceAsync`](../../app/runtime/library/LibraryTaskService.cpp) owns interactive materialization; [`LibraryYamlExporter.cpp`](../../app/runtime/library/LibraryYamlExporter.cpp) and CLI export read `ResourceStore` directly under their own transaction.
 - [`TrackRow.h`](../../app/include/ao/rt/TrackRow.h), [`TrackListProjection.h`](../../app/include/ao/rt/projection/TrackListProjection.h), [`TrackDetailProjection.h`](../../app/include/ao/rt/projection/TrackDetailProjection.h), and [`PlaybackState.h`](../../app/include/ao/rt/PlaybackState.h) carry identities.
 - [`ImageCache`](../../app/linux-gtk/image/ImageCache.h), [`ResourceImageLoader`](../../app/linux-gtk/image/ResourceImageLoader.h), [`ResourceImageController`](../../app/linux-gtk/image/ResourceImageController.h), and [`ImageWidget`](../../app/linux-gtk/image/ImageWidget.h) own GTK delivery.
 - [`CoverArtLoader`](../../app/tui/CoverArtLoader.h), [`CoverArt.cpp`](../../app/tui/CoverArt.cpp), and [`app/tui/App.cpp`](../../app/tui/App.cpp) own TUI delivery, transforms, and paint state.
@@ -170,7 +171,7 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 - [`TrackBuilderCoverArtTest.cpp`](../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects ordered references and primary selection.
 - [`RequestCoalescerTest.cpp`](../../test/unit/linux-gtk/common/RequestCoalescerTest.cpp) protects shared-flight ordering, interest cancellation, reentrancy, failure rollback, and owner-independent request handles.
 - GTK image tests under [`test/unit/linux-gtk/image/`](../../test/unit/linux-gtk/image/) protect cache, coalescing, scaling, cancellation, current-request publication, and render targets.
-- [`PlaybackImageTest.cpp`](../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) and [`TrackRowCacheTest.cpp`](../../test/unit/linux-gtk/track/TrackRowCacheTest.cpp) protect runtime identity-to-widget consumers.
+- [`PlaybackImageTest.cpp`](../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects the runtime identity-to-widget consumer.
 - [`CoverArtTest.cpp`](../../test/unit/tui/CoverArtTest.cpp) protects TUI decode and Kitty protocol transforms.
 - [`MprisBridgeTest.cpp`](../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects cache-file export and URL publication.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects raw resource list/export behavior.

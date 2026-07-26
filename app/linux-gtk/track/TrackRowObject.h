@@ -18,12 +18,10 @@
 
 namespace ao::gtk
 {
-  class TrackRowCache;
-
   class TrackRowObject final : public Glib::Object
   {
   public:
-    static Glib::RefPtr<TrackRowObject> create(TrackId id, TrackRowCache const& provider);
+    static Glib::RefPtr<TrackRowObject> create(TrackId id);
     static ::GType objectType();
 
     TrackId trackId() const { return _id; }
@@ -41,15 +39,8 @@ namespace ao::gtk
     Glib::ustring fieldText(rt::TrackField field) const;
 
     Glib::ustring const& tags() const { return _tags; }
-    void setTags(Glib::ustring const& tags)
-    {
-      _tags = tags;
-      invalidateComputedCache();
-    }
 
     std::chrono::milliseconds duration() const { return _duration; }
-
-    ResourceId resourceId() const { return _resourceId; }
 
     std::uint32_t sampleRate() const { return _sampleRate; }
     std::uint8_t channels() const { return _channels; }
@@ -97,6 +88,7 @@ namespace ao::gtk
                   Glib::ustring movement,
                   Glib::ustring soloist,
                   Glib::ustring tags,
+                  Glib::ustring filePath,
                   std::chrono::milliseconds duration,
                   std::uint16_t year,
                   std::uint16_t discNumber,
@@ -105,7 +97,6 @@ namespace ao::gtk
                   std::uint16_t trackTotal,
                   std::uint16_t movementNumber,
                   std::uint16_t movementTotal,
-                  ResourceId resourceId,
                   std::uint32_t sampleRate,
                   std::uint8_t channels,
                   std::uint8_t bitDepth,
@@ -126,7 +117,6 @@ namespace ao::gtk
     void invalidateComputedCache() noexcept { _computedFilled = 0; }
 
     TrackId _id;
-    TrackRowCache const* _provider = nullptr;
 
     // Holds both text-backed fields (filled at populate) and lazily memoized
     // computed-field strings; mutable so displayText() can fill computed slots
@@ -144,7 +134,6 @@ namespace ao::gtk
     std::uint16_t _trackTotal = 0;
     std::uint16_t _movementNumber = 0;
     std::uint16_t _movementTotal = 0;
-    ResourceId _resourceId{kInvalidResourceId};
 
     std::uint32_t _sampleRate = 0;
     std::uint8_t _channels = 0;

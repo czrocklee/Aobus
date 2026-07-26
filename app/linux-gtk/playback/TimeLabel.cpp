@@ -38,8 +38,6 @@ namespace ao::gtk
     // Lock the width to the measured size, with a small tolerance.
     _label.set_size_request(textWidth + 2, -1);
 
-    _label.set_text(templateText);
-
     _mapConnection = _label.signal_map().connect(
       [this]
       {
@@ -53,7 +51,9 @@ namespace ao::gtk
         _isMapped = false;
       });
 
-    reset();
+    // No reset() here: the view model already delivered the current playback
+    // state synchronously during member construction, and it renders the
+    // template through reset() itself when there is no track loaded.
   }
 
   TimeLabel::~TimeLabel()

@@ -519,12 +519,6 @@ namespace ao::rt
     return query::variableDisplayName(descriptor->type, descriptor->canonicalName);
   }
 
-  bool supportsTrackFieldFilterExpression(TrackField const field)
-  {
-    auto const* const definition = trackFieldDefinition(field);
-    return definition != nullptr && queryVariableDescriptor(*definition) != nullptr;
-  }
-
   bool supportsTrackFieldValueCompletion(TrackField const field)
   {
     auto const* const definition = trackFieldDefinition(field);

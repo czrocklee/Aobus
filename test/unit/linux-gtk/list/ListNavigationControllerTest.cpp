@@ -16,6 +16,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -233,6 +234,87 @@ namespace ao::gtk::test
 
       CHECK(selectedId == listId);
       CHECK(selectionAttemptCount == 2);
+    }
+
+    SECTION("a newer successful selection supersedes an earlier failed one")
+    {
+      auto const rejectedListId = createList(fixture.runtime().library(), "Rejected Target");
+      auto const acceptedListId = createList(fixture.runtime().library(), "Accepted Target");
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      rejectSelection = true;
+      controller.select(rejectedListId);
+      drainGtkEvents();
+      REQUIRE(selectedId != rejectedListId);
+
+      rejectSelection = false;
+      controller.select(acceptedListId);
+      drainGtkEvents();
+      REQUIRE(selectedId == acceptedListId);
+
+      auto const attemptsBeforeRebuild = selectionAttemptCount;
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedId == acceptedListId);
+      CHECK(selectionAttemptCount == attemptsBeforeRebuild);
+    }
+
+    SECTION("an authoritative workspace selection supersedes an earlier failed one")
+    {
+      auto const rejectedListId = createList(fixture.runtime().library(), "Rejected Target");
+      auto const navigatedListId = createList(fixture.runtime().library(), "Navigated Target");
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      rejectSelection = true;
+      controller.select(rejectedListId);
+      drainGtkEvents();
+      REQUIRE(selectedId != rejectedListId);
+
+      // External navigation is authoritative: the panel syncs to it silently,
+      // so the stale pending selection must not survive into the next rebuild.
+      rejectSelection = false;
+      REQUIRE(fixture.runtime().workspace().navigate({.target = navigatedListId}));
+      drainGtkEvents();
+
+      auto const attemptsBeforeRebuild = selectionAttemptCount;
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedId != rejectedListId);
+      CHECK(selectionAttemptCount == attemptsBeforeRebuild);
+    }
+
+    SECTION("closing the last workspace view discards an earlier failed selection")
+    {
+      auto const rejectedListId = createList(fixture.runtime().library(), "Rejected Target");
+      auto const activeViewId =
+        ao::test::requireValue(fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId}));
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      rejectSelection = true;
+      controller.select(rejectedListId);
+      drainGtkEvents();
+      REQUIRE(selectedId != rejectedListId);
+
+      rejectSelection = false;
+      REQUIRE(fixture.runtime().workspace().closeView(activeViewId));
+      drainGtkEvents();
+      REQUIRE(fixture.runtime().workspace().snapshot().activeViewId == rt::kInvalidViewId);
+      auto const attemptsBeforeRebuild = selectionAttemptCount;
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedId != rejectedListId);
+      CHECK(selectionAttemptCount == attemptsBeforeRebuild);
     }
 
     SECTION("submitListDraft updates an existing list and preserves the presentation callback")

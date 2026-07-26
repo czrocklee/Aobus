@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -37,6 +38,7 @@ namespace ao::uimodel
   struct TrackPresentationSelection final
   {
     rt::ViewId targetViewId = rt::kInvalidViewId;
+    ListId targetListId = kInvalidListId;
     rt::TrackPresentationSpec spec{};
   };
 
@@ -56,7 +58,13 @@ namespace ao::uimodel
     TrackPresentationPickerViewModel& operator=(TrackPresentationPickerViewModel&&) = delete;
 
     void refresh();
+
+    // Resolves the pending selection without changing any state. The caller
+    // applies it to the runtime and reports the outcome through
+    // completeSelection(), so a failed or superseded apply leaves the stored
+    // list preference untouched.
     std::optional<TrackPresentationSelection> selectPresentation(std::string_view presentationId);
+    void completeSelection(TrackPresentationSelection const& selection);
 
   private:
     TrackPresentationPickerState state() const;
@@ -70,7 +78,5 @@ namespace ao::uimodel
     async::Subscription _presentationSub;
     async::Subscription _catalogSub;
     rt::ViewId _observedViewId = rt::kInvalidViewId;
-    rt::ViewId _optimisticViewId = rt::kInvalidViewId;
-    std::string _optimisticPresentationId;
   };
 } // namespace ao::uimodel

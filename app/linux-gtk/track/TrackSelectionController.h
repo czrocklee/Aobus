@@ -4,7 +4,6 @@
 #pragma once
 
 #include "track/TrackListModel.h"
-#include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 
 #include <glibmm/refptr.h>
@@ -13,7 +12,6 @@
 #include <sigc++/scoped_connection.h>
 #include <sigc++/signal.h>
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -40,15 +38,12 @@ namespace ao::gtk
     void configureActivation();
 
     std::vector<TrackId> selectedTrackIds() const noexcept;
-    std::vector<Glib::RefPtr<TrackRowObject>> selectedRows() const noexcept;
-    std::chrono::milliseconds selectedTracksDuration() const noexcept;
     TrackId primarySelectedTrackId() const noexcept;
     std::size_t selectedTrackCount() const noexcept;
 
     void selectTrack(TrackId trackId);
     void scrollToTrack(TrackId trackId);
     void setPlayingTrackId(TrackId trackId);
-    std::vector<TrackId> visibleTrackIds() const noexcept;
 
     // Exposed signals for TrackViewPage to wire to external handlers
     SelectionChangedSignal& signalSelectionChanged() noexcept { return _selectionChanged; }

@@ -44,7 +44,6 @@ namespace ao::rt
     std::optional<TrackRow> trackRow(TrackId id) const;
     bool containsTrack(TrackId id) const;
     ResourceId trackCoverArtId(TrackId id) const;
-    std::optional<std::filesystem::path> trackUriPath(TrackId id) const;
     TrackFieldRawValue trackField(TrackId id, TrackField field) const;
 
     // Dictionary
@@ -54,9 +53,6 @@ namespace ao::rt
     std::vector<ListNode> lists() const;
     std::optional<ListNode> listNode(ListId id) const;
     std::vector<TrackId> listTrackIds(ListId id) const;
-
-    // Resources
-    std::optional<std::vector<std::byte>> loadResource(ResourceId id) const;
 
     // Tags
 

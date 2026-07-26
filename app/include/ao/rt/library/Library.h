@@ -51,6 +51,8 @@ namespace ao::rt
     LibraryWriter& writer() noexcept;
     LibraryTaskService& taskService() noexcept;
 
+    // Frontend-facing list mutation. linux-gtk is barred from reaching
+    // LibraryWriter directly (frontend-core guardrail), so these stay.
     Result<ListId> createList(LibraryListDraft const& draft);
     Result<UpdateListReply> updateList(LibraryListDraft const& draft);
     Result<DeleteListReply> deleteList(ListId listId);

@@ -18,7 +18,6 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::library
@@ -53,12 +52,6 @@ namespace ao::rt
       std::vector<TrackId> selection{};
     };
 
-    struct ListChanged final
-    {
-      ViewId viewId{};
-      ListId listId{};
-    };
-
     struct PresentationChanged final
     {
       ViewId viewId{};
@@ -77,9 +70,7 @@ namespace ao::rt
     Result<> destroyView(ViewId viewId);
     Result<> setFilter(ViewId viewId, std::string filterExpression);
     Result<> setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
-    Result<TrackPresentationSpec> setPresentation(ViewId viewId, std::string_view presentationId);
     Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
-    Result<> openListInView(ViewId viewId, ListId listId);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
     async::Subscription onDestroyed(std::move_only_function<void(ViewId) noexcept> handler);
@@ -88,7 +79,6 @@ namespace ao::rt
     async::Subscription onPresentationChanged(
       std::move_only_function<void(PresentationChanged const&) noexcept> handler);
     async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&) noexcept> handler);
-    async::Subscription onListChanged(std::move_only_function<void(ListChanged const&) noexcept> handler);
 
     std::vector<ViewId> listViews() const;
 

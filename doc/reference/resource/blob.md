@@ -46,10 +46,9 @@ An id is content-derived but is not a portable cryptographic content identifier:
 Resource values are exact raw bytes with no header, length prefix, MIME, file extension, dimensions, refcount, or checksum field.
 LMDB supplies the row length.
 
-`LibraryReader::loadResource(id)` returns `optional<vector<byte>>` and copies before its scoped transaction ends.
-CLI resource export writes that exact vector without interpretation.
+CLI resource export and YAML library export read `ResourceStore` directly under their own read transaction; CLI writes the exact bytes without interpretation.
 
-`LibraryTaskService::loadResourceAsync(id, stopToken)` is the interactive owned-byte operation:
+`LibraryTaskService::loadResourceAsync(id, stopToken)` is the interactive runtime owned-byte operation:
 
 | Input/result | Exact behavior |
 | --- | --- |
@@ -93,7 +92,8 @@ If id `42` contains different bytes and `43` is free, creation writes and return
 - [`CoreIds.h`](../../../include/ao/CoreIds.h) defines the strong type and invalid sentinel.
 - [`ResourceStore.h`](../../../include/ao/library/ResourceStore.h) defines reader and writer operations.
 - [`ResourceStore.cpp`](../../../lib/library/ResourceStore.cpp) defines create, deduplication, and probing.
-- [`LibraryReader.cpp`](../../../app/runtime/library/LibraryReader.cpp) defines the owned runtime read.
+- [`LibraryYamlExporter.cpp`](../../../app/runtime/library/LibraryYamlExporter.cpp) defines the administrative scoped read used by export.
+- [`LibCommand.cpp`](../../../app/cli/LibCommand.cpp) defines CLI resource listing and raw export.
 - [`LibraryTaskService.cpp`](../../../app/runtime/library/LibraryTaskService.cpp) defines the bounded interactive owned-byte read.
 
 ## Test authority

@@ -38,9 +38,8 @@ namespace ao::uimodel::test
     CHECK(fixture.preferences.listPresentations().empty());
   }
 
-  TEST_CASE(
-    "TrackPresentationPickerViewModel - selecting a valid presentation stores preference and returns captured spec",
-    "[uimodel][unit][workflow]")
+  TEST_CASE("TrackPresentationPickerViewModel - selecting a presentation captures the spec without persisting",
+            "[uimodel][unit][workflow]")
   {
     auto fixture = TrackPresentationFixture{};
     REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
@@ -54,15 +53,61 @@ namespace ao::uimodel::test
     workflow.refresh();
     auto const optCommand = workflow.selectPresentation("albums");
 
-    REQUIRE(rendered.size() == 2);
+    REQUIRE(rendered.size() == 1);
     CHECK(rendered[0].enabled);
     CHECK(rendered[0].label == fixture.catalog.labelForId(rt::kDefaultTrackPresentationId));
     REQUIRE(optCommand);
     CHECK(optCommand->targetViewId == fixture.workspace.snapshot().activeViewId);
+    CHECK(optCommand->targetListId == rt::kAllTracksListId);
     CHECK(optCommand->spec.id == "albums");
+    CHECK(fixture.preferences.listPresentations().empty());
+  }
+
+  TEST_CASE("TrackPresentationPickerViewModel - completing an applied selection persists the list preference",
+            "[uimodel][unit][workflow]")
+  {
+    auto fixture = TrackPresentationFixture{};
+    REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
+    auto rendered = std::vector<TrackPresentationPickerState>{};
+    auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
+                                                     fixture.workspace,
+                                                     fixture.catalog,
+                                                     fixture.preferences,
+                                                     [&rendered](auto const& state) { rendered.push_back(state); }};
+
+    auto const optCommand = workflow.selectPresentation("albums");
+    REQUIRE(optCommand);
+
+    REQUIRE(fixture.viewService.setPresentation(optCommand->targetViewId, optCommand->spec));
+    workflow.completeSelection(*optCommand);
+
     REQUIRE(fixture.preferences.presentationIdForList(rt::kAllTracksListId));
     CHECK(*fixture.preferences.presentationIdForList(rt::kAllTracksListId) == "albums");
-    CHECK(rendered[1].label == fixture.catalog.labelForId("albums"));
+    REQUIRE_FALSE(rendered.empty());
+    CHECK(rendered.back().label == fixture.catalog.labelForId("albums"));
+  }
+
+  // A selection that never reaches completeSelection stands for a runtime apply
+  // that failed or was superseded before the deferred apply ran.
+  TEST_CASE("TrackPresentationPickerViewModel - an unapplied selection leaves preference and label unchanged",
+            "[uimodel][unit][regression][workflow]")
+  {
+    auto fixture = TrackPresentationFixture{};
+    REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
+    auto rendered = std::vector<TrackPresentationPickerState>{};
+    auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
+                                                     fixture.workspace,
+                                                     fixture.catalog,
+                                                     fixture.preferences,
+                                                     [&rendered](auto const& state) { rendered.push_back(state); }};
+
+    REQUIRE(workflow.selectPresentation("albums"));
+
+    workflow.refresh();
+
+    CHECK(fixture.preferences.listPresentations().empty());
+    REQUIRE_FALSE(rendered.empty());
+    CHECK(rendered.back().label == fixture.catalog.labelForId(rt::kDefaultTrackPresentationId));
   }
 
   TEST_CASE("TrackPresentationPickerViewModel - missing active view rejects selection without optimistic state",

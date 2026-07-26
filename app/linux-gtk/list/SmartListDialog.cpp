@@ -336,8 +336,10 @@ namespace ao::gtk
         auto selectionModelPtr = Gtk::SingleSelection::create(_previewModelPtr);
         _previewColumnView.set_model(selectionModelPtr);
 
-        updateSourceLabels();
-        updateDialogState();
+        // Re-run the full preview: the earlier source-unavailable pass left
+        // _expressionValid false, which would keep submission disabled until
+        // the user happened to edit the expression again.
+        updatePreview();
 
         return false;
       });

@@ -869,8 +869,7 @@ namespace ao::rt
                                                                     MutationMode mode);
     Result<MoveManualListTracksReply> applyMoveManualListTracks(ListId listId,
                                                                 std::span<TrackId const> trackIds,
-                                                                std::size_t insertionIndexAfterRemoval,
-                                                                MutationMode mode);
+                                                                std::size_t insertionIndexAfterRemoval);
     Result<DeleteListReply> applyDeleteList(ListId listId, MutationMode mode);
     Result<DeleteTrackReply> applyDeleteTrack(TrackId trackId, MutationMode mode);
     Result<CreateTrackReply> applyCreateTrackFromFile(std::filesystem::path const& path, MutationMode mode);
@@ -969,14 +968,7 @@ namespace ao::rt
                                                                         std::span<TrackId const> trackIds,
                                                                         std::size_t insertionIndexAfterRemoval)
   {
-    return _implPtr->applyMoveManualListTracks(listId, trackIds, insertionIndexAfterRemoval, MutationMode::Commit);
-  }
-
-  Result<MoveManualListTracksReply> LibraryWriter::previewMoveManualListTracks(ListId listId,
-                                                                               std::span<TrackId const> trackIds,
-                                                                               std::size_t insertionIndexAfterRemoval)
-  {
-    return _implPtr->applyMoveManualListTracks(listId, trackIds, insertionIndexAfterRemoval, MutationMode::Preview);
+    return _implPtr->applyMoveManualListTracks(listId, trackIds, insertionIndexAfterRemoval);
   }
 
   Result<DeleteListReply> LibraryWriter::deleteList(ListId listId)
@@ -1451,8 +1443,7 @@ namespace ao::rt
   Result<MoveManualListTracksReply> LibraryWriter::Impl::applyMoveManualListTracks(
     ListId listId,
     std::span<TrackId const> trackIds,
-    std::size_t insertionIndexAfterRemoval,
-    MutationMode mode)
+    std::size_t insertionIndexAfterRemoval)
   {
     auto mutationResult = mutationService.beginInteractiveMutation();
 
@@ -1539,11 +1530,6 @@ namespace ao::rt
     if (auto result = listWriter.update(listId, *payload); !result)
     {
       return storageError("Failed to move manual list tracks", result.error());
-    }
-
-    if (mode == MutationMode::Preview)
-    {
-      return reply;
     }
 
     if (auto result = mutation.commit(

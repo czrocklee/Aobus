@@ -14,11 +14,6 @@
 
 namespace ao::uimodel
 {
-  class LayoutActionCatalog;
-}
-
-namespace ao::uimodel
-{
   /// Effective bindings: stable action id -> ordered list of chords.
   using KeymapBindings = std::map<std::string, std::vector<KeyChord>, std::less<>>;
 
@@ -71,9 +66,6 @@ namespace ao::uimodel
 
     /// Chords bound to more than one action, keyed deterministically by chord.
     std::vector<KeymapConflict> conflicts() const;
-
-    /// Effective action ids that are not registered in @p catalog.
-    std::vector<std::string> unknownActionIds(LayoutActionCatalog const& catalog) const;
 
     /// Adds @p chord to @p actionId. Returns false if the chord is invalid or already bound there.
     bool bind(std::string actionId, KeyChord chord);

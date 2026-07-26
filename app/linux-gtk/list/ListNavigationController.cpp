@@ -75,6 +75,10 @@ namespace ao::gtk
         }
 
         _observedViewId = viewId;
+        // The workspace is authoritative even when it now has no active view
+        // or the referenced view has already retired. Replaying an earlier
+        // failed selection would navigate back out of that state.
+        _pendingSelectId = kInvalidListId;
 
         if (viewId != rt::kInvalidViewId)
         {
@@ -155,10 +159,9 @@ namespace ao::gtk
 
     if (!_syncingWorkspaceSelection && _callbacks.onListSelected)
     {
-      if (!notifyListSelected(listId))
-      {
-        _pendingSelectId = listId;
-      }
+      // A newer successful selection supersedes any earlier failed one, which
+      // would otherwise be replayed by the next rebuildTree().
+      _pendingSelectId = notifyListSelected(listId) ? kInvalidListId : listId;
     }
   }
 

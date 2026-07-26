@@ -3,8 +3,6 @@
 
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
-#include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -99,19 +97,6 @@ namespace ao::uimodel::test
     REQUIRE(conflicts.size() == 1);
     CHECK(conflicts.front().chord == chord("Ctrl+P"));
     CHECK(conflicts.front().actionIds == std::vector<std::string>{"playback.next", "playback.playPause"});
-  }
-
-  TEST_CASE("KeymapModel - validates action ids against a catalog", "[uimodel][unit][input][keymap]")
-  {
-    auto catalog = LayoutActionCatalog{};
-    catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "playback.playPause", .label = "P", .category = "X"});
-    catalog.registerActionDescriptor(LayoutActionDescriptor{.id = "playback.next", .label = "N", .category = "X"});
-
-    auto model = KeymapModel{sampleDefaults()};
-    CHECK(model.unknownActionIds(catalog).empty());
-
-    model.applyOverrides(KeymapOverrides{{"playback.bogus", {"Ctrl+B"}}});
-    CHECK(model.unknownActionIds(catalog) == std::vector<std::string>{"playback.bogus"});
   }
 
   TEST_CASE("KeymapModel - bind and unbind mutate the effective map", "[uimodel][unit][input][keymap]")

@@ -63,9 +63,56 @@ namespace ao::gtk::test
     CHECK(hasCssClass(*albumsButton, "ao-presentation-menu-item"));
     CHECK_FALSE(hasCssClass(*albumsButton, "ao-presentation-trigger"));
 
-    // Selecting an action must not crash and should route through the bound services.
+    // The adapter owns the apply-then-persist order: the runtime must accept the
+    // change before the list preference records it.
     emitClicked(*albumsButton);
     drainGtkEvents();
+
+    auto const activeViewId = runtime.workspace().snapshot().activeViewId;
+    REQUIRE(activeViewId != rt::kInvalidViewId);
+    CHECK(runtime.views().trackListState(activeViewId).presentation.id == "albums");
+
+    auto const optStored = preferences.presentationIdForList(rt::kAllTracksListId);
+    REQUIRE(optStored);
+    CHECK(*optStored == "albums");
+  }
+
+  TEST_CASE("TrackPresentationButton - rebinding services drops the pending apply",
+            "[gtk][regression][track][presentation]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto& runtime = fixture.runtime();
+    auto themeCoordinator = ThemeCoordinator{};
+    auto catalog = uimodel::TrackPresentationCatalog{runtime.workspace()};
+    auto preferences = uimodel::ListPresentationPreferenceStore{catalog};
+    auto replacementPreferences = uimodel::ListPresentationPreferenceStore{catalog};
+    auto window = Gtk::Window{};
+
+    auto const activeViewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+    drainGtkEvents();
+
+    auto button = TrackPresentationButton{runtime};
+    button.setPresentationServices(&catalog, &preferences, &themeCoordinator);
+    window.set_child(button);
+    drainGtkEvents();
+
+    auto* const menuButton = findWidget<Gtk::MenuButton>(button);
+    REQUIRE(menuButton != nullptr);
+    auto* const popover = menuButton->get_popover();
+    REQUIRE(popover != nullptr);
+    auto* const albumsButton = findButtonByLabel(*popover, "Albums");
+    REQUIRE(albumsButton != nullptr);
+
+    // The queued apply belongs to the outgoing session. Rebinding must cancel
+    // it, or it lands in the runtime with the incoming store recording it.
+    emitClicked(*albumsButton);
+    button.setPresentationServices(&catalog, &replacementPreferences, &themeCoordinator);
+    drainGtkEvents();
+
+    CHECK(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
+    CHECK_FALSE(preferences.presentationIdForList(rt::kAllTracksListId).has_value());
+    CHECK_FALSE(replacementPreferences.presentationIdForList(rt::kAllTracksListId).has_value());
   }
 
   TEST_CASE("TrackPresentationButton - cancels pending presentation apply when destroyed", "[gtk][unit][regression]")
@@ -104,7 +151,7 @@ namespace ao::gtk::test
     CHECK(runtime.views().trackListState(activeViewId).presentation.id == rt::kDefaultTrackPresentationId);
   }
 
-  TEST_CASE("TrackPresentationButton - focus change before idle does not mutate the new active view",
+  TEST_CASE("TrackPresentationButton - refused deferred applies do not persist a preference",
             "[gtk][regression][track][presentation]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -132,14 +179,32 @@ namespace ao::gtk::test
     REQUIRE(albumsButton != nullptr);
 
     emitClicked(*albumsButton);
-    auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
-      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Other"}));
-    auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
-    auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
-    drainGtkEvents();
 
-    CHECK(runtime.views().trackListState(firstViewId).presentation.id == rt::kDefaultTrackPresentationId);
-    CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
+    SECTION("focus changes before the idle apply")
+    {
+      auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
+        rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Other"}));
+      auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
+      auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
+      drainGtkEvents();
+
+      CHECK(runtime.views().trackListState(firstViewId).presentation.id == rt::kDefaultTrackPresentationId);
+      CHECK(runtime.views().trackListState(secondViewId).presentation.id == secondPresentationId);
+      CHECK_FALSE(preferences.presentationIdForList(secondListId).has_value());
+    }
+
+    SECTION("the runtime rejects the apply")
+    {
+      // Keep the workspace focus unchanged while making its captured view
+      // unavailable, so the runtime Result failure branch is exercised.
+      REQUIRE(runtime.views().destroyView(firstViewId));
+      REQUIRE(runtime.workspace().snapshot().activeViewId == firstViewId);
+      drainGtkEvents();
+
+      CHECK_FALSE(runtime.views().findTrackListState(firstViewId).has_value());
+    }
+
+    CHECK_FALSE(preferences.presentationIdForList(rt::kAllTracksListId).has_value());
 
     AppDialog* errorDialog = nullptr;
 
