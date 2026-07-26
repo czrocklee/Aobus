@@ -22,8 +22,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/ViewIds.h>
-#include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
@@ -63,7 +61,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -233,10 +230,9 @@ namespace ao::gtk
                                uimodel::TrackColumnLayoutStore& layoutStore,
                                rt::AppRuntime& runtime,
                                ResourceImageLoader& thumbnailLoader,
-                               rt::ViewId viewId)
+                               rt::TrackPresentationSpec const& presentation)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
-    , _viewId{viewId}
     , _modelPtr{std::move(modelPtr)}
 
     , _layoutStore{layoutStore}
@@ -274,27 +270,7 @@ namespace ao::gtk
           *_modelPtr);
       });
 
-    // Constructed from TrackPageHost::ensureViewPage, which runs inside the
-    // workspace observer, so the view id can already be stale here. A page
-    // built without a view keeps the default layout.
-    auto optVisibleFields = std::optional<std::vector<rt::TrackField>>{};
-
-    if (_viewId != rt::kInvalidViewId)
-    {
-      if (auto const found = _runtime.views().findTrackListState(_viewId); found)
-      {
-        optVisibleFields = found->presentation.visibleFields;
-      }
-    }
-
-    if (optVisibleFields)
-    {
-      _viewHostPtr->columnController().setLayoutAndApply(*optVisibleFields);
-    }
-    else
-    {
-      _viewHostPtr->columnController().syncLayout(rt::defaultTrackPresentationSpec().visibleFields);
-    }
+    _viewHostPtr->columnController().syncLayout(presentation.visibleFields);
 
     // 2. Configure decorators and styles
     updateSectionHeaders();
@@ -579,7 +555,6 @@ namespace ao::gtk
       case rt::TrackAuthoringStatus::Stale:
         setStatusMessage("Library changed while this edit was open. Reload the value and try again.");
         return;
-      case rt::TrackAuthoringStatus::Missing: setStatusMessage("The edited track no longer exists."); return;
       case rt::TrackAuthoringStatus::Unavailable: setStatusMessage("Library editing is currently unavailable."); return;
       case rt::TrackAuthoringStatus::Applied: break;
     }

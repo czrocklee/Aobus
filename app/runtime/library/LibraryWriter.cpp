@@ -17,6 +17,7 @@
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -548,10 +549,10 @@ namespace ao::rt
       return *optView;
     }
 
-    std::vector<ManualStoredRemoveRange> removalRangesFor(std::span<TrackId const> storedTrackIds,
-                                                          std::unordered_set<TrackId> const& selectedTrackIds)
+    delta::RegularTrackEditScript removalScriptFor(std::span<TrackId const> storedTrackIds,
+                                                   std::unordered_set<TrackId> const& selectedTrackIds)
     {
-      auto removals = std::vector<ManualStoredRemoveRange>{};
+      auto removals = std::vector<delta::RemoveRange>{};
 
       for (std::size_t index = 0; index < storedTrackIds.size(); ++index)
       {
@@ -564,14 +565,22 @@ namespace ao::rt
 
         if (removals.empty() || removals.back().start + removals.back().trackIds.size() != index)
         {
-          removals.push_back(ManualStoredRemoveRange{.start = index});
+          removals.push_back(delta::RemoveRange{.start = index});
         }
 
         removals.back().trackIds.push_back(trackId);
       }
 
       std::ranges::reverse(removals);
-      return removals;
+      auto script = delta::RegularTrackEditScript{};
+      script.edits.reserve(removals.size());
+
+      for (auto& removal : removals)
+      {
+        script.edits.emplace_back(std::move(removal));
+      }
+
+      return script;
     }
 
     struct ManualListRemovalResult final
@@ -620,7 +629,7 @@ namespace ao::rt
             .contentChange =
               ManualListContentChange{
                 .listId = listId,
-                .operation = ManualTracksRemove{.removals = removalRangesFor(storedTrackIds, selectedTrackIds)},
+                .operation = removalScriptFor(storedTrackIds, selectedTrackIds),
               },
           });
         }
@@ -1340,7 +1349,10 @@ namespace ao::rt
           .listsUpserted = {listId},
           .manualContentChanges = {ManualListContentChange{
             .listId = listId,
-            .operation = ManualTracksInsert{.storedIndex = insertionIndex, .trackIds = reply.insertedTrackIds},
+            .operation =
+              delta::RegularTrackEditScript{
+                .edits = {delta::InsertRange{.start = insertionIndex, .trackIds = reply.insertedTrackIds}},
+              },
           }}});
         !result)
     {
@@ -1407,7 +1419,7 @@ namespace ao::rt
     }
 
     reply.changed = true;
-    auto removals = removalRangesFor(storedTrackIds, selectedTrackIds);
+    auto script = removalScriptFor(storedTrackIds, selectedTrackIds);
     std::erase_if(storedTrackIds, [&selectedTrackIds](TrackId trackId) { return selectedTrackIds.contains(trackId); });
     auto const payload = manualListPayload(view, storedTrackIds);
 
@@ -1426,12 +1438,11 @@ namespace ao::rt
       return reply;
     }
 
-    if (auto result =
-          mutation.commit(LibraryChangeSet{.listsUpserted = {listId},
-                                           .manualContentChanges = {ManualListContentChange{
-                                             .listId = listId,
-                                             .operation = ManualTracksRemove{.removals = std::move(removals)},
-                                           }}});
+    if (auto result = mutation.commit(LibraryChangeSet{.listsUpserted = {listId},
+                                                       .manualContentChanges = {ManualListContentChange{
+                                                         .listId = listId,
+                                                         .operation = std::move(script),
+                                                       }}});
         !result)
     {
       return storageError("Failed to commit manual list track removal", result.error());
@@ -1519,7 +1530,7 @@ namespace ao::rt
     }
 
     reply.changed = true;
-    auto removals = removalRangesFor(storedTrackIds, selectedMembership);
+    auto script = removalScriptFor(storedTrackIds, selectedMembership);
     auto const payload = manualListPayload(view, nextTrackIds);
 
     if (!payload)
@@ -1532,14 +1543,16 @@ namespace ao::rt
       return storageError("Failed to move manual list tracks", result.error());
     }
 
-    if (auto result = mutation.commit(
-          LibraryChangeSet{.listsUpserted = {listId},
-                           .manualContentChanges = {ManualListContentChange{
-                             .listId = listId,
-                             .operation = ManualTracksMove{.removals = std::move(removals),
-                                                           .insertionIndexAfterRemoval = insertionIndexAfterRemoval,
-                                                           .insertedTrackIds = reply.selectedTrackIds},
-                           }}});
+    script.edits.emplace_back(delta::InsertRange{
+      .start = insertionIndexAfterRemoval,
+      .trackIds = reply.selectedTrackIds,
+    });
+
+    if (auto result = mutation.commit(LibraryChangeSet{.listsUpserted = {listId},
+                                                       .manualContentChanges = {ManualListContentChange{
+                                                         .listId = listId,
+                                                         .operation = std::move(script),
+                                                       }}});
         !result)
     {
       return storageError("Failed to commit manual list track move", result.error());

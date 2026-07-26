@@ -7,7 +7,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 
 #include <cstdint>
 #include <optional>
@@ -74,10 +74,8 @@ namespace ao::uimodel
     std::string_view systemDefaultOutputDeviceLabel() const noexcept;
     std::string completionDetail(rt::CompletionDetail const& detail) const;
     std::string notificationMessage(rt::NotificationMessage const& message) const;
-    std::string libraryTaskProgressDetail(rt::LibraryChanges::LibraryTaskProgressKind kind,
-                                          std::string_view subject) const;
-    std::string libraryTaskProgressCompact(rt::LibraryChanges::LibraryTaskProgressKind kind,
-                                           std::string_view subject) const;
+    std::string libraryTaskProgressDetail(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
+    std::string libraryTaskProgressCompact(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
 
     // Wraps a query-parser diagnostic in the shared label the filter entry and
     // the Smart List editor both show.

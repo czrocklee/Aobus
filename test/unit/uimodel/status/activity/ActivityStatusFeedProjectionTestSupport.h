@@ -5,7 +5,7 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskService.h>
 
 #include <cstddef>
 #include <memory>
@@ -53,15 +53,16 @@ namespace ao::uimodel::test
     };
   }
 
-  inline rt::LibraryChanges::LibraryTaskCompleted libraryTaskCompletion(
+  inline rt::LibraryTaskCompleted libraryTaskCompletion(
     std::size_t affectedCount,
-    rt::LibraryChanges::LibraryTaskCompletionStatus status = rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded)
+    rt::LibraryTaskCompletionStatus status = rt::LibraryTaskCompletionStatus::Succeeded)
   {
     return {.status = status, .affectedCount = affectedCount};
   }
 
-  inline rt::LibraryChanges::LibraryTaskProgressUpdated
-  libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind kind, std::string subject, double fraction)
+  inline rt::LibraryTaskProgressUpdated libraryTaskProgress(rt::LibraryTaskProgressKind kind,
+                                                            std::string subject,
+                                                            double fraction)
   {
     return {.kind = kind, .fraction = fraction, .subject = std::move(subject)};
   }

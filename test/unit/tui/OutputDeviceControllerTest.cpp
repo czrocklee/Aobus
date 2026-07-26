@@ -28,7 +28,8 @@ namespace ao::tui::test
     struct ControllerPlayback final
     {
       explicit ControllerPlayback(rt::test::PlaybackTransportFixture<rt::test::InlineExecutor>& fixture)
-        : sources{fixture.libraryFixture.library(), changes}
+        : changes{fixture.executor, 0}
+        , sources{fixture.libraryFixture.library(), changes}
         , views{fixture.executor, fixture.libraryFixture.library(), sources}
         , succession{fixture.executor,
                      views,
@@ -43,7 +44,7 @@ namespace ao::tui::test
       {
       }
 
-      rt::LibraryChanges changes{};
+      rt::LibraryChanges changes;
       rt::TrackSourceCache sources;
       rt::ViewService views;
       rt::PlaybackSuccession succession;

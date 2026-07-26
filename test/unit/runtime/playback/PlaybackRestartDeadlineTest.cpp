@@ -116,6 +116,34 @@ namespace ao::rt::test
     CHECK(fixture.availabilityEvents == std::vector{true});
   }
 
+  TEST_CASE("PlaybackRestartDeadline - destruction cancels a callback already queued for delivery",
+            "[runtime][regression][playback-cursor][concurrency]")
+  {
+    auto executor = ManualExecutor{};
+    auto scheduler = ControlledSleeper{};
+    auto asyncRuntime = async::Runtime{executor, 1, {}, &scheduler};
+    std::size_t liveElapsedReadCount = 0;
+    auto availabilityEvents = std::vector<bool>{};
+    auto deadlinePtr = std::make_unique<PlaybackRestartDeadline>(
+      asyncRuntime,
+      [&liveElapsedReadCount]
+      {
+        ++liveElapsedReadCount;
+        return Elapsed{3001};
+      },
+      [&availabilityEvents](bool const available) { availabilityEvents.push_back(available); });
+
+    deadlinePtr->start(Elapsed{0});
+    REQUIRE(scheduler.waitForCallCount(1));
+    REQUIRE(scheduler.fire(0));
+    executor.checkQueued();
+    deadlinePtr.reset();
+
+    REQUIRE(executor.runOne());
+    CHECK(liveElapsedReadCount == 0);
+    CHECK(availabilityEvents.empty());
+  }
+
   TEST_CASE("PlaybackRestartDeadline - reentrant availability changes install only the replacement deadline",
             "[runtime][regression][playback-cursor][concurrency]")
   {
@@ -188,7 +216,7 @@ namespace ao::rt::test
     fixture.deadline.start(Elapsed{0});
     REQUIRE(fixture.scheduler.waitForCallCount(1));
 
-    fixture.deadline.currentTrackChanged(Elapsed{100}, true);
+    fixture.deadline.replaceSession(Elapsed{100}, true);
     REQUIRE(fixture.scheduler.waitForCancellation(0));
     CHECK(fixture.scheduler.call(0).cancelled);
     REQUIRE(fixture.scheduler.waitForCallCount(2));
@@ -237,7 +265,6 @@ namespace ao::rt::test
     fixture.deadline.start(Elapsed{3001});
     fixture.deadline.resume(Elapsed{3001});
     fixture.deadline.seek(Elapsed{3001});
-    fixture.deadline.currentTrackChanged(Elapsed{3001}, true);
     fixture.deadline.replaceSession(Elapsed{3001}, true);
 
     CHECK(fixture.scheduler.callCount() == 1);

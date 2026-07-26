@@ -26,7 +26,7 @@ namespace ao::uimodel::test
     {
       MusicLibraryFixture libraryFixture;
       InlineExecutor executor;
-      LibraryChanges changes;
+      LibraryChanges changes{executor, 0};
       TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
       ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
       WorkspaceService workspaceService{executor, viewService, changes};
@@ -137,20 +137,6 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().resolvedExpression == "$year >");
     CHECK(fixture.renderLog.last().hasError == true);
     CHECK(fixture.renderLog.last().tooltip.contains("Filter error"));
-    CHECK(fixture.renderLog.last().canCreateSmartList == false);
-  }
-
-  TEST_CASE("TrackFilterViewModel - command failure is rendered instead of ignored", "[uimodel][unit][track-filter]")
-  {
-    auto fixture = TrackFilterFixture{};
-    auto const viewId = fixture.focusAllTracksView();
-    REQUIRE(fixture.viewService.destroyView(viewId));
-
-    fixture.viewModel.updateFilter("Beatles");
-
-    CHECK(fixture.renderLog.last().entryText == "Beatles");
-    CHECK(fixture.renderLog.last().hasError == true);
-    CHECK(fixture.renderLog.last().tooltip.contains("does not exist"));
     CHECK(fixture.renderLog.last().canCreateSmartList == false);
   }
 

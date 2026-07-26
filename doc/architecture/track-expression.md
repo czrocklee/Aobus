@@ -93,7 +93,7 @@ TrackPresentationSpec
   -> sort + group + visible fields
 
 TrackSource + TrackPresentationSpec
-  -> LiveTrackListProjection
+  -> TrackListProjection
   -> rows and sections
 ```
 
@@ -134,7 +134,7 @@ raw GTK/TUI filter text
   -> canonical expression text
   -> ViewService.setFilter()
   -> ad-hoc SmartListSource over the base list
-  -> replacement LiveTrackListProjection using the existing presentation
+  -> replacement TrackListProjection using the existing presentation
 ```
 
 Changing the filter replaces the membership source while preserving the view's presentation spec.

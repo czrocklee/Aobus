@@ -135,14 +135,10 @@ namespace ao::rt
   struct NotificationFeedLimits final
   {
     static constexpr std::size_t kDefaultMaxEntries = 256;
-    static constexpr std::size_t kDefaultMaxHistoryEntries = 128;
     static constexpr std::size_t kDefaultMaxTextBytes = 4096;
-    static constexpr std::size_t kDefaultMaxTotalTextBytes = std::size_t{256} * 1024;
 
     std::size_t maxEntries = kDefaultMaxEntries;
-    std::size_t maxHistoryEntries = kDefaultMaxHistoryEntries;
     std::size_t maxTextBytes = kDefaultMaxTextBytes;
-    std::size_t maxTotalTextBytes = kDefaultMaxTotalTextBytes;
   };
 
   struct NotificationFeedUpdate final

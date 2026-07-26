@@ -271,7 +271,7 @@ library:
 )";
     }
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(ml);
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
@@ -296,7 +296,7 @@ library:
       yaml << "version: 2\nexport_mode: full\nlibrary:\n  tracks: []\n  lists: []\n";
     }
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(ml);
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
@@ -324,7 +324,7 @@ library:
            << "  lists: []\n";
     }
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(ml);
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });

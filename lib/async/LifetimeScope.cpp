@@ -20,8 +20,15 @@ namespace ao::async
     bool completed{false};
   };
 
+  struct LifetimeScope::State final
+  {
+    std::mutex mutex;
+    std::vector<std::shared_ptr<LifetimeScopeTask>> tasks;
+    bool isAlive{true};
+  };
+
   LifetimeScope::LifetimeScope()
-    : _statePtr{std::make_shared<LifetimeScopeState>()}
+    : _statePtr{std::make_shared<State>()}
   {
   }
 
@@ -46,34 +53,27 @@ namespace ao::async
     }
   }
 
-  std::shared_ptr<LifetimeScopeState> LifetimeScope::state() const noexcept
+  bool LifetimeScope::empty() const
   {
-    return _statePtr;
+    auto const lock = std::scoped_lock{_statePtr->mutex};
+    return _statePtr->tasks.empty();
   }
-
-  namespace
-  {
-    void retireCoroutine(std::shared_ptr<LifetimeScopeState> const& statePtr,
-                         std::shared_ptr<LifetimeScopeTask> const& taskPtr)
-    {
-      {
-        auto lock = std::scoped_lock{statePtr->mutex};
-        taskPtr->completed = true;
-        std::erase(statePtr->tasks, taskPtr);
-      }
-    }
-  } // namespace
 
   void Runtime::spawnWithLifetime(LifetimeScope* scope, CancellableTask task)
   {
-    auto statePtr = scope->state();
+    auto statePtr = scope->_statePtr;
     auto taskPtr = std::make_shared<LifetimeScopeTask>();
     auto diagnosticStatePtr = _diagnosticStatePtr;
     taskPtr->cancel = startCancellable(
       std::move(task),
       [diagnosticStatePtr = std::move(diagnosticStatePtr), statePtr, taskPtr](std::exception_ptr exceptionPtr)
       {
-        retireCoroutine(statePtr, taskPtr);
+        {
+          auto lock = std::scoped_lock{statePtr->mutex};
+          taskPtr->completed = true;
+          std::erase(statePtr->tasks, taskPtr);
+        }
+
         handleUnhandledException(*diagnosticStatePtr, std::move(exceptionPtr), "lifetime-bound coroutine");
       });
 

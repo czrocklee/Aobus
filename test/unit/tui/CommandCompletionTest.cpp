@@ -9,7 +9,6 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/library/track/TrackFilterCompleter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -96,7 +95,7 @@ namespace ao::tui::test
                                                      .artist = "Aimer",
                                                      .uri = "tui-expression-completion.flac",
                                                      .duration = std::chrono::seconds{120}});
-    auto changes = rt::LibraryChanges{};
+    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
     auto service = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = uimodel::TrackFilterCompleter{service};
     auto context = CommandCompletionContext{

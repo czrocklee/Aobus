@@ -34,13 +34,11 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <concepts>
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -502,7 +500,7 @@ namespace ao::rt
     std::uint64_t nextPreparedTokenValue = 1;
     std::deque<OutboundEvent> outboundEvents;
     bool drainingOutboundEvents = false;
-    std::atomic_bool closing{false};
+    bool closing = false;
     async::Signal<> preparingSignal;
     async::Signal<> startedSignal;
     async::Signal<> pausedSignal;
@@ -516,10 +514,11 @@ namespace ao::rt
     async::Signal<bool> mutedChangedSignal;
     async::Signal<PlaybackTransport::RevealTrackRequested const&> revealTrackRequestedSignal;
     async::Signal<PlaybackTransport::SeekUpdate const&> seekUpdateSignal;
-    async::Signal<PlaybackFailure const&> playbackFailureSignal;
+    // A recovery callback may synchronously end the succession session and
+    // unbind itself. Pin the callable across invocation.
     std::shared_ptr<PlaybackFailureRecoveryHandler> playbackFailureRecoveryHandlerPtr;
 
-    bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
+    bool isClosing() const noexcept { return closing; }
 
     void enqueueOutbound(OutboundEvent event)
     {
@@ -605,8 +604,6 @@ namespace ao::rt
             }
             else
             {
-              playbackFailureSignal.emit(value);
-
               if (!isClosing() && shouldPostDefaultFailureNotification(value))
               {
                 postOrUpdateFailureNotification(value);
@@ -634,15 +631,16 @@ namespace ao::rt
       mutedChangedSignal.disconnectAll();
       revealTrackRequestedSignal.disconnectAll();
       seekUpdateSignal.disconnectAll();
-      playbackFailureSignal.disconnectAll();
     }
 
     void shutdown() noexcept
     {
-      if (closing.exchange(true, std::memory_order_acq_rel))
+      if (closing)
       {
         return;
       }
+
+      closing = true;
 
       // Stop callback producers before touching Signal state. External teardown
       // waits for in-flight callbacks; Debug facade contracts reject reentrant
@@ -943,35 +941,32 @@ namespace ao::rt
       return restoredElapsed;
     }
 
-    Result<> applySessionVolumeAndMute(PlaybackTransportSessionState const& session) const
+    Result<> applySessionVolumeAndMute(PlaybackTransportSessionState const& session)
     {
-      auto const oldVolume = state.volume.level;
-      auto const oldMuted = state.volume.muted;
-
       if (auto const volumeResult = playerPtr->setVolume(session.volume); !volumeResult)
       {
-        std::ignore = playerPtr->setVolume(oldVolume);
+        refreshState();
         return std::unexpected{volumeResult.error()};
       }
 
+      refreshState();
+
       if (isClosing())
       {
-        std::ignore = playerPtr->setVolume(oldVolume);
-        return makeError(Error::Code::InvalidState, "Playback transport closed while staging restored volume");
+        return makeError(Error::Code::InvalidState, "Playback transport closed after restoring volume");
       }
 
       if (auto const muteResult = playerPtr->setMuted(session.muted); !muteResult)
       {
-        std::ignore = playerPtr->setMuted(oldMuted);
-        std::ignore = playerPtr->setVolume(oldVolume);
+        refreshState();
         return std::unexpected{muteResult.error()};
       }
 
+      refreshState();
+
       if (isClosing())
       {
-        std::ignore = playerPtr->setMuted(oldMuted);
-        std::ignore = playerPtr->setVolume(oldVolume);
-        return makeError(Error::Code::InvalidState, "Playback transport closed while staging restored mute");
+        return makeError(Error::Code::InvalidState, "Playback transport closed after restoring mute");
       }
 
       return {};
@@ -1342,7 +1337,7 @@ namespace ao::rt
 
   void PlaybackTransport::shutdown() noexcept
   {
-    _implPtr->shutdown();
+    checkedImpl()->shutdown();
   }
 
   async::Subscription PlaybackTransport::onPreparing(std::move_only_function<void() noexcept> handler)
@@ -1425,13 +1420,6 @@ namespace ao::rt
   {
     auto* const impl = checkedImpl();
     return impl->seekUpdateSignal.connect(std::move(handler));
-  }
-
-  async::Subscription PlaybackTransport::onPlaybackFailure(
-    std::move_only_function<void(PlaybackFailure const&) noexcept> handler)
-  {
-    auto* const impl = checkedImpl();
-    return impl->playbackFailureSignal.connect(std::move(handler));
   }
 
   void PlaybackTransport::bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler)
@@ -1739,21 +1727,14 @@ namespace ao::rt
       return std::unexpected{requestResult.error()};
     }
 
-    try
-    {
-      auto preparedResult = stagePlayback(*requestResult, sourceListId);
+    auto preparedResult = stagePlayback(*requestResult, sourceListId);
 
-      if (!preparedResult)
-      {
-        return std::unexpected{preparedResult.error()};
-      }
-
-      return commitStagedPlayback(std::move(*preparedResult), announce);
-    }
-    catch (std::exception const& ex)
+    if (!preparedResult)
     {
-      return makeError(Error::Code::Generic, ex.what());
+      return std::unexpected{preparedResult.error()};
     }
+
+    return commitStagedPlayback(std::move(*preparedResult), announce);
   }
 
   Result<PreparedNextToken> PlaybackTransport::prepareNextRequest(PlaybackRequest const& request,
@@ -1789,26 +1770,6 @@ namespace ao::rt
   Result<PreparedNextToken> PlaybackTransport::prepareNext(PlaybackRequest const& request, ListId const sourceListId)
   {
     return prepareNextRequest(request, sourceListId);
-  }
-
-  Result<PreparedNextToken> PlaybackTransport::prepareNext(TrackId const trackId, ListId const sourceListId)
-  {
-    auto* const impl = checkedImpl();
-    auto const requestResult = playbackRequestForTrack(impl->library, trackId);
-
-    if (!requestResult)
-    {
-      return std::unexpected{requestResult.error()};
-    }
-
-    try
-    {
-      return prepareNext(*requestResult, sourceListId);
-    }
-    catch (std::exception const& ex)
-    {
-      return makeError(Error::Code::Generic, ex.what());
-    }
   }
 
   std::optional<PreparedNextToken> PlaybackTransport::clearPreparedNext()
@@ -2045,14 +2006,7 @@ namespace ao::rt
       return std::unexpected{requestResult.error()};
     }
 
-    try
-    {
-      return impl->restoreDeferredPlayback(std::move(*requestResult), normalizedSession);
-    }
-    catch (std::exception const& ex)
-    {
-      return makeError(Error::Code::Generic, ex.what());
-    }
+    return impl->restoreDeferredPlayback(std::move(*requestResult), normalizedSession);
   }
 
   void PlaybackTransport::discardPlaybackTransportSnapshot()

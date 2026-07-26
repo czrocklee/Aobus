@@ -21,11 +21,6 @@ namespace ao::library
 
 namespace ao::rt
 {
-  struct ManualStoredRemoveRange;
-  struct ManualTracksInsert;
-  struct ManualTracksMove;
-  struct ManualTracksRemove;
-
   /**
    * A manually ordered source whose stored rows are filtered by a parent.
    *
@@ -45,12 +40,7 @@ namespace ao::rt
     ManualListSource(ManualListSource&&) = delete;
     ManualListSource& operator=(ManualListSource&&) = delete;
 
-    void reloadFromListView(library::ListView const& view);
-
-    // Internal exact-operation entry points used by TrackSourceCache.
-    void applyManualTracksInsert(ManualTracksInsert const& operation);
-    void applyManualTracksRemove(ManualTracksRemove const& operation);
-    void applyManualTracksMove(ManualTracksMove const& operation);
+    void applyManualEditScript(delta::RegularTrackEditScript const& script);
 
     std::span<TrackId const> storedTrackIds() const noexcept { return _storedTracks.ids(); }
 
@@ -65,12 +55,10 @@ namespace ao::rt
     void ensureLive() const;
     void loadStoredTracks(library::ListView const& view);
     void rebuildEffectiveTracks();
-    std::vector<TrackId> validateStoredRemovals(std::span<ManualStoredRemoveRange const> removals) const;
-    void eraseStoredRemovals(std::span<ManualStoredRemoveRange const> removals);
     void publishVisibilityDelta(std::vector<TrackId> const& previousEffective,
-                                std::span<TrackId const> updatedTrackIds = {});
-    void publishExactMoveDelta(std::vector<TrackId> const& previousEffective, std::span<TrackId const> movedTrackIds);
-    void handleParentBatch(TrackSourceDeltaBatch const& batch);
+                                std::span<TrackId const> updatedTrackIds = {},
+                                std::span<TrackId const> preferredMovedIds = {});
+    void handleParentBatch(TrackSourceDelta const& batch);
 
     TrackSourceLease _parentLease;
     IndexedTrackSequence _storedTracks;

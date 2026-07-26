@@ -196,9 +196,8 @@ namespace ao::library::test
     return spec;
   }
 
-  inline TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
+  inline TrackId addTrack(MusicLibrary& library, WriteTransaction& transaction, TrackSpec const& spec)
   {
-    auto transaction = writeTransaction(library);
     auto writer = library.tracks().writer(transaction);
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, spec);
@@ -208,6 +207,13 @@ namespace ao::library::test
     auto createResult = writer.createHotCold(data->first, data->second);
     REQUIRE(createResult);
     auto const [id, _] = *createResult;
+    return id;
+  }
+
+  inline TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
+  {
+    auto transaction = writeTransaction(library);
+    auto const id = addTrack(library, transaction, spec);
     REQUIRE(transaction.commit());
     return id;
   }

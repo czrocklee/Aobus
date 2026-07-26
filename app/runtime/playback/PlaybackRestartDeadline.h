@@ -45,7 +45,6 @@ namespace ao::rt
     void resume(Elapsed elapsed);
     void pause(Elapsed elapsed);
     void seek(Elapsed elapsed);
-    void currentTrackChanged(Elapsed elapsed, bool playing);
     void replaceSession(Elapsed elapsed, bool playing);
     void clearSession() noexcept;
     void shutdown() noexcept;
@@ -56,9 +55,8 @@ namespace ao::rt
     bool hasScheduledDeadline() const noexcept;
 
   private:
-    struct SharedState;
+    struct State;
 
-    // The suspended deadline coroutine keeps only a weak reference to this state.
-    std::shared_ptr<SharedState> _sharedStatePtr;
+    std::unique_ptr<State> _statePtr;
   };
 } // namespace ao::rt

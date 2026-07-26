@@ -9,11 +9,9 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
-#include <ao/async/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -25,12 +23,8 @@
 #include <gtkmm/multiselection.h>
 #include <sigc++/functors/mem_fun.h>
 
-#include <algorithm>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -85,143 +79,6 @@ namespace ao::gtk::test
         events.push_back({position, removed, added, modelPtr->get_n_items(), modelPtr->projection() != nullptr});
       }
     };
-
-    class TerminalTrackListProjection final : public rt::TrackListProjection
-    {
-    public:
-      explicit TerminalTrackListProjection(std::vector<TrackId> trackIds)
-        : _trackIds{std::move(trackIds)}
-      {
-      }
-
-      rt::ViewId viewId() const noexcept override { return rt::ViewId{1}; }
-
-      rt::TrackPresentationSpec presentation() const override
-      {
-        recordQuery();
-        return {};
-      }
-
-      std::size_t groupCount() const noexcept override
-      {
-        recordQuery();
-        return _trackIds.empty() ? 0 : 1;
-      }
-
-      rt::TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const override
-      {
-        recordQuery();
-
-        if (groupIndex != 0 || _trackIds.empty())
-        {
-          return {};
-        }
-
-        return {
-          .rows = {.start = 0, .count = _trackIds.size()},
-          .heading = {.primary = std::string{"Group"}},
-        };
-      }
-
-      std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const noexcept override
-      {
-        recordQuery();
-        return rowIndex < _trackIds.size() ? std::optional<std::size_t>{0} : std::nullopt;
-      }
-
-      std::optional<rt::TrackRowRange> groupRangeAt(std::size_t rowIndex) const noexcept override
-      {
-        recordQuery();
-
-        if (rowIndex >= _trackIds.size())
-        {
-          return std::nullopt;
-        }
-
-        return rt::TrackRowRange{.start = 0, .count = _trackIds.size()};
-      }
-
-      std::size_t size() const noexcept override
-      {
-        recordQuery();
-        return _trackIds.size();
-      }
-
-      TrackId trackIdAt(std::size_t index) const override
-      {
-        recordQuery();
-        return _trackIds.at(index);
-      }
-
-      std::optional<std::size_t> indexOf(TrackId trackId) const noexcept override
-      {
-        recordQuery();
-        auto const it = std::ranges::find(_trackIds, trackId);
-
-        if (it == _trackIds.end())
-        {
-          return std::nullopt;
-        }
-
-        return static_cast<std::size_t>(std::distance(_trackIds.begin(), it));
-      }
-
-      async::Subscription subscribe(
-        std::move_only_function<void(rt::TrackListProjectionDeltaBatch const&) noexcept> handler) override
-      {
-        if (_invalidated)
-        {
-          handler(rt::TrackListProjectionDeltaBatch{
-            .deltas = {rt::ProjectionSourceInvalidated{}},
-          });
-          return {};
-        }
-
-        _handlerPtr = std::make_shared<Handler>(std::move(handler));
-        (*_handlerPtr)(rt::TrackListProjectionDeltaBatch{
-          .deltas = {rt::ProjectionReset{}},
-        });
-
-        return async::Subscription{[this] { _handlerPtr.reset(); }};
-      }
-
-      void invalidate()
-      {
-        if (_invalidated)
-        {
-          return;
-        }
-
-        _invalidated = true;
-        auto const handlerPtr = _handlerPtr;
-
-        if (handlerPtr != nullptr)
-        {
-          (*handlerPtr)(rt::TrackListProjectionDeltaBatch{
-            .deltas = {rt::ProjectionSourceInvalidated{}},
-          });
-        }
-      }
-
-      bool hasSubscriber() const noexcept { return _handlerPtr != nullptr; }
-      std::size_t postInvalidationQueryCount() const noexcept { return _postInvalidationQueryCount; }
-
-    private:
-      using Handler = std::move_only_function<void(rt::TrackListProjectionDeltaBatch const&)>;
-
-      void recordQuery() const noexcept
-      {
-        if (_invalidated)
-        {
-          ++_postInvalidationQueryCount;
-        }
-      }
-
-      std::vector<TrackId> _trackIds;
-      std::shared_ptr<Handler> _handlerPtr;
-      bool _invalidated = false;
-      mutable std::size_t _postInvalidationQueryCount = 0;
-    };
   } // namespace
 
   TEST_CASE("TrackListModel - exposes projection rows and emits playing-track updates", "[gtk][unit][track][adapter]")
@@ -240,7 +97,7 @@ namespace ao::gtk::test
 
     auto rowCache = TrackRowCache{runtime.library()};
     auto const projectionPtr =
-      std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, musicLibrary);
+      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, musicLibrary);
 
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
@@ -413,7 +270,7 @@ namespace ao::gtk::test
     auto const albumB = addRuntimeTrack(runtime, makeTrackSpec("B1", "Artist", "Album B"));
     auto sourcePtr = rt::test::makeMutableTrackSource({albumA1, albumA2, albumB});
     auto projectionPtr =
-      std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
+      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
     auto rowCache = TrackRowCache{runtime.library()};
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
@@ -456,24 +313,28 @@ namespace ao::gtk::test
     CHECK(rowCache.cachedRowCount() == 0);
   }
 
-  TEST_CASE("TrackListModel - source invalidation clears rows and detaches without stale projection queries",
+  TEST_CASE("TrackListModel - source invalidation clears rows and detaches the projection",
             "[gtk][regression][track-model]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    auto rowCache = TrackRowCache{fixture.runtime().library()};
-    auto projectionPtr = std::make_shared<TerminalTrackListProjection>(std::vector{TrackId{11}, TrackId{22}});
+    auto& runtime = fixture.runtime();
+    auto const firstTrackId = addRuntimeTrack(runtime, makeTrackSpec("First", "Artist", "Album"));
+    auto const secondTrackId = addRuntimeTrack(runtime, makeTrackSpec("Second", "Artist", "Album"));
+    auto sourcePtr = rt::test::makeMutableTrackSource({firstTrackId, secondTrackId});
+    auto rowCache = TrackRowCache{runtime.library()};
+    auto projectionPtr =
+      std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
     auto const modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
 
     REQUIRE(modelPtr->get_n_items() == 2);
-    CHECK(projectionPtr->hasSubscriber());
 
     auto spy = SpyTrackListModelEvents{};
     spy.modelPtr = modelPtr;
     modelPtr->signal_items_changed().connect(sigc::mem_fun(spy, &SpyTrackListModelEvents::handleItemsChanged));
 
-    projectionPtr->invalidate();
+    sourcePtr->invalidate();
 
     REQUIRE(spy.events.size() == 1);
     CHECK(spy.events[0].position == 0);
@@ -483,17 +344,13 @@ namespace ao::gtk::test
     CHECK_FALSE(spy.events[0].projectionAttachedDuringEvent);
     CHECK(modelPtr->get_n_items() == 0);
     CHECK(modelPtr->projection() == nullptr);
-    CHECK_FALSE(modelPtr->indexOf(TrackId{11}));
+    CHECK_FALSE(modelPtr->indexOf(firstTrackId));
     CHECK(modelPtr->get_object(0) == nullptr);
-    CHECK_FALSE(projectionPtr->hasSubscriber());
-    CHECK(projectionPtr->postInvalidationQueryCount() == 0);
 
-    projectionPtr->invalidate();
-
+    sourcePtr->invalidate();
     CHECK(spy.events.size() == 1);
-    CHECK(projectionPtr->postInvalidationQueryCount() == 0);
 
-    auto const weakProjectionPtr = std::weak_ptr<TerminalTrackListProjection>{projectionPtr};
+    auto const weakProjectionPtr = std::weak_ptr<rt::TrackListProjection>{projectionPtr};
     projectionPtr.reset();
 
     CHECK_FALSE(weakProjectionPtr.expired());

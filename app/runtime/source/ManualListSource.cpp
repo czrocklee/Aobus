@@ -4,17 +4,14 @@
 #include <ao/CoreIds.h>
 #include <ao/library/ListView.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
-#include <ao/rt/source/TrackSourceEditScript.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
 #include <gsl-lite/gsl-lite.hpp>
 
-#include <algorithm>
 #include <cstddef>
 #include <functional>
 #include <optional>
@@ -32,7 +29,7 @@ namespace ao::rt
     loadStoredTracks(view);
     rebuildEffectiveTracks();
     _parentSubscription =
-      _parentLease->subscribe([this](TrackSourceDeltaBatch const& batch) noexcept { handleParentBatch(batch); });
+      _parentLease->subscribe([this](TrackSourceDelta const& batch) noexcept { handleParentBatch(batch); });
   }
 
   ManualListSource::~ManualListSource()
@@ -40,97 +37,36 @@ namespace ao::rt
     _parentSubscription.reset();
   }
 
-  void ManualListSource::reloadFromListView(library::ListView const& view)
+  void ManualListSource::applyManualEditScript(delta::RegularTrackEditScript const& script)
   {
     ensureLive();
+    gsl_Assert(!script.edits.empty() && delta::validate(script, _storedTracks.size()));
 
     auto const previousEffective = _effectiveTracks.vector();
-    loadStoredTracks(view);
-    rebuildEffectiveTracks();
+    auto removedTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+    auto preferredMovedIds = std::vector<TrackId>{};
 
-    if (previousEffective == _effectiveTracks.vector())
+    for (auto const& edit : script.edits)
     {
-      return;
+      if (auto const* removal = std::get_if<delta::RemoveRange>(&edit); removal != nullptr)
+      {
+        removedTrackIds.insert(removal->trackIds.begin(), removal->trackIds.end());
+      }
+      else if (auto const* insertion = std::get_if<delta::InsertRange>(&edit); insertion != nullptr)
+      {
+        for (auto const trackId : insertion->trackIds)
+        {
+          if (removedTrackIds.contains(trackId))
+          {
+            preferredMovedIds.push_back(trackId);
+          }
+        }
+      }
     }
 
-    std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousEffective.size());
-  }
-
-  void ManualListSource::applyManualTracksInsert(ManualTracksInsert const& operation)
-  {
-    ensureLive();
-
-    if (operation.trackIds.empty())
-    {
-      return;
-    }
-
-    gsl_Assert(operation.storedIndex <= _storedTracks.size());
-
-    for (auto const trackId : operation.trackIds)
-    {
-      gsl_Assert(!_storedTracks.contains(trackId) && std::ranges::count(operation.trackIds, trackId) == 1);
-    }
-
-    auto const previousEffective = _effectiveTracks.vector();
-    _storedTracks.applyScript(delta::RegularTrackEditScript{
-      .edits = {delta::InsertRange{.start = operation.storedIndex, .trackIds = operation.trackIds}}});
-    rebuildEffectiveTracks();
-    publishVisibilityDelta(previousEffective);
-  }
-
-  void ManualListSource::applyManualTracksRemove(ManualTracksRemove const& operation)
-  {
-    ensureLive();
-
-    if (operation.removals.empty())
-    {
-      return;
-    }
-
-    std::ignore = validateStoredRemovals(operation.removals);
-    auto const previousEffective = _effectiveTracks.vector();
-    eraseStoredRemovals(operation.removals);
-    rebuildEffectiveTracks();
-    publishVisibilityDelta(previousEffective);
-  }
-
-  void ManualListSource::applyManualTracksMove(ManualTracksMove const& operation)
-  {
-    ensureLive();
-
-    if (operation.removals.empty() && operation.insertedTrackIds.empty())
-    {
-      return;
-    }
-
-    auto const removedInStoredOrder = validateStoredRemovals(operation.removals);
-
-    gsl_Assert(removedInStoredOrder == operation.insertedTrackIds);
-
-    auto const remainingSize = _storedTracks.size() - removedInStoredOrder.size();
-
-    gsl_Assert(operation.insertionIndexAfterRemoval <= remainingSize);
-
-    auto const previousEffective = _effectiveTracks.vector();
-    auto script = delta::RegularTrackEditScript{};
-
-    for (auto const& removal : operation.removals)
-    {
-      script.edits.emplace_back(delta::RemoveRange{.start = removal.start, .trackIds = removal.trackIds});
-    }
-
-    script.edits.emplace_back(
-      delta::InsertRange{.start = operation.insertionIndexAfterRemoval, .trackIds = operation.insertedTrackIds});
     _storedTracks.applyScript(script);
     rebuildEffectiveTracks();
-
-    if (previousEffective == _effectiveTracks.vector())
-    {
-      return;
-    }
-
-    publishExactMoveDelta(previousEffective, operation.insertedTrackIds);
+    publishVisibilityDelta(previousEffective, {}, preferredMovedIds);
   }
 
   bool ManualListSource::contains(TrackId const id) const
@@ -177,90 +113,28 @@ namespace ao::rt
     _effectiveTracks.assign(effective);
   }
 
-  std::vector<TrackId> ManualListSource::validateStoredRemovals(
-    std::span<ManualStoredRemoveRange const> const removals) const
-  {
-    gsl_Assert(!removals.empty());
-
-    auto selectedIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
-    auto upperBound = _storedTracks.size();
-
-    for (auto const& removal : removals)
-    {
-      gsl_Assert(!removal.trackIds.empty() && removal.start <= upperBound &&
-                 removal.trackIds.size() <= upperBound - removal.start);
-
-      for (std::size_t offset = 0; offset < removal.trackIds.size(); ++offset)
-      {
-        auto const trackId = removal.trackIds[offset];
-
-        gsl_Assert(_storedTracks.at(removal.start + offset) == trackId);
-
-        auto const inserted = selectedIds.emplace(trackId).second;
-        gsl_Assert(inserted);
-      }
-
-      upperBound = removal.start;
-    }
-
-    auto removedInStoredOrder = std::vector<TrackId>{};
-    removedInStoredOrder.reserve(selectedIds.size());
-
-    for (auto const trackId : _storedTracks.ids())
-    {
-      if (selectedIds.contains(trackId))
-      {
-        removedInStoredOrder.push_back(trackId);
-      }
-    }
-
-    return removedInStoredOrder;
-  }
-
-  void ManualListSource::eraseStoredRemovals(std::span<ManualStoredRemoveRange const> const removals)
-  {
-    auto script = delta::RegularTrackEditScript{};
-
-    for (auto const& removal : removals)
-    {
-      script.edits.emplace_back(delta::RemoveRange{.start = removal.start, .trackIds = removal.trackIds});
-    }
-
-    _storedTracks.applyScript(script);
-  }
-
   void ManualListSource::publishVisibilityDelta(std::vector<TrackId> const& previousEffective,
-                                                std::span<TrackId const> const updatedTrackIds)
+                                                std::span<TrackId const> const updatedTrackIds,
+                                                std::span<TrackId const> const preferredMovedIds)
   {
-    auto batch = sourceBatchOf(delta::diff(previousEffective, _effectiveTracks.ids(), updatedTrackIds));
+    auto script = delta::diff(previousEffective, _effectiveTracks.ids(), updatedTrackIds, preferredMovedIds);
 
-    if (batch.deltas.empty())
+    if (script.edits.empty())
     {
       return;
     }
 
-    std::ignore = publishDeltaBatch(std::move(batch), previousEffective.size());
+    std::ignore = publishDelta(std::move(script), previousEffective.size());
   }
 
-  void ManualListSource::publishExactMoveDelta(std::vector<TrackId> const& previousEffective,
-                                               std::span<TrackId const> const movedTrackIds)
-  {
-    auto batch = sourceBatchOf(delta::diff(previousEffective, _effectiveTracks.ids(), {}, movedTrackIds));
-
-    if (!batch.deltas.empty())
-    {
-      std::ignore = publishDeltaBatch(std::move(batch), previousEffective.size());
-    }
-  }
-
-  void ManualListSource::handleParentBatch(TrackSourceDeltaBatch const& batch)
+  void ManualListSource::handleParentBatch(TrackSourceDelta const& batch)
   {
     if (state() == TrackSourceState::Invalidated)
     {
       return;
     }
 
-    if (batch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
+    if (std::holds_alternative<SourceInvalidated>(batch))
     {
       _parentSubscription.reset();
       invalidate();
@@ -270,17 +144,17 @@ namespace ao::rt
     auto const previousEffective = _effectiveTracks.vector();
     rebuildEffectiveTracks();
 
-    if (batch.deltas.size() == 1 && std::holds_alternative<SourceReset>(batch.deltas.front()))
+    if (std::holds_alternative<SourceReset>(batch))
     {
-      std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousEffective.size());
+      std::ignore = publishDelta(SourceReset{}, previousEffective.size());
       return;
     }
 
     auto updatedTrackIds = std::vector<TrackId>{};
 
-    for (auto const& delta : batch.deltas)
+    for (auto const& edit : std::get<delta::RegularTrackEditScript>(batch).edits)
     {
-      if (auto const* update = std::get_if<SourceUpdateRange>(&delta); update != nullptr)
+      if (auto const* update = std::get_if<delta::UpdateRange>(&edit); update != nullptr)
       {
         updatedTrackIds.append_range(update->trackIds);
       }

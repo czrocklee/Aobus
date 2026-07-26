@@ -48,7 +48,7 @@ It exposes typed snapshots and subscriptions without naming widgets, CSS classes
 
 For track-list views, runtime keeps content and shape as separate state axes.
 `listId` and `filterExpression` select a source, while `TrackPresentationSpec` selects sorting, grouping, visible fields, and redundant-field suppression.
-`LiveTrackListProjection` is their composition point, not a second authority for either concern.
+`TrackListProjection` is their composition point, not a second authority for either concern.
 
 Runtime owns the stable ids for persisted `TrackField`, `TrackSortField`, and `TrackGroupKey` choices.
 Those ids are shared by runtime workspace persistence and UIModel presentation schemas without making either layer own the other's document shape.
@@ -182,7 +182,7 @@ runtime projection target ids
   -> UIModel TrackAuthoringSession binds (runtime instance, revision, exact ids)
   -> GTK/TUI edits a local value
   -> session submits a metadata/tag command with the retained binding
-  -> Applied + next binding | NoOp | Stale | Missing | Unavailable
+  -> Applied + next binding | NoOp | Stale | Unavailable
 ```
 
 Purely platform concerns, such as CSS application, popover dismissal, terminal hit regions, and native file selection, stay within the frontend.

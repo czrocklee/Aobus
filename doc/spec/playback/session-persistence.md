@@ -30,7 +30,8 @@ This contract belongs to the **application runtime** layer in the [system archit
 - Restore validates the complete version 3 payload before resolving a source.
 - A candidate is prepared completely before it replaces live sequence or transport state.
 - Restore never autoplays, arms an output route, or creates a frontend view.
-- A failed restore leaves prior public playback and restorable state unchanged.
+- A restore failure before volume/mute application leaves prior public playback and restorable state unchanged.
+- Volume and mute restore is sequential best effort: it returns the first typed backend failure and publishes the actual property state reached before that failure.
 - Cursor and transport snapshots must name the same current track before save.
 - A save captures one coherent cursor and transport value synchronously on the callback executor.
 - A failed save leaves live playback state unchanged.
@@ -81,7 +82,9 @@ Restore does not immediately write the normalized value back; the next natural o
 
 The owner constructs the same lease, filter, and detached projection chain used by a view launch without creating a view.
 It prepares candidate cursor, idle current target, modes, position, volume, and mute.
-One `PlaybackService` restore commit first installs deferred transport without lower publication, then installs the prepared succession session, and finally publishes their combined snapshot.
+One `PlaybackService` restore commit applies volume and then mute, installs deferred transport without lower publication only after both properties succeed, then installs the prepared succession session and finally publishes their combined snapshot.
+If either property fails, the restore returns that typed error and publishes the actual volume/mute state reached at the backend; an earlier successful property write remains applied.
+It does not attempt rollback through the same fallible backend API.
 There is no callback from transport into cursor installation and no intermediate transport-only or cursor-only public state.
 A restore that installs a candidate always publishes a new position anchor, even
 when the subject is unchanged. The persistence owner consumes that exact
@@ -127,7 +130,9 @@ Explicit and lifecycle checkpoints remain no-ops while discarded until a later d
 ## Failure and cancellation
 
 Malformed structural deserialize, unsupported versions, schema semantic validation, source/filter/projection construction, transport preparation, and store failures return typed results.
-Restore and discard are fail-closed with respect to live/restorable state as described above.
+Structural and transport-preparation failures are fail-closed with respect to live/restorable state.
+Volume/mute property failure follows the sequential best-effort contract above; the stored payload remains unchanged, while the public snapshot reflects any property write that succeeded.
+Discard remains fail-closed.
 
 Scheduled debounce uses one cancellable shared-runtime task and a cancellation-checked callback-executor hop; replacement or checkpoint retires that task before admitting another.
 Automatic failures do not create background retry work.
@@ -158,7 +163,7 @@ TUI currently does not run the same startup/checkpoint sequence; that asymmetry 
 
 ## Test map
 
-- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, deferred observer commands, event-driven timing, failed-save recovery on a later change, discard, store selection, and failure atomicity.
+- [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp) protects payload validation, restore matrix, coherent and same-subject restore publication, sequential volume/mute failure, deferred observer commands, event-driven timing, failed-save recovery on a later change, discard, store selection, and structural failure atomicity.
 - [`HeadlessShellTest.cpp`](../../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral restoration primitives.
 
 ## Related documents

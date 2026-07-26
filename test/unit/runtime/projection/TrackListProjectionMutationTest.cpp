@@ -8,7 +8,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -563,7 +562,7 @@ namespace ao::rt::test
 
     SECTION("Destructor coverage")
     {
-      auto proj2Ptr = std::make_unique<LiveTrackListProjection>(
+      auto proj2Ptr = std::make_unique<TrackListProjection>(
         ViewId{2}, TrackSourceLease{env.filteredPtr}, env.libraryFixture.library());
       proj2Ptr.reset();
     }

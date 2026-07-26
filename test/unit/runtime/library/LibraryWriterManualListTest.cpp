@@ -9,6 +9,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -16,6 +17,7 @@
 
 #include <array>
 #include <cstddef>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -28,13 +30,20 @@ namespace ao::rt::test
   {
     struct ManualListWriterFixture final
     {
-      ManualListWriterFixture()
-        : writerFixture{libraryFixture.library(), changes}
-        , listSub{changes.onChanged([this](LibraryChangeSet const& event) noexcept { listEvents.push_back(event); })}
+      LibraryWriter& writer()
       {
-      }
+        if (!writerFixturePtr)
+        {
+          auto const transaction = libraryFixture.library().readTransaction();
+          changesPtr =
+            std::make_unique<LibraryChanges>(executor, libraryFixture.library().libraryRevision(transaction));
+          writerFixturePtr = std::make_unique<LibraryWriterFixture>(libraryFixture.library(), *changesPtr);
+          listSub =
+            changesPtr->onChanged([this](LibraryChangeSet const& event) noexcept { listEvents.push_back(event); });
+        }
 
-      LibraryWriter& writer() { return writerFixture.writer(); }
+        return writerFixturePtr->writer();
+      }
 
       TrackId addTrack(std::string_view title) { return libraryFixture.addTrack(title); }
 
@@ -101,8 +110,9 @@ namespace ao::rt::test
       }
 
       MusicLibraryFixture libraryFixture;
-      LibraryChanges changes;
-      LibraryWriterFixture writerFixture;
+      InlineExecutor executor;
+      std::unique_ptr<LibraryChanges> changesPtr;
+      std::unique_ptr<LibraryWriterFixture> writerFixturePtr;
       std::vector<LibraryChangeSet> listEvents;
       async::Subscription listSub;
     };
@@ -248,10 +258,13 @@ namespace ao::rt::test
     CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{existing, hidden});
     REQUIRE(fixture.listEvents.size() == 1);
     REQUIRE(fixture.listEvents[0].manualContentChanges.size() == 1);
-    auto const* operation = std::get_if<ManualTracksInsert>(&fixture.listEvents[0].manualContentChanges[0].operation);
+    auto const* operation =
+      std::get_if<delta::RegularTrackEditScript>(&fixture.listEvents[0].manualContentChanges[0].operation);
     REQUIRE(operation != nullptr);
-    CHECK(operation->storedIndex == 1);
-    CHECK(operation->trackIds == std::vector<TrackId>{hidden});
+    REQUIRE(operation->edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(operation->edits.front());
+    CHECK(insertion.start == 1);
+    CHECK(insertion.trackIds == std::vector<TrackId>{hidden});
   }
 
   TEST_CASE("LibraryWriter manual lists - all-skipped insert is a validated no-op",
@@ -299,10 +312,12 @@ namespace ao::rt::test
     CHECK(fixture.storedTrackIds(listId) == std::vector<TrackId>{first, third, fifth});
     REQUIRE(fixture.listEvents.size() == 1);
     REQUIRE(fixture.listEvents[0].manualContentChanges.size() == 1);
-    auto const* operation = std::get_if<ManualTracksRemove>(&fixture.listEvents[0].manualContentChanges[0].operation);
+    auto const* operation =
+      std::get_if<delta::RegularTrackEditScript>(&fixture.listEvents[0].manualContentChanges[0].operation);
     REQUIRE(operation != nullptr);
-    CHECK(operation->removals ==
-          std::vector<ManualStoredRemoveRange>{{.start = 3, .trackIds = {fourth}}, {.start = 1, .trackIds = {second}}});
+    REQUIRE(operation->edits.size() == 2);
+    CHECK(std::get<delta::RemoveRange>(operation->edits[0]) == delta::RemoveRange{.start = 3, .trackIds = {fourth}});
+    CHECK(std::get<delta::RemoveRange>(operation->edits[1]) == delta::RemoveRange{.start = 1, .trackIds = {second}});
   }
 
   TEST_CASE("LibraryWriter manual lists - move uses stored selection order and post-removal gaps",
@@ -349,12 +364,14 @@ namespace ao::rt::test
     CHECK(fixture.storedTrackIds(listId) == expected);
     REQUIRE(fixture.listEvents.size() == 1);
     REQUIRE(fixture.listEvents[0].manualContentChanges.size() == 1);
-    auto const* operation = std::get_if<ManualTracksMove>(&fixture.listEvents[0].manualContentChanges[0].operation);
+    auto const* operation =
+      std::get_if<delta::RegularTrackEditScript>(&fixture.listEvents[0].manualContentChanges[0].operation);
     REQUIRE(operation != nullptr);
-    CHECK(operation->removals ==
-          std::vector<ManualStoredRemoveRange>{{.start = 3, .trackIds = {fourth}}, {.start = 1, .trackIds = {second}}});
-    CHECK(operation->insertionIndexAfterRemoval == insertionIndex);
-    CHECK(operation->insertedTrackIds == std::vector<TrackId>{second, fourth});
+    REQUIRE(operation->edits.size() == 3);
+    CHECK(std::get<delta::RemoveRange>(operation->edits[0]) == delta::RemoveRange{.start = 3, .trackIds = {fourth}});
+    CHECK(std::get<delta::RemoveRange>(operation->edits[1]) == delta::RemoveRange{.start = 1, .trackIds = {second}});
+    CHECK(std::get<delta::InsertRange>(operation->edits[2]) ==
+          delta::InsertRange{.start = insertionIndex, .trackIds = {second, fourth}});
   }
 
   TEST_CASE("LibraryWriter manual lists - same-order and empty-selection moves are no-ops",
@@ -503,12 +520,14 @@ namespace ao::rt::test
     REQUIRE(fixture.listEvents[0].manualContentChanges.size() == 2);
 
     auto const* firstRemoval =
-      std::get_if<ManualTracksRemove>(&fixture.listEvents[0].manualContentChanges[0].operation);
+      std::get_if<delta::RegularTrackEditScript>(&fixture.listEvents[0].manualContentChanges[0].operation);
     auto const* secondRemoval =
-      std::get_if<ManualTracksRemove>(&fixture.listEvents[0].manualContentChanges[1].operation);
+      std::get_if<delta::RegularTrackEditScript>(&fixture.listEvents[0].manualContentChanges[1].operation);
     REQUIRE(firstRemoval != nullptr);
     REQUIRE(secondRemoval != nullptr);
-    CHECK(firstRemoval->removals == std::vector<ManualStoredRemoveRange>{{.start = 0, .trackIds = {target}}});
-    CHECK(secondRemoval->removals == std::vector<ManualStoredRemoveRange>{{.start = 2, .trackIds = {target}}});
+    CHECK(firstRemoval->edits ==
+          std::vector<delta::RegularTrackEdit>{delta::RemoveRange{.start = 0, .trackIds = {target}}});
+    CHECK(secondRemoval->edits ==
+          std::vector<delta::RegularTrackEdit>{delta::RemoveRange{.start = 2, .trackIds = {target}}});
   }
 } // namespace ao::rt::test

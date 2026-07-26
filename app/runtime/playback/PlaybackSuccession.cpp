@@ -27,7 +27,6 @@
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -149,7 +148,7 @@ namespace ao::rt
       };
     }
 
-    bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
+    bool isClosing() const noexcept { return closing; }
 
     static PlaybackSuccessionSourceState sourceStateFor(PlaybackCursorSession const* session) noexcept
     {
@@ -603,7 +602,7 @@ namespace ao::rt
       }
 
       resetFailureState();
-      restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -816,7 +815,7 @@ namespace ao::rt
         return;
       }
 
-      std::ignore = attemptNavigation(sessionPtr->cursor().resolveNaturalAdvance(),
+      std::ignore = attemptNavigation(sessionPtr->cursor().resolveNext(),
                                       ShuffleHistory::TransitionOrigin::Forward,
                                       NavigationDirection::Forward,
                                       true);
@@ -852,7 +851,7 @@ namespace ao::rt
       // from committing over the accepted transition.
       cancelPendingStart();
       resetFailureState();
-      restartDeadline.currentTrackChanged(std::chrono::milliseconds{0}, true);
+      restartDeadline.replaceSession(std::chrono::milliseconds{0}, true);
       reprepareNext(false);
       synchronizeState();
       notifyRestorableStateChanged();
@@ -1010,10 +1009,12 @@ namespace ao::rt
 
     void shutdown() noexcept
     {
-      if (closing.exchange(true, std::memory_order_acq_rel))
+      if (closing)
       {
         return;
       }
+
+      closing = true;
 
       cancelPendingStart();
       cancelPendingLookahead();
@@ -1064,7 +1065,7 @@ namespace ao::rt
     std::optional<NotificationReportKey> optSkipReportKey;
     std::uint64_t nextSkipReportKey = 0;
     std::size_t skippedFailureCount = 0;
-    std::atomic_bool closing{false};
+    bool closing = false;
     bool stoppingTransport = false;
   };
 
@@ -1139,18 +1140,6 @@ namespace ao::rt
     }
 
     return {};
-  }
-
-  bool PlaybackSuccession::hasNext() const
-  {
-    auto* const impl = checkedImpl();
-    return impl->state.hasNext;
-  }
-
-  bool PlaybackSuccession::hasPrevious() const
-  {
-    auto* const impl = checkedImpl();
-    return impl->state.hasPrevious;
   }
 
   bool PlaybackSuccession::next()

@@ -55,12 +55,12 @@ It applies to temporary UIModel compact presentation, not runtime `Transient` li
 
 | `ActivityStatusViewModelOptions` field | Type | Default |
 |---|---|---|
-| `libraryChanges` | `rt::LibraryChanges const*` | `nullptr` |
+| `libraryTasks` | `rt::LibraryTaskService const*` | `nullptr` |
 | `clock` | `ActivityStatusClock` | empty; replaced with `steady_clock::now` |
 | `emitInitialState` | `bool` | `true` |
 
 The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatusViewState const&)` callback, and optional options.
-When `libraryChanges` is present, it subscribes to task progress and completion.
+When `libraryTasks` is present, it subscribes to that service's task progress and completion.
 
 ## View-model members
 
@@ -96,7 +96,7 @@ Progress subjects do not select behavior by prefix.
 
 UIModel does not clamp task progress fractions.
 Notification ids have service-lifetime scope and must not be persisted.
-The notification service and optional library-change source must outlive the view model.
+The notification service and optional library-task source must outlive the view model.
 
 This is an in-process C++ surface without independent versioning.
 Frontend adapters update together with UIModel changes.

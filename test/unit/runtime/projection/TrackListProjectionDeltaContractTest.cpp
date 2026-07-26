@@ -6,10 +6,10 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -120,7 +120,7 @@ namespace ao::rt::test
     auto const second = libraryFixture.addTrack(library::test::makeTrackSpec("Second", 2020));
     auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("Third", 2020));
     auto sourcePtr = makeMutableTrackSource({third, first});
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     [[maybe_unused]] auto subscription = projection.subscribe(
       [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
@@ -146,7 +146,7 @@ namespace ao::rt::test
     auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("Third", 2020));
     auto const fourth = libraryFixture.addTrack(library::test::makeTrackSpec("Fourth", 2020));
     auto sourcePtr = makeMutableTrackSource({third, first, fourth, second});
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     CHECK(projectionTrackIds(projection) == std::vector{third, first, fourth, second});
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     [[maybe_unused]] auto subscription = projection.subscribe(
@@ -155,12 +155,9 @@ namespace ao::rt::test
 
     libraryFixture.updateTrack(third, [](library::test::TrackSpec& spec) { spec.title = "Updated Third"; });
     sourcePtr->replaceWithBatch(std::array{third, fourth, second},
-                                TrackSourceDeltaBatch{
-                                  .deltas =
-                                    {
-                                      SourceRemoveRange{.start = 1, .trackIds = {first}},
-                                      SourceUpdateRange{.start = 0, .trackIds = {third}},
-                                    },
+                                delta::RegularTrackEditScript{
+                                  .edits = {delta::RemoveRange{.start = 1, .trackIds = {first}},
+                                            delta::UpdateRange{.start = 0, .trackIds = {third}}},
                                 });
 
     REQUIRE(batches.size() == 1);
@@ -183,7 +180,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2020));
     auto const second = libraryFixture.addTrack(library::test::makeTrackSpec("Second", 2020));
     auto sourcePtr = makeMutableTrackSource({first});
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     bool insertedDuringReset = false;
 
@@ -219,19 +216,16 @@ namespace ao::rt::test
     auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("Third", 2020));
     auto const fourth = libraryFixture.addTrack(library::test::makeTrackSpec("Fourth", 2020));
     auto sourcePtr = makeMutableTrackSource({first, second, third, fourth});
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     [[maybe_unused]] auto subscription = projection.subscribe(
       [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     sourcePtr->replaceWithBatch(std::vector{second, third, first, fourth},
-                                TrackSourceDeltaBatch{
-                                  .deltas =
-                                    {
-                                      SourceRemoveRange{.start = 0, .trackIds = {first}},
-                                      SourceInsertRange{.start = 2, .trackIds = {first}},
-                                    },
+                                delta::RegularTrackEditScript{
+                                  .edits = {delta::RemoveRange{.start = 0, .trackIds = {first}},
+                                            delta::InsertRange{.start = 2, .trackIds = {first}}},
                                 });
 
     auto const expected = std::vector{second, third, first, fourth};
@@ -254,7 +248,7 @@ namespace ao::rt::test
     auto const second = libraryFixture.addTrack(library::test::makeTrackSpec("B", 2020));
     auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("C", 2020));
     auto sourcePtr = makeMutableTrackSource({third, first, second});
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     projection.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None,
       .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
@@ -265,12 +259,9 @@ namespace ao::rt::test
     batches.clear();
 
     sourcePtr->replaceWithBatch(std::vector{first, second, third},
-                                TrackSourceDeltaBatch{
-                                  .deltas =
-                                    {
-                                      SourceRemoveRange{.start = 0, .trackIds = {third}},
-                                      SourceInsertRange{.start = 2, .trackIds = {third}},
-                                    },
+                                delta::RegularTrackEditScript{
+                                  .edits = {delta::RemoveRange{.start = 0, .trackIds = {third}},
+                                            delta::InsertRange{.start = 2, .trackIds = {third}}},
                                 });
 
     auto const expected = std::vector{first, second, third};
@@ -285,7 +276,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("A", 2020));
     auto const second = libraryFixture.addTrack(library::test::makeTrackSpec("C", 2020));
     auto sourcePtr = makeMutableTrackSource({first, second});
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     projection.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None,
       .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
@@ -320,7 +311,7 @@ namespace ao::rt::test
     auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("C", 2020));
     auto sourcePtr = makeMutableTrackSource({third, first, second});
 
-    auto projection = LiveTrackListProjection{
+    auto projection = TrackListProjection{
       kInvalidViewId,
       TrackSourceLease{sourcePtr},
       libraryFixture.library(),
@@ -342,7 +333,7 @@ namespace ao::rt::test
     auto sourcePtr = std::make_shared<QueryCountingTrackSource>(TrackId{99});
     sourcePtr->invalidate();
 
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     [[maybe_unused]] auto subscription = projection.subscribe(
       [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });

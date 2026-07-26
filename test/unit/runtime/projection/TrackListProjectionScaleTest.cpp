@@ -12,7 +12,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
@@ -79,7 +78,7 @@ namespace ao::rt::test
     auto sourcePtr = std::make_shared<MutableTrackSource>();
     sourcePtr->setInitial(ids);
 
-    auto proj = LiveTrackListProjection{
+    auto proj = TrackListProjection{
       kInvalidViewId,
       TrackSourceLease{sourcePtr},
       lib,

@@ -31,7 +31,7 @@ ao::rt::Library
 TrackSourceCache + TrackSource implementations
             |
             v
-LiveTrackListProjection / LiveTrackDetailProjection
+TrackListProjection / TrackDetailProjection
             |
             v
 ViewService, workspace, playback sequence, UIModel/frontends
@@ -110,8 +110,8 @@ It exposes four cooperating roles and owns one private mutation coordinator:
 
 - `LibraryReader` owns one read transaction for a coherent point-in-time read batch.
 - `LibraryWriter` owns synchronous semantic commands; every effective command commits and publishes through the coordinator.
-- `LibraryTaskService` owns long-running asynchronous operations such as scan, import/export, and identity backfill.
-- `LibraryChanges` is the read-only revisioned mutation and task-progress observation boundary.
+- `LibraryTaskService` owns long-running asynchronous operations such as scan, import/export, and identity backfill, including their operational progress and completion observations.
+- `LibraryChanges` is the read-only committed-revision observation boundary.
 - `LibraryMutationService` exclusively owns the writable core capability, interactive/maintenance admission, commit revision checks, and publication completion.
 
 The facade borrows storage, async runtime, and change-bus collaborators owned by `CoreRuntime`.
@@ -142,7 +142,7 @@ The cache observes `LibraryChanges` and turns committed storage changes into sou
 Live projections combine a source lease with library reads and presentation structure.
 They own frontend-neutral row/detail snapshots and publish projection deltas to consumers such as `ViewService` and the internal `PlaybackSuccession` owner.
 
-`LiveTrackListProjection` resolves each dictionary ID into one cached pair: raw presentation text borrowed from `DictionaryStore` and a normalized sort/group key owned by its `StringArena`.
+`TrackListProjection` resolves each dictionary ID into one cached pair: raw presentation text borrowed from `DictionaryStore` and a normalized sort/group key owned by its `StringArena`.
 The cache is projection-local and owner-thread confined; a full rebuild releases every dependent row and section view, clears the cache, and then reclaims the arena.
 
 `ViewService` owns the lifecycle of open runtime views and their projections.
@@ -185,7 +185,7 @@ runtime command
 
 An asynchronous mutating operation enters exclusive maintenance before it leaves the callback executor, performs slow preparation through `LibraryTaskService` on the async worker pool without writer ownership, and acquires a coordinator mutation only for preview or apply/commit.
 Export and scan-plan construction remain independent read snapshots.
-Progress and completion return through `LibraryChanges`, while committed content changes use `LibraryChangeSet`.
+Progress and completion return through `LibraryTaskService`, while committed content changes use `LibraryChangeSet`.
 
 A library transfer follows a two-operation path:
 
@@ -207,7 +207,8 @@ A read-oriented workflow obtains one `LibraryReader`, performs the related reads
 
 Metadata and tag authoring first binds the exact targets to one runtime instance and one available committed revision.
 Commit rechecks runtime identity, availability, revision, and every target under coordinator writer ownership.
-A foreign or superseded binding is `Stale`, a missing target rejects the whole command as `Missing`, maintenance is `Unavailable`, and an effective commit returns a binding advanced to the published revision.
+A foreign or superseded binding is `Stale`, maintenance is `Unavailable`, and an effective commit returns a binding advanced to the published revision.
+Creating a binding validates that every target exists and returns `NotFound` otherwise; disappearance under an accepted exact-revision binding is an invariant violation rather than another authoring status.
 
 A filtered runtime view follows a separate composition path:
 
@@ -215,7 +216,7 @@ A filtered runtime view follows a separate composition path:
 base ListId + filter expression
   -> TrackSourceCache
   -> base or ad-hoc TrackSource
-  -> LiveTrackListProjection + TrackPresentationSpec
+  -> TrackListProjection + TrackPresentationSpec
   -> ViewService observers
 ```
 
@@ -277,11 +278,11 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`Library`](../../app/include/ao/rt/library/Library.h) composes the runtime reader, writer, task, and change roles.
 - [`LibraryMutationService`](../../app/runtime/library/LibraryMutationService.h) owns live-runtime write admission, revision validation, commit, and publication completion.
 - [`LibraryReader`](../../app/include/ao/rt/library/LibraryReader.h) and [`LibraryWriter`](../../app/include/ao/rt/library/LibraryWriter.h) define scoped read and synchronous mutation boundaries.
-- [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations.
+- [`LibraryTaskService`](../../app/include/ao/rt/library/LibraryTaskService.h) defines asynchronous library operations and their operational progress/completion observations.
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
-- [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned changes and task status.
+- [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned committed changes.
 - [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) owns reusable sources and their dependency graph.
-- [`LiveTrackListProjection`](../../app/include/ao/rt/projection/LiveTrackListProjection.h) is the primary ordered-list projection boundary.
+- [`TrackListProjection`](../../app/include/ao/rt/projection/TrackListProjection.h) is the concrete ordered-list projection boundary.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) is the ownership and lifetime composition root for the subsystem.
 
 ## Test map

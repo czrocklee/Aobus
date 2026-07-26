@@ -8,7 +8,7 @@
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -43,14 +43,14 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource(trackIds);
     auto evaluator = SmartListEvaluator{libraryFixture.library()};
     auto smartSources = std::array<std::shared_ptr<SmartListSource>, 3>{};
-    auto projections = std::vector<std::unique_ptr<LiveTrackListProjection>>{};
+    auto projections = std::vector<std::unique_ptr<TrackListProjection>>{};
     projections.reserve(smartSources.size());
 
     for (auto& smartSourcePtr : smartSources)
     {
       smartSourcePtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, evaluator);
       smartSourcePtr->reload();
-      projections.push_back(std::make_unique<LiveTrackListProjection>(
+      projections.push_back(std::make_unique<TrackListProjection>(
         kInvalidViewId,
         TrackSourceLease{smartSourcePtr},
         libraryFixture.library(),

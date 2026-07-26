@@ -6,6 +6,7 @@
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -29,9 +30,9 @@ namespace ao::rt::test
     list.setExpression("$year >= 2020");
     list.reload();
 
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     auto subscription =
-      list.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      list.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Old", 2010));
     auto t2 = libraryFixture.addTrack(makeSmartListSpec("New1", 2021));
@@ -41,8 +42,8 @@ namespace ao::rt::test
     source.batchInsert(batchTrackIds);
 
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    auto const& inserted = std::get<SourceInsertRange>(batches.front().deltas.front());
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
+    auto const& inserted = std::get<delta::InsertRange>(sourceEditScript(batches.front()).edits.front());
     CHECK(inserted.start == 0);
     CHECK(inserted.trackIds == std::vector{t2, t3});
     CHECK(list.size() == 2);
@@ -52,8 +53,8 @@ namespace ao::rt::test
     source.batchRemove(removeTrackIds);
 
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    auto const& removed = std::get<SourceRemoveRange>(batches.front().deltas.front());
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
+    auto const& removed = std::get<delta::RemoveRange>(sourceEditScript(batches.front()).edits.front());
     CHECK(removed.start == 0);
     CHECK(removed.trackIds == std::vector{t2});
     CHECK(list.size() == 1);
@@ -113,26 +114,23 @@ namespace ao::rt::test
 
     CHECK(sourceTrackIds(list) == std::vector{first, second, third});
 
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     auto subscription =
-      list.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      list.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     sourcePtr->replaceWithBatch(std::array{first, third, hidden, second},
-                                TrackSourceDeltaBatch{
-                                  .deltas =
-                                    {
-                                      SourceRemoveRange{.start = 1, .trackIds = {hidden, second}},
-                                      SourceInsertRange{.start = 2, .trackIds = {hidden, second}},
-                                    },
+                                delta::RegularTrackEditScript{
+                                  .edits = {delta::RemoveRange{.start = 1, .trackIds = {hidden, second}},
+                                            delta::InsertRange{.start = 2, .trackIds = {hidden, second}}},
                                 });
 
     CHECK(sourceTrackIds(list) == std::vector{first, third, second});
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 2);
-    auto const& remove = std::get<SourceRemoveRange>(batches.front().deltas[0]);
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 2);
+    auto const& remove = std::get<delta::RemoveRange>(sourceEditScript(batches.front()).edits[0]);
     CHECK(remove.start == 1);
     CHECK(remove.trackIds == std::vector{second});
-    auto const& insert = std::get<SourceInsertRange>(batches.front().deltas[1]);
+    auto const& insert = std::get<delta::InsertRange>(sourceEditScript(batches.front()).edits[1]);
     CHECK(insert.start == 2);
     CHECK(insert.trackIds == std::vector{second});
   }

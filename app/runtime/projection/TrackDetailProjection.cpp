@@ -16,7 +16,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/projection/LiveTrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
@@ -126,7 +125,7 @@ namespace ao::rt
     }
   } // namespace
 
-  struct LiveTrackDetailProjection::Impl final
+  struct TrackDetailProjection::Impl final
   {
     DetailTarget target;
     ViewService& views;
@@ -151,11 +150,11 @@ namespace ao::rt
     }
   };
 
-  LiveTrackDetailProjection::LiveTrackDetailProjection(DetailTarget target,
-                                                       ViewService& views,
-                                                       library::MusicLibrary const& library,
-                                                       WorkspaceService& workspace,
-                                                       LibraryChanges const& changes)
+  TrackDetailProjection::TrackDetailProjection(DetailTarget target,
+                                               ViewService& views,
+                                               library::MusicLibrary const& library,
+                                               WorkspaceService& workspace,
+                                               LibraryChanges const& changes)
     : _implPtr{std::make_unique<Impl>(std::move(target), views, library, workspace, changes)}
   {
     std::visit(
@@ -252,32 +251,32 @@ namespace ao::rt
       });
   }
 
-  LiveTrackDetailProjection::~LiveTrackDetailProjection() = default;
+  TrackDetailProjection::~TrackDetailProjection() = default;
 
-  TrackDetailSnapshot LiveTrackDetailProjection::snapshot() const
+  TrackDetailSnapshot TrackDetailProjection::snapshot() const
   {
     return _implPtr->cachedSnapshot;
   }
 
-  async::Subscription LiveTrackDetailProjection::subscribe(
+  async::Subscription TrackDetailProjection::subscribe(
     std::move_only_function<void(TrackDetailSnapshot const&) noexcept> handler)
   {
     handler(_implPtr->cachedSnapshot);
     return _implPtr->changedSignal.connect(std::move(handler));
   }
 
-  void LiveTrackDetailProjection::publishSnapshot()
+  void TrackDetailProjection::publishSnapshot()
   {
     _implPtr->changedSignal.emit(_implPtr->cachedSnapshot);
   }
 
-  void LiveTrackDetailProjection::refreshSnapshot(std::span<TrackId const> const ids) noexcept
+  void TrackDetailProjection::refreshSnapshot(std::span<TrackId const> const ids) noexcept
   {
     _implPtr->cachedSnapshot = buildSnapshot(ids);
     publishSnapshot();
   }
 
-  TrackDetailSnapshot LiveTrackDetailProjection::buildSnapshot(std::span<TrackId const> ids) const
+  TrackDetailSnapshot TrackDetailProjection::buildSnapshot(std::span<TrackId const> ids) const
   {
     auto snap = TrackDetailSnapshot{
       .selectionKind = selectionKindFromCount(ids.size()),

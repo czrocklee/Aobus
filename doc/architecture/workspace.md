@@ -38,8 +38,9 @@ The public boundary is under `app/include/ao/rt/`; implementations live under `a
 
 ### View service
 
-`ViewService` allocates runtime-local `ViewId` values and owns each live view's content state, source lease, projection, selection, and presentation.
+`ViewService` allocates runtime-local `ViewId` values and owns each live view's content state, source lease, list projection, selection, and presentation.
 Destroying a view erases that entry and releases its projection and source leases; later access to the same id is simply not found.
+Creation, enumeration, and destruction are private collaboration used only by `WorkspaceService`, so a full runtime cannot create a live-but-unopened view.
 
 `ViewId` is execution state rather than a durable library or navigation identity.
 History and sessions therefore retain semantic reconstruction inputs instead of persisting a live handle.
@@ -51,6 +52,7 @@ It owns semantic target resolution, the reuse-or-create decision, navigation pre
 
 The service borrows `ViewService` to create, focus, replay, and destroy views and borrows the callback executor to enforce serialized ownership and queue observations.
 It observes committed list deletion through `LibraryChanges` and closes views whose base list no longer exists.
+Because it already owns the workspace, view, and change collaborators required by detail targets, it also composes `TrackDetailProjection` instances for consumers without asking frontends to repack those dependencies.
 
 Every public mutation is a validated semantic command returning only the value its caller needs or an empty success.
 One accepted command installs one complete `WorkspaceSnapshot`, advances its revision once, and queues one self-contained `WorkspaceChanged` observation.
@@ -69,7 +71,7 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 
 - `WorkspaceService` may coordinate `ViewService`, library-change observations, presentation values, and the callback executor; it cannot invoke playback.
 - `AppRuntime` may compose one accepted workspace command with a playback reveal request without becoming another workspace state owner.
-- `ViewService` may acquire library sources and construct projections, but it does not own focus, navigation history, frontend layout, or managed paths.
+- `ViewService` may acquire library sources and construct projections for its workspace collaborator, but it does not own focus, navigation history, frontend layout, or managed paths.
 - The [library architecture](library.md) owns `ListId`, source membership, leases, and projection mechanics below the view boundary.
 - The [track expression architecture](track-expression.md) owns expression compilation and membership semantics used by filtered and Smart List views.
 - The [presentation architecture](presentation.md) owns display and interaction policy, not the workspace aggregate.
@@ -113,6 +115,7 @@ Runtime converts between semantic session state and a private strict document wh
 
 - One `WorkspaceService` is the canonical open and focused view aggregate for one `AppRuntime`.
 - `WorkspaceService` is the only authority that decides whether navigation reuses a plain view or creates a new view.
+- `WorkspaceService` is the only full-runtime authority that creates or destroys `ViewService` entries.
 - Every live workspace view belongs to the same runtime's `ViewService`.
 - `ViewId` is valid only within its allocating `ViewService` lifetime.
 - `ListId` is interpreted only within the active library bound to that runtime.

@@ -31,6 +31,8 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
@@ -207,11 +209,11 @@ namespace ao::gtk
   {
     _runtime.reloadAllTracks();
 
-    _libraryTaskCompletedSubscription = _runtime.library().changes().onLibraryTaskCompleted(
-      [this](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
+    _libraryTaskCompletedSubscription = _runtime.library().taskService().onCompleted(
+      [this](rt::LibraryTaskCompleted const& event) noexcept
       {
-        if (event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Failed ||
-            event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Cancelled)
+        if (event.status == rt::LibraryTaskCompletionStatus::Failed ||
+            event.status == rt::LibraryTaskCompletionStatus::Cancelled)
         {
           return;
         }

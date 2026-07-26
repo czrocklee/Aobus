@@ -5,11 +5,10 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
-#include <ao/rt/source/TrackSourceLease.h>
 
 #include <cstddef>
 #include <memory>
@@ -20,21 +19,16 @@
 
 namespace ao::rt
 {
-  CachedListSource::CachedListSource(ListId const listId,
-                                     CachedListSourceDefinition definition,
-                                     TrackSourceLease parentLease,
+  CachedListSource::CachedListSource(CachedListSourceDefinition definition,
                                      std::unique_ptr<TrackSource> implementationPtr)
-    : _listId{listId}
-    , _definition{std::move(definition)}
-    , _parentLease{std::move(parentLease)}
-    , _implementationPtr{std::move(implementationPtr)}
+    : _definition{std::move(definition)}, _implementationPtr{std::move(implementationPtr)}
   {
     if (_implementationPtr == nullptr)
     {
       throwException<Exception>("Cached list source requires an implementation");
     }
 
-    _publishedSize = _implementationPtr->size();
+    _lastPublishedSize = _implementationPtr->size();
     subscribeToImplementation();
   }
 
@@ -44,9 +38,7 @@ namespace ao::rt
     _implementationPtr.reset();
   }
 
-  void CachedListSource::rebind(CachedListSourceDefinition definition,
-                                TrackSourceLease parentLease,
-                                std::unique_ptr<TrackSource> implementationPtr)
+  void CachedListSource::rebind(CachedListSourceDefinition definition, std::unique_ptr<TrackSource> implementationPtr)
   {
     if (implementationPtr == nullptr)
     {
@@ -58,16 +50,15 @@ namespace ao::rt
       throwException<Exception>("Cannot rebind an invalidated cached list source");
     }
 
-    auto const previousSize = _publishedSize;
+    auto const previousSize = _lastPublishedSize;
     _implementationSubscription.reset();
     _implementationPtr.reset();
     _definition = std::move(definition);
-    _parentLease = std::move(parentLease);
     _implementationPtr = std::move(implementationPtr);
-    _publishedSize = _implementationPtr->size();
+    _lastPublishedSize = _implementationPtr->size();
     subscribeToImplementation();
 
-    std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousSize);
+    std::ignore = publishDelta(SourceReset{}, previousSize);
   }
 
   bool CachedListSource::trySynchronizeManualDefinition(CachedListSourceDefinition const& definition)
@@ -108,24 +99,10 @@ namespace ao::rt
     invalidate();
   }
 
-  void CachedListSource::applyManualTracksInsert(ManualTracksInsert const& operation)
+  void CachedListSource::applyManualEditScript(delta::RegularTrackEditScript const& script)
   {
     auto& source = manualImplementation();
-    source.applyManualTracksInsert(operation);
-    syncManualDefinition(source);
-  }
-
-  void CachedListSource::applyManualTracksRemove(ManualTracksRemove const& operation)
-  {
-    auto& source = manualImplementation();
-    source.applyManualTracksRemove(operation);
-    syncManualDefinition(source);
-  }
-
-  void CachedListSource::applyManualTracksMove(ManualTracksMove const& operation)
-  {
-    auto& source = manualImplementation();
-    source.applyManualTracksMove(operation);
+    source.applyManualEditScript(script);
     syncManualDefinition(source);
   }
 
@@ -148,7 +125,7 @@ namespace ao::rt
   {
     _implementationSubscription.reset();
     _implementationPtr->invalidate();
-    _publishedSize = 0;
+    _lastPublishedSize = 0;
   }
 
   ManualListSource& CachedListSource::manualImplementation()
@@ -176,22 +153,22 @@ namespace ao::rt
 
   void CachedListSource::subscribeToImplementation()
   {
-    _implementationSubscription = _implementationPtr->subscribe([this](TrackSourceDeltaBatch const& batch) noexcept
+    _implementationSubscription = _implementationPtr->subscribe([this](TrackSourceDelta const& batch) noexcept
                                                                 { handleImplementationBatch(batch); });
   }
 
-  void CachedListSource::handleImplementationBatch(TrackSourceDeltaBatch const& batch)
+  void CachedListSource::handleImplementationBatch(TrackSourceDelta const& batch)
   {
-    if (batch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
+    if (std::holds_alternative<SourceInvalidated>(batch))
     {
       semanticInvalidate();
       return;
     }
 
     auto forwarded = batch;
-    auto const previousSize = _publishedSize;
-    _publishedSize = _implementationPtr->size();
+    auto const previousSize = _lastPublishedSize;
+    _lastPublishedSize = _implementationPtr->size();
 
-    std::ignore = publishDeltaBatch(std::move(forwarded), previousSize);
+    std::ignore = publishDelta(std::move(forwarded), previousSize);
   }
 } // namespace ao::rt

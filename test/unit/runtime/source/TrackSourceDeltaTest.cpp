@@ -2,67 +2,54 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace ao::rt::test
 {
-  TEST_CASE("TrackSourceDelta - mixed ranges use sequential coordinates", "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDelta - a regular script uses sequential coordinates", "[runtime][unit][source]")
   {
-    auto const batch = TrackSourceDeltaBatch{
-      .deltas =
-        {
-          SourceRemoveRange{.start = 1, .trackIds = {TrackId{20}}},
-          SourceInsertRange{.start = 2, .trackIds = {TrackId{40}, TrackId{50}}},
-          SourceUpdateRange{.start = 3, .trackIds = {TrackId{50}}},
-        },
-    };
+    auto const message = TrackSourceDelta{delta::RegularTrackEditScript{
+      .edits = {delta::RemoveRange{.start = 1, .trackIds = {TrackId{20}}},
+                delta::InsertRange{.start = 2, .trackIds = {TrackId{40}, TrackId{50}}},
+                delta::UpdateRange{.start = 3, .trackIds = {TrackId{50}}}},
+    }};
 
-    CHECK(validateTrackSourceDeltaBatch(batch, 3));
+    CHECK(validateTrackSourceDelta(message, 3));
   }
 
   TEST_CASE("TrackSourceDelta - a later range is validated in the preceding delta coordinate space",
             "[runtime][unit][source]")
   {
-    auto const batch = TrackSourceDeltaBatch{
-      .deltas =
-        {
-          SourceRemoveRange{.start = 1, .trackIds = {TrackId{20}, TrackId{30}}},
-          SourceUpdateRange{.start = 2, .trackIds = {TrackId{40}}},
-        },
-    };
+    auto const message = TrackSourceDelta{delta::RegularTrackEditScript{
+      .edits = {delta::RemoveRange{.start = 1, .trackIds = {TrackId{20}, TrackId{30}}},
+                delta::UpdateRange{.start = 2, .trackIds = {TrackId{40}}}},
+    }};
 
-    CHECK_FALSE(validateTrackSourceDeltaBatch(batch, 4));
+    CHECK_FALSE(validateTrackSourceDelta(message, 4));
   }
 
-  TEST_CASE("TrackSourceDelta - reset and invalidation require singleton batches", "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDelta - reset and invalidation are standalone alternatives", "[runtime][unit][source]")
   {
-    auto const reset = TrackSourceDeltaBatch{.deltas = {SourceReset{}}};
-    auto const invalidated = TrackSourceDeltaBatch{.deltas = {SourceInvalidated{}}};
-    auto const resetWithRange = TrackSourceDeltaBatch{
-      .deltas = {SourceReset{}, SourceInsertRange{.start = 0, .trackIds = {TrackId{10}}}},
-    };
-    auto const rangeWithInvalidation = TrackSourceDeltaBatch{
-      .deltas = {SourceRemoveRange{.start = 0, .trackIds = {TrackId{10}}}, SourceInvalidated{}},
-    };
+    auto const reset = TrackSourceDelta{SourceReset{}};
+    auto const invalidated = TrackSourceDelta{SourceInvalidated{}};
 
-    CHECK(validateTrackSourceDeltaBatch(reset, 7));
-    CHECK(validateTrackSourceDeltaBatch(invalidated, 7));
-    CHECK_FALSE(validateTrackSourceDeltaBatch(resetWithRange, 0));
-    CHECK_FALSE(validateTrackSourceDeltaBatch(rangeWithInvalidation, 1));
+    CHECK(validateTrackSourceDelta(reset, 7));
+    CHECK(validateTrackSourceDelta(invalidated, 7));
   }
 
-  TEST_CASE("TrackSourceDelta - empty batches and empty ranges are invalid", "[runtime][unit][source]")
+  TEST_CASE("TrackSourceDelta - empty scripts and empty ranges are invalid", "[runtime][unit][source]")
   {
-    auto const emptyBatch = TrackSourceDeltaBatch{};
-    auto const emptyInsert = TrackSourceDeltaBatch{.deltas = {SourceInsertRange{.start = 0}}};
-    auto const emptyRemove = TrackSourceDeltaBatch{.deltas = {SourceRemoveRange{.start = 0}}};
-    auto const emptyUpdate = TrackSourceDeltaBatch{.deltas = {SourceUpdateRange{.start = 0}}};
+    auto const emptyScript = TrackSourceDelta{delta::RegularTrackEditScript{}};
+    auto const emptyInsert = TrackSourceDelta{delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = 0}}}};
+    auto const emptyRemove = TrackSourceDelta{delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = 0}}}};
+    auto const emptyUpdate = TrackSourceDelta{delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = 0}}}};
 
-    CHECK_FALSE(validateTrackSourceDeltaBatch(emptyBatch, 0));
-    CHECK_FALSE(validateTrackSourceDeltaBatch(emptyInsert, 0));
-    CHECK_FALSE(validateTrackSourceDeltaBatch(emptyRemove, 0));
-    CHECK_FALSE(validateTrackSourceDeltaBatch(emptyUpdate, 0));
+    CHECK_FALSE(validateTrackSourceDelta(emptyScript, 0));
+    CHECK_FALSE(validateTrackSourceDelta(emptyInsert, 0));
+    CHECK_FALSE(validateTrackSourceDelta(emptyRemove, 0));
+    CHECK_FALSE(validateTrackSourceDelta(emptyUpdate, 0));
   }
 } // namespace ao::rt::test

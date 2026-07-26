@@ -32,6 +32,11 @@ namespace ao::uimodel
     , _onRender{std::move(onRender)}
     , _clockChangeFilter{playback.snapshot().transport}
   {
+    if (!_onRender)
+    {
+      return;
+    }
+
     _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
                                                  { onSnapshotChanged(snapshot); });
     _seekPreviewSub = _playback.events().onSeekPreview([this](std::chrono::milliseconds const elapsed) noexcept
@@ -86,6 +91,11 @@ namespace ao::uimodel
                                          bool const isPreviewing,
                                          std::optional<std::chrono::milliseconds> const optOverrideElapsed)
   {
+    if (!_onRender)
+    {
+      return;
+    }
+
     auto view = PlaybackPositionViewState{};
     view.duration = state.duration;
     view.elapsed = optOverrideElapsed.value_or(state.elapsed);
@@ -94,9 +104,6 @@ namespace ao::uimodel
     view.isPreviewing = isPreviewing;
     view.immediateUpdate = immediateUpdate;
 
-    if (_onRender)
-    {
-      _onRender(view);
-    }
+    _onRender(view);
   }
 } // namespace ao::uimodel

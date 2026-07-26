@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
@@ -18,12 +17,12 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setFilter updates filter state and projection", "[runtime][unit][view][filter]")
   {
     auto env = ViewServiceFixture{};
-    auto const oldTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
-    auto const newTrackId = env.libraryFixture.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
+    auto const oldTrackId = env.addTrack(library::test::TrackSpec{.title = "Old", .year = 1999});
+    auto const newTrackId = env.addTrack(library::test::TrackSpec{.title = "New", .year = 2021});
     env.cachePtr->reloadAllTracks();
 
-    auto service = env.makeService();
-    auto const result = env.requireView(service);
+    auto& service = env.service;
+    auto const result = env.requireView();
 
     auto projView = kInvalidViewId;
     std::int32_t projectionChangedCount = 0;
@@ -38,7 +37,7 @@ namespace ao::rt::test
     {
       REQUIRE(service.setFilter(result, "$year > 2000"));
       auto const snap = service.trackListState(result);
-      auto const filteredProjectionPtr = service.trackListProjection(result);
+      auto const filteredProjectionPtr = env.requireProjection(result);
 
       REQUIRE(filteredProjectionPtr != nullptr);
       CHECK(snap.filterExpression == "$year > 2000");
@@ -50,7 +49,7 @@ namespace ao::rt::test
 
       REQUIRE(service.setFilter(result, "$year > 2025"));
       auto const snap2 = service.trackListState(result);
-      auto const updatedFilteredProjectionPtr = service.trackListProjection(result);
+      auto const updatedFilteredProjectionPtr = env.requireProjection(result);
       CHECK(snap2.filterExpression == "$year > 2025");
       CHECK_FALSE(snap2.optFilterError);
       CHECK(projectionChangedCount == 2);
@@ -60,7 +59,7 @@ namespace ao::rt::test
 
       REQUIRE(service.setFilter(result, ""));
       auto const snap3 = service.trackListState(result);
-      auto const unfilteredProjectionPtr = service.trackListProjection(result);
+      auto const unfilteredProjectionPtr = env.requireProjection(result);
       CHECK(snap3.filterExpression.empty());
       CHECK_FALSE(snap3.optFilterError);
       CHECK(projectionChangedCount == 3);
@@ -75,7 +74,7 @@ namespace ao::rt::test
     {
       REQUIRE(service.setFilter(result, "$year >"));
       auto const snap = service.trackListState(result);
-      auto const filteredProjectionPtr = service.trackListProjection(result);
+      auto const filteredProjectionPtr = env.requireProjection(result);
 
       CHECK(snap.filterExpression == "$year >");
       REQUIRE(snap.optFilterError);

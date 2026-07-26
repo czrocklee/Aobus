@@ -66,21 +66,16 @@ namespace ao::rt
     ViewService(ViewService&&) = delete;
     ViewService& operator=(ViewService&&) = delete;
 
-    Result<ViewId> createView(TrackListViewConfig const& initial);
-    Result<> destroyView(ViewId viewId);
     Result<> setFilter(ViewId viewId, std::string filterExpression);
     Result<> setPresentation(ViewId viewId, TrackPresentationSpec const& presentation);
     Result<> setSelection(ViewId viewId, std::vector<TrackId> selection);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
-    async::Subscription onDestroyed(std::move_only_function<void(ViewId) noexcept> handler);
     async::Subscription onProjectionChanged(
       std::move_only_function<void(TrackListProjectionChanged const&) noexcept> handler);
     async::Subscription onPresentationChanged(
       std::move_only_function<void(PresentationChanged const&) noexcept> handler);
     async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&) noexcept> handler);
-
-    std::vector<ViewId> listViews() const;
 
     // View lookups come in two forms. The precondition form assumes the caller
     // already holds a live view id, so an unknown id is a programming error and
@@ -104,13 +99,18 @@ namespace ao::rt
     // an empty selection, or selected ids missing from the library.
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
-    std::shared_ptr<TrackListProjection> trackListProjection(ViewId viewId);
     Result<std::shared_ptr<TrackListProjection>> findTrackListProjection(ViewId viewId);
+
+  private:
+    friend class WorkspaceService;
+
+    Result<ViewId> createView(TrackListViewConfig const& initial);
+    void destroyView(ViewId viewId);
+    std::vector<ViewId> listViews() const;
     std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target,
                                                             WorkspaceService& workspace,
                                                             LibraryChanges const& changes);
 
-  private:
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

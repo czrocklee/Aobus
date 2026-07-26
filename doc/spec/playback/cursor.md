@@ -285,7 +285,7 @@ Observers are observational and do not choose succession policy.
 - [`ProjectionAnchorTest.cpp`](../../../test/unit/runtime/playback/ProjectionAnchorTest.cpp) proves insertion/removal boundaries, move reconciliation, reset, empty gaps, and range invariants.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
-- [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, queued-task cancellation, synchronous reentrancy, pause/resume/seek control, session replacement, and shutdown.
+- [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, replacement and owner-destruction cancellation after callback queueing, synchronous reentrancy, pause/resume/seek control, session replacement, and shutdown.
 - [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 

@@ -24,10 +24,11 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
@@ -114,11 +115,20 @@ namespace ao::rt::test
     ViewId createView(AppRuntime& runtime, std::string filterExpression = {}, std::vector<TrackSortTerm> sortBy = {})
     {
       runtime.reloadAllTracks();
-      auto const created = runtime.views().createView(TrackListViewConfig{
-        .listId = kAllTracksListId,
-        .filterExpression = std::move(filterExpression),
-        .sortBy = std::move(sortBy),
-      });
+      auto request = NavigationRequest{
+        .target =
+          FilteredListTarget{
+            .listId = kAllTracksListId,
+            .filterExpression = std::move(filterExpression),
+          },
+      };
+
+      if (!sortBy.empty())
+      {
+        request.optPresentation = NavigationPresentation{.spec = TrackPresentationSpec{.sortBy = std::move(sortBy)}};
+      }
+
+      auto const created = runtime.workspace().navigate(request);
       REQUIRE(created);
       return *created;
     }
@@ -174,10 +184,16 @@ namespace ao::rt::test
         .name = "Playback session order",
         .trackIds = std::move(trackIds),
       }));
-      auto const created = runtime.views().createView(TrackListViewConfig{
-        .listId = listId,
-        .sortBy = std::move(sortBy),
-      });
+      auto request = NavigationRequest{
+        .target = FilteredListTarget{.listId = listId, .filterExpression = {}},
+      };
+
+      if (!sortBy.empty())
+      {
+        request.optPresentation = NavigationPresentation{.spec = TrackPresentationSpec{.sortBy = std::move(sortBy)}};
+      }
+
+      auto const created = runtime.workspace().navigate(request);
       REQUIRE(created);
       return ManualView{.listId = listId, .viewId = *created};
     }
@@ -213,10 +229,9 @@ namespace ao::rt::test
     }
 
     // A ready audio provider whose backend can be armed to reject setProperty for
-    // one property. Session restore applies the restored volume then mute to the
-    // active backend; arming a rejection exercises the atomic rollback path
-    // through the public restore workflow. The arm outlives the backends that
-    // borrow it, so declare it before the runtime it feeds.
+    // one property. Session restore applies volume then mute, so the fixture
+    // exposes the resulting sequential partial state through the public restore
+    // workflow. The arm outlives the backends that borrow it.
     class PropertyFailArm final
     {
     public:
@@ -1163,7 +1178,7 @@ namespace ao::rt::test
     CHECK(storedSession(runtime.playbackSessionConfigStore()).positionMs == 0);
   }
 
-  TEST_CASE("PlaybackSession - backend property failure rolls restored volume and mute back atomically",
+  TEST_CASE("PlaybackSession - volume and mute restore reports the first failure and publishes actual state",
             "[runtime][unit][playback-session][error]")
   {
     // The arm is declared before the runtime so the backends that borrow it stay
@@ -1193,14 +1208,17 @@ namespace ao::rt::test
     };
     storeSession(runtime, payload);
 
-    SECTION("volume rejection leaves the baseline untouched")
+    bool muteAttempted = false;
+
+    SECTION("volume rejection publishes the requested volume and skips mute")
     {
       arm.arm(audio::PropertyId::Volume);
     }
 
-    SECTION("mute rejection rolls back the staged volume")
+    SECTION("mute rejection publishes both requested properties")
     {
       arm.arm(audio::PropertyId::Muted);
+      muteAttempted = true;
     }
 
     auto const restored = runtime.restorePlaybackSession();
@@ -1215,7 +1233,10 @@ namespace ao::rt::test
     CHECK(playbackAfter.duration == playbackBefore.duration);
     CHECK(playbackAfter.ready == playbackBefore.ready);
     CHECK(playbackAfter.nowPlaying == playbackBefore.nowPlaying);
-    CHECK(playbackAfter.volume == playbackBefore.volume);
+    CHECK(playbackAfter.volume.level == payload.volume);
+    CHECK(playbackAfter.volume.muted == (muteAttempted ? payload.muted : playbackBefore.volume.muted));
+    CHECK(playbackAfter.volume.available == playbackBefore.volume.available);
+    CHECK(playbackAfter.volume.hardwareAssisted == playbackBefore.volume.hardwareAssisted);
     CHECK(playbackAfter.output == playbackBefore.output);
     CHECK(playbackAfter.quality == playbackBefore.quality);
     CHECK(storedSession(runtime.playbackSessionConfigStore()) == payload);
@@ -1238,7 +1259,7 @@ namespace ao::rt::test
         .name = "Temporary source",
         .trackIds = {first, second},
       }));
-      auto const view = runtime.views().createView({.listId = listId});
+      auto const view = runtime.workspace().navigate({.target = listId});
       REQUIRE(view);
       REQUIRE(startFromViewAndWait(runtime, *executor, *view, first));
       REQUIRE(runtime.savePlaybackSession());
@@ -1348,8 +1369,9 @@ namespace ao::rt::test
     CHECK(beforePayload.currentTrackId == current);
     CHECK(beforePayload.anchorIndex == 1);
     CHECK(beforePayload.sortBy == titleSort);
-    auto const projectionPtr = runtime.views().trackListProjection(manual.viewId);
-    REQUIRE(projectionPtr);
+    auto const projectionResult = runtime.views().findTrackListProjection(manual.viewId);
+    REQUIRE(projectionResult);
+    auto const& projectionPtr = *projectionResult;
     REQUIRE(projectionPtr->size() == 2);
     CHECK(projectionPtr->trackIdAt(0) == alpha);
     CHECK(projectionPtr->trackIdAt(1) == charlie);

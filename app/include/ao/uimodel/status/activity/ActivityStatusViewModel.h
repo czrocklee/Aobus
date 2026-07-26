@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/rt/NotificationIds.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
@@ -13,6 +12,7 @@
 
 namespace ao::rt
 {
+  class LibraryTaskService;
   class NotificationService;
 }
 
@@ -22,7 +22,7 @@ namespace ao::uimodel
 
   struct ActivityStatusViewModelOptions final
   {
-    rt::LibraryChanges const* libraryChanges = nullptr;
+    rt::LibraryTaskService const* libraryTasks = nullptr;
     ActivityStatusClock clock{};
     bool emitInitialState = true;
   };

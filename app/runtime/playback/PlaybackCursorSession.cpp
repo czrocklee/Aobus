@@ -13,7 +13,6 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -82,7 +81,7 @@ namespace ao::rt
       }
 
       auto projectionPtr =
-        std::make_unique<LiveTrackListProjection>(kInvalidViewId, projectionSourceLease, library, launchSpec.order);
+        std::make_unique<TrackListProjection>(kInvalidViewId, projectionSourceLease, library, launchSpec.order);
       auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
 
       if (optRequiredCurrentIndex && !optCurrentIndex)
@@ -148,7 +147,7 @@ namespace ao::rt
 
   PlaybackCursorSession::PlaybackCursorSession(PlaybackLaunchSpec launchSpec,
                                                TrackSourceLease baseSourceLease,
-                                               std::unique_ptr<LiveTrackListProjection> projectionPtr,
+                                               std::unique_ptr<TrackListProjection> projectionPtr,
                                                ProjectionAnchor currentAnchor,
                                                RepeatMode const repeatMode,
                                                ShuffleMode const shuffleMode,

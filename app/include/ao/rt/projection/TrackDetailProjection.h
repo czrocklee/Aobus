@@ -8,11 +8,22 @@
 #include <ao/async/Subscription.h>
 
 #include <functional>
+#include <memory>
+#include <span>
 #include <variant>
 #include <vector>
 
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::rt
 {
+  class LibraryChanges;
+  class ViewService;
+  class WorkspaceService;
+
   struct FocusedViewTarget final
   {};
   struct ExplicitViewTarget final
@@ -26,21 +37,30 @@ namespace ao::rt
 
   using DetailTarget = std::variant<FocusedViewTarget, ExplicitViewTarget, ExplicitSelectionTarget>;
 
-  class TrackDetailProjection
+  class TrackDetailProjection final
   {
   public:
-    virtual ~TrackDetailProjection() = default;
+    TrackDetailProjection(DetailTarget target,
+                          ViewService& views,
+                          library::MusicLibrary const& library,
+                          WorkspaceService& workspace,
+                          LibraryChanges const& changes);
+    ~TrackDetailProjection();
 
     TrackDetailProjection(TrackDetailProjection const&) = delete;
     TrackDetailProjection& operator=(TrackDetailProjection const&) = delete;
     TrackDetailProjection(TrackDetailProjection&&) = delete;
     TrackDetailProjection& operator=(TrackDetailProjection&&) = delete;
 
-    virtual TrackDetailSnapshot snapshot() const = 0;
-    virtual async::Subscription subscribe(
-      std::move_only_function<void(TrackDetailSnapshot const&) noexcept> handler) = 0;
+    TrackDetailSnapshot snapshot() const;
+    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&) noexcept> handler);
 
-  protected:
-    TrackDetailProjection() = default;
+  private:
+    TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
+    void refreshSnapshot(std::span<TrackId const> ids) noexcept;
+    void publishSnapshot();
+
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

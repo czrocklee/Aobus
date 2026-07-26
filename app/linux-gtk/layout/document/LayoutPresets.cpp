@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "layout/document/GtkLayoutPresets.h"
+#include "layout/document/LayoutPresets.h"
 
 #include <ao/Exception.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
-#include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -14,7 +13,6 @@
 #include <glib.h>
 #include <glibmm/error.h>
 
-#include <functional>
 #include <map>
 #include <string>
 #include <string_view>
@@ -47,33 +45,44 @@ namespace ao::gtk::layout
       }
       catch (Glib::Error const& e)
       {
-        APP_LOG_CRITICAL("GtkLayoutPresets: GResource error loading {}: {}", path, e.what());
+        APP_LOG_CRITICAL("LayoutPresets: GResource error loading {}: {}", path, e.what());
         throw;
       }
     }
   } // namespace
 
-  GtkLayoutPresetId presetIdFromString(std::string_view presetIdStr)
+  LayoutPresetId presetIdFromString(std::string_view const presetId)
   {
-    if (presetIdStr == "modern")
+    if (presetId == "modern")
     {
-      return GtkLayoutPresetId::Modern;
+      return LayoutPresetId::Modern;
     }
 
-    return GtkLayoutPresetId::Classic;
+    return LayoutPresetId::Classic;
   }
 
-  uimodel::LayoutDocument makeDefaultGtkLayout()
-  {
-    return makeBuiltInGtkLayout(GtkLayoutPresetId::Classic);
-  }
-
-  uimodel::LayoutDocument makeBuiltInGtkLayout(GtkLayoutPresetId presetId)
+  std::string_view presetIdToString(LayoutPresetId const presetId) noexcept
   {
     switch (presetId)
     {
-      case GtkLayoutPresetId::Classic: return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
-      case GtkLayoutPresetId::Modern:
+      case LayoutPresetId::Classic: return "classic";
+      case LayoutPresetId::Modern: return "modern";
+    }
+
+    return "classic";
+  }
+
+  uimodel::LayoutDocument makeDefaultLayout()
+  {
+    return makeBuiltInLayout(LayoutPresetId::Classic);
+  }
+
+  uimodel::LayoutDocument makeBuiltInLayout(LayoutPresetId presetId)
+  {
+    switch (presetId)
+    {
+      case LayoutPresetId::Classic: return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
+      case LayoutPresetId::Modern:
       {
         auto doc = loadBuiltInLayout("/org/aobus/layout/modern_layout.yaml");
         auto const defaultDoc = loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
@@ -88,10 +97,5 @@ namespace ao::gtk::layout
     }
 
     return loadBuiltInLayout("/org/aobus/layout/default_layout.yaml");
-  }
-
-  std::map<std::string, uimodel::LayoutNode, std::less<>> builtInGtkTemplates()
-  {
-    return makeDefaultGtkLayout().templates;
   }
 } // namespace ao::gtk::layout

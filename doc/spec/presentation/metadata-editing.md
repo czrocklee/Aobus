@@ -66,7 +66,7 @@ It has no public submission lifecycle: submission is synchronous, and frontends 
 Beginning a session binds its explicit targets and immediately reconciles current runtime availability after subscribing, closing the bind-to-subscribe event gap.
 During its own submission, the session defers availability invalidation until the runtime result supplies the next binding.
 An applied submission replaces the retained binding with that next-revision binding; a later effective commit invalidates it.
-Operational failure, a missing target, stale or unavailable status, or mismatched post-submit availability also invalidates it.
+Operational failure, stale or unavailable status, or mismatched post-submit availability also invalidates it.
 
 ## Commands and transitions
 
@@ -74,7 +74,7 @@ Operational failure, a missing target, stale or unavailable status, or mismatche
 
 The frontend decodes edit text through the shared field codec and creates a typed `MetadataPatch`.
 Applying the patch through the retained authoring session updates the complete bound target set or none of it.
-The result is `Applied`, `NoOp`, `Stale`, `Missing`, or `Unavailable`; `Result` errors remain operational or validation failures.
+The result is `Applied`, `NoOp`, `Stale`, or `Unavailable`; `Result` errors remain operational or validation failures.
 An empty metadata display value remains hidden by default unless show-empty is active or its editor is open.
 
 ### Custom metadata
@@ -98,13 +98,14 @@ Suggested tags are a presentation aid; only the final add/remove command is auth
 
 Runtime mutation failure rejects the edit and exposes the recoverable diagnostic to the frontend workflow.
 No partial frontend state is treated as committed merely because an editor closed.
-GTK table inline edits place parsing, operational, stale, missing, and unavailable failures in the table's existing status surface and update the row only after `Applied`.
+GTK table inline edits place parsing, operational, stale, and unavailable failures in the table's existing status surface and update the row only after `Applied`.
 GTK detail-grid parsing and submission failures create an error notification and restore the pre-edit display value; the backing library remains unchanged on rejection.
 Custom-metadata undo returns its terminal failure, clears the expired action, and the undo bar publishes that failure as an error notification.
 The current synchronous mutation boundary has no cancellation token; cancellation before submission discards the local draft, while a returned successful mutation is committed.
 
 Stale and unavailable outcomes tell the frontend to reload rather than retry the same session.
-Missing targets reject the session and report the missing-target condition.
+Missing targets are rejected with `NotFound` while creating the binding.
+Once an exact-revision binding exists, target disappearance without a newer committed revision is an invariant violation rather than a frontend-recoverable status.
 After durable commit, a publication failure faults the runtime; UIModel cannot treat it as an ordinary uncommitted rejection.
 The authoring session invalidates itself and propagates that exception to its caller; it does not translate the failure into an `Applied` result.
 
@@ -124,7 +125,7 @@ Custom keys are queryable through the custom-variable syntax in the predicate la
 ## Implementation map
 
 - [`TrackDetailProjection.h`](../../../app/include/ao/rt/projection/TrackDetailProjection.h) defines the aggregate snapshot.
-- [`LiveTrackDetailProjection.cpp`](../../../app/runtime/projection/LiveTrackDetailProjection.cpp) builds and observes live snapshots.
+- [`TrackDetailProjection.cpp`](../../../app/runtime/projection/TrackDetailProjection.cpp) builds and observes live snapshots.
 - [`TrackFieldGridSchema.cpp`](../../../app/uimodel/library/detail/TrackFieldGridSchema.cpp) and [`TrackFieldGridPolicy.h`](../../../app/include/ao/uimodel/library/detail/TrackFieldGridPolicy.h) own field selection and visibility.
 - [`TrackCustomMetadata.cpp`](../../../app/uimodel/library/detail/TrackCustomMetadata.cpp) owns display, validation, patches, and undo eligibility.
 - [`TagEdit.cpp`](../../../app/uimodel/library/property/TagEdit.cpp) owns tag mutation submission and status text.

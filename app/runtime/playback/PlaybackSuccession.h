@@ -92,8 +92,6 @@ namespace ao::rt
     PlaybackSuccession& operator=(PlaybackSuccession&&) = delete;
 
     Result<> playFromView(ViewId viewId, TrackId startTrackId);
-    bool hasNext() const;
-    bool hasPrevious() const;
     // Returns whether navigation accepted a restart, subject transition, or
     // terminal stop that establishes a new playback-clock anchor.
     bool next();

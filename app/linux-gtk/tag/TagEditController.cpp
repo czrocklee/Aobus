@@ -186,13 +186,6 @@ namespace ao::gtk
       return;
     }
 
-    if (result->status == rt::TrackAuthoringStatus::Missing)
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
-      return;
-    }
-
     if (result->status != rt::TrackAuthoringStatus::Applied)
     {
       return;

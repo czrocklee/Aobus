@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "runtime/playback/PlaybackTransport.h"
+
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -9,7 +11,6 @@
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -97,13 +98,15 @@ namespace ao::rt::test
     auto const nextTrack = fixture.libraryFixture.addTrack({.title = "Prepared Track", .uri = fixtureUri});
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
-    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(nextTrack, ListId{7});
+    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
+    REQUIRE(nextRequest);
+    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(*nextRequest, ListId{7});
     REQUIRE(preparedTokenResult);
     auto const preparedToken = *preparedTokenResult;
 
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == currentTrack);
     CHECK(fixture.playbackTransport.state().nowPlaying.title == "Current Track");
-    CHECK_FALSE(fixture.playbackTransport.prepareNext(TrackId{99999}, ListId{7}));
+    CHECK_FALSE(playbackRequestForTrack(fixture.libraryFixture.library(), TrackId{99999}));
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == currentTrack);
     CHECK(fixture.playbackTransport.clearPreparedNext() == preparedToken);
   }
@@ -163,7 +166,9 @@ namespace ao::rt::test
     auto idleSub = fixture.playbackTransport.onIdle([&] noexcept { ++idleCount; });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
-    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(nextTrack, ListId{7});
+    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
+    REQUIRE(nextRequest);
+    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(*nextRequest, ListId{7});
     REQUIRE(preparedTokenResult);
     auto const preparedToken = *preparedTokenResult;
     REQUIRE(fixture.renderTarget != nullptr);
@@ -213,7 +218,9 @@ namespace ao::rt::test
       [&](PlaybackTransport::NowPlayingChanged const& ev) noexcept { nowPlaying.push_back(ev); });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
-    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(nextTrack, ListId{7});
+    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrack);
+    REQUIRE(nextRequest);
+    auto const preparedTokenResult = fixture.playbackTransport.prepareNext(*nextRequest, ListId{7});
     REQUIRE(preparedTokenResult);
     auto const preparedToken = *preparedTokenResult;
     REQUIRE(fixture.renderTarget != nullptr);
@@ -234,54 +241,25 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.title == "Prepared Track");
   }
 
-  TEST_CASE("PlaybackTransport playback - rejected preflight reports synchronously without an engine failure event",
-            "[runtime][unit][playback][error]")
+  TEST_CASE("PlaybackTransport playback - rejected preflight reports synchronously", "[runtime][unit][playback][error]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
     fixture.executor.drain();
 
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
-
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
-                                                           { failures.push_back(failure); });
 
     auto const result = fixture.playbackTransport.playTrack(trackId, ListId{7});
 
     REQUIRE_FALSE(result);
     CHECK(result.error().message.contains("Unsupported audio file extension"));
     fixture.executor.drain();
-    CHECK(failures.empty());
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().lifetime == NotificationLifetime::pinned());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
     CHECK(
       std::get<NotificationReport>(feed.entries.front().message).detail.contains("Unsupported audio file extension"));
-  }
-
-  TEST_CASE("PlaybackTransport playback - rejected preflight bypasses asynchronous failure observers",
-            "[runtime][unit][playback][error]")
-  {
-    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
-    fixture.onDevicesChangedCb(fixture.status.devices);
-    fixture.executor.drain();
-
-    auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
-    auto firstFailures = std::vector<PlaybackFailure>{};
-    auto secondFailures = std::vector<PlaybackFailure>{};
-    auto firstSub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
-                                                                { firstFailures.push_back(failure); });
-    auto secondSub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
-                                                                 { secondFailures.push_back(failure); });
-
-    REQUIRE_FALSE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
-    fixture.executor.drain();
-
-    CHECK(firstFailures.empty());
-    CHECK(secondFailures.empty());
-    REQUIRE(fixture.notificationService.feed().entries.size() == 1);
   }
 
   TEST_CASE("PlaybackTransport playback - rejected preflight report suppresses identical updates",
@@ -327,16 +305,11 @@ namespace ao::rt::test
     auto const brokenTrack = fixture.libraryFixture.addTrack({.title = "Stale Broken Track", .uri = "broken.txt"});
     auto const replacementTrack = fixture.libraryFixture.addTrack({.title = "Replacement Track", .uri = fixtureUri});
 
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
-                                                           { failures.push_back(failure); });
-
     REQUIRE(fixture.playbackTransport.playTrack(replacementTrack, ListId{7}));
     REQUIRE_FALSE(fixture.playbackTransport.playTrack(brokenTrack, ListId{7}));
 
     fixture.executor.drain();
 
-    CHECK(failures.empty());
     CHECK(fixture.notificationService.feed().entries.size() == 1);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == replacementTrack);
   }
@@ -370,23 +343,11 @@ namespace ao::rt::test
     auto const fixtureUri = fixture.installAudioFixture();
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Playing Track", .uri = fixtureUri});
 
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
-                                                           { failures.push_back(failure); });
-
     REQUIRE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
     REQUIRE(fixture.renderTarget != nullptr);
 
     fixture.renderTarget->handleBackendError("device lost");
-    REQUIRE(fixture.executor.drainUntil([&] { return !failures.empty(); }));
-
-    REQUIRE(failures.size() == 1);
-    CHECK(failures.front().kind == PlaybackFailureKind::DeviceLost);
-    CHECK(failures.front().trackId == trackId);
-    CHECK(failures.front().sourceListId == ListId{7});
-    CHECK(failures.front().title == "Playing Track");
-    CHECK_FALSE(failures.front().recoverable);
-    CHECK(failures.front().error.message == "device lost");
+    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
 
     auto const feed = fixture.notificationService.feed();
     REQUIRE(feed.entries.size() == 1);

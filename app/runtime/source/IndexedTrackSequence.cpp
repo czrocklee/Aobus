@@ -38,16 +38,6 @@ namespace ao::rt
     replace(std::move(*result));
   }
 
-  void IndexedTrackSequence::insert(std::size_t const index, TrackId const trackId)
-  {
-    applyScript(delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = index, .trackIds = {trackId}}}});
-  }
-
-  void IndexedTrackSequence::remove(std::size_t const index, TrackId const trackId)
-  {
-    applyScript(delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = index, .trackIds = {trackId}}}});
-  }
-
   std::optional<std::size_t> IndexedTrackSequence::indexOf(TrackId const trackId) const
   {
     if (auto const it = _indexByTrackId.find(trackId); it != _indexByTrackId.end())

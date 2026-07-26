@@ -54,7 +54,7 @@ namespace ao::rt
     WorkspaceService workspaceService;
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
     ConfigStore* playbackSessionConfigStore = nullptr;
-    std::shared_ptr<PlaybackSessionPersistence> playbackSessionPersistencePtr;
+    std::unique_ptr<PlaybackSessionPersistence> playbackSessionPersistencePtr;
 
     Impl(AppRuntime& runtime,
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
@@ -77,7 +77,7 @@ namespace ao::rt
       , workspaceConfigStorePtr{std::move(workspaceConfigPtr)}
       , playbackSessionConfigStore{playbackSessionConfigStoreValue != nullptr ? playbackSessionConfigStoreValue
                                                                               : workspaceConfigStorePtr.get()}
-      , playbackSessionPersistencePtr{std::make_shared<PlaybackSessionPersistence>(*playbackSessionConfigStore,
+      , playbackSessionPersistencePtr{std::make_unique<PlaybackSessionPersistence>(*playbackSessionConfigStore,
                                                                                    runtime.library(),
                                                                                    playbackSuccession,
                                                                                    playbackTransport,

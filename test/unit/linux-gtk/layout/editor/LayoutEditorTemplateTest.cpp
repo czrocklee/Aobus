@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutPresets.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -26,9 +26,9 @@ namespace ao::gtk::layout::editor::test
   TEST_CASE("LayoutEditorTemplate - built-in layout templates expose expected component structure",
             "[gtk][unit][layout][editor]")
   {
-    SECTION("builtInTemplates returns all 8 built-ins")
+    SECTION("the default layout carries all 8 built-in templates")
     {
-      auto const templates = builtInTemplates();
+      auto const templates = makeDefaultLayout().templates;
 
       CHECK(templates.contains("playback.compactControls"));
       CHECK(templates.contains("playback.transportGroup"));
@@ -46,7 +46,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("playback.transportGroup has 2 children and linked class")
     {
-      auto const templates = builtInTemplates();
+      auto const templates = makeDefaultLayout().templates;
       auto const& group = templates.at("playback.transportGroup");
 
       CHECK(group.type == "box");
@@ -59,7 +59,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("playback.defaultBar contains all expected children")
     {
-      auto const templates = builtInTemplates();
+      auto const templates = makeDefaultLayout().templates;
       auto const& bar = templates.at("playback.defaultBar");
 
       CHECK(bar.type == "box");
@@ -86,7 +86,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("status.defaultBar template preserves right-side status order")
     {
-      auto const templates = builtInTemplates();
+      auto const templates = makeDefaultLayout().templates;
       auto const& bar = templates.at("status.defaultBar");
 
       CHECK(bar.type == "box");
@@ -137,7 +137,7 @@ namespace ao::gtk::layout::editor::test
 
     SECTION("track.selectionDetailPane keeps field grid scroll at layout level")
     {
-      auto const templates = builtInTemplates();
+      auto const templates = makeDefaultLayout().templates;
       auto const& pane = templates.at("track.selectionDetailPane");
 
       LayoutNode const* detailContent = nullptr;
@@ -174,7 +174,7 @@ namespace ao::gtk::layout::editor::test
 
       auto doc = LayoutDocument{};
       doc.version = 1;
-      doc.templates = builtInTemplates();
+      doc.templates = makeDefaultLayout().templates;
       doc.root.type = "template";
       doc.root.props["templateId"] = LayoutValue{std::string{"playback.compactControls"}};
 
@@ -207,7 +207,7 @@ namespace ao::gtk::layout::editor::test
     {
       auto doc = LayoutDocument{};
       doc.root.type = "box";
-      doc.templates = builtInTemplates();
+      doc.templates = makeDefaultLayout().templates;
 
       auto tree = ryml::Tree{};
       REQUIRE(LayoutDocumentYamlSchema{}.serialize(tree.rootref(), doc));

@@ -102,7 +102,6 @@ namespace ao::uimodel
           break;
         case rt::TrackAuthoringStatus::Stale:
         case rt::TrackAuthoringStatus::Unavailable: invalidate(rt::TrackAuthoringStatus::Stale); break;
-        case rt::TrackAuthoringStatus::Missing: invalidate(rt::TrackAuthoringStatus::Unavailable); break;
       }
 
       return result;

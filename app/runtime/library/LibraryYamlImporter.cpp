@@ -696,8 +696,7 @@ namespace ao::rt
 
     Result<ImportReport> applyPreparedImport(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                              ImportRunMode runMode,
-                                             library::WriteTransaction* externalTransaction = nullptr,
-                                             LibraryChangeSet* preparedChangeSet = nullptr);
+                                             library::WriteTransaction& transaction) const;
     Result<> applyPreparedRecords(LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
                                   library::WriteTransaction& transaction,
                                   ImportReport& report) const;
@@ -808,7 +807,27 @@ namespace ao::rt
       return std::unexpected{preparedResult.error()};
     }
 
-    return operation.applyOffline(*preparedResult);
+    auto writableResult = library::WritableMusicLibrary::acquire(_implPtr->ml);
+
+    if (!writableResult)
+    {
+      return std::unexpected{writableResult.error()};
+    }
+
+    auto transaction = writableResult->writeTransaction();
+    auto reportResult = operation.apply(*preparedResult, transaction);
+
+    if (!reportResult)
+    {
+      return reportResult;
+    }
+
+    if (auto commitResult = transaction.commit(); !commitResult)
+    {
+      return std::unexpected{commitResult.error()};
+    }
+
+    return reportResult;
   }
 
   Result<ImportReport> LibraryYamlImporter::previewImportFromYamlOffline(std::filesystem::path const& path,
@@ -822,7 +841,15 @@ namespace ao::rt
       return std::unexpected{preparedResult.error()};
     }
 
-    return operation.previewOffline(*preparedResult);
+    auto writableResult = library::WritableMusicLibrary::acquire(_implPtr->ml);
+
+    if (!writableResult)
+    {
+      return std::unexpected{writableResult.error()};
+    }
+
+    auto transaction = writableResult->writeTransaction();
+    return operation.preview(*preparedResult, transaction);
   }
 
   Result<LibraryYamlImportOperation::PreparedImport>
@@ -918,26 +945,21 @@ namespace ao::rt
   }
 
   Result<ImportReport> LibraryYamlImportOperation::apply(PreparedImport const& prepared,
-                                                         library::WriteTransaction& transaction,
-                                                         LibraryChangeSet& changeSet)
+                                                         library::WriteTransaction& transaction)
   {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Commit, &transaction, &changeSet);
+    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Commit, transaction);
+  }
+
+  LibraryChangeSet LibraryYamlImportOperation::buildChangeSet(PreparedImport const& prepared,
+                                                              library::WriteTransaction const& transaction) const
+  {
+    return _importer._implPtr->buildPreparedChangeSet(*prepared._implPtr, transaction);
   }
 
   Result<ImportReport> LibraryYamlImportOperation::preview(PreparedImport const& prepared,
                                                            library::WriteTransaction& transaction)
   {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Preview, &transaction);
-  }
-
-  Result<ImportReport> LibraryYamlImportOperation::applyOffline(PreparedImport const& prepared)
-  {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Commit);
-  }
-
-  Result<ImportReport> LibraryYamlImportOperation::previewOffline(PreparedImport const& prepared)
-  {
-    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Preview);
+    return _importer._implPtr->applyPreparedImport(*prepared._implPtr, ImportRunMode::Preview, transaction);
   }
 
   Result<> LibraryYamlImporter::Impl::applyPreparedRecords(
@@ -1048,26 +1070,9 @@ namespace ao::rt
   Result<ImportReport> LibraryYamlImporter::Impl::applyPreparedImport(
     LibraryYamlImportOperation::PreparedImport::Impl const& prepared,
     ImportRunMode runMode,
-    library::WriteTransaction* externalTransaction,
-    LibraryChangeSet* preparedChangeSet)
+    library::WriteTransaction& transaction) const
   {
     auto report = prepared.initialReport;
-    auto optOwnedTransaction = std::optional<library::WriteTransaction>{};
-
-    if (externalTransaction == nullptr)
-    {
-      auto writableResult = library::WritableMusicLibrary::acquire(ml);
-
-      if (!writableResult)
-      {
-        return std::unexpected{writableResult.error()};
-      }
-
-      optOwnedTransaction.emplace(writableResult->writeTransaction());
-      externalTransaction = &*optOwnedTransaction;
-    }
-
-    auto& transaction = *externalTransaction;
     auto applyResult = applyPreparedRecords(prepared, transaction, report);
 
     if (!applyResult)
@@ -1083,19 +1088,6 @@ namespace ao::rt
     if (auto identityResult = restoreLibraryIdentity(prepared.validated, prepared.mode, transaction); !identityResult)
     {
       return std::unexpected{identityResult.error()};
-    }
-
-    auto changeSet = buildPreparedChangeSet(prepared, transaction);
-
-    if (preparedChangeSet != nullptr)
-    {
-      *preparedChangeSet = std::move(changeSet);
-      return report;
-    }
-
-    if (auto result = transaction.commit(); !result)
-    {
-      return std::unexpected{result.error()};
     }
 
     return report;

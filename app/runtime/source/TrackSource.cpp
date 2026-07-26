@@ -5,6 +5,7 @@
 #include <ao/Exception.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
@@ -23,8 +24,7 @@ namespace ao::rt
 {
   TrackSource::~TrackSource() = default;
 
-  async::Subscription TrackSource::subscribe(
-    std::move_only_function<void(TrackSourceDeltaBatch const&) noexcept> handler)
+  async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDelta const&) noexcept> handler)
   {
     if (!handler)
     {
@@ -33,7 +33,7 @@ namespace ao::rt
 
     if (_state == TrackSourceState::Invalidated)
     {
-      handler(TrackSourceDeltaBatch{.deltas = {SourceInvalidated{}}});
+      handler(SourceInvalidated{});
       return {};
     }
 
@@ -49,7 +49,7 @@ namespace ao::rt
 
     _state = TrackSourceState::Invalidated;
     discardSnapshot();
-    _changedSignal.emit(TrackSourceDeltaBatch{.deltas = {SourceInvalidated{}}});
+    _changedSignal.emit(SourceInvalidated{});
     _changedSignal.disconnectAll();
   }
 
@@ -68,7 +68,7 @@ namespace ao::rt
       return;
     }
 
-    auto batch = TrackSourceDeltaBatch{};
+    auto script = delta::RegularTrackEditScript{};
     auto matchedIds = std::vector<TrackId>{};
 
     for (std::size_t index = 0; index < size(); ++index)
@@ -92,9 +92,9 @@ namespace ao::rt
 
       matchedIds.push_back(trackId);
 
-      if (!batch.deltas.empty())
+      if (!script.edits.empty())
       {
-        auto& range = std::get<SourceInsertRange>(batch.deltas.back());
+        auto& range = std::get<delta::InsertRange>(script.edits.back());
 
         if (range.start + range.trackIds.size() == index)
         {
@@ -103,12 +103,12 @@ namespace ao::rt
         }
       }
 
-      batch.deltas.push_back(SourceInsertRange{.start = index, .trackIds = {trackId}});
+      script.edits.emplace_back(delta::InsertRange{.start = index, .trackIds = {trackId}});
     }
 
     if (auto const currentSize = size(); !matchedIds.empty() && matchedIds.size() <= currentSize)
     {
-      std::ignore = publishDeltaBatch(std::move(batch), currentSize - matchedIds.size());
+      std::ignore = publishDelta(std::move(script), currentSize - matchedIds.size());
     }
   }
 
@@ -119,7 +119,7 @@ namespace ao::rt
       return;
     }
 
-    auto batch = TrackSourceDeltaBatch{};
+    auto script = delta::RegularTrackEditScript{};
     auto matchedIds = std::vector<TrackId>{};
 
     for (std::size_t index = 0; index < size(); ++index)
@@ -143,9 +143,9 @@ namespace ao::rt
 
       matchedIds.push_back(trackId);
 
-      if (!batch.deltas.empty())
+      if (!script.edits.empty())
       {
-        auto& range = std::get<SourceUpdateRange>(batch.deltas.back());
+        auto& range = std::get<delta::UpdateRange>(script.edits.back());
 
         if (range.start + range.trackIds.size() == index)
         {
@@ -154,55 +154,56 @@ namespace ao::rt
         }
       }
 
-      batch.deltas.push_back(SourceUpdateRange{.start = index, .trackIds = {trackId}});
+      script.edits.emplace_back(delta::UpdateRange{.start = index, .trackIds = {trackId}});
     }
 
     if (!matchedIds.empty())
     {
-      std::ignore = publishDeltaBatch(std::move(batch), size());
+      std::ignore = publishDelta(std::move(script), size());
     }
   }
 
   void TrackSource::notifyReset()
   {
-    std::ignore = publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, size());
+    std::ignore = publishDelta(SourceReset{}, size());
   }
 
   void TrackSource::notifyInserted(TrackId id, std::size_t index)
   {
     if (auto const currentSize = size(); currentSize != 0)
     {
-      std::ignore = publishDeltaBatch(
-        TrackSourceDeltaBatch{.deltas = {SourceInsertRange{.start = index, .trackIds = {id}}}}, currentSize - 1);
+      std::ignore =
+        publishDelta(delta::RegularTrackEditScript{.edits = {delta::InsertRange{.start = index, .trackIds = {id}}}},
+                     currentSize - 1);
     }
   }
 
   void TrackSource::notifyUpdated(TrackId id, std::size_t index)
   {
-    std::ignore =
-      publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceUpdateRange{.start = index, .trackIds = {id}}}}, size());
+    std::ignore = publishDelta(
+      delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = index, .trackIds = {id}}}}, size());
   }
 
   void TrackSource::notifyRemoved(TrackId id, std::size_t index)
   {
     if (auto const currentSize = size(); currentSize != std::numeric_limits<std::size_t>::max())
     {
-      std::ignore = publishDeltaBatch(
-        TrackSourceDeltaBatch{.deltas = {SourceRemoveRange{.start = index, .trackIds = {id}}}}, currentSize + 1);
+      std::ignore =
+        publishDelta(delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = index, .trackIds = {id}}}},
+                     currentSize + 1);
     }
   }
 
-  bool TrackSource::publishDeltaBatch(TrackSourceDeltaBatch batch, std::size_t const previousSize)
+  bool TrackSource::publishDelta(TrackSourceDelta message, std::size_t const previousSize)
   {
     if (_state == TrackSourceState::Invalidated)
     {
       return false;
     }
 
-    gsl_Assert(!batch.deltas.empty() && validateTrackSourceDeltaBatch(batch, previousSize) &&
-               !std::holds_alternative<SourceInvalidated>(batch.deltas.front()));
+    gsl_Assert(validateTrackSourceDelta(message, previousSize) && !std::holds_alternative<SourceInvalidated>(message));
 
-    _changedSignal.emit(batch);
+    _changedSignal.emit(message);
     return true;
   }
 } // namespace ao::rt

@@ -193,17 +193,6 @@ namespace ao::gtk::test
       CHECK_FALSE(preferences.presentationIdForList(secondListId).has_value());
     }
 
-    SECTION("the runtime rejects the apply")
-    {
-      // Keep the workspace focus unchanged while making its captured view
-      // unavailable, so the runtime Result failure branch is exercised.
-      REQUIRE(runtime.views().destroyView(firstViewId));
-      REQUIRE(runtime.workspace().snapshot().activeViewId == firstViewId);
-      drainGtkEvents();
-
-      CHECK_FALSE(runtime.views().findTrackListState(firstViewId).has_value());
-    }
-
     CHECK_FALSE(preferences.presentationIdForList(rt::kAllTracksListId).has_value());
 
     AppDialog* errorDialog = nullptr;

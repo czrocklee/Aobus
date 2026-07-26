@@ -173,7 +173,7 @@ There is no automatic migration, quarantine, or normalization policy.
 - [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) defines explicit YAML mapping and validation.
 - [`LayoutPreparation.h`](../../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) defines the limits and prepared proof type.
 - [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) defines authored metering and bounded template expansion.
-- [`GtkLayoutPresets.cpp`](../../../app/linux-gtk/layout/document/GtkLayoutPresets.cpp) and GTK layout YAML resources own built-in presets.
+- [`LayoutPresets.cpp`](../../../app/linux-gtk/layout/document/LayoutPresets.cpp) and GTK layout YAML resources own built-in presets.
 
 ## Test authority
 

@@ -5,9 +5,11 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
-#include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/LibraryImportPlan.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
 
@@ -18,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
+#include <string>
 #include <vector>
 
 namespace ao::library
@@ -32,7 +35,6 @@ namespace ao::async
 
 namespace ao::rt
 {
-  class LibraryChanges;
   class LibraryMutationService;
   enum class ExportMode : std::uint8_t;
 
@@ -67,11 +69,15 @@ namespace ao::rt
                                                             ScanFailureCallback failureCallback = {});
     async::Task<Result<AudioIdentityIndexResult>> backfillAudioIdentityAsync(
       std::stop_token stopToken = {},
-      AudioIdentityIndexer::ProgressCallback progressCallback = {},
-      AudioIdentityIndexer::ItemFailureCallback failureCallback = {});
+      AudioIdentityIndexProgressCallback progressCallback = {},
+      AudioIdentityIndexFailureCallback failureCallback = {});
     // Read-only interactive delivery: no maintenance admission or task-progress publication.
     async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceAsync(ResourceId resourceId,
                                                                                  std::stop_token stopToken = {});
+
+    async::Subscription onCompleted(std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const;
+    async::Subscription onProgress(
+      std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const;
 
     LibraryTaskService(LibraryTaskService const&) = delete;
     LibraryTaskService& operator=(LibraryTaskService const&) = delete;
@@ -81,7 +87,6 @@ namespace ao::rt
   private:
     LibraryTaskService(async::Runtime& asyncRuntime,
                        library::MusicLibrary& library,
-                       LibraryChanges& changes,
                        LibraryMutationService& mutationService);
 
     struct Impl;

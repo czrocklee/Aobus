@@ -75,7 +75,7 @@ namespace ao::gtk
     , _activityStatusViewModel{dependencies.notifications,
                                [this](uimodel::ActivityStatusViewState const&) { render(); },
                                uimodel::ActivityStatusViewModelOptions{
-                                 .libraryChanges = dependencies.libraryChanges,
+                                 .libraryTasks = dependencies.libraryTasks,
                                  .emitInitialState = false,
                                }}
   {

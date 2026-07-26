@@ -5,7 +5,7 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
@@ -230,8 +230,7 @@ namespace ao::uimodel
     return false;
   }
 
-  void ActivityStatusFeedProjection::handleLibraryTaskProgress(
-    rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
+  void ActivityStatusFeedProjection::handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event)
   {
     _taskActive = true;
     _optLibraryProgress =
@@ -247,7 +246,7 @@ namespace ao::uimodel
     };
   }
 
-  void ActivityStatusFeedProjection::handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
+  void ActivityStatusFeedProjection::handleLibraryTaskCompleted(rt::LibraryTaskCompleted const& event,
                                                                 rt::NotificationFeedState const& feed)
   {
     _taskActive = false;
@@ -256,8 +255,7 @@ namespace ao::uimodel
 
     projectPersistentCompact(feed);
 
-    if (_state.compact.kind == ActivityStatusKind::Idle &&
-        event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded)
+    if (_state.compact.kind == ActivityStatusKind::Idle && event.status == rt::LibraryTaskCompletionStatus::Succeeded)
     {
       projectCompletionCompact(event.affectedCount);
     }

@@ -16,7 +16,8 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -139,9 +140,9 @@ namespace ao::gtk::test
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
+    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
+    auto completedSub = fixture.runtime().library().taskService().onCompleted(
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
       {
         optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
@@ -154,7 +155,7 @@ namespace ao::gtk::test
                          { return optCompletedCount && !fixture.runtime().notifications().feed().entries.empty(); }));
 
     REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 0);
     auto const feed = fixture.runtime().notifications().feed();
@@ -174,15 +175,15 @@ namespace ao::gtk::test
     copyMetadataFixtureToLibrary(fixture);
 
     auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto progressEvents = std::vector<rt::LibraryChanges::LibraryTaskProgressUpdated>{};
-    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
+    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
+    auto progressEvents = std::vector<rt::LibraryTaskProgressUpdated>{};
+    auto completedSub = fixture.runtime().library().taskService().onCompleted(
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
       {
         optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
       });
-    auto progressSub = fixture.runtime().library().changes().onLibraryTaskProgress(
+    auto progressSub = fixture.runtime().library().taskService().onProgress(
       [&progressEvents](auto const& event) noexcept { progressEvents.push_back(event); });
 
     workflow.scan();
@@ -193,20 +194,20 @@ namespace ao::gtk::test
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
     REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
     CHECK(optCompletedCount == 1U);
     CHECK(mutationCallbackCount == 1);
     REQUIRE(progressEvents.size() == 4);
-    CHECK(progressEvents[0].kind == rt::LibraryChanges::LibraryTaskProgressKind::Scanning);
+    CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
-    CHECK(progressEvents[1].kind == rt::LibraryChanges::LibraryTaskProgressKind::Updating);
+    CHECK(progressEvents[1].kind == rt::LibraryTaskProgressKind::Updating);
     CHECK(progressEvents[1].subject == "song.flac");
     CHECK(progressEvents[1].fraction == 0.0);
-    CHECK(progressEvents[2].kind == rt::LibraryChanges::LibraryTaskProgressKind::Fingerprinting);
+    CHECK(progressEvents[2].kind == rt::LibraryTaskProgressKind::Fingerprinting);
     CHECK(progressEvents[2].subject == "song.flac");
     CHECK(progressEvents[2].fraction == 0.0);
-    CHECK(progressEvents[3].kind == rt::LibraryChanges::LibraryTaskProgressKind::Fingerprinting);
+    CHECK(progressEvents[3].kind == rt::LibraryTaskProgressKind::Fingerprinting);
     CHECK(progressEvents[3].subject == "song.flac");
     CHECK(progressEvents[3].fraction == 1.0);
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
@@ -225,11 +226,11 @@ namespace ao::gtk::test
       }));
 
     REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 1);
     REQUIRE(progressEvents.size() == 1);
-    CHECK(progressEvents[0].kind == rt::LibraryChanges::LibraryTaskProgressKind::Scanning);
+    CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
     CHECK(progressEvents[0].fraction == 0.0);
   }
@@ -273,9 +274,9 @@ namespace ao::gtk::test
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
+    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
+    auto completedSub = fixture.runtime().library().taskService().onCompleted(
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
       {
         optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
@@ -294,7 +295,7 @@ namespace ao::gtk::test
       }));
 
     REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
     CHECK(mutationCallbackCount == 2);
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
@@ -313,9 +314,9 @@ namespace ao::gtk::test
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
+    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
+    auto completedSub = fixture.runtime().library().taskService().onCompleted(
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
       {
         optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
@@ -333,7 +334,7 @@ namespace ao::gtk::test
       }));
 
     REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
     CHECK(mutationCallbackCount == 1);
   }
 

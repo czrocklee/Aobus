@@ -15,7 +15,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/property/TagEdit.h>
@@ -110,14 +110,6 @@ namespace ao::gtk::layout
           _notifications.post(
             rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
           _tagEditSessionPtr.reset();
-          return;
-        }
-
-        if (result->status == rt::TrackAuthoringStatus::Missing)
-        {
-          APP_LOG_ERROR("Tag edit failed: {}", result->notificationText);
-          _notifications.post(
-            rt::NotificationSeverity::Error, result->notificationText, rt::NotificationLifetime::history());
           return;
         }
 

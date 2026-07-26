@@ -29,7 +29,7 @@ namespace ao::tui::test
       rt::test::MusicLibraryFixture storage{};
       rt::test::QueuedExecutor executor{};
       async::Runtime runtime{executor, 1};
-      rt::LibraryChanges changes{};
+      rt::LibraryChanges changes{executor, 0};
       std::unique_ptr<rt::Library> libraryPtr;
 
       CoverArtLoaderFixture() = default;

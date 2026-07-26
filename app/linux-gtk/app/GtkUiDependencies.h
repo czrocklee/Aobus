@@ -36,9 +36,7 @@ namespace ao::uimodel
 namespace ao::gtk
 {
   /**
-   * Construction-scoped bundle of borrowed collaborators supplied by the GTK
-   * application layer. Consumers unpack the collaborators they retain; the
-   * bundle itself is not retained as subsystem wiring.
+   * Borrowed collaborators supplied by the GTK application layer.
    */
   struct GtkUiDependencies final
   {

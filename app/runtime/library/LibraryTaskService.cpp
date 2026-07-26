@@ -10,17 +10,21 @@
 #include <ao/async/Executor.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Signal.h>
+#include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryScan.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
@@ -87,8 +91,6 @@ namespace ao::rt
 
   namespace
   {
-    using LibraryTaskCompletionStatus = LibraryChanges::LibraryTaskCompletionStatus;
-    using LibraryTaskProgressKind = LibraryChanges::LibraryTaskProgressKind;
     using LibraryTaskProgressPublisher =
       std::move_only_function<void(LibraryTaskProgressKind kind, double fraction, std::string subject)>;
 
@@ -279,9 +281,8 @@ namespace ao::rt
       };
     }
 
-    AudioIdentityIndexer::ProgressCallback makeAudioIdentityProgressReporter(
-      LibraryTaskProgressPublisher publish,
-      AudioIdentityIndexer::ProgressCallback callback)
+    AudioIdentityIndexProgressCallback makeAudioIdentityProgressReporter(LibraryTaskProgressPublisher publish,
+                                                                         AudioIdentityIndexProgressCallback callback)
     {
       return [publish = std::move(publish),
               callback = std::move(callback)](AudioIdentityIndexProgress const& progress) mutable
@@ -299,8 +300,7 @@ namespace ao::rt
       };
     }
 
-    AudioIdentityIndexer::ItemFailureCallback makeAudioIdentityFailureReporter(
-      AudioIdentityIndexer::ItemFailureCallback callback)
+    AudioIdentityIndexFailureCallback makeAudioIdentityFailureReporter(AudioIdentityIndexFailureCallback callback)
     {
       return [callback = std::move(callback)](AudioIdentityIndexFailure const& failure) mutable
       {
@@ -331,46 +331,87 @@ namespace ao::rt
 
   struct LibraryTaskService::Impl final
   {
+    struct Signals final
+    {
+      async::Signal<LibraryTaskCompleted const&> completed;
+      async::Signal<LibraryTaskProgressUpdated const&> progress;
+    };
+
+    Impl(async::Runtime& runtimeRef, library::MusicLibrary& libraryRef, LibraryMutationService& mutationServiceRef)
+      : asyncRuntime{runtimeRef}, library{libraryRef}, mutationService{mutationServiceRef}
+    {
+    }
+
     LibraryTaskProgressPublisher makeProgressPublisher()
     {
-      return [this](LibraryTaskProgressKind kind, double fraction, std::string subject)
+      auto* const executorRaw = &asyncRuntime.callbackExecutor();
+      auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
+
+      return [executorRaw, weakSignalsPtr](LibraryTaskProgressKind kind, double fraction, std::string subject)
       {
-        auto* const changesRaw = &changes;
-        asyncRuntime.callbackExecutor().dispatch(
-          [changesRaw, kind, fraction, subject = std::move(subject)]
+        executorRaw->dispatch(
+          [weakSignalsPtr, kind, fraction, subject = std::move(subject)]
           {
-            changesRaw->notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
-              .kind = kind,
-              .fraction = fraction,
-              .subject = std::move(subject),
-            });
+            if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
+            {
+              auto const event = LibraryTaskProgressUpdated{
+                .kind = kind,
+                .fraction = fraction,
+                .subject = std::move(subject),
+              };
+              signalsPtr->progress.emit(event);
+            }
           });
       };
     }
 
     [[noreturn]] void dispatchFailureCompletionAndRethrow(std::exception_ptr const& exceptionPtr)
     {
-      auto* const changesRaw = &changes;
+      auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
       asyncRuntime.callbackExecutor().dispatch(
-        [changesRaw] { changesRaw->notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Failed); });
+        [weakSignalsPtr]
+        {
+          if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
+          {
+            auto const event = LibraryTaskCompleted{.status = LibraryTaskCompletionStatus::Failed};
+            signalsPtr->completed.emit(event);
+          }
+        });
       std::rethrow_exception(exceptionPtr);
+    }
+
+    void notifyCompleted(LibraryTaskCompletionStatus const status, std::size_t const affectedCount = 0)
+    {
+      auto const event = LibraryTaskCompleted{.status = status, .affectedCount = affectedCount};
+      signalsPtr->completed.emit(event);
     }
 
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
-    LibraryChanges& changes;
     LibraryMutationService& mutationService;
+    std::shared_ptr<Signals> signalsPtr = std::make_shared<Signals>();
   };
 
   LibraryTaskService::LibraryTaskService(async::Runtime& asyncRuntime,
                                          library::MusicLibrary& library,
-                                         LibraryChanges& changes,
                                          LibraryMutationService& mutationService)
-    : _implPtr{std::make_unique<Impl>(asyncRuntime, library, changes, mutationService)}
+    : _implPtr{std::make_unique<Impl>(asyncRuntime, library, mutationService)}
   {
   }
 
   LibraryTaskService::~LibraryTaskService() = default;
+
+  async::Subscription LibraryTaskService::onCompleted(
+    std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const
+  {
+    return _implPtr->signalsPtr->completed.connect(std::move(handler));
+  }
+
+  async::Subscription LibraryTaskService::onProgress(
+    std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const
+  {
+    return _implPtr->signalsPtr->progress.connect(std::move(handler));
+  }
 
   async::Task<Result<std::optional<std::vector<std::byte>>>> LibraryTaskService::loadResourceAsync(
     ResourceId const resourceId,
@@ -538,13 +579,14 @@ namespace ao::rt
       }
 
       auto mutation = std::move(*mutationResult);
-      auto changeSet = LibraryChangeSet{};
-      auto importResult = importOperation.apply(binding.prepared, mutation.transaction(), changeSet);
+      auto importResult = importOperation.apply(binding.prepared, mutation.transaction());
 
       if (!importResult)
       {
         return std::unexpected{importResult.error()};
       }
+
+      auto changeSet = importOperation.buildChangeSet(binding.prepared, mutation.transaction());
 
       if (auto commitResult = mutation.commit(std::move(changeSet)); !commitResult)
       {
@@ -589,15 +631,15 @@ namespace ao::rt
     // keep the plan fresh anyway (the lock is released before apply).
     auto scanService = LibraryScan{_implPtr->library};
     auto publishProgress = _implPtr->makeProgressPublisher();
-    auto planResult = scanService.buildPlan(
-      [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
-      { publishProgress(LibraryChanges::LibraryTaskProgressKind::Scanning, 0.0, path.filename().string()); });
+    auto planResult =
+      scanService.buildPlan([publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
+                            { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, path.filename().string()); });
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
     if (stopToken.stop_requested())
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Cancelled);
+      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Cancelled);
       async::throwOperationCancelled();
     }
 
@@ -605,16 +647,16 @@ namespace ao::rt
     {
       // A scan that could not even begin (missing root, failed walk) is fatal to
       // the whole task. Clear any in-flight progress and report it as a failure.
-      _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Failed);
+      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Failed);
       co_return std::unexpected{planResult.error()};
     }
 
     if (planResult->count(ScanClassification::New) == 0 && planResult->count(ScanClassification::Changed) == 0 &&
         planResult->count(ScanClassification::Moved) == 0 && planResult->count(ScanClassification::Missing) == 0)
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(planResult->count(ScanClassification::Error) == 0
-                                                     ? LibraryTaskCompletionStatus::Succeeded
-                                                     : LibraryTaskCompletionStatus::CompletedWithIssues);
+      _implPtr->notifyCompleted(planResult->count(ScanClassification::Error) == 0
+                                  ? LibraryTaskCompletionStatus::Succeeded
+                                  : LibraryTaskCompletionStatus::CompletedWithIssues);
     }
 
     co_return std::move(planResult);
@@ -672,7 +714,7 @@ namespace ao::rt
 
     if (!coordinatedScan)
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Failed);
+      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Failed);
       co_return std::unexpected{coordinatedScan.error()};
     }
 
@@ -681,22 +723,21 @@ namespace ao::rt
 
     if (coordinatedScan->cancelled)
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Cancelled);
+      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Cancelled);
       async::throwOperationCancelled();
     }
 
-    _implPtr->changes.notifyLibraryTaskCompleted(result.failureCount == 0
-                                                   ? LibraryTaskCompletionStatus::Succeeded
-                                                   : LibraryTaskCompletionStatus::CompletedWithIssues,
-                                                 processedCount);
+    _implPtr->notifyCompleted(result.failureCount == 0 ? LibraryTaskCompletionStatus::Succeeded
+                                                       : LibraryTaskCompletionStatus::CompletedWithIssues,
+                              processedCount);
 
     co_return Result<ScanApplyResult>{std::move(coordinatedScan->result)};
   }
 
   async::Task<Result<AudioIdentityIndexResult>> LibraryTaskService::backfillAudioIdentityAsync(
     std::stop_token const stopToken,
-    AudioIdentityIndexer::ProgressCallback progressCallback,
-    AudioIdentityIndexer::ItemFailureCallback failureCallback)
+    AudioIdentityIndexProgressCallback progressCallback,
+    AudioIdentityIndexFailureCallback failureCallback)
   {
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
     auto maintenanceResult = _implPtr->mutationService.beginMaintenance(LibraryMaintenanceKind::AudioIdentityBackfill);
@@ -743,11 +784,11 @@ namespace ao::rt
 
     if (!backfillResult)
     {
-      _implPtr->changes.notifyLibraryTaskCompleted(LibraryTaskCompletionStatus::Failed);
+      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Failed);
       co_return std::unexpected{backfillResult.error()};
     }
 
-    _implPtr->changes.notifyLibraryTaskCompleted(
+    _implPtr->notifyCompleted(
       completionStatus(*backfillResult), static_cast<std::size_t>(backfillResult->completedCount));
     co_return backfillResult;
   }

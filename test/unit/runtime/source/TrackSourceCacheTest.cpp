@@ -11,9 +11,9 @@
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/TrackSource.h>
@@ -36,12 +36,11 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
-
-    auto cache = TrackSourceCache{libraryFixture.library(), changes};
 
     SECTION("acquire resolves only the explicit All Tracks virtual id")
     {
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto const allTracksResult = cache.acquire(kAllTracksListId);
       REQUIRE(allTracksResult);
       auto const secondAllTracksResult = cache.acquire(kAllTracksListId);
@@ -67,6 +66,8 @@ namespace ao::rt::test
         REQUIRE(transaction.commit());
       }
 
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto firstLease = ao::test::requireValue(cache.acquire(listId));
       auto& source = firstLease.source();
       CHECK(source.state() == TrackSourceState::Live);
@@ -90,12 +91,16 @@ namespace ao::rt::test
         REQUIRE(transaction.commit());
       }
 
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto lease = ao::test::requireValue(cache.acquire(listId));
       CHECK(lease->state() == TrackSourceState::Live);
     }
 
     SECTION("acquire rejects a missing list without an All Tracks fallback")
     {
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto const result = cache.acquire(ListId{999});
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotFound);
@@ -103,10 +108,12 @@ namespace ao::rt::test
 
     SECTION("reloadAllTracks updates allTracks source")
     {
-      auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       libraryFixture.addTrack("Track 1");
       libraryFixture.addTrack("Track 2");
 
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
+      auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       cache.reloadAllTracks();
       CHECK(allTracks->size() == 2);
     }
@@ -114,6 +121,8 @@ namespace ao::rt::test
     SECTION("track delete notifications remove allTracks membership")
     {
       auto const trackId = libraryFixture.addTrack("Track 1");
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       cache.reloadAllTracks();
       REQUIRE(allTracks->size() == 1);
@@ -124,8 +133,8 @@ namespace ao::rt::test
       CHECK(writer.deleteTrack(trackId).has_value());
       CHECK(allTracks->size() == 0);
       REQUIRE(spy.batches.size() == 1);
-      REQUIRE(spy.batches.front().deltas.size() == 1);
-      auto const& removal = std::get<SourceRemoveRange>(spy.batches.front().deltas.front());
+      REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
+      auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
       CHECK(removal.start == 0);
       CHECK(removal.trackIds == std::vector{trackId});
     }
@@ -144,6 +153,8 @@ namespace ao::rt::test
         REQUIRE(transaction.commit());
       }
 
+      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto lease = ao::test::requireValue(cache.acquire(listId));
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
       auto& writer = writerFixture.writer();
@@ -176,7 +187,7 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
@@ -185,12 +196,12 @@ namespace ao::rt::test
     auto& smartSource = smartLease.source();
     REQUIRE(smartSource.size() == 0);
 
-    auto allTracksBatches = std::vector<TrackSourceDeltaBatch>{};
-    auto smartBatches = std::vector<TrackSourceDeltaBatch>{};
-    auto allTracksSubscription = allTracksLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept
-                                                           { allTracksBatches.push_back(batch); });
+    auto allTracksBatches = std::vector<TrackSourceDelta>{};
+    auto smartBatches = std::vector<TrackSourceDelta>{};
+    auto allTracksSubscription =
+      allTracksLease->subscribe([&](TrackSourceDelta const& batch) noexcept { allTracksBatches.push_back(batch); });
     auto smartSubscription =
-      smartSource.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { smartBatches.push_back(batch); });
+      smartSource.subscribe([&](TrackSourceDelta const& batch) noexcept { smartBatches.push_back(batch); });
 
     auto const result = writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"});
 
@@ -198,14 +209,14 @@ namespace ao::rt::test
     REQUIRE(smartSource.size() == 1);
     CHECK(smartSource.trackIdAt(0) == trackId);
     REQUIRE(allTracksBatches.size() == 1);
-    REQUIRE(allTracksBatches[0].deltas.size() == 1);
-    auto const& update = std::get<SourceUpdateRange>(allTracksBatches[0].deltas[0]);
+    REQUIRE(sourceEditScript(allTracksBatches[0]).edits.size() == 1);
+    auto const& update = std::get<delta::UpdateRange>(sourceEditScript(allTracksBatches[0]).edits[0]);
     CHECK(update.start == 0);
     CHECK(update.trackIds == std::vector{trackId});
 
     REQUIRE(smartBatches.size() == 1);
-    REQUIRE(smartBatches[0].deltas.size() == 1);
-    auto const& insert = std::get<SourceInsertRange>(smartBatches[0].deltas[0]);
+    REQUIRE(sourceEditScript(smartBatches[0]).edits.size() == 1);
+    auto const& insert = std::get<delta::InsertRange>(sourceEditScript(smartBatches[0]).edits[0]);
     CHECK(insert.start == 0);
     CHECK(insert.trackIds == std::vector{trackId});
   }
@@ -215,9 +226,9 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Pinned across cache shutdown");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto optLease = std::optional<TrackSourceLease>{};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = async::Subscription{};
 
     {
@@ -225,7 +236,7 @@ namespace ao::rt::test
       cache.reloadAllTracks();
       optLease.emplace(ao::test::requireValue(cache.acquire(kAllTracksListId)));
       subscription =
-        (*optLease)->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+        (*optLease)->subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
       REQUIRE((*optLease)->size() == 1);
       CHECK((*optLease)->trackIdAt(0) == trackId);
@@ -245,7 +256,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Inserted after acquisition");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -260,17 +271,16 @@ namespace ao::rt::test
     auto reacquired = ao::test::requireValue(cache.acquire(listId));
     CHECK(&reacquired.source() == identity);
 
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription =
-      lease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription = lease->subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     REQUIRE(writer.insertManualListTracks(listId, 0, std::array{trackId}));
 
     REQUIRE(lease->size() == 1);
     CHECK(lease->trackIdAt(0) == trackId);
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 1);
-    auto const& insert = std::get<SourceInsertRange>(batches[0].deltas[0]);
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
+    auto const& insert = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits[0]);
     CHECK(insert.start == 0);
     CHECK(insert.trackIds == std::vector{trackId});
     batches.clear();
@@ -279,7 +289,7 @@ namespace ao::rt::test
 
     CHECK(lease->state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(batches[0]));
     auto const missingResult = cache.acquire(listId);
     REQUIRE_FALSE(missingResult);
     CHECK(missingResult.error().code == Error::Code::NotFound);
@@ -289,7 +299,7 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -299,14 +309,14 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto oldLease = ao::test::requireValue(cache.acquire(listId));
     auto* const oldIdentity = &oldLease.source();
-    auto oldBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto oldBatches = std::vector<TrackSourceDelta>{};
     auto oldSubscription =
-      oldLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { oldBatches.push_back(batch); });
+      oldLease->subscribe([&](TrackSourceDelta const& batch) noexcept { oldBatches.push_back(batch); });
 
     REQUIRE(writer.deleteList(listId));
     REQUIRE(oldLease->state() == TrackSourceState::Invalidated);
     REQUIRE(oldBatches.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(oldBatches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(oldBatches[0]));
 
     auto const recreatedId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
@@ -325,7 +335,7 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -343,12 +353,12 @@ namespace ao::rt::test
     auto parentAgain = ao::test::requireValue(cache.acquire(parentId));
     CHECK(&parentAgain.source() == &parentLease.source());
 
-    auto parentBatches = std::vector<TrackSourceDeltaBatch>{};
-    auto childBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto parentBatches = std::vector<TrackSourceDelta>{};
+    auto childBatches = std::vector<TrackSourceDelta>{};
     auto parentSubscription =
-      parentAgain->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { parentBatches.push_back(batch); });
+      parentAgain->subscribe([&](TrackSourceDelta const& batch) noexcept { parentBatches.push_back(batch); });
     auto childSubscription =
-      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { childBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDelta const& batch) noexcept { childBatches.push_back(batch); });
 
     REQUIRE(writer.deleteList(parentId));
 
@@ -356,15 +366,15 @@ namespace ao::rt::test
     CHECK(childLease->state() == TrackSourceState::Invalidated);
     REQUIRE(parentBatches.size() == 1);
     REQUIRE(childBatches.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(parentBatches[0].deltas[0]));
-    CHECK(std::holds_alternative<SourceInvalidated>(childBatches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(parentBatches[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(childBatches[0]));
   }
 
   TEST_CASE("TrackSourceCache - reparent rewires deletion propagation to the new parent",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -383,9 +393,9 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto* const childIdentity = &childLease.source();
-    auto childBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto childBatches = std::vector<TrackSourceDelta>{};
     auto childSubscription =
-      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { childBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDelta const& batch) noexcept { childBatches.push_back(batch); });
 
     REQUIRE(writer.updateList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
@@ -397,7 +407,7 @@ namespace ao::rt::test
     CHECK(&childLease.source() == childIdentity);
     CHECK(childLease->state() == TrackSourceState::Live);
     REQUIRE(childBatches.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(childBatches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceReset>(childBatches[0]));
 
     REQUIRE(writer.deleteList(oldParentId));
     CHECK(childLease->state() == TrackSourceState::Live);
@@ -406,14 +416,14 @@ namespace ao::rt::test
     REQUIRE(writer.deleteList(newParentId));
     CHECK(childLease->state() == TrackSourceState::Invalidated);
     REQUIRE(childBatches.size() == 2);
-    CHECK(std::holds_alternative<SourceInvalidated>(childBatches[1].deltas[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(childBatches[1]));
   }
 
   TEST_CASE("TrackSourceCache - definition rebind keeps identity and metadata-only updates emit nothing",
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto draft = LibraryWriter::ListDraft{
@@ -424,9 +434,8 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto* const identity = &lease.source();
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription =
-      lease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription = lease->subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     draft.listId = listId;
     draft.name = "Metadata only";
@@ -440,7 +449,7 @@ namespace ao::rt::test
     CHECK(&lease.source() == identity);
     CHECK(lease->state() == TrackSourceState::Live);
     REQUIRE(batches.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(batches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceReset>(batches[0]));
   }
 
   TEST_CASE("TrackSourceCache - detailed manual operations publish exact batches without reset fallback",
@@ -451,7 +460,7 @@ namespace ao::rt::test
     auto const second = libraryFixture.addTrack("Second");
     auto const third = libraryFixture.addTrack("Third");
     auto const inserted = libraryFixture.addTrack("Inserted");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -462,16 +471,16 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      lease->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      lease->subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     auto const moveResult = writer.moveManualListTracks(listId, std::array{second}, 0);
     REQUIRE(moveResult);
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 2);
-    auto const& moveRemoval = std::get<SourceRemoveRange>(batches[0].deltas[0]);
-    auto const& moveInsertion = std::get<SourceInsertRange>(batches[0].deltas[1]);
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 2);
+    auto const& moveRemoval = std::get<delta::RemoveRange>(sourceEditScript(batches[0]).edits[0]);
+    auto const& moveInsertion = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits[1]);
     CHECK(moveRemoval.start == 1);
     CHECK(moveRemoval.trackIds == std::vector{second});
     CHECK(moveInsertion.start == 0);
@@ -480,16 +489,16 @@ namespace ao::rt::test
     auto const insertResult = writer.insertManualListTracks(listId, 2, std::array{inserted});
     REQUIRE(insertResult);
     REQUIRE(batches.size() == 2);
-    REQUIRE(batches[1].deltas.size() == 1);
-    auto const& exactInsertion = std::get<SourceInsertRange>(batches[1].deltas[0]);
+    REQUIRE(sourceEditScript(batches[1]).edits.size() == 1);
+    auto const& exactInsertion = std::get<delta::InsertRange>(sourceEditScript(batches[1]).edits[0]);
     CHECK(exactInsertion.start == 2);
     CHECK(exactInsertion.trackIds == std::vector{inserted});
 
     auto const removeResult = writer.removeManualListTracks(listId, std::array{first});
     REQUIRE(removeResult);
     REQUIRE(batches.size() == 3);
-    REQUIRE(batches[2].deltas.size() == 1);
-    auto const& exactRemoval = std::get<SourceRemoveRange>(batches[2].deltas[0]);
+    REQUIRE(sourceEditScript(batches[2]).edits.size() == 1);
+    auto const& exactRemoval = std::get<delta::RemoveRange>(sourceEditScript(batches[2]).edits[0]);
     CHECK(exactRemoval.start == 1);
     CHECK(exactRemoval.trackIds == std::vector{first});
 
@@ -504,14 +513,13 @@ namespace ao::rt::test
     });
     REQUIRE(replacement);
     REQUIRE(batches.size() == 4);
-    REQUIRE(batches[3].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(batches[3].deltas.front()));
+    CHECK(std::holds_alternative<SourceReset>(batches[3]));
     auto const expectedAfterReset = std::vector{third, second, inserted};
     CHECK(sourceTrackIds(lease.source()) == expectedAfterReset);
 
     for (auto const& batch : batches | std::views::take(3))
     {
-      CHECK_FALSE(std::holds_alternative<SourceReset>(batch.deltas.front()));
+      CHECK_FALSE(std::holds_alternative<SourceReset>(batch));
     }
   }
 
@@ -521,7 +529,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const inserted = libraryFixture.addTrack("Inserted");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -533,11 +541,11 @@ namespace ao::rt::test
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto* const identity = &lease.source();
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     bool handledInsertion = false;
     auto nestedError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = lease->subscribe(
-      [&](TrackSourceDeltaBatch const& batch) noexcept
+      [&](TrackSourceDelta const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -568,8 +576,8 @@ namespace ao::rt::test
     CHECK(lease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(lease.source()) == std::vector{first, inserted});
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas.front());
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches.front()).edits.front());
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{inserted});
 
@@ -585,7 +593,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const inserted = libraryFixture.addTrack("Inserted");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -608,13 +616,13 @@ namespace ao::rt::test
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto* const identity = &childLease.source();
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto trailingBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto trailingBatches = std::vector<TrackSourceDelta>{};
     auto snapshotAfterNestedUpdate = std::vector<TrackId>{};
     bool handledInsertion = false;
     auto nestedError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = childLease->subscribe(
-      [&](TrackSourceDeltaBatch const& batch) noexcept
+      [&](TrackSourceDelta const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -640,7 +648,7 @@ namespace ao::rt::test
         snapshotAfterNestedUpdate = sourceTrackIds(childLease.source());
       });
     [[maybe_unused]] auto trailingSubscription =
-      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { trailingBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDelta const& batch) noexcept { trailingBatches.push_back(batch); });
 
     auto const result = writer.insertManualListTracks(childId, 1, std::array{inserted});
 
@@ -651,12 +659,12 @@ namespace ao::rt::test
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(childLease.source()) == std::vector{first, inserted});
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 1);
-    auto const& insertion = std::get<SourceInsertRange>(batches[0].deltas.front());
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits.front());
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{inserted});
     REQUIRE(trailingBatches.size() == 1);
-    CHECK(std::holds_alternative<SourceInsertRange>(trailingBatches[0].deltas.front()));
+    CHECK(std::holds_alternative<delta::InsertRange>(sourceEditScript(trailingBatches[0]).edits.front()));
 
     {
       auto const transaction = libraryFixture.library().readTransaction();
@@ -672,8 +680,7 @@ namespace ao::rt::test
     REQUIRE(writer.deleteList(oldParentId));
     CHECK(childLease->state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 2);
-    REQUIRE(batches[1].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches[1].deltas.front()));
+    CHECK(std::holds_alternative<SourceInvalidated>(batches[1]));
   }
 
   TEST_CASE("TrackSourceCache - mutations reentered from a delta observer are rejected",
@@ -683,7 +690,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack("First");
     auto const second = libraryFixture.addTrack("Second");
     auto const third = libraryFixture.addTrack("Third");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -711,13 +718,13 @@ namespace ao::rt::test
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto* const identity = &childLease.source();
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     bool callbackInvoked = false;
     auto nestedInsertError = Error::Code::Generic;
     auto intermediateReparentError = Error::Code::Generic;
     auto finalReparentError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = childLease->subscribe(
-      [&](TrackSourceDeltaBatch const& batch) noexcept
+      [&](TrackSourceDelta const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -770,8 +777,8 @@ namespace ao::rt::test
     CHECK(childLease->state() == TrackSourceState::Live);
     CHECK(sourceTrackIds(childLease.source()) == std::vector{first, second});
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 1);
-    auto const& outerInsertion = std::get<SourceInsertRange>(batches[0].deltas.front());
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
+    auto const& outerInsertion = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits.front());
     CHECK(outerInsertion.start == 1);
     CHECK(outerInsertion.trackIds == std::vector{second});
 
@@ -792,7 +799,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const visible = libraryFixture.addTrack("Visible");
     auto const hidden = libraryFixture.addTrack("Parent hidden");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -809,9 +816,9 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto childLease = ao::test::requireValue(cache.acquire(childId));
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      childLease->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      childLease->subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     auto const hiddenInsert = writer.insertManualListTracks(childId, 1, std::array{hidden});
     REQUIRE(hiddenInsert);
@@ -823,8 +830,8 @@ namespace ao::rt::test
 
     auto const expected = std::vector{visible, hidden};
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas.front());
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches.front()).edits.front());
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{hidden});
     CHECK(sourceTrackIds(childLease.source()) == expected);
@@ -837,7 +844,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack("First");
     auto const deleted = libraryFixture.addTrack("Deleted");
     auto const third = libraryFixture.addTrack("Third");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -848,17 +855,17 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto lease = ao::test::requireValue(cache.acquire(listId));
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      lease->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      lease->subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     auto const result = writer.deleteTrack(deleted);
 
     REQUIRE(result);
     auto const expected = std::vector{first, third};
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    auto const& removal = std::get<SourceRemoveRange>(batches.front().deltas.front());
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(batches.front()).edits.front());
     CHECK(removal.start == 1);
     CHECK(removal.trackIds == std::vector{deleted});
     CHECK(sourceTrackIds(lease.source()) == expected);
@@ -868,7 +875,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     libraryFixture.addTrack("First");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto const spec = SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "true"};

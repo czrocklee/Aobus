@@ -72,9 +72,8 @@ A lease pins the source identity until the projection releases it, and the proje
 
 ## Implementation map
 
-- [`TrackListProjection.h`](../../../../app/include/ao/rt/projection/TrackListProjection.h) defines snapshots and public delta values.
-- [`LiveTrackListProjection.h`](../../../../app/include/ao/rt/projection/LiveTrackListProjection.h) defines the live implementation boundary.
-- [`LiveTrackListProjection.cpp`](../../../../app/runtime/projection/LiveTrackListProjection.cpp) owns incremental maintenance, grouping, and arena rebasing.
+- [`TrackListProjection.h`](../../../../app/include/ao/rt/projection/TrackListProjection.h) defines the concrete projection, snapshots, and public delta values.
+- [`TrackListProjection.cpp`](../../../../app/runtime/projection/TrackListProjection.cpp) owns incremental maintenance, grouping, and arena rebasing.
 - [`TrackProjectionEditScript.cpp`](../../../../app/runtime/projection/TrackProjectionEditScript.cpp) adapts the shared edit algebra.
 
 ## Test map

@@ -13,14 +13,12 @@
 
 #include <condition_variable>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <string_view>
-#include <vector>
 
 namespace ao::async
 {
@@ -96,7 +94,6 @@ namespace ao::rt
     {
       TrackAuthoringStatus status = TrackAuthoringStatus::Unavailable;
       std::optional<Mutation> optMutation{};
-      std::vector<TrackId> missingTargetIds{};
     };
 
     LibraryMutationService(async::Executor& callbackExecutor,
@@ -127,7 +124,7 @@ namespace ao::rt
     Result<std::unique_lock<std::mutex>> acquireWriter(LibraryAuthoringState requiredState, std::string_view operation);
     Result<CommitInfo> commit(Mutation& mutation, LibraryChangeSet changeSet);
     void finishMaintenance(std::uint64_t generation) noexcept;
-    void handlePublication(std::uint64_t revision, std::exception_ptr failure);
+    void finishPublication(std::uint64_t revision, bool failed) noexcept;
     void dispatchAvailability(LibraryAuthoringAvailability expected);
     void emitAvailability(LibraryAuthoringAvailability const& expected) noexcept;
     LibraryAuthoringAvailability availabilityLocked() const noexcept;

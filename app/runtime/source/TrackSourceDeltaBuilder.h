@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/CoreIds.h>
-#include <ao/rt/source/TrackSourceDelta.h>
+#include <ao/rt/TrackEditScript.h>
 
 #include <cstddef>
 #include <optional>
@@ -32,7 +32,7 @@ namespace ao::rt
     void remove(std::size_t originalIndex, TrackId trackId);
     void insert(std::size_t postRemovalIndex, TrackId trackId);
 
-    std::optional<TrackSourceDeltaBatch> build() const;
+    std::optional<delta::RegularTrackEditScript> build() const;
 
   private:
     struct IndexedTrack final

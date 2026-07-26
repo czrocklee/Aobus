@@ -6,7 +6,7 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -268,35 +268,31 @@ namespace ao::uimodel
     return "Notification";
   }
 
-  std::string PresentationTextCatalog::libraryTaskProgressDetail(rt::LibraryChanges::LibraryTaskProgressKind const kind,
+  std::string PresentationTextCatalog::libraryTaskProgressDetail(rt::LibraryTaskProgressKind const kind,
                                                                  std::string_view const subject) const
   {
     auto prefix = std::string_view{};
 
     switch (kind)
     {
-      case rt::LibraryChanges::LibraryTaskProgressKind::Scanning: prefix = "Scanning"; break;
-      case rt::LibraryChanges::LibraryTaskProgressKind::Updating: prefix = "Updating"; break;
-      case rt::LibraryChanges::LibraryTaskProgressKind::Fingerprinting: prefix = "Fingerprinting"; break;
-      case rt::LibraryChanges::LibraryTaskProgressKind::IndexingAudioIdentity:
-        prefix = "Indexing audio identity";
-        break;
+      case rt::LibraryTaskProgressKind::Scanning: prefix = "Scanning"; break;
+      case rt::LibraryTaskProgressKind::Updating: prefix = "Updating"; break;
+      case rt::LibraryTaskProgressKind::Fingerprinting: prefix = "Fingerprinting"; break;
+      case rt::LibraryTaskProgressKind::IndexingAudioIdentity: prefix = "Indexing audio identity"; break;
     }
 
     return subject.empty() ? std::string{prefix} : std::string{prefix} + ": " + std::string{subject};
   }
 
-  std::string PresentationTextCatalog::libraryTaskProgressCompact(
-    rt::LibraryChanges::LibraryTaskProgressKind const kind,
-    std::string_view const subject) const
+  std::string PresentationTextCatalog::libraryTaskProgressCompact(rt::LibraryTaskProgressKind const kind,
+                                                                  std::string_view const subject) const
   {
     switch (kind)
     {
-      case rt::LibraryChanges::LibraryTaskProgressKind::Scanning: return "Scanning library";
-      case rt::LibraryChanges::LibraryTaskProgressKind::Updating: return "Updating library";
-      case rt::LibraryChanges::LibraryTaskProgressKind::Fingerprinting:
-      case rt::LibraryChanges::LibraryTaskProgressKind::IndexingAudioIdentity:
-        return libraryTaskProgressDetail(kind, subject);
+      case rt::LibraryTaskProgressKind::Scanning: return "Scanning library";
+      case rt::LibraryTaskProgressKind::Updating: return "Updating library";
+      case rt::LibraryTaskProgressKind::Fingerprinting:
+      case rt::LibraryTaskProgressKind::IndexingAudioIdentity: return libraryTaskProgressDetail(kind, subject);
     }
 
     return {};

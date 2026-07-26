@@ -26,14 +26,9 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack(library::test::TrackSpec{.title = "Test Track", .uri = "test.flac"});
 
-    auto changes = LibraryChanges{};
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
     auto deletedTracks = std::vector<TrackId>{};
-    auto collectionSub =
-      changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deletedTracks = ev.tracksDeleted; });
     auto upsertedLists = std::vector<ListId>{};
-    auto listSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upsertedLists = ev.listsUpserted; });
 
     auto listIds = std::vector<ListId>{};
     {
@@ -55,6 +50,11 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
+    auto collectionSub =
+      changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deletedTracks = ev.tracksDeleted; });
+    auto listSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upsertedLists = ev.listsUpserted; });
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const deleted = writer.deleteTrack(trackId);
@@ -87,7 +87,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 

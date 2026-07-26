@@ -101,7 +101,7 @@ add_library(aobus-gtk-lib STATIC
     portal/ImportExportCoordinator.cpp
     portal/LibraryImportExportWorkflow.cpp
 
-    layout/document/GtkLayoutPresets.cpp
+    layout/document/LayoutPresets.cpp
     layout/runtime/LayoutRuntime.cpp
     layout/runtime/ComponentRegistry.cpp
     layout/runtime/ComponentInteractionController.cpp

@@ -15,7 +15,6 @@
 #include <barrier>
 #include <cstddef>
 #include <exception>
-#include <mutex>
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
@@ -148,16 +147,12 @@ namespace ao::rt::test
     auto scope = LifetimeScope{};
     auto exceptionRecorder = AsyncExceptionRecorder{};
     auto bookkeepingRetired = AsyncTestState<bool>::create(false);
-    auto scopeStatePtr = scope.state();
     auto recorderHandler = exceptionRecorder.handler();
     auto runtime = Runtime{executor,
-                           [scopeStatePtr, bookkeepingRetired, recorderHandler = std::move(recorderHandler)](
+                           [&scope, bookkeepingRetired, recorderHandler = std::move(recorderHandler)](
                              std::exception_ptr exceptionPtr, std::string_view const context)
                            {
-                             {
-                               auto const lock = std::scoped_lock{scopeStatePtr->mutex};
-                               bookkeepingRetired.set(scopeStatePtr->tasks.empty());
-                             }
+                             bookkeepingRetired.set(scope.empty());
                              recorderHandler(std::move(exceptionPtr), context);
                            }};
 

@@ -19,6 +19,7 @@
 #include <ao/rt/WorkspaceSessionState.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <algorithm>
 #include <array>
@@ -95,13 +96,14 @@ namespace ao::rt
 
     async::Executor& executor;
     ViewService& views;
+    LibraryChanges const& changes;
     WorkspaceSnapshot currentSnapshot;
     NavigationHistory navigationHistory;
     async::Signal<WorkspaceChanged const&> changedSignal;
     async::Subscription listsMutatedSub;
 
     Impl(async::Executor& callbackExecutor, ViewService& viewService, LibraryChanges const& changes)
-      : executor{callbackExecutor}, views{viewService}
+      : executor{callbackExecutor}, views{viewService}, changes{changes}
     {
       listsMutatedSub =
         changes.onChanged([this](LibraryChangeSet const& changeSet) noexcept { handleLibraryChange(changeSet); });
@@ -324,7 +326,7 @@ namespace ao::rt
       }
       catch (...)
       {
-        std::ignore = views.destroyView(viewId);
+        views.destroyView(viewId);
         throw;
       }
 
@@ -374,10 +376,7 @@ namespace ao::rt
 
       for (auto const viewId : viewIds)
       {
-        if (auto result = views.destroyView(viewId); !result)
-        {
-          APP_LOG_ERROR("Failed to destroy view {} after workspace close: {}", viewId.raw(), result.error().message);
-        }
+        views.destroyView(viewId);
       }
 
       return {};
@@ -505,7 +504,7 @@ namespace ao::rt
       {
         if (createdView)
         {
-          std::ignore = views.destroyView(matchingViewId);
+          views.destroyView(matchingViewId);
         }
 
         throw;
@@ -674,6 +673,12 @@ namespace ao::rt
     return _implPtr->goForward();
   }
 
+  std::unique_ptr<TrackDetailProjection> WorkspaceService::detailProjection(DetailTarget const& target)
+  {
+    _implPtr->ensureOnExecutor();
+    return _implPtr->views.detailProjection(target, *this, _implPtr->changes);
+  }
+
   async::Subscription WorkspaceService::onChanged(
     std::move_only_function<void(WorkspaceChanged const&) noexcept> handler)
   {
@@ -765,7 +770,7 @@ namespace ao::rt
       {
         for (auto const viewId : createdViewIds)
         {
-          std::ignore = _implPtr->views.destroyView(viewId);
+          _implPtr->views.destroyView(viewId);
         }
 
         return std::unexpected{result.error()};
@@ -816,7 +821,7 @@ namespace ao::rt
     {
       for (auto const viewId : createdViewIds)
       {
-        std::ignore = _implPtr->views.destroyView(viewId);
+        _implPtr->views.destroyView(viewId);
       }
 
       throw;

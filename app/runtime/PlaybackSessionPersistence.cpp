@@ -94,7 +94,10 @@ namespace ao::rt
   {
   }
 
-  PlaybackSessionPersistence::~PlaybackSessionPersistence() = default;
+  PlaybackSessionPersistence::~PlaybackSessionPersistence()
+  {
+    cancelScheduledSave();
+  }
 
   void PlaybackSessionPersistence::ensureStarted()
   {
@@ -215,23 +218,18 @@ namespace ao::rt
   {
     cancelScheduledSave();
     _scheduledTask = _asyncRuntime.spawnCancellable(
-      [asyncRuntime = &_asyncRuntime, weakSelfPtr = weak_from_this(), delay](std::stop_token const stopToken)
-      { return waitForScheduledSave(asyncRuntime, weakSelfPtr, delay, stopToken); });
+      [asyncRuntime = &_asyncRuntime, owner = this, delay](std::stop_token const stopToken)
+      { return waitForScheduledSave(asyncRuntime, owner, delay, stopToken); });
   }
 
-  async::Task<void> PlaybackSessionPersistence::waitForScheduledSave(
-    async::Runtime* asyncRuntime,
-    std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
-    Delay const delay,
-    std::stop_token const stopToken)
+  async::Task<void> PlaybackSessionPersistence::waitForScheduledSave(async::Runtime* asyncRuntime,
+                                                                     PlaybackSessionPersistence* owner,
+                                                                     Delay const delay,
+                                                                     std::stop_token const stopToken)
   {
     co_await asyncRuntime->sleepFor(delay, stopToken);
     co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
-
-    if (auto const selfPtr = weakSelfPtr.lock(); selfPtr)
-    {
-      selfPtr->handleScheduledSave();
-    }
+    owner->handleScheduledSave();
   }
 
   void PlaybackSessionPersistence::handleScheduledSave()

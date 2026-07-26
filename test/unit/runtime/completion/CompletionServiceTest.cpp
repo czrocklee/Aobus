@@ -44,15 +44,6 @@ namespace ao::rt::test
       std::ranges::sort(result);
       return result;
     }
-
-    void publishCommittedChange(library::MusicLibrary& library, LibraryChanges& changes, LibraryChangeSet changeSet)
-    {
-      auto executor = InlineExecutor{};
-      auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(library), changes};
-      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-      auto const commitResult = mutation.commit(std::move(changeSet));
-      REQUIRE(commitResult);
-    }
   } // namespace
 
   TEST_CASE("CompletionService - builds tag and custom-key vocabularies", "[runtime][unit][completion][vocabulary]")
@@ -66,7 +57,7 @@ namespace ao::rt::test
       libraryFixture.library(),
       library::test::TrackSpec{.title = "Two", .tags = {"Rock", "Live"}, .customMetadata = {{"Mood", "Dark"}}});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -121,7 +112,7 @@ namespace ao::rt::test
                                                      .movement = "Opening",
                                                      .soloist = "Philip Glass"});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -187,7 +178,7 @@ namespace ao::rt::test
                                                      .work = "Selected Work",
                                                      .tags = {"Tag Only"}});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kFields = std::to_array({TrackField::Work, TrackField::Artist, TrackField::Title});
 
@@ -217,21 +208,35 @@ namespace ao::rt::test
                                                      .work = "First Work",
                                                      .tags = {"First Tag"},
                                                      .customMetadata = {{"First Key", "Value"}}});
-    auto changes = LibraryChanges{};
+    auto const baselineRevision = [&]
+    {
+      auto const transaction = libraryFixture.library().readTransaction();
+      return libraryFixture.library().libraryRevision(transaction);
+    }();
+    auto changesExecutor = ManualExecutor{};
+    auto changes = LibraryChanges{changesExecutor, baselineRevision};
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kAggregateFields = std::to_array({TrackField::Title, TrackField::Artist, TrackField::Work});
 
     REQUIRE(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"First Tag", 1}});
 
-    // The fixture write intentionally bypasses LibraryChanges. Every other vocabulary must keep
-    // using the already-built snapshot until the committed change is published below.
-    auto const secondId =
-      library::test::addTrack(libraryFixture.library(),
-                              library::test::TrackSpec{.title = "Second Title",
-                                                       .artist = "Second Artist",
-                                                       .work = "Second Work",
-                                                       .tags = {"Second Tag"},
-                                                       .customMetadata = {{"Second Key", "Value"}}});
+    auto mutationExecutor = InlineExecutor{};
+    auto mutationService = LibraryMutationService{
+      mutationExecutor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
+    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    auto const secondId = library::test::addTrack(libraryFixture.library(),
+                                                  mutation.transaction(),
+                                                  library::test::TrackSpec{
+                                                    .title = "Second Title",
+                                                    .artist = "Second Artist",
+                                                    .work = "Second Work",
+                                                    .tags = {"Second Tag"},
+                                                    .customMetadata = {{"Second Key", "Value"}},
+                                                  });
+    REQUIRE(mutation.commit(LibraryChangeSet{.tracksInserted = {secondId}}));
+
+    // Storage is committed, but publication is still queued. Every vocabulary
+    // must keep using the same already-built snapshot until phase two arrives.
 
     CHECK(pairs(service.customKeys()) == std::vector<std::pair<std::string, std::uint32_t>>{{"First Key", 1}});
     CHECK(pairs(service.valuesFor(TrackField::Artist)) ==
@@ -246,7 +251,7 @@ namespace ao::rt::test
             {"First Work", 1},
           });
 
-    publishCommittedChange(libraryFixture.library(), changes, LibraryChangeSet{.tracksInserted = {secondId}});
+    changesExecutor.runUntilIdle();
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"First Tag", 1},
@@ -283,7 +288,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const originalId = library::test::addTrack(
       libraryFixture.library(), library::test::TrackSpec{.title = "Original", .artist = "Original Artist"});
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kFields = std::to_array({TrackField::Title, TrackField::Artist});
     auto vocabulary = [&] { return sortedPairs(service.aggregateValues({.fields = kFields})); };
@@ -295,9 +300,8 @@ namespace ao::rt::test
 
     SECTION("Insertion")
     {
-      auto const insertedId = library::test::addTrack(
-        libraryFixture.library(), library::test::TrackSpec{.title = "Inserted", .artist = "Inserted Artist"});
-      publishCommittedChange(libraryFixture.library(), changes, LibraryChangeSet{.tracksInserted = {insertedId}});
+      addTrackAndPublish(
+        libraryFixture.library(), changes, library::test::TrackSpec{.title = "Inserted", .artist = "Inserted Artist"});
 
       CHECK(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
                               {"Inserted", 1},
@@ -327,10 +331,8 @@ namespace ao::rt::test
 
     SECTION("Library reset")
     {
-      auto const insertedId = library::test::addTrack(
-        libraryFixture.library(), library::test::TrackSpec{.title = "Reset", .artist = "Reset Artist"});
-      publishCommittedChange(
-        libraryFixture.library(), changes, LibraryChangeSet{.libraryReset = true, .tracksInserted = {insertedId}});
+      addTrackAndPublish(
+        libraryFixture.library(), changes, library::test::TrackSpec{.title = "Reset", .artist = "Reset Artist"}, true);
 
       CHECK(vocabulary() == std::vector<std::pair<std::string, std::uint32_t>>{
                               {"Original", 1},
@@ -345,22 +347,19 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
+    auto const trackId =
+      library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Rock", 1}});
 
-    auto const trackId =
-      library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "Two", .tags = {"Jazz"}});
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    // addTrack writes directly; drive a writer mutation so the change
-    // notification fires and invalidates the completion cache.
-    auto const updateResult =
-      writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
-    REQUIRE(updateResult);
-    CHECK_FALSE(updateResult->changes.empty());
+    auto const tagsToAdd = std::array{std::string{"Jazz"}};
+    auto const editResult = writerFixture.editTags(std::array{trackId}, tagsToAdd, {});
+    REQUIRE(editResult);
+    CHECK_FALSE(editResult->changes.empty());
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
                                      {"Jazz", 1},
@@ -372,12 +371,12 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(
+    auto const trackId = library::test::addTrack(
       libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .conductor = "Carlos Kleiber", .work = "Variations"});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -393,32 +392,27 @@ namespace ao::rt::test
                                                                {"Carlos Kleiber", 1},
                                                              });
 
-    auto const trackId = library::test::addTrack(
-      libraryFixture.library(),
-      library::test::TrackSpec{
-        .title = "Two", .artist = "Glass", .album = "Glassworks", .conductor = "Michael Riesman", .work = "Etudes"});
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    // addTrack writes directly; drive a writer mutation so the change
-    // notification fires and invalidates the completion cache.
-    auto const updateResult =
-      writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
+    auto const updateResult = writerFixture.updateMetadata(std::array{trackId},
+                                                           MetadataPatch{
+                                                             .optArtist = "Glass",
+                                                             .optAlbum = "Glassworks",
+                                                             .optConductor = "Michael Riesman",
+                                                             .optWork = "Etudes",
+                                                           });
     REQUIRE(updateResult);
     CHECK_FALSE(updateResult->changes.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
-                                                            {"Bach", 1},
                                                             {"Glass", 1},
                                                           });
     CHECK(pairs(service.valuesFor(TrackField::Album)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                            {"Glassworks", 1},
-                                                           {"Goldberg", 1},
                                                          });
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},
-                                                          {"Variations", 1},
                                                         });
     CHECK(pairs(service.valuesFor(TrackField::Conductor)) == std::vector<std::pair<std::string, std::uint32_t>>{
-                                                               {"Carlos Kleiber", 1},
                                                                {"Michael Riesman", 1},
                                                              });
   }
@@ -442,7 +436,7 @@ namespace ao::rt::test
                                                                           .tags = {"Only Tag"},
                                                                           .customMetadata = {{"Only Key", "Value"}}});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kValueFields = std::to_array({TrackField::Artist,
@@ -479,7 +473,7 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     REQUIRE(service.tags().empty());
@@ -487,22 +481,26 @@ namespace ao::rt::test
     REQUIRE(service.valuesFor(TrackField::Artist).empty());
     REQUIRE(service.valuesFor(TrackField::Work).empty());
 
-    auto const trackId = library::test::addTrack(libraryFixture.library(),
-                                                 library::test::TrackSpec{.title = "Added",
-                                                                          .artist = "Added Artist",
-                                                                          .work = "Added Work",
-                                                                          .tags = {"Added Tag"},
-                                                                          .customMetadata = {{"Added Key", "Value"}}});
+    bool libraryReset = false;
 
     SECTION("Track insertion")
     {
-      publishCommittedChange(libraryFixture.library(), changes, LibraryChangeSet{.tracksInserted = {trackId}});
+      libraryReset = false;
     }
 
     SECTION("Library reset")
     {
-      publishCommittedChange(libraryFixture.library(), changes, LibraryChangeSet{.libraryReset = true});
+      libraryReset = true;
     }
+
+    addTrackAndPublish(libraryFixture.library(),
+                       changes,
+                       library::test::TrackSpec{.title = "Added",
+                                                .artist = "Added Artist",
+                                                .work = "Added Work",
+                                                .tags = {"Added Tag"},
+                                                .customMetadata = {{"Added Key", "Value"}}},
+                       libraryReset);
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Added Tag", 1}});
     CHECK(pairs(service.customKeys()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Added Key", 1}});
@@ -516,12 +514,12 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    library::test::addTrack(
+    auto const trackId = library::test::addTrack(
       libraryFixture.library(),
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"});
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -537,20 +535,18 @@ namespace ao::rt::test
                                                           {"Variations", 1},
                                                         });
 
-    auto const trackId = library::test::addTrack(
-      libraryFixture.library(),
-      library::test::TrackSpec{.title = "Two", .artist = "Glass", .album = "Glassworks", .work = "Etudes"});
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
-    // addTrack writes directly; drive a writer mutation so the change
-    // notification fires and invalidates the completion cache.
-    auto const updateResult =
-      writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "Two Updated"});
+    auto const updateResult = writerFixture.updateMetadata(std::array{trackId},
+                                                           MetadataPatch{
+                                                             .optArtist = "Glass",
+                                                             .optAlbum = "Glassworks",
+                                                             .optWork = "Etudes",
+                                                           });
     REQUIRE(updateResult);
     CHECK_FALSE(updateResult->changes.empty());
 
     CHECK(pairs(service.valuesFor(TrackField::Work)) == std::vector<std::pair<std::string, std::uint32_t>>{
                                                           {"Etudes", 1},
-                                                          {"Variations", 1},
                                                         });
 
     CHECK(pairs(service.valuesFor(TrackField::Composer)).empty());

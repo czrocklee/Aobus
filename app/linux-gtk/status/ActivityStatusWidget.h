@@ -22,7 +22,7 @@
 
 namespace ao::rt
 {
-  class LibraryChanges;
+  class LibraryTaskService;
   class NotificationService;
 }
 
@@ -52,7 +52,7 @@ namespace ao::gtk
   struct ActivityStatusWidgetDependencies final
   {
     rt::NotificationService& notifications;
-    rt::LibraryChanges const* libraryChanges = nullptr;
+    rt::LibraryTaskService const* libraryTasks = nullptr;
     ActivityStatusWidgetOptions options{};
   };
 

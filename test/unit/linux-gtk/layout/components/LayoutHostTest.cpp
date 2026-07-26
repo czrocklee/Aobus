@@ -10,7 +10,7 @@
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
-#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutPresets.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/layout/components/ContainerTestHelpers.h"

@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/async/Task.h>
 #include <ao/library/AudioIdentity.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -28,36 +29,6 @@ namespace ao::library
 
 namespace ao::rt
 {
-  struct AudioIdentityIndexProgress final
-  {
-    /// File currently being fingerprinted.
-    std::filesystem::path path{};
-    /// Rows finished so far (completed, skipped, or failed). With concurrent
-    /// fingerprinting this is the only monotonic notion of progress; there is
-    /// no stable per-item ordering.
-    std::int32_t processedCount = 0;
-    /// Pending rows counted when indexing started. Best-effort snapshot: rows
-    /// added while indexing runs are not included.
-    std::int32_t totalCount = 0;
-    /// Hash progress within `path`, in [0.0, 1.0].
-    double itemFraction = 0.0;
-  };
-
-  struct AudioIdentityIndexResult final
-  {
-    std::int32_t completedCount = 0;
-    std::int32_t skippedCount = 0;
-    std::int32_t failureCount = 0;
-    bool cancelled = false;
-  };
-
-  struct AudioIdentityIndexFailure final
-  {
-    std::string uri{};
-    std::string stage{};
-    std::string message{};
-  };
-
   struct AudioIdentityWriteCandidate final
   {
     std::string uri{};
@@ -97,8 +68,6 @@ namespace ao::rt
   public:
     /// Progress and failure callbacks are serialized by the indexer but may be
     /// invoked from any worker-pool thread, never concurrently.
-    using ProgressCallback = std::move_only_function<void(AudioIdentityIndexProgress const& progress)>;
-    using ItemFailureCallback = std::move_only_function<void(AudioIdentityIndexFailure const& failure)>;
     using CommitBatchCallback = std::move_only_function<Result<AudioIdentityBatchCommitResult>(
       std::span<AudioIdentityWriteCandidate const> candidates)>;
     using FingerprintFunction = AudioIdentityFingerprintFunction;
@@ -115,8 +84,8 @@ namespace ao::rt
     /// batch and returns a cancelled result.
     async::Task<Result<AudioIdentityIndexResult>> indexPending(CommitBatchCallback commitBatchCallback,
                                                                Options options = {},
-                                                               ProgressCallback progressCallback = {},
-                                                               ItemFailureCallback failureCallback = {},
+                                                               AudioIdentityIndexProgressCallback progressCallback = {},
+                                                               AudioIdentityIndexFailureCallback failureCallback = {},
                                                                std::stop_token stopToken = {});
 
     AudioIdentityIndexer(AudioIdentityIndexer const&) = delete;

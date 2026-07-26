@@ -20,7 +20,7 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const reply = ao::test::requireValue(runtime.views().createView({.listId = rt::kAllTracksListId}));
+    auto const reply = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     auto label = SelectionInfoLabel{runtime.views()};
     auto const& text = dynamic_cast<Gtk::Label const&>(label.widget());
 

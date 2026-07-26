@@ -69,10 +69,10 @@ Its immutable snapshot is the authority for any history eviction caused by that 
 ## Bounds and rejection
 
 Each report key, plain message, and structured report subject/detail must fit `maxTextBytes`.
-The complete feed must fit `maxEntries`, `maxHistoryEntries`, and `maxTotalTextBytes`.
+The complete feed must fit `maxEntries`.
 A report key must be non-empty and a transient duration must be positive.
 
-Before commit, the service removes oldest `History` entries other than the command target until the candidate fits.
+Before commit, the service removes oldest `History` entries other than the command target until the candidate fits the entry-count bound.
 If only transient, pinned, or protected entries remain, the candidate is rejected without partial mutation.
 Structured playback reports remain structured; their subject and detail count toward the same text bounds.
 
@@ -82,6 +82,8 @@ Candidate state, update storage, expiry scheduling, and the next-id watermark ar
 After commit, observer delivery is synchronous and has no recoverable failure channel.
 Contract-fulfilling `noexcept` observers complete normally; an escaping exception terminates immediately.
 A mutation requested by an observer appends a later immutable update to the publication queue and is drained only after the current emission returns.
+Validation and capacity rejection occur before commit and preserve the previous feed.
+Allocation failure is an exceptional process-resource failure; the service does not attempt allocator rollback or promise continued usability afterward.
 
 Expiry waits are cancellable tasks, but cancellation is only an optimization.
 The id-registration identity check is the correctness guard when a timer callback was already queued.

@@ -23,7 +23,6 @@
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PreparedPlayback.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -306,11 +305,13 @@ namespace ao::rt::test
     auto const nextTrackId = fixture.libraryFixture.addTrack({.title = "Next", .uri = fixtureUri});
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrackId, kSourceListId));
-    auto const tokenResult = fixture.playbackTransport.prepareNext(nextTrackId, kSourceListId);
+    auto const nextRequest = playbackRequestForTrack(fixture.libraryFixture.library(), nextTrackId);
+    REQUIRE(nextRequest);
+    auto const tokenResult = fixture.playbackTransport.prepareNext(*nextRequest, kSourceListId);
     REQUIRE(tokenResult);
     auto const token = *tokenResult;
 
-    auto const missingResult = fixture.playbackTransport.prepareNext(TrackId{99999}, kSourceListId);
+    auto const missingResult = playbackRequestForTrack(fixture.libraryFixture.library(), TrackId{99999});
     REQUIRE_FALSE(missingResult);
     CHECK(missingResult.error().code == Error::Code::NotFound);
     // The rejected missing-track replacement preserves the active token identity.
@@ -384,13 +385,10 @@ namespace ao::rt::test
 
     std::size_t startedCount = 0;
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
-    auto failures = std::vector<PlaybackFailure>{};
     std::size_t notificationCount = 0;
     auto startedSub = transportPtr->onStarted([&] noexcept { ++startedCount; });
     auto nowPlayingSub = transportPtr->onNowPlayingChanged(
       [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { nowPlaying.push_back(event); });
-    auto failureSub =
-      transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) noexcept { failures.push_back(failure); });
     auto notificationSub = notifications.onFeedUpdated(
       [&](NotificationFeedUpdate const& update) noexcept
       {
@@ -414,7 +412,6 @@ namespace ao::rt::test
     CHECK(transportPtr->clearPreparedNext() == *preparedNext);
     CHECK(startedCount == 0);
     CHECK(nowPlaying.empty());
-    CHECK(failures.empty());
     CHECK(notificationCount == 1);
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);
@@ -490,7 +487,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
   }
 
-  TEST_CASE("PlaybackTransport token - prepared decode failure reports the exact same-track token",
+  TEST_CASE("PlaybackTransport token - prepared decode failure clears the active same-track commitment",
             "[runtime][unit][playback][token]")
   {
     auto failureRelease = std::binary_semaphore{0};
@@ -521,24 +518,18 @@ namespace ao::rt::test
     auto const firstToken = *firstTokenResult;
     REQUIRE(transportPtr->clearPreparedNext() == firstToken);
 
-    auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) noexcept { failures.push_back(failure); });
     auto const failingTokenResult = transportPtr->prepareNext(failingCommitment, kSourceListId);
     REQUIRE(failingTokenResult);
     auto const failingToken = *failingTokenResult;
     REQUIRE(failingToken != firstToken);
 
     releaseGuard.release();
-    REQUIRE(executor.drainUntil([&] { return !failures.empty(); }, std::chrono::seconds{5}));
+    REQUIRE(executor.drainUntil([&] { return !notifications.feed().entries.empty(); }, std::chrono::seconds{5}));
 
-    REQUIRE(failures.size() == 1);
-    CHECK(failures.front().kind == PlaybackFailureKind::Decode);
-    CHECK(failures.front().trackId == sharedTrackId);
-    CHECK(failures.front().sourceListId == kSourceListId);
-    CHECK(failures.front().optPreparedNextToken == failingToken);
-    CHECK(failures.front().error.message == "gated prepared decode failure");
-    CHECK(failures.front().recoverable);
+    auto const feed = notifications.feed();
+    REQUIRE(feed.entries.size() == 1);
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).detail == "gated prepared decode failure");
     CHECK(transportPtr->state().nowPlaying.trackId == current.item.trackId);
     CHECK_FALSE(transportPtr->clearPreparedNext());
   }

@@ -20,7 +20,8 @@ CLI flags and output rendering belong to the [CLI command reference](../../../re
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
 `LibraryYamlExporter`, `LibraryYamlImporter`, and `LibraryTaskService` translate between a portable document and `ao::library::MusicLibrary`; YAML is not a physical storage format.
-Interactive and CLI callers use `LibraryTaskService` so a commit consumes preview evidence rather than accepting a bare path.
+Interactive and CLI callers use `LibraryTaskService` so a live-runtime commit consumes preview evidence rather than accepting a bare path.
+The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated writable-library lease and transaction; they do not enter runtime maintenance or publish through `LibraryChanges` and must not mutate a library attached to a live runtime.
 
 ## Terminology
 
@@ -72,8 +73,9 @@ explicit authorization
 Rejecting or dropping a plan performs no persistent mutation.
 A plan has no time-based expiry; its source and target bindings make stale plans unusable.
 
-The synchronous offline importer remains a lower-level composition and test surface.
-It provides preview and atomic import behavior but is not the frontend authorization boundary.
+The synchronous offline importer is a separate lower-level capability and test surface.
+It performs preparation, acquires its own writable-library lease, previews or commits one transaction, and returns the report directly.
+It does not reuse a nullable branch inside the live operation and is not the frontend authorization boundary.
 
 ## Commands and transitions
 
@@ -167,7 +169,7 @@ Preview and commit produce the same report when source bytes and target binding 
 
 ### Change publication
 
-A committed application import publishes one `LibraryChangeSet` carrying the transaction revision.
+A committed live-runtime import publishes one `LibraryChangeSet` carrying the transaction revision.
 Preview publishes nothing.
 
 Restore publishes `libraryReset: true` and no incremental ID lists.
@@ -183,7 +185,8 @@ Every apply attempt consumes the plan, including an attempt that returns a pre-c
 Any failure before commit leaves target content, metadata identity, and revision unchanged and publishes no content change.
 Commit failure likewise publishes no change set.
 
-After durable commit, revision-admission or publication-enqueue failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and the live runtime enters terminal `Faulted`.
+After a durable live-runtime commit, revision-admission or publication-enqueue failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and the live runtime enters terminal `Faulted`.
+Offline import has no runtime publication phase; its transaction commit result is its terminal outcome.
 
 `LibraryTaskService` honors cancellation on executor transitions.
 Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.

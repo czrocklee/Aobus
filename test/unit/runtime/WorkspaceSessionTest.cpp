@@ -98,7 +98,7 @@ namespace ao::rt::test
 
     REQUIRE(runtime.workspace().restoreSession(store));
     CHECK(runtime.workspace().snapshot() == before);
-    CHECK(runtime.views().listViews().size() == 1);
+    CHECK(runtime.workspace().snapshot().openViews.size() == 1);
   }
 
   TEST_CASE("WorkspaceService - session restore recreates the initial navigation point",
@@ -306,7 +306,6 @@ namespace ao::rt::test
     REQUIRE(runtime.workspace().addCustomPreset(
       CustomTrackPresentationPreset{.label = "Keep", .basePresetId = "songs", .spec = customSpec}));
     auto const beforeSnapshot = runtime.workspace().snapshot();
-    auto const beforeViews = runtime.views().listViews();
     auto const configPath = tempDir.path() / "config.yaml";
     writeWorkspaceConfig(configPath, {storedListId.raw()}, 1);
     std::int32_t changeCount = 0;
@@ -318,7 +317,7 @@ namespace ao::rt::test
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::FormatRejected);
     CHECK(runtime.workspace().snapshot() == beforeSnapshot);
-    CHECK(runtime.views().listViews() == beforeViews);
+    CHECK(runtime.workspace().snapshot().openViews == beforeSnapshot.openViews);
     CHECK(runtime.workspace().customPresets().size() == 1);
     CHECK(changeCount == 0);
 
@@ -353,11 +352,11 @@ namespace ao::rt::test
         LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second existing"}));
       auto const firstViewId = ao::test::requireValue(runtime.workspace().navigate({.target = firstListId}));
       REQUIRE(runtime.workspace().navigate({.target = secondListId}));
-      auto const beforeViews = runtime.views().listViews();
+      auto const beforeViews = runtime.workspace().snapshot().openViews;
 
       REQUIRE(runtime.workspace().restoreSession(store));
       CHECK(runtime.workspace().snapshot().activeViewId == firstViewId);
-      CHECK(runtime.views().listViews() == beforeViews);
+      CHECK(runtime.workspace().snapshot().openViews == beforeViews);
     }
   }
 
@@ -381,7 +380,7 @@ namespace ao::rt::test
     CHECK(layout.openViews.empty());
     CHECK(layout.activeViewId == kInvalidViewId);
     CHECK(layout.revision == 0);
-    CHECK(runtime.views().listViews().empty());
+    CHECK(runtime.workspace().snapshot().openViews.empty());
   }
 
   TEST_CASE("WorkspaceService - restore rejects unsupported or unknown presentation vocabulary",
@@ -417,7 +416,7 @@ namespace ao::rt::test
     REQUIRE_FALSE(result);
     CHECK(result.error().code == expectedCode);
     CHECK(runtime.workspace().snapshot().openViews.empty());
-    CHECK(runtime.views().listViews().empty());
+    CHECK(runtime.workspace().snapshot().openViews.empty());
   }
 
   TEST_CASE("WorkspaceService - restore rejects the unversioned numeric presentation format",

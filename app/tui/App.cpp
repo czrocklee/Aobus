@@ -627,7 +627,7 @@ namespace ao::tui
         activityAutoDismissActive.store(view.compact.optAutoDismissTimeout.has_value());
         requestRefresh();
       },
-      uimodel::ActivityStatusViewModelOptions{.libraryChanges = &runtime.library().changes()}};
+      uimodel::ActivityStatusViewModelOptions{.libraryTasks = &runtime.library().taskService()}};
     runtime.notifications().post(rt::NotificationSeverity::Info, "Ready", rt::NotificationLifetime::transient());
 
     auto playbackSub =

@@ -13,7 +13,7 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
@@ -87,7 +87,7 @@ namespace ao::gtk::test
       auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
       sourcePtr->addInitial(trackId);
       auto projectionPtr =
-        std::make_shared<rt::LiveTrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
+        std::make_shared<rt::TrackListProjection>(rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, library);
       auto modelPtr = TrackListModel::create(cache);
       modelPtr->bindProjection(projectionPtr);
 

@@ -642,7 +642,6 @@ namespace ao::gtk::layout
           case rt::TrackAuthoringStatus::Applied: editor.setText(newText); return true;
           case rt::TrackAuthoringStatus::NoOp: editor.setText(oldText); return true;
           case rt::TrackAuthoringStatus::Stale:
-          case rt::TrackAuthoringStatus::Missing:
           case rt::TrackAuthoringStatus::Unavailable: return false;
         }
 
@@ -945,7 +944,6 @@ namespace ao::gtk::layout
             case rt::TrackAuthoringStatus::Stale:
               message = "Library changed while this edit was open. Reload the value and try again.";
               break;
-            case rt::TrackAuthoringStatus::Missing: message = "One or more selected tracks no longer exist."; break;
             case rt::TrackAuthoringStatus::Unavailable: message = "Library editing is currently unavailable."; break;
           }
         }

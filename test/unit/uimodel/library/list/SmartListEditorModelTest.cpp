@@ -39,33 +39,24 @@ namespace ao::uimodel::test
 
   TEST_CASE("SmartListEditorModel - formats status text", "[uimodel][unit][list]")
   {
-    auto const small = formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 3, true, false);
-    auto const large = formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 14, true, false);
+    auto const small = formatSmartListPreviewStatusText(true, 3, true, false);
+    auto const large = formatSmartListPreviewStatusText(true, 14, true, false);
 
-    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 0, true, false) == "No matches");
+    CHECK(formatSmartListPreviewStatusText(true, 0, true, false) == "No matches");
     CHECK(small == "Showing all 3 matches");
     CHECK(large == "Showing 10 of 14 matches");
   }
 
   TEST_CASE("SmartListEditorModel - formats an unfiltered source with track-count grammar", "[uimodel][unit][list]")
   {
-    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 1, true, true) == "Showing all 1 track");
-    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 1, false, true) ==
-          "Showing all 1 track from source");
-    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::Valid, 4, false, true) ==
-          "Showing all 4 tracks from source");
+    CHECK(formatSmartListPreviewStatusText(true, 1, true, true) == "Showing all 1 track");
+    CHECK(formatSmartListPreviewStatusText(true, 1, false, true) == "Showing all 1 track from source");
+    CHECK(formatSmartListPreviewStatusText(true, 4, false, true) == "Showing all 4 tracks from source");
   }
 
-  TEST_CASE("SmartListEditorModel - formats unavailable source status text", "[uimodel][unit][list]")
+  TEST_CASE("SmartListEditorModel - formats an invalid expression", "[uimodel][unit][list]")
   {
-    CHECK(deriveSmartListPreviewStatus(true, false) == SmartListPreviewStatus::PreviewSourceUnavailable);
-    CHECK(formatSmartListPreviewStatusText(SmartListPreviewStatus::PreviewSourceUnavailable, 0, false, false) ==
-          "No tracks in source");
-  }
-
-  TEST_CASE("SmartListEditorModel - falls back for unknown status", "[uimodel][unit][list]")
-  {
-    CHECK(formatSmartListPreviewStatusText(static_cast<SmartListPreviewStatus>(250), 2, true, false).empty());
+    CHECK(formatSmartListPreviewStatusText(false, 0, false, false) == "Invalid filter");
   }
 
   TEST_CASE("SmartListEditorModel - formats track labels", "[uimodel][unit][list]")
@@ -77,38 +68,6 @@ namespace ao::uimodel::test
     CHECK(formatSmartListPreviewTrackLabel("", "Miles Davis", "") == "Miles Davis");
     CHECK(formatSmartListPreviewTrackLabel("", "", "Kind of Blue") == "(untitled)");
     CHECK(formatSmartListPreviewTrackLabel("", "", "") == "(untitled)");
-  }
-
-  TEST_CASE("SmartListPreviewStatus - keeps stable enum values", "[uimodel][regression][list]")
-  {
-    CHECK(static_cast<int>(SmartListPreviewStatus::PreviewSourceUnavailable) == 0);
-    CHECK(static_cast<int>(SmartListPreviewStatus::Valid) == 1);
-    CHECK(static_cast<int>(SmartListPreviewStatus::InvalidExpression) == 2);
-  }
-
-  TEST_CASE("SmartListEditorModel - accepts named valid draft", "[uimodel][unit][list]")
-  {
-    CHECK(canSubmitSmartListDraft("My Smart List", SmartListPreviewStatus::Valid) == true);
-  }
-
-  TEST_CASE("SmartListEditorModel - rejects empty name", "[uimodel][unit][list]")
-  {
-    CHECK(canSubmitSmartListDraft("", SmartListPreviewStatus::Valid) == false);
-  }
-
-  TEST_CASE("SmartListEditorModel - rejects invalid expression", "[uimodel][unit][list]")
-  {
-    CHECK(canSubmitSmartListDraft("My List", SmartListPreviewStatus::InvalidExpression) == false);
-  }
-
-  TEST_CASE("SmartListEditorModel - rejects empty invalid draft", "[uimodel][unit][list]")
-  {
-    CHECK(canSubmitSmartListDraft("", SmartListPreviewStatus::InvalidExpression) == false);
-  }
-
-  TEST_CASE("SmartListEditorModel - accepts named draft with unavailable preview source", "[uimodel][unit][list]")
-  {
-    CHECK(canSubmitSmartListDraft("My List", SmartListPreviewStatus::PreviewSourceUnavailable) == true);
   }
 
   TEST_CASE("SmartListEditorModel - preserves parent edit id and filter fields", "[uimodel][unit][list]")
@@ -170,7 +129,6 @@ namespace ao::uimodel::test
       .isAllTracks = false,
     });
 
-    CHECK(state.status == SmartListPreviewStatus::PreviewSourceUnavailable);
     CHECK(state.name == "Library Picks");
     CHECK(state.localExpression == "$artist = 'Queen'");
     CHECK(state.matchCount == 0);
@@ -179,9 +137,9 @@ namespace ao::uimodel::test
     CHECK(state.errorText.empty());
     CHECK(state.expressionValid == false);
     CHECK(state.queryInvalid == false);
+    CHECK(state.canSubmit == false);
     CHECK(state.previewVisible == false);
     CHECK(state.errorVisible == false);
-    CHECK(state.canSubmit == false);
   }
 
   TEST_CASE("SmartListEditorModel - shows full source for empty local expression", "[uimodel][unit][list]")
@@ -196,10 +154,10 @@ namespace ao::uimodel::test
       .isAllTracks = false,
     });
 
-    CHECK(state.status == SmartListPreviewStatus::Valid);
     CHECK(state.name == "Source Tracks");
     CHECK(state.localExpression.empty());
     CHECK(state.matchCount == 4);
+    CHECK(state.canSubmit);
     CHECK(state.isAllTracks == false);
     CHECK(state.previewStatusText == "Showing all 4 tracks from source");
     CHECK(state.expressionValid == true);
@@ -207,7 +165,17 @@ namespace ao::uimodel::test
     CHECK(state.previewVisible == true);
     CHECK(state.errorVisible == false);
     CHECK(state.errorText.empty());
-    CHECK(state.canSubmit == true);
+
+    auto const unnamed = makeSmartListEditorViewState(SmartListPreviewState{
+      .name = "",
+      .localExpression = "",
+      .hasPreviewSource = true,
+      .hasError = false,
+      .errorMessage = "",
+      .matchCount = 4,
+      .isAllTracks = false,
+    });
+    CHECK_FALSE(unnamed.canSubmit);
   }
 
   TEST_CASE("SmartListEditorModel - uses library wording for empty all-track source", "[uimodel][unit][list]")
@@ -237,7 +205,6 @@ namespace ao::uimodel::test
       .isAllTracks = true,
     });
 
-    CHECK(state.status == SmartListPreviewStatus::InvalidExpression);
     CHECK(state.name == "Broken Filter");
     CHECK(state.localExpression == "$artist =");
     CHECK(state.matchCount == 0);
@@ -247,8 +214,8 @@ namespace ao::uimodel::test
     CHECK(state.errorVisible == true);
     CHECK(state.previewVisible == false);
     CHECK(state.expressionValid == false);
+    CHECK_FALSE(state.canSubmit);
     CHECK(state.errorText == "Filter error: expected value");
-    CHECK(state.canSubmit == false);
   }
 
   TEST_CASE("SmartListEditorModel - keeps empty invalid filter preview visible", "[uimodel][unit][list]")
@@ -269,6 +236,5 @@ namespace ao::uimodel::test
     CHECK(state.expressionValid == true);
     CHECK(state.errorText.empty());
     CHECK(state.previewStatusText == "Showing all 5 tracks");
-    CHECK(state.canSubmit == true);
   }
 } // namespace ao::uimodel::test

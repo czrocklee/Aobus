@@ -15,6 +15,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -148,8 +149,8 @@ namespace ao::rt::test
     // future blocks the test thread, never a pool thread.
     Result<AudioIdentityIndexResult> runIndexPending(library::MusicLibrary& ml,
                                                      AudioIdentityIndexer::Options options = {},
-                                                     AudioIdentityIndexer::ProgressCallback progressCallback = {},
-                                                     AudioIdentityIndexer::ItemFailureCallback failureCallback = {},
+                                                     AudioIdentityIndexProgressCallback progressCallback = {},
+                                                     AudioIdentityIndexFailureCallback failureCallback = {},
                                                      std::stop_token stopToken = {},
                                                      std::mutex* optCommitMutex = nullptr)
     {

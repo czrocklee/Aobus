@@ -52,7 +52,7 @@ namespace ao::rt
       , changeBus{changes}
       , mutationService{asyncRuntime.callbackExecutor(), acquireWritableLibrary(libraryStorage), changes}
       , writer{libraryStorage, mutationService}
-      , taskService{asyncRuntime, libraryStorage, changes, mutationService}
+      , taskService{asyncRuntime, libraryStorage, mutationService}
     {
     }
   };

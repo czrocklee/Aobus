@@ -4,7 +4,7 @@
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -28,7 +28,7 @@ namespace ao::uimodel::test
     SECTION("library progress owns the compact readout")
     {
       feedProjection.handleLibraryTaskProgress(
-        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "long-file-name.flac", 0.625));
+        libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "long-file-name.flac", 0.625));
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Processing);
@@ -40,7 +40,7 @@ namespace ao::uimodel::test
     SECTION("library completion is a transient success")
     {
       feedProjection.handleLibraryTaskProgress(
-        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Updating, "track.flac", 0.8));
+        libraryTaskProgress(rt::LibraryTaskProgressKind::Updating, "track.flac", 0.8));
       feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(17), feed({}));
 
       auto const& compact = feedProjection.viewState().compact;
@@ -60,7 +60,7 @@ namespace ao::uimodel::test
     SECTION("notification during task is deferred and errors beat completion")
     {
       feedProjection.handleLibraryTaskProgress(
-        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
+        libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
       auto const error = entry(
         rt::NotificationId{4}, rt::NotificationSeverity::Error, "Import failed", rt::NotificationLifetime::pinned());
@@ -79,7 +79,7 @@ namespace ao::uimodel::test
     SECTION("deferred persistent notification is ignored when removed before task completion")
     {
       feedProjection.handleLibraryTaskProgress(
-        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
+        libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
 
       auto const error = entry(
         rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", rt::NotificationLifetime::pinned());
@@ -94,12 +94,12 @@ namespace ao::uimodel::test
 
     SECTION("cancelled and failed tasks clear progress without projecting success")
     {
-      for (auto const status : {rt::LibraryChanges::LibraryTaskCompletionStatus::CompletedWithIssues,
-                                rt::LibraryChanges::LibraryTaskCompletionStatus::Cancelled,
-                                rt::LibraryChanges::LibraryTaskCompletionStatus::Failed})
+      for (auto const status : {rt::LibraryTaskCompletionStatus::CompletedWithIssues,
+                                rt::LibraryTaskCompletionStatus::Cancelled,
+                                rt::LibraryTaskCompletionStatus::Failed})
       {
         feedProjection.handleLibraryTaskProgress(
-          libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
+          libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
         feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(0, status), feed({}));
 
         CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);

@@ -37,8 +37,6 @@ namespace ao::rt
     SmartListSource(TrackSourceLease sourceLease, SmartListEvaluator& evaluator);
     ~SmartListSource() override;
 
-    using TrackSource::notifyUpdated;
-
     SmartListSource(SmartListSource const&) = delete;
     SmartListSource& operator=(SmartListSource const&) = delete;
     SmartListSource(SmartListSource&&) = delete;
@@ -51,8 +49,6 @@ namespace ao::rt
     std::size_t size() const override { return _members.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _members.at(index); }
     std::optional<std::size_t> indexOf(TrackId id) const override;
-
-    void notifyUpdated(TrackId id) override;
 
     bool hasError() const { return _current.optError.has_value(); }
     std::optional<Error> const& error() const { return _current.optError; }

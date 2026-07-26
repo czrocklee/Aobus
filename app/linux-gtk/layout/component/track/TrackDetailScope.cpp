@@ -11,7 +11,7 @@
 #include <ao/async/Subscription.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
-#include <ao/rt/library/Library.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -63,9 +63,7 @@ namespace ao::gtk::layout
       TrackDetailScopeComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _box{Gtk::Orientation::VERTICAL, 0}
         , _undoController{ctx.timeoutScheduler}
-        , _projectionPtr{ctx.runtime.views().detailProjection(rt::FocusedViewTarget{},
-                                                              ctx.runtime.workspace(),
-                                                              ctx.runtime.library().changes())}
+        , _projectionPtr{ctx.runtime.workspace().detailProjection(rt::FocusedViewTarget{})}
       {
         _currentSnap = _projectionPtr->snapshot();
 

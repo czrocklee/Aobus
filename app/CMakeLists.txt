@@ -48,12 +48,11 @@ add_library(ao_app_runtime STATIC
     runtime/TrackField.cpp
     runtime/TrackFieldReader.cpp
     runtime/TrackEditScript.cpp
-    runtime/projection/LiveTrackListProjection.cpp
+    runtime/projection/TrackListProjection.cpp
     runtime/projection/TrackProjectionEditScript.cpp
-    runtime/projection/LiveTrackDetailProjection.cpp
+    runtime/projection/TrackDetailProjection.cpp
     runtime/source/TrackSource.cpp
     runtime/source/TrackSourceDeltaBuilder.cpp
-    runtime/source/TrackSourceEditScript.cpp
     runtime/ViewService.cpp
     runtime/Log.cpp
 )

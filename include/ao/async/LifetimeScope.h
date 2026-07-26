@@ -4,20 +4,10 @@
 #pragma once
 
 #include <memory>
-#include <mutex>
-#include <vector>
 
 namespace ao::async
 {
   class Runtime;
-  struct LifetimeScopeTask;
-
-  struct LifetimeScopeState final
-  {
-    std::mutex mutex;
-    std::vector<std::shared_ptr<LifetimeScopeTask>> tasks;
-    bool isAlive{true};
-  };
 
   class [[nodiscard]] LifetimeScope final
   {
@@ -31,9 +21,13 @@ namespace ao::async
     LifetimeScope& operator=(LifetimeScope&&) = delete;
 
     void cancelAll();
-    std::shared_ptr<LifetimeScopeState> state() const noexcept;
+    bool empty() const;
 
   private:
-    std::shared_ptr<LifetimeScopeState> _statePtr;
+    struct State;
+
+    std::shared_ptr<State> _statePtr;
+
+    friend class Runtime;
   };
 } // namespace ao::async

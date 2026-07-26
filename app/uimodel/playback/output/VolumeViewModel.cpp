@@ -21,6 +21,11 @@ namespace ao::uimodel
     , _onRender{std::move(onRender)}
     , _lastVolume{playback.snapshot().transport.volume}
   {
+    if (!_onRender)
+    {
+      return;
+    }
+
     _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
                                                  { handleSnapshot(snapshot); });
     refresh();
@@ -85,6 +90,11 @@ namespace ao::uimodel
 
   void VolumeViewModel::render(rt::VolumeState const& volume)
   {
+    if (!_onRender)
+    {
+      return;
+    }
+
     auto view = VolumeViewState{
       .visible = volume.available,
       .volume = volume.level,
@@ -94,10 +104,7 @@ namespace ao::uimodel
       .tooltip = resolveTooltip(volume.level, volume.muted, volume.hardwareAssisted),
     };
 
-    if (_onRender)
-    {
-      _onRender(view);
-    }
+    _onRender(view);
   }
 
   float VolumeViewModel::resolveVolumeScroll(float currentVolume, double scrollDy)

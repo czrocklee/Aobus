@@ -4,6 +4,7 @@
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
@@ -20,37 +21,35 @@
 
 namespace ao::rt::test
 {
-  TEST_CASE("ViewService - listViews starts empty", "[runtime][unit][view][lifecycle]")
+  TEST_CASE("ViewService - workspace starts without live views", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
 
-    CHECK(service.listViews().empty());
+    CHECK(env.workspace.snapshot().openViews.empty());
   }
 
   TEST_CASE("ViewService - createView assigns ids and lists live views", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
 
     SECTION("creating a track list view returns ViewId")
     {
-      auto const result = env.requireView(service);
+      auto const result = env.requireView();
       CHECK(result != rt::kInvalidViewId);
     }
 
     SECTION("creating multiple views returns distinct ViewIds")
     {
-      auto const r1 = env.requireView(service);
-      auto const r2 = env.requireView(service);
+      auto const r1 = env.requireView();
+      auto const r2 = env.requireView();
 
       CHECK(r1 != r2);
     }
 
-    SECTION("created view appears in listViews")
+    SECTION("created view appears in the workspace snapshot")
     {
-      auto const result = env.requireView(service);
-      auto const views = service.listViews();
+      auto const result = env.requireView();
+      auto const views = env.workspace.snapshot().openViews;
       CHECK(views.size() == 1);
       CHECK(views[0] == result);
     }
@@ -60,43 +59,34 @@ namespace ao::rt::test
             "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
-
-    auto const failed = service.createView({.listId = kInvalidListId});
+    auto const failed = env.workspace.navigate({.target = ListId{kInvalidListId}});
 
     REQUIRE_FALSE(failed);
     CHECK(failed.error().code == Error::Code::InvalidInput);
-    CHECK(service.listViews().empty());
+    CHECK(env.workspace.snapshot().openViews.empty());
 
-    auto const created = env.requireView(service);
+    auto const created = env.requireView();
     CHECK(created == ViewId{1});
   }
 
-  TEST_CASE("ViewService - destroyView removes state and publishes destruction", "[runtime][unit][view][lifecycle]")
+  TEST_CASE("ViewService - workspace close removes owned view state", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
+    auto const result = env.requireView();
     auto const viewId = ViewId{result};
 
-    SECTION("destroying a view removes it from listViews")
+    SECTION("closing a view removes it from the workspace")
     {
-      REQUIRE(service.destroyView(viewId));
-      auto const views = service.listViews();
+      REQUIRE(env.workspace.closeView(viewId));
+      auto const views = env.workspace.snapshot().openViews;
       CHECK(views.empty());
     }
 
-    SECTION("destroying non-existent view reports not found")
+    SECTION("close removes state and repeated close is a no-op")
     {
-      auto const missing = service.destroyView(ViewId{99999});
-      REQUIRE_FALSE(missing);
-      CHECK(missing.error().code == Error::Code::NotFound);
-    }
-
-    SECTION("destroy removes state and repeated destroy reports not found")
-    {
-      REQUIRE(service.destroyView(viewId));
+      REQUIRE(env.workspace.closeView(viewId));
 
       CHECK_THROWS_AS(std::ignore = service.trackListState(viewId), std::out_of_range);
 
@@ -105,9 +95,8 @@ namespace ao::rt::test
       REQUIRE_FALSE(found);
       CHECK(found.error().code == Error::Code::NotFound);
 
-      auto const repeated = service.destroyView(viewId);
-      REQUIRE_FALSE(repeated);
-      CHECK(repeated.error().code == Error::Code::NotFound);
+      REQUIRE(env.workspace.closeView(viewId));
+      CHECK(env.workspace.snapshot().openViews.empty());
     }
 
     SECTION("the checked lookup returns the same state as the precondition form")
@@ -118,18 +107,16 @@ namespace ao::rt::test
       CHECK(found->listId == service.trackListState(viewId).listId);
     }
 
-    SECTION("the checked projection lookup mirrors the precondition form")
+    SECTION("the checked projection lookup returns the owned projection")
     {
       auto const found = service.findTrackListProjection(viewId);
       REQUIRE(found);
-      CHECK(*found == service.trackListProjection(viewId));
+      CHECK((*found)->viewId() == viewId);
     }
 
     SECTION("the checked projection lookup reports NotFound after destroy")
     {
-      REQUIRE(service.destroyView(viewId));
-
-      CHECK_THROWS_AS(std::ignore = service.trackListProjection(viewId), std::out_of_range);
+      REQUIRE(env.workspace.closeView(viewId));
 
       auto const found = service.findTrackListProjection(viewId);
       REQUIRE_FALSE(found);
@@ -138,40 +125,37 @@ namespace ao::rt::test
 
     SECTION("destroyed views reject launch-context capture")
     {
-      REQUIRE(service.destroyView(viewId));
+      REQUIRE(env.workspace.closeView(viewId));
 
       auto const captured = service.capturePlaybackLaunchSpec(viewId);
       REQUIRE_FALSE(captured);
       CHECK(captured.error().code == Error::Code::NotFound);
     }
 
-    SECTION("destroy publishes ViewDestroyed event")
+    SECTION("close releases the owned projection")
     {
-      auto received = kInvalidViewId;
-      auto const sub = service.onDestroyed([&](auto viewId) noexcept { received = viewId; });
+      auto projectionWeakPtr = std::weak_ptr<TrackListProjection>{};
 
-      REQUIRE(service.destroyView(viewId));
-      CHECK(received == viewId);
-    }
+      {
+        auto const projectionResult = service.findTrackListProjection(viewId);
+        REQUIRE(projectionResult);
+        projectionWeakPtr = *projectionResult;
+      }
 
-    SECTION("destroy releases the owned projection")
-    {
-      auto const projectionWeakPtr = std::weak_ptr<TrackListProjection>{service.trackListProjection(viewId)};
       REQUIRE_FALSE(projectionWeakPtr.expired());
 
-      REQUIRE(service.destroyView(viewId));
+      REQUIRE(env.workspace.closeView(viewId));
 
       CHECK(projectionWeakPtr.expired());
-      CHECK_THROWS_AS(std::ignore = service.trackListProjection(viewId), std::out_of_range);
     }
   }
 
   TEST_CASE("ViewService - trackListState returns created view snapshot", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service, {.filterExpression = "$year > 2000"});
+    auto const result = env.requireView({.filterExpression = "$year > 2000"});
     auto const snap = service.trackListState(result);
 
     CHECK(snap.id == result);
@@ -193,13 +177,15 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - trackListProjection returns the owned projection", "[runtime][unit][view][lifecycle]")
+  TEST_CASE("ViewService - findTrackListProjection returns the owned projection", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
-    auto const projectionPtr = service.trackListProjection(result);
+    auto const result = env.requireView();
+    auto const projectionResult = service.findTrackListProjection(result);
+    REQUIRE(projectionResult);
+    auto const& projectionPtr = *projectionResult;
     REQUIRE(projectionPtr != nullptr);
     CHECK(projectionPtr->viewId() == result);
     CHECK(projectionPtr->size() == 0);
@@ -209,14 +195,14 @@ namespace ao::rt::test
             "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
     auto const order = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = false}};
-    auto const result = env.requireView(service, {.sortBy = order});
+    auto const result = env.requireView({.sortBy = order});
 
     auto const state = service.trackListState(result);
     CHECK(state.groupBy == TrackGroupKey::None);
     CHECK(state.sortBy == order);
-    CHECK(state.presentation.id.empty());
+    CHECK(state.presentation.id == kDefaultTrackPresentationId);
     auto const launchSpec = service.capturePlaybackLaunchSpec(result);
     REQUIRE(launchSpec);
     CHECK(launchSpec->order.sortBy == order);
@@ -225,10 +211,12 @@ namespace ao::rt::test
   TEST_CASE("ViewService - projection subscription replays initial reset", "[runtime][unit][view][lifecycle]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
-    auto const projectionPtr = service.trackListProjection(result);
+    auto const result = env.requireView();
+    auto const projectionResult = service.findTrackListProjection(result);
+    REQUIRE(projectionResult);
+    auto const& projectionPtr = *projectionResult;
     REQUIRE(projectionPtr != nullptr);
 
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};

@@ -77,24 +77,6 @@ namespace ao::rt
 
   Result<ScanApplyResult> ScanApplyOperation::run(std::stop_token stopToken)
   {
-    auto writableResult = library::WritableMusicLibrary::acquire(_ml);
-
-    if (!writableResult)
-    {
-      return std::unexpected{writableResult.error()};
-    }
-
-    return runOffline(*writableResult, stopToken);
-  }
-
-  Result<ScanApplyResult> ScanApplyOperation::runOffline(library::WritableMusicLibrary& writableLibrary,
-                                                         std::stop_token stopToken)
-  {
-    if (&writableLibrary.library() != &_ml)
-    {
-      return makeError(Error::Code::InvalidInput, "Writable library does not match the scan apply operation");
-    }
-
     if (_state == State::Created)
     {
       if (auto prepareResult = prepare(stopToken); !prepareResult)
@@ -131,7 +113,14 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Scan apply operation is not ready for database mutation");
     }
 
-    auto transaction = writableLibrary.writeTransaction();
+    auto writableResult = library::WritableMusicLibrary::acquire(_ml);
+
+    if (!writableResult)
+    {
+      return std::unexpected{writableResult.error()};
+    }
+
+    auto transaction = writableResult->writeTransaction();
     auto result = apply(transaction, stopToken);
 
     if (!result)

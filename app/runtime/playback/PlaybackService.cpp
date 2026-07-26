@@ -20,11 +20,12 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
-#include <exception>
 #include <expected>
 #include <functional>
 #include <memory>
@@ -236,7 +237,7 @@ namespace ao::rt
     {
       if (closed)
       {
-        return makeError(Error::Code::InvalidState, "Playback is shutting down");
+        return makeError(Error::Code::InvalidState, "Playback service is closed");
       }
 
       auto command = QueuedCommand{
@@ -296,8 +297,8 @@ namespace ao::rt
       }
 
       beginCommit();
+      auto const closeCommitOnExit = gsl_lite::finally([this] { closeCommit(); });
       auto result = Result<bool>{};
-      auto operationException = std::exception_ptr{};
       bool forcesPositionAnchor = false;
 
       try
@@ -311,10 +312,9 @@ namespace ao::rt
       }
       catch (...)
       {
-        operationException = std::current_exception();
+        closeService();
+        throw;
       }
-
-      auto settlementException = std::exception_ptr{};
 
       try
       {
@@ -322,19 +322,8 @@ namespace ao::rt
       }
       catch (...)
       {
-        settlementException = std::current_exception();
-      }
-
-      closeCommit();
-
-      if (operationException)
-      {
-        std::rethrow_exception(operationException);
-      }
-
-      if (settlementException)
-      {
-        std::rethrow_exception(settlementException);
+        closeService();
+        throw;
       }
 
       if (!result)
@@ -347,24 +336,7 @@ namespace ao::rt
 
     Result<> executeCommandAndContinue(QueuedCommand& command)
     {
-      auto result = Result<>{};
-      auto executionException = std::exception_ptr{};
-
-      try
-      {
-        result = executeCommand(command);
-      }
-      catch (...)
-      {
-        executionException = std::current_exception();
-      }
-
-      if (executionException)
-      {
-        scheduleCommandDrain();
-        std::rethrow_exception(executionException);
-      }
-
+      auto result = executeCommand(command);
       scheduleCommandDrain();
       return result;
     }
@@ -632,6 +604,26 @@ namespace ao::rt
 
     void closeCommit() noexcept { --commitDepth; }
 
+    // Shared closure mechanism for normal shutdown and a terminal unexpected
+    // command or settlement failure.
+    void closeService() noexcept
+    {
+      if (closed)
+      {
+        return;
+      }
+
+      closed = true;
+      latestInvalidatingGeneration = ++commandGenerationCounter;
+      queuedCommands.clear();
+      pendingSeekPreviews.clear();
+      pendingRevealRequests.clear();
+      subscriptions.clear();
+      deferredControlPtr->owner = nullptr;
+      publishScheduled = false;
+      commandDrainScheduled = false;
+    }
+
     void publishNow()
     {
       auto const& nowPlaying = transport.state().nowPlaying;
@@ -689,19 +681,7 @@ namespace ao::rt
       }
     }
 
-    void shutdown() noexcept
-    {
-      if (closed)
-      {
-        return;
-      }
-
-      closed = true;
-      latestInvalidatingGeneration = ++commandGenerationCounter;
-      queuedCommands.clear();
-      subscriptions.clear();
-      deferredControlPtr->owner = nullptr;
-    }
+    void shutdown() noexcept { closeService(); }
 
     PlaybackSnapshot composeContent() const
     {

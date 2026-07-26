@@ -25,29 +25,25 @@ namespace ao::uimodel
 
     if (!input.hasPreviewSource)
     {
-      state.status = SmartListPreviewStatus::PreviewSourceUnavailable;
       state.expressionValid = false;
       state.previewVisible = false;
       state.errorVisible = false;
-      state.canSubmit = false;
       return state;
     }
 
-    state.status = input.hasError ? SmartListPreviewStatus::InvalidExpression : SmartListPreviewStatus::Valid;
-    state.previewStatusText = formatSmartListPreviewStatusText(
-      state.status, input.matchCount, input.isAllTracks, input.localExpression.empty());
     state.queryInvalid = input.hasError && !input.localExpression.empty();
     state.errorVisible = state.queryInvalid;
     state.previewVisible = !state.queryInvalid;
     state.expressionValid = !state.queryInvalid;
+    state.canSubmit = !state.name.empty() && state.expressionValid;
+    state.previewStatusText = formatSmartListPreviewStatusText(
+      state.expressionValid, input.matchCount, input.isAllTracks, input.localExpression.empty());
 
     if (state.errorVisible)
     {
       state.errorText = PresentationTextCatalog{}.trackFilterError(input.errorMessage);
     }
 
-    state.canSubmit =
-      canSubmitSmartListDraft(input.name, deriveSmartListPreviewStatus(state.expressionValid, input.hasPreviewSource));
     return state;
   }
 
@@ -71,22 +67,7 @@ namespace ao::uimodel
     return std::format("({}) and ({})", parent, local);
   }
 
-  SmartListPreviewStatus deriveSmartListPreviewStatus(bool expressionValid, bool hasPreviewSource)
-  {
-    if (!expressionValid)
-    {
-      return SmartListPreviewStatus::InvalidExpression;
-    }
-
-    if (!hasPreviewSource)
-    {
-      return SmartListPreviewStatus::PreviewSourceUnavailable;
-    }
-
-    return SmartListPreviewStatus::Valid;
-  }
-
-  std::string formatSmartListPreviewStatusText(SmartListPreviewStatus status,
+  std::string formatSmartListPreviewStatusText(bool const expressionValid,
                                                std::size_t count,
                                                bool isAllTracks,
                                                bool localEmpty)
@@ -101,29 +82,24 @@ namespace ao::uimodel
       return std::format("Showing all {}{}", formatTrackCount(count), isAllTracks ? "" : " from source");
     }
 
-    switch (status)
+    if (!expressionValid)
     {
-      case SmartListPreviewStatus::InvalidExpression: return "Invalid filter";
-      case SmartListPreviewStatus::PreviewSourceUnavailable: return "No tracks in source";
-      case SmartListPreviewStatus::Valid:
-      {
-        if (count == 0)
-        {
-          return "No matches";
-        }
-
-        constexpr std::size_t kMaxPreview = 10;
-
-        if (count <= kMaxPreview)
-        {
-          return std::format("Showing all {} matches", count);
-        }
-
-        return std::format("Showing {} of {} matches", kMaxPreview, count);
-      }
+      return "Invalid filter";
     }
 
-    return "";
+    if (count == 0)
+    {
+      return "No matches";
+    }
+
+    constexpr std::size_t kMaxPreview = 10;
+
+    if (count <= kMaxPreview)
+    {
+      return std::format("Showing all {} matches", count);
+    }
+
+    return std::format("Showing {} of {} matches", kMaxPreview, count);
   }
 
   std::string formatSmartListPreviewTrackLabel(std::string_view title, std::string_view artist, std::string_view album)
@@ -158,11 +134,6 @@ namespace ao::uimodel
     }
 
     return "(untitled)";
-  }
-
-  bool canSubmitSmartListDraft(std::string_view name, SmartListPreviewStatus status)
-  {
-    return !name.empty() && (status != SmartListPreviewStatus::InvalidExpression);
   }
 
   // The draft owns its strings, so they are taken by value and moved in: a

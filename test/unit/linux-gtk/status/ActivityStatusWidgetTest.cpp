@@ -21,7 +21,7 @@ namespace ao::gtk::test
     {
       return ActivityStatusWidget{ActivityStatusWidgetDependencies{
         .notifications = runtime.notifications(),
-        .libraryChanges = nullptr,
+        .libraryTasks = nullptr,
         .options = options,
       }};
     }

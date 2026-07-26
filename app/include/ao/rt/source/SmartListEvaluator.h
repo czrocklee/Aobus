@@ -61,9 +61,6 @@ namespace ao::rt
     void unregisterList(SmartListSource& list);
     void rebuild(SmartListSource& list);
 
-    // Re-evaluates one upstream member after a metadata-only mutation.
-    void notifyUpdated(SmartListSource& list, TrackId trackId);
-
   private:
     enum class TrackLoadMode : std::uint8_t
     {
@@ -86,15 +83,17 @@ namespace ao::rt
       SmartListSource* list = nullptr;
       std::vector<TrackId> oldMembers{};
       std::vector<TrackId> members{};
-      boost::container::small_vector<TrackSourceDelta, 1> deltas{};
+      delta::RegularTrackEditScript script{};
       bool active = false;
     };
 
     using TrackMatches = boost::unordered_flat_map<TrackId, std::vector<bool>, std::hash<TrackId>>;
 
-    void handleSourceBatch(TrackSource& source, TrackSourceDeltaBatch const& batch);
+    void handleSourceBatch(TrackSource& source, TrackSourceDelta const& batch);
     void handleSourceReset(SourceBucket& bucket);
-    void handleRegularBatch(SourceBucket& bucket, TrackSourceDeltaBatch const& batch, bool verifyFinalSnapshot = true);
+    void handleRegularBatch(SourceBucket& bucket,
+                            delta::RegularTrackEditScript const& script,
+                            bool verifyFinalSnapshot = true);
     void handleSourceInvalidated(SourceBucket& bucket);
 
     std::vector<DerivedWork> buildDerivedWorks(SourceBucket const& bucket,

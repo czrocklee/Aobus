@@ -413,7 +413,7 @@ namespace ao::rt::test
 
     policy.forbidQueries();
     CHECK(cursor.resolveNext() == stopPlayback());
-    CHECK(cursor.resolveNaturalAdvance() == stopPlayback());
+    CHECK(cursor.resolveNext() == stopPlayback());
     CHECK(cursor.resolvePrevious(policy) == noCommand());
 
     effect = cursor.setRepeatMode(RepeatMode::All, policy);

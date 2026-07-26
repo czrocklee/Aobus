@@ -11,7 +11,6 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 
 #include <chrono>
-#include <memory>
 #include <stop_token>
 
 namespace ao::rt
@@ -23,7 +22,7 @@ namespace ao::rt
   class PlaybackService;
 
   /** Executor-affine owner of playback-session serialization, restore, and save policy. */
-  class PlaybackSessionPersistence final : public std::enable_shared_from_this<PlaybackSessionPersistence>
+  class PlaybackSessionPersistence final
   {
   public:
     PlaybackSessionPersistence(ConfigStore& config,
@@ -60,7 +59,7 @@ namespace ao::rt
     void handleScheduledSave();
     void cancelScheduledSave() noexcept;
     static async::Task<void> waitForScheduledSave(async::Runtime* asyncRuntime,
-                                                  std::weak_ptr<PlaybackSessionPersistence> weakSelfPtr,
+                                                  PlaybackSessionPersistence* owner,
                                                   Delay delay,
                                                   std::stop_token stopToken);
 

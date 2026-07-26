@@ -17,7 +17,7 @@ namespace ao::uimodel::test
   {
     rt::test::MusicLibraryFixture libraryFixture{};
     rt::test::InlineExecutor executor{};
-    rt::LibraryChanges changes{};
+    rt::LibraryChanges changes{executor, 0};
     rt::TrackSourceCache trackSourceCache{libraryFixture.library(), changes};
     rt::ViewService viewService{executor, libraryFixture.library(), trackSourceCache};
     rt::WorkspaceService workspace{executor, viewService, changes};

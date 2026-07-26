@@ -20,7 +20,8 @@ Manifest keys and fields belong to the [library database reference](../../../ref
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
 The frontend-shared surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryTaskService.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
 `LibraryScan` is read-only plan construction.
-Committing application is a runtime-private coordinator operation; focused storage tests may use its explicitly offline composition.
+Live committing application is a runtime-private coordinator operation.
+The runtime-private `ScanApplyOperation::run()` is the distinct offline composition used by focused storage workflows and tests.
 
 ## Terminology
 
@@ -72,6 +73,13 @@ Ambiguous duplicate groups remain `Missing` plus `New` for explicit resolution.
 Runtime application enters `ScanApply` maintenance, prepares plan items on a worker without writer ownership, then opens one coordinator mutation to revalidate prepared state and apply every successful content change atomically.
 It reports updating and fingerprinting progress during preparation.
 The runtime-private operation enforces `Created → Prepared → Revalidated → Applied/Terminal`; callers cannot skip final file revalidation or apply the same operation twice.
+
+The two compositions share that state machine but not transaction ownership:
+
+- live `LibraryTaskService` calls `prepare()`, then obtains the coordinator transaction and calls `apply()`;
+- offline `run()` prepares first, acquires its own writable-library lease, revalidates, applies, and commits one isolated transaction.
+
+There is no nullable or mode-switching transaction branch inside `apply()`.
 
 After maintenance closes interactive admission, application validates the plan binding before reporting item progress, opening media, or fingerprinting.
 The write transaction validates the same library id again and requires its newly allocated revision to immediately follow the plan revision before it touches track or manifest rows.
@@ -136,7 +144,7 @@ Cancellation is cooperative during payload hashing and before commit.
 
 - [`LibraryScan.h`](../../../../app/include/ao/rt/library/LibraryScan.h) and [`ScanPlan.h`](../../../../app/include/ao/rt/library/ScanPlan.h) define the shared scan surface.
 - [`LibraryScan.cpp`](../../../../app/runtime/library/LibraryScan.cpp) owns planning and move matching.
-- [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns transactional application.
+- [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns the shared state machine, the self-contained offline `run()` composition, and transaction-scoped apply.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns maintenance lifetime and prepare/apply worker composition.
 - [`AudioIdentity.h`](../../../../include/ao/library/AudioIdentity.h) owns identity calculation.
 - [`AudioIdentityIndexer.cpp`](../../../../app/runtime/library/AudioIdentityIndexer.cpp) owns concurrent backfill.

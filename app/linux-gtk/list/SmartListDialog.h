@@ -37,6 +37,11 @@ namespace ao::rt
   class TrackSource;
 }
 
+namespace ao::uimodel
+{
+  struct SmartListEditorViewState;
+}
+
 namespace ao::gtk
 {
   class TrackListModel;
@@ -74,6 +79,7 @@ namespace ao::gtk
     void configurePreviewColumns();
     void rebuildPreviewSource();
     void updateSourceLabels();
+    uimodel::SmartListEditorViewState editorViewState() const;
     void updateDialogState();
     void updatePreview();
 
@@ -101,7 +107,6 @@ namespace ao::gtk
     std::shared_ptr<rt::SmartListSource> _previewFilteredListPtr;
     std::unique_ptr<rt::SmartListEvaluator> _previewEnginePtr;
     Glib::RefPtr<TrackListModel> _previewModelPtr;
-    bool _expressionValid = true;
 
     // Edit mode state
     ListId _editListId{kInvalidListId};

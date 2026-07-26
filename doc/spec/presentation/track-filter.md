@@ -112,7 +112,7 @@ Create Smart List is allowed only when the resolved expression is non-empty and 
 
 ## Runtime transition
 
-For a changed expression, `ViewService` acquires an ad-hoc source over the existing base list, constructs a new `LiveTrackListProjection` with the existing `TrackPresentationSpec`, and then installs the resources atomically into the view entry.
+For a changed expression, `ViewService` acquires an ad-hoc source over the existing base list, constructs a new `TrackListProjection` with the existing `TrackPresentationSpec`, and then installs the resources atomically into the view entry.
 
 After installation it updates expression text and its optional expression error, then publishes the projection replacement.
 An identical expression is a no-op.

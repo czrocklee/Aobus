@@ -151,7 +151,6 @@ namespace ao::rt
     async::Subscription onRevealTrackRequested(
       std::move_only_function<void(RevealTrackRequested const&) noexcept> handler);
     async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&) noexcept> handler);
-    async::Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&) noexcept> handler);
 
     // Starts a track by id. Succession passes announce=false because it
     // publishes its own now-playing story for automatic transitions.
@@ -169,7 +168,6 @@ namespace ao::rt
                                              ListId sourceListId,
                                              std::chrono::milliseconds initialOffset = {});
     Result<PreparedNextToken> prepareNext(PlaybackRequest const& request, ListId sourceListId);
-    Result<PreparedNextToken> prepareNext(TrackId trackId, ListId sourceListId);
     std::optional<PreparedNextToken> clearPreparedNext();
 
     void pause();

@@ -353,9 +353,7 @@ namespace ao::gtk
       AppDialog::presentMessage(
         *this,
         "Save could not be applied",
-        replyResult->status == rt::TrackAuthoringStatus::Missing
-          ? "One or more selected tracks no longer exist."
-          : "The library changed while this dialog was open. Reload the properties and try again.",
+        "The library changed while this dialog was open. Reload the properties and try again.",
         {AppDialogAction{
           .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
         Gtk::ResponseType::CLOSE);

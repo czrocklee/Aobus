@@ -25,6 +25,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -84,7 +85,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     std::size_t appliedCount = 0;
     std::size_t notifiedCount = 0;
@@ -103,9 +104,29 @@ namespace ao::rt::test
     CHECK(writerFixture.library().authoringAvailability().state == LibraryAuthoringState::Available);
   }
 
+  TEST_CASE("LibraryChanges - applies the replica before notifying observers", "[runtime][unit][library][changeset]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Before");
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto phases = std::array<std::string_view, 2>{};
+    std::size_t phaseCount = 0;
+    auto replicaBinding = changes.bindReplica("OrderingReplica",
+                                              [&phases, &phaseCount](LibraryChangeSet const&) noexcept
+                                              { phases[phaseCount++] = "replica"; });
+    auto observerSubscription = changes.onChanged([&phases, &phaseCount](LibraryChangeSet const&) noexcept
+                                                  { phases[phaseCount++] = "observer"; });
+
+    REQUIRE(writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"}));
+
+    CHECK(phaseCount == phases.size());
+    CHECK(phases == std::array<std::string_view, 2>{"replica", "observer"});
+  }
+
   TEST_CASE("LibraryChanges - only one replica may be bound at a time", "[runtime][unit][library][changeset]")
   {
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges();
     CHECK_THROWS_AS(changes.bindReplica("EmptyReplica", {}), Exception);
     auto binding = changes.bindReplica("FirstReplica", [](LibraryChangeSet const&) noexcept {});
 
@@ -163,7 +184,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto executor = ManualExecutor{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
 
     {
       auto mutationServicePtr = std::make_unique<LibraryMutationService>(
@@ -215,7 +236,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =

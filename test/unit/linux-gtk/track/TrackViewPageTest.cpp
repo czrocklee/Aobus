@@ -22,7 +22,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
@@ -127,7 +127,7 @@ namespace ao::gtk::test
       auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
       sourcePtr->addInitial(albumTrackId);
 
-      auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
+      auto projectionPtr = std::make_shared<rt::TrackListProjection>(
         rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
       auto presentation = rt::TrackPresentationSpec{.groupBy = rt::TrackGroupKey::Album};
       projectionPtr->setPresentation(presentation);
@@ -170,7 +170,7 @@ namespace ao::gtk::test
     REQUIRE(trackIds.size() == kTrackCount);
 
     auto sourcePtr = rt::test::makeMutableTrackSource(trackIds);
-    auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
+    auto projectionPtr = std::make_shared<rt::TrackListProjection>(
       rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
     auto rowCache = TrackRowCache{runtime.library()};
     auto modelPtr = TrackListModel::create(rowCache);
@@ -219,7 +219,7 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
     sourcePtr->addInitial(trackId);
-    auto projectionPtr = std::make_shared<rt::LiveTrackListProjection>(
+    auto projectionPtr = std::make_shared<rt::TrackListProjection>(
       rt::kInvalidViewId, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
     auto rowCache = TrackRowCache{runtime.library()};
     auto modelPtr = TrackListModel::create(rowCache);

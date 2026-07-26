@@ -9,7 +9,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_message.hpp>
@@ -29,7 +29,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    void checkProjectionMatches(LiveTrackListProjection const& actual, LiveTrackListProjection const& expected)
+    void checkProjectionMatches(TrackListProjection const& actual, TrackListProjection const& expected)
     {
       REQUIRE(actual.size() == expected.size());
       REQUIRE(actual.groupCount() == expected.groupCount());
@@ -83,7 +83,7 @@ namespace ao::rt::test
 
     auto sourcePtr = makeMutableTrackSource(trackIds);
     auto const presentation = groupedPresentation();
-    auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+    auto projection = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     projection.setPresentation(presentation);
     auto const before = projection.operationCounts();
     auto random = std::mt19937{0xA0B05U}; // NOLINT(bugprone-random-generator-seed) -- deterministic replay.
@@ -153,7 +153,7 @@ namespace ao::rt::test
         }
       }
 
-      auto oracle = LiveTrackListProjection{ViewId{2}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+      auto oracle = TrackListProjection{ViewId{2}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
       oracle.setPresentation(presentation);
       checkProjectionMatches(projection, oracle);
     }
@@ -178,7 +178,7 @@ namespace ao::rt::test
     }
 
     auto sourcePtr = makeMutableTrackSource(trackIds);
-    auto projection = LiveTrackListProjection{
+    auto projection = TrackListProjection{
       kInvalidViewId,
       TrackSourceLease{sourcePtr},
       libraryFixture.library(),
@@ -195,7 +195,7 @@ namespace ao::rt::test
       sourcePtr->update(trackIds.front());
     }
 
-    auto oracle = LiveTrackListProjection{
+    auto oracle = TrackListProjection{
       kInvalidViewId,
       TrackSourceLease{sourcePtr},
       libraryFixture.library(),

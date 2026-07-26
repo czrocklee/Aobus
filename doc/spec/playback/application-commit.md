@@ -3,7 +3,7 @@ id: playback.application-commit
 type: spec
 status: current
 domain: playback
-summary: Defines PlaybackService command ordering, coherent snapshot commits, observer reentrancy, supersession, and shutdown.
+summary: Defines PlaybackService command ordering, coherent snapshot commits, observer reentrancy, supersession, terminal failure, and shutdown.
 ---
 # Playback application commits
 
@@ -57,6 +57,7 @@ command queue while borrowing the runtime-internal `PlaybackTransport` and
   and shutdown supersede older queued start/navigation commands. Orthogonal
   volume, mute, pause, resume, seek, shuffle, and repeat commands remain FIFO.
 - Elapsed clock drift alone is not semantic content and causes no publication.
+- An unexpected command or settlement exception terminally closes the service, retains the last committed snapshot, and abandons the queued backlog.
 - Shutdown closes command admission and makes deferred service tasks safe to
   drop before transport callback producers are quiesced.
 
@@ -187,9 +188,12 @@ pending bookkeeping, and stale or `Conflict` completion has no semantic effect.
 The [playback cursor](cursor.md) owns current preparation-failure reroll and
 boundary recovery policy.
 
-An unexpected exception is an invariant fault. Before propagating it, the
-service settles observed state, closes commit bookkeeping, and attempts to keep
-the queue drain live. A pre-admission drain-scheduling rejection is contained:
+An unexpected command or settlement exception is an invariant fault.
+The service first closes admission, abandons queued commands and pending transient events, disconnects lower observations, and revokes deferred callbacks.
+It then unwinds commit bookkeeping and rethrows the original exception without settling or publishing partially observed lower state.
+The last successfully committed snapshot remains authoritative, and all later result-bearing commands return `InvalidState` while void commands are ignored.
+
+A pre-admission drain-scheduling rejection is contained:
 the marker is rolled back, the FIFO remains intact, and a later command
 admission retries the drain without overtaking queued commands.
 
@@ -220,7 +224,7 @@ producers while succession and the remaining runtime graph are alive.
 
 - [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp)
   protects coherent publication, observer deferral, FIFO ordering, supersession,
-  exception recovery, scheduler rejection, and queued-command lifetime.
+  terminal exception closure, scheduler rejection, and queued-command lifetime.
 - [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp)
   protects asynchronous admission, failure isolation, candidate installation,
   and prepared-next correlation.

@@ -30,10 +30,6 @@ namespace ao::rt
     void clear() noexcept;
     void applyScript(delta::RegularTrackEditScript const& script);
 
-    // Rare point operations are O(n), including one complete index rebuild.
-    void insert(std::size_t index, TrackId trackId);
-    void remove(std::size_t index, TrackId trackId);
-
     std::span<TrackId const> ids() const noexcept { return _trackIds; }
     std::vector<TrackId> const& vector() const noexcept { return _trackIds; }
     std::size_t size() const noexcept { return _trackIds.size(); }

@@ -4,8 +4,7 @@
 #include "LayoutEditorDialog.h"
 
 #include "app/AppDialog.h"
-#include "layout/document/GtkLayoutPresets.h"
-#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutPresets.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>

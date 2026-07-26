@@ -71,7 +71,7 @@ namespace ao::gtk::layout
       ActivityStatusComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _widget{ActivityStatusWidgetDependencies{
             .notifications = ctx.runtime.notifications(),
-            .libraryChanges = &ctx.runtime.library().changes(),
+            .libraryTasks = &ctx.runtime.library().taskService(),
             .options = optionsFromNode(node),
           }}
       {

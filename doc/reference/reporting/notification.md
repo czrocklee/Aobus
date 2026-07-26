@@ -83,12 +83,9 @@ Timer generations are private service control state and do not appear in snapsho
 | `NotificationFeedLimits` field | Default |
 |---|---:|
 | `maxEntries` | `256` |
-| `maxHistoryEntries` | `128` |
 | `maxTextBytes` | `4096` |
-| `maxTotalTextBytes` | `256 KiB` |
 
 The per-text limit applies independently to report keys, plain messages, and structured report subject/detail strings.
-The total counts the retained string payload of all entries.
 
 ## Update
 

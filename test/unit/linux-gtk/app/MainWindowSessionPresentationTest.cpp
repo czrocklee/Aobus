@@ -80,7 +80,7 @@ namespace ao::gtk::test
     {
       auto result = std::vector<rt::ViewId>{};
 
-      for (auto const viewId : runtime.views().listViews())
+      for (auto const viewId : runtime.workspace().snapshot().openViews)
       {
         if (runtime.views().trackListState(viewId).listId == listId)
         {

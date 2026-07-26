@@ -83,16 +83,6 @@ namespace ao::rt
     return _members.indexOf(id);
   }
 
-  void SmartListSource::notifyUpdated(TrackId id)
-  {
-    if (_evaluator == nullptr || !_evaluator->isAlive())
-    {
-      return;
-    }
-
-    _evaluator->notifyUpdated(*this, id);
-  }
-
   void SmartListSource::applyPendingState()
   {
     if (!_optPending)

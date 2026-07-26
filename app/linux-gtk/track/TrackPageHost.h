@@ -98,7 +98,6 @@ namespace ao::gtk
     async::Subscription _revealSub;
     async::Subscription _snapshotSub;
     async::Subscription _focusSub;
-    async::Subscription _viewDestroyedSub;
     async::Subscription _projectionChangedSub;
     async::Subscription _presentationChangedSub;
 

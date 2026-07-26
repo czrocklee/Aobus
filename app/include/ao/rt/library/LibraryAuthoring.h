@@ -78,7 +78,6 @@ namespace ao::rt
     Applied,
     NoOp,
     Stale,
-    Missing,
     Unavailable,
   };
 

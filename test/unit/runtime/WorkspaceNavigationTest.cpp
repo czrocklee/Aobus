@@ -215,7 +215,6 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime;
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto const beforeLayout = runtime.workspace().snapshot();
-    auto const beforeViews = runtime.views().listViews();
 
     auto const result = runtime.workspace().navigate({.target = ListId{999999}});
 
@@ -225,7 +224,7 @@ namespace ao::rt::test
     CHECK(afterLayout.activeViewId == beforeLayout.activeViewId);
     CHECK(afterLayout.openViews == beforeLayout.openViews);
     CHECK(afterLayout.revision == beforeLayout.revision);
-    CHECK(runtime.views().listViews().size() == beforeViews.size());
+    CHECK(afterLayout.openViews.size() == beforeLayout.openViews.size());
   }
 
   TEST_CASE("WorkspaceService - focus rejects ids outside the open live aggregate",
@@ -234,11 +233,9 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
     auto const activeViewId = requireNavigation(runtime, fixture.firstListId);
-    auto const unopenedView =
-      ao::test::requireValue(runtime.views().createView(TrackListViewConfig{.listId = fixture.secondListId}));
     auto const before = runtime.workspace().snapshot();
 
-    for (auto const viewId : {kInvalidViewId, unopenedView, ViewId{999999}})
+    for (auto const viewId : {kInvalidViewId, ViewId{999999}})
     {
       auto const result = runtime.workspace().focusView(viewId);
       REQUIRE_FALSE(result);
@@ -255,16 +252,13 @@ namespace ao::rt::test
     auto& workspace = fixture.runtime.workspace();
     auto const activeViewId = requireNavigation(fixture.runtime, fixture.firstListId);
     auto const before = workspace.snapshot();
-    auto const unopened =
-      ao::test::requireValue(fixture.runtime.views().createView(TrackListViewConfig{.listId = fixture.secondListId}));
     std::int32_t changeCount = 0;
     auto const sub = workspace.onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
 
     REQUIRE(workspace.focusView(activeViewId));
-    REQUIRE(workspace.closeView(unopened));
+    REQUIRE(workspace.closeView(ViewId{999999}));
 
     CHECK(workspace.snapshot() == before);
-    CHECK(fixture.runtime.views().trackListState(unopened).id == unopened);
     CHECK(changeCount == 0);
   }
 

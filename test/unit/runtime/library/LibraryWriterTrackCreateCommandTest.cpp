@@ -49,7 +49,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 
@@ -90,7 +90,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - createTrackFromFile accepts root-relative paths", "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 
@@ -118,7 +118,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 
@@ -137,7 +137,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 

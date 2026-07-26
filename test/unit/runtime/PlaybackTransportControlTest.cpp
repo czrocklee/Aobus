@@ -8,7 +8,6 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/PlaybackFailure.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -214,10 +213,6 @@ namespace ao::rt::test
     auto subNowPlaying = playbackTransport.onNowPlayingChanged([&](PlaybackTransport::NowPlayingChanged const&) noexcept
                                                                { nowPlayingFired = true; });
 
-    bool failureFired = false;
-    auto subFailure =
-      playbackTransport.onPlaybackFailure([&](PlaybackFailure const&) noexcept { failureFired = true; });
-
     auto const desc =
       playbackRequest(TrackId{12}, "/not/started.flac", "Rejected Track", "Rejected Artist", std::chrono::minutes{5});
 
@@ -228,7 +223,6 @@ namespace ao::rt::test
     CHECK(preparingFired);
     CHECK_FALSE(startedFired);
     CHECK_FALSE(nowPlayingFired);
-    CHECK_FALSE(failureFired);
     CHECK(playbackTransport.state().nowPlaying.trackId == kInvalidTrackId);
     CHECK(playbackTransport.state().nowPlaying.sourceListId == kInvalidListId);
     CHECK(playbackTransport.state().nowPlaying.title.empty());

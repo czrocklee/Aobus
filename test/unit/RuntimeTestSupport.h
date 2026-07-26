@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "runtime/library/LibraryMutationService.h"
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
@@ -28,6 +29,7 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -986,6 +988,34 @@ namespace ao::rt::test
     void defer(std::move_only_function<void()> task) override { task(); }
   };
 
+  inline LibraryChanges makeInlineLibraryChanges(std::uint64_t const lastPublishedRevision = 0)
+  {
+    static thread_local auto executor = InlineExecutor{};
+    return LibraryChanges{executor, lastPublishedRevision};
+  }
+
+  inline LibraryChanges makeInlineLibraryChanges(library::MusicLibrary const& storage)
+  {
+    auto const transaction = storage.readTransaction();
+    return makeInlineLibraryChanges(storage.libraryRevision(transaction));
+  }
+
+  inline TrackId addTrackAndPublish(library::MusicLibrary& storage,
+                                    LibraryChanges& changes,
+                                    library::test::TrackSpec const& spec,
+                                    bool const libraryReset = false)
+  {
+    auto executor = InlineExecutor{};
+    auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
+    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    auto const trackId = library::test::addTrack(storage, mutation.transaction(), spec);
+    REQUIRE(mutation.commit(LibraryChangeSet{
+      .libraryReset = libraryReset,
+      .tracksInserted = {trackId},
+    }));
+    return trackId;
+  }
+
   class LibraryWriterFixture final
   {
   public:
@@ -1034,8 +1064,6 @@ namespace ao::rt::test
       {
         case TrackAuthoringStatus::Applied:
         case TrackAuthoringStatus::NoOp: return std::move(outcomeResult->reply);
-        case TrackAuthoringStatus::Missing:
-          return makeError(Error::Code::NotFound, "Track authoring target is missing");
         case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
         case TrackAuthoringStatus::Unavailable:
           return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
@@ -1066,8 +1094,6 @@ namespace ao::rt::test
       {
         case TrackAuthoringStatus::Applied:
         case TrackAuthoringStatus::NoOp: return std::move(outcomeResult->reply);
-        case TrackAuthoringStatus::Missing:
-          return makeError(Error::Code::NotFound, "Track authoring target is missing");
         case TrackAuthoringStatus::Stale: return makeError(Error::Code::Conflict, "Track authoring binding is stale");
         case TrackAuthoringStatus::Unavailable:
           return makeError(Error::Code::InvalidState, "Track authoring is unavailable");
@@ -1377,11 +1403,13 @@ namespace ao::rt::test
     MusicLibraryFixture libraryFixture;
     ControlledSleeper sleeper;
     ExecutorT executor;
+    InlineExecutor libraryChangesExecutor;
     async::Runtime asyncRuntime{executor, 1, {}, &sleeper};
-    LibraryChanges changes;
+    LibraryChanges changes{libraryChangesExecutor, 0};
     LibraryWriterFixture writerFixture{libraryFixture.library(), changes};
     TrackSourceCache sources{libraryFixture.library(), changes};
     ViewService views{executor, libraryFixture.library(), sources};
+    WorkspaceService workspace{executor, views, changes};
     NotificationService notifications{asyncRuntime};
     PlaybackTransport playbackTransport{makePlaybackTransport(asyncRuntime, libraryFixture.library(), notifications)};
     PlaybackSuccession

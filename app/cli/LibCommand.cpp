@@ -23,7 +23,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/CoreRuntime.h>
-#include <ao/rt/library/AudioIdentityIndexer.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
@@ -982,15 +982,14 @@ namespace ao::cli
       // worker-produced and indexer-serialized.
       auto result = cli.runTask(cli.library().taskService().backfillAudioIdentityAsync(
         {},
-        verbose ? rt::AudioIdentityIndexer::ProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
-                                                             {
-                                                               if (progress.itemFraction == 0.0)
-                                                               {
-                                                                 std::println(err,
-                                                                              "fingerprint: {}",
-                                                                              progress.path.generic_string());
-                                                               }
-                                                             }}
+        verbose ? rt::AudioIdentityIndexProgressCallback{[&err](rt::AudioIdentityIndexProgress const& progress)
+                                                         {
+                                                           if (progress.itemFraction == 0.0)
+                                                           {
+                                                             std::println(
+                                                               err, "fingerprint: {}", progress.path.generic_string());
+                                                           }
+                                                         }}
                 : nullptr,
         [&err](rt::AudioIdentityIndexFailure const& failure) { printBackfillFailure(failure, err); }));
 

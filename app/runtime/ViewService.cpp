@@ -20,12 +20,12 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/projection/LiveTrackDetailProjection.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <chrono>
 #include <cstdint>
@@ -48,7 +48,7 @@ namespace ao::rt
       TrackListViewState state;
       TrackSourceLease baseSourceLease;
       TrackSourceLease activeSourceLease;
-      std::shared_ptr<LiveTrackListProjection> projectionPtr;
+      std::shared_ptr<TrackListProjection> projectionPtr;
     };
 
     struct PreparedViewResources final
@@ -56,7 +56,7 @@ namespace ao::rt
       TrackSourceLease baseSourceLease;
       TrackSourceLease activeSourceLease;
       std::optional<Error> optFilterError;
-      std::shared_ptr<LiveTrackListProjection> projectionPtr;
+      std::shared_ptr<TrackListProjection> projectionPtr;
     };
 
     TrackPresentationSpec presentationForGroup(TrackGroupKey const groupBy)
@@ -158,7 +158,7 @@ namespace ao::rt
         optFilterError = sources.sourceError(activeSourceLease);
       }
 
-      auto projectionPtr = std::make_shared<LiveTrackListProjection>(viewId, activeSourceLease, library);
+      auto projectionPtr = std::make_shared<TrackListProjection>(viewId, activeSourceLease, library);
       projectionPtr->setPresentation(presentation);
 
       return PreparedViewResources{
@@ -210,7 +210,6 @@ namespace ao::rt
     {
     }
 
-    async::Signal<ViewId> destroyedSignal;
     async::Signal<TrackListProjectionChanged const&> projectionChangedSignal;
     async::Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     async::Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
@@ -222,11 +221,6 @@ namespace ao::rt
   }
 
   ViewService::~ViewService() = default;
-
-  async::Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId) noexcept> handler)
-  {
-    return _implPtr->destroyedSignal.connect(std::move(handler));
-  }
 
   async::Subscription ViewService::onProjectionChanged(
     std::move_only_function<void(TrackListProjectionChanged const&) noexcept> handler)
@@ -291,18 +285,11 @@ namespace ao::rt
     return id;
   }
 
-  Result<> ViewService::destroyView(ViewId viewId)
+  void ViewService::destroyView(ViewId viewId)
   {
     auto const it = _implPtr->views.find(viewId);
-
-    if (it == _implPtr->views.end())
-    {
-      return missingViewError(viewId);
-    }
-
+    gsl_Assert(it != _implPtr->views.end());
     _implPtr->views.erase(it);
-    _implPtr->destroyedSignal.post(_implPtr->executor, viewId);
-    return {};
   }
 
   Result<> ViewService::setFilter(ViewId const viewId, std::string filterExpression)
@@ -456,11 +443,6 @@ namespace ao::rt
     return totalDuration;
   }
 
-  std::shared_ptr<TrackListProjection> ViewService::trackListProjection(ViewId viewId)
-  {
-    return _implPtr->views.at(viewId).projectionPtr;
-  }
-
   Result<std::shared_ptr<TrackListProjection>> ViewService::findTrackListProjection(ViewId const viewId)
   {
     auto const iter = _implPtr->views.find(viewId);
@@ -477,6 +459,6 @@ namespace ao::rt
                                                                        WorkspaceService& workspace,
                                                                        LibraryChanges const& changes)
   {
-    return std::make_unique<LiveTrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
+    return std::make_unique<TrackDetailProjection>(target, *this, _implPtr->library, workspace, changes);
   }
 } // namespace ao::rt

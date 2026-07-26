@@ -17,10 +17,11 @@
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
@@ -1097,7 +1098,7 @@ namespace ao::rt::test
       auto sourceLease = TrackSourceLease{sourcePtr};
 
       auto const t0 = std::chrono::steady_clock::now();
-      auto proj = LiveTrackListProjection{ViewId{1}, sourceLease, lib};
+      auto proj = TrackListProjection{ViewId{1}, sourceLease, lib};
       auto const t1 = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
         .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title}}});
@@ -1225,7 +1226,7 @@ namespace ao::rt::test
     std::chrono::milliseconds measureProjectionSortFieldDuration(ScaleBench& bench, TrackSortField field)
     {
       auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
-      auto proj = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
+      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(TrackPresentationSpec{
@@ -1239,7 +1240,7 @@ namespace ao::rt::test
                                                                     TrackPresentationSpec const& spec)
     {
       auto sourcePtr = std::make_shared<BenchmarkTrackSource>(bench.ids);
-      auto proj = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
+      auto proj = TrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, bench.libraryFixture.library()};
 
       auto const start = std::chrono::steady_clock::now();
       proj.setPresentation(spec);
@@ -1272,9 +1273,13 @@ namespace ao::rt::test
       {
         auto const previousSize = _trackIds.size();
         _trackIds.append_range(trackIds);
-        REQUIRE(publishDeltaBatch(
-          TrackSourceDeltaBatch{
-            .deltas = {SourceInsertRange{.start = previousSize, .trackIds = {trackIds.begin(), trackIds.end()}}}},
+        REQUIRE(publishDelta(
+          delta::RegularTrackEditScript{
+            .edits = {delta::InsertRange{
+              .start = previousSize,
+              .trackIds = {trackIds.begin(), trackIds.end()},
+            }},
+          },
           previousSize));
       }
 
@@ -1285,8 +1290,9 @@ namespace ao::rt::test
         auto const start = previousSize - count;
         auto removed = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end()};
         _trackIds.erase(_trackIds.begin() + static_cast<std::ptrdiff_t>(start), _trackIds.end());
-        REQUIRE(publishDeltaBatch(
-          TrackSourceDeltaBatch{.deltas = {SourceRemoveRange{.start = start, .trackIds = removed}}}, previousSize));
+        REQUIRE(publishDelta(
+          delta::RegularTrackEditScript{.edits = {delta::RemoveRange{.start = start, .trackIds = removed}}},
+          previousSize));
         return removed;
       }
 
@@ -1297,8 +1303,9 @@ namespace ao::rt::test
         auto ids = std::vector<TrackId>{_trackIds.begin() + static_cast<std::ptrdiff_t>(start),
                                         _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count)};
         auto const previousSize = _trackIds.size();
-        auto batch = TrackSourceDeltaBatch{.deltas = {SourceUpdateRange{.start = start, .trackIds = std::move(ids)}}};
-        auto const published = publishDeltaBatch(std::move(batch), previousSize);
+        auto script =
+          delta::RegularTrackEditScript{.edits = {delta::UpdateRange{.start = start, .trackIds = std::move(ids)}}};
+        auto const published = publishDelta(std::move(script), previousSize);
         REQUIRE(published);
       }
 
@@ -1313,11 +1320,11 @@ namespace ao::rt::test
                         _trackIds.begin() + static_cast<std::ptrdiff_t>(start + count));
         auto const insertionIndex = _trackIds.size();
         _trackIds.append_range(moved);
-        auto batch = TrackSourceDeltaBatch{.deltas = {
-                                             SourceRemoveRange{.start = start, .trackIds = moved},
-                                             SourceInsertRange{.start = insertionIndex, .trackIds = std::move(moved)},
-                                           }};
-        auto const published = publishDeltaBatch(std::move(batch), previousSize);
+        auto script = delta::RegularTrackEditScript{
+          .edits = {delta::RemoveRange{.start = start, .trackIds = moved},
+                    delta::InsertRange{.start = insertionIndex, .trackIds = std::move(moved)}},
+        };
+        auto const published = publishDelta(std::move(script), previousSize);
         REQUIRE(published);
       }
 
@@ -1408,7 +1415,7 @@ namespace ao::rt::test
           auto sourcePtr = std::make_shared<SmartListSource>(TrackSourceLease{_rootPtr}, _evaluator);
           sourcePtr->setExpression(std::format("$year >= {}", 1990 + (index * 5)));
           sourcePtr->reload();
-          _projections.push_back(std::make_unique<LiveTrackListProjection>(
+          _projections.push_back(std::make_unique<TrackListProjection>(
             kInvalidViewId,
             TrackSourceLease{sourcePtr},
             _libraryFixture.library(),
@@ -1416,7 +1423,7 @@ namespace ao::rt::test
           _smartSources.push_back(std::move(sourcePtr));
         }
 
-        _projections.push_back(std::make_unique<LiveTrackListProjection>(
+        _projections.push_back(std::make_unique<TrackListProjection>(
           kInvalidViewId,
           TrackSourceLease{_manualPtr},
           _libraryFixture.library(),
@@ -1548,7 +1555,7 @@ namespace ao::rt::test
       SmartListEvaluator _evaluator;
       std::vector<std::shared_ptr<SmartListSource>> _smartSources;
       std::shared_ptr<PipelineBenchmarkSource> _manualPtr;
-      std::vector<std::unique_ptr<LiveTrackListProjection>> _projections;
+      std::vector<std::unique_ptr<TrackListProjection>> _projections;
       ListId _manualListId = kInvalidListId;
     };
 

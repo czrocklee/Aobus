@@ -7,7 +7,6 @@
 #include <ao/async/Runtime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -147,7 +146,6 @@ namespace ao::uimodel::test
     auto runtime = async::Runtime{executor, 1};
     auto limits = rt::NotificationFeedLimits{};
     limits.maxEntries = 1;
-    limits.maxHistoryEntries = 1;
     auto notifications = rt::NotificationService{runtime, limits};
     auto latest = ActivityStatusViewState{};
     std::int32_t renderCount = 0;
@@ -179,13 +177,16 @@ namespace ao::uimodel::test
     CHECK(notifications.feed().entries.front().id == secondId);
   }
 
-  TEST_CASE("ActivityStatusViewModel - projects library task events from LibraryChanges",
+  TEST_CASE("ActivityStatusViewModel - projects events from LibraryTaskService",
             "[uimodel][regression][status][activity]")
   {
     auto executor = rt::test::InlineExecutor{};
     auto runtime = async::Runtime{executor, 1};
     auto notifications = rt::NotificationService{runtime};
-    auto changes = rt::LibraryChanges{};
+    auto changes = rt::test::makeInlineLibraryChanges();
+    auto libraryFixture = rt::test::MusicLibraryFixture{};
+    auto runtimeLibrary = rt::Library{runtime, libraryFixture.library(), changes};
+    auto& taskService = runtimeLibrary.taskService();
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
     auto viewModel = ActivityStatusViewModel{
@@ -195,12 +196,9 @@ namespace ao::uimodel::test
         latest = view;
         rendered.push_back(view);
       },
-      ActivityStatusViewModelOptions{.libraryChanges = &changes},
+      ActivityStatusViewModelOptions{.libraryTasks = &taskService},
     };
 
-    auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto runtimeLibrary = rt::Library{runtime, libraryFixture.library(), changes};
-    auto& taskService = runtimeLibrary.taskService();
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = libraryFixture.root() / "first.flac";
     std::filesystem::copy_file(sourceFile, targetFile);

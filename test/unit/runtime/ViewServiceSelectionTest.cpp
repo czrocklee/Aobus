@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/rt/ViewIds.h>
@@ -15,13 +14,11 @@ namespace ao::rt::test
   TEST_CASE("ViewService - selectionDuration sums selected track durations", "[runtime][unit][view][selection]")
   {
     auto env = ViewServiceFixture{};
-    auto const trackA =
-      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
-    auto const trackB =
-      env.libraryFixture.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
+    auto const trackA = env.addTrack(library::test::TrackSpec{.title = "A", .duration = std::chrono::seconds{200}});
+    auto const trackB = env.addTrack(library::test::TrackSpec{.title = "B", .duration = std::chrono::seconds{100}});
 
-    auto service = env.makeService();
-    auto const result = env.requireView(service);
+    auto& service = env.service;
+    auto const result = env.requireView();
 
     SECTION("an empty selection has zero duration")
     {
@@ -49,13 +46,13 @@ namespace ao::rt::test
   TEST_CASE("ViewService - selection mutation reports missing views", "[runtime][unit][view][selection]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
     auto const missing = service.setSelection(ViewId{999}, {});
     REQUIRE_FALSE(missing);
     CHECK(missing.error().code == Error::Code::NotFound);
 
-    auto const view = env.requireView(service);
-    REQUIRE(service.destroyView(view));
+    auto const view = env.requireView();
+    REQUIRE(env.workspace.closeView(view));
     auto const removed = service.setSelection(view, {});
     REQUIRE_FALSE(removed);
     CHECK(removed.error().code == Error::Code::NotFound);

@@ -4,6 +4,7 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -24,9 +25,8 @@ namespace ao::rt::test
   {
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{10});
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription =
-      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription = source.subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     CHECK(batches.empty());
 
@@ -36,15 +36,15 @@ namespace ao::rt::test
 
     REQUIRE(batches.size() == 3);
 
-    auto const& inserted = std::get<SourceInsertRange>(batches[0].deltas[0]);
+    auto const& inserted = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits[0]);
     CHECK(inserted.start == 1);
     CHECK(inserted.trackIds == std::vector{TrackId{20}});
 
-    auto const& updated = std::get<SourceUpdateRange>(batches[1].deltas[0]);
+    auto const& updated = std::get<delta::UpdateRange>(sourceEditScript(batches[1]).edits[0]);
     CHECK(updated.start == 0);
     CHECK(updated.trackIds == std::vector{TrackId{10}});
 
-    auto const& removed = std::get<SourceRemoveRange>(batches[2].deltas[0]);
+    auto const& removed = std::get<delta::RemoveRange>(sourceEditScript(batches[2]).edits[0]);
     CHECK(removed.start == 1);
     CHECK(removed.trackIds == std::vector{TrackId{20}});
   }
@@ -55,9 +55,9 @@ namespace ao::rt::test
     auto source = MutableTrackSource{};
     source.setInitial(std::to_array<TrackId>({TrackId{10}, TrackId{20}, TrackId{30}}));
     auto observedIds = std::vector<TrackId>{};
-    auto observedBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto observedBatches = std::vector<TrackSourceDelta>{};
     auto subscription = source.subscribe(
-      [&](TrackSourceDeltaBatch const& batch) noexcept
+      [&](TrackSourceDelta const& batch) noexcept
       {
         for (std::size_t index = 0; index < source.size(); ++index)
         {
@@ -69,54 +69,50 @@ namespace ao::rt::test
 
     auto const finalIds = std::to_array<TrackId>({TrackId{10}, TrackId{30}, TrackId{40}, TrackId{50}});
     source.replaceWithBatch(finalIds,
-                            TrackSourceDeltaBatch{
-                              .deltas =
-                                {
-                                  SourceRemoveRange{.start = 1, .trackIds = {TrackId{20}}},
-                                  SourceInsertRange{.start = 2, .trackIds = {TrackId{40}, TrackId{50}}},
-                                },
+                            delta::RegularTrackEditScript{
+                              .edits = {delta::RemoveRange{.start = 1, .trackIds = {TrackId{20}}},
+                                        delta::InsertRange{
+                                          .start = 2,
+                                          .trackIds = {TrackId{40}, TrackId{50}},
+                                        }},
                             });
 
     REQUIRE(observedBatches.size() == 1);
-    REQUIRE(observedBatches[0].deltas.size() == 2);
+    REQUIRE(sourceEditScript(observedBatches[0]).edits.size() == 2);
     CHECK(observedIds == std::vector<TrackId>(finalIds.begin(), finalIds.end()));
   }
 
   TEST_CASE("TrackSource - invalidation is terminal and idempotent", "[runtime][unit][source]")
   {
     auto source = MutableTrackSource{};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription =
-      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription = source.subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     source.invalidate();
     source.invalidate();
     source.emitReset();
 
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(batches[0]));
     CHECK(source.state() == TrackSourceState::Invalidated);
 
-    auto lateBatches = std::vector<TrackSourceDeltaBatch>{};
+    auto lateBatches = std::vector<TrackSourceDelta>{};
     auto lateSubscription =
-      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { lateBatches.push_back(batch); });
+      source.subscribe([&](TrackSourceDelta const& batch) noexcept { lateBatches.push_back(batch); });
 
     REQUIRE(lateBatches.size() == 1);
-    REQUIRE(lateBatches[0].deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(lateBatches[0].deltas[0]));
+    CHECK(std::holds_alternative<SourceInvalidated>(lateBatches[0]));
   }
 
   TEST_CASE("TrackSource - destruction disconnects subscribers without semantic invalidation",
             "[runtime][unit][source]")
   {
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = async::Subscription{};
 
     {
       auto sourcePtr = std::make_unique<MutableTrackSource>();
-      subscription =
-        sourcePtr->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      subscription = sourcePtr->subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
     }
 
     CHECK(batches.empty());
@@ -128,8 +124,8 @@ namespace ao::rt::test
     auto source = MutableTrackSource{};
     std::uint32_t batchCount = 0;
     std::uint32_t retainedBatchCount = 0;
-    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const&) noexcept { ++batchCount; });
-    auto retainedSubscription = source.subscribe([&](TrackSourceDeltaBatch const&) noexcept { ++retainedBatchCount; });
+    auto subscription = source.subscribe([&](TrackSourceDelta const&) noexcept { ++batchCount; });
+    auto retainedSubscription = source.subscribe([&](TrackSourceDelta const&) noexcept { ++retainedBatchCount; });
 
     subscription.reset();
     source.emitReset();

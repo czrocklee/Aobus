@@ -15,12 +15,10 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/projection/TrackProjectionEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
-#include <ao/rt/source/TrackSourceEditScript.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/utility/StringArena.h>
 
@@ -609,7 +607,7 @@ namespace ao::rt
     }
   } // namespace
 
-  struct LiveTrackListProjection::Impl final
+  struct TrackListProjection::Impl final
   {
     ViewId viewId;
     TrackSourceLease sourceLease;
@@ -723,7 +721,7 @@ namespace ao::rt
 
     void rebuildOrderIndex()
     {
-      auto const timer = rt::ScopedTimer{"LiveTrackListProjection::rebuildOrderIndex"};
+      auto const timer = rt::ScopedTimer{"TrackListProjection::rebuildOrderIndex"};
       ++operationCounts.fullProjectionRebuilds;
       sourceOrder.clear();
       orderIndex.clear();
@@ -854,13 +852,12 @@ namespace ao::rt
       return rowsTouchedSinceRebuild >= churnThreshold || stringArena.allocatedBytes() >= arenaRebaseThresholdBytes;
     }
 
-    std::optional<SourceOrderResolution> resolveFinalSourceOrder(TrackSourceDeltaBatch const& sourceBatch,
-                                                                 delta::RegularTrackEditScript const& script) const
+    std::optional<SourceOrderResolution> resolveFinalSourceOrder(delta::RegularTrackEditScript const& script) const
     {
-      auto resolution = SourceOrderResolution{.hasStructuralChanges = std::ranges::any_of(
-                                                sourceBatch.deltas,
-                                                [](TrackSourceDelta const& sourceDelta)
-                                                { return !std::holds_alternative<SourceUpdateRange>(sourceDelta); })};
+      auto resolution = SourceOrderResolution{
+        .hasStructuralChanges = std::ranges::any_of(script.edits,
+                                                    [](delta::RegularTrackEdit const& edit)
+                                                    { return !std::holds_alternative<delta::UpdateRange>(edit); })};
       auto finalSourceOrder = std::span<TrackId const>{sourceOrder};
 
       if (resolution.hasStructuralChanges)
@@ -877,11 +874,10 @@ namespace ao::rt
       }
       else
       {
-        for (auto const& sourceDelta : sourceBatch.deltas)
+        for (auto const& edit : script.edits)
         {
-          auto const& update = std::get<SourceUpdateRange>(sourceDelta);
-
-          if (update.start > sourceOrder.size() || update.trackIds.size() > sourceOrder.size() - update.start ||
+          if (auto const& update = std::get<delta::UpdateRange>(edit);
+              update.start > sourceOrder.size() || update.trackIds.size() > sourceOrder.size() - update.start ||
               !std::ranges::equal(update.trackIds, finalSourceOrder.subspan(update.start, update.trackIds.size())))
           {
             return std::nullopt;
@@ -897,31 +893,31 @@ namespace ao::rt
       return resolution;
     }
 
-    static void collectChangedTrackIds(TrackSourceDeltaBatch const& sourceBatch,
+    static void collectChangedTrackIds(delta::RegularTrackEditScript const& script,
                                        bool const entriesDependOnTrackData,
                                        TrackIdSet& replacementIds,
                                        TrackIdSet& excludedIds,
                                        TrackIdSet& changedIds)
     {
-      for (auto const& sourceDelta : sourceBatch.deltas)
+      for (auto const& edit : script.edits)
       {
         std::visit(
           [&](auto const& range)
           {
             using Range = std::remove_cvref_t<decltype(range)>;
 
-            if constexpr (std::same_as<Range, SourceInsertRange>)
+            if constexpr (std::same_as<Range, delta::InsertRange>)
             {
               replacementIds.insert(range.trackIds.begin(), range.trackIds.end());
               excludedIds.insert(range.trackIds.begin(), range.trackIds.end());
               changedIds.insert(range.trackIds.begin(), range.trackIds.end());
             }
-            else if constexpr (std::same_as<Range, SourceRemoveRange>)
+            else if constexpr (std::same_as<Range, delta::RemoveRange>)
             {
               excludedIds.insert(range.trackIds.begin(), range.trackIds.end());
               changedIds.insert(range.trackIds.begin(), range.trackIds.end());
             }
-            else if constexpr (std::same_as<Range, SourceUpdateRange>)
+            else if constexpr (std::same_as<Range, delta::UpdateRange>)
             {
               changedIds.insert(range.trackIds.begin(), range.trackIds.end());
 
@@ -932,7 +928,7 @@ namespace ao::rt
               }
             }
           },
-          sourceDelta);
+          edit);
       }
     }
 
@@ -1071,9 +1067,9 @@ namespace ao::rt
       }
     }
 
-    bool applyIncrementalBatch(TrackSourceDeltaBatch const& sourceBatch, delta::RegularTrackEditScript const& script)
+    bool applyIncrementalBatch(delta::RegularTrackEditScript const& script)
     {
-      auto optSourceOrderResolution = resolveFinalSourceOrder(sourceBatch, script);
+      auto optSourceOrderResolution = resolveFinalSourceOrder(script);
 
       if (!optSourceOrderResolution)
       {
@@ -1086,7 +1082,7 @@ namespace ao::rt
       auto excludedIds = TrackIdSet{};
       auto changedIds = TrackIdSet{};
       bool const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
-      collectChangedTrackIds(sourceBatch, entriesDependOnTrackData, replacementIds, excludedIds, changedIds);
+      collectChangedTrackIds(script, entriesDependOnTrackData, replacementIds, excludedIds, changedIds);
       auto retainedEntries = retainOrderEntries(excludedIds);
       auto optReplacementEntries = buildReplacementEntries(replacementIds, finalSourceOrder, entriesDependOnTrackData);
 
@@ -1229,36 +1225,28 @@ namespace ao::rt
     }
 
     static bool sourceOrderBatchMatches(std::vector<TrackId> const& previousTrackIds,
-                                        TrackSourceDeltaBatch const& sourceBatch,
+                                        delta::RegularTrackEditScript const& script,
                                         std::vector<TrackId> const& finalTrackIds)
     {
-      auto const script = regularTrackEditScriptOf(sourceBatch);
-
-      if (!script)
-      {
-        return false;
-      }
-
-      auto const result = delta::apply(previousTrackIds, *script);
+      auto const result = delta::apply(previousTrackIds, script);
       return result && *result == finalTrackIds;
     }
 
-    static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(TrackSourceDeltaBatch const& sourceBatch)
+    static TrackListProjectionDeltaBatch sourceOrderProjectionBatch(delta::RegularTrackEditScript const& script)
     {
-      auto const script = regularTrackEditScriptOf(sourceBatch);
-      return script ? eraseTrackIds(*script) : TrackListProjectionDeltaBatch{};
+      return eraseTrackIds(script);
     }
 
     void publishSortedSourceBatch(std::vector<TrackId> const& previousTrackIds,
-                                  TrackSourceDeltaBatch const& sourceBatch,
+                                  delta::RegularTrackEditScript const& sourceScript,
                                   std::size_t previousSize)
     {
       auto const finalTrackIds = projectionTrackIds();
       auto updatedTrackIds = std::vector<TrackId>{};
 
-      for (auto const& sourceDelta : sourceBatch.deltas)
+      for (auto const& edit : sourceScript.edits)
       {
-        if (auto const* update = std::get_if<SourceUpdateRange>(&sourceDelta); update != nullptr)
+        if (auto const* update = std::get_if<delta::UpdateRange>(&edit); update != nullptr)
         {
           updatedTrackIds.append_range(update->trackIds);
         }
@@ -1304,14 +1292,14 @@ namespace ao::rt
       publishBatch(std::move(batch), previousSize);
     }
 
-    void handleSourceBatch(TrackSourceDeltaBatch const& sourceBatch)
+    void handleSourceBatch(TrackSourceDelta const& sourceBatch)
     {
       if (sourceInvalidated)
       {
         return;
       }
 
-      if (sourceBatch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(sourceBatch.deltas.front()))
+      if (std::holds_alternative<SourceInvalidated>(sourceBatch))
       {
         publishSourceInvalidated();
         return;
@@ -1321,15 +1309,16 @@ namespace ao::rt
       auto const previousTrackIds = projectionTrackIds();
       auto const previousSections = sectionDescriptors();
 
-      if (sourceBatch.deltas.size() == 1 && std::holds_alternative<SourceReset>(sourceBatch.deltas.front()))
+      if (std::holds_alternative<SourceReset>(sourceBatch))
       {
         rebuildOrderIndex();
         publishReset(previousSize);
         return;
       }
 
-      if (auto const script = regularTrackEditScriptOf(sourceBatch);
-          !script || !applyIncrementalBatch(sourceBatch, *script))
+      auto const& script = std::get<delta::RegularTrackEditScript>(sourceBatch);
+
+      if (!applyIncrementalBatch(script))
       {
         rebuildOrderIndex();
         publishReset(previousSize);
@@ -1344,18 +1333,18 @@ namespace ao::rt
 
       if (comparator)
       {
-        publishSortedSourceBatch(previousTrackIds, sourceBatch, previousSize);
+        publishSortedSourceBatch(previousTrackIds, script, previousSize);
         return;
       }
 
       if (auto const finalTrackIds = projectionTrackIds();
-          !sourceOrderBatchMatches(previousTrackIds, sourceBatch, finalTrackIds))
+          !sourceOrderBatchMatches(previousTrackIds, script, finalTrackIds))
       {
         publishReset(previousSize);
         return;
       }
 
-      auto batch = sourceOrderProjectionBatch(sourceBatch);
+      auto batch = sourceOrderProjectionBatch(script);
 
       if (!validateTrackListProjectionDeltaBatch(batch, previousSize) ||
           finalSizeOf(batch, previousSize) != orderIndex.size())
@@ -1368,19 +1357,19 @@ namespace ao::rt
     }
   };
 
-  LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
-                                                   TrackSourceLease sourceLease,
-                                                   library::MusicLibrary const& library)
+  TrackListProjection::TrackListProjection(ViewId viewId,
+                                           TrackSourceLease sourceLease,
+                                           library::MusicLibrary const& library)
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library)}
   {
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
-      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) noexcept { impl->handleSourceBatch(batch); });
+      [impl = _implPtr.get()](TrackSourceDelta const& batch) noexcept { impl->handleSourceBatch(batch); });
   }
 
-  LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
-                                                   TrackSourceLease sourceLease,
-                                                   library::MusicLibrary const& library,
-                                                   TrackOrderSpec const& order)
+  TrackListProjection::TrackListProjection(ViewId viewId,
+                                           TrackSourceLease sourceLease,
+                                           library::MusicLibrary const& library,
+                                           TrackOrderSpec const& order)
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library, order.sortBy)}
   {
     if (viewId != kInvalidViewId)
@@ -1389,17 +1378,17 @@ namespace ao::rt
     }
 
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
-      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) noexcept { impl->handleSourceBatch(batch); });
+      [impl = _implPtr.get()](TrackSourceDelta const& batch) noexcept { impl->handleSourceBatch(batch); });
   }
 
-  LiveTrackListProjection::~LiveTrackListProjection() = default;
+  TrackListProjection::~TrackListProjection() = default;
 
-  ViewId LiveTrackListProjection::viewId() const noexcept
+  ViewId TrackListProjection::viewId() const noexcept
   {
     return _implPtr->viewId;
   }
 
-  void LiveTrackListProjection::setPresentation(TrackPresentationSpec const& presentation)
+  void TrackListProjection::setPresentation(TrackPresentationSpec const& presentation)
   {
     if (_implPtr->sourceInvalidated)
     {
@@ -1449,12 +1438,12 @@ namespace ao::rt
     _implPtr->publishReset(previousSize);
   }
 
-  std::size_t LiveTrackListProjection::size() const noexcept
+  std::size_t TrackListProjection::size() const noexcept
   {
     return _implPtr->orderIndex.size();
   }
 
-  TrackId LiveTrackListProjection::trackIdAt(std::size_t index) const
+  TrackId TrackListProjection::trackIdAt(std::size_t index) const
   {
     if (index >= _implPtr->orderIndex.size())
     {
@@ -1464,7 +1453,7 @@ namespace ao::rt
     return _implPtr->orderIndex[index].trackId;
   }
 
-  std::optional<std::size_t> LiveTrackListProjection::indexOf(TrackId trackId) const noexcept
+  std::optional<std::size_t> TrackListProjection::indexOf(TrackId trackId) const noexcept
   {
     if (auto const it = _implPtr->rowIndexByTrackId.find(trackId); it != _implPtr->rowIndexByTrackId.end())
     {
@@ -1474,12 +1463,12 @@ namespace ao::rt
     return std::nullopt;
   }
 
-  TrackListProjectionOperationCounts LiveTrackListProjection::operationCounts() const noexcept
+  TrackListProjectionOperationCounts TrackListProjection::operationCounts() const noexcept
   {
     return _implPtr->operationCounts;
   }
 
-  TrackPresentationSpec LiveTrackListProjection::presentation() const
+  TrackPresentationSpec TrackListProjection::presentation() const
   {
     return TrackPresentationSpec{
       .id = _implPtr->presentationId,
@@ -1490,12 +1479,12 @@ namespace ao::rt
     };
   }
 
-  std::size_t LiveTrackListProjection::groupCount() const noexcept
+  std::size_t TrackListProjection::groupCount() const noexcept
   {
     return _implPtr->sections.size();
   }
 
-  TrackGroupSectionSnapshot LiveTrackListProjection::groupAt(std::size_t groupIndex) const
+  TrackGroupSectionSnapshot TrackListProjection::groupAt(std::size_t groupIndex) const
   {
     if (groupIndex >= _implPtr->sections.size())
     {
@@ -1515,12 +1504,12 @@ namespace ao::rt
     };
   }
 
-  std::optional<std::size_t> LiveTrackListProjection::groupIndexAt(std::size_t rowIndex) const
+  std::optional<std::size_t> TrackListProjection::groupIndexAt(std::size_t rowIndex) const
   {
     return _implPtr->findSectionIndexAt(rowIndex);
   }
 
-  std::optional<TrackRowRange> LiveTrackListProjection::groupRangeAt(std::size_t rowIndex) const noexcept
+  std::optional<TrackRowRange> TrackListProjection::groupRangeAt(std::size_t rowIndex) const noexcept
   {
     auto const optSectionIndex = _implPtr->findSectionIndexAt(rowIndex);
 
@@ -1532,7 +1521,7 @@ namespace ao::rt
     return _implPtr->sections[*optSectionIndex].rows;
   }
 
-  async::Subscription LiveTrackListProjection::subscribe(
+  async::Subscription TrackListProjection::subscribe(
     std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler)
   {
     if (!handler)

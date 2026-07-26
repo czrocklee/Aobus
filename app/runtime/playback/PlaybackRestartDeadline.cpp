@@ -15,11 +15,11 @@
 
 namespace ao::rt
 {
-  struct PlaybackRestartDeadline::SharedState final : std::enable_shared_from_this<SharedState>
+  struct PlaybackRestartDeadline::State final
   {
-    SharedState(async::Runtime& asyncRuntime,
-                LiveElapsedReader liveElapsedReader,
-                AvailabilityChangedHandler availabilityChangedHandler)
+    State(async::Runtime& asyncRuntime,
+          LiveElapsedReader liveElapsedReader,
+          AvailabilityChangedHandler availabilityChangedHandler)
       : asyncRuntime{asyncRuntime}
       , liveElapsedReader{std::move(liveElapsedReader)}
       , availabilityChangedHandler{std::move(availabilityChangedHandler)}
@@ -137,44 +137,29 @@ namespace ao::rt
     void scheduleDeadline(Elapsed const elapsed)
     {
       auto const delay = kFirstRestartAvailableElapsed - elapsed;
-      auto const weakStatePtr = weak_from_this();
-      deadlineScheduled = true;
-
-      try
-      {
-        deadlineTask = asyncRuntime.spawnCancellable(
-          [asyncRuntime = &asyncRuntime, weakStatePtr, delay](std::stop_token const stopToken)
-          { return waitForDeadline(asyncRuntime, weakStatePtr, delay, stopToken); });
-      }
-      catch (...)
-      {
-        deadlineScheduled = false;
-        throw;
-      }
+      deadlineTask = asyncRuntime.spawnCancellable(
+        [asyncRuntime = &asyncRuntime, state = this, delay](std::stop_token const stopToken)
+        { return waitForDeadline(asyncRuntime, state, delay, stopToken); });
     }
 
     static async::Task<void> waitForDeadline(async::Runtime* asyncRuntime,
-                                             std::weak_ptr<SharedState> weakStatePtr,
+                                             State* state,
                                              Elapsed const delay,
                                              std::stop_token const stopToken)
     {
       co_await asyncRuntime->sleepFor(delay, stopToken);
       co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
-
-      if (auto const statePtr = weakStatePtr.lock(); statePtr != nullptr)
-      {
-        statePtr->handleDeadline();
-      }
+      state->handleDeadline();
     }
 
     void handleDeadline()
     {
-      if (shuttingDown || !active || !running || !deadlineScheduled)
+      if (shuttingDown || !active || !running || !deadlineTask)
       {
         return;
       }
 
-      deadlineScheduled = false;
+      deadlineTask.reset();
       auto const liveElapsed = normalizeElapsed(liveElapsedReader());
 
       if (liveElapsed > kRestartThreshold)
@@ -189,12 +174,7 @@ namespace ao::rt
     void cancelDeadline() noexcept
     {
       ++synchronizationRevision;
-
-      if (deadlineScheduled)
-      {
-        deadlineTask.reset();
-        deadlineScheduled = false;
-      }
+      deadlineTask.reset();
     }
 
     void setRestartAvailable(bool const available)
@@ -216,16 +196,14 @@ namespace ao::rt
     bool active = false;
     bool running = false;
     bool restartAvailable = false;
-    bool deadlineScheduled = false;
     bool shuttingDown = false;
   };
 
   PlaybackRestartDeadline::PlaybackRestartDeadline(async::Runtime& asyncRuntime,
                                                    LiveElapsedReader liveElapsedReader,
                                                    AvailabilityChangedHandler availabilityChangedHandler)
-    : _sharedStatePtr{std::make_shared<SharedState>(asyncRuntime,
-                                                    std::move(liveElapsedReader),
-                                                    std::move(availabilityChangedHandler))}
+    : _statePtr{
+        std::make_unique<State>(asyncRuntime, std::move(liveElapsedReader), std::move(availabilityChangedHandler))}
   {
   }
 
@@ -236,61 +214,56 @@ namespace ao::rt
 
   void PlaybackRestartDeadline::start(Elapsed const elapsed)
   {
-    _sharedStatePtr->start(elapsed);
+    _statePtr->start(elapsed);
   }
 
   void PlaybackRestartDeadline::resume(Elapsed const elapsed)
   {
-    _sharedStatePtr->resume(elapsed);
+    _statePtr->resume(elapsed);
   }
 
   void PlaybackRestartDeadline::pause(Elapsed const elapsed)
   {
-    _sharedStatePtr->pause(elapsed);
+    _statePtr->pause(elapsed);
   }
 
   void PlaybackRestartDeadline::seek(Elapsed const elapsed)
   {
-    _sharedStatePtr->seek(elapsed);
-  }
-
-  void PlaybackRestartDeadline::currentTrackChanged(Elapsed const elapsed, bool const playing)
-  {
-    _sharedStatePtr->resetCurrent(elapsed, playing);
+    _statePtr->seek(elapsed);
   }
 
   void PlaybackRestartDeadline::replaceSession(Elapsed const elapsed, bool const playing)
   {
-    _sharedStatePtr->resetCurrent(elapsed, playing);
+    _statePtr->resetCurrent(elapsed, playing);
   }
 
   void PlaybackRestartDeadline::clearSession() noexcept
   {
-    _sharedStatePtr->clearSession();
+    _statePtr->clearSession();
   }
 
   void PlaybackRestartDeadline::shutdown() noexcept
   {
-    _sharedStatePtr->shutdown();
+    _statePtr->shutdown();
   }
 
   bool PlaybackRestartDeadline::isActive() const noexcept
   {
-    return _sharedStatePtr->active;
+    return _statePtr->active;
   }
 
   bool PlaybackRestartDeadline::isRunning() const noexcept
   {
-    return _sharedStatePtr->running;
+    return _statePtr->running;
   }
 
   bool PlaybackRestartDeadline::restartAvailable() const noexcept
   {
-    return _sharedStatePtr->restartAvailable;
+    return _statePtr->restartAvailable;
   }
 
   bool PlaybackRestartDeadline::hasScheduledDeadline() const noexcept
   {
-    return _sharedStatePtr->deadlineScheduled;
+    return static_cast<bool>(_statePtr->deadlineTask);
   }
 } // namespace ao::rt

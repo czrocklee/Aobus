@@ -14,10 +14,11 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 
+#include <gsl-lite/gsl-lite.hpp>
+
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -120,6 +121,18 @@ namespace ao::rt
       catch (...)
       {
         // Logging cannot escape MaintenanceGuard's destructor.
+        return;
+      }
+    }
+
+    void logPublicationAvailabilityFailure() noexcept
+    {
+      try
+      {
+        APP_LOG_ERROR("Failed to publish faulted library availability");
+      }
+      catch (...)
+      {
         return;
       }
     }
@@ -331,19 +344,11 @@ namespace ao::rt
 
     auto transaction = _writableLibrary.writeTransaction();
     auto reader = _library.tracks().reader(transaction);
-    auto missingTargetIds = std::vector<TrackId>{};
 
     for (auto const trackId : targets._trackIds)
     {
-      if (trackId == kInvalidTrackId || !reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot))
-      {
-        missingTargetIds.push_back(trackId);
-      }
-    }
-
-    if (!missingTargetIds.empty())
-    {
-      return AuthoringStart{.status = TrackAuthoringStatus::Missing, .missingTargetIds = std::move(missingTargetIds)};
+      gsl_Assert(trackId != kInvalidTrackId);
+      gsl_Assert(reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot));
     }
 
     auto result = AuthoringStart{.status = TrackAuthoringStatus::NoOp};
@@ -506,40 +511,19 @@ namespace ao::rt
     {
       _changes.publishFromCoordinator(
         std::move(changeSet),
-        [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr},
-         revision](std::exception_ptr failure)
+        [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, revision] noexcept
         {
           if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
           {
-            lifetimeStatePtr->invokeIfAlive([revision, &failure](LibraryMutationService& owner)
-                                            { owner.handlePublication(revision, std::move(failure)); });
+            lifetimeStatePtr->invokeIfAlive([revision](LibraryMutationService& owner) noexcept
+                                            { owner.finishPublication(revision, false); });
           }
         });
     }
     catch (...)
     {
-      auto const failure = std::current_exception();
-      bool publicationStillPending = false;
-
-      {
-        auto const stateLock = std::scoped_lock{_stateMutex};
-        publicationStillPending = _publicationInProgress;
-      }
-
-      if (publicationStillPending)
-      {
-        try
-        {
-          handlePublication(revision, failure);
-        }
-        catch (...)
-        {
-          // Preserve the original publication failure after faulting state.
-          std::rethrow_exception(failure);
-        }
-      }
-
-      std::rethrow_exception(failure);
+      finishPublication(revision, true);
+      throw;
     }
 
     return CommitInfo{.libraryRevision = revision};
@@ -608,7 +592,7 @@ namespace ao::rt
     }
   }
 
-  void LibraryMutationService::handlePublication(std::uint64_t revision, std::exception_ptr failure)
+  void LibraryMutationService::finishPublication(std::uint64_t const revision, bool const failed) noexcept
   {
     auto expected = LibraryAuthoringAvailability{};
     bool shouldEmit = false;
@@ -616,7 +600,7 @@ namespace ao::rt
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
 
-      if (failure)
+      if (failed)
       {
         _state = LibraryAuthoringState::Faulted;
         _maintenanceKind = LibraryMaintenanceKind::None;
@@ -635,8 +619,6 @@ namespace ao::rt
       }
     }
 
-    auto completionFailure = failure;
-
     if (shouldEmit)
     {
       if (_callbackExecutor.isCurrent())
@@ -653,14 +635,13 @@ namespace ao::rt
         }
         catch (...)
         {
-          if (!completionFailure)
           {
-            completionFailure = std::current_exception();
+            auto const stateLock = std::scoped_lock{_stateMutex};
+            _state = LibraryAuthoringState::Faulted;
+            _maintenanceKind = LibraryMaintenanceKind::None;
           }
 
-          auto const stateLock = std::scoped_lock{_stateMutex};
-          _state = LibraryAuthoringState::Faulted;
-          _maintenanceKind = LibraryMaintenanceKind::None;
+          logPublicationAvailabilityFailure();
         }
       }
     }
@@ -671,11 +652,6 @@ namespace ao::rt
     }
 
     _publicationCompleted.notify_all();
-
-    if (completionFailure)
-    {
-      std::rethrow_exception(completionFailure);
-    }
   }
 
   void LibraryMutationService::dispatchAvailability(LibraryAuthoringAvailability expected)

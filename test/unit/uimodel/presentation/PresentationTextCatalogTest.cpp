@@ -6,7 +6,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -192,7 +192,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][presentation]")
   {
     auto const catalog = PresentationTextCatalog{};
-    using Kind = rt::LibraryChanges::LibraryTaskProgressKind;
+    using Kind = rt::LibraryTaskProgressKind;
 
     CHECK(catalog.libraryTaskProgressDetail(Kind::Scanning, "Scanning: literal.flac") ==
           "Scanning: Scanning: literal.flac");

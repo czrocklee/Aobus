@@ -47,7 +47,7 @@ namespace ao::gtk::test
                                  .uri = audio::test::requireAudioFixture("basic_metadata.flac").string(),
                                  .duration = std::chrono::seconds{5}});
       runtime.reloadAllTracks();
-      auto const view = runtime.views().createView({.listId = rt::kAllTracksListId});
+      auto const view = runtime.workspace().navigate({.target = rt::kAllTracksListId});
       REQUIRE(view);
       REQUIRE(runtime.playback().commands().startFromView(*view, trackId));
       REQUIRE(waitForPlaybackSettlement(runtime, trackId));

@@ -4,6 +4,7 @@
 #include "preference/PreferencesWindow.h"
 
 #include "app/FormBuilder.h"
+#include "layout/document/LayoutPresets.h"
 #include "playback/OutputDevicePopover.h"
 #include "preference/ShortcutEditorWidget.h"
 #include <ao/rt/AppPrefsState.h>
@@ -11,6 +12,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 #include <ao/uimodel/preference/PreferencesEditorModel.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -46,9 +48,6 @@ namespace ao::gtk
     constexpr auto kDefaultWindowHeight = 560;
     constexpr auto kPageMargin = 16;
     constexpr auto kSidebarWidth = 180;
-    constexpr auto kClassicLayoutPresetId = std::string_view{"classic"};
-    constexpr auto kModernLayoutPresetId = std::string_view{"modern"};
-
     Gtk::Label& placeholderLabel(std::string_view const text)
     {
       auto* const label = Gtk::make_managed<Gtk::Label>(std::string{text});
@@ -59,12 +58,7 @@ namespace ao::gtk
 
     std::string normalizedLayoutPresetId(std::string_view const presetId)
     {
-      if (presetId == kModernLayoutPresetId)
-      {
-        return std::string{kModernLayoutPresetId};
-      }
-
-      return std::string{kClassicLayoutPresetId};
+      return std::string{layout::presetIdToString(layout::presetIdFromString(presetId))};
     }
 
     struct [[nodiscard]] ConnectionBlocker final
@@ -198,8 +192,8 @@ namespace ao::gtk
   {
     auto* const list = Gtk::make_managed<FormBoxedList>();
 
-    _layoutPresetCombo.append(std::string{kClassicLayoutPresetId}, "Classic");
-    _layoutPresetCombo.append(std::string{kModernLayoutPresetId}, "Modern");
+    _layoutPresetCombo.append(std::string{uimodel::ShellLayoutSessionModel::kDefaultPresetId}, "Classic");
+    _layoutPresetCombo.append(std::string{layout::presetIdToString(layout::LayoutPresetId::Modern)}, "Modern");
     _layoutPresetComboConn = _layoutPresetCombo.signal_changed().connect([this] { handleLayoutPresetChanged(); });
     list->addRow("Default preset", _layoutPresetCombo);
 

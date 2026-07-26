@@ -9,9 +9,7 @@
 
 #include <gsl-lite/gsl-lite.hpp>
 
-#include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -26,7 +24,7 @@ namespace ao::rt
     struct PendingPublication final
     {
       LibraryChangeSet changeSet{};
-      std::move_only_function<void(std::exception_ptr)> completion{};
+      std::move_only_function<void() noexcept> completion{};
     };
 
     struct ReplicaSlot final
@@ -35,10 +33,8 @@ namespace ao::rt
       std::move_only_function<void(LibraryChangeSet const&) noexcept> apply{};
     };
 
-    Impl() = default;
-
-    Impl(async::Executor* executor, std::uint64_t lastPublishedRevision)
-      : callbackExecutor{executor}, optExpectedRevision{lastPublishedRevision + 1U}
+    Impl(async::Executor& executor, std::uint64_t const lastPublishedRevision)
+      : callbackExecutor{executor}, expectedRevision{lastPublishedRevision + 1U}
     {
     }
 
@@ -70,7 +66,7 @@ namespace ao::rt
       replicaSlotPtr.reset();
     }
 
-    void publish(LibraryChangeSet changeSet, std::move_only_function<void(std::exception_ptr)> completion = {})
+    void publish(LibraryChangeSet changeSet, std::move_only_function<void() noexcept> completion)
     {
       if (changeSet.libraryRevision == 0)
       {
@@ -81,20 +77,10 @@ namespace ao::rt
       {
         auto const lock = std::scoped_lock{mutex};
 
-        // The synchronous test bus has no persisted baseline, so its first
-        // submission establishes one. Production construction supplies the
-        // last published revision and therefore checks the first submission too.
-        if (!optExpectedRevision)
-        {
-          optExpectedRevision = revision;
-        }
-
-        gsl_Assert(optExpectedRevision);
-
-        if (revision != *optExpectedRevision)
+        if (revision != expectedRevision)
         {
           throwException<Exception>(
-            "Out-of-sequence library changeset revision: expected {}, got {}", *optExpectedRevision, revision);
+            "Out-of-sequence library changeset revision: expected {}, got {}", expectedRevision, revision);
         }
 
         if (publicationInProgress)
@@ -109,26 +95,17 @@ namespace ao::rt
 
       try
       {
-        if (callbackExecutor != nullptr)
-        {
-          callbackExecutor->dispatch(
-            [weakImplPtr = weak_from_this()]
+        callbackExecutor.dispatch(
+          [weakImplPtr = weak_from_this()]
+          {
+            if (auto const lockedPtr = weakImplPtr.lock(); lockedPtr != nullptr)
             {
-              if (auto const lockedPtr = weakImplPtr.lock(); lockedPtr != nullptr)
-              {
-                lockedPtr->deliverPending();
-              }
-            });
-        }
-        else
-        {
-          deliverPending();
-        }
+              lockedPtr->deliverPending();
+            }
+          });
       }
       catch (...)
       {
-        auto optFailedPublication = std::optional<PendingPublication>{};
-
         {
           auto const lock = std::scoped_lock{mutex};
 
@@ -137,28 +114,12 @@ namespace ao::rt
           // propagate. A still-pending value means dispatch rejected the task.
           if (optPendingPublication)
           {
-            optFailedPublication.emplace(std::move(*optPendingPublication));
             optPendingPublication.reset();
             publicationInProgress = false;
           }
         }
 
-        auto const failure = std::current_exception();
-
-        if (optFailedPublication && optFailedPublication->completion)
-        {
-          try
-          {
-            optFailedPublication->completion(failure);
-          }
-          catch (...)
-          {
-            // Preserve the publication failure; completion is fault cleanup.
-            std::rethrow_exception(failure);
-          }
-        }
-
-        std::rethrow_exception(failure);
+        throw;
       }
     }
 
@@ -188,34 +149,26 @@ namespace ao::rt
       {
         auto const lock = std::scoped_lock{mutex};
         publicationInProgress = false;
-        gsl_Assert(optExpectedRevision);
-        ++*optExpectedRevision;
+        ++expectedRevision;
       }
 
       if (optPending->completion)
       {
-        optPending->completion({});
+        optPending->completion();
       }
     }
 
-    async::Executor* callbackExecutor = nullptr;
+    async::Executor& callbackExecutor;
     std::shared_ptr<ReplicaSlot> replicaSlotPtr;
     async::Signal<LibraryChangeSet const&> changedSignal;
-    async::Signal<LibraryChanges::LibraryTaskCompleted const&> libraryTaskCompletedSignal;
-    async::Signal<LibraryChanges::LibraryTaskProgressUpdated const&> libraryTaskProgressSignal;
     std::mutex mutex;
     std::optional<PendingPublication> optPendingPublication;
-    std::optional<std::uint64_t> optExpectedRevision;
+    std::uint64_t expectedRevision = 1;
     bool publicationInProgress = false;
   };
 
-  LibraryChanges::LibraryChanges()
-    : _implPtr{std::make_shared<Impl>()}
-  {
-  }
-
   LibraryChanges::LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision)
-    : _implPtr{std::make_shared<Impl>(&callbackExecutor, lastPublishedRevision)}
+    : _implPtr{std::make_shared<Impl>(callbackExecutor, lastPublishedRevision)}
   {
   }
 
@@ -242,33 +195,9 @@ namespace ao::rt
     return _implPtr->changedSignal.connect(std::move(handler));
   }
 
-  async::Subscription LibraryChanges::onLibraryTaskCompleted(
-    std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const
-  {
-    return _implPtr->libraryTaskCompletedSignal.connect(std::move(handler));
-  }
-
-  async::Subscription LibraryChanges::onLibraryTaskProgress(
-    std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const
-  {
-    return _implPtr->libraryTaskProgressSignal.connect(std::move(handler));
-  }
-
   void LibraryChanges::publishFromCoordinator(LibraryChangeSet changeSet,
-                                              std::move_only_function<void(std::exception_ptr)> completion)
+                                              std::move_only_function<void() noexcept> completion)
   {
     _implPtr->publish(std::move(changeSet), std::move(completion));
-  }
-
-  void LibraryChanges::notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress)
-  {
-    _implPtr->libraryTaskProgressSignal.emit(progress);
-  }
-
-  void LibraryChanges::notifyLibraryTaskCompleted(LibraryTaskCompletionStatus const status,
-                                                  std::size_t const affectedCount)
-  {
-    auto const event = LibraryTaskCompleted{.status = status, .affectedCount = affectedCount};
-    _implPtr->libraryTaskCompletedSignal.emit(event);
   }
 } // namespace ao::rt

@@ -19,9 +19,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - createView with groupBy applies effective sort", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service, {.groupBy = TrackGroupKey::Artist});
+    auto const result = env.requireView({.groupBy = TrackGroupKey::Artist});
     auto const snap = service.trackListState(result);
 
     CHECK(snap.groupBy == TrackGroupKey::Artist);
@@ -44,9 +44,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - presentation mutation reports a removed view", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
-    auto const view = env.requireView(service);
-    REQUIRE(service.destroyView(view));
+    auto& service = env.service;
+    auto const view = env.requireView();
+    REQUIRE(env.workspace.closeView(view));
 
     auto const result = service.setPresentation(view, defaultTrackPresentationSpec());
     REQUIRE_FALSE(result);
@@ -56,9 +56,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - createView with Album groupBy applies album sort", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service, {.groupBy = TrackGroupKey::Album});
+    auto const result = env.requireView({.groupBy = TrackGroupKey::Album});
     auto const snap = service.trackListState(result);
 
     CHECK(snap.groupBy == TrackGroupKey::Album);
@@ -80,13 +80,13 @@ namespace ao::rt::test
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
     auto const manualListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Manual order",
     }));
 
-    auto const created = env.requireView(service, {.listId = manualListId});
+    auto const created = env.requireView({.listId = manualListId});
     auto const state = service.trackListState(created);
 
     CHECK(state.presentation.id == kListOrderTrackPresentationId);
@@ -98,7 +98,7 @@ namespace ao::rt::test
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
     auto const manualListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
       .name = "Explicit order",
@@ -106,7 +106,7 @@ namespace ao::rt::test
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
 
-    auto const created = env.requireView(service, {.listId = manualListId, .optPresentation = albumsPreset->spec});
+    auto const created = env.requireView({.listId = manualListId, .optPresentation = albumsPreset->spec});
     auto const state = service.trackListState(created);
 
     CHECK(state.presentation.id == "albums");
@@ -118,15 +118,15 @@ namespace ao::rt::test
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
     auto const smartListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Smart,
       .name = "Smart order",
       .expression = "true",
     }));
 
-    auto const allTracks = env.requireView(service);
-    auto const smart = env.requireView(service, {.listId = smartListId});
+    auto const allTracks = env.requireView();
+    auto const smart = env.requireView({.listId = smartListId});
 
     CHECK(service.trackListState(allTracks).presentation.id == kDefaultTrackPresentationId);
     CHECK(service.trackListState(smart).presentation.id == kDefaultTrackPresentationId);
@@ -136,11 +136,10 @@ namespace ao::rt::test
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
     auto const* genresPreset = builtinTrackPresentationPreset("genres");
     REQUIRE(genresPreset != nullptr);
-    auto const created =
-      env.requireView(service, {.filterExpression = "$year > 2000", .optPresentation = genresPreset->spec});
+    auto const created = env.requireView({.filterExpression = "$year > 2000", .optPresentation = genresPreset->spec});
 
     auto const captured = service.capturePlaybackLaunchSpec(created);
 
@@ -157,9 +156,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setPresentation updates state and projection", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
+    auto const result = env.requireView();
     auto const viewId = ViewId{result};
 
     auto const* preset = builtinTrackPresentationPreset("genres");
@@ -174,11 +173,11 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setPresentation no-ops on same value", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
     auto const* preset = builtinTrackPresentationPreset("years");
     REQUIRE(preset != nullptr);
-    auto const result = env.requireView(service);
+    auto const result = env.requireView();
     std::int32_t published = 0;
     auto const sub = service.onPresentationChanged([&](auto const&) noexcept { ++published; });
     REQUIRE(service.setPresentation(result, preset->spec));
@@ -195,8 +194,8 @@ namespace ao::rt::test
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
-    auto const result = env.requireView(service);
+    auto& service = env.service;
+    auto const result = env.requireView();
     auto presentation = defaultTrackPresentationSpec();
     presentation.id = "custom";
     presentation.visibleFields = {TrackField::Title};
@@ -212,9 +211,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setPresentation publishes PresentationChanged", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
+    auto const result = env.requireView();
 
     auto received = TrackPresentationSpec{};
     auto const sub = service.onPresentationChanged([&](auto const& ev) noexcept { received = ev.presentation; });
@@ -230,9 +229,9 @@ namespace ao::rt::test
   TEST_CASE("ViewService - setPresentation no-op does not publish event", "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
+    auto const result = env.requireView();
 
     std::int32_t callCount = 0;
     auto const sub = service.onPresentationChanged([&](auto const&) noexcept { ++callCount; });
@@ -255,9 +254,9 @@ namespace ao::rt::test
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
-    auto service = env.makeService();
+    auto& service = env.service;
 
-    auto const result = env.requireView(service);
+    auto const result = env.requireView();
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
     REQUIRE(service.setPresentation(result, preset->spec));

@@ -7,6 +7,7 @@
 #include "ViewIds.h"
 #include "ViewState.h"
 #include "WorkspaceSnapshot.h"
+#include "projection/TrackDetailProjection.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
@@ -86,6 +87,8 @@ namespace ao::rt
 
     Result<> goBack();
     Result<> goForward();
+
+    std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target);
 
     async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&) noexcept> handler);
 

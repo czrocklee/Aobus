@@ -309,8 +309,6 @@ namespace ao::cli
       {
         case rt::TrackAuthoringStatus::Applied:
         case rt::TrackAuthoringStatus::NoOp: break;
-        case rt::TrackAuthoringStatus::Missing:
-          throwCommandError(Error::Code::NotFound, "one or more track update targets no longer exist");
         case rt::TrackAuthoringStatus::Stale:
           throwCommandError(Error::Code::Conflict, "library changed while preparing the track update");
         case rt::TrackAuthoringStatus::Unavailable:

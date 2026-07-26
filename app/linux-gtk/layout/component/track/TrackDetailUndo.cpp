@@ -119,9 +119,6 @@ namespace ao::gtk::layout
       case rt::TrackAuthoringStatus::Stale:
         result = makeError(Error::Code::InvalidState, "Library changed before metadata undo could be applied");
         break;
-      case rt::TrackAuthoringStatus::Missing:
-        result = makeError(Error::Code::NotFound, "One or more tracks for metadata undo no longer exist");
-        break;
       case rt::TrackAuthoringStatus::Unavailable:
         result = makeError(Error::Code::InvalidState, "Metadata undo is currently unavailable");
         break;

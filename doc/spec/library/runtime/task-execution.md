@@ -40,7 +40,7 @@ Once a maintenance transaction may have committed, the coroutine returns to the 
 
 ## Progress and completion
 
-Task progress and completion use the operational channels in `LibraryChanges`.
+Task progress and completion use owner-local operational channels on `LibraryTaskService`.
 Progress is best effort and does not constitute a committed state transition.
 The terminal event distinguishes `Succeeded`, `CompletedWithIssues`, `Failed`, and `Cancelled`; every status clears active progress, while presentation may announce success only for `Succeeded`.
 Its affected count describes the operation-specific completed item count and is zero when no useful item completed.
@@ -74,7 +74,7 @@ Failure while admitting or enqueueing a committed revision leaves the coordinato
 - [`LibraryTaskService.h`](../../../../app/include/ao/rt/library/LibraryTaskService.h) defines the async task surface.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns executor hops, coordinator composition, and notification adaptation.
 - [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns maintenance admission and bounded write sessions.
-- [`LibraryChanges.h`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines progress and completion channels.
+- [`LibraryTaskEvents.h`](../../../../app/include/ao/rt/library/LibraryTaskEvents.h) defines the progress and completion payloads independently of the task-operation surface.
 
 ## Test map
 

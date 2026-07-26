@@ -61,9 +61,8 @@ Its observer signal weak-invalidates outstanding subscriptions when the projecti
 
 ## Implementation map
 
-- [`TrackDetailProjection.h`](../../../../app/include/ao/rt/projection/TrackDetailProjection.h) defines targets, aggregate values, and snapshots.
-- [`LiveTrackDetailProjection.h`](../../../../app/include/ao/rt/projection/LiveTrackDetailProjection.h) defines the live projection boundary.
-- [`LiveTrackDetailProjection.cpp`](../../../../app/runtime/projection/LiveTrackDetailProjection.cpp) owns target tracking, aggregation, and refresh behavior.
+- [`TrackDetailProjection.h`](../../../../app/include/ao/rt/projection/TrackDetailProjection.h) defines the concrete projection, targets, aggregate values, and snapshots.
+- [`TrackDetailProjection.cpp`](../../../../app/runtime/projection/TrackDetailProjection.cpp) owns target tracking, aggregation, and refresh behavior.
 
 ## Test map
 

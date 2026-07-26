@@ -6,7 +6,7 @@
 #include "test/unit/runtime/source/ManualListSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/ManualListSource.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
@@ -37,16 +37,16 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->remove(TrackId{2});
 
     auto const hiddenEffective = std::vector{TrackId{1}, TrackId{3}};
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 1);
-    auto const& removal = std::get<SourceRemoveRange>(batches[0].deltas.front());
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(batches[0]).edits.front());
     CHECK(removal.start == 1);
     CHECK(removal.trackIds == std::vector{TrackId{2}});
     CHECK(sourceTrackIds(source) == hiddenEffective);
@@ -55,8 +55,8 @@ namespace ao::rt::test
 
     auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
     REQUIRE(batches.size() == 2);
-    REQUIRE(batches[1].deltas.size() == 1);
-    auto const& insertion = std::get<SourceInsertRange>(batches[1].deltas.front());
+    REQUIRE(sourceEditScript(batches[1]).edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches[1]).edits.front());
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{TrackId{2}});
     CHECK(sourceTrackIds(source) == expectedStored);
@@ -83,18 +83,17 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(quickFilter) == std::vector{second, third, first});
     auto quickFilterSpy = TrackSourceBatchSpy{quickFilter};
 
-    manualPtr->applyManualTracksMove(ManualTracksMove{
-      .removals = {{.start = 2, .trackIds = {third}}},
-      .insertionIndexAfterRemoval = 0,
-      .insertedTrackIds = {third},
+    manualPtr->applyManualEditScript(delta::RegularTrackEditScript{
+      .edits = {delta::RemoveRange{.start = 2, .trackIds = {third}},
+                delta::InsertRange{.start = 0, .trackIds = {third}}},
     });
 
     CHECK(sourceTrackIds(*manualPtr) == std::vector{third, second, hidden, first});
     CHECK(sourceTrackIds(quickFilter) == std::vector{third, second, first});
     REQUIRE(quickFilterSpy.batches.size() == 1);
-    REQUIRE(quickFilterSpy.batches.front().deltas.size() == 2);
-    auto const& removal = std::get<SourceRemoveRange>(quickFilterSpy.batches.front().deltas[0]);
-    auto const& insertion = std::get<SourceInsertRange>(quickFilterSpy.batches.front().deltas[1]);
+    REQUIRE(sourceEditScript(quickFilterSpy.batches.front()).edits.size() == 2);
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(quickFilterSpy.batches.front()).edits[0]);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(quickFilterSpy.batches.front()).edits[1]);
     CHECK(removal.start == 1);
     CHECK(removal.trackIds == std::vector{third});
     CHECK(insertion.start == 0);
@@ -107,14 +106,14 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->replaceWithBatch(std::vector{TrackId{3}, TrackId{1}, TrackId{2}},
-                                TrackSourceDeltaBatch{
-                                  .deltas = {SourceRemoveRange{.start = 2, .trackIds = {TrackId{3}}},
-                                             SourceInsertRange{.start = 0, .trackIds = {TrackId{3}}}},
+                                delta::RegularTrackEditScript{
+                                  .edits = {delta::RemoveRange{.start = 2, .trackIds = {TrackId{3}}},
+                                            delta::InsertRange{.start = 0, .trackIds = {TrackId{3}}}},
                                 });
 
     auto const expected = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
@@ -128,21 +127,21 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->replaceWithBatch(std::vector{TrackId{1}, TrackId{3}, TrackId{4}},
-                                TrackSourceDeltaBatch{
-                                  .deltas = {SourceRemoveRange{.start = 1, .trackIds = {TrackId{2}}},
-                                             SourceInsertRange{.start = 2, .trackIds = {TrackId{4}}}},
+                                delta::RegularTrackEditScript{
+                                  .edits = {delta::RemoveRange{.start = 1, .trackIds = {TrackId{2}}},
+                                            delta::InsertRange{.start = 2, .trackIds = {TrackId{4}}}},
                                 });
 
     auto const expected = std::vector{TrackId{1}, TrackId{3}, TrackId{4}};
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 2);
-    auto const& removal = std::get<SourceRemoveRange>(batches.front().deltas[0]);
-    auto const& insertion = std::get<SourceInsertRange>(batches.front().deltas[1]);
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 2);
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(batches.front()).edits[0]);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches.front()).edits[1]);
     CHECK(removal.start == 1);
     CHECK(removal.trackIds == std::vector{TrackId{2}});
     CHECK(insertion.start == 2);
@@ -156,20 +155,20 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{3}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
-    parentPtr->publishBatch(TrackSourceDeltaBatch{
-      .deltas = {SourceUpdateRange{
+    parentPtr->publishBatch(delta::RegularTrackEditScript{
+      .edits = {delta::UpdateRange{
         .start = 0,
         .trackIds = {TrackId{1}, TrackId{2}, TrackId{3}},
       }},
     });
 
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    auto const& update = std::get<SourceUpdateRange>(batches.front().deltas.front());
+    REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
+    auto const& update = std::get<delta::UpdateRange>(sourceEditScript(batches.front()).edits.front());
     auto const expectedUpdated = std::vector{TrackId{1}, TrackId{3}};
     CHECK(update.start == 0);
     CHECK(update.trackIds == expectedUpdated);
@@ -181,9 +180,9 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{9}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->append(TrackId{8});
     parentPtr->update(TrackId{9});
@@ -199,17 +198,16 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->reset(std::vector{TrackId{3}, TrackId{1}});
 
     auto const expectedStored = std::vector{TrackId{1}, TrackId{2}, TrackId{3}};
     auto const expectedEffective = std::vector{TrackId{1}, TrackId{3}};
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(batches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceReset>(batches.front()));
     CHECK(sourceTrackIds(source) == expectedEffective);
     CHECK(storedTrackIdsOf(source) == expectedStored);
   }
@@ -220,16 +218,15 @@ namespace ao::rt::test
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->invalidate();
     parentPtr->invalidate();
 
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceInvalidated>(batches.front()));
     CHECK(source.state() == TrackSourceState::Invalidated);
   }
 
@@ -241,12 +238,12 @@ namespace ao::rt::test
     auto innerPtr = std::make_shared<ManualListSource>(innerView.view(), TrackSourceLease{rootPtr});
     auto outerView = ListViewOwner{{TrackId{2}}};
     auto outer = ManualListSource{outerView.view(), TrackSourceLease{innerPtr}};
-    auto innerBatches = std::vector<TrackSourceDeltaBatch>{};
-    auto outerBatches = std::vector<TrackSourceDeltaBatch>{};
-    [[maybe_unused]] auto innerSubscription = innerPtr->subscribe(
-      [&innerBatches](TrackSourceDeltaBatch const& batch) noexcept { innerBatches.push_back(batch); });
+    auto innerBatches = std::vector<TrackSourceDelta>{};
+    auto outerBatches = std::vector<TrackSourceDelta>{};
+    [[maybe_unused]] auto innerSubscription =
+      innerPtr->subscribe([&innerBatches](TrackSourceDelta const& batch) noexcept { innerBatches.push_back(batch); });
     [[maybe_unused]] auto outerSubscription =
-      outer.subscribe([&outerBatches](TrackSourceDeltaBatch const& batch) noexcept { outerBatches.push_back(batch); });
+      outer.subscribe([&outerBatches](TrackSourceDelta const& batch) noexcept { outerBatches.push_back(batch); });
 
     rootPtr->invalidate();
 
@@ -254,8 +251,8 @@ namespace ao::rt::test
     CHECK(outer.state() == TrackSourceState::Invalidated);
     REQUIRE(innerBatches.size() == 1);
     REQUIRE(outerBatches.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(innerBatches.front().deltas.front()));
-    CHECK(std::holds_alternative<SourceInvalidated>(outerBatches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceInvalidated>(innerBatches.front()));
+    CHECK(std::holds_alternative<SourceInvalidated>(outerBatches.front()));
   }
 
   TEST_CASE("ManualListSource - lease pins its parent for the subscription lifetime",

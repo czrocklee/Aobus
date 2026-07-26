@@ -11,6 +11,7 @@
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
+#include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
 
 #include <algorithm>
@@ -188,8 +189,8 @@ namespace ao::rt
       std::vector<PendingIdentityRow> const& rows;
       std::vector<RowSlot>& slots;
       AudioIdentityIndexer::FingerprintFunction const& fingerprint;
-      AudioIdentityIndexer::ProgressCallback& progressCallback;
-      AudioIdentityIndexer::ItemFailureCallback& failureCallback;
+      AudioIdentityIndexProgressCallback& progressCallback;
+      AudioIdentityIndexFailureCallback& failureCallback;
       std::stop_token stopToken;
       std::int32_t totalCount = 0;
       std::atomic<std::size_t>& cursor;
@@ -360,8 +361,8 @@ namespace ao::rt
   async::Task<Result<AudioIdentityIndexResult>> AudioIdentityIndexer::indexPending(
     CommitBatchCallback commitBatchCallback,
     Options options,
-    ProgressCallback progressCallback,
-    ItemFailureCallback failureCallback,
+    AudioIdentityIndexProgressCallback progressCallback,
+    AudioIdentityIndexFailureCallback failureCallback,
     std::stop_token stopToken)
   {
     if (!commitBatchCallback)

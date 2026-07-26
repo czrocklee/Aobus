@@ -257,7 +257,7 @@ namespace ao::rt::test
       .name = "Teardown order",
       .trackIds = {firstTrackId, secondTrackId},
     }));
-    auto const viewId = ao::test::requireValue(appPtr->views().createView({.listId = listId}));
+    auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));
     auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;
     REQUIRE(appPtr->playback().commands().startFromView(viewId, firstTrackId));
     REQUIRE(waitForPlaybackSettlement(

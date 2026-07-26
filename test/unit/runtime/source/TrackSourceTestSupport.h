@@ -88,11 +88,12 @@ namespace ao::rt::test
           std::erase(_ids, id);
         }
 
-        std::ignore = publishDeltaBatch(std::move(*optBatch), previousSize);
+        std::ignore = publishDelta(std::move(*optBatch), previousSize);
       }
     }
 
     void batchUpdate(std::span<TrackId const> ids) { notifyUpdated(ids); }
+    void updateByIdentity(TrackId const id) { notifyUpdated(id); }
 
     void singleInsert(TrackId id) { append(id); }
 
@@ -100,14 +101,14 @@ namespace ao::rt::test
 
     void singleUpdate(TrackId id) { update(id); }
 
-    void replaceWithBatch(std::span<TrackId const> ids, TrackSourceDeltaBatch batch)
+    void replaceWithBatch(std::span<TrackId const> ids, TrackSourceDelta batch)
     {
       auto const previousSize = _ids.size();
       _ids.assign(ids.begin(), ids.end());
-      std::ignore = publishDeltaBatch(std::move(batch), previousSize);
+      std::ignore = publishDelta(std::move(batch), previousSize);
     }
 
-    void publishBatch(TrackSourceDeltaBatch batch) { std::ignore = publishDeltaBatch(std::move(batch), _ids.size()); }
+    void publishBatch(TrackSourceDelta batch) { std::ignore = publishDelta(std::move(batch), _ids.size()); }
 
     std::size_t size() const override { return _ids.size(); }
     TrackId trackIdAt(std::size_t index) const override { return _ids.at(index); }
@@ -150,14 +151,18 @@ namespace ao::rt::test
     return trackIds;
   }
 
+  inline delta::RegularTrackEditScript const& sourceEditScript(TrackSourceDelta const& message)
+  {
+    return std::get<delta::RegularTrackEditScript>(message);
+  }
+
   // Recorded batches are intentionally public as the spy's assertion surface.
   // NOLINTBEGIN(cppcoreguidelines-non-private-member-variables-in-classes)
   class TrackSourceBatchSpy final
   {
   public:
     explicit TrackSourceBatchSpy(TrackSource& source)
-      : _subscription{
-          source.subscribe([this](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); })}
+      : _subscription{source.subscribe([this](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); })}
     {
     }
 
@@ -171,7 +176,7 @@ namespace ao::rt::test
     void clear() { batches.clear(); }
 
     // NOLINTNEXTLINE(aobus-readability-identifier-naming-extensions)
-    std::vector<TrackSourceDeltaBatch> batches;
+    std::vector<TrackSourceDelta> batches;
 
   private:
     async::Subscription _subscription;

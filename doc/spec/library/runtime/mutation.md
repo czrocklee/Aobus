@@ -70,7 +70,9 @@ The all-tags query returns distinct tag text and usage counts ordered by descend
 Binding from inside the matching `Available` notification is valid, but committing another mutation reentrantly from any publication or availability observer is rejected.
 
 Metadata updates apply one patch to the complete bound target sequence.
-Validation uses this precedence: a foreign runtime binding is `Stale`; maintenance or fault is `Unavailable`; a superseded revision is `Stale`; and any missing target returns `Missing` with the missing ids.
+Binding first validates every requested id and returns `NotFound` when a target is absent.
+Submission then uses this precedence: a foreign runtime binding is `Stale`; maintenance or fault is `Unavailable`; and a superseded revision is `Stale`.
+Because the coordinator serializes mutation and publication, disappearance under an accepted exact-revision binding is an invariant violation rather than a recoverable authoring outcome.
 None of these outcomes commits a subset.
 Fields whose current value already equals the patch produce a semantic `NoOp`; no-op preserves the current binding and publishes nothing.
 An effective update returns `Applied`, the mutation reply, the committed revision, and a next binding for the same target order at that revision.
@@ -146,7 +148,7 @@ No command publishes a change for a failed, previewed, or no-op transaction.
 When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
 The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks while writer and dictionary locks are held.
 
-`Stale`, `Missing`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata/tag authoring outcomes.
+`Stale`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata/tag authoring outcomes.
 Input, validation, serialization, and pre-commit storage failures remain `Result` errors.
 After durable commit, revision-admission or publication-enqueue failure faults the coordinator and propagates as a committed-publication failure; it is never reported as an ordinary pre-commit error, and the runtime rejects every later mutation.
 

@@ -4,7 +4,7 @@
 #include "test/unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.h"
 #include "uimodel/status/activity/ActivityStatusFeedProjection.h"
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -36,7 +36,7 @@ namespace ao::uimodel::test
     SECTION("synthetic library progress is retained as task detail")
     {
       feedProjection.handleLibraryTaskProgress(
-        libraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressKind::Scanning, "album.flac", 0.5));
+        libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.5));
 
       auto const& detail = feedProjection.viewState().detail;
       REQUIRE(detail.optLibraryTask);

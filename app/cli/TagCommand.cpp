@@ -235,8 +235,6 @@ namespace ao::cli
       {
         case rt::TrackAuthoringStatus::Applied:
         case rt::TrackAuthoringStatus::NoOp: break;
-        case rt::TrackAuthoringStatus::Missing:
-          throwCommandError(Error::Code::NotFound, "one or more tag edit targets no longer exist");
         case rt::TrackAuthoringStatus::Stale:
           throwCommandError(Error::Code::Conflict, "library changed while preparing the tag edit");
         case rt::TrackAuthoringStatus::Unavailable:

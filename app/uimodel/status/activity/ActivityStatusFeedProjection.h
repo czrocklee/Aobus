@@ -5,7 +5,7 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -21,9 +21,8 @@ namespace ao::uimodel
   public:
     void initialize(rt::NotificationFeedState const& feed);
     void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
-    void handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event);
-    void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event,
-                                    rt::NotificationFeedState const& feed);
+    void handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event);
+    void handleLibraryTaskCompleted(rt::LibraryTaskCompleted const& event, rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
     void hideDetailNotification(rt::NotificationId id, rt::NotificationFeedState const& feed);
     void autoDismissCompact(rt::NotificationFeedState const& feed);
@@ -33,7 +32,7 @@ namespace ao::uimodel
   private:
     struct LibraryProgressState final
     {
-      rt::LibraryChanges::LibraryTaskProgressKind kind = rt::LibraryChanges::LibraryTaskProgressKind::Scanning;
+      rt::LibraryTaskProgressKind kind = rt::LibraryTaskProgressKind::Scanning;
       std::string subject{};
       double fraction = 0.0;
     };

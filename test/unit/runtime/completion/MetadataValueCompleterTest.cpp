@@ -7,7 +7,6 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/completion/MetadataValueCompleter.h>
-#include <ao/rt/library/LibraryChanges.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -50,7 +49,7 @@ namespace ao::rt::test
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Protection");
     addMetadataValueTrack(libraryFixture, "Mazzy Star", "So Tonight That I Might See");
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     auto artistCompleter = MetadataValueCompleter{service, TrackField::Artist};
@@ -73,7 +72,7 @@ namespace ao::rt::test
     addMetadataValueTrack(libraryFixture, "Artist A", "Album A");
     addMetadataValueTrack(libraryFixture, "Artist B", "Album B");
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     auto titleCompleter = MetadataValueCompleter{service, TrackField::Title};
@@ -91,7 +90,7 @@ namespace ao::rt::test
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
     addMetadataValueTrack(libraryFixture, "Mazzy Star", "She Hangs Brightly");
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     auto provider = MetadataValueCompleter{service, TrackField::Artist}.asProvider();

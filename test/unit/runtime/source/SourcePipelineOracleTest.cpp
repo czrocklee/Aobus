@@ -13,9 +13,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
@@ -128,7 +126,7 @@ namespace ao::rt::test
       }));
     }
 
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const manualListId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -147,13 +145,13 @@ namespace ao::rt::test
     auto allTracksLease = ao::test::requireValue(cache.acquire(kAllTracksListId));
     auto manualLease = ao::test::requireValue(cache.acquire(manualListId));
     auto smartLease = ao::test::requireValue(cache.acquire(smartListId));
-    auto manualProjection = LiveTrackListProjection{
+    auto manualProjection = TrackListProjection{
       kInvalidViewId,
       manualLease,
       libraryFixture.library(),
       TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}},
     };
-    auto smartProjection = LiveTrackListProjection{
+    auto smartProjection = TrackListProjection{
       kInvalidViewId,
       smartLease,
       libraryFixture.library(),

@@ -43,7 +43,9 @@ namespace ao::rt::test
                                            std::unique_ptr<LibraryChanges>& changesPtr,
                                            std::unique_ptr<CompletionService>& servicePtr)
     {
-      changesPtr = std::make_unique<LibraryChanges>();
+      static thread_local auto executor = InlineExecutor{};
+      auto const transaction = libraryFixture.library().readTransaction();
+      changesPtr = std::make_unique<LibraryChanges>(executor, libraryFixture.library().libraryRevision(transaction));
       servicePtr = std::make_unique<CompletionService>(libraryFixture.library(), *changesPtr);
       return QueryExpressionCompleter{*servicePtr};
     }

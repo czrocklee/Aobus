@@ -7,9 +7,7 @@
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
-#include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
@@ -183,8 +181,23 @@ namespace ao::rt::test
       {
         auto const playableUri = std::format("playable-{}.flac", nextPlayableFile++);
         audio::test::installAudioFixture(application.libraryFixture.root(), "basic_metadata.flac", playableUri);
-        return application.libraryFixture.addTrack(
-          library::test::TrackSpec{.title = std::move(title), .uri = playableUri, .codec = AudioCodec::Flac});
+        auto const created =
+          ao::test::requireValue(writer().createTrackFromFile(application.libraryFixture.root() / playableUri));
+
+        if constexpr (requires { application.executor.drain(); })
+        {
+          application.executor.drain();
+        }
+
+        REQUIRE(
+          application.writerFixture.updateMetadata(std::array{created.trackId}, MetadataPatch{.optTitle = title}));
+
+        if constexpr (requires { application.executor.drain(); })
+        {
+          application.executor.drain();
+        }
+
+        return created.trackId;
       }
 
       void buildThreeTrackManualView()
@@ -198,7 +211,7 @@ namespace ao::rt::test
           .name = "Playback order",
           .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
         }));
-        viewId = ao::test::requireValue(application.views.createView({.listId = listId}));
+        viewId = ao::test::requireValue(application.workspace.navigate({.target = listId}));
         application.addReadyProvider();
         application.executor.drain();
       }
@@ -229,10 +242,11 @@ namespace ao::rt::test
 
   TEST_CASE("PlaybackService - public commands cannot bypass succession", "[runtime][unit][playback][boundary]")
   {
-    // The internal transport still supports focused collaborator tests, while
-    // neither public entry point can create a transport-only playback subject.
+    // The internal transport still supports focused collaborator tests through
+    // a complete request, while no public entry point can create a
+    // transport-only playback subject.
     STATIC_REQUIRE(HasTrackOnlyStart<PlaybackTransport>);
-    STATIC_REQUIRE(HasTrackOnlyPreparation<PlaybackTransport>);
+    STATIC_REQUIRE(!HasTrackOnlyPreparation<PlaybackTransport>);
     STATIC_REQUIRE(HasPreparedNextClear<PlaybackTransport>);
     STATIC_REQUIRE(!HasTrackOnlyStart<PlaybackService>);
     STATIC_REQUIRE(!HasTrackOnlyStart<PlaybackCommands>);
@@ -354,7 +368,7 @@ namespace ao::rt::test
             "[runtime][regression][playback][snapshot]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges();
     auto sources = TrackSourceCache{fixture.libraryFixture.library(), changes};
     auto views = ViewService{fixture.executor, fixture.libraryFixture.library(), sources};
     auto succession = PlaybackSuccession{fixture.executor,
@@ -646,7 +660,7 @@ namespace ao::rt::test
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
   }
 
-  TEST_CASE("PlaybackService - queued command exceptions do not strand later commands",
+  TEST_CASE("PlaybackService - an unexpected command exception terminally closes admission",
             "[runtime][regression][playback][concurrency]")
   {
     // The arm must outlive the backend that borrows it.
@@ -675,11 +689,20 @@ namespace ao::rt::test
 
     fixture.commands().setShuffleMode(ShuffleMode::On);
     REQUIRE(queuedCommands);
+    auto const lastCommitted = fixture.playback().snapshot();
     REQUIRE_THROWS_AS(fixture.application.executor.drain(), Exception);
 
+    CHECK(fixture.playback().snapshot() == lastCommitted);
+    CHECK(fixture.playback().snapshot().succession.repeat == RepeatMode::Off);
+
+    auto const rejectedStart = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
+    REQUIRE_FALSE(rejectedStart);
+    CHECK(rejectedStart.error().code == Error::Code::InvalidState);
+
+    fixture.commands().setRepeatMode(RepeatMode::One);
     fixture.application.executor.drain();
 
-    CHECK(fixture.playback().snapshot().succession.repeat == RepeatMode::All);
+    CHECK(fixture.playback().snapshot() == lastCommitted);
   }
 
   TEST_CASE("PlaybackService - a newer stop supersedes an observer-queued start",

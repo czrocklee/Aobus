@@ -8,8 +8,7 @@
 #include "ShellLayoutStore.h"
 #include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
-#include "layout/document/GtkLayoutPresets.h"
-#include "layout/document/LayoutDocument.h"
+#include "layout/document/LayoutPresets.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -174,22 +173,12 @@ namespace ao::gtk
     , _parentWindow{window}
     , _registry{}
     , _actionRegistry{}
-    , _trackRowCache{dependencies.trackRowCache}
-    , _imageLoader{dependencies.imageLoader}
-    , _playbackCommandSurface{dependencies.playbackCommandSurface}
-    , _tagEditController{dependencies.tagEditController}
-    , _importExportActions{dependencies.importExportActions}
-    , _trackPageHost{dependencies.trackPageHost}
-    , _trackPresentationCatalog{dependencies.trackPresentationCatalog}
-    , _trackPresentationPreferences{dependencies.trackPresentationPreferences}
-    , _listNavigationController{dependencies.listNavigationController}
-    , _createSmartListFromExpression{std::move(dependencies.createSmartListFromExpression)}
-    , _menuModelPtr{std::move(dependencies.menuModelPtr)}
+    , _dependencies{std::move(dependencies)}
     , _host{_registry}
     , _configStorePtr{std::move(configStorePtr)}
     , _layoutStorePtr{std::move(layoutStorePtr)}
     , _componentStateStorePtr{std::move(componentStateStorePtr)}
-    , _themeCoordinator{requireThemeCoordinator(dependencies)}
+    , _themeCoordinator{requireThemeCoordinator(_dependencies)}
     , _callbackScope{[this] { _queuedOpenEditorConnection.disconnect(); }}
   {
     _runtimeState.componentStateStore = _componentStateStorePtr.get();
@@ -220,8 +209,8 @@ namespace ao::gtk
     registerWorkspaceActions(registerAction, hasActiveSequence);
     registerTrackActions(registerAction);
 
-    _playbackSubs.push_back(
-      commandSurface(_playbackCommandSurface).onAvailabilityChanged([this] noexcept { refreshExportedActions(); }));
+    _playbackSubs.push_back(commandSurface(_dependencies.playbackCommandSurface)
+                              .onAvailabilityChanged([this] noexcept { refreshExportedActions(); }));
   }
 
   ShellLayoutController::~ShellLayoutController()
@@ -239,7 +228,7 @@ namespace ao::gtk
 
   void ShellLayoutController::setMenuModel(Glib::RefPtr<Gio::MenuModel> menuModelPtr)
   {
-    _menuModelPtr = std::move(menuModelPtr);
+    _dependencies.menuModelPtr = std::move(menuModelPtr);
   }
 
   void ShellLayoutController::registerPlaybackActions(RegisterActionFn const& registerAction)
@@ -247,7 +236,7 @@ namespace ao::gtk
     auto const execute = [this](uimodel::PlaybackCommand command)
     {
       return [this, command](layout::ActionActivationContext&)
-      { commandSurface(_playbackCommandSurface).execute(command); };
+      { commandSurface(_dependencies.playbackCommandSurface).execute(command); };
     };
 
     auto const isEnabled = [this](uimodel::PlaybackCommand command)
@@ -255,7 +244,7 @@ namespace ao::gtk
       return [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
       {
         return uimodel::LayoutActionAvailability{
-          .enabled = commandSurface(_playbackCommandSurface).isEnabled(command), .disabledReason = ""};
+          .enabled = commandSurface(_dependencies.playbackCommandSurface).isEnabled(command), .disabledReason = ""};
       };
     };
 
@@ -343,14 +332,14 @@ namespace ao::gtk
                    uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
                    [this](layout::ActionActivationContext& ctx)
                    {
-                     if (_menuModelPtr)
+                     if (_dependencies.menuModelPtr)
                      {
                        if (_menuPopover.hasPopover())
                        {
                          return;
                        }
 
-                       auto popoverPtr = std::make_unique<Gtk::PopoverMenu>(_menuModelPtr);
+                       auto popoverPtr = std::make_unique<Gtk::PopoverMenu>(_dependencies.menuModelPtr);
                        popoverPtr->set_has_arrow(true);
                        _menuPopover.attach(std::move(popoverPtr), ctx.anchorWidget);
                        _menuPopover.popup();
@@ -422,15 +411,14 @@ namespace ao::gtk
       uimodel::LayoutActionCapability::None,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (_tagEditController != nullptr)
+        if (_dependencies.tagEditController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
-          auto projPtr =
-            ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
+          auto projPtr = ctx.runtime.workspace().detailProjection(target);
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            _tagEditController->presentProperties(
+            _dependencies.tagEditController->presentProperties(
               TrackSelection{.listId = kInvalidListId, .selectedIds = snap.trackIds});
           }
         }
@@ -438,8 +426,7 @@ namespace ao::gtk
       [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
-        auto projPtr =
-          ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
+        auto projPtr = ctx.runtime.workspace().detailProjection(target);
         return uimodel::LayoutActionAvailability{
           .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
@@ -451,15 +438,14 @@ namespace ao::gtk
       uimodel::LayoutActionCapability::RequiresAnchor | uimodel::LayoutActionCapability::PresentsMenu,
       [this](layout::ActionActivationContext& ctx)
       {
-        if (_tagEditController != nullptr)
+        if (_dependencies.tagEditController != nullptr)
         {
           auto const target = rt::FocusedViewTarget{};
-          auto projPtr =
-            ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
+          auto projPtr = ctx.runtime.workspace().detailProjection(target);
 
           if (auto const snap = projPtr->snapshot(); !snap.trackIds.empty())
           {
-            _tagEditController->openTagEditor(
+            _dependencies.tagEditController->openTagEditor(
               TrackSelection{.listId = kInvalidListId, .selectedIds = snap.trackIds}, ctx.anchorWidget);
           }
         }
@@ -467,8 +453,7 @@ namespace ao::gtk
       [](layout::ActionActivationContext const& ctx) -> uimodel::LayoutActionAvailability
       {
         auto const target = rt::FocusedViewTarget{};
-        auto projPtr =
-          ctx.runtime.views().detailProjection(target, ctx.runtime.workspace(), ctx.runtime.library().changes());
+        auto projPtr = ctx.runtime.workspace().detailProjection(target);
         return uimodel::LayoutActionAvailability{
           .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
@@ -500,27 +485,13 @@ namespace ao::gtk
     uimodel::PreparedLayout const& preparedLayout,
     layout::LayoutBuildStateView buildState)
   {
-    auto const dependencies = GtkUiDependencies{
-      .trackRowCache = _trackRowCache,
-      .imageLoader = _imageLoader,
-      .playbackCommandSurface = _playbackCommandSurface,
-      .tagEditController = _tagEditController,
-      .importExportActions = _importExportActions,
-      .trackPageHost = _trackPageHost,
-      .trackPresentationCatalog = _trackPresentationCatalog,
-      .trackPresentationPreferences = _trackPresentationPreferences,
-      .listNavigationController = _listNavigationController,
-      .themeCoordinator = &_themeCoordinator,
-      .createSmartListFromExpression = _createSmartListFromExpression,
-      .menuModelPtr = _menuModelPtr,
-    };
     auto ctx = layout::LayoutBuildContext{.registry = _registry,
                                           .actionRegistry = _actionRegistry,
                                           .runtime = _runtime,
                                           .parentWindow = _parentWindow,
                                           .runtimeState = _runtimeState,
                                           .buildState = std::move(buildState),
-                                          .dependencies = dependencies};
+                                          .dependencies = _dependencies};
     return _host.prepare(ctx, preparedLayout);
   }
 

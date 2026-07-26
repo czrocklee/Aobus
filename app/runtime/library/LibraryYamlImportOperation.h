@@ -46,12 +46,9 @@ namespace ao::rt
 
     Result<PreparedImport> prepare(std::filesystem::path const& path, ImportMode mode, bool buildChangeSet);
     Result<> revalidateSource(PreparedImport const& prepared) const;
-    Result<ImportReport> apply(PreparedImport const& prepared,
-                               library::WriteTransaction& transaction,
-                               LibraryChangeSet& changeSet);
+    Result<ImportReport> apply(PreparedImport const& prepared, library::WriteTransaction& transaction);
+    LibraryChangeSet buildChangeSet(PreparedImport const& prepared, library::WriteTransaction const& transaction) const;
     Result<ImportReport> preview(PreparedImport const& prepared, library::WriteTransaction& transaction);
-    Result<ImportReport> applyOffline(PreparedImport const& prepared);
-    Result<ImportReport> previewOffline(PreparedImport const& prepared);
 
   private:
     LibraryYamlImporter& _importer;

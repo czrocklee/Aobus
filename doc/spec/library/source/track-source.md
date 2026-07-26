@@ -50,7 +50,8 @@ A manual source keeps stored intent separate from effective membership.
 Its effective order is the stable subsequence of stored ids currently present in its parent source.
 When an upstream track disappears and later re-enters, it returns to its stored position.
 
-Exact manual insert, remove, and move changes are translated without a reset fallback.
+Exact manual insert and remove scripts are applied without a reset fallback.
+A move is the same canonical script shape: descending removals followed by one insertion.
 A change affecting only currently hidden stored ids updates stored order without publishing an effective source batch.
 Parent reorder alone does not reorder manual intent.
 
@@ -82,12 +83,13 @@ Deleting a list invalidates its source and dependent chain terminally.
 Recreating the same numeric list id creates a new source identity; an old invalidated lease never revives.
 
 For each committed library changeset the cache applies deletions, collection changes, detailed manual content, list upserts, and metadata updates in the order required to expose one coherent derived result.
-Reentrant changes queue behind the batch currently being published so observers never see a half-rebound graph.
+Reentrant mutations are rejected while the cache applies a committed revision.
+Only refresh requests discovered during that application are queued and drained afterward, so observers never see a half-rebound graph.
 
 ## Edit algebra
 
-`delta::RegularTrackEditScript` is the dependency-neutral remove/insert/update representation.
-The source adapter converts to and from `TrackSourceDeltaBatch` and validates source-specific constraints.
+`delta::RegularTrackEditScript` is the dependency-neutral remove/insert/update representation shared by library changes, sources, and projections.
+`TrackSourceDelta` is a variant of that regular script, `SourceReset`, or `SourceInvalidated`; reset and invalidation remain singleton alternatives.
 
 `IndexedTrackSequence` applies one regular script with one merge and one index rebuild.
 Malformed coordinates, empty ranges, divergent reducer state, and a final sequence inconsistent with the installed source are fail-fast programming errors rather than recoverable cache-healing events.

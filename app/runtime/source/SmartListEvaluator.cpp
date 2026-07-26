@@ -14,9 +14,7 @@
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
-#include <ao/rt/source/TrackSourceEditScript.h>
 
-#include <boost/container/small_vector.hpp>
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
 #include <gsl-lite/gsl-lite.hpp>
@@ -141,7 +139,7 @@ namespace ao::rt
 
     if (inserted && !bucket.invalidated)
     {
-      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDeltaBatch const& batch) noexcept
+      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDelta const& batch) noexcept
                                              { handleSourceBatch(*source, batch); });
     }
 
@@ -187,29 +185,7 @@ namespace ao::rt
     evaluatePendingLists(*it->second);
   }
 
-  void SmartListEvaluator::notifyUpdated(SmartListSource& list, TrackId const trackId)
-  {
-    auto const it = _buckets.find(&list.source());
-
-    if (it == _buckets.end() || it->second->invalidated)
-    {
-      return;
-    }
-
-    auto const optIndex = it->second->upstreamTracks.indexOf(trackId);
-
-    if (!optIndex)
-    {
-      return;
-    }
-
-    handleRegularBatch(*it->second,
-                       TrackSourceDeltaBatch{
-                         .deltas = {SourceUpdateRange{.start = *optIndex, .trackIds = {trackId}}},
-                       });
-  }
-
-  void SmartListEvaluator::handleSourceBatch(TrackSource& source, TrackSourceDeltaBatch const& batch)
+  void SmartListEvaluator::handleSourceBatch(TrackSource& source, TrackSourceDelta const& batch)
   {
     auto const it = _buckets.find(&source);
 
@@ -218,19 +194,19 @@ namespace ao::rt
       return;
     }
 
-    if (batch.deltas.size() == 1 && std::holds_alternative<SourceInvalidated>(batch.deltas.front()))
+    if (std::holds_alternative<SourceInvalidated>(batch))
     {
       handleSourceInvalidated(*it->second);
       return;
     }
 
-    if (batch.deltas.size() == 1 && std::holds_alternative<SourceReset>(batch.deltas.front()))
+    if (std::holds_alternative<SourceReset>(batch))
     {
       handleSourceReset(*it->second);
       return;
     }
 
-    handleRegularBatch(*it->second, batch);
+    handleRegularBatch(*it->second, std::get<delta::RegularTrackEditScript>(batch));
   }
 
   void SmartListEvaluator::handleSourceReset(SourceBucket& bucket)
@@ -353,7 +329,7 @@ namespace ao::rt
           auto const applied = delta::apply(work.oldMembers, script);
           return applied && *applied == work.members;
         }()));
-      work.deltas = std::move(sourceBatchOf(script).deltas);
+      work.script = std::move(script);
     }
   }
 
@@ -374,31 +350,28 @@ namespace ao::rt
 
     for (auto& work : works)
     {
-      if (!work.active || work.deltas.empty())
+      if (!work.active || work.script.edits.empty())
       {
         continue;
       }
 
-      std::ignore =
-        work.list->publishDeltaBatch(TrackSourceDeltaBatch{.deltas = std::move(work.deltas)}, work.oldMembers.size());
+      std::ignore = work.list->publishDelta(std::move(work.script), work.oldMembers.size());
     }
   }
 
   void SmartListEvaluator::handleRegularBatch(SourceBucket& bucket,
-                                              TrackSourceDeltaBatch const& batch,
+                                              delta::RegularTrackEditScript const& script,
                                               bool const verifyFinalSnapshot)
   {
     auto const timer = rt::ScopedTimer{"SmartListEvaluator::handleRegularBatch"};
-    auto scriptResult = regularTrackEditScriptOf(batch);
-    gsl_Assert(scriptResult);
     auto upstreamTracks = bucket.upstreamTracks;
-    upstreamTracks.applyScript(*scriptResult);
+    upstreamTracks.applyScript(script);
     ++_operationCounts.upstreamIndexRebuilds;
     gsl_Assert(!verifyFinalSnapshot || upstreamTracks.vector() == snapshotSource(*bucket.source));
 
     auto evaluatableLists = std::vector<SmartListSource*>{};
     auto works = buildDerivedWorks(bucket, evaluatableLists);
-    auto changes = summarizeTrackChanges(*scriptResult);
+    auto changes = summarizeTrackChanges(script);
     auto const matchesByTrackId =
       evaluateTouchedTracks(works, std::span<SmartListSource* const>{evaluatableLists}, changes.touchedTrackIds);
     updateDerivedWorks(works, upstreamTracks, matchesByTrackId, changes.updatedTrackIds, changes.preferredMovedIds);
@@ -511,7 +484,7 @@ namespace ao::rt
         continue;
       }
 
-      std::ignore = list->publishDeltaBatch(TrackSourceDeltaBatch{.deltas = {SourceReset{}}}, previousSizes[index]);
+      std::ignore = list->publishDelta(SourceReset{}, previousSizes[index]);
     }
   }
 

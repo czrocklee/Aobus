@@ -164,7 +164,6 @@ namespace ao::rt::test
   {
     auto limits = NotificationFeedLimits{};
     limits.maxEntries = 3;
-    limits.maxHistoryEntries = 2;
     auto fixture = NotificationServiceFixture{{}, limits};
     auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
@@ -172,15 +171,12 @@ namespace ao::rt::test
 
     service.post(NotificationSeverity::Info, "first", NotificationLifetime::history());
     service.post(NotificationSeverity::Info, "second", NotificationLifetime::history());
-    auto const secondId = updates.back().id;
     service.post(NotificationSeverity::Info, "third", NotificationLifetime::history());
     auto const thirdId = updates.back().id;
 
     REQUIRE(updates.size() == 3);
     CHECK(updates.back().id == thirdId);
-    REQUIRE(service.feed().entries.size() == 2);
-    CHECK(service.feed().entries[0].id == secondId);
-    CHECK(service.feed().entries[1].id == thirdId);
+    REQUIRE(service.feed().entries.size() == 3);
 
     service.post(NotificationSeverity::Warning, "pinned one", NotificationLifetime::pinned());
     auto const firstPinnedId = updates.back().id;
@@ -198,41 +194,6 @@ namespace ao::rt::test
     CHECK(service.feed().entries[0].id == firstPinnedId);
     CHECK(service.feed().entries[1].id == secondPinnedId);
     CHECK(service.feed().entries[2].id == thirdPinnedId);
-  }
-
-  TEST_CASE("NotificationService - total text bound evicts history before rejecting retained entries",
-            "[runtime][unit][notification]")
-  {
-    auto limits = NotificationFeedLimits{};
-    limits.maxEntries = 10;
-    limits.maxHistoryEntries = 10;
-    limits.maxTotalTextBytes = 10;
-    auto fixture = NotificationServiceFixture{{}, limits};
-    auto& service = fixture.service;
-    auto updates = std::vector<NotificationFeedUpdate>{};
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); });
-
-    service.post(NotificationRequest{
-      .message = "12345",
-      .lifetime = NotificationLifetime::history(),
-    });
-    service.post(NotificationRequest{
-      .message = "123456",
-      .lifetime = NotificationLifetime::pinned(),
-    });
-    auto const pinnedId = updates.back().id;
-
-    REQUIRE(service.feed().entries.size() == 1);
-    CHECK(service.feed().entries.front().id == pinnedId);
-
-    service.post(NotificationRequest{
-      .message = "12345",
-      .lifetime = NotificationLifetime::pinned(),
-    });
-
-    CHECK(updates.size() == 2);
-    REQUIRE(service.feed().entries.size() == 1);
-    CHECK(service.feed().entries.front().id == pinnedId);
   }
 
   TEST_CASE("NotificationService - keyed report coalesces and suppresses identical updates",

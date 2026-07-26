@@ -16,7 +16,7 @@ Start here when changing a library command, scan, revision event, source, projec
 
 - Point-in-time reads and one-operation mutation transactions.
 - Track and list mutation semantics, previews, reports, and failures.
-- Revisioned change publication and asynchronous task notifications.
+- Revisioned change publication and owner-local asynchronous task notifications.
 - Scan planning, file reconciliation, audio identity, and identity backfill.
 - Ordered source membership and live projection delta behavior.
 - YAML export and import behavior.
@@ -43,7 +43,7 @@ Query grammar, playback succession, and frontend rendering belong to their respe
 ### Runtime library facade
 
 - [Library access and mutation](runtime/mutation.md) defines coherent reads, command transactions, previews, track/list mutations, and no-op behavior.
-- [Library change publication](runtime/change-publication.md) defines revisions, changesets, task notifications, ordering, and executor delivery.
+- [Library change publication](runtime/change-publication.md) defines revisions, changesets, ordering, and executor delivery.
 - [Library task execution](runtime/task-execution.md) defines worker/callback affinity, mutation serialization, progress, completion, and cancellation.
 - [Library scan and audio identity](runtime/scan-and-identity.md) defines classification, reconciliation, relinking, cancellation, and identity backfill.
 - [Library YAML transfer](runtime/yaml-transfer.md) defines export, restore, merge, preview, reporting, and change publication.

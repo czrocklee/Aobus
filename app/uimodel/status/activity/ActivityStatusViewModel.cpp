@@ -6,7 +6,8 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -71,14 +72,12 @@ namespace ao::uimodel
           publish();
         });
 
-      if (options.libraryChanges != nullptr)
+      if (options.libraryTasks != nullptr)
       {
-        libraryProgressSub = options.libraryChanges->onLibraryTaskProgress(
-          [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event) noexcept
-          { handleLibraryTaskProgress(event); });
-        libraryCompletedSub = options.libraryChanges->onLibraryTaskCompleted(
-          [this](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
-          { handleLibraryTaskCompleted(event); });
+        libraryProgressSub = options.libraryTasks->onProgress(
+          [this](rt::LibraryTaskProgressUpdated const& event) noexcept { handleLibraryTaskProgress(event); });
+        libraryCompletedSub = options.libraryTasks->onCompleted([this](rt::LibraryTaskCompleted const& event) noexcept
+                                                                { handleLibraryTaskCompleted(event); });
       }
 
       syncAutoDismissDeadline();
@@ -140,13 +139,13 @@ namespace ao::uimodel
       publish();
     }
 
-    void handleLibraryTaskProgress(rt::LibraryChanges::LibraryTaskProgressUpdated const& event)
+    void handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event)
     {
       feedProjection.handleLibraryTaskProgress(event);
       publish();
     }
 
-    void handleLibraryTaskCompleted(rt::LibraryChanges::LibraryTaskCompleted const& event)
+    void handleLibraryTaskCompleted(rt::LibraryTaskCompleted const& event)
     {
       feedProjection.handleLibraryTaskCompleted(event, notifications.feed());
       publish();

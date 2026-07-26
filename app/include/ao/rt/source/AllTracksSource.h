@@ -30,13 +30,9 @@ namespace ao::rt
   public:
     explicit AllTracksSource(library::TrackStore const& store);
 
-    using TrackSource::notifyInserted;
-
     void reloadFromStore(library::ReadTransaction const& transaction);
     void applyCollectionChange(std::span<TrackId const> inserted, std::span<TrackId const> removed);
-    void notifyInserted(TrackId id);
-    void notifyRemoved(TrackId id);
-    void clear();
+    void applyMetadataChange(std::span<TrackId const> trackIds);
 
     // TrackSource interface
     std::size_t size() const override { return _trackIds.size(); }

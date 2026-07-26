@@ -46,16 +46,6 @@ namespace ao::rt
     TrackSource::notifyReset();
   }
 
-  void AllTracksSource::notifyInserted(TrackId const id)
-  {
-    applyCollectionChange(std::span{&id, 1}, {});
-  }
-
-  void AllTracksSource::notifyRemoved(TrackId const id)
-  {
-    applyCollectionChange({}, std::span{&id, 1});
-  }
-
   void AllTracksSource::applyCollectionChange(std::span<TrackId const> const inserted,
                                               std::span<TrackId const> const removed)
   {
@@ -131,18 +121,12 @@ namespace ao::rt
       return;
     }
 
-    std::ignore = publishDeltaBatch(std::move(*optBatch), previousSize);
+    std::ignore = publishDelta(std::move(*optBatch), previousSize);
   }
 
-  void AllTracksSource::clear()
+  void AllTracksSource::applyMetadataChange(std::span<TrackId const> const trackIds)
   {
-    if (_trackIds.empty())
-    {
-      return;
-    }
-
-    _trackIds.clear();
-    TrackSource::notifyReset();
+    notifyUpdated(trackIds);
   }
 
   std::optional<std::size_t> AllTracksSource::indexOf(TrackId const id) const

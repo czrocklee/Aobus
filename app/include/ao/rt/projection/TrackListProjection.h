@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include "../PlaybackLaunchSpec.h"
 #include "../TrackPresentation.h"
 #include "../ViewIds.h"
+#include "../source/TrackSourceLease.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 
@@ -13,12 +15,28 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <variant>
 
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::rt
 {
+  struct TrackListProjectionOperationCounts final
+  {
+    std::uint64_t fullProjectionRebuilds = 0;
+    std::uint64_t incrementalProjectionUpdates = 0;
+    std::uint64_t arenaRebases = 0;
+    std::uint64_t rowIndexRebuilds = 0;
+
+    bool operator==(TrackListProjectionOperationCounts const&) const = default;
+  };
+
   struct TrackRowRange final
   {
     std::size_t start = 0;
@@ -98,32 +116,40 @@ namespace ao::rt
    */
   bool validateTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize);
 
-  class TrackListProjection
+  class TrackListProjection final
   {
   public:
-    virtual ~TrackListProjection() = default;
+    TrackListProjection(ViewId viewId, TrackSourceLease sourceLease, library::MusicLibrary const& library);
+    TrackListProjection(ViewId viewId,
+                        TrackSourceLease sourceLease,
+                        library::MusicLibrary const& library,
+                        TrackOrderSpec const& order);
+    ~TrackListProjection();
 
     TrackListProjection(TrackListProjection const&) = delete;
     TrackListProjection& operator=(TrackListProjection const&) = delete;
     TrackListProjection(TrackListProjection&&) = delete;
     TrackListProjection& operator=(TrackListProjection&&) = delete;
 
-    virtual ViewId viewId() const noexcept = 0;
+    ViewId viewId() const noexcept;
 
-    virtual TrackPresentationSpec presentation() const = 0;
-    virtual std::size_t groupCount() const noexcept = 0;
-    virtual TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const = 0;
-    virtual std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const = 0;
-    virtual std::optional<TrackRowRange> groupRangeAt(std::size_t rowIndex) const noexcept = 0;
+    TrackPresentationSpec presentation() const;
+    std::size_t groupCount() const noexcept;
+    TrackGroupSectionSnapshot groupAt(std::size_t groupIndex) const;
+    std::optional<std::size_t> groupIndexAt(std::size_t rowIndex) const;
+    std::optional<TrackRowRange> groupRangeAt(std::size_t rowIndex) const noexcept;
 
-    virtual std::size_t size() const noexcept = 0;
-    virtual TrackId trackIdAt(std::size_t index) const = 0;
-    virtual std::optional<std::size_t> indexOf(TrackId trackId) const noexcept = 0;
+    std::size_t size() const noexcept;
+    TrackId trackIdAt(std::size_t index) const;
+    std::optional<std::size_t> indexOf(TrackId trackId) const noexcept;
 
-    virtual async::Subscription subscribe(
-      std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler) = 0;
+    TrackListProjectionOperationCounts operationCounts() const noexcept;
+    void setPresentation(TrackPresentationSpec const& presentation);
 
-  protected:
-    TrackListProjection() = default;
+    async::Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler);
+
+  private:
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

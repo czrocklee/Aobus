@@ -8,6 +8,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/AllTracksSource.h>
@@ -158,17 +159,9 @@ namespace ao::rt
         {
           using Operation = std::remove_cvref_t<decltype(operation)>;
 
-          if constexpr (std::same_as<Operation, ManualTracksInsert>)
+          if constexpr (std::same_as<Operation, delta::RegularTrackEditScript>)
           {
-            sourcePtr->applyManualTracksInsert(operation);
-          }
-          else if constexpr (std::same_as<Operation, ManualTracksRemove>)
-          {
-            sourcePtr->applyManualTracksRemove(operation);
-          }
-          else if constexpr (std::same_as<Operation, ManualTracksMove>)
-          {
-            sourcePtr->applyManualTracksMove(operation);
+            sourcePtr->applyManualEditScript(operation);
           }
           else
           {
@@ -194,7 +187,7 @@ namespace ao::rt
       }
     }
 
-    _allTracksPtr->notifyUpdated(metadataTrackIds);
+    _allTracksPtr->applyMetadataChange(metadataTrackIds);
   }
 
   Result<TrackSourceLease> TrackSourceCache::acquire(ListId const listId)
@@ -302,7 +295,7 @@ namespace ao::rt
     auto implementationPtr = buildImplementation(*optView, *parentResult);
     auto const parentId = definition.parentId;
     linkGraph(listId, parentId);
-    sourcePtr->rebind(std::move(definition), *parentResult, std::move(implementationPtr));
+    sourcePtr->rebind(std::move(definition), std::move(implementationPtr));
   }
 
   void TrackSourceCache::applyListMutation(std::move_only_function<void()> mutation)
@@ -413,8 +406,7 @@ namespace ao::rt
     auto definition = definitionOf(*optView);
     auto const parentId = definition.parentId;
     auto implementationPtr = buildImplementation(*optView, *parentResult);
-    auto sourcePtr =
-      std::make_shared<CachedListSource>(listId, std::move(definition), *parentResult, std::move(implementationPtr));
+    auto sourcePtr = std::make_shared<CachedListSource>(std::move(definition), std::move(implementationPtr));
     _sources.insert_or_assign(listId, sourcePtr);
     linkGraph(listId, parentId);
     return TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(sourcePtr))};

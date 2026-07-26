@@ -20,7 +20,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -325,10 +325,10 @@ namespace ao::gtk
 
         _previewFilteredListPtr = std::make_shared<rt::SmartListSource>(*parentResult, *_previewEnginePtr);
 
-        auto projPtr = std::make_shared<rt::LiveTrackListProjection>(rt::kInvalidViewId,
-                                                                     rt::TrackSourceLease{_previewFilteredListPtr},
-                                                                     _runtime.musicLibrary(),
-                                                                     rt::TrackOrderSpec{});
+        auto projPtr = std::make_shared<rt::TrackListProjection>(rt::kInvalidViewId,
+                                                                 rt::TrackSourceLease{_previewFilteredListPtr},
+                                                                 _runtime.musicLibrary(),
+                                                                 rt::TrackOrderSpec{});
 
         _previewModelPtr = TrackListModel::create(_trackRowCache);
         _previewModelPtr->bindProjection(std::move(projPtr));
@@ -336,9 +336,8 @@ namespace ao::gtk
         auto selectionModelPtr = Gtk::SingleSelection::create(_previewModelPtr);
         _previewColumnView.set_model(selectionModelPtr);
 
-        // Re-run the full preview: the earlier source-unavailable pass left
-        // _expressionValid false, which would keep submission disabled until
-        // the user happened to edit the expression again.
+        // Re-run the full preview so the model can replace its
+        // source-unavailable state as soon as the source arrives.
         updatePreview();
 
         return false;
@@ -373,11 +372,26 @@ namespace ao::gtk
     _effectiveExprLabel.set_text(uimodel::formatSmartListExpressionDisplayText(effectiveExpression));
   }
 
+  uimodel::SmartListEditorViewState SmartListDialog::editorViewState() const
+  {
+    auto const hasPreviewSource = _previewFilteredListPtr != nullptr;
+    auto const hasError = hasPreviewSource && _previewFilteredListPtr->hasError();
+    auto const optError = hasPreviewSource ? _previewFilteredListPtr->error() : std::nullopt;
+
+    return ao::uimodel::makeSmartListEditorViewState(ao::uimodel::SmartListPreviewState{
+      .name = _nameEntry.get_text().raw(),
+      .localExpression = _exprBox.entry().get_text().raw(),
+      .hasPreviewSource = hasPreviewSource,
+      .hasError = hasError,
+      .errorMessage = optError ? optError->message : std::string{},
+      .matchCount = hasPreviewSource ? _previewFilteredListPtr->size() : 0,
+      .isAllTracks = _parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId,
+    });
+  }
+
   void SmartListDialog::updateDialogState()
   {
-    auto const status = ao::uimodel::deriveSmartListPreviewStatus(_expressionValid, _previewFilteredListPtr != nullptr);
-
-    _okButton->set_sensitive(ao::uimodel::canSubmitSmartListDraft(_nameEntry.get_text().raw(), status));
+    _okButton->set_sensitive(editorViewState().canSubmit);
   }
 
   void SmartListDialog::updatePreview()
@@ -386,41 +400,17 @@ namespace ao::gtk
 
     if (!_previewFilteredListPtr)
     {
-      auto const state = ao::uimodel::makeSmartListEditorViewState(ao::uimodel::SmartListPreviewState{
-        .name = _nameEntry.get_text().raw(),
-        .localExpression = _exprBox.entry().get_text().raw(),
-        .hasPreviewSource = false,
-        .hasError = false,
-        .errorMessage = "",
-        .matchCount = 0,
-        .isAllTracks = false,
-      });
-      _expressionValid = state.expressionValid;
       _previewScrolledWindow.set_visible(false);
       updateDialogState();
       return;
     }
 
     auto const expr = std::string{_exprBox.entry().get_text()};
-    auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
     _previewFilteredListPtr->setExpression(expr);
     _previewFilteredListPtr->reload();
 
-    auto const hasError = _previewFilteredListPtr->hasError();
-    auto const optError = _previewFilteredListPtr->error();
-    auto const errorMessage = optError ? optError->message : std::string{};
-    auto const matchCount = _previewFilteredListPtr->size();
-
-    auto const state = ao::uimodel::makeSmartListEditorViewState(ao::uimodel::SmartListPreviewState{
-      .name = _nameEntry.get_text().raw(),
-      .localExpression = expr,
-      .hasPreviewSource = true,
-      .hasError = hasError,
-      .errorMessage = errorMessage,
-      .matchCount = matchCount,
-      .isAllTracks = isAllTracks,
-    });
+    auto const state = editorViewState();
 
     _matchCountLabel.set_markup(italicMarkup(state.previewStatusText));
 
@@ -436,9 +426,8 @@ namespace ao::gtk
     _errorLabel.set_visible(state.errorVisible);
     _errorLabel.set_text(state.errorText);
     _previewScrolledWindow.set_visible(state.previewVisible);
-    _expressionValid = state.expressionValid;
 
-    updateDialogState();
+    _okButton->set_sensitive(state.canSubmit);
   }
 
   rt::LibraryListDraft SmartListDialog::draft() const

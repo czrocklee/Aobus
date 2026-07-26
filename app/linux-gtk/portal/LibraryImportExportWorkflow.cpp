@@ -14,7 +14,6 @@
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlImporter.h>

@@ -5,6 +5,7 @@
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
@@ -57,16 +58,15 @@ namespace ao::rt::test
     auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
     list.reload();
 
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
+    auto batches = std::vector<TrackSourceDelta>{};
     auto subscription =
-      list.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+      list.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
 
     sourcePtr->invalidate();
 
     CHECK(list.state() == TrackSourceState::Invalidated);
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceInvalidated>(batches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceInvalidated>(batches.front()));
 
     sourcePtr->emitReset();
     CHECK(batches.size() == 1);
@@ -96,22 +96,21 @@ namespace ao::rt::test
     CHECK(list.indexOf(t2) == std::nullopt);           // Filtered out
     CHECK(list.indexOf(TrackId{999}) == std::nullopt); // Non-existent
 
-    // Test TrackSource::notifyUpdated(TrackId id) without index
+    // Test identity-based update lookup through the mutable source fixture.
     auto spy = TrackSourceBatchSpy{source};
 
-    // Call the base class method directly
-    source.TrackSource::notifyUpdated(t3); // Calls TrackSource::notifyUpdated(id)
+    source.updateByIdentity(t3);
 
     REQUIRE(spy.batches.size() == 1);
-    REQUIRE(spy.batches.front().deltas.size() == 1);
-    auto const& update = std::get<SourceUpdateRange>(spy.batches.front().deltas.front());
+    REQUIRE(sourceEditScript(spy.batches.front()).edits.size() == 1);
+    auto const& update = std::get<delta::UpdateRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(update.start == 2);
     CHECK(update.trackIds == std::vector{t3});
 
     // t2 is not in source's indexOf (wait, it IS in source, just not in list)
     // Let's call it on a non-existent track
     spy.clear();
-    source.TrackSource::notifyUpdated(TrackId{999});
+    source.updateByIdentity(TrackId{999});
     CHECK(spy.batches.empty()); // Should not notify since it's not in the source
 
     // Destructor for TrackSource is implicitly covered when MutableTrackSource is destroyed

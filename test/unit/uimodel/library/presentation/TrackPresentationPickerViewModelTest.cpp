@@ -110,7 +110,7 @@ namespace ao::uimodel::test
     CHECK(rendered.back().label == fixture.catalog.labelForId(rt::kDefaultTrackPresentationId));
   }
 
-  TEST_CASE("TrackPresentationPickerViewModel - missing active view rejects selection without optimistic state",
+  TEST_CASE("TrackPresentationPickerViewModel - a closed active view rejects selection without optimistic state",
             "[uimodel][unit][regression][workflow]")
   {
     auto fixture = TrackPresentationFixture{};
@@ -122,7 +122,8 @@ namespace ao::uimodel::test
                                                      fixture.preferences,
                                                      [&rendered](auto const& state) { rendered.push_back(state); }};
     auto const activeViewId = fixture.workspace.snapshot().activeViewId;
-    REQUIRE(fixture.viewService.destroyView(activeViewId));
+    REQUIRE(fixture.workspace.closeView(activeViewId));
+    rendered.clear();
 
     auto const optCommand = workflow.selectPresentation("albums");
 

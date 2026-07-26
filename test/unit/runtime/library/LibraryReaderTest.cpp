@@ -24,7 +24,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
 
@@ -248,7 +247,7 @@ namespace ao::rt::test
 
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges(ml);
     auto runtimeLibrary = Library{asyncRuntime, ml, changes};
     auto reader = runtimeLibrary.reader();
     auto const optRow = reader.trackRow(trackId);

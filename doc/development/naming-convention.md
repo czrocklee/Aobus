@@ -131,9 +131,9 @@ carry architectural meaning and cannot be inferred mechanically.
   a type after storage shape or declaration grouping when a concrete domain name
   exists.
 - Do not prefix project-owned contracts or abstract interfaces with `I`. Use the
-  contract name for the public role, such as `Backend` or
-  `TrackListProjection`, and give concrete implementations a semantic qualifier,
-  such as `LiveTrackListProjection`.
+  contract name for the public role, such as `Backend`. When one concrete type
+  owns the complete contract, name that type directly, such as
+  `TrackListProjection`, instead of adding an implementation-only qualifier.
 - Do not define `*TestAccess` friend backdoors. Tests observe public behavior;
   when they need control over a collaborator, use a normal construction seam
   that is also usable by a production composition root.

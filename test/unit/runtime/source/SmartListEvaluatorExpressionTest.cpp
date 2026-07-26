@@ -6,6 +6,7 @@
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/Error.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -38,8 +39,7 @@ namespace ao::rt::test
     CHECK(filtered.trackIdAt(0) == second);
     CHECK(filtered.trackIdAt(1) == first);
     REQUIRE(spy.batches.size() == 1);
-    REQUIRE(spy.batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(spy.batches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceReset>(spy.batches.front()));
   }
 
   TEST_CASE("SmartListEvaluator - invalid expression remains empty while sibling list receives inserts",
@@ -74,8 +74,8 @@ namespace ao::rt::test
     source.insert(second, 1);
 
     REQUIRE(validSpy.batches.size() == 1);
-    REQUIRE(validSpy.batches.front().deltas.size() == 1);
-    auto const& insertion = std::get<SourceInsertRange>(validSpy.batches.front().deltas.front());
+    REQUIRE(sourceEditScript(validSpy.batches.front()).edits.size() == 1);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(validSpy.batches.front()).edits.front());
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{second});
     CHECK(invalidSpy.batches.empty());

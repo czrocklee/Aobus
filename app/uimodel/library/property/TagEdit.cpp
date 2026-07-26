@@ -71,11 +71,6 @@ namespace ao::uimodel
           .status = replyResult->status,
           .notificationText = "Library changed while the tag editor was open. Reload and try again.",
         };
-      case rt::TrackAuthoringStatus::Missing:
-        return TagEditResult{
-          .status = replyResult->status,
-          .notificationText = "One or more selected tracks no longer exist.",
-        };
     }
 
     return makeError(Error::Code::InvalidState, "Tag edit returned an unknown authoring status");

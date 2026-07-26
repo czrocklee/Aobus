@@ -37,7 +37,7 @@ namespace ao::gtk::test
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const trackId = addRuntimeTrack(fixture.runtime(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
     fixture.runtime().reloadAllTracks();
-    auto const view = fixture.runtime().views().createView({.listId = rt::kAllTracksListId});
+    auto const view = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
     REQUIRE(view);
     REQUIRE(playback.commands().startFromView(*view, trackId));
     REQUIRE(waitForPlaybackSettlement(fixture.runtime(), trackId));

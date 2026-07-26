@@ -135,7 +135,6 @@ namespace ao::rt
 
     /** Resolves both manual next and natural advance. */
     CommandResolution resolveNext() const noexcept;
-    CommandResolution resolveNaturalAdvance() const noexcept { return resolveNext(); }
     CommandResolution resolvePrevious(PlaybackCursorPolicy& policy);
 
   private:

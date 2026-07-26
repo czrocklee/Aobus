@@ -10,7 +10,6 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
-#include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
@@ -65,7 +64,7 @@ namespace ao::gtk
                            uimodel::TrackColumnLayoutStore& layoutStore,
                            rt::AppRuntime& runtime,
                            ResourceImageLoader& thumbnailLoader,
-                           rt::ViewId viewId = rt::kInvalidViewId);
+                           rt::TrackPresentationSpec const& presentation = rt::defaultTrackPresentationSpec());
     ~TrackViewPage() override;
 
     TrackViewPage(TrackViewPage const&) = delete;
@@ -120,7 +119,6 @@ namespace ao::gtk
 
     // Models
     ListId _listId;
-    rt::ViewId _viewId{};
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::TrackColumnLayoutStore& _layoutStore;
     rt::AppRuntime& _runtime;

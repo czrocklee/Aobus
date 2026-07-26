@@ -5,6 +5,7 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/AllTracksSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -38,7 +39,7 @@ namespace ao::rt::test
       source.reloadFromStore(transaction);
 
       REQUIRE(listener.batches.size() == 1);
-      CHECK(std::holds_alternative<SourceReset>(listener.batches.front().deltas.front()));
+      CHECK(std::holds_alternative<SourceReset>(listener.batches.front()));
       CHECK(source.size() == 2);
 
       auto const optI1 = source.indexOf(t1);
@@ -50,67 +51,68 @@ namespace ao::rt::test
       CHECK(source.trackIdAt(*optI2) == t2);
     }
 
-    SECTION("notifyInserted adds item and notifies")
+    SECTION("collection insertions add items and notify")
     {
-      source.notifyInserted(TrackId{10});
+      source.applyCollectionChange(std::array{TrackId{10}}, {});
       REQUIRE(listener.batches.size() == 1);
-      auto const& firstInsert = std::get<SourceInsertRange>(listener.batches[0].deltas.front());
+      auto const& firstInsert = std::get<delta::InsertRange>(sourceEditScript(listener.batches[0]).edits.front());
       CHECK(firstInsert.start == 0);
       CHECK(firstInsert.trackIds == std::vector{TrackId{10}});
       CHECK(source.size() == 1);
 
-      source.notifyInserted(TrackId{20});
+      source.applyCollectionChange(std::array{TrackId{20}}, {});
       REQUIRE(listener.batches.size() == 2);
-      auto const& secondInsert = std::get<SourceInsertRange>(listener.batches[1].deltas.front());
+      auto const& secondInsert = std::get<delta::InsertRange>(sourceEditScript(listener.batches[1]).edits.front());
       CHECK(secondInsert.start == 1);
       CHECK(secondInsert.trackIds == std::vector{TrackId{20}});
       CHECK(source.size() == 2);
 
       // Insert smaller id, should be at index 0
-      source.notifyInserted(TrackId{5});
+      source.applyCollectionChange(std::array{TrackId{5}}, {});
       REQUIRE(listener.batches.size() == 3);
-      auto const& frontInsert = std::get<SourceInsertRange>(listener.batches[2].deltas.front());
+      auto const& frontInsert = std::get<delta::InsertRange>(sourceEditScript(listener.batches[2]).edits.front());
       CHECK(frontInsert.start == 0);
       CHECK(frontInsert.trackIds == std::vector{TrackId{5}});
 
       // Duplicate insert shouldn't trigger
-      source.notifyInserted(TrackId{10});
+      source.applyCollectionChange(std::array{TrackId{10}}, {});
       CHECK(listener.batches.size() == 3);
     }
 
-    SECTION("notifyRemoved removes item and notifies")
+    SECTION("collection removals remove items and notify")
     {
-      source.notifyInserted(TrackId{10});
-      source.notifyInserted(TrackId{20});
+      source.applyCollectionChange(std::array{TrackId{10}}, {});
+      source.applyCollectionChange(std::array{TrackId{20}}, {});
 
       listener.clear();
 
-      source.notifyRemoved(TrackId{10});
+      source.applyCollectionChange({}, std::array{TrackId{10}});
       REQUIRE(listener.batches.size() == 1);
-      auto const& removal = std::get<SourceRemoveRange>(listener.batches.front().deltas.front());
+      auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(listener.batches.front()).edits.front());
       CHECK(removal.start == 0);
       CHECK(removal.trackIds == std::vector{TrackId{10}});
       CHECK(source.size() == 1);
 
       // Non-existent remove shouldn't trigger
-      source.notifyRemoved(TrackId{99});
+      source.applyCollectionChange({}, std::array{TrackId{99}});
       CHECK(listener.batches.size() == 1);
 
       CHECK(source.indexOf(TrackId{10}) == std::nullopt);
     }
 
-    SECTION("clear empties the source and resets")
+    SECTION("metadata changes notify updates for existing tracks")
     {
-      source.notifyInserted(TrackId{10});
-      source.notifyInserted(TrackId{20});
+      source.applyCollectionChange(std::array{TrackId{10}, TrackId{20}}, {});
       listener.clear();
 
-      source.clear();
+      source.applyMetadataChange(std::array{TrackId{20}, TrackId{99}});
 
-      CHECK(source.size() == 0);
       REQUIRE(listener.batches.size() == 1);
-      CHECK(std::holds_alternative<SourceReset>(listener.batches.front().deltas.front()));
-      CHECK(source.indexOf(TrackId{10}) == std::nullopt);
+      REQUIRE(sourceEditScript(listener.batches.front()).edits.size() == 1);
+      auto const& update = std::get<delta::UpdateRange>(sourceEditScript(listener.batches.front()).edits.front());
+      CHECK(update.start == 1);
+      CHECK(update.trackIds == std::vector{TrackId{20}});
+      CHECK(source.size() == 2);
     }
   }
 
@@ -119,16 +121,15 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto source = AllTracksSource{libraryFixture.library().tracks()};
-    auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription =
-      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
+    auto batches = std::vector<TrackSourceDelta>{};
+    auto subscription = source.subscribe([&](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
     auto const initialInsertions = std::array{TrackId{30}, TrackId{10}, TrackId{20}};
 
     source.applyCollectionChange(initialInsertions, {});
 
     REQUIRE(batches.size() == 1);
-    REQUIRE(batches[0].deltas.size() == 1);
-    auto const& initial = std::get<SourceInsertRange>(batches[0].deltas[0]);
+    REQUIRE(sourceEditScript(batches[0]).edits.size() == 1);
+    auto const& initial = std::get<delta::InsertRange>(sourceEditScript(batches[0]).edits[0]);
     CHECK(initial.start == 0);
     CHECK(initial.trackIds == std::vector{TrackId{10}, TrackId{20}, TrackId{30}});
 
@@ -137,11 +138,11 @@ namespace ao::rt::test
     source.applyCollectionChange(inserted, removed);
 
     REQUIRE(batches.size() == 2);
-    REQUIRE(batches[1].deltas.size() == 2);
-    auto const& removal = std::get<SourceRemoveRange>(batches[1].deltas[0]);
+    REQUIRE(sourceEditScript(batches[1]).edits.size() == 2);
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(batches[1]).edits[0]);
     CHECK(removal.start == 1);
     CHECK(removal.trackIds == std::vector{TrackId{20}});
-    auto const& insertion = std::get<SourceInsertRange>(batches[1].deltas[1]);
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(batches[1]).edits[1]);
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{TrackId{15}, TrackId{25}});
     REQUIRE(source.size() == 4);
@@ -171,7 +172,6 @@ namespace ao::rt::test
       auto const transaction = libraryFixture.library().readTransaction();
       source.reloadFromStore(transaction);
     }
-    source.notifyInserted(trackId);
     source.applyCollectionChange(std::array{TrackId{99}}, {});
 
     CHECK(source.state() == TrackSourceState::Invalidated);

@@ -57,39 +57,6 @@ namespace ao::rt
       return text.size() <= limits.maxTextBytes;
     }
 
-    void canonicalizeStorage(std::string& text)
-    {
-      text.shrink_to_fit();
-    }
-
-    void canonicalizeStorage(NotificationMessage& message)
-    {
-      std::visit(
-        []<typename Message>(Message& value)
-        {
-          if constexpr (std::same_as<Message, std::string>)
-          {
-            canonicalizeStorage(value);
-          }
-          else
-          {
-            canonicalizeStorage(value.subject);
-            canonicalizeStorage(value.detail);
-          }
-        },
-        message);
-    }
-
-    void canonicalizeStorage(NotificationEntry& entry)
-    {
-      if (entry.optReportKey)
-      {
-        canonicalizeStorage(entry.optReportKey->raw());
-      }
-
-      canonicalizeStorage(entry.message);
-    }
-
     bool messageFits(NotificationMessage const& message, NotificationFeedLimits const& limits) noexcept
     {
       return std::visit(
@@ -117,40 +84,6 @@ namespace ao::rt
     {
       return (!entry.optReportKey || (!entry.optReportKey->empty() && textFits(entry.optReportKey->raw(), limits))) &&
              messageFits(entry.message, limits) && lifetimeFits(entry.lifetime);
-    }
-
-    bool consumeText(std::string_view const text, std::size_t& remainingBytes) noexcept
-    {
-      if (text.size() > remainingBytes)
-      {
-        return false;
-      }
-
-      remainingBytes -= text.size();
-      return true;
-    }
-
-    bool consumeEntryText(NotificationEntry const& entry, std::size_t& remainingBytes) noexcept
-    {
-      auto const consumeMessage = [&remainingBytes](NotificationMessage const& message)
-      {
-        return std::visit(
-          [&remainingBytes]<typename Message>(Message const& value)
-          {
-            if constexpr (std::same_as<Message, std::string>)
-            {
-              return consumeText(value, remainingBytes);
-            }
-            else
-            {
-              return consumeText(value.subject, remainingBytes) && consumeText(value.detail, remainingBytes);
-            }
-          },
-          message);
-      };
-
-      return (!entry.optReportKey || consumeText(entry.optReportKey->raw(), remainingBytes)) &&
-             consumeMessage(entry.message);
     }
 
     NotificationEntry entryFromRequest(NotificationId const id,
@@ -318,25 +251,9 @@ namespace ao::rt
       return registrationPtr;
     }
 
-    bool feedFitsBounds(NotificationFeedState const& candidate) const noexcept
+    bool feedFitsCapacity(NotificationFeedState const& candidate) const noexcept
     {
-      if (candidate.entries.size() > limits.maxEntries)
-      {
-        return false;
-      }
-
-      auto const historyCount = std::ranges::count_if(
-        candidate.entries,
-        [](NotificationEntry const& entry) { return entry.lifetime.kind() == NotificationLifetimeKind::History; });
-
-      if (std::cmp_greater(historyCount, limits.maxHistoryEntries))
-      {
-        return false;
-      }
-
-      auto remainingBytes = limits.maxTotalTextBytes;
-      return std::ranges::all_of(
-        candidate.entries, [&](NotificationEntry const& entry) { return consumeEntryText(entry, remainingBytes); });
+      return candidate.entries.size() <= limits.maxEntries;
     }
 
     std::optional<std::vector<NotificationId>> evictHistoryToFit(NotificationFeedState& candidate,
@@ -344,7 +261,7 @@ namespace ao::rt
     {
       auto evictedIds = std::vector<NotificationId>{};
 
-      while (!feedFitsBounds(candidate))
+      while (!feedFitsCapacity(candidate))
       {
         auto const entryIter = std::ranges::find_if(
           candidate.entries,
@@ -417,7 +334,6 @@ namespace ao::rt
 
       auto const registrationIter = expiryRegistrations.find(id);
       gsl_Expects(registrationIter != expiryRegistrations.end());
-      auto previousRegistrationPtr = registrationIter->second;
 
       auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
 
@@ -435,21 +351,7 @@ namespace ao::rt
       // reentrant update supersedes this exact registration.
       registrationIter->second = candidateRegistrationPtr;
 
-      try
-      {
-        commit(std::move(candidatePtr), mutationKind, id, nextId);
-      }
-      catch (...)
-      {
-        if (auto const currentIter = expiryRegistrations.find(id);
-            currentIter != expiryRegistrations.end() && currentIter->second == candidateRegistrationPtr)
-        {
-          currentIter->second = std::move(previousRegistrationPtr);
-        }
-
-        throw;
-      }
-
+      commit(std::move(candidatePtr), mutationKind, id, nextId);
       eraseExpiryRegistrations(*optEvictedIds);
     }
 
@@ -474,7 +376,6 @@ namespace ao::rt
         return;
       }
 
-      canonicalizeStorage(entry);
       auto candidatePtr = mutableFeedCopy();
       candidatePtr->entries.push_back(std::move(entry));
       auto optEvictedIds = evictHistoryToFit(*candidatePtr, id);
@@ -489,23 +390,10 @@ namespace ao::rt
 
       auto& candidateEntry = candidatePtr->entries.back();
       auto expiryRegistrationPtr = prepareExpiry(candidateEntry);
-      auto const [registrationIter, inserted] = expiryRegistrations.try_emplace(id, expiryRegistrationPtr);
+      auto const inserted = expiryRegistrations.try_emplace(id, expiryRegistrationPtr).second;
       gsl_Expects(inserted);
 
-      try
-      {
-        commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, id, committedNextId);
-      }
-      catch (...)
-      {
-        if (registrationIter->second == expiryRegistrationPtr)
-        {
-          expiryRegistrations.erase(registrationIter);
-        }
-
-        throw;
-      }
-
+      commit(std::move(candidatePtr), NotificationFeedMutationKind::Posted, id, committedNextId);
       eraseExpiryRegistrations(*optEvictedIds);
     }
 
@@ -586,7 +474,6 @@ namespace ao::rt
       return;
     }
 
-    canonicalizeStorage(replacement);
     auto candidatePtr = _implPtr->mutableFeedCopy();
     candidatePtr->entries[static_cast<std::size_t>(entryIter - entries.begin())] = std::move(replacement);
     _implPtr->commitCandidateMutation(std::move(candidatePtr), id, NotificationFeedMutationKind::ReportUpdated);

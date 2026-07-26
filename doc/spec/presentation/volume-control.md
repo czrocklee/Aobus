@@ -14,7 +14,7 @@ It does not own backend volume application or persisted output selection; those 
 
 ## Code boundary
 
-`VolumeViewModel` under `ao::uimodel` subscribes to `rt::PlaybackService`, derives semantic state, and sends volume/mute commands.
+`VolumeViewModel` under `ao::uimodel` sends volume/mute commands and, when constructed with a render callback, subscribes to `rt::PlaybackService` and derives semantic state.
 `VolumeControlWidget` maps the semantic indicator kind to a GTK symbolic icon and owns GTK gestures, icon button, popovers, timeout, and scale widgets.
 The declarative shell component only constructs the widget and does not duplicate volume policy.
 
@@ -40,7 +40,8 @@ The declarative shell component only constructs the widget and does not duplicat
 ## State model
 
 `VolumeViewState` contains visibility, normalized level, hardware-assisted flag, explicit mute, semantic `VolumeIndicatorKind`, and tooltip.
-The view model retains runtime subscriptions and one render callback.
+A rendering view model retains runtime subscriptions and its callback.
+An empty callback creates a command-only instance: it skips initial projection, subscriptions, and tooltip construction while retaining the same interaction commands.
 
 GTK retains one icon button, precision popover, vertical scale, mute toggle, scroll bubble, and optional timeout connection.
 
@@ -60,7 +61,7 @@ The previous bubble timeout is replaced; the bubble closes after 500 millisecond
 
 Volume interaction has no separate recoverable error surface; runtime accepts or narrows device behavior through `PlaybackService`.
 Widget destruction disconnects the timeout and unparents both popovers before their button parent disappears.
-View-model subscriptions release with the model.
+Any view-model subscriptions release with the model.
 
 ## Persistence and versioning
 

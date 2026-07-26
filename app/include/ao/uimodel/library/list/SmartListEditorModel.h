@@ -7,7 +7,6 @@
 #include <ao/rt/ListMutation.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -21,13 +20,6 @@ namespace ao::uimodel
    * `SmartListPreviewState`; every decision about what the user may see or
    * submit is made here.
    */
-
-  enum class SmartListPreviewStatus : std::uint8_t
-  {
-    PreviewSourceUnavailable,
-    Valid,
-    InvalidExpression
-  };
 
   // What the editor currently observes. Borrowed strings: valid only for the
   // duration of the call that consumes this.
@@ -45,20 +37,17 @@ namespace ao::uimodel
   struct SmartListEditorViewState final
   {
     std::string name;
-    std::string description;
     std::string localExpression;
-    std::string effectiveExpression;
 
-    SmartListPreviewStatus status = SmartListPreviewStatus::Valid;
     std::size_t matchCount = 0;
     bool isAllTracks = false;
     std::string previewStatusText;
     std::string errorText;
     bool expressionValid = true;
     bool queryInvalid = false;
+    bool canSubmit = false;
     bool previewVisible = true;
     bool errorVisible = false;
-    bool canSubmit = false;
   };
 
   SmartListEditorViewState makeSmartListEditorViewState(SmartListPreviewState const& input);
@@ -71,18 +60,12 @@ namespace ao::uimodel
 
   // Preview
 
-  SmartListPreviewStatus deriveSmartListPreviewStatus(bool expressionValid, bool hasPreviewSource);
-
-  std::string formatSmartListPreviewStatusText(SmartListPreviewStatus status,
+  std::string formatSmartListPreviewStatusText(bool expressionValid,
                                                std::size_t count,
                                                bool isAllTracks,
                                                bool localEmpty);
 
   std::string formatSmartListPreviewTrackLabel(std::string_view title, std::string_view artist, std::string_view album);
-
-  // Submission
-
-  bool canSubmitSmartListDraft(std::string_view name, SmartListPreviewStatus status);
 
   rt::LibraryListDraft makeSmartListDraft(ListId parentListId,
                                           ListId editListId,

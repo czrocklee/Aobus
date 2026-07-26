@@ -5,8 +5,6 @@
 
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/TrackSourceDelta.h>
-#include <ao/rt/source/TrackSourceEditScript.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -34,7 +32,7 @@ namespace ao::rt
     _insertions.push_back(IndexedTrack{.index = postRemovalIndex, .trackId = trackId});
   }
 
-  std::optional<TrackSourceDeltaBatch> TrackSourceDeltaBuilder::build() const
+  std::optional<delta::RegularTrackEditScript> TrackSourceDeltaBuilder::build() const
   {
     if (_removals.empty() && _insertions.empty())
     {
@@ -70,8 +68,8 @@ namespace ao::rt
       coalescer.appendInsert(insertion.index, std::span{&insertion.trackId, 1});
     }
 
-    auto const script = coalescer.take();
+    auto script = coalescer.take();
     gsl_Assert(delta::validate(script, _initialSize));
-    return sourceBatchOf(script);
+    return script;
   }
 } // namespace ao::rt

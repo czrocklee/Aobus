@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
 #include "common/MainContextCallbackScope.h"
 #include "common/PopoverAttachment.h"
@@ -13,7 +14,6 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
 #include "layout/runtime/LayoutRuntimeState.h"
-#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
@@ -54,7 +54,6 @@ namespace ao::gtk
   class AppConfigStore;
   class ResourceImageLoader;
   class ListNavigationController;
-  struct GtkUiDependencies;
   class ShellLayoutComponentStateStore;
   class ShellLayoutStore;
   class TagEditController;
@@ -158,17 +157,7 @@ namespace ao::gtk
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;
     layout::LayoutRuntimeState _runtimeState;
-    TrackRowCache* _trackRowCache;
-    ResourceImageLoader* _imageLoader;
-    uimodel::PlaybackCommandSurface* _playbackCommandSurface;
-    TagEditController* _tagEditController;
-    portal::ImportExportActions* _importExportActions;
-    TrackPageHost* _trackPageHost;
-    uimodel::TrackPresentationCatalog* _trackPresentationCatalog;
-    uimodel::ListPresentationPreferenceStore* _trackPresentationPreferences;
-    ListNavigationController* _listNavigationController;
-    std::function<void(ListId, std::string)> _createSmartListFromExpression;
-    Glib::RefPtr<Gio::MenuModel> _menuModelPtr;
+    GtkUiDependencies _dependencies;
     layout::LayoutHost _host;
     PopoverAttachment _outputDevicePopover;
     PopoverAttachment _menuPopover;

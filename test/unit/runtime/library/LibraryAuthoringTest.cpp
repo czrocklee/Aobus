@@ -288,38 +288,6 @@ namespace ao::rt::test
     CHECK(fixture.title() == "Before");
   }
 
-  TEST_CASE("Library authoring - missing bound target rejects the complete command",
-            "[runtime][unit][library-authoring]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto const trackId = library::test::addTrack(musicLibrary, library::test::TrackSpec{.title = "Before"});
-    auto const revision = [&]
-    {
-      auto readTransaction = musicLibrary.readTransaction();
-      return musicLibrary.libraryRevision(readTransaction);
-    }();
-    auto executor = InlineExecutor{};
-    auto changes = LibraryChanges{executor, revision};
-    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-
-    // Keep one already-admitted low-level transaction to model a target that
-    // disappears outside the mutationService after the binding is captured.
-    auto bypassTransaction = writableLibrary.writeTransaction();
-    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-    auto boundResult = mutationService.bindTrackTargets(std::array{trackId});
-    REQUIRE(boundResult);
-
-    REQUIRE(musicLibrary.tracks().writer(bypassTransaction).remove(trackId));
-    REQUIRE(bypassTransaction.commit());
-
-    auto start = mutationService.beginAuthoringMutation(*boundResult);
-
-    CHECK(start.status == TrackAuthoringStatus::Missing);
-    CHECK(start.missingTargetIds == std::vector<TrackId>{trackId});
-    CHECK_FALSE(start.optMutation);
-  }
-
   TEST_CASE("Library authoring - publication enqueue failure after commit faults the mutationService",
             "[runtime][unit][library-authoring]")
   {
@@ -417,7 +385,7 @@ namespace ao::rt::test
   {
     auto temp = ao::test::TempDir{};
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto changes = LibraryChanges{};
+    auto changes = makeInlineLibraryChanges();
     auto executor = RejectingExecutor{};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};

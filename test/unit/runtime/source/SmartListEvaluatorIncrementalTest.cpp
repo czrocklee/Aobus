@@ -5,6 +5,7 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/source/SmartListEvaluatorTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -12,7 +13,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <array>
 #include <chrono>
 #include <memory>
 #include <variant>
@@ -44,8 +44,7 @@ namespace ao::rt::test
     hotList.reload();
 
     REQUIRE(hotSpy.batches.size() == 1);
-    REQUIRE(hotSpy.batches.front().deltas.size() == 1);
-    CHECK(std::holds_alternative<SourceReset>(hotSpy.batches.front().deltas.front()));
+    CHECK(std::holds_alternative<SourceReset>(hotSpy.batches.front()));
     CHECK(coldSpy.batches.empty());
     REQUIRE(hotList.size() == 1);
     CHECK(hotList.trackIdAt(0) == second);
@@ -77,13 +76,13 @@ namespace ao::rt::test
     source.insert(inserted, 1);
 
     REQUIRE(hotSpy.batches.size() == 1);
-    REQUIRE(hotSpy.batches.front().deltas.size() == 1);
-    auto const& hotInsert = std::get<SourceInsertRange>(hotSpy.batches.front().deltas.front());
+    REQUIRE(sourceEditScript(hotSpy.batches.front()).edits.size() == 1);
+    auto const& hotInsert = std::get<delta::InsertRange>(sourceEditScript(hotSpy.batches.front()).edits.front());
     CHECK(hotInsert.start == 0);
     CHECK(hotInsert.trackIds == std::vector{inserted});
     REQUIRE(coldSpy.batches.size() == 1);
-    REQUIRE(coldSpy.batches.front().deltas.size() == 1);
-    auto const& coldInsert = std::get<SourceInsertRange>(coldSpy.batches.front().deltas.front());
+    REQUIRE(sourceEditScript(coldSpy.batches.front()).edits.size() == 1);
+    auto const& coldInsert = std::get<delta::InsertRange>(sourceEditScript(coldSpy.batches.front()).edits.front());
     CHECK(coldInsert.start == 0);
     CHECK(coldInsert.trackIds == std::vector{inserted});
     REQUIRE(hotList.size() == 1);
@@ -112,7 +111,7 @@ namespace ao::rt::test
     source.update(trackId);
 
     REQUIRE(spy.batches.size() == 1);
-    auto const& insertion = std::get<SourceInsertRange>(spy.batches.front().deltas.front());
+    auto const& insertion = std::get<delta::InsertRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(insertion.start == 0);
     CHECK(insertion.trackIds == std::vector{trackId});
 
@@ -122,7 +121,7 @@ namespace ao::rt::test
     source.update(trackId);
 
     REQUIRE(spy.batches.size() == 1);
-    auto const& update = std::get<SourceUpdateRange>(spy.batches.front().deltas.front());
+    auto const& update = std::get<delta::UpdateRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(update.start == 0);
     CHECK(update.trackIds == std::vector{trackId});
 
@@ -132,7 +131,7 @@ namespace ao::rt::test
     source.update(trackId);
 
     REQUIRE(spy.batches.size() == 1);
-    auto const& removal = std::get<SourceRemoveRange>(spy.batches.front().deltas.front());
+    auto const& removal = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(removal.start == 0);
     CHECK(removal.trackIds == std::vector{trackId});
     CHECK(filtered.size() == 0);
@@ -169,7 +168,7 @@ namespace ao::rt::test
     source.insert(fresh, 2);
 
     REQUIRE(spy.batches.size() == 1);
-    auto const& childInsert = std::get<SourceInsertRange>(spy.batches.front().deltas.front());
+    auto const& childInsert = std::get<delta::InsertRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(childInsert.start == 1);
     CHECK(childInsert.trackIds == std::vector{fresh});
     REQUIRE(child.size() == 2);
@@ -181,7 +180,7 @@ namespace ao::rt::test
     source.update(modern);
 
     REQUIRE(spy.batches.size() == 1);
-    auto const& childRemoval = std::get<SourceRemoveRange>(spy.batches.front().deltas.front());
+    auto const& childRemoval = std::get<delta::RemoveRange>(sourceEditScript(spy.batches.front()).edits.front());
     CHECK(childRemoval.start == 0);
     CHECK(childRemoval.trackIds == std::vector{modern});
     REQUIRE(child.size() == 1);
@@ -217,29 +216,6 @@ namespace ao::rt::test
 
     // Single Remove
     source.remove(t2);
-    CHECK(list.size() == 1);
-  }
-
-  TEST_CASE("SmartListEvaluator - relays SmartListSource::notifyUpdated to evaluator",
-            "[runtime][unit][smart-list][incremental]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto engine = SmartListEvaluator{libraryFixture.library()};
-    auto sourcePtr = makeMutableTrackSource({});
-    auto& source = *sourcePtr;
-
-    auto list = SmartListSource{TrackSourceLease{sourcePtr}, engine};
-    list.setExpression("$year >= 2020");
-    list.reload();
-
-    auto t1 = libraryFixture.addTrack(makeSmartListSpec("Track", 2020));
-    auto const batchTrackIds = std::array{t1};
-    source.batchInsert(batchTrackIds);
-
-    // Mutate via base library, then notify list directly
-    libraryFixture.updateTrack(t1, [](library::test::TrackSpec& spec) { spec.year = 2022; });
-    list.notifyUpdated(t1);
-
     CHECK(list.size() == 1);
   }
 } // namespace ao::rt::test

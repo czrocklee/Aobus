@@ -7,7 +7,7 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/LiveTrackListProjection.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -60,14 +60,14 @@ namespace ao::rt::test
     {
     }
 
-    LiveTrackListProjection createProjection(ViewId viewId)
+    TrackListProjection createProjection(ViewId viewId)
     {
-      return LiveTrackListProjection{viewId, TrackSourceLease{filteredPtr}, libraryFixture.library()};
+      return TrackListProjection{viewId, TrackSourceLease{filteredPtr}, libraryFixture.library()};
     }
 
-    LiveTrackListProjection createUnfilteredProjection(ViewId viewId)
+    TrackListProjection createUnfilteredProjection(ViewId viewId)
     {
-      return LiveTrackListProjection{viewId, TrackSourceLease{sourcePtr}, libraryFixture.library()};
+      return TrackListProjection{viewId, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     }
 
     void setupFiltered(std::span<TrackId const> ids)

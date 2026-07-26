@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/app/GtkUiDependencies.h"
-#include "app/linux-gtk/layout/document/LayoutDocument.h"
+#include "app/linux-gtk/layout/document/LayoutPresets.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
@@ -219,7 +219,7 @@ namespace ao::gtk::layout::test
       auto decoded = LayoutDocumentYamlSchema{}.deserialize(tree.rootref(), LayoutDocument{});
       REQUIRE(decoded);
       auto doc = std::move(*decoded);
-      doc.templates = builtInTemplates();
+      doc.templates = makeDefaultLayout().templates;
 
       auto const compPtr = fixture.layoutRuntime().build(ctx, preparedLayout(doc));
 

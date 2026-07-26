@@ -5,10 +5,10 @@
 
 #include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
+#include <ao/rt/TrackEditScript.h>
 
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <string>
@@ -22,38 +22,6 @@ namespace ao::async
 
 namespace ao::rt
 {
-  struct ManualStoredRemoveRange final
-  {
-    std::size_t start = 0;
-    std::vector<TrackId> trackIds{};
-
-    bool operator==(ManualStoredRemoveRange const&) const = default;
-  };
-
-  struct ManualTracksInsert final
-  {
-    std::size_t storedIndex = 0;
-    std::vector<TrackId> trackIds{};
-
-    bool operator==(ManualTracksInsert const&) const = default;
-  };
-
-  struct ManualTracksRemove final
-  {
-    std::vector<ManualStoredRemoveRange> removals{};
-
-    bool operator==(ManualTracksRemove const&) const = default;
-  };
-
-  struct ManualTracksMove final
-  {
-    std::vector<ManualStoredRemoveRange> removals{};
-    std::size_t insertionIndexAfterRemoval = 0;
-    std::vector<TrackId> insertedTrackIds{};
-
-    bool operator==(ManualTracksMove const&) const = default;
-  };
-
   struct ManualTracksReset final
   {
     bool operator==(ManualTracksReset const&) const = default;
@@ -62,7 +30,7 @@ namespace ao::rt
   struct ManualListContentChange final
   {
     ListId listId = kInvalidListId;
-    std::variant<ManualTracksInsert, ManualTracksRemove, ManualTracksMove, ManualTracksReset> operation{};
+    std::variant<delta::RegularTrackEditScript, ManualTracksReset> operation{};
 
     bool operator==(ManualListContentChange const&) const = default;
   };
@@ -81,42 +49,11 @@ namespace ao::rt
     bool operator==(LibraryChangeSet const&) const = default;
   };
 
-  class LibraryTaskService;
   class LibraryMutationService;
 
   class [[nodiscard]] LibraryChanges final
   {
   public:
-    enum class LibraryTaskProgressKind : std::uint8_t
-    {
-      Scanning,
-      Updating,
-      Fingerprinting,
-      IndexingAudioIdentity,
-    };
-
-    struct LibraryTaskProgressUpdated final
-    {
-      LibraryTaskProgressKind kind = LibraryTaskProgressKind::Scanning;
-      double fraction = 0.0;
-      std::string subject{};
-    };
-
-    enum class LibraryTaskCompletionStatus : std::uint8_t
-    {
-      Succeeded,
-      CompletedWithIssues,
-      Failed,
-      Cancelled,
-    };
-
-    struct LibraryTaskCompleted final
-    {
-      LibraryTaskCompletionStatus status = LibraryTaskCompletionStatus::Succeeded;
-      std::size_t affectedCount = 0;
-    };
-
-    LibraryChanges();
     LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision);
     ~LibraryChanges();
 
@@ -141,19 +78,11 @@ namespace ao::rt
     // the replica applied the revision and the library is readable at it.
     // Observers are noexcept notifications.
     async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&) noexcept> handler) const;
-    async::Subscription onLibraryTaskCompleted(
-      std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const;
-    async::Subscription onLibraryTaskProgress(
-      std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const;
 
   private:
     friend class LibraryMutationService;
-    friend class LibraryTaskService;
 
-    void publishFromCoordinator(LibraryChangeSet changeSet,
-                                std::move_only_function<void(std::exception_ptr)> completion);
-    void notifyLibraryTaskCompleted(LibraryTaskCompletionStatus status, std::size_t affectedCount = 0);
-    void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);
+    void publishFromCoordinator(LibraryChangeSet changeSet, std::move_only_function<void() noexcept> completion);
 
     struct Impl;
     std::shared_ptr<Impl> _implPtr;

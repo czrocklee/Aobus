@@ -3,6 +3,7 @@
 
 #include "track/LibraryTrackCountLabel.h"
 
+#include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 #include <ao/rt/source/TrackSourceLease.h>
@@ -19,28 +20,30 @@ namespace ao::gtk
   {
     _label.add_css_class("dim-label");
     _sourceSubscription =
-      _sourceLease->subscribe([this](rt::TrackSourceDeltaBatch const& batch) noexcept { handleSourceBatch(batch); });
+      _sourceLease->subscribe([this](rt::TrackSourceDelta const& batch) noexcept { handleSourceBatch(batch); });
 
     updateCount();
   }
 
   LibraryTrackCountLabel::~LibraryTrackCountLabel() = default;
 
-  void LibraryTrackCountLabel::handleSourceBatch(rt::TrackSourceDeltaBatch const& batch)
+  void LibraryTrackCountLabel::handleSourceBatch(rt::TrackSourceDelta const& message)
   {
-    if (batch.deltas.size() == 1 && std::holds_alternative<rt::SourceInvalidated>(batch.deltas.front()))
+    if (std::holds_alternative<rt::SourceInvalidated>(message))
     {
       _sourceSubscription.reset();
       return;
     }
 
-    if (std::ranges::any_of(batch.deltas,
-                            [](rt::TrackSourceDelta const& delta)
-                            {
-                              return std::holds_alternative<rt::SourceReset>(delta) ||
-                                     std::holds_alternative<rt::SourceInsertRange>(delta) ||
-                                     std::holds_alternative<rt::SourceRemoveRange>(delta);
-                            }))
+    auto const* script = std::get_if<rt::delta::RegularTrackEditScript>(&message);
+
+    if (std::holds_alternative<rt::SourceReset>(message) ||
+        (script != nullptr && std::ranges::any_of(script->edits,
+                                                  [](rt::delta::RegularTrackEdit const& edit)
+                                                  {
+                                                    return std::holds_alternative<rt::delta::InsertRange>(edit) ||
+                                                           std::holds_alternative<rt::delta::RemoveRange>(edit);
+                                                  })))
     {
       updateCount();
     }

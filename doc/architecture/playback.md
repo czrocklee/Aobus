@@ -293,7 +293,7 @@ Playback refines them as follows:
 | Domain | Authoritative owner | Access and synchronization | Exit toward another domain |
 |---|---|---|---|
 | Runtime callback executor | PlaybackService, PlaybackSuccession, PlaybackTransport, PlaybackSessionPersistence, Player application state | Executor affinity; no lower callback mutates these objects inline. | Values and commands enter Engine; observations publish to UIModel/frontends. |
-| Async runtime timer/worker | Persistence delays, explicit-start preparation, and gapless lookahead preparation | Stop tokens and weak/shared lifetime guards; playback workers own isolated preparation values and resume on the callback executor before adoption. | A scheduled checkpoint or prepared audio value returns to the callback domain. |
+| Async runtime timer/worker | Persistence delays, explicit-start preparation, and gapless lookahead preparation | Stop-token-owned task handles and cancellation-checked callback hops; component-specific callback gates remain where lower producers require them. Playback workers own isolated preparation values and resume on the callback executor before adoption. | A scheduled checkpoint or prepared audio value returns to the callback domain. |
 | Engine control domain | Engine transport, route attachment, timeline, and synchronized snapshots | Thread-tolerant commands and complete status snapshots are serialized by Engine control/state synchronization; scalar state-only queries use the narrower state synchronization. | Commands affect Backend/StreamingSource; notifications are queued to the event worker. |
 | Engine event worker | Ordered backend/source events and realtime transition signals | One owned worker, synchronized event queue, bounded realtime signal ring. | Engine callbacks enter the Player callback gate. |
 | StreamingSource decode thread | Decoder progress and PCM production for one source | Owned `jthread`, decoder/error synchronization, stop tokens, capacity-bounded byte targets, and producer-confined block headroom over the PCM ring. | PCM enters the render plane; errors enqueue toward Engine. |
@@ -334,7 +334,7 @@ Explicit start and restore use silent lower-owner installation, so succession ne
 
 ## Failure, cancellation, and lifetime boundaries
 
-Core audio classifies execution failures, while Engine and Player own quiescence of the failing audio activity; PlaybackTransport translates accepted lower failures into application transport state and public observations.
+Core audio classifies execution failures, while Engine and Player own quiescence of the failing audio activity; PlaybackTransport translates accepted lower failures into application transport state and routes them either to the private succession recovery collaborator or to the runtime notification feed.
 PlaybackSuccession owns recovery only when choosing another source member requires cursor context.
 The persistence coordinator owns malformed-session rejection, best-effort save scheduling, and restore normalization.
 
@@ -350,7 +350,8 @@ rechecks the callback gate and owner after acceptance, computes the complete
 result before completion, and performs no Player access after completion.
 Decoder open cannot be forcibly interrupted, so cancellation guarantees only that a late result cannot commit; the worker may outlive Player teardown and destroy its isolated value when the call returns.
 Final `CoreRuntime` teardown stops and joins the worker pool, so an uninterruptible decoder call can extend application shutdown.
-Async persistence work uses stop tokens and lifetime guards; StreamingSource owns decode/seek stop sources; Engine and Player use playback generations and cancellation barriers to reject stale callbacks and prepared transitions.
+Async persistence and restart-deadline work uses owned task handles plus stop-token checks before callback-executor resumption; destroying either owner cancels the handle before its raw executor-affine state is released.
+StreamingSource owns decode/seek stop sources; Engine and Player use playback generations and cancellation barriers to reject stale callbacks and prepared transitions.
 None of these mechanisms substitutes for another layer's lifetime proof.
 
 Shutdown proceeds from callback producers toward their dependencies:

@@ -44,29 +44,27 @@ namespace ao::rt
 
     TrackSourceState state() const noexcept { return _state; }
 
-    async::Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&) noexcept> handler);
+    async::Subscription subscribe(std::move_only_function<void(TrackSourceDelta const&) noexcept> handler);
     void invalidate() noexcept;
-
-    // Public notification API
-    virtual void notifyUpdated(TrackId id);
-    virtual void notifyInserted(std::span<TrackId const> ids);
-    virtual void notifyUpdated(std::span<TrackId const> ids);
 
   protected:
     TrackSource() = default;
 
+    void notifyUpdated(TrackId id);
+    void notifyInserted(std::span<TrackId const> ids);
+    void notifyUpdated(std::span<TrackId const> ids);
     void notifyReset();
     void notifyInserted(TrackId id, std::size_t index);
     void notifyUpdated(TrackId id, std::size_t index);
     void notifyRemoved(TrackId id, std::size_t index);
 
-    bool publishDeltaBatch(TrackSourceDeltaBatch batch, std::size_t previousSize);
+    bool publishDelta(TrackSourceDelta message, std::size_t previousSize);
 
   private:
     virtual void discardSnapshot() noexcept {}
 
     TrackSourceState _state = TrackSourceState::Live;
-    async::Signal<TrackSourceDeltaBatch const&> _changedSignal;
+    async::Signal<TrackSourceDelta const&> _changedSignal;
 
     friend class SmartListEvaluator;
   };

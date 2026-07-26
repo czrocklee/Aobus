@@ -31,7 +31,7 @@ namespace ao::gtk
     Gtk::Widget& widget() { return _label; }
 
   private:
-    void handleSourceBatch(rt::TrackSourceDeltaBatch const& batch);
+    void handleSourceBatch(rt::TrackSourceDelta const& message);
     void updateCount();
 
     rt::TrackSourceLease _sourceLease;

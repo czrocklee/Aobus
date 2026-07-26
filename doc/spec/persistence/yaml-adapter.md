@@ -236,7 +236,7 @@ A frontend file adapter may log or fall back only according to the specification
 - [`RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) implements callback state, parsing, file reading, arena and borrowed-view helpers, strict scalar reads, and lenient accessors.
 - [`Serialization.h`](../../../include/ao/yaml/Serialization.h) implements node and key validation, explicit map/sequence composition, bounded field context, required fields, and arena-owning scalar writes.
 - [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) exposes the Core include path and RapidYAML dependency through `ao_utility`.
-- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlImporter.cpp`](../../../app/runtime/library/LibraryYamlImporter.cpp), [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp), and [`GtkLayoutPresets.cpp`](../../../app/linux-gtk/layout/document/GtkLayoutPresets.cpp) are representative parsing boundaries.
+- [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlImporter.cpp`](../../../app/runtime/library/LibraryYamlImporter.cpp), [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp), and [`LayoutPresets.cpp`](../../../app/linux-gtk/layout/document/LayoutPresets.cpp) are representative parsing boundaries.
 - Owner-local runtime, UIModel, and frontend schemas reuse these primitives; [`Reflect.h`](../../../include/ao/yaml/Reflect.h) remains a separate one-way output helper.
 
 ## Test map
