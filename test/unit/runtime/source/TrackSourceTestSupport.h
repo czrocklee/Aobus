@@ -156,7 +156,8 @@ namespace ao::rt::test
   {
   public:
     explicit TrackSourceBatchSpy(TrackSource& source)
-      : _subscription{source.subscribe([this](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); })}
+      : _subscription{
+          source.subscribe([this](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); })}
     {
     }
 

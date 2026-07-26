@@ -21,8 +21,8 @@ namespace ao::uimodel
     , _onRender{std::move(onRender)}
     , _lastVolume{playback.snapshot().transport.volume}
   {
-    _snapshotSub =
-      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
+                                                 { handleSnapshot(snapshot); });
     refresh();
   }
 

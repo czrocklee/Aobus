@@ -54,9 +54,9 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
     auto inserted = std::vector<TrackId>{};
-    auto collectionSub = changes.onChanged([&](LibraryChangeSet const& ev) { inserted = ev.tracksInserted; });
+    auto collectionSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { inserted = ev.tracksInserted; });
 
     auto const absValidFile = copyFixtureAudio(libraryFixture, "music/song.flac");
 
@@ -123,7 +123,7 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
     auto const unsupportedFile = createTextFile(libraryFixture, "unsupported.txt");
 

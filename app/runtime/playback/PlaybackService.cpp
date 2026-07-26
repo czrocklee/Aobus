@@ -12,6 +12,7 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/playback/PlaybackCommands.h>
@@ -27,6 +28,7 @@
 #include <expected>
 #include <functional>
 #include <memory>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -46,6 +48,19 @@ namespace ao::rt
       }
 
       return PlaybackSourceState::Inactive;
+    }
+
+    void logDeferredAdmissionFailure(std::string_view const operation) noexcept
+    {
+      try
+      {
+        APP_LOG_WARN("PlaybackService could not schedule deferred {}; a later event will retry", operation);
+      }
+      catch (...)
+      {
+        // Logging cannot escape the noexcept observation path.
+        return;
+      }
     }
   } // namespace
 
@@ -97,13 +112,14 @@ namespace ao::rt
       return snapshotSignal.connect(std::move(observer));
     }
 
-    async::Subscription onSeekPreview(std::move_only_function<void(std::chrono::milliseconds)> handler) override
+    async::Subscription onSeekPreview(
+      std::move_only_function<void(std::chrono::milliseconds) noexcept> handler) override
     {
       return seekPreviewSignal.connect(std::move(handler));
     }
 
     async::Subscription onRevealTrackRequested(
-      std::move_only_function<void(PlaybackRevealTrackRequest const&)> handler) override
+      std::move_only_function<void(PlaybackRevealTrackRequest const&) noexcept> handler) override
     {
       return revealTrackSignal.connect(std::move(handler));
     }
@@ -345,16 +361,7 @@ namespace ao::rt
 
       if (executionException)
       {
-        try
-        {
-          scheduleCommandDrain();
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- preserve the primary invariant fault
-        {
-          // Preserve the invariant fault from the command or its settlement.
-          // A later admission retries the still-visible backlog.
-        }
-
+        scheduleCommandDrain();
         std::rethrow_exception(executionException);
       }
 
@@ -379,7 +386,7 @@ namespace ao::rt
       return true;
     }
 
-    void scheduleCommandDrain()
+    void scheduleCommandDrain() noexcept
     {
       if (closed || commandDrainScheduled || queuedCommands.empty() || insideBoundary())
       {
@@ -406,8 +413,10 @@ namespace ao::rt
       }
       catch (...)
       {
+        // Executor::defer guarantees that a throwing admission retained no
+        // task. Keep the FIFO and let the next admission retry this drain.
         commandDrainScheduled = false;
-        throw;
+        logDeferredAdmissionFailure("command drain");
       }
     }
 
@@ -432,33 +441,34 @@ namespace ao::rt
 
     void connectSources()
     {
-      auto const markChanged = [this] { onSourceChanged(); };
+      auto const markChanged = [this] noexcept { onSourceChanged(); };
 
       subscriptions.push_back(transport.onPreparing(markChanged));
       subscriptions.push_back(transport.onStarted(markChanged));
       subscriptions.push_back(transport.onPaused(markChanged));
-      subscriptions.push_back(transport.onIdle([this] { onTransportIdle(); }));
+      subscriptions.push_back(transport.onIdle([this] noexcept { onTransportIdle(); }));
       subscriptions.push_back(transport.onStopped(markChanged));
       subscriptions.push_back(transport.onOutputDevicesChanged(markChanged));
-      subscriptions.push_back(transport.onNowPlayingChanged([this](PlaybackTransport::NowPlayingChanged const& event)
-                                                            { onPositionAnchorChanged(event); }));
-      subscriptions.push_back(transport.onOutputDeviceChanged([this](auto const&) { onSourceChanged(); }));
-      subscriptions.push_back(transport.onQualityChanged([this](auto const&) { onSourceChanged(); }));
-      subscriptions.push_back(transport.onVolumeChanged([this](float) { onSourceChanged(); }));
-      subscriptions.push_back(transport.onMutedChanged([this](bool) { onSourceChanged(); }));
+      subscriptions.push_back(transport.onNowPlayingChanged(
+        [this](PlaybackTransport::NowPlayingChanged const& event) noexcept { onPositionAnchorChanged(event); }));
+      subscriptions.push_back(transport.onOutputDeviceChanged([this](auto const&) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(transport.onQualityChanged([this](auto const&) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(transport.onVolumeChanged([this](float) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(transport.onMutedChanged([this](bool) noexcept { onSourceChanged(); }));
       subscriptions.push_back(
-        transport.onSeekUpdate([this](PlaybackTransport::SeekUpdate const& update) { onSeekUpdate(update); }));
+        transport.onSeekUpdate([this](PlaybackTransport::SeekUpdate const& update) noexcept { onSeekUpdate(update); }));
       subscriptions.push_back(transport.onRevealTrackRequested(
-        [this](PlaybackTransport::RevealTrackRequested const& request)
+        [this](PlaybackTransport::RevealTrackRequested const& request) noexcept
         {
           onRevealTrackRequested(PlaybackRevealTrackRequest{.trackId = request.trackId,
                                                             .preferredViewId = request.preferredViewId,
                                                             .preferredListId = request.preferredListId});
         }));
 
-      subscriptions.push_back(succession.onChanged([this](PlaybackSuccessionState const&) { onSourceChanged(); }));
+      subscriptions.push_back(
+        succession.onChanged([this](PlaybackSuccessionState const&) noexcept { onSourceChanged(); }));
       subscriptions.push_back(succession.onExplicitStartSettled(
-        [this]
+        [this] noexcept
         {
           if (commitDepth == 0)
           {
@@ -467,10 +477,10 @@ namespace ao::rt
 
           onSourceChanged();
         }));
-      subscriptions.push_back(
-        succession.onShuffleModeChanged([this](PlaybackSuccession::ShuffleModeChanged const&) { onSourceChanged(); }));
-      subscriptions.push_back(
-        succession.onRepeatModeChanged([this](PlaybackSuccession::RepeatModeChanged const&) { onSourceChanged(); }));
+      subscriptions.push_back(succession.onShuffleModeChanged(
+        [this](PlaybackSuccession::ShuffleModeChanged const&) noexcept { onSourceChanged(); }));
+      subscriptions.push_back(succession.onRepeatModeChanged(
+        [this](PlaybackSuccession::RepeatModeChanged const&) noexcept { onSourceChanged(); }));
     }
 
     void onSourceChanged()
@@ -503,7 +513,7 @@ namespace ao::rt
         }
         else
         {
-          emitSafely(seekPreviewSignal, update.elapsed);
+          emitInsideBoundary(seekPreviewSignal, update.elapsed);
         }
 
         return;
@@ -541,10 +551,10 @@ namespace ao::rt
         return;
       }
 
-      emitSafely(revealTrackSignal, request);
+      emitInsideBoundary(revealTrackSignal, request);
     }
 
-    void scheduleDeferredPublish()
+    void scheduleDeferredPublish() noexcept
     {
       if (publishScheduled)
       {
@@ -578,8 +588,10 @@ namespace ao::rt
       }
       catch (...)
       {
+        // The current lower state remains authoritative. A later observation
+        // retries publication after this pre-admission rejection.
         publishScheduled = false;
-        throw;
+        logDeferredAdmissionFailure("snapshot publication");
       }
     }
 
@@ -642,7 +654,7 @@ namespace ao::rt
       }
 
       lastSnapshot = std::move(content);
-      emitSafely(snapshotSignal, lastSnapshot);
+      emitInsideBoundary(snapshotSignal, lastSnapshot);
     }
 
     void publishPendingEvents()
@@ -652,31 +664,23 @@ namespace ao::rt
 
       for (auto const elapsed : seekPreviews)
       {
-        emitSafely(seekPreviewSignal, elapsed);
+        emitInsideBoundary(seekPreviewSignal, elapsed);
       }
 
       for (auto const& request : revealRequests)
       {
-        emitSafely(revealTrackSignal, request);
+        emitInsideBoundary(revealTrackSignal, request);
       }
     }
 
+    // Publishes inside the boundary so that a command issued by an observer is
+    // admitted to the queue rather than executed reentrantly; the drain runs
+    // once the outermost publication returns.
     template<typename... Args>
-    void emitSafely(async::Signal<Args...>& signal, std::type_identity_t<Args>... args)
+    void emitInsideBoundary(async::Signal<Args...>& signal, std::type_identity_t<Args>... args)
     {
       ++publicationDepth;
-
-      try
-      {
-        signal.emit(args...);
-      }
-      catch (...) // NOLINT(bugprone-empty-catch) -- public observer faults are isolated
-      {
-        // Runtime observation is exception-contained by the boundary. Every
-        // still-connected observer has already run because Signal preserves
-        // the first exception until delivery completes.
-      }
-
+      signal.emit(args...);
       --publicationDepth;
 
       if (!insideBoundary())

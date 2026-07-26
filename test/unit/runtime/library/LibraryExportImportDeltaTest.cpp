@@ -273,7 +273,8 @@ library:
 
     auto changes = LibraryChanges{};
     auto observed = std::vector<LibraryChangeSet>{};
-    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto subscription =
+      changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
     REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Merge));
 
     REQUIRE(observed.size() == 1);
@@ -297,7 +298,8 @@ library:
 
     auto changes = LibraryChanges{};
     auto observed = std::vector<LibraryChangeSet>{};
-    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto subscription =
+      changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
     REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Restore));
 
     REQUIRE(observed.size() == 1);
@@ -324,7 +326,8 @@ library:
 
     auto changes = LibraryChanges{};
     auto observed = std::vector<LibraryChangeSet>{};
-    auto subscription = changes.onChanged([&observed](LibraryChangeSet const& value) { observed.push_back(value); });
+    auto subscription =
+      changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
     REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Restore));
 
     CHECK(utility::formatUuid(ml.metadataHeader().libraryId) == "123e4567-e89b-12d3-a456-426614174000");

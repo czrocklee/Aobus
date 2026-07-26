@@ -20,7 +20,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <exception>
 #include <expected>
 #include <memory>
 #include <optional>
@@ -56,60 +55,53 @@ namespace ao::rt
         return std::unexpected{baseSourceResult.error()};
       }
 
-      try
+      auto baseSourceLease = std::move(*baseSourceResult);
+      auto projectionSourceLease = baseSourceLease;
+
+      if (!launchSpec.quickFilterExpression.empty())
       {
-        auto baseSourceLease = std::move(*baseSourceResult);
-        auto projectionSourceLease = baseSourceLease;
+        auto filteredResult = sources.acquire(
+          SourceSpec{.baseListId = launchSpec.sourceListId, .filterExpression = launchSpec.quickFilterExpression});
 
-        if (!launchSpec.quickFilterExpression.empty())
+        if (!filteredResult)
         {
-          auto filteredResult = sources.acquire(
-            SourceSpec{.baseListId = launchSpec.sourceListId, .filterExpression = launchSpec.quickFilterExpression});
-
-          if (!filteredResult)
-          {
-            return std::unexpected{filteredResult.error()};
-          }
-
-          projectionSourceLease = std::move(*filteredResult);
-
-          if (auto const optError = sources.sourceError(projectionSourceLease); optError)
-          {
-            return std::unexpected{*optError};
-          }
+          return std::unexpected{filteredResult.error()};
         }
 
-        if (projectionSourceLease->state() == TrackSourceState::Invalidated)
+        projectionSourceLease = std::move(*filteredResult);
+
+        if (auto const optError = sources.sourceError(projectionSourceLease); optError)
         {
-          return makeError(Error::Code::InvalidState, "Playback source was invalidated during launch");
+          return std::unexpected{*optError};
         }
-
-        auto projectionPtr =
-          std::make_unique<LiveTrackListProjection>(kInvalidViewId, projectionSourceLease, library, launchSpec.order);
-        auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
-
-        if (optRequiredCurrentIndex && !optCurrentIndex)
-        {
-          return makeError(Error::Code::NotFound, "Start track is not present in the captured playback projection");
-        }
-
-        auto currentAnchor =
-          optCurrentIndex
-            ? ProjectionAnchor::bound(currentTrackId, *optCurrentIndex, projectionPtr->size())
-            : ProjectionAnchor::gap(
-                currentTrackId, std::min(fallbackAnchorIndex, projectionPtr->size()), projectionPtr->size());
-        return std::make_unique<PlaybackCursorSession>(std::move(launchSpec),
-                                                       std::move(baseSourceLease),
-                                                       std::move(projectionPtr),
-                                                       std::move(currentAnchor),
-                                                       repeatMode,
-                                                       shuffleMode,
-                                                       std::move(candidateChooser));
       }
-      catch (std::exception const& error)
+
+      if (projectionSourceLease->state() == TrackSourceState::Invalidated)
       {
-        return makeError(Error::Code::Generic, error.what());
+        return makeError(Error::Code::InvalidState, "Playback source was invalidated during launch");
       }
+
+      auto projectionPtr =
+        std::make_unique<LiveTrackListProjection>(kInvalidViewId, projectionSourceLease, library, launchSpec.order);
+      auto const optCurrentIndex = projectionPtr->indexOf(currentTrackId);
+
+      if (optRequiredCurrentIndex && !optCurrentIndex)
+      {
+        return makeError(Error::Code::NotFound, "Start track is not present in the captured playback projection");
+      }
+
+      auto currentAnchor =
+        optCurrentIndex
+          ? ProjectionAnchor::bound(currentTrackId, *optCurrentIndex, projectionPtr->size())
+          : ProjectionAnchor::gap(
+              currentTrackId, std::min(fallbackAnchorIndex, projectionPtr->size()), projectionPtr->size());
+      return std::make_unique<PlaybackCursorSession>(std::move(launchSpec),
+                                                     std::move(baseSourceLease),
+                                                     std::move(projectionPtr),
+                                                     std::move(currentAnchor),
+                                                     repeatMode,
+                                                     shuffleMode,
+                                                     std::move(candidateChooser));
     }
   } // namespace
 
@@ -183,8 +175,8 @@ namespace ao::rt
     }
 
     _projectionBatchHandler = std::move(handler);
-    _projectionSubscription =
-      _projectionPtr->subscribe([this](TrackListProjectionDeltaBatch const& batch) { handleProjectionBatch(batch); });
+    _projectionSubscription = _projectionPtr->subscribe([this](TrackListProjectionDeltaBatch const& batch) noexcept
+                                                        { handleProjectionBatch(batch); });
   }
 
   std::size_t PlaybackCursorSession::projectionSize() const

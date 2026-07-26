@@ -22,7 +22,7 @@ namespace ao::gtk
     _label.set_halign(Gtk::Align::END);
 
     _selectionChangedSub = _viewService.onSelectionChanged(
-      [this](auto const& ev) { updateState(ev.selection.size(), _viewService.selectionDuration(ev.viewId)); });
+      [this](auto const& ev) noexcept { updateState(ev.selection.size(), _viewService.selectionDuration(ev.viewId)); });
 
     updateState(0);
   }

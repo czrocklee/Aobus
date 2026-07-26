@@ -33,7 +33,6 @@ add_library(ao_app_runtime STATIC
     runtime/library/AudioIdentityBatchWriter.cpp
     runtime/library/AudioIdentityIndexer.cpp
     runtime/library/LibraryScan.cpp
-    runtime/library/ScanPlanBuilder.cpp
     runtime/library/ScanPlan.cpp
     runtime/library/ScanApplyOperation.cpp
     runtime/library/LibraryTaskService.cpp
@@ -88,10 +87,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
     uimodel/library/list/ListTreeProjection.cpp
-    uimodel/library/list/SmartListDraft.cpp
-    uimodel/library/list/SmartListEditorViewState.cpp
-    uimodel/library/list/SmartListExpression.cpp
-    uimodel/library/list/SmartListPreview.cpp
+    uimodel/library/list/SmartListEditorModel.cpp
     uimodel/library/list/SmartListTrackPresentationResolver.cpp
     uimodel/library/presentation/TrackColumnLayoutPolicy.cpp
     uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp
@@ -122,9 +118,9 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/output/VolumeViewModel.cpp
     uimodel/playback/quality/AudioQualityFormatter.cpp
     uimodel/playback/seek/PlaybackPositionInterpolator.cpp
-    uimodel/playback/seek/PlaybackTimeViewModel.cpp
+    uimodel/playback/seek/PlaybackPositionViewModel.cpp
+    uimodel/playback/seek/PlaybackTimeFormatter.cpp
     uimodel/playback/seek/SeekSliderInteractionModel.cpp
-    uimodel/playback/seek/SeekViewModel.cpp
     uimodel/playback/soul/AobusSoulViewModel.cpp
     uimodel/playback/transport/TransportViewModel.cpp
     uimodel/status/activity/ActivityStatusFeedProjection.cpp

@@ -71,6 +71,7 @@ namespace ao::rt
 
     void applyPendingState();
     void replaceMembers(std::vector<TrackId> members);
+    void discardSnapshot() noexcept override;
 
     TrackSourceLease _sourceLease;
     SmartListEvaluator* _evaluator = nullptr;

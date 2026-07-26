@@ -58,7 +58,8 @@ namespace ao::rt::test
     list.reload();
 
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = list.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      list.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     sourcePtr->invalidate();
 

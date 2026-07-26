@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
 
 #include <gtkmm/label.h>
 #include <gtkmm/widget.h>
@@ -38,7 +39,7 @@ namespace ao::gtk
     bool isTickActive() const noexcept;
 
   private:
-    void applyState(uimodel::PlaybackTimeViewState const& view);
+    void applyState(uimodel::PlaybackPositionViewState const& view);
     void reset();
     void startTickIfNeeded();
     void stopTick();
@@ -57,7 +58,7 @@ namespace ao::gtk
     std::chrono::seconds _lastElapsed{0};
     std::chrono::seconds _lastDuration{0};
     // Constructed after every field touched by its synchronous initial-state callback.
-    uimodel::PlaybackTimeViewModel _timeViewModel;
+    uimodel::PlaybackPositionViewModel _timeViewModel;
     sigc::scoped_connection _mapConnection;
     sigc::scoped_connection _unmapConnection;
   };

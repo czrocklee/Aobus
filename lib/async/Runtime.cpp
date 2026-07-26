@@ -200,7 +200,6 @@ namespace ao::async
 
   Runtime::~Runtime()
   {
-    _callbackStatePtr->acceptsCallbacks.store(false, std::memory_order_release);
     requestStop();
     join();
   }
@@ -217,6 +216,10 @@ namespace ao::async
 
   void Runtime::requestStop() noexcept
   {
+    // Closing callback admission is part of the terminal stop boundary, not
+    // deferred until member destruction. Composite owners call requestStop()
+    // while their callback targets are still alive.
+    _callbackStatePtr->acceptsCallbacks.store(false, std::memory_order_release);
     _callbackStatePtr->workerPool.stop();
   }
 

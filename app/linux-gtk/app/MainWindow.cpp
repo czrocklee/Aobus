@@ -265,18 +265,7 @@ namespace ao::gtk
 
     if (restoreMode == PlaybackRestoreMode::Restore)
     {
-      try
-      {
-        _mainWindowCoordinatorPtr->restorePlaybackSession();
-      }
-      catch (std::exception const& e)
-      {
-        APP_LOG_WARN("Failed to restore GTK playback session during activation: {}", e.what());
-      }
-      catch (...)
-      {
-        APP_LOG_WARN("Failed to restore GTK playback session during activation: unknown exception");
-      }
+      _mainWindowCoordinatorPtr->restorePlaybackSession();
     }
 
     try

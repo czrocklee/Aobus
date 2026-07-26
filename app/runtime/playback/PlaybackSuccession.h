@@ -15,6 +15,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <source_location>
 
 namespace ao::async
 {
@@ -105,10 +106,10 @@ namespace ao::rt
 
     // Handlers run synchronously on the executor thread. Callers must defer
     // emitting-owner teardown to a later executor turn.
-    async::Subscription onChanged(std::move_only_function<void(PlaybackSuccessionState const&)> handler);
-    async::Subscription onExplicitStartSettled(std::move_only_function<void()> handler);
-    async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&)> handler);
-    async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&)> handler);
+    async::Subscription onChanged(std::move_only_function<void(PlaybackSuccessionState const&) noexcept> handler);
+    async::Subscription onExplicitStartSettled(std::move_only_function<void() noexcept> handler);
+    async::Subscription onShuffleModeChanged(std::move_only_function<void(ShuffleModeChanged const&) noexcept> handler);
+    async::Subscription onRepeatModeChanged(std::move_only_function<void(RepeatModeChanged const&) noexcept> handler);
 
   private:
     friend class PlaybackSessionPersistence;
@@ -127,9 +128,14 @@ namespace ao::rt
                                       RepeatMode repeatMode,
                                       std::chrono::milliseconds elapsed) noexcept;
     void discardPlaybackSessionSnapshot();
-    async::Subscription onRestorableStateChanged(std::move_only_function<void()> handler);
+    async::Subscription onRestorableStateChanged(std::move_only_function<void() noexcept> handler);
 
     struct Impl;
+
+    // Every executor-affine member starts here: it asserts the callback-executor
+    // affinity for the calling member and hands back the implementation.
+    Impl* checkedImpl(std::source_location location = std::source_location::current()) const;
+
     std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

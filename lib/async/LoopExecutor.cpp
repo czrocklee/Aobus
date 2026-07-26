@@ -29,7 +29,7 @@ namespace ao::async
     return true;
   }
 
-  void LoopExecutor::wake()
+  void LoopExecutor::wake() noexcept
   {
     _wakeSignal.release();
   }

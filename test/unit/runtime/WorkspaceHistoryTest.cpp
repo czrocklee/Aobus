@@ -190,7 +190,7 @@ namespace ao::rt::test
     requireNavigation(runtime, fixture.firstListId);
 
     std::int32_t callCount = 0;
-    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const&) { ++callCount; });
+    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++callCount; });
 
     requireNavigation(runtime, fixture.firstListId);
     CHECK(callCount == 0);

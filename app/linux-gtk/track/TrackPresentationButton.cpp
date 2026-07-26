@@ -133,19 +133,18 @@ namespace ao::gtk
       return;
     }
 
-    auto optSpec = _viewModelPtr->selectPresentation(presentationId);
+    auto optSelection = _viewModelPtr->selectPresentation(presentationId);
 
-    if (!optSpec)
+    if (!optSelection)
     {
       return;
     }
 
-    auto const targetViewId = _state.activeViewId;
     _applyPresentationConn.disconnect();
     _applyPresentationConn = Glib::signal_idle().connect(
-      [this, targetViewId, spec = std::move(*optSpec)]
+      [this, selection = std::move(*optSelection)]
       {
-        if (_runtime.workspace().snapshot().activeViewId != targetViewId)
+        if (_runtime.workspace().snapshot().activeViewId != selection.targetViewId)
         {
           auto const message = std::string{"The selected track view is no longer active."};
           APP_LOG_ERROR("Failed to apply track presentation: {}", message);
@@ -153,7 +152,7 @@ namespace ao::gtk
           return false;
         }
 
-        if (auto const result = _runtime.workspace().setActivePresentation(spec); !result)
+        if (auto const result = _runtime.workspace().setActivePresentation(selection.spec); !result)
         {
           APP_LOG_ERROR("Failed to apply track presentation: {}", result.error().message);
           showPresentationError(result.error().message);
@@ -202,8 +201,16 @@ namespace ao::gtk
       return;
     }
 
-    auto const state = _runtime.views().trackListState(_state.activeViewId);
-    auto const& spec = state.presentation;
+    // _state is a cached render snapshot, so its view id can be stale by the
+    // time the user clicks.
+    auto const found = _runtime.views().findTrackListState(_state.activeViewId);
+
+    if (!found)
+    {
+      return;
+    }
+
+    auto const& spec = found->presentation;
 
     auto const label = std::string{_button.get_label()} + " Copy";
     auto dialog = TrackCustomViewDialog{*parentWindow, spec, label};

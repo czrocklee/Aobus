@@ -28,7 +28,8 @@ namespace ao::rt::test
     auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
+    auto sub =
+      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
@@ -57,7 +58,8 @@ namespace ao::rt::test
     auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
+    auto sub =
+      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
@@ -80,7 +82,8 @@ namespace ao::rt::test
     auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
+    auto sub =
+      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
@@ -100,7 +103,8 @@ namespace ao::rt::test
     auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
+    auto sub =
+      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 
@@ -124,7 +128,8 @@ namespace ao::rt::test
     auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
+    auto sub =
+      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const nonExistent = std::array{std::string{"NonExistent"}};
     auto const reply = writer.editTags(std::array{trackId}, {}, nonExistent);
@@ -143,7 +148,8 @@ namespace ao::rt::test
     auto& writer = writerFixture;
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& changeSet) { mutated = changeSet.tracksMutated; });
+    auto sub =
+      changes.onChanged([&](LibraryChangeSet const& changeSet) noexcept { mutated = changeSet.tracksMutated; });
 
     auto const favorite = std::array{std::string{"Favorite"}};
 

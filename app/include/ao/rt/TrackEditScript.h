@@ -7,6 +7,7 @@
 #include <ao/Error.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <variant>
 #include <vector>
@@ -46,12 +47,48 @@ namespace ao::rt::delta
     bool operator==(RegularTrackEditScript const&) const = default;
   };
 
+  enum class RangeEditKind : std::uint8_t
+  {
+    Remove,
+    Insert,
+    Update,
+  };
+
   /**
+   * Checks edit coordinates against a running sequence size, one edit at a
+   * time, without looking at any payload.
+   *
    * Canonical scripts contain descending removals, then ascending insertions,
    * then ascending updates. Removal coordinates address the initial sequence;
    * insertion coordinates address the sequential post-removal result; update
    * coordinates address the final sequence.
+   *
+   * Every delta vocabulary in the application -- id-carrying edit scripts,
+   * source batches, and row-range projection batches -- shares these rules,
+   * so each feeds its edits through one validator rather than converting into
+   * another vocabulary first.
    */
+  class RangeEditValidator final
+  {
+  public:
+    explicit RangeEditValidator(std::size_t initialSize) noexcept
+      : _size{initialSize}, _previousRemoveStart{initialSize}
+    {
+    }
+
+    // Returns false for an edit that is out of order or out of bounds without
+    // changing the running validation state.
+    bool accept(RangeEditKind kind, std::size_t start, std::size_t count) noexcept;
+
+  private:
+    RangeEditKind _stage = RangeEditKind::Remove;
+    std::size_t _size = 0;
+    std::size_t _previousRemoveStart = 0;
+    std::size_t _previousInsertEnd = 0;
+    std::size_t _previousUpdateEnd = 0;
+  };
+
+  /** Validates a canonical id-carrying script. See RangeEditValidator. */
   bool validate(RegularTrackEditScript const& script, std::size_t initialSize) noexcept;
 
   /** Applies a canonical script with identity checks in O(n + k). */

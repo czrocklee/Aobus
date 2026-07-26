@@ -28,11 +28,12 @@ namespace ao::rt::test
 
     auto changes = LibraryChanges{};
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
     auto deletedTracks = std::vector<TrackId>{};
-    auto collectionSub = changes.onChanged([&](LibraryChangeSet const& ev) { deletedTracks = ev.tracksDeleted; });
+    auto collectionSub =
+      changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deletedTracks = ev.tracksDeleted; });
     auto upsertedLists = std::vector<ListId>{};
-    auto listSub = changes.onChanged([&](LibraryChangeSet const& ev) { upsertedLists = ev.listsUpserted; });
+    auto listSub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upsertedLists = ev.listsUpserted; });
 
     auto listIds = std::vector<ListId>{};
     {
@@ -91,7 +92,7 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
     auto const deleted = writer.deleteTrack(TrackId{99999});
     CHECK_FALSE(deleted);

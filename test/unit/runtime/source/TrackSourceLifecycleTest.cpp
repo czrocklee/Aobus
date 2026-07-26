@@ -25,7 +25,8 @@ namespace ao::rt::test
     auto source = MutableTrackSource{};
     source.addInitial(TrackId{10});
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     CHECK(batches.empty());
 
@@ -56,7 +57,7 @@ namespace ao::rt::test
     auto observedIds = std::vector<TrackId>{};
     auto observedBatches = std::vector<TrackSourceDeltaBatch>{};
     auto subscription = source.subscribe(
-      [&](TrackSourceDeltaBatch const& batch)
+      [&](TrackSourceDeltaBatch const& batch) noexcept
       {
         for (std::size_t index = 0; index < source.size(); ++index)
         {
@@ -85,7 +86,8 @@ namespace ao::rt::test
   {
     auto source = MutableTrackSource{};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     source.invalidate();
     source.invalidate();
@@ -97,7 +99,8 @@ namespace ao::rt::test
     CHECK(source.state() == TrackSourceState::Invalidated);
 
     auto lateBatches = std::vector<TrackSourceDeltaBatch>{};
-    auto lateSubscription = source.subscribe([&](TrackSourceDeltaBatch const& batch) { lateBatches.push_back(batch); });
+    auto lateSubscription =
+      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { lateBatches.push_back(batch); });
 
     REQUIRE(lateBatches.size() == 1);
     REQUIRE(lateBatches[0].deltas.size() == 1);
@@ -112,7 +115,8 @@ namespace ao::rt::test
 
     {
       auto sourcePtr = std::make_unique<MutableTrackSource>();
-      subscription = sourcePtr->subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      subscription =
+        sourcePtr->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     }
 
     CHECK(batches.empty());
@@ -124,8 +128,8 @@ namespace ao::rt::test
     auto source = MutableTrackSource{};
     std::uint32_t batchCount = 0;
     std::uint32_t retainedBatchCount = 0;
-    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const&) { ++batchCount; });
-    auto retainedSubscription = source.subscribe([&](TrackSourceDeltaBatch const&) { ++retainedBatchCount; });
+    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const&) noexcept { ++batchCount; });
+    auto retainedSubscription = source.subscribe([&](TrackSourceDeltaBatch const&) noexcept { ++retainedBatchCount; });
 
     subscription.reset();
     source.emitReset();

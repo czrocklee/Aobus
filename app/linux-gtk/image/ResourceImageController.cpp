@@ -6,7 +6,6 @@
 #include "image/ImageWidget.h"
 #include "image/ResourceImageLoader.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
@@ -14,9 +13,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <functional>
-#include <memory>
-#include <utility>
 
 namespace ao::gtk
 {
@@ -48,23 +44,6 @@ namespace ao::gtk
   {
     _request.reset();
     _widget.clearImage();
-  }
-
-  void ResourceImageController::bindToDetailProjection(std::unique_ptr<rt::TrackDetailProjection> projectionPtr)
-  {
-    _detailProjectionPtr = std::move(projectionPtr);
-    _detailSub = _detailProjectionPtr->subscribe(std::bind_front(&ResourceImageController::handleDetailSnapshot, this));
-  }
-
-  void ResourceImageController::handleDetailSnapshot(rt::TrackDetailSnapshot const& snap)
-  {
-    if (snap.selectionKind == rt::SelectionKind::None || snap.trackIds.empty())
-    {
-      clear();
-      return;
-    }
-
-    load(snap.singleCoverArtId);
   }
 
   void ResourceImageController::loadFullSize(ResourceId const resourceId)

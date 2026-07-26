@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <functional>
 #include <iterator>
@@ -24,11 +23,18 @@ namespace ao::rt::delta
 {
   namespace
   {
-    enum class Stage : std::uint8_t
+    constexpr RangeEditKind rangeEditKindOf(RemoveRange const& /*range*/) noexcept
     {
-      Remove,
-      Insert,
-    };
+      return RangeEditKind::Remove;
+    }
+    constexpr RangeEditKind rangeEditKindOf(InsertRange const& /*range*/) noexcept
+    {
+      return RangeEditKind::Insert;
+    }
+    constexpr RangeEditKind rangeEditKindOf(UpdateRange const& /*range*/) noexcept
+    {
+      return RangeEditKind::Update;
+    }
 
     bool checkedAdd(std::size_t& value, std::size_t amount) noexcept
     {
@@ -131,53 +137,77 @@ namespace ao::rt::delta
     }
   } // namespace
 
+  bool RangeEditValidator::accept(RangeEditKind const kind, std::size_t const start, std::size_t const count) noexcept
+  {
+    if (count == 0)
+    {
+      return false;
+    }
+
+    if (kind < _stage)
+    {
+      return false;
+    }
+
+    switch (kind)
+    {
+      case RangeEditKind::Remove:
+      {
+        if (start >= _previousRemoveStart || start > _size || count > _size - start)
+        {
+          return false;
+        }
+
+        _previousRemoveStart = start;
+        _size -= count;
+        _previousUpdateEnd = 0;
+        return true;
+      }
+
+      case RangeEditKind::Insert:
+      {
+        if (start < _previousInsertEnd || start > _size || !checkedAdd(_size, count))
+        {
+          return false;
+        }
+
+        _stage = RangeEditKind::Insert;
+        _previousInsertEnd = start + count;
+        _previousUpdateEnd = 0;
+        return true;
+      }
+
+      case RangeEditKind::Update:
+      {
+        if (start < _previousUpdateEnd || start > _size || count > _size - start)
+        {
+          return false;
+        }
+
+        _stage = RangeEditKind::Update;
+        _previousUpdateEnd = start + count;
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   bool validate(RegularTrackEditScript const& script, std::size_t const initialSize) noexcept
   {
-    auto stage = Stage::Remove;
-    auto size = initialSize;
-    auto previousRemoveStart = initialSize;
-    std::size_t previousInsertEnd = 0;
-    std::size_t previousUpdateEnd = 0;
+    auto validator = RangeEditValidator{initialSize};
 
     for (auto const& edit : script.edits)
     {
-      if (auto const* removal = std::get_if<RemoveRange>(&edit); removal != nullptr)
-      {
-        if (stage != Stage::Remove || removal->trackIds.empty() || removal->start >= previousRemoveStart ||
-            removal->start > size || removal->trackIds.size() > size - removal->start)
-        {
-          return false;
-        }
+      auto const accepted =
+        std::visit([&validator](auto const& range)
+                   { return validator.accept(rangeEditKindOf(range), range.start, range.trackIds.size()); },
+                   edit);
 
-        previousRemoveStart = removal->start;
-        size -= removal->trackIds.size();
-        previousUpdateEnd = 0;
-        continue;
-      }
-
-      if (auto const* insertion = std::get_if<InsertRange>(&edit); insertion != nullptr)
-      {
-        if (insertion->trackIds.empty() || insertion->start < previousInsertEnd || insertion->start > size ||
-            !checkedAdd(size, insertion->trackIds.size()))
-        {
-          return false;
-        }
-
-        stage = Stage::Insert;
-        previousInsertEnd = insertion->start + insertion->trackIds.size();
-        previousUpdateEnd = 0;
-        continue;
-      }
-
-      auto const* update = std::get_if<UpdateRange>(&edit);
-
-      if (update == nullptr || update->trackIds.empty() || update->start < previousUpdateEnd || update->start > size ||
-          update->trackIds.size() > size - update->start)
+      if (!accepted)
       {
         return false;
       }
-
-      previousUpdateEnd = update->start + update->trackIds.size();
     }
 
     return true;

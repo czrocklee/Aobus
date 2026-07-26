@@ -66,8 +66,9 @@ The shared duration formatter uses `m:ss` below one hour and `h:mm:ss` at or abo
 
 ## Failure and cancellation
 
-Formatting is synchronous and cannot fail.
-Runtime storage read failures are narrowed by the shared storage-observation policy used by `ViewService`; an unreadable or missing selected record contributes no duration.
+Pure text formatting is synchronous and cannot fail.
+A missing selected record contributes no duration.
+Failure to open the underlying read transaction follows the exceptional library contract and is not narrowed here.
 The aggregation exposes no retry or cancellation surface because it is a bounded synchronous view query.
 
 ## Persistence and versioning

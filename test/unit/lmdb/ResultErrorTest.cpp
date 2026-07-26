@@ -49,6 +49,7 @@ namespace ao::lmdb::test
     SECTION("Unmapped failures collapse to IoError")
     {
       CHECK(resultFromCode("mdb_get", MDB_CORRUPTED).error().code == Error::Code::IoError);
+      CHECK(resultFromCode("mdb_txn_begin", MDB_READERS_FULL).error().code == Error::Code::IoError);
     }
   }
 } // namespace ao::lmdb::test

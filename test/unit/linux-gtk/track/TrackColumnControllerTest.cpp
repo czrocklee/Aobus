@@ -117,7 +117,7 @@ namespace ao::gtk::test
     SECTION("column layout writes do not bounce between open views")
     {
       auto events = std::vector<ListId>{};
-      auto sub = layoutStore.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
+      auto sub = layoutStore.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
 
       controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
 

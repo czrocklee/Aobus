@@ -6,7 +6,7 @@
 #include <ao/AudioCodec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <chrono>
 #include <cstdint>

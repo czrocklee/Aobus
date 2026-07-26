@@ -25,7 +25,6 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
-#include <exception>
 #include <expected>
 #include <memory>
 #include <utility>
@@ -189,28 +188,26 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "No track view is focused");
     }
 
-    try
+    auto const state = _implPtr->viewService.findTrackListState(focus.activeViewId);
+
+    if (!state)
     {
-      auto const state = _implPtr->viewService.trackListState(focus.activeViewId);
-
-      if (state.selection.empty())
-      {
-        return makeError(Error::Code::NotFound, "The focused track view has no selection");
-      }
-
-      auto const trackId = state.selection.front();
-
-      if (auto const played = _implPtr->playbackPtr->commands().startFromView(focus.activeViewId, trackId); !played)
-      {
-        return std::unexpected{played.error()};
-      }
-
-      return trackId;
+      return std::unexpected{state.error()};
     }
-    catch (std::exception const& error)
+
+    if (state->selection.empty())
     {
-      return makeError(Error::Code::Generic, error.what());
+      return makeError(Error::Code::NotFound, "The focused track view has no selection");
     }
+
+    auto const trackId = state->selection.front();
+
+    if (auto const played = _implPtr->playbackPtr->commands().startFromView(focus.activeViewId, trackId); !played)
+    {
+      return std::unexpected{played.error()};
+    }
+
+    return trackId;
   }
 
   Result<> AppRuntime::jumpToAlbum(TrackId const trackId)

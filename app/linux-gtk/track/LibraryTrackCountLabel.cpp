@@ -19,7 +19,7 @@ namespace ao::gtk
   {
     _label.add_css_class("dim-label");
     _sourceSubscription =
-      _sourceLease->subscribe([this](rt::TrackSourceDeltaBatch const& batch) { handleSourceBatch(batch); });
+      _sourceLease->subscribe([this](rt::TrackSourceDeltaBatch const& batch) noexcept { handleSourceBatch(batch); });
 
     updateCount();
   }

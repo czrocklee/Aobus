@@ -246,7 +246,7 @@ namespace ao::rt::test
 
     std::int32_t emitCount = 0;
     auto const sub = runtime.workspace().onChanged(
-      [&](WorkspaceChanged const& changed)
+      [&](WorkspaceChanged const& changed) noexcept
       {
         if (changed.cause == WorkspaceChangeCause::Presets)
         {

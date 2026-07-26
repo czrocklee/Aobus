@@ -52,7 +52,7 @@ namespace ao::tui
     _sections = std::move(snapshot.sections);
     syncSelectedPresentation(activePresentationId());
     _customPresetsSub = _runtime.workspace().onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const& changed) noexcept
       {
         if (changed.cause == rt::WorkspaceChangeCause::Presets || changed.cause == rt::WorkspaceChangeCause::Restore)
         {
@@ -60,7 +60,7 @@ namespace ao::tui
         }
       });
     _libraryChangesSub = _runtime.library().changes().onChanged(
-      [this](rt::LibraryChangeSet const& changeSet)
+      [this](rt::LibraryChangeSet const& changeSet) noexcept
       {
         if (changeSet.libraryReset || !changeSet.listsUpserted.empty() || !changeSet.listsDeleted.empty())
         {
@@ -85,7 +85,9 @@ namespace ao::tui
       return {};
     }
 
-    return _runtime.views().trackListState(_activeViewId).presentation.id;
+    // Reached from the workspace observer via refreshPresentationNavigation().
+    auto const found = _runtime.views().findTrackListState(_activeViewId);
+    return found ? found->presentation.id : std::string{};
   }
 
   SelectedTrackView LibraryController::selectedTrackView() const
@@ -242,9 +244,9 @@ namespace ao::tui
     // The projection maintains an indexed track-to-row lookup. _tracks can drift
     // from projection indices when a row's LMDB lookup was skipped, so trust the
     // index only when the materialized row matches and otherwise scan below.
-    if (auto const projectionPtr = _runtime.views().trackListProjection(_activeViewId); projectionPtr != nullptr)
+    if (auto const found = _runtime.views().findTrackListProjection(_activeViewId); found && *found != nullptr)
     {
-      if (auto const optIndex = projectionPtr->indexOf(trackId);
+      if (auto const optIndex = (*found)->indexOf(trackId);
           optIndex && *optIndex < _tracks.size() && _tracks[*optIndex].id == trackId)
       {
         _selectedTrack = static_cast<std::int32_t>(*optIndex);
@@ -419,12 +421,15 @@ namespace ao::tui
 
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItemsFromView(rt::ViewId const activeViewId)
   {
-    auto const projectionPtr = _runtime.views().trackListProjection(activeViewId);
+    // Reached from the library-changes observer via reloadActiveList().
+    auto const foundProjection = _runtime.views().findTrackListProjection(activeViewId);
 
-    if (projectionPtr == nullptr)
+    if (!foundProjection || *foundProjection == nullptr)
     {
       return {};
     }
+
+    auto const& projectionPtr = *foundProjection;
 
     auto const reader = _runtime.library().reader();
     auto snapshot = TrackItemsSnapshot{};

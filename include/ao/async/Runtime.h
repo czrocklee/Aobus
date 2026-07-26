@@ -57,6 +57,8 @@ namespace ao::async
     // or the default stderr fallback.
     void reportUnhandledException(std::exception_ptr exceptionPtr, std::string_view context) const noexcept;
 
+    // Terminally closes callback-executor resumption admission and stops the
+    // worker pool. The Runtime cannot be restarted afterward.
     void requestStop() noexcept;
     void join();
 

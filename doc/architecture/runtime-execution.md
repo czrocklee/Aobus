@@ -47,11 +47,15 @@ Subscription registration, event delivery, and subscription teardown follow the 
 `async::Signal` is the reusable synchronous observer mechanism below runtime and UIModel services.
 It is unsynchronized and does not choose an executor, so its owner defines the serialized domain for connection, emission, disconnection, inspection, and destruction.
 Its `post()` operation is a weak-lifetime deferred hop through a supplied executor, not permission for other signal operations to cross threads.
-The [signal delivery specification](../spec/async/signal.md) owns its exact ordering, reentrancy, observer-exception, and destruction behavior.
+
+Primitive choice follows delivery topology.
+Notification owners broadcast already-committed state through `async::Signal`, whose handlers are `noexcept`.
+Library change publication instead binds one named replica callable because phase ordering requires exactly one mandatory derived-state consumer before notifications; that callable is also `noexcept`.
+The [signal delivery specification](../spec/async/signal.md) owns signal ordering, reentrancy, handler failure, and destruction behavior.
 
 The notification service refines synchronous callback delivery with a small publication queue.
 One effective feed command installs an immutable snapshot and publishes one canonical update; a command invoked by an observer appends a later update rather than nesting signal delivery.
-Observer failure is contained after every connected observer has run and is reported through `Runtime::reportUnhandledException`, so it cannot unwind an already committed feed command.
+Feed observers are `noexcept`, so delivery cannot unwind an already committed feed command.
 Candidate bounding and eligible history eviction complete before that commit, so rejection leaves the current snapshot and id watermark untouched while accepted eviction remains part of the same observed update.
 For transient notification lifetime, the service schedules a cancellable worker sleep through the same runtime and defers completion to the callback executor.
 Only a callback carrying the current notification id and lifetime generation may commit expiry; updates restart the duration, while cancellation merely avoids obsolete work.
@@ -63,6 +67,8 @@ CLI supplies `LoopExecutor`, which uses the invocation thread as owner and expos
 
 The GTK, TUI, and loop adapters share `QueuedExecutorBase`.
 Producer threads admit foreign dispatches and deferred tasks into one mutex-protected FIFO, while only the constructing owner thread drains and executes it.
+Returning from `defer()` means the executor accepted the task; if admission throws, the executor retained nothing and will not execute that task.
+After queue admission, event-loop wake is a `noexcept` infrastructure boundary: a wake failure is fatal rather than a recoverable rejection because concurrent producers make rollback unsafe.
 An owner drain is non-reentrant: it extracts the entry snapshot, releases the queue mutex, and then executes that snapshot.
 Tasks admitted while it runs remain pending for a later executor turn.
 The first task in a pending burst owns the wake request, and drain completion requests one follow-up wake when later work remains; this coalesces redundant event-loop notifications without losing the final wake.
@@ -108,7 +114,7 @@ The logging backend may also own its own asynchronous worker, but it is infrastr
 - Frontends construct the callback executor and transfer exclusive ownership to `CoreRuntime`.
 - `CoreRuntime` owns `async::Runtime`; runtime services borrow it or its callback executor and cannot outlive it.
 - Interactive composition injects an async exception handler from the application logging boundary; `ao_async` does not depend on application logging types.
-- Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, transaction ordering, and observer-failure containment remain with those owners.
+- Runtime and UIModel event owners may use `async::Signal`, but application payloads, affinity checks, and transaction ordering remain with those owners.
 - Worker tasks may resume on the callback executor through `Runtime::resumeOnCallbackExecutor`.
 - Runtime library code cannot bypass `LibraryMutationService` with an independent committing transaction; UIModel and frontend code cannot name that authority.
 - A synchronous non-toolkit adapter that starts such a task drives its owner loop rather than blocking on a future whose completion may require that loop.
@@ -176,7 +182,7 @@ The current Engine non-realtime queue and Player-to-executor task stream have no
 - A maintenance guard closes interactive admission across slow preparation but never grants storage write access by itself.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
 - Synchronous observer delivery cannot destroy the emitting owner on the same callback stack; teardown is deferred to a later executor turn.
-- Reentrant notification mutations queue another immutable update, so every observer finishes the current snapshot before delivery moves to the next one.
+- Reentrant notification mutations queue another immutable update, so every contract-fulfilling observer finishes the current snapshot before delivery moves to the next one.
 - Notification expiry tasks never mutate feed state on a worker; a stale, cancelled, or owner-retired expiry callback is rejected on the callback executor.
 - A dedicated audio or device thread cannot become a general application worker.
 - Tests replace time, execution, or backend facilities through explicit executor and sleeper seams instead of relying on sleeps.
@@ -195,11 +201,13 @@ If the callback gate remains open, an acceptance veto produces exactly one
 `Conflict` completion. Cancellation, replacement, or teardown can end the task
 path earlier and suppress completion.
 Player closes its callback gate and cancels both handles before Engine teardown; a worker that returns after Player teardown then owns and destroys only its detached preparation value.
-Runtime teardown closes callback admission before stopping and joining its
-worker pool. A callback-executor resumption queued before that boundary is
+`Runtime::requestStop()` closes callback admission before stopping the worker
+pool, and teardown then joins it. A callback-executor resumption queued before that boundary is
 discarded instead of resuming application code; destroying its Asio handler
 unwinds the suspended coroutine frame, while shared callback state keeps the
 worker executor alive until that destruction completes.
+Owner-calling terminal guards use a weak lifetime gate, so later destruction of
+a discarded frame cannot re-enter an already-retired runtime service.
 Because pool join is final rather than detached, a decoder open that does not
 return can extend `CoreRuntime` shutdown even though cancellation has already
 made its result inadmissible.
@@ -247,13 +255,13 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) tests executor switching, cancellation, terminal exception ownership, non-default-constructible result transport, and runtime lifetime.
 - [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
 - [`LoopExecutorTest.cpp`](../../test/unit/runtime/LoopExecutorTest.cpp) protects owner affinity, burst wake coalescing, multi-producer admission, non-reentrant turns, and later-turn delivery.
-- [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects connection order, reentrant mutation, nested emission, observer failures, deferred turns, and weak owner lifetime independently of application runtime composition.
+- [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects connection order, reentrant mutation, nested emission, the noexcept handler contract, deferred turns, and weak owner lifetime independently of application runtime composition.
 - [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
 - [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) and [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp) exercise the public playback service and executor-affine internal succession owner.
-- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, reentrant commands, and observer-fault containment.
+- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, and reentrant commands.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.
 
 ## Related documents

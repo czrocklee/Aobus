@@ -59,7 +59,7 @@ namespace ao::gtk
     _observedWorkspaceRevision = initialWorkspace.revision;
 
     _workspaceSub = _runtime.workspace().onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const& changed) noexcept
       {
         if (changed.snapshot.revision <= _observedWorkspaceRevision)
         {
@@ -78,10 +78,10 @@ namespace ao::gtk
 
         if (viewId != rt::kInvalidViewId)
         {
-          if (auto const state = _runtime.views().trackListState(viewId); state.listId != kInvalidListId)
+          if (auto const found = _runtime.views().findTrackListState(viewId); found && found->listId != kInvalidListId)
           {
             _syncingWorkspaceSelection = true;
-            select(state.listId);
+            select(found->listId);
             _syncingWorkspaceSelection = false;
           }
         }
@@ -128,14 +128,15 @@ namespace ao::gtk
 
     if (_pendingSelectId != kInvalidListId)
     {
-      _panelPtr->selectList(_pendingSelectId);
+      auto const pendingSelectId = _pendingSelectId;
+      _syncingWorkspaceSelection = true;
+      _panelPtr->selectList(pendingSelectId);
+      _syncingWorkspaceSelection = false;
 
-      if (_callbacks.onListSelected)
+      if (notifyListSelected(pendingSelectId))
       {
-        _callbacks.onListSelected(_pendingSelectId);
+        _pendingSelectId = kInvalidListId;
       }
-
-      _pendingSelectId = kInvalidListId;
     }
   }
 
@@ -154,8 +155,16 @@ namespace ao::gtk
 
     if (!_syncingWorkspaceSelection && _callbacks.onListSelected)
     {
-      _callbacks.onListSelected(listId);
+      if (!notifyListSelected(listId))
+      {
+        _pendingSelectId = listId;
+      }
     }
+  }
+
+  bool ListNavigationController::notifyListSelected(ListId const listId) const
+  {
+    return !_callbacks.onListSelected || _callbacks.onListSelected(listId);
   }
 
   void ListNavigationController::handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect)

@@ -6,6 +6,7 @@
 #include "MediaTrack.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/TrackBuilder.h>
@@ -13,7 +14,6 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/utility/Hash128.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +32,7 @@ namespace ao::library
   class MusicLibrary;
   class DictionaryStore;
   class WritableMusicLibrary;
+  struct AudioIdentity;
 }
 
 namespace ao::rt
@@ -72,12 +73,6 @@ namespace ao::rt
     bool transactionShouldCommit() const noexcept;
 
   private:
-    struct AudioFingerprint final
-    {
-      utility::Hash128 signature;
-      std::uint64_t payloadLength = 0;
-    };
-
     struct PreparedScanItem;
 
     enum class State : std::uint8_t
@@ -115,7 +110,7 @@ namespace ao::rt
                              library::FileManifestStore::Writer& manifestWriter,
                              library::DictionaryStore const& dictionary,
                              library::TrackBuilder& builder,
-                             AudioFingerprint const& fingerprint);
+                             library::AudioIdentity const& identity);
 
     bool applyMovedItem(ScanItem const& item,
                         library::WriteTransaction& transaction,
@@ -123,35 +118,35 @@ namespace ao::rt
                         library::FileManifestStore::Writer& manifestWriter,
                         library::DictionaryStore const& dictionary,
                         library::TrackBuilder& builder,
-                        AudioFingerprint const& fingerprint);
+                        library::AudioIdentity const& identity);
 
     void applyNewItem(ScanItem const& item,
                       library::WriteTransaction& transaction,
                       library::TrackStore::Writer& trackWriter,
                       library::FileManifestStore::Writer& manifestWriter,
                       library::TrackBuilder& builder,
-                      std::optional<AudioFingerprint> const& optFingerprint);
+                      std::optional<library::AudioIdentity> const& optIdentity);
 
     std::optional<MediaTrack> loadTrackBuilder(ScanItem const& item);
 
-    std::optional<AudioFingerprint> cachedAudioFingerprint(ScanItem const& item) const noexcept;
+    std::optional<library::AudioIdentity> cachedAudioIdentity(ScanItem const& item) const noexcept;
 
     bool shouldFingerprintDuringPreparation(ScanItem const& item) const noexcept;
 
     bool isFingerprintRequiredForApply(ScanItem const& item) const noexcept;
 
-    std::optional<AudioFingerprint> fingerprintAudioPayload(ScanItem const& item,
-                                                            media::file::File const& file,
-                                                            std::size_t itemIndex,
-                                                            bool publishProgress,
-                                                            std::stop_token stopToken);
+    std::optional<library::AudioIdentity> fingerprintAudioPayload(ScanItem const& item,
+                                                                  media::file::File const& file,
+                                                                  std::size_t itemIndex,
+                                                                  bool publishProgress,
+                                                                  std::stop_token stopToken);
 
     std::optional<std::pair<library::TrackBuilder::PreparedHot, library::TrackBuilder::PreparedCold>>
     prepareTrack(library::TrackBuilder const& builder, library::WriteTransaction& transaction, std::string const& uri);
 
     static library::FileManifestBuilder makeAvailableManifest(ScanItem const& item,
                                                               TrackId trackId,
-                                                              std::optional<AudioFingerprint> const& optFingerprint);
+                                                              std::optional<library::AudioIdentity> const& optIdentity);
 
     bool writeManifest(library::FileManifestStore::Writer& writer,
                        std::string const& uri,

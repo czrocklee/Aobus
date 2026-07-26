@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <cstdint>
 #include <optional>

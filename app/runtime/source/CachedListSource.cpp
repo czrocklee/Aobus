@@ -111,51 +111,21 @@ namespace ao::rt
   void CachedListSource::applyManualTracksInsert(ManualTracksInsert const& operation)
   {
     auto& source = manualImplementation();
-
-    try
-    {
-      source.applyManualTracksInsert(operation);
-    }
-    catch (...)
-    {
-      syncManualDefinition(source);
-      throw;
-    }
-
+    source.applyManualTracksInsert(operation);
     syncManualDefinition(source);
   }
 
   void CachedListSource::applyManualTracksRemove(ManualTracksRemove const& operation)
   {
     auto& source = manualImplementation();
-
-    try
-    {
-      source.applyManualTracksRemove(operation);
-    }
-    catch (...)
-    {
-      syncManualDefinition(source);
-      throw;
-    }
-
+    source.applyManualTracksRemove(operation);
     syncManualDefinition(source);
   }
 
   void CachedListSource::applyManualTracksMove(ManualTracksMove const& operation)
   {
     auto& source = manualImplementation();
-
-    try
-    {
-      source.applyManualTracksMove(operation);
-    }
-    catch (...)
-    {
-      syncManualDefinition(source);
-      throw;
-    }
-
+    source.applyManualTracksMove(operation);
     syncManualDefinition(source);
   }
 
@@ -172,6 +142,13 @@ namespace ao::rt
   std::optional<std::size_t> CachedListSource::indexOf(TrackId const id) const
   {
     return _implementationPtr->indexOf(id);
+  }
+
+  void CachedListSource::discardSnapshot() noexcept
+  {
+    _implementationSubscription.reset();
+    _implementationPtr->invalidate();
+    _publishedSize = 0;
   }
 
   ManualListSource& CachedListSource::manualImplementation()
@@ -199,8 +176,8 @@ namespace ao::rt
 
   void CachedListSource::subscribeToImplementation()
   {
-    _implementationSubscription =
-      _implementationPtr->subscribe([this](TrackSourceDeltaBatch const& batch) { handleImplementationBatch(batch); });
+    _implementationSubscription = _implementationPtr->subscribe([this](TrackSourceDeltaBatch const& batch) noexcept
+                                                                { handleImplementationBatch(batch); });
   }
 
   void CachedListSource::handleImplementationBatch(TrackSourceDeltaBatch const& batch)

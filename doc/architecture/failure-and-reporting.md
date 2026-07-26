@@ -95,7 +95,8 @@ There is no process-wide recovery manager.
 `CoreRuntime` owns one `NotificationService` for the active runtime composition.
 The service owns an executor-confined in-memory feed, explicit notification lifetimes, post and keyed create-or-update commands, and service-owned transient expiry.
 Each effective mutation publishes one canonical update carrying a complete immutable snapshot on the callback executor.
-Reentrant commands enter a small FIFO until the current update reaches every observer; observer exceptions are contained after commit and forwarded to the async-runtime diagnostic handler.
+Reentrant commands enter a small FIFO until the current update completes delivery to its contract-fulfilling observers.
+Feed observers are `noexcept`; an expected fallible operation is handled locally by the observer, while an escaping exception terminates at that contract boundary.
 Matching the id and current expiry-registration identity prevents cancelled or superseded timers from expiring newer state.
 History and pinned entries do not schedule expiry.
 Construction-time entry and text bounds keep retained state finite.
@@ -103,7 +104,7 @@ Capacity pressure removes only oldest history; exhaustion by transient or pinned
 The command surface returns `void`, so the feed logs rejection directly because it cannot recursively report failure to accept a report.
 It does not inspect `Result`, catch subsystem exceptions, choose severity, retry operations, or decide which domain failures deserve a user-facing report.
 The service uses `async::Signal` only as its synchronous observer-list mechanism.
-FIFO publication, immutable update ownership, and observer-exception containment remain reporting-domain behavior above that generic primitive.
+FIFO publication and immutable update ownership remain reporting-domain behavior above that generic primitive.
 
 Domain services and application workflow coordinators decide when a semantic outcome becomes a notification and provide the frontend-neutral content.
 They own deduplication and aggregation policy when reporting every low-level failure would produce noise or misrepresent one higher-level operation; the feed supplies typed report-key correlation and create-or-update mechanics without inventing that policy.
@@ -262,7 +263,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`Error`](../../include/ao/Error.h) and [`Exception`](../../include/ao/Exception.h) define the shared recoverable value and invariant exception foundations.
 - [`OperationCancelled`](../../include/ao/async/OperationCancelled.h), [`LifetimeScope`](../../include/ao/async/LifetimeScope.h), and their implementations under [`lib/async/`](../../lib/async) define cancellation and lifetime completion boundaries.
 - [`AsyncExceptionHandler`](../../include/ao/async/AsyncExceptionHandler.h) and [`Runtime.cpp`](../../lib/async/Runtime.cpp) define unobserved coroutine diagnostic ownership without replacing Asio exception transport.
-- [`Signal`](../../include/ao/async/Signal.h) supplies generic synchronous observer delivery below reporting, while [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) owns feed-specific queuing and exception containment.
+- [`Signal`](../../include/ao/async/Signal.h) supplies generic synchronous observer delivery below reporting, while [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) owns feed-specific queuing.
 - [`NotificationState`](../../app/include/ao/rt/NotificationState.h), [`NotificationService`](../../app/include/ao/rt/NotificationService.h), and [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) define the runtime reporting feed.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) composes the notification owner with library, source, completion, async, and diagnostic collaborators.
 - [`PlaybackFailure`](../../app/include/ao/rt/PlaybackFailure.h), public [`PlaybackService.cpp`](../../app/runtime/playback/PlaybackService.cpp), internal [`PlaybackTransport.cpp`](../../app/runtime/playback/PlaybackTransport.cpp), and [`PlaybackSuccession.cpp`](../../app/runtime/playback/PlaybackSuccession.cpp) are the principal typed asynchronous failure, recovery, and summary-reporting path.
@@ -278,7 +279,7 @@ During shutdown, final persistence and subsystem quiescence run while their repo
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) and [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) protect cancellation, executor return, single-owner exception completion, injected diagnostics, and owner lifetime.
 - [`UiWorkflowTest.cpp`](../../test/unit/linux-gtk/common/UiWorkflowTest.cpp) protects diagnostic-before-presentation ordering when cancellation wins the callback hop.
 - [`LogTest.cpp`](../../test/unit/runtime/LogTest.cpp) protects the retained application-log adapter.
-- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, configured bounds, atomic history eviction, keyed correlation, immutable snapshots, executor-owned observation, reentrant FIFO publication, and observer-fault containment.
+- [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) protects feed mutation, configured bounds, atomic history eviction, keyed correlation, immutable snapshots, executor-owned observation, and reentrant FIFO publication.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) protects transient scheduling, unchanged suppression, keyed lifetime transitions, callback-executor expiry, registration-identity races, cancellation, and teardown.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackTransportTest.cpp`](../../test/unit/runtime/PlaybackTransportTest.cpp), and [`PlaybackSuccessionTest.cpp`](../../test/unit/runtime/PlaybackSuccessionTest.cpp) protect typed failure correlation, recovery ownership, and notification aggregation.
 - Activity-status tests under [`test/unit/uimodel/status/activity/`](../../test/unit/uimodel/status/activity) protect the runtime-feed to UIModel boundary and presentation-local suppression.

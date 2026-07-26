@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <source_location>
 
 namespace ao::library
 {
@@ -135,22 +136,26 @@ namespace ao::rt
     // handler must not synchronously destroy this transport; Debug contracts
     // require teardown to be deferred to a later executor turn.
 
-    async::Subscription onPreparing(std::move_only_function<void()> handler);
-    async::Subscription onStarted(std::move_only_function<void()> handler);
-    async::Subscription onPaused(std::move_only_function<void()> handler);
-    async::Subscription onIdle(std::move_only_function<void()> handler);
-    async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&)> handler);
-    async::Subscription onOutputDeviceChanged(std::move_only_function<void(OutputDeviceSelection const&)> handler);
-    async::Subscription onStopped(std::move_only_function<void()> handler);
-    async::Subscription onOutputDevicesChanged(std::move_only_function<void()> handler);
-    async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler);
-    async::Subscription onVolumeChanged(std::move_only_function<void(float)> handler);
-    async::Subscription onMutedChanged(std::move_only_function<void(bool)> handler);
-    async::Subscription onRevealTrackRequested(std::move_only_function<void(RevealTrackRequested const&)> handler);
-    async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler);
-    async::Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&)> handler);
+    async::Subscription onPreparing(std::move_only_function<void() noexcept> handler);
+    async::Subscription onStarted(std::move_only_function<void() noexcept> handler);
+    async::Subscription onPaused(std::move_only_function<void() noexcept> handler);
+    async::Subscription onIdle(std::move_only_function<void() noexcept> handler);
+    async::Subscription onNowPlayingChanged(std::move_only_function<void(NowPlayingChanged const&) noexcept> handler);
+    async::Subscription onOutputDeviceChanged(
+      std::move_only_function<void(OutputDeviceSelection const&) noexcept> handler);
+    async::Subscription onStopped(std::move_only_function<void() noexcept> handler);
+    async::Subscription onOutputDevicesChanged(std::move_only_function<void() noexcept> handler);
+    async::Subscription onQualityChanged(std::move_only_function<void(QualityChanged const&) noexcept> handler);
+    async::Subscription onVolumeChanged(std::move_only_function<void(float) noexcept> handler);
+    async::Subscription onMutedChanged(std::move_only_function<void(bool) noexcept> handler);
+    async::Subscription onRevealTrackRequested(
+      std::move_only_function<void(RevealTrackRequested const&) noexcept> handler);
+    async::Subscription onSeekUpdate(std::move_only_function<void(SeekUpdate const&) noexcept> handler);
+    async::Subscription onPlaybackFailure(std::move_only_function<void(PlaybackFailure const&) noexcept> handler);
 
-    Result<PreparedCancellationBarrier> playTrack(TrackId trackId, ListId sourceListId);
+    // Starts a track by id. Succession passes announce=false because it
+    // publishes its own now-playing story for automatic transitions.
+    Result<PreparedCancellationBarrier> playTrack(TrackId trackId, ListId sourceListId, bool announce = true);
 
     // Lower-level playback entry point: start a fully-resolved request.
     // playTrack() resolves a TrackId via the library and forwards here.
@@ -200,15 +205,22 @@ namespace ao::rt
     void cancelSuccessionStartPreparation();
     void cancelSuccessionLookaheadPreparation();
     Result<PreparedNextToken> prepareNextRequest(PlaybackRequest const& request, ListId sourceListId);
-    Result<PreparedCancellationBarrier> playSuccessionTrack(TrackId trackId, ListId sourceListId);
-    Result<PreparedNextToken> prepareSuccessionNext(TrackId trackId, ListId sourceListId);
-    std::optional<PreparedNextToken> clearSuccessionPreparedNext();
-    PreparedCancellationBarrier stopSuccession();
     PlaybackTransportSessionState playbackTransportSessionState();
     Result<std::chrono::milliseconds> restorePlaybackTransport(PlaybackTransportSessionState const& session);
     void discardPlaybackTransportSnapshot();
 
     struct Impl;
+
+    // Every executor-affine member starts here: it asserts the callback-executor
+    // affinity for the calling member and hands back the implementation.
+    Impl* checkedImpl(std::source_location location = std::source_location::current()) const;
+
     std::unique_ptr<Impl> _implPtr;
   };
+
+  // Resolves a library track into a fully-formed playback request. Shared by
+  // the transport's own track-addressed entry points and by succession, which
+  // resolves requests ahead of time to stage them off the executor.
+  Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     TrackId trackId);
 } // namespace ao::rt

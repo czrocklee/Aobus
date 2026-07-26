@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/rt/TrackField.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldEditCodec.h>
 
 #include <string_view>

@@ -24,7 +24,7 @@ namespace ao::uimodel::test
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.preferences;
     auto events = std::vector<ListId>{};
-    auto sub = store.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
+    auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
 
     store.setPresentationIdForList(kInvalidListId, "albums");
     CHECK_FALSE(store.presentationIdForList(kInvalidListId));
@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.preferences;
     auto events = std::vector<ListId>{};
-    auto sub = store.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
+    auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
 
     store.setPresentationIdForList(rt::kAllTracksListId, "");
     CHECK(store.listPresentations().empty());
@@ -128,7 +128,7 @@ namespace ao::uimodel::test
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.preferences;
     auto events = std::vector<ListId>{};
-    auto sub = store.signalChanged().connect([&events](ListId listId) { events.push_back(listId); });
+    auto sub = store.signalChanged().connect([&events](ListId listId) noexcept { events.push_back(listId); });
     auto const presentations = std::map<ListId, std::string>{{rt::kAllTracksListId, "albums"}};
 
     store.setListPresentations(presentations);

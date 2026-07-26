@@ -11,15 +11,12 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <memory>
-#include <utility>
 
 namespace ao::gtk::test
 {
@@ -253,27 +250,6 @@ namespace ao::gtk::test
       REQUIRE(paintablePtr);
       CHECK(paintablePtr->get_intrinsic_width() == 56 * widget.get_scale_factor());
       CHECK(paintablePtr->get_intrinsic_height() == 56 * widget.get_scale_factor());
-    }
-
-    SECTION("binds to a projection and ignores missing resources")
-    {
-      auto mockProjPtr = std::make_unique<MockManualTrackDetail>();
-      auto* mock = mockProjPtr.get();
-
-      auto widget = ImageWidget{};
-      auto controller = ResourceImageController{widget, loader};
-
-      controller.bindToDetailProjection(std::move(mockProjPtr));
-
-      auto snapshot = rt::TrackDetailSnapshot{};
-      snapshot.selectionKind = rt::SelectionKind::Single;
-      snapshot.trackIds = {TrackId{1}};
-      snapshot.singleCoverArtId = ResourceId{123};
-
-      mock->emit(snapshot);
-      drainGtkEvents();
-
-      CHECK_FALSE(widget.get_paintable());
     }
 
     SECTION("full-size cache miss clears the placeholder and completes asynchronously")

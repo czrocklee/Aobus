@@ -65,7 +65,8 @@ namespace ao::rt
 
     void setPresentation(TrackPresentationSpec const& presentation);
 
-    async::Subscription subscribe(std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) override;
+    async::Subscription subscribe(
+      std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler) override;
 
   private:
     struct Impl;

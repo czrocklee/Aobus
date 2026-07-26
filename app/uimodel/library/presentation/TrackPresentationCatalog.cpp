@@ -20,7 +20,7 @@ namespace ao::uimodel
     : _workspace{workspace}
   {
     _customPresetsSub = _workspace.onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const& changed) noexcept
       {
         if (changed.cause == rt::WorkspaceChangeCause::Presets || changed.cause == rt::WorkspaceChangeCause::Restore)
         {

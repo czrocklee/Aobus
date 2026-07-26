@@ -141,7 +141,7 @@ namespace ao::rt
 
     if (inserted && !bucket.invalidated)
     {
-      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDeltaBatch const& batch)
+      bucket.subscription = source.subscribe([this, source = &source](TrackSourceDeltaBatch const& batch) noexcept
                                              { handleSourceBatch(*source, batch); });
     }
 
@@ -408,6 +408,8 @@ namespace ao::rt
   void SmartListEvaluator::handleSourceInvalidated(SourceBucket& bucket)
   {
     bucket.invalidated = true;
+    bucket.subscription.reset();
+    bucket.upstreamTracks.clear();
 
     for (auto* const list : bucket.lists)
     {

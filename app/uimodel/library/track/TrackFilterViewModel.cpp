@@ -7,8 +7,8 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
+#include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
-#include <format>
 #include <functional>
 #include <string>
 #include <utility>
@@ -21,7 +21,7 @@ namespace ao::uimodel
     : _viewService{viewService}, _workspaceService{workspaceService}, _onRender{std::move(onRender)}
   {
     _focusSub = _workspaceService.onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const& changed) noexcept
       {
         if (changed.snapshot.activeViewId != _viewId)
         {
@@ -72,12 +72,25 @@ namespace ao::uimodel
       return;
     }
 
-    auto const state = _viewService.trackListState(_viewId);
-    _entryText = state.filterExpression;
+    // Reached from the workspace observer, whose snapshot can name a view that
+    // has already been destroyed.
+    auto const found = _viewService.findTrackListState(_viewId);
+
+    if (!found)
+    {
+      _viewId = rt::kInvalidViewId;
+      _entryText.clear();
+      _resolvedExpression.clear();
+      _optFilterError.reset();
+      refresh();
+      return;
+    }
+
+    _entryText = found->filterExpression;
 
     auto const resolved = resolveTrackFilterExpression(_entryText);
     _resolvedExpression = resolved.expression;
-    _optFilterError = state.optFilterError;
+    _optFilterError = found->optFilterError;
 
     refresh();
   }
@@ -99,7 +112,7 @@ namespace ao::uimodel
       if (_optFilterError)
       {
         view.hasError = true;
-        view.tooltip = std::format("Filter error: {}", _optFilterError->message);
+        view.tooltip = PresentationTextCatalog{}.trackFilterError(_optFilterError->message);
       }
 
       view.canCreateSmartList = !view.resolvedExpression.empty() && !view.hasError;

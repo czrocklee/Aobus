@@ -44,6 +44,8 @@ namespace ao::rt
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
+    void discardSnapshot() noexcept override;
+
     library::TrackStore const& _store;
     std::vector<TrackId> _trackIds;
   };

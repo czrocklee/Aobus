@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/projection/TrackProjectionEditScript.h>
@@ -11,7 +10,6 @@
 #include <cstddef>
 #include <ranges>
 #include <type_traits>
-#include <utility>
 #include <variant>
 #include <vector>
 
@@ -124,6 +122,24 @@ namespace ao::rt
     appendAscending<ProjectionUpdateRange>(batch, rowIndices);
   }
 
+  namespace
+  {
+    constexpr delta::RangeEditKind rangeEditKindOf(ProjectionRemoveRange const& /*range*/) noexcept
+    {
+      return delta::RangeEditKind::Remove;
+    }
+
+    constexpr delta::RangeEditKind rangeEditKindOf(ProjectionInsertRange const& /*range*/) noexcept
+    {
+      return delta::RangeEditKind::Insert;
+    }
+
+    constexpr delta::RangeEditKind rangeEditKindOf(ProjectionUpdateRange const& /*range*/) noexcept
+    {
+      return delta::RangeEditKind::Update;
+    }
+  } // namespace
+
   bool validateTrackListProjectionDeltaBatch(TrackListProjectionDeltaBatch const& batch, std::size_t initialSize)
   {
     if (batch.deltas.empty())
@@ -137,42 +153,34 @@ namespace ao::rt
       return batch.deltas.size() == 1;
     }
 
-    auto script = delta::RegularTrackEditScript{};
-    script.edits.reserve(batch.deltas.size());
+    auto validator = delta::RangeEditValidator{initialSize};
 
     for (auto const& edit : batch.deltas)
     {
-      if (std::holds_alternative<ProjectionReset>(edit) || std::holds_alternative<ProjectionSourceInvalidated>(edit))
-      {
-        return false;
-      }
-
-      std::visit(
-        [&script](auto const& range)
+      auto const accepted = std::visit(
+        [&validator](auto const& range)
         {
           using Range = std::remove_cvref_t<decltype(range)>;
 
-          if constexpr (!std::same_as<Range, ProjectionReset> && !std::same_as<Range, ProjectionSourceInvalidated>)
+          if constexpr (std::same_as<Range, ProjectionReset> || std::same_as<Range, ProjectionSourceInvalidated>)
           {
-            auto ids = std::vector<TrackId>(range.range.count, kInvalidTrackId);
-
-            if constexpr (std::same_as<Range, ProjectionInsertRange>)
-            {
-              script.edits.emplace_back(delta::InsertRange{.start = range.range.start, .trackIds = std::move(ids)});
-            }
-            else if constexpr (std::same_as<Range, ProjectionRemoveRange>)
-            {
-              script.edits.emplace_back(delta::RemoveRange{.start = range.range.start, .trackIds = std::move(ids)});
-            }
-            else
-            {
-              script.edits.emplace_back(delta::UpdateRange{.start = range.range.start, .trackIds = std::move(ids)});
-            }
+            // A reset or invalidation is only ever valid on its own, and that
+            // case returned above.
+            return false;
+          }
+          else
+          {
+            return validator.accept(rangeEditKindOf(range), range.range.start, range.range.count);
           }
         },
         edit);
+
+      if (!accepted)
+      {
+        return false;
+      }
     }
 
-    return delta::validate(script, initialSize);
+    return true;
   }
 } // namespace ao::rt

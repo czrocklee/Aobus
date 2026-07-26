@@ -174,7 +174,7 @@ Decoder mappings, demux state, and packet views instead belong to each decoder s
 - [`MP4 Atom`](../../include/ao/media/mp4/Atom.h), [`MP4 Demuxer`](../../include/ao/media/mp4/Demuxer.h), and [`WAVE Riff`](../../include/ao/media/wav/Riff.h) define reusable container primitives.
 - [`lib/media/CMakeLists.txt`](../../lib/media/CMakeLists.txt) defines `ao_media` and enforces its forbidden dependencies.
 - [`readMediaTrack` and `MediaTrack`](../../app/runtime/library/MediaTrack.h) own runtime visitor adaptation and the builder-backing lifetime.
-- [`AudioIdentity`](../../include/ao/library/AudioIdentity.h), [`AudioIdentityIndexer`](../../app/runtime/library/AudioIdentityIndexer.cpp), and [`ScanPlanBuilder`](../../app/runtime/library/ScanPlanBuilder.cpp) define the payload consumer path.
+- [`AudioIdentity`](../../include/ao/library/AudioIdentity.h), [`AudioIdentityIndexer`](../../app/runtime/library/AudioIdentityIndexer.cpp), and [`LibraryScan`](../../app/runtime/library/LibraryScan.cpp) define the payload consumer path.
 - [`DecoderFactory`](../../lib/audio/DecoderFactory.cpp), [`Mp4PacketSource`](../../lib/audio/detail/Mp4PacketSource.cpp), and [`WavDecoderSession`](../../lib/audio/WavDecoderSession.cpp) illustrate the independent decoder consumer path.
 
 ## Test map
@@ -183,7 +183,7 @@ Decoder mappings, demux state, and packet views instead belong to each decoder s
 - [`FileTest.cpp`](../../test/integration/media/file/FileTest.cpp) protects supported formats with encoded fixtures.
 - [`AtomTest.cpp`](../../test/unit/media/mp4/AtomTest.cpp), [`DemuxerTest.cpp`](../../test/unit/media/mp4/DemuxerTest.cpp), and [`RiffTest.cpp`](../../test/unit/media/wav/RiffTest.cpp) protect reusable container boundaries.
 - [`MediaTrackTest.cpp`](../../test/unit/runtime/library/MediaTrackTest.cpp) protects runtime adaptation and backing lifetime.
-- [`AudioIdentityTest.cpp`](../../test/unit/library/AudioIdentityTest.cpp), [`AudioIdentityIndexerTest.cpp`](../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp), and [`ScanPlanBuilderTest.cpp`](../../test/unit/runtime/library/ScanPlanBuilderTest.cpp) protect payload consumption without a library-to-reader dependency.
+- [`AudioIdentityTest.cpp`](../../test/unit/library/AudioIdentityTest.cpp), [`AudioIdentityIndexerTest.cpp`](../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp), and [`ScanPlanTest.cpp`](../../test/unit/runtime/library/ScanPlanTest.cpp) protect payload consumption without a library-to-reader dependency.
 - Decoder-session tests under [`test/unit/audio/`](../../test/unit/audio/) and [`Mp4PacketSourceTest.cpp`](../../test/unit/audio/detail/Mp4PacketSourceTest.cpp) protect media-primitive consumption from the audio side.
 
 ## Related documents

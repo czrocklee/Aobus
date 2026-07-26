@@ -69,7 +69,7 @@ namespace ao::gtk
                                  runtime,
                                  ListNavigationController::Callbacks{
                                    .onListSelected = [&runtime, this](ListId listId)
-                                   { std::ignore = navigateToList(listId, runtime); },
+                                   { return navigateToList(listId, runtime).has_value(); },
                                    .onListPresentationSaved = [this](ListId listId, std::string const& presentationId)
                                    { trackPresentationPreferences.setPresentationIdForList(listId, presentationId); },
                                    .listPresentationCallback = [this](ListId listId) -> std::optional<std::string>
@@ -104,22 +104,24 @@ namespace ao::gtk
 
     rt::TrackPresentationSpec presentationForList(ListId listId, rt::AppRuntime& runtime) const
     {
-      if (listId == rt::kAllTracksListId || listId == kInvalidListId)
+      auto const fallback = [this, listId]
       {
         return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
           .listId = listId,
           .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
         });
+      };
+
+      if (listId == rt::kAllTracksListId || listId == kInvalidListId)
+      {
+        return fallback();
       }
 
       auto const optNode = runtime.library().reader().listNode(listId);
 
       if (!optNode)
       {
-        return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
-          .listId = listId,
-          .sourceKind = uimodel::ListPresentationSourceKind::AllTracks,
-        });
+        return fallback();
       }
 
       return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
@@ -187,9 +189,9 @@ namespace ao::gtk
     _implPtr = std::make_unique<Impl>(this, window, runtime);
 
     _trackPresentationChangedSubscription = _implPtr->trackPresentationPreferences.signalChanged().connect(
-      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
+      [this](ao::ListId /*listId*/) noexcept { saveColumnLayoutIfNotRestoring(); });
     _trackColumnLayoutChangedSubscription = _implPtr->trackColumnLayouts.signalChanged().connect(
-      [this](ao::ListId /*listId*/) { saveColumnLayoutIfNotRestoring(); });
+      [this](ao::ListId /*listId*/) noexcept { saveColumnLayoutIfNotRestoring(); });
   }
 
   MainWindowCoordinator::~MainWindowCoordinator()
@@ -206,7 +208,7 @@ namespace ao::gtk
     _runtime.reloadAllTracks();
 
     _libraryTaskCompletedSubscription = _runtime.library().changes().onLibraryTaskCompleted(
-      [this](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      [this](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
       {
         if (event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Failed ||
             event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Cancelled)
@@ -215,11 +217,10 @@ namespace ao::gtk
         }
 
         _implPtr->trackRowCache.clearCache();
-        _runtime.reloadAllTracks();
       });
 
     _tracksMutatedSubscription = _runtime.library().changes().onChanged(
-      [this](rt::LibraryChangeSet const& changeSet)
+      [this](rt::LibraryChangeSet const& changeSet) noexcept
       {
         if (changeSet.libraryReset)
         {
@@ -238,7 +239,7 @@ namespace ao::gtk
       });
 
     _listsMutatedSubscription = _runtime.library().changes().onChanged(
-      [this](rt::LibraryChangeSet const& mutation)
+      [this](rt::LibraryChangeSet const& mutation) noexcept
       {
         if (!mutation.libraryReset && mutation.listsUpserted.empty() && mutation.listsDeleted.empty() &&
             mutation.manualContentChanges.empty())

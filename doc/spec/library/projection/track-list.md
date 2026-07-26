@@ -54,7 +54,7 @@ A projection never parses a filter expression; its source already owns the resul
 A section identity, order, or section-metadata change publishes `ProjectionReset`; membership-count-only changes may remain regular row deltas.
 
 Changing presentation or receiving source reset performs a complete rebuild.
-Source invalidation publishes one terminal invalidation batch and no later reset.
+Source invalidation clears rows, lookup indexes, group sections, and arena-backed views before publishing one terminal invalidation batch and no later reset.
 
 ## Arena rebasing
 
@@ -64,7 +64,7 @@ The rebase releases all old view holders before discarding the arena and rebuild
 
 ## Failure and lifetime
 
-Library read failures follow the runtime storage-result boundary.
+Storage failures are not translated into source invalidation; crossing a `noexcept` source callback boundary is fatal.
 Internal delta and mirror violations use fail-fast contracts rather than a recovery reset.
 
 Projection delivery is synchronous on the callback side.

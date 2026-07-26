@@ -254,11 +254,11 @@ namespace ao::gtk::platform
     void subscribePlayback()
     {
       subscriptions.push_back(commands.onAvailabilityChanged(
-        [this] { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
+        [this] noexcept { emitPlayerPropertiesChanged({"CanPlay", "CanPause", "CanGoNext", "CanGoPrevious"}); }));
       lastSnapshot = playbackSource.snapshot();
       refreshArt(lastSnapshot.transport);
       subscriptions.push_back(playbackSource.onSnapshot(
-        [this](rt::PlaybackSnapshot const& snapshot)
+        [this](rt::PlaybackSnapshot const& snapshot) noexcept
         {
           if (snapshot.transport.transport != lastSnapshot.transport.transport)
           {

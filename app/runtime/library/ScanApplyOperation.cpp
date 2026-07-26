@@ -40,13 +40,14 @@ namespace ao::rt
 {
   struct ScanApplyOperation::PreparedScanItem final
   {
-    explicit PreparedScanItem(library::TrackBuilder const& source, std::optional<AudioFingerprint> optFingerprintValue)
-      : builder{source}, optFingerprint{std::move(optFingerprintValue)}
+    explicit PreparedScanItem(library::TrackBuilder const& source,
+                              std::optional<library::AudioIdentity> optIdentityValue)
+      : builder{source}, optIdentity{std::move(optIdentityValue)}
     {
     }
 
     TrackBuilderSnapshot builder;
-    std::optional<AudioFingerprint> optFingerprint;
+    std::optional<library::AudioIdentity> optIdentity;
   };
 
   ScanApplyOperation::ScanApplyOperation(library::MusicLibrary& ml,
@@ -206,11 +207,11 @@ namespace ao::rt
         continue;
       }
 
-      auto optFingerprint = cachedAudioFingerprint(item);
+      auto optIdentity = cachedAudioIdentity(item);
 
-      if (!optFingerprint && shouldFingerprintDuringPreparation(item))
+      if (!optIdentity && shouldFingerprintDuringPreparation(item))
       {
-        optFingerprint = fingerprintAudioPayload(item, optMediaTrack->file(), i, true, stopToken);
+        optIdentity = fingerprintAudioPayload(item, optMediaTrack->file(), i, true, stopToken);
       }
 
       if (_cancelled || stopToken.stop_requested())
@@ -219,12 +220,12 @@ namespace ao::rt
         break;
       }
 
-      if (!optFingerprint && isFingerprintRequiredForApply(item))
+      if (!optIdentity && isFingerprintRequiredForApply(item))
       {
         continue;
       }
 
-      _preparedItems[i] = std::make_unique<PreparedScanItem>(optMediaTrack->builder(), std::move(optFingerprint));
+      _preparedItems[i] = std::make_unique<PreparedScanItem>(optMediaTrack->builder(), std::move(optIdentity));
     }
 
     if (_cancelled)
@@ -304,7 +305,7 @@ namespace ao::rt
 
       auto const* const preparedItem = _preparedItems[i].get();
 
-      if (preparedItem == nullptr || !preparedItem->optFingerprint)
+      if (preparedItem == nullptr || !preparedItem->optIdentity)
       {
         _abortTransaction = true;
         break;
@@ -328,21 +329,20 @@ namespace ao::rt
         break;
       }
 
-      auto const optLiveFingerprint = fingerprintAudioPayload(item, *fileResult, i, false, stopToken);
+      auto const optLiveIdentity = fingerprintAudioPayload(item, *fileResult, i, false, stopToken);
 
       if (_cancelled)
       {
         break;
       }
 
-      auto const& preparedFingerprint = *preparedItem->optFingerprint;
-
-      if (!optLiveFingerprint || optLiveFingerprint->payloadLength != preparedFingerprint.payloadLength ||
-          optLiveFingerprint->signature != preparedFingerprint.signature ||
-          optLiveFingerprint->payloadLength != item.audioPayloadLength ||
-          optLiveFingerprint->signature != item.audioSignature)
+      if (auto const& preparedIdentity = *preparedItem->optIdentity;
+          !optLiveIdentity || optLiveIdentity->payloadLength != preparedIdentity.payloadLength ||
+          optLiveIdentity->signature != preparedIdentity.signature ||
+          optLiveIdentity->payloadLength != item.audioPayloadLength ||
+          optLiveIdentity->signature != item.audioSignature)
       {
-        if (optLiveFingerprint)
+        if (optLiveIdentity)
         {
           reportFailure(item.uri, "relink", "audio identity changed after preparation");
         }
@@ -503,17 +503,17 @@ namespace ao::rt
     }
 
     auto builder = preparedItem->builder.makeBuilder();
-    auto const& optFingerprint = preparedItem->optFingerprint;
+    auto const& optIdentity = preparedItem->optIdentity;
     builder.property().uri(item.uri);
 
     if (item.classification == ScanClassification::Changed && item.trackId != kInvalidTrackId)
     {
-      if (!optFingerprint)
+      if (!optIdentity)
       {
         return;
       }
 
-      if (tryApplyChangedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optFingerprint))
+      if (tryApplyChangedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optIdentity))
       {
         return;
       }
@@ -523,8 +523,8 @@ namespace ao::rt
     {
       _abortTransaction = true;
 
-      if (optFingerprint &&
-          applyMovedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optFingerprint))
+      if (optIdentity &&
+          applyMovedItem(item, transaction, trackWriter, manifestWriter, dictionary, builder, *optIdentity))
       {
         _abortTransaction = false;
       }
@@ -532,7 +532,7 @@ namespace ao::rt
       return;
     }
 
-    applyNewItem(item, transaction, trackWriter, manifestWriter, builder, optFingerprint);
+    applyNewItem(item, transaction, trackWriter, manifestWriter, builder, optIdentity);
   }
 
   bool ScanApplyOperation::skipNonActionableItem(ScanItem const& item)
@@ -614,15 +614,14 @@ namespace ao::rt
     return std::move(*mediaTrackResult);
   }
 
-  std::optional<ScanApplyOperation::AudioFingerprint> ScanApplyOperation::cachedAudioFingerprint(
-    ScanItem const& item) const noexcept
+  std::optional<library::AudioIdentity> ScanApplyOperation::cachedAudioIdentity(ScanItem const& item) const noexcept
   {
     if (item.classification != ScanClassification::New || !hasAudioIdentity(item))
     {
       return std::nullopt;
     }
 
-    return AudioFingerprint{.signature = item.audioSignature, .payloadLength = item.audioPayloadLength};
+    return library::AudioIdentity{.signature = item.audioSignature, .payloadLength = item.audioPayloadLength};
   }
 
   bool ScanApplyOperation::shouldFingerprintDuringPreparation(ScanItem const& item) const noexcept
@@ -655,12 +654,11 @@ namespace ao::rt
     return false;
   }
 
-  std::optional<ScanApplyOperation::AudioFingerprint> ScanApplyOperation::fingerprintAudioPayload(
-    ScanItem const& item,
-    media::file::File const& file,
-    std::size_t itemIndex,
-    bool const publishProgress,
-    std::stop_token stopToken)
+  std::optional<library::AudioIdentity> ScanApplyOperation::fingerprintAudioPayload(ScanItem const& item,
+                                                                                    media::file::File const& file,
+                                                                                    std::size_t itemIndex,
+                                                                                    bool const publishProgress,
+                                                                                    std::stop_token stopToken)
   {
     auto payloadResult = file.audioPayload();
 
@@ -686,8 +684,7 @@ namespace ao::rt
       return std::nullopt;
     }
 
-    auto const& identity = *optIdentity;
-    return AudioFingerprint{.signature = identity.signature, .payloadLength = identity.payloadLength};
+    return optIdentity;
   }
 
   bool ScanApplyOperation::tryApplyChangedItem(ScanItem const& item,
@@ -696,7 +693,7 @@ namespace ao::rt
                                                library::FileManifestStore::Writer& manifestWriter,
                                                library::DictionaryStore const& dictionary,
                                                library::TrackBuilder& builder,
-                                               AudioFingerprint const& fingerprint)
+                                               library::AudioIdentity const& identity)
   {
     auto optExisting = trackWriter.get(item.trackId, library::TrackStore::Reader::LoadMode::Both);
 
@@ -728,7 +725,7 @@ namespace ao::rt
       return true;
     }
 
-    auto manifestBuilder = makeAvailableManifest(item, item.trackId, std::optional<AudioFingerprint>{fingerprint});
+    auto manifestBuilder = makeAvailableManifest(item, item.trackId, std::optional<library::AudioIdentity>{identity});
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -745,7 +742,7 @@ namespace ao::rt
                                           library::FileManifestStore::Writer& manifestWriter,
                                           library::DictionaryStore const& dictionary,
                                           library::TrackBuilder& builder,
-                                          AudioFingerprint const& fingerprint)
+                                          library::AudioIdentity const& identity)
   {
     if (item.trackId == kInvalidTrackId || item.oldUri.empty())
     {
@@ -759,7 +756,7 @@ namespace ao::rt
       return false;
     }
 
-    if (item.audioPayloadLength != fingerprint.payloadLength || item.audioSignature != fingerprint.signature)
+    if (item.audioPayloadLength != identity.payloadLength || item.audioSignature != identity.signature)
     {
       reportFailure(item.uri, "relink", "audio identity changed before apply");
       return false;
@@ -803,7 +800,7 @@ namespace ao::rt
       return false;
     }
 
-    auto manifestBuilder = makeAvailableManifest(item, item.trackId, std::optional<AudioFingerprint>{fingerprint});
+    auto manifestBuilder = makeAvailableManifest(item, item.trackId, std::optional<library::AudioIdentity>{identity});
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -819,7 +816,7 @@ namespace ao::rt
                                         library::TrackStore::Writer& trackWriter,
                                         library::FileManifestStore::Writer& manifestWriter,
                                         library::TrackBuilder& builder,
-                                        std::optional<AudioFingerprint> const& optFingerprint)
+                                        std::optional<library::AudioIdentity> const& optIdentity)
   {
     auto optPrepared = prepareTrack(builder, transaction, item.uri);
 
@@ -837,7 +834,7 @@ namespace ao::rt
       return;
     }
 
-    auto manifestBuilder = makeAvailableManifest(item, *optNewTrackId, optFingerprint);
+    auto manifestBuilder = makeAvailableManifest(item, *optNewTrackId, optIdentity);
 
     if (!writeManifest(manifestWriter, item.uri, manifestBuilder))
     {
@@ -866,14 +863,14 @@ namespace ao::rt
   library::FileManifestBuilder ScanApplyOperation::makeAvailableManifest(
     ScanItem const& item,
     TrackId trackId,
-    std::optional<AudioFingerprint> const& optFingerprint)
+    std::optional<library::AudioIdentity> const& optIdentity)
   {
     auto builder = library::FileManifestBuilder::makeEmpty();
     builder.trackId(trackId).status(library::FileStatus::Available).fileSize(item.fileSize).mtime(item.mtime);
 
-    if (optFingerprint)
+    if (optIdentity)
     {
-      builder.audioPayloadLength(optFingerprint->payloadLength).audioSignature(optFingerprint->signature);
+      builder.audioPayloadLength(optIdentity->payloadLength).audioSignature(optIdentity->signature);
     }
 
     return builder;

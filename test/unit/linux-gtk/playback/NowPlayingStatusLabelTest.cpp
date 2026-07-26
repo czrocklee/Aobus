@@ -45,7 +45,7 @@ namespace ao::gtk::test
     CHECK_FALSE(gtkLabel->get_text().empty());
 
     auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
-    auto sub = playback.events().onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
+    auto sub = playback.events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
 
     REQUIRE(emitGesturePressed(*gtkLabel));
     drainGtkEvents();

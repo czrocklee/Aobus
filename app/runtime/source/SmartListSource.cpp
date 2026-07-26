@@ -108,4 +108,9 @@ namespace ao::rt
   {
     _members.assign(members);
   }
+
+  void SmartListSource::discardSnapshot() noexcept
+  {
+    _members.clear();
+  }
 } // namespace ao::rt

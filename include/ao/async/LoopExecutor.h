@@ -32,7 +32,7 @@ namespace ao::async
     bool runReadyTurn();
 
   private:
-    void wake() override;
+    void wake() noexcept override;
     void executeTask(std::move_only_function<void()>& task) override;
 
     std::binary_semaphore _wakeSignal{0};

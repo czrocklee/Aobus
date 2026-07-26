@@ -51,31 +51,8 @@ namespace ao::gtk
       return std::format("{:016x}", dis(gen));
     }
 
-    Glib::RefPtr<Gtk::StringList> createGroupKeysModel(std::span<uimodel::TrackGroupKeyOption const> options)
-    {
-      auto modelPtr = Gtk::StringList::create({});
-
-      for (auto const& option : options)
-      {
-        modelPtr->append(option.label);
-      }
-
-      return modelPtr;
-    }
-
-    Glib::RefPtr<Gtk::StringList> createSortFieldsModel(std::span<uimodel::TrackSortFieldOption const> options)
-    {
-      auto modelPtr = Gtk::StringList::create({});
-
-      for (auto const& option : options)
-      {
-        modelPtr->append(option.label);
-      }
-
-      return modelPtr;
-    }
-
-    Glib::RefPtr<Gtk::StringList> createVisibleFieldsModel(std::span<uimodel::TrackVisibleFieldOption const> options)
+    template<typename T>
+    Glib::RefPtr<Gtk::StringList> createOptionLabelsModel(std::span<uimodel::LabeledOption<T> const> options)
     {
       auto modelPtr = Gtk::StringList::create({});
 
@@ -157,7 +134,7 @@ namespace ao::gtk
     _nameEntry.set_placeholder_text("View label");
     detailsList->addEntryRow("Name", _nameEntry);
 
-    _groupDropdown.set_model(createGroupKeysModel(_model.groupOptions()));
+    _groupDropdown.set_model(createOptionLabelsModel(_model.groupOptions()));
     _groupDropdown.property_selected().signal_changed().connect(
       [this]
       {
@@ -227,7 +204,7 @@ namespace ao::gtk
       auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
       auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
-      auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createSortFieldsModel(_model.sortFieldOptions()));
+      auto* const dropdown = Gtk::make_managed<Gtk::DropDown>(createOptionLabelsModel(_model.sortFieldOptions()));
       auto const index = _model.optionIndexForSortField(term.field).value_or(0);
 
       dropdown->set_selected(static_cast<::guint>(index));
@@ -309,7 +286,7 @@ namespace ao::gtk
       auto* row = Gtk::make_managed<Gtk::ListBoxRow>();
       auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kBoxSpacing);
 
-      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createVisibleFieldsModel(_model.visibleFieldOptions()));
+      auto* dropdown = Gtk::make_managed<Gtk::DropDown>(createOptionLabelsModel(_model.visibleFieldOptions()));
       auto const index = _model.optionIndexForVisibleField(field).value_or(0);
 
       dropdown->set_selected(static_cast<::guint>(index));

@@ -38,7 +38,7 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void(ListId)> onListSelected = {};
+      std::function<bool(ListId)> onListSelected = {};
       std::function<void(ListId, std::string)> onListPresentationSaved = {};
       std::function<std::optional<std::string>(ListId)> listPresentationCallback = {};
     };
@@ -68,6 +68,7 @@ namespace ao::gtk
     void createActions();
     void handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
     void handleSelectionChanged(ListId listId);
+    bool notifyListSelected(ListId listId) const;
 
     void openNewListDialog(ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();

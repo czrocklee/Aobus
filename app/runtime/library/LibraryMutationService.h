@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <exception>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -81,9 +82,11 @@ namespace ao::rt
       MaintenanceGuard& operator=(MaintenanceGuard&&) = delete;
 
     private:
-      MaintenanceGuard(LibraryMutationService& owner, std::uint64_t generation) noexcept;
+      struct LifetimeState;
 
-      LibraryMutationService* _owner = nullptr;
+      MaintenanceGuard(std::weak_ptr<LifetimeState> lifetimeStatePtr, std::uint64_t generation) noexcept;
+
+      std::weak_ptr<LifetimeState> _lifetimeStatePtr;
       std::uint64_t _generation = 0;
 
       friend class LibraryMutationService;
@@ -107,8 +110,11 @@ namespace ao::rt
     LibraryMutationService& operator=(LibraryMutationService&&) = delete;
 
     LibraryAuthoringAvailability availability() const;
+    // Availability is a notification: it reports a state the coordinator has
+    // already reached, so handlers are noexcept. Publication faults come from
+    // revision admission or executor task admission, not from observers.
     async::Subscription onAvailabilityChanged(
-      std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const;
+      std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
     BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision) const;
 
@@ -122,7 +128,8 @@ namespace ao::rt
     Result<CommitInfo> commit(Mutation& mutation, LibraryChangeSet changeSet);
     void finishMaintenance(std::uint64_t generation) noexcept;
     void handlePublication(std::uint64_t revision, std::exception_ptr failure);
-    void emitAvailability(LibraryAuthoringAvailability const& expected);
+    void dispatchAvailability(LibraryAuthoringAvailability expected);
+    void emitAvailability(LibraryAuthoringAvailability const& expected) noexcept;
     LibraryAuthoringAvailability availabilityLocked() const noexcept;
 
     async::Executor& _callbackExecutor;
@@ -130,6 +137,7 @@ namespace ao::rt
     library::MusicLibrary& _library;
     LibraryChanges& _changes;
     std::uint64_t const _runtimeInstanceId;
+    std::shared_ptr<MaintenanceGuard::LifetimeState> _lifetimeStatePtr;
 
     mutable std::mutex _stateMutex;
     std::mutex _writerMutex;

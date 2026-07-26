@@ -14,6 +14,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <optional>
@@ -33,7 +35,7 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
     auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "New Title"});
@@ -52,21 +54,15 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
-    auto observedTitle = std::string{};
+    std::size_t observedMutationCount = 0;
+    auto observedTrackId = TrackId{kInvalidTrackId};
+    std::uint64_t observedRevision = 0;
     auto sub = changes.onChanged(
-      [&](LibraryChangeSet const& event)
+      [&](LibraryChangeSet const& event) noexcept
       {
-        auto const& trackIds = event.tracksMutated;
-        REQUIRE(trackIds.size() == 1);
-        CHECK(trackIds[0] == trackId);
-
-        auto transaction = libraryFixture.library().readTransaction();
-        auto const optView = libraryFixture.library()
-                               .tracks()
-                               .reader(transaction)
-                               .get(trackId, library::TrackStore::Reader::LoadMode::Hot);
-        REQUIRE(optView);
-        observedTitle = std::string{optView->metadata().title()};
+        observedMutationCount = event.tracksMutated.size();
+        observedTrackId = event.tracksMutated.empty() ? kInvalidTrackId : event.tracksMutated.front();
+        observedRevision = event.libraryRevision;
       });
 
     auto const targetIds = std::array{trackId};
@@ -74,7 +70,15 @@ namespace ao::rt::test
 
     REQUIRE(result);
     CHECK_FALSE(result->changes.empty());
-    CHECK(observedTitle == "Committed Title");
+    REQUIRE(observedMutationCount == 1);
+    CHECK(observedTrackId == trackId);
+
+    auto transaction = libraryFixture.library().readTransaction();
+    CHECK(libraryFixture.library().libraryRevision(transaction) == observedRevision);
+    auto const optView =
+      libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
+    REQUIRE(optView);
+    CHECK(optView->metadata().title() == "Committed Title");
   }
 
   TEST_CASE("LibraryWriter - updateMetadata reports no mutation for identical values",
@@ -87,7 +91,7 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
     auto const targetIds = std::array{trackId};
     auto const result = writerFixture.updateMetadata(targetIds, MetadataPatch{.optTitle = "Original Title"});
@@ -196,7 +200,7 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& event) { mutated = event.tracksMutated; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
 
     auto patch = MetadataPatch{};
     patch.customUpdates["oversized"] = std::string(70'000, 'x');
@@ -284,7 +288,7 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(service.createList(draft));
 
     auto upserted = std::vector<ListId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { upserted = ev.listsUpserted; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
     auto updateDraft = LibraryWriter::ListDraft{};
     updateDraft.kind = LibraryWriter::ListKind::Manual;
@@ -401,7 +405,7 @@ namespace ao::rt::test
     draft.listId = listId;
 
     auto upserted = std::vector<ListId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { upserted = ev.listsUpserted; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
     auto const updateResult = service.updateList(draft);
     REQUIRE(updateResult);
@@ -439,7 +443,7 @@ namespace ao::rt::test
     auto const listId = ao::test::requireValue(service.createList(draft));
 
     auto deleted = std::vector<ListId>{};
-    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) { deleted = ev.listsDeleted; });
+    auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deleted = ev.listsDeleted; });
 
     REQUIRE(service.deleteList(listId));
 

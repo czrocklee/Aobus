@@ -39,7 +39,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->remove(TrackId{2});
 
@@ -109,7 +109,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->replaceWithBatch(std::vector{TrackId{3}, TrackId{1}, TrackId{2}},
                                 TrackSourceDeltaBatch{
@@ -130,7 +130,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->replaceWithBatch(std::vector{TrackId{1}, TrackId{3}, TrackId{4}},
                                 TrackSourceDeltaBatch{
@@ -158,7 +158,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->publishBatch(TrackSourceDeltaBatch{
       .deltas = {SourceUpdateRange{
@@ -183,7 +183,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->append(TrackId{8});
     parentPtr->update(TrackId{9});
@@ -201,7 +201,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->reset(std::vector{TrackId{3}, TrackId{1}});
 
@@ -222,7 +222,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     parentPtr->invalidate();
     parentPtr->invalidate();
@@ -243,10 +243,10 @@ namespace ao::rt::test
     auto outer = ManualListSource{outerView.view(), TrackSourceLease{innerPtr}};
     auto innerBatches = std::vector<TrackSourceDeltaBatch>{};
     auto outerBatches = std::vector<TrackSourceDeltaBatch>{};
-    [[maybe_unused]] auto innerSubscription =
-      innerPtr->subscribe([&innerBatches](TrackSourceDeltaBatch const& batch) { innerBatches.push_back(batch); });
+    [[maybe_unused]] auto innerSubscription = innerPtr->subscribe(
+      [&innerBatches](TrackSourceDeltaBatch const& batch) noexcept { innerBatches.push_back(batch); });
     [[maybe_unused]] auto outerSubscription =
-      outer.subscribe([&outerBatches](TrackSourceDeltaBatch const& batch) { outerBatches.push_back(batch); });
+      outer.subscribe([&outerBatches](TrackSourceDeltaBatch const& batch) noexcept { outerBatches.push_back(batch); });
 
     rootPtr->invalidate();
 

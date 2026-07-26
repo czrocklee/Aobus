@@ -4,8 +4,8 @@
 #pragma once
 
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
-#include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <gtkmm/scale.h>
 #include <gtkmm/widget.h>
@@ -40,7 +40,7 @@ namespace ao::gtk
     bool isTickActive() const noexcept;
 
   private:
-    void applyState(uimodel::SeekViewState const& view);
+    void applyState(uimodel::PlaybackPositionViewState const& view);
     void startTickIfNeeded();
     void stopTick();
     void updateTickState();
@@ -66,6 +66,6 @@ namespace ao::gtk
     sigc::connection _debounceConnection;
     sigc::scoped_connection _mapConnection;
     sigc::scoped_connection _unmapConnection;
-    uimodel::SeekViewModel _seekViewModel;
+    uimodel::PlaybackPositionViewModel _seekViewModel;
   };
 } // namespace ao::gtk

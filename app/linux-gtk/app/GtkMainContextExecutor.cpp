@@ -16,7 +16,7 @@ namespace ao::gtk
     _dispatcher.connect([this] { drainQueuedTasks(); });
   }
 
-  void GtkMainContextExecutor::wake()
+  void GtkMainContextExecutor::wake() noexcept
   {
     _dispatcher.emit();
   }

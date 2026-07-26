@@ -109,6 +109,24 @@ namespace ao::rt
     return batch;
   }
 
+  namespace
+  {
+    constexpr delta::RangeEditKind rangeEditKindOf(SourceRemoveRange const& /*range*/) noexcept
+    {
+      return delta::RangeEditKind::Remove;
+    }
+
+    constexpr delta::RangeEditKind rangeEditKindOf(SourceInsertRange const& /*range*/) noexcept
+    {
+      return delta::RangeEditKind::Insert;
+    }
+
+    constexpr delta::RangeEditKind rangeEditKindOf(SourceUpdateRange const& /*range*/) noexcept
+    {
+      return delta::RangeEditKind::Update;
+    }
+  } // namespace
+
   bool validateTrackSourceDeltaBatch(TrackSourceDeltaBatch const& batch, std::size_t initialSize)
   {
     auto const kind = classifyTrackSourceBatch(batch);
@@ -123,7 +141,33 @@ namespace ao::rt
       return false;
     }
 
-    auto const script = regularTrackEditScriptOf(batch);
-    return script && delta::validate(*script, initialSize);
+    auto validator = delta::RangeEditValidator{initialSize};
+
+    for (auto const& edit : batch.deltas)
+    {
+      auto const accepted = std::visit(
+        [&validator](auto const& range)
+        {
+          using Range = std::remove_cvref_t<decltype(range)>;
+
+          if constexpr (std::same_as<Range, SourceReset> || std::same_as<Range, SourceInvalidated>)
+          {
+            // classifyTrackSourceBatch() already rejected mixed batches.
+            return false;
+          }
+          else
+          {
+            return validator.accept(rangeEditKindOf(range), range.start, range.trackIds.size());
+          }
+        },
+        edit);
+
+      if (!accepted)
+      {
+        return false;
+      }
+    }
+
+    return true;
   }
 } // namespace ao::rt

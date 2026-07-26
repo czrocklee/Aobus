@@ -119,7 +119,7 @@ namespace ao::rt::test
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Terminal Track", .uri = fixtureUri});
 
     std::size_t idleCount = 0;
-    auto idleSub = fixture.playbackTransport.onIdle([&] { ++idleCount; });
+    auto idleSub = fixture.playbackTransport.onIdle([&] noexcept { ++idleCount; });
 
     REQUIRE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
     REQUIRE(fixture.renderTarget != nullptr);
@@ -159,8 +159,8 @@ namespace ao::rt::test
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
     std::size_t idleCount = 0;
     auto nowPlayingSub = fixture.playbackTransport.onNowPlayingChanged(
-      [&](PlaybackTransport::NowPlayingChanged const& ev) { nowPlaying.push_back(ev); });
-    auto idleSub = fixture.playbackTransport.onIdle([&] { ++idleCount; });
+      [&](PlaybackTransport::NowPlayingChanged const& ev) noexcept { nowPlaying.push_back(ev); });
+    auto idleSub = fixture.playbackTransport.onIdle([&] noexcept { ++idleCount; });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
     auto const preparedTokenResult = fixture.playbackTransport.prepareNext(nextTrack, ListId{7});
@@ -210,7 +210,7 @@ namespace ao::rt::test
 
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
     auto nowPlayingSub = fixture.playbackTransport.onNowPlayingChanged(
-      [&](PlaybackTransport::NowPlayingChanged const& ev) { nowPlaying.push_back(ev); });
+      [&](PlaybackTransport::NowPlayingChanged const& ev) noexcept { nowPlaying.push_back(ev); });
 
     REQUIRE(fixture.playbackTransport.playTrack(currentTrack, ListId{7}));
     auto const preparedTokenResult = fixture.playbackTransport.prepareNext(nextTrack, ListId{7});
@@ -244,8 +244,8 @@ namespace ao::rt::test
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
 
     auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+    auto sub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
+                                                           { failures.push_back(failure); });
 
     auto const result = fixture.playbackTransport.playTrack(trackId, ListId{7});
 
@@ -271,9 +271,9 @@ namespace ao::rt::test
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Broken Track", .uri = "broken.txt"});
     auto firstFailures = std::vector<PlaybackFailure>{};
     auto secondFailures = std::vector<PlaybackFailure>{};
-    auto firstSub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure)
+    auto firstSub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
                                                                 { firstFailures.push_back(failure); });
-    auto secondSub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure)
+    auto secondSub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
                                                                  { secondFailures.push_back(failure); });
 
     REQUIRE_FALSE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
@@ -305,7 +305,8 @@ namespace ao::rt::test
 
     auto const originalId = feed.entries.front().id;
     std::int32_t mutationCount = 0;
-    auto updateSub = fixture.notificationService.onFeedUpdated([&](NotificationFeedUpdate const&) { ++mutationCount; });
+    auto updateSub =
+      fixture.notificationService.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++mutationCount; });
 
     REQUIRE_FALSE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
     CHECK(mutationCount == 0);
@@ -327,8 +328,8 @@ namespace ao::rt::test
     auto const replacementTrack = fixture.libraryFixture.addTrack({.title = "Replacement Track", .uri = fixtureUri});
 
     auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+    auto sub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
+                                                           { failures.push_back(failure); });
 
     REQUIRE(fixture.playbackTransport.playTrack(replacementTrack, ListId{7}));
     REQUIRE_FALSE(fixture.playbackTransport.playTrack(brokenTrack, ListId{7}));
@@ -370,8 +371,8 @@ namespace ao::rt::test
     auto const trackId = fixture.libraryFixture.addTrack({.title = "Playing Track", .uri = fixtureUri});
 
     auto failures = std::vector<PlaybackFailure>{};
-    auto sub =
-      fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+    auto sub = fixture.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
+                                                           { failures.push_back(failure); });
 
     REQUIRE(fixture.playbackTransport.playTrack(trackId, ListId{7}));
     REQUIRE(fixture.renderTarget != nullptr);

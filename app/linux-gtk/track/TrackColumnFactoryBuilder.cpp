@@ -316,7 +316,7 @@ namespace ao::gtk
 
       bindingState.editSessionPtr = std::move(*sessionResult);
       bindingState.editSessionInvalidatedSubscription = bindingState.editSessionPtr->onInvalidated(
-        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState]
+        [itemRaw = &item, stackRaw = &stack, bindingStateRaw = &bindingState] noexcept
         { handleEditSessionInvalidated(*itemRaw, *stackRaw, *bindingStateRaw); });
     }
 

@@ -29,7 +29,7 @@ namespace ao::uimodel
   {
     _observedViewId = _workspace.snapshot().activeViewId;
     _focusSub = _workspace.onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const& changed) noexcept
       {
         if (changed.snapshot.activeViewId == _observedViewId)
         {
@@ -43,7 +43,7 @@ namespace ao::uimodel
       });
 
     _presentationSub = _views.onPresentationChanged(
-      [this](rt::ViewService::PresentationChanged const& ev)
+      [this](rt::ViewService::PresentationChanged const& ev) noexcept
       {
         if (ev.viewId != _workspace.snapshot().activeViewId)
         {
@@ -55,7 +55,7 @@ namespace ao::uimodel
         refresh();
       });
 
-    _catalogSub = _catalog.signalChanged().connect([this] { refresh(); });
+    _catalogSub = _catalog.signalChanged().connect([this] noexcept { refresh(); });
   }
 
   TrackPresentationPickerState TrackPresentationPickerViewModel::state() const
@@ -73,8 +73,16 @@ namespace ao::uimodel
       return result;
     }
 
-    auto const viewState = _views.trackListState(activeViewId);
-    auto presentationId = viewState.presentation.id;
+    // Reached from three observers via refresh(), so the active view may already
+    // be gone by the time the notification is delivered.
+    auto const foundState = _views.findTrackListState(activeViewId);
+
+    if (!foundState)
+    {
+      return result;
+    }
+
+    auto presentationId = foundState->presentation.id;
 
     if (_optimisticViewId == activeViewId && !_optimisticPresentationId.empty())
     {
@@ -95,12 +103,19 @@ namespace ao::uimodel
     }
   }
 
-  std::optional<rt::TrackPresentationSpec> TrackPresentationPickerViewModel::selectPresentation(
+  std::optional<TrackPresentationSelection> TrackPresentationPickerViewModel::selectPresentation(
     std::string_view presentationId)
   {
     auto const activeViewId = _workspace.snapshot().activeViewId;
 
     if (activeViewId == rt::kInvalidViewId)
+    {
+      return {};
+    }
+
+    auto const foundState = _views.findTrackListState(activeViewId);
+
+    if (!foundState)
     {
       return {};
     }
@@ -112,15 +127,15 @@ namespace ao::uimodel
       return {};
     }
 
-    if (auto const viewState = _views.trackListState(activeViewId); viewState.listId != kInvalidListId)
+    if (foundState->listId != kInvalidListId)
     {
-      _preferences.setPresentationIdForList(viewState.listId, optSpec->id);
+      _preferences.setPresentationIdForList(foundState->listId, optSpec->id);
     }
 
     _optimisticViewId = activeViewId;
     _optimisticPresentationId = optSpec->id;
     refresh();
 
-    return optSpec;
+    return TrackPresentationSelection{.targetViewId = activeViewId, .spec = std::move(*optSpec)};
   }
 } // namespace ao::uimodel

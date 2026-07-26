@@ -237,19 +237,18 @@ namespace ao::gtk
                                                 std::stop_token const stopToken)
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+    auto bytesResult = co_await tasks->loadResourceAsync(key.resourceId, stopToken);
 
-    try
+    if (!bytesResult)
     {
-      auto bytesResult = co_await tasks->loadResourceAsync(key.resourceId, stopToken);
-
-      if (!bytesResult)
+      if (bytesResult.error().code == Error::Code::ValueTooLarge)
       {
-        if (bytesResult.error().code == Error::Code::ValueTooLarge)
-        {
-          APP_LOG_WARN("GTK cover resource {} exceeds the interactive byte limit", key.resourceId.raw());
-        }
+        APP_LOG_WARN("GTK cover resource {} exceeds the interactive byte limit", key.resourceId.raw());
       }
-      else if (*bytesResult)
+    }
+    else if (*bytesResult)
+    {
+      try
       {
         auto bytes = std::move(**bytesResult);
         co_await runtime->resumeOnWorker(stopToken);
@@ -263,11 +262,11 @@ namespace ao::gtk
           decodedPtr.reset();
         }
       }
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "GTK resource image decode workflow");
+      catch (...)
+      {
+        async::rethrowIfOperationCancelled();
+        runtime->reportUnhandledException(std::current_exception(), "GTK resource image decode workflow");
+      }
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

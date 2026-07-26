@@ -183,7 +183,7 @@ Every apply attempt consumes the plan, including an attempt that returns a pre-c
 Any failure before commit leaves target content, metadata identity, and revision unchanged and publishes no content change.
 Commit failure likewise publishes no change set.
 
-After durable commit, publication enqueue or observer failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and the live runtime enters terminal `Faulted`.
+After durable commit, revision-admission or publication-enqueue failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and the live runtime enters terminal `Faulted`.
 
 `LibraryTaskService` honors cancellation on executor transitions.
 Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.

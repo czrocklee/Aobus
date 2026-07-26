@@ -42,14 +42,14 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(emptyStatus.devices);
 
     bool preparingFired = false;
-    auto subPrep = fixture.playbackTransport.onPreparing([&] { preparingFired = true; });
+    auto subPrep = fixture.playbackTransport.onPreparing([&] noexcept { preparingFired = true; });
 
     bool startedFired = false;
-    auto subStart = fixture.playbackTransport.onStarted([&] { startedFired = true; });
+    auto subStart = fixture.playbackTransport.onStarted([&] noexcept { startedFired = true; });
 
     bool nowPlayingFired = false;
     auto subNow = fixture.playbackTransport.onNowPlayingChanged(
-      [&](auto const& ev)
+      [&](auto const& ev) noexcept
       {
         if (ev.trackId == TrackId{1})
         {
@@ -81,7 +81,7 @@ namespace ao::rt::test
                                                                          .album = "Fake Album"});
 
     bool pausedFired = false;
-    auto subPause = fixture.playbackTransport.onPaused([&] { pausedFired = true; });
+    auto subPause = fixture.playbackTransport.onPaused([&] noexcept { pausedFired = true; });
     fixture.playbackTransport.pause();
     CHECK(pausedFired);
 
@@ -92,9 +92,9 @@ namespace ao::rt::test
     fixture.playbackTransport.seek(std::chrono::milliseconds{50});
 
     bool stoppedFired = false;
-    auto subStop = fixture.playbackTransport.onStopped([&] { stoppedFired = true; });
+    auto subStop = fixture.playbackTransport.onStopped([&] noexcept { stoppedFired = true; });
     bool idleFired = false;
-    auto subIdle = fixture.playbackTransport.onIdle([&] { idleFired = true; });
+    auto subIdle = fixture.playbackTransport.onIdle([&] noexcept { idleFired = true; });
 
     fixture.playbackTransport.stop();
     CHECK(stoppedFired);
@@ -107,16 +107,20 @@ namespace ao::rt::test
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
     bool seekFired = false;
+    auto observedElapsed = std::chrono::milliseconds{};
+    auto observedMode = PlaybackTransport::SeekMode::Preview;
     auto sub = fixture.playbackTransport.onSeekUpdate(
-      [&](auto const& ev)
+      [&](auto const& ev) noexcept
       {
         seekFired = true;
-        CHECK(ev.elapsed == std::chrono::seconds{1});
-        CHECK(ev.mode == PlaybackTransport::SeekMode::Final);
+        observedElapsed = ev.elapsed;
+        observedMode = ev.mode;
       });
 
     fixture.playbackTransport.seek(std::chrono::seconds{1}, PlaybackTransport::SeekMode::Final);
     CHECK(seekFired);
+    CHECK(observedElapsed == std::chrono::seconds{1});
+    CHECK(observedMode == PlaybackTransport::SeekMode::Final);
   }
 
   TEST_CASE("PlaybackTransport control - volume and muted controls update state", "[runtime][unit][playback][control]")
@@ -135,7 +139,7 @@ namespace ao::rt::test
     bool mutedChangedFired = false;
     bool lastMutedState = false;
     auto sub = fixture.playbackTransport.onMutedChanged(
-      [&](bool const muted)
+      [&](bool const muted) noexcept
       {
         mutedChangedFired = true;
         lastMutedState = muted;
@@ -171,7 +175,7 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.state().ready);
 
     bool startedFired = false;
-    auto subStarted = fixture.playbackTransport.onStarted([&] { startedFired = true; });
+    auto subStarted = fixture.playbackTransport.onStarted([&] noexcept { startedFired = true; });
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
     auto const desc =
       playbackRequest(TrackId{77}, fixturePath, "Deferred Track", "Deferred Artist", std::chrono::minutes{4});
@@ -201,17 +205,18 @@ namespace ao::rt::test
     auto playbackTransport = makePlaybackTransport(executor, libraryFixture.library(), notificationService);
 
     bool preparingFired = false;
-    auto subPreparing = playbackTransport.onPreparing([&] { preparingFired = true; });
+    auto subPreparing = playbackTransport.onPreparing([&] noexcept { preparingFired = true; });
 
     bool startedFired = false;
-    auto subStarted = playbackTransport.onStarted([&] { startedFired = true; });
+    auto subStarted = playbackTransport.onStarted([&] noexcept { startedFired = true; });
 
     bool nowPlayingFired = false;
-    auto subNowPlaying = playbackTransport.onNowPlayingChanged([&](PlaybackTransport::NowPlayingChanged const&)
+    auto subNowPlaying = playbackTransport.onNowPlayingChanged([&](PlaybackTransport::NowPlayingChanged const&) noexcept
                                                                { nowPlayingFired = true; });
 
     bool failureFired = false;
-    auto subFailure = playbackTransport.onPlaybackFailure([&](PlaybackFailure const&) { failureFired = true; });
+    auto subFailure =
+      playbackTransport.onPlaybackFailure([&](PlaybackFailure const&) noexcept { failureFired = true; });
 
     auto const desc =
       playbackRequest(TrackId{12}, "/not/started.flac", "Rejected Track", "Rejected Artist", std::chrono::minutes{5});

@@ -64,15 +64,18 @@ namespace ao::rt::test
 
     auto proj = env.createProjection(ViewId{1});
     bool receivedReset = false;
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     auto const sub = proj.subscribe(
-      [&](TrackListProjectionDeltaBatch const& batch)
+      [&](TrackListProjectionDeltaBatch const& batch) noexcept
       {
-        REQUIRE(batch.deltas.size() == 1);
-        CHECK(std::holds_alternative<ProjectionReset>(batch.deltas[0]));
         receivedReset = true;
+        batches.push_back(batch);
       });
 
     CHECK(receivedReset);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
   }
 
   TEST_CASE("TrackListProjection - subscribe replays reset to each subscriber", "[runtime][unit][projection]")
@@ -83,8 +86,8 @@ namespace ao::rt::test
 
     auto proj = env.createProjection(ViewId{1});
     std::int32_t count = 0;
-    auto const sub1 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
-    auto const sub2 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
+    auto const sub1 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) noexcept { ++count; });
+    auto const sub2 = proj.subscribe([&](TrackListProjectionDeltaBatch const&) noexcept { ++count; });
     CHECK(count == 2);
   }
 
@@ -97,7 +100,7 @@ namespace ao::rt::test
 
     auto proj = env.createProjection(ViewId{1});
     std::int32_t count = 0;
-    auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const&) { ++count; });
+    auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const&) noexcept { ++count; });
     auto const initial = count;
     sub.reset();
     CHECK(count == initial);
@@ -124,7 +127,7 @@ namespace ao::rt::test
     auto proj = env.createProjection(ViewId{1});
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      proj.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+      proj.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     env.filteredPtr->invalidate();
@@ -136,10 +139,13 @@ namespace ao::rt::test
     REQUIRE(batches.size() == 1);
     REQUIRE(batches.front().deltas.size() == 1);
     CHECK(std::holds_alternative<ProjectionSourceInvalidated>(batches.front().deltas.front()));
+    CHECK(proj.size() == 0);
+    CHECK(proj.trackIdAt(0) == kInvalidTrackId);
+    CHECK_FALSE(proj.indexOf(id));
 
     auto lateBatches = std::vector<TrackListProjectionDeltaBatch>{};
-    auto lateSubscription =
-      proj.subscribe([&lateBatches](TrackListProjectionDeltaBatch const& batch) { lateBatches.push_back(batch); });
+    auto lateSubscription = proj.subscribe([&lateBatches](TrackListProjectionDeltaBatch const& batch) noexcept
+                                           { lateBatches.push_back(batch); });
     REQUIRE(lateBatches.size() == 1);
     REQUIRE(lateBatches.front().deltas.size() == 1);
     CHECK(std::holds_alternative<ProjectionSourceInvalidated>(lateBatches.front().deltas.front()));

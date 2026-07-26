@@ -19,7 +19,7 @@ namespace ao::uimodel::test
     auto fixture = TrackPresentationFixture{};
     auto& catalog = fixture.catalog;
     std::int32_t signalCount = 0;
-    auto sub = catalog.signalChanged().connect([&signalCount] { ++signalCount; });
+    auto sub = catalog.signalChanged().connect([&signalCount] noexcept { ++signalCount; });
 
     catalog.addCustomPresentation(rt::CustomTrackPresentationPreset{
       .label = "Library QA",

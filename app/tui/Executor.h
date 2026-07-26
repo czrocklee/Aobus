@@ -25,7 +25,7 @@ namespace ao::tui
     void drainPendingTasks();
 
   private:
-    void wake() override;
+    void wake() noexcept override;
     void executeTask(std::move_only_function<void()>& task) override;
 
     ftxui::ScreenInteractive& _screen;

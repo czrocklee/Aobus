@@ -41,10 +41,11 @@ namespace ao::rt
     LiveTrackDetailProjection& operator=(LiveTrackDetailProjection&&) = delete;
 
     TrackDetailSnapshot snapshot() const override;
-    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&)> handler) override;
+    async::Subscription subscribe(std::move_only_function<void(TrackDetailSnapshot const&) noexcept> handler) override;
 
   private:
     TrackDetailSnapshot buildSnapshot(std::span<TrackId const> ids) const;
+    void refreshSnapshot(std::span<TrackId const> ids) noexcept;
     void publishSnapshot();
 
     struct Impl;

@@ -181,10 +181,7 @@ add_executable(ao_core_test
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
     unit/uimodel/library/list/ListActionPolicyTest.cpp
     unit/uimodel/library/list/ListTreeProjectionTest.cpp
-    unit/uimodel/library/list/SmartListDraftTest.cpp
-    unit/uimodel/library/list/SmartListEditorViewStateTest.cpp
-    unit/uimodel/library/list/SmartListExpressionTest.cpp
-    unit/uimodel/library/list/SmartListPreviewTest.cpp
+    unit/uimodel/library/list/SmartListEditorModelTest.cpp
     unit/uimodel/library/list/SmartListTrackPresentationResolverTest.cpp
     unit/uimodel/library/presentation/CustomPresentationEditorModelTest.cpp
     unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp
@@ -214,9 +211,9 @@ add_executable(ao_core_test
     unit/uimodel/playback/output/VolumeViewModelTest.cpp
     unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp
     unit/uimodel/playback/seek/PlaybackPositionInterpolatorTest.cpp
-    unit/uimodel/playback/seek/PlaybackTimeViewModelTest.cpp
+    unit/uimodel/playback/seek/PlaybackPositionViewModelTest.cpp
+    unit/uimodel/playback/seek/PlaybackTimeFormatterTest.cpp
     unit/uimodel/playback/seek/SeekSliderInteractionModelTest.cpp
-    unit/uimodel/playback/seek/SeekViewModelTest.cpp
     unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp
     unit/uimodel/playback/transport/TransportViewModelTest.cpp
     unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp
@@ -279,7 +276,7 @@ add_executable(ao_core_test
     unit/runtime/projection/TrackDetailProjectionTest.cpp
     unit/runtime/library/AudioIdentityIndexerTest.cpp
     unit/runtime/library/LibraryScanTest.cpp
-    unit/runtime/library/ScanPlanBuilderTest.cpp
+    unit/runtime/library/ScanPlanTest.cpp
     unit/runtime/library/ScanApplyOperationTest.cpp
     unit/runtime/library/LibraryTaskServiceTest.cpp
     unit/runtime/library/LibraryWriterTest.cpp

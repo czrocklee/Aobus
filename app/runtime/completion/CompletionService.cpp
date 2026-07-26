@@ -112,7 +112,7 @@ namespace ao::rt
     : _library{library}
     , _ownerThread{std::this_thread::get_id()}
     , _libraryChangeSubscription{changes.onChanged(
-        [this](LibraryChangeSet const& changeSet)
+        [this](LibraryChangeSet const& changeSet) noexcept
         {
           if (changeSet.libraryReset || !changeSet.tracksInserted.empty() || !changeSet.tracksDeleted.empty() ||
               !changeSet.tracksMutated.empty())

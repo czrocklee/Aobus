@@ -87,7 +87,7 @@ namespace ao::gtk
     void bindTrackPage(TrackPageEntry& entry);
     void handleTrackSelectionChanged(TrackViewPage& page, rt::ViewId viewId);
     void syncLayout();
-    void handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev);
+    void handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev) noexcept;
     rt::ViewId tryFindViewByPreferredList(ListId preferredListId);
     void tryRevealTrackInView(rt::ViewId viewId, TrackId trackId);
     Gtk::Stack& _stack;

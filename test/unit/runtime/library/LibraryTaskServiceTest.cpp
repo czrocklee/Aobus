@@ -62,15 +62,32 @@ namespace ao::rt::test
     class FaultOrderingExecutor final : public async::Executor
     {
     public:
+      FaultOrderingExecutor() = default;
+
+      // Faults the running task from inside the given inline dispatch. Task
+      // progress observers are noexcept, so a test cannot inject the fault
+      // through one; it is injected at the executor boundary the progress
+      // notification crosses instead.
+      explicit FaultOrderingExecutor(std::size_t faultingInlineDispatchIndex)
+        : _optFaultingDispatchIndex{faultingInlineDispatchIndex}
+      {
+      }
+
       bool isCurrent() const noexcept override { return std::this_thread::get_id() == _ownerThreadId; }
 
       void dispatch(std::move_only_function<void()> task) override
       {
         // Resume admission, maintenance-state notification, and the injected
         // progress fault run inline. Cleanup and maintenance exit stay queued.
-        if (_dispatchCount.fetch_add(1) < 3)
+        if (auto const index = _dispatchCount.fetch_add(1); index < 3)
         {
           task();
+
+          if (_optFaultingDispatchIndex == index)
+          {
+            throwException<InjectedLibraryTaskFailure>("injected library task failure");
+          }
+
           return;
         }
 
@@ -108,6 +125,7 @@ namespace ao::rt::test
       }
 
     private:
+      std::optional<std::size_t> _optFaultingDispatchIndex;
       std::thread::id _ownerThreadId = std::this_thread::get_id();
       std::atomic_size_t _dispatchCount{0};
       mutable std::mutex _mutex;
@@ -165,12 +183,24 @@ namespace ao::rt::test
 
     async::Task<void> applyScanPlanAndRecordCancellation(LibraryTaskService* service,
                                                          ScanPlan plan,
+                                                         AsyncTestState<bool> sawFingerprinting,
                                                          AsyncTestState<bool> sawCancellation,
+                                                         AsyncBarrier* cancellationGate,
                                                          std::stop_token const stopToken)
     {
       try
       {
-        [[maybe_unused]] auto result = co_await service->applyScanPlanAsync(std::move(plan), {}, stopToken);
+        auto progress = [sawFingerprinting, cancellationGate](ScanApplyProgress const& update)
+        {
+          if (update.stage == ScanApplyProgressStage::Fingerprinting && update.path.filename() == "song.flac" &&
+              !sawFingerprinting.load())
+          {
+            sawFingerprinting.set(true);
+            cancellationGate->wait();
+          }
+        };
+        [[maybe_unused]] auto result =
+          co_await service->applyScanPlanAsync(std::move(plan), {}, stopToken, std::move(progress));
       }
       catch (async::OperationCancelled const&)
       {
@@ -263,7 +293,7 @@ namespace ao::rt::test
     auto changes = LibraryChanges{};
     auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
     auto completionStatuses = std::vector<LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto completionSub = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event)
+    auto completionSub = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event) noexcept
                                                         { completionStatuses.push_back(event.status); });
     auto completedPtr = std::make_shared<std::atomic_bool>(false);
     auto future = spawnFuture(
@@ -526,7 +556,7 @@ namespace ao::rt::test
     REQUIRE(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
 
     auto committed = AsyncTestState<bool>::create(false);
-    auto changeSubscription = changes.onChanged([committed](LibraryChangeSet const&) { committed.set(true); });
+    auto changeSubscription = changes.onChanged([committed](LibraryChangeSet const&) noexcept { committed.set(true); });
     auto stopSource = std::stop_source{};
     auto applyCompletedPtr = std::make_shared<std::atomic_bool>(false);
     auto applyFuture = spawnFuture(
@@ -733,7 +763,7 @@ namespace ao::rt::test
     auto& service = runtimeLibrary.taskService();
 
     auto progressEvents = std::vector<LibraryChanges::LibraryTaskProgressUpdated>{};
-    auto sub = changes.onLibraryTaskProgress([&](auto const& ev) { progressEvents.push_back(ev); });
+    auto sub = changes.onLibraryTaskProgress([&](auto const& ev) noexcept { progressEvents.push_back(ev); });
     auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
     auto expectedNames = std::vector<std::string>{};
 
@@ -791,24 +821,26 @@ namespace ao::rt::test
     auto sawCancellation = AsyncTestState<bool>::create(false);
     auto completionStatus = AsyncTestState<LibraryChanges::LibraryTaskCompletionStatus>::create(
       LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
-    auto sub = changes.onLibraryTaskProgress(
-      [&](LibraryChanges::LibraryTaskProgressUpdated const& event)
-      {
-        if (event.kind == LibraryChanges::LibraryTaskProgressKind::Fingerprinting && event.subject == "song.flac" &&
-            !sawFingerprinting.load())
-        {
-          sawFingerprinting.set(true);
-        }
-      });
-    auto completionSub = changes.onLibraryTaskCompleted(
-      [completionStatus](LibraryChanges::LibraryTaskCompleted const& event) { completionStatus.set(event.status); });
+    auto cancellationGate = AsyncBarrier{};
+    auto completionSub =
+      changes.onLibraryTaskCompleted([completionStatus](LibraryChanges::LibraryTaskCompleted const& event) noexcept
+                                     { completionStatus.set(event.status); });
 
     auto taskHandle = runtime.spawnCancellable(
-      [service = &service, plan = std::move(plan), sawCancellation](std::stop_token const stopToken) mutable
-      { return applyScanPlanAndRecordCancellation(service, std::move(plan), sawCancellation, stopToken); });
+      [service = &service,
+       plan = std::move(plan),
+       sawFingerprinting,
+       sawCancellation,
+       cancellationGate = &cancellationGate](std::stop_token const stopToken) mutable
+      {
+        return applyScanPlanAndRecordCancellation(
+          service, std::move(plan), sawFingerprinting, sawCancellation, cancellationGate, stopToken);
+      });
 
-    REQUIRE(sawFingerprinting.waitUntil(true));
+    auto const fingerprintingSeen = sawFingerprinting.waitUntil(true);
     taskHandle.reset();
+    cancellationGate.release();
+    REQUIRE(fingerprintingSeen);
     REQUIRE(sawCancellation.waitUntil(true));
     CHECK(sawFingerprinting.load());
     CHECK(completionStatus.load() == LibraryChanges::LibraryTaskCompletionStatus::Cancelled);
@@ -828,17 +860,14 @@ namespace ao::rt::test
             "[runtime][regression][library-task][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = FaultOrderingExecutor{};
+    auto executor = FaultOrderingExecutor{2};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
     auto& service = runtimeLibrary.taskService();
     auto completionStatuses = std::vector<LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto completionSubscription = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event)
-                                                                 { completionStatuses.push_back(event.status); });
-    auto progressSubscription =
-      changes.onLibraryTaskProgress([](LibraryChanges::LibraryTaskProgressUpdated const&)
-                                    { throwException<InjectedLibraryTaskFailure>("injected library task failure"); });
+    auto completionSubscription = changes.onLibraryTaskCompleted(
+      [&](LibraryChanges::LibraryTaskCompleted const& event) noexcept { completionStatuses.push_back(event.status); });
     auto stopSource = std::stop_source{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     auto const targetFile = libraryFixture.root() / "missing.flac";
@@ -869,17 +898,14 @@ namespace ao::rt::test
     REQUIRE(applyResult);
     REQUIRE(applyResult->insertedIds.size() == 1);
 
-    auto executor = FaultOrderingExecutor{};
+    auto executor = FaultOrderingExecutor{2};
     auto runtime = async::Runtime{executor};
     auto changes = LibraryChanges{};
     auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
     auto& service = runtimeLibrary.taskService();
     auto completionStatuses = std::vector<LibraryChanges::LibraryTaskCompletionStatus>{};
-    auto completionSubscription = changes.onLibraryTaskCompleted([&](LibraryChanges::LibraryTaskCompleted const& event)
-                                                                 { completionStatuses.push_back(event.status); });
-    auto progressSubscription =
-      changes.onLibraryTaskProgress([](LibraryChanges::LibraryTaskProgressUpdated const&)
-                                    { throwException<InjectedLibraryTaskFailure>("injected library task failure"); });
+    auto completionSubscription = changes.onLibraryTaskCompleted(
+      [&](LibraryChanges::LibraryTaskCompleted const& event) noexcept { completionStatuses.push_back(event.status); });
     auto stopSource = std::stop_source{};
 
     auto future = runtime.spawn(service.backfillAudioIdentityAsync(stopSource.get_token()));

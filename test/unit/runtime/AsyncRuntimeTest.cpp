@@ -365,6 +365,28 @@ namespace ao::rt::test
     CHECK(weakDiagnosticLifetimePtr.expired());
   }
 
+  TEST_CASE("AsyncRuntime - terminal stop closes queued callback admission before destruction",
+            "[runtime][regression][async][concurrency]")
+  {
+    auto executor = QueuedExecutor{};
+    auto resumed = AsyncTestState<bool>::create(false);
+    auto lifetimePtr = std::make_shared<std::uint8_t>(0);
+    auto const weakLifetimePtr = std::weak_ptr<void>{lifetimePtr};
+    auto runtimePtr = std::make_unique<Runtime>(executor, 1);
+
+    runtimePtr->spawnLogged(callbackAfterRuntimeShutdown(runtimePtr.get(), resumed, lifetimePtr));
+    lifetimePtr.reset();
+    executor.checkQueued();
+
+    runtimePtr->requestStop();
+    runtimePtr->join();
+    executor.drain();
+
+    CHECK_FALSE(resumed.load());
+    runtimePtr.reset();
+    CHECK(weakLifetimePtr.expired());
+  }
+
   TEST_CASE("AsyncRuntime - unobserved and future task failures have one owner", "[runtime][unit][async]")
   {
     auto executor = InlineExecutor{};

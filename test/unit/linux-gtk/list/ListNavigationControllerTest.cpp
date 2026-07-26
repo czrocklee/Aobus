@@ -30,6 +30,7 @@
 #include <gtkmm/singleselection.h>
 #include <gtkmm/window.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -83,9 +84,23 @@ namespace ao::gtk::test
     auto cache = TrackRowCache{fixture.runtime().library()};
 
     auto selectedId = ListId{999};
+    bool rejectSelection = false;
+    std::size_t selectionAttemptCount = 0;
     auto savedPresentationListId = kInvalidListId;
     auto savedPresentationId = std::string{};
-    auto callbacks = ListNavigationController::Callbacks{.onListSelected = [&](ListId id) { selectedId = id; },
+    auto callbacks = ListNavigationController::Callbacks{.onListSelected =
+                                                           [&](ListId id)
+                                                         {
+                                                           ++selectionAttemptCount;
+
+                                                           if (rejectSelection)
+                                                           {
+                                                             return false;
+                                                           }
+
+                                                           selectedId = id;
+                                                           return true;
+                                                         },
                                                          .onListPresentationSaved =
                                                            [&](ListId id, std::string presentationId)
                                                          {
@@ -193,6 +208,31 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(selectedId == listId);
+    }
+
+    SECTION("a failed pending selection is retried after the next complete rebuild")
+    {
+      auto draft = rt::LibraryListDraft{};
+      draft.kind = rt::LibraryListKind::Smart;
+      draft.name = "Retry selection";
+      draft.expression = "true";
+      auto const listResult = controller.submitListDraft(draft, {});
+      REQUIRE(listResult);
+      auto const listId = *listResult;
+      rejectSelection = true;
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedId != listId);
+      CHECK(selectionAttemptCount == 1);
+
+      rejectSelection = false;
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedId == listId);
+      CHECK(selectionAttemptCount == 2);
     }
 
     SECTION("submitListDraft updates an existing list and preserves the presentation callback")

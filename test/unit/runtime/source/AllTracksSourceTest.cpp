@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/source/AllTracksSource.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -119,7 +120,8 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto source = AllTracksSource{libraryFixture.library().tracks()};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = source.subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      source.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     auto const initialInsertions = std::array{TrackId{30}, TrackId{10}, TrackId{20}};
 
     source.applyCollectionChange(initialInsertions, {});
@@ -147,5 +149,33 @@ namespace ao::rt::test
     CHECK(source.trackIdAt(1) == TrackId{15});
     CHECK(source.trackIdAt(2) == TrackId{25});
     CHECK(source.trackIdAt(3) == TrackId{30});
+  }
+
+  TEST_CASE("AllTracksSource - invalidation clears and permanently fences its snapshot",
+            "[runtime][unit][source][all-tracks]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const trackId = libraryFixture.addTrack("Stored");
+    auto source = AllTracksSource{libraryFixture.library().tracks()};
+    {
+      auto const transaction = libraryFixture.library().readTransaction();
+      source.reloadFromStore(transaction);
+    }
+    REQUIRE(source.size() == 1);
+
+    source.invalidate();
+    CHECK(source.state() == TrackSourceState::Invalidated);
+    CHECK(source.size() == 0);
+
+    {
+      auto const transaction = libraryFixture.library().readTransaction();
+      source.reloadFromStore(transaction);
+    }
+    source.notifyInserted(trackId);
+    source.applyCollectionChange(std::array{TrackId{99}}, {});
+
+    CHECK(source.state() == TrackSourceState::Invalidated);
+    CHECK(source.size() == 0);
+    CHECK_FALSE(source.indexOf(trackId));
   }
 } // namespace ao::rt::test

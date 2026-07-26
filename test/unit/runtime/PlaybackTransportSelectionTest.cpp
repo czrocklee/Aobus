@@ -21,7 +21,8 @@ namespace ao::rt::test
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
     auto revealRequests = std::vector<PlaybackTransport::RevealTrackRequested>{};
-    auto sub = fixture.playbackTransport.onRevealTrackRequested([&](auto const& ev) { revealRequests.push_back(ev); });
+    auto sub =
+      fixture.playbackTransport.onRevealTrackRequested([&](auto const& ev) noexcept { revealRequests.push_back(ev); });
     fixture.playbackTransport.revealTrack(TrackId{42});
     REQUIRE(revealRequests.size() == 1);
     CHECK(revealRequests[0].trackId == TrackId{42});
@@ -44,7 +45,7 @@ namespace ao::rt::test
     bool callbackEntered = false;
     auto subscription = async::Subscription{};
     subscription = fixturePtr->playbackTransport.onQualityChanged(
-      [&subscription, &callbackEntered](PlaybackTransport::QualityChanged const&)
+      [&subscription, &callbackEntered](PlaybackTransport::QualityChanged const&) noexcept
       {
         subscription.reset();
         callbackEntered = true;
@@ -65,8 +66,8 @@ namespace ao::rt::test
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
 
     auto revealRequests = std::vector<PlaybackTransport::RevealTrackRequested>{};
-    auto sub = fixture.playbackTransport.onRevealTrackRequested([&](PlaybackTransport::RevealTrackRequested const& ev)
-                                                                { revealRequests.push_back(ev); });
+    auto sub = fixture.playbackTransport.onRevealTrackRequested(
+      [&](PlaybackTransport::RevealTrackRequested const& ev) noexcept { revealRequests.push_back(ev); });
     fixture.playbackTransport.revealPlayingTrack();
     REQUIRE(revealRequests.size() == 1);
     CHECK(revealRequests[0].trackId == kInvalidTrackId);

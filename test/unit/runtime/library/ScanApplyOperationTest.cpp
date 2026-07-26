@@ -16,10 +16,10 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
 #include <runtime/library/ScanApplyOperation.h>
-#include <runtime/library/ScanPlanBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -104,7 +104,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     CHECK(plan.items()[0].classification == ScanClassification::New);
@@ -145,7 +145,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     CHECK(plan.items()[0].classification == ScanClassification::New);
@@ -181,7 +181,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), musicRoot / "song.flac");
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto plan = ScanPlanBuilder{ml}.buildPlan().value();
+    auto plan = LibraryScan{ml}.buildPlan().value();
     auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
     REQUIRE(operation.prepare());
 
@@ -202,7 +202,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), musicRoot / "song.flac");
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto plan = ScanPlanBuilder{ml}.buildPlan().value();
+    auto plan = LibraryScan{ml}.buildPlan().value();
     auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
     REQUIRE(operation.prepare());
     REQUIRE(operation.revalidatePreparedFiles());
@@ -245,7 +245,7 @@ namespace ao::rt::test
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
     {
-      auto scanner = ScanPlanBuilder{ml};
+      auto scanner = LibraryScan{ml};
       auto initialPlan = scanner.buildPlan().value();
       auto operation = ScanApplyOperation{ml, std::move(initialPlan), nullptr, nullptr};
       REQUIRE(operation.run());
@@ -256,7 +256,7 @@ namespace ao::rt::test
     std::filesystem::rename(targetFile, firstNewFile);
     std::filesystem::copy_file(sourceFile, secondNewFile);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 2);
     REQUIRE(plan.count(ScanClassification::Missing) == 1);
@@ -300,7 +300,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
 
@@ -335,7 +335,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 2);
     CHECK(plan.count(ScanClassification::New) == 2);
@@ -387,7 +387,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
 
@@ -431,7 +431,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 2);
     auto const corruptPath = plan.items()[0].fullPath;
@@ -472,7 +472,7 @@ namespace ao::rt::test
 
     // First scan to populate the manifest
     {
-      auto scanner = ScanPlanBuilder{ml};
+      auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
@@ -480,7 +480,7 @@ namespace ao::rt::test
     }
 
     // Second scan should find unchanged file
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     CHECK(plan.items()[0].classification == ScanClassification::Unchanged);
@@ -511,7 +511,7 @@ namespace ao::rt::test
 
     // First scan to populate the manifest
     {
-      auto scanner = ScanPlanBuilder{ml};
+      auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
@@ -536,7 +536,7 @@ namespace ao::rt::test
     }
     std::filesystem::last_write_time(targetFile, oldMTime + std::chrono::seconds{10});
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     CHECK(plan.items()[0].classification == ScanClassification::Changed);
@@ -580,7 +580,7 @@ namespace ao::rt::test
 
     // First scan to populate the manifest
     {
-      auto scanner = ScanPlanBuilder{ml};
+      auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
@@ -590,7 +590,7 @@ namespace ao::rt::test
     // Remove the file
     std::filesystem::remove(targetFile);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     CHECK(plan.items()[0].classification == ScanClassification::Missing);
@@ -624,7 +624,7 @@ namespace ao::rt::test
     auto originalTrackId = kInvalidTrackId;
 
     {
-      auto scanner = ScanPlanBuilder{ml};
+      auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
@@ -667,7 +667,7 @@ namespace ao::rt::test
     std::filesystem::create_directories(movedFile.parent_path());
     std::filesystem::rename(originalFile, movedFile);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     CHECK(plan.items().front().classification == ScanClassification::Moved);
@@ -748,7 +748,7 @@ namespace ao::rt::test
     auto originalTrackId = kInvalidTrackId;
 
     {
-      auto scanner = ScanPlanBuilder{ml};
+      auto scanner = LibraryScan{ml};
       auto plan = scanner.buildPlan().value();
       auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
       auto runResult = executor.run();
@@ -760,7 +760,7 @@ namespace ao::rt::test
     auto const movedFile = musicRoot / "renamed.flac";
     std::filesystem::rename(originalFile, movedFile);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     REQUIRE(plan.size() == 1);
     REQUIRE(plan.items().front().classification == ScanClassification::Moved);
@@ -822,7 +822,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), originalFile);
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto initialPlan = ScanPlanBuilder{ml}.buildPlan().value();
+    auto initialPlan = LibraryScan{ml}.buildPlan().value();
     auto initialResult = ScanApplyOperation{ml, std::move(initialPlan), nullptr, nullptr}.run();
     REQUIRE(initialResult);
     REQUIRE(initialResult->insertedIds.size() == 1);
@@ -833,7 +833,7 @@ namespace ao::rt::test
     std::filesystem::rename(originalFile, movedFile);
     std::filesystem::copy_file(audio::test::requireAudioFixture("hires.flac"), newFile);
 
-    auto plan = ScanPlanBuilder{ml}.buildPlan().value();
+    auto plan = LibraryScan{ml}.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::Moved) == 1);
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
@@ -891,7 +891,7 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourceFile, musicRoot / "song.flac");
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     auto counts = FailureCounts{};
     auto executor = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
@@ -928,7 +928,7 @@ namespace ao::rt::test
     auto firstLibrary = library::test::makeTestMusicLibrary(firstRoot, std::filesystem::path{temp.path()} / "first-db");
     auto secondLibrary =
       library::test::makeTestMusicLibrary(secondRoot, std::filesystem::path{temp.path()} / "second-db");
-    auto plan = ScanPlanBuilder{firstLibrary}.buildPlan().value();
+    auto plan = LibraryScan{firstLibrary}.buildPlan().value();
     bool sawProgress = false;
 
     auto operation = ScanApplyOperation{
@@ -953,8 +953,8 @@ namespace ao::rt::test
     std::filesystem::copy_file(sourceFile, musicRoot / "song.flac");
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto firstPlan = ScanPlanBuilder{ml}.buildPlan().value();
-    auto secondPlan = ScanPlanBuilder{ml}.buildPlan().value();
+    auto firstPlan = LibraryScan{ml}.buildPlan().value();
+    auto secondPlan = LibraryScan{ml}.buildPlan().value();
 
     auto firstResult = ScanApplyOperation{ml, std::move(firstPlan), nullptr, nullptr}.run();
     REQUIRE(firstResult);
@@ -997,7 +997,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
 
     auto counts = FailureCounts{};
@@ -1021,7 +1021,7 @@ namespace ao::rt::test
 
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
     std::filesystem::copy_file(sourceFile, musicRoot / "bad.flac");
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
 
     auto counts = FailureCounts{};
@@ -1048,7 +1048,7 @@ namespace ao::rt::test
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
     CHECK(plan.empty());
 

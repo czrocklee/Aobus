@@ -32,10 +32,10 @@ namespace ao::rt::test
     auto const result = env.requireView(service);
 
     auto listChanged = kInvalidListId;
-    auto sub = service.onListChanged([&](auto const& ev) { listChanged = ev.listId; });
+    auto sub = service.onListChanged([&](auto const& ev) noexcept { listChanged = ev.listId; });
 
     auto projectionChanged = TrackListProjectionChanged{};
-    auto projectionSub = service.onProjectionChanged([&](auto const& ev) { projectionChanged = ev; });
+    auto projectionSub = service.onProjectionChanged([&](auto const& ev) noexcept { projectionChanged = ev; });
 
     REQUIRE(service.openListInView(result, listId));
     auto const snap = service.trackListState(result);
@@ -64,8 +64,8 @@ namespace ao::rt::test
     auto const projectionPtr = service.trackListProjection(created);
     std::int32_t listChangedCount = 0;
     std::int32_t projectionChangedCount = 0;
-    auto const listSub = service.onListChanged([&](auto const&) { ++listChangedCount; });
-    auto const projectionSub = service.onProjectionChanged([&](auto const&) { ++projectionChangedCount; });
+    auto const listSub = service.onListChanged([&](auto const&) noexcept { ++listChangedCount; });
+    auto const projectionSub = service.onProjectionChanged([&](auto const&) noexcept { ++projectionChangedCount; });
 
     auto const result = service.openListInView(created, ListId{999999});
 
@@ -94,7 +94,7 @@ namespace ao::rt::test
     auto projView = kInvalidViewId;
     std::int32_t projectionChangedCount = 0;
     auto projSub = service.onProjectionChanged(
-      [&](auto const& ev)
+      [&](auto const& ev) noexcept
       {
         projView = ev.viewId;
         ++projectionChangedCount;

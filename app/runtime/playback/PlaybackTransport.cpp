@@ -305,73 +305,6 @@ namespace ao::rt
       }
     }
 
-    Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
-                                                                       TrackId trackId)
-    {
-      auto const transaction = library.readTransaction();
-      auto reader = library.tracks().reader(transaction);
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        return makeError(Error::Code::NotFound, "track not found");
-      }
-
-      auto const& view = *optView;
-      auto const metadata = view.metadata();
-      auto const property = view.property();
-      auto optFilePath = std::optional<std::filesystem::path>{};
-
-      if (auto const uriText = property.uri(); !uriText.empty())
-      {
-        auto uri = library::LibraryUri::parse(uriText);
-
-        if (!uri)
-        {
-          return makeError(
-            Error::Code::CorruptData,
-            std::format("track {} contains an invalid library URI: {}", trackId.raw(), uri.error().message));
-        }
-
-        auto resolved = uri->resolveUnder(library.rootPath());
-
-        if (!resolved)
-        {
-          return std::unexpected{resolved.error()};
-        }
-
-        optFilePath = std::move(*resolved);
-      }
-
-      auto request = PlaybackTransport::PlaybackRequest{
-        .item =
-          NowPlayingInfo{
-            .trackId = trackId,
-            .coverArtId = view.coverArt()
-                            .primary()
-                            .transform([](library::CoverArt const cover) { return cover.resourceId; })
-                            .value_or(kInvalidResourceId),
-            .title = std::string{metadata.title()},
-            .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
-            .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
-          },
-        .input =
-          audio::PlaybackInput{
-            .duration = property.duration(),
-            .sampleRateHint = property.sampleRate().raw(),
-            .channelsHint = property.channels().raw(),
-            .bitDepthHint = property.bitDepth().raw(),
-          },
-      };
-
-      if (optFilePath)
-      {
-        request.input.filePath = *optFilePath;
-      }
-
-      return request;
-    }
-
     [[noreturn]] void failExecutorAffinity(std::source_location const& loc)
     {
       APP_LOG_CRITICAL("PlaybackTransport thread-affinity violation: '{}' invoked off the executor thread ({}:{})",
@@ -387,6 +320,73 @@ namespace ao::rt
       std::abort();
     }
   } // namespace
+
+  Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
+                                                                     TrackId trackId)
+  {
+    auto const transaction = library.readTransaction();
+    auto reader = library.tracks().reader(transaction);
+    auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+
+    if (!optView)
+    {
+      return makeError(Error::Code::NotFound, "track not found");
+    }
+
+    auto const& view = *optView;
+    auto const metadata = view.metadata();
+    auto const property = view.property();
+    auto optFilePath = std::optional<std::filesystem::path>{};
+
+    if (auto const uriText = property.uri(); !uriText.empty())
+    {
+      auto uri = library::LibraryUri::parse(uriText);
+
+      if (!uri)
+      {
+        return makeError(
+          Error::Code::CorruptData,
+          std::format("track {} contains an invalid library URI: {}", trackId.raw(), uri.error().message));
+      }
+
+      auto resolved = uri->resolveUnder(library.rootPath());
+
+      if (!resolved)
+      {
+        return std::unexpected{resolved.error()};
+      }
+
+      optFilePath = std::move(*resolved);
+    }
+
+    auto request = PlaybackTransport::PlaybackRequest{
+      .item =
+        NowPlayingInfo{
+          .trackId = trackId,
+          .coverArtId = view.coverArt()
+                          .primary()
+                          .transform([](library::CoverArt const cover) { return cover.resourceId; })
+                          .value_or(kInvalidResourceId),
+          .title = std::string{metadata.title()},
+          .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
+          .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
+        },
+      .input =
+        audio::PlaybackInput{
+          .duration = property.duration(),
+          .sampleRateHint = property.sampleRate().raw(),
+          .channelsHint = property.channels().raw(),
+          .bitDepthHint = property.bitDepth().raw(),
+        },
+    };
+
+    if (optFilePath)
+    {
+      request.input.filePath = *optFilePath;
+    }
+
+    return request;
+  }
 
   struct PreparedPlaybackStart::Impl final
   {
@@ -521,35 +521,6 @@ namespace ao::rt
 
     bool isClosing() const noexcept { return closing.load(std::memory_order_acquire); }
 
-    template<typename Publish>
-    void publishObserverSafely(std::string_view const eventName, Publish&& publish) noexcept
-    {
-      try
-      {
-        std::forward<Publish>(publish)();
-      }
-      catch (std::exception const& error)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback {} observer threw: {}", eventName, error.what());
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- observer containment must remain noexcept
-        {
-        }
-      }
-      catch (...)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback {} observer threw an unknown exception", eventName);
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- observer containment must remain noexcept
-        {
-        }
-      }
-    }
-
     void enqueueOutbound(OutboundEvent event)
     {
       outboundEvents.push_back(std::move(event));
@@ -582,59 +553,59 @@ namespace ao::rt
 
             if constexpr (std::same_as<Value, PreparingEvent>)
             {
-              publishObserverSafely("preparing", [this] { preparingSignal.emit(); });
+              preparingSignal.emit();
             }
             else if constexpr (std::same_as<Value, StartedEvent>)
             {
-              publishObserverSafely("started", [this] { startedSignal.emit(); });
+              startedSignal.emit();
             }
             else if constexpr (std::same_as<Value, PausedEvent>)
             {
-              publishObserverSafely("paused", [this] { pausedSignal.emit(); });
+              pausedSignal.emit();
             }
             else if constexpr (std::same_as<Value, IdleEvent>)
             {
-              publishObserverSafely("idle", [this] { idleSignal.emit(); });
+              idleSignal.emit();
             }
             else if constexpr (std::same_as<Value, StoppedEvent>)
             {
-              publishObserverSafely("stopped", [this] { stoppedSignal.emit(); });
+              stoppedSignal.emit();
             }
             else if constexpr (std::same_as<Value, OutputDevicesChangedEvent>)
             {
-              publishObserverSafely("output-devices-changed", [this] { outputDevicesChangedSignal.emit(); });
+              outputDevicesChangedSignal.emit();
             }
             else if constexpr (std::same_as<Value, PlaybackTransport::NowPlayingChanged>)
             {
-              publishObserverSafely("now-playing", [this, &value] { nowPlayingChangedSignal.emit(value); });
+              nowPlayingChangedSignal.emit(value);
             }
             else if constexpr (std::same_as<Value, OutputDeviceSelection>)
             {
-              publishObserverSafely("output-device-changed", [this, &value] { outputDeviceChangedSignal.emit(value); });
+              outputDeviceChangedSignal.emit(value);
             }
             else if constexpr (std::same_as<Value, PlaybackTransport::QualityChanged>)
             {
-              publishObserverSafely("quality-changed", [this, &value] { qualityChangedSignal.emit(value); });
+              qualityChangedSignal.emit(value);
             }
             else if constexpr (std::same_as<Value, VolumeChangedEvent>)
             {
-              publishObserverSafely("volume-changed", [this, &value] { volumeChangedSignal.emit(value.value); });
+              volumeChangedSignal.emit(value.value);
             }
             else if constexpr (std::same_as<Value, MutedChangedEvent>)
             {
-              publishObserverSafely("muted-changed", [this, &value] { mutedChangedSignal.emit(value.value); });
+              mutedChangedSignal.emit(value.value);
             }
             else if constexpr (std::same_as<Value, PlaybackTransport::RevealTrackRequested>)
             {
-              publishObserverSafely("reveal-track", [this, &value] { revealTrackRequestedSignal.emit(value); });
+              revealTrackRequestedSignal.emit(value);
             }
             else if constexpr (std::same_as<Value, PlaybackTransport::SeekUpdate>)
             {
-              publishObserverSafely("seek-update", [this, &value] { seekUpdateSignal.emit(value); });
+              seekUpdateSignal.emit(value);
             }
             else
             {
-              publishObserverSafely("failure", [this, &value] { playbackFailureSignal.emit(value); });
+              playbackFailureSignal.emit(value);
 
               if (!isClosing() && shouldPostDefaultFailureNotification(value))
               {
@@ -1347,6 +1318,12 @@ namespace ao::rt
     }
   };
 
+  PlaybackTransport::Impl* PlaybackTransport::checkedImpl(std::source_location const location) const
+  {
+    _implPtr->ensureOnExecutor(location);
+    return _implPtr.get();
+  }
+
   PlaybackTransport::PlaybackTransport(async::Executor& executor,
                                        library::MusicLibrary const& library,
                                        NotificationService& notifications,
@@ -1368,112 +1345,98 @@ namespace ao::rt
     _implPtr->shutdown();
   }
 
-  async::Subscription PlaybackTransport::onPreparing(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onPreparing(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->preparingSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onStarted(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onStarted(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->startedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onPaused(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onPaused(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->pausedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onIdle(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onIdle(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->idleSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onNowPlayingChanged(
-    std::move_only_function<void(NowPlayingChanged const&)> handler)
+    std::move_only_function<void(NowPlayingChanged const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->nowPlayingChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onOutputDeviceChanged(
-    std::move_only_function<void(OutputDeviceSelection const&)> handler)
+    std::move_only_function<void(OutputDeviceSelection const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->outputDeviceChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onStopped(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onStopped(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->stoppedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onOutputDevicesChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackTransport::onOutputDevicesChanged(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->outputDevicesChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onQualityChanged(std::move_only_function<void(QualityChanged const&)> handler)
+  async::Subscription PlaybackTransport::onQualityChanged(
+    std::move_only_function<void(QualityChanged const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->qualityChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onVolumeChanged(std::move_only_function<void(float)> handler)
+  async::Subscription PlaybackTransport::onVolumeChanged(std::move_only_function<void(float) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->volumeChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onMutedChanged(std::move_only_function<void(bool)> handler)
+  async::Subscription PlaybackTransport::onMutedChanged(std::move_only_function<void(bool) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->mutedChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onRevealTrackRequested(
-    std::move_only_function<void(RevealTrackRequested const&)> handler)
+    std::move_only_function<void(RevealTrackRequested const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->revealTrackRequestedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackTransport::onSeekUpdate(std::move_only_function<void(SeekUpdate const&)> handler)
+  async::Subscription PlaybackTransport::onSeekUpdate(std::move_only_function<void(SeekUpdate const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->seekUpdateSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackTransport::onPlaybackFailure(
-    std::move_only_function<void(PlaybackFailure const&)> handler)
+    std::move_only_function<void(PlaybackFailure const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->playbackFailureSignal.connect(std::move(handler));
   }
 
   void PlaybackTransport::bindPlaybackFailureRecovery(PlaybackFailureRecoveryHandler handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (!handler)
     {
@@ -1490,8 +1453,7 @@ namespace ao::rt
 
   void PlaybackTransport::unbindPlaybackFailureRecovery()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->playbackFailureRecoveryHandlerPtr.reset();
   }
 
@@ -1501,8 +1463,7 @@ namespace ao::rt
     std::move_only_function<bool()> acceptance,
     std::move_only_function<void(Result<PreparedPlaybackStart>)> completion)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->ensureReady();
     impl->enqueueOutbound(Impl::PreparingEvent{});
 
@@ -1566,8 +1527,7 @@ namespace ao::rt
     std::move_only_function<bool()> acceptance,
     std::move_only_function<void(Result<PreparedNextToken>)> completion)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->ensureReady();
 
     if (impl->optActivePreparedToken)
@@ -1619,95 +1579,25 @@ namespace ao::rt
 
   void PlaybackTransport::cancelSuccessionStartPreparation()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->playerPtr->cancelStartPreparation();
   }
 
   void PlaybackTransport::cancelSuccessionLookaheadPreparation()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->playerPtr->cancelLookaheadPreparation();
-  }
-
-  Result<PreparedCancellationBarrier> PlaybackTransport::playSuccessionTrack(TrackId const trackId,
-                                                                             ListId const sourceListId)
-  {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-
-    try
-    {
-      auto const requestResult = playbackRequestForTrack(impl->library, trackId);
-
-      if (!requestResult)
-      {
-        return std::unexpected{requestResult.error()};
-      }
-
-      auto preparedResult = stagePlayback(*requestResult, sourceListId);
-
-      if (!preparedResult)
-      {
-        return std::unexpected{preparedResult.error()};
-      }
-
-      return commitStagedPlayback(std::move(*preparedResult), false);
-    }
-    catch (std::exception const& ex)
-    {
-      return makeError(Error::Code::Generic, ex.what());
-    }
-  }
-
-  Result<PreparedNextToken> PlaybackTransport::prepareSuccessionNext(TrackId const trackId, ListId const sourceListId)
-  {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-
-    try
-    {
-      auto const requestResult = playbackRequestForTrack(impl->library, trackId);
-
-      if (!requestResult)
-      {
-        return std::unexpected{requestResult.error()};
-      }
-
-      return prepareNextRequest(*requestResult, sourceListId);
-    }
-    catch (std::exception const& ex)
-    {
-      return makeError(Error::Code::Generic, ex.what());
-    }
-  }
-
-  std::optional<PreparedNextToken> PlaybackTransport::clearSuccessionPreparedNext()
-  {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-    return clearPreparedNext();
-  }
-
-  PreparedCancellationBarrier PlaybackTransport::stopSuccession()
-  {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-    return stop();
   }
 
   PlaybackState const& PlaybackTransport::state() const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->state;
   }
 
   std::chrono::milliseconds PlaybackTransport::elapsed() const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (impl->optDeferredResume && impl->state.transport == audio::Transport::Idle)
     {
@@ -1721,8 +1611,7 @@ namespace ao::rt
                                                                  ListId const sourceListId,
                                                                  std::chrono::milliseconds const initialOffset)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     impl->ensureReady();
 
@@ -1770,8 +1659,7 @@ namespace ao::rt
   Result<PreparedCancellationBarrier> PlaybackTransport::commitStagedPlayback(PreparedPlaybackStart&& preparedStart,
                                                                               bool const announce)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (!preparedStart._implPtr)
     {
@@ -1827,9 +1715,8 @@ namespace ao::rt
                                                               ListId const sourceListId,
                                                               std::chrono::milliseconds const initialOffset)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
-
+    // stagePlayback() and commitPlayback() each assert executor affinity, so this
+    // composition needs no check of its own.
     auto preparedResult = stagePlayback(request, sourceListId, initialOffset);
 
     if (!preparedResult)
@@ -1840,21 +1727,28 @@ namespace ao::rt
     return commitPlayback(std::move(*preparedResult));
   }
 
-  Result<PreparedCancellationBarrier> PlaybackTransport::playTrack(TrackId const trackId, ListId const sourceListId)
+  Result<PreparedCancellationBarrier> PlaybackTransport::playTrack(TrackId const trackId,
+                                                                   ListId const sourceListId,
+                                                                   bool const announce)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
+    auto const requestResult = playbackRequestForTrack(impl->library, trackId);
+
+    if (!requestResult)
+    {
+      return std::unexpected{requestResult.error()};
+    }
 
     try
     {
-      auto const requestResult = playbackRequestForTrack(impl->library, trackId);
+      auto preparedResult = stagePlayback(*requestResult, sourceListId);
 
-      if (!requestResult)
+      if (!preparedResult)
       {
-        return std::unexpected{requestResult.error()};
+        return std::unexpected{preparedResult.error()};
       }
 
-      return play(*requestResult, sourceListId);
+      return commitStagedPlayback(std::move(*preparedResult), announce);
     }
     catch (std::exception const& ex)
     {
@@ -1865,8 +1759,7 @@ namespace ao::rt
   Result<PreparedNextToken> PlaybackTransport::prepareNextRequest(PlaybackRequest const& request,
                                                                   ListId const sourceListId)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     impl->ensureReady();
 
@@ -1900,18 +1793,16 @@ namespace ao::rt
 
   Result<PreparedNextToken> PlaybackTransport::prepareNext(TrackId const trackId, ListId const sourceListId)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
+    auto const requestResult = playbackRequestForTrack(impl->library, trackId);
+
+    if (!requestResult)
+    {
+      return std::unexpected{requestResult.error()};
+    }
 
     try
     {
-      auto const requestResult = playbackRequestForTrack(impl->library, trackId);
-
-      if (!requestResult)
-      {
-        return std::unexpected{requestResult.error()};
-      }
-
       return prepareNext(*requestResult, sourceListId);
     }
     catch (std::exception const& ex)
@@ -1922,16 +1813,14 @@ namespace ao::rt
 
   std::optional<PreparedNextToken> PlaybackTransport::clearPreparedNext()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     return impl->clearPreparedNext();
   }
 
   void PlaybackTransport::pause()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     impl->playerPtr->pause();
 
@@ -1946,8 +1835,7 @@ namespace ao::rt
 
   void PlaybackTransport::resume()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     // A deferred resume token only fires when we still own the idle state it
     // was armed against; an intervening player transition (e.g. an async
@@ -1974,8 +1862,7 @@ namespace ao::rt
 
   PreparedCancellationBarrier PlaybackTransport::stop()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     impl->refreshState();
     impl->rememberRestorableSession();
@@ -2004,8 +1891,7 @@ namespace ao::rt
 
   void PlaybackTransport::seek(std::chrono::milliseconds const elapsed, SeekMode const mode)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (mode == SeekMode::Final)
     {
@@ -2043,8 +1929,7 @@ namespace ao::rt
                                           audio::DeviceId const& deviceId,
                                           audio::ProfileId const& profileId)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     std::ignore = impl->clearPreparedNext();
 
@@ -2069,8 +1954,7 @@ namespace ao::rt
 
   void PlaybackTransport::setVolume(float const volume)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     auto const normalizedVolume = normalizePlaybackVolume(volume);
 
@@ -2096,8 +1980,7 @@ namespace ao::rt
 
   void PlaybackTransport::setMuted(bool const muted)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (auto const result = impl->playerPtr->setMuted(muted); !result)
     {
@@ -2127,16 +2010,14 @@ namespace ao::rt
 
   void PlaybackTransport::revealTrack(TrackId const trackId, ViewId const preferredViewId, ListId const preferredListId)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->enqueueOutbound(PlaybackTransport::RevealTrackRequested{
       .trackId = trackId, .preferredListId = preferredListId, .preferredViewId = preferredViewId});
   }
 
   PlaybackTransportSessionState PlaybackTransport::playbackTransportSessionState()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->refreshState();
     return impl->snapshotSessionState();
   }
@@ -2144,8 +2025,7 @@ namespace ao::rt
   Result<std::chrono::milliseconds> PlaybackTransport::restorePlaybackTransport(
     PlaybackTransportSessionState const& session)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     impl->refreshState();
     auto normalizedSession = session;
@@ -2158,15 +2038,15 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, "No track available for playback session restore");
     }
 
+    auto requestResult = playbackRequestForTrack(impl->library, normalizedSession.trackId);
+
+    if (!requestResult)
+    {
+      return std::unexpected{requestResult.error()};
+    }
+
     try
     {
-      auto requestResult = playbackRequestForTrack(impl->library, normalizedSession.trackId);
-
-      if (!requestResult)
-      {
-        return std::unexpected{requestResult.error()};
-      }
-
       return impl->restoreDeferredPlayback(std::move(*requestResult), normalizedSession);
     }
     catch (std::exception const& ex)
@@ -2177,15 +2057,13 @@ namespace ao::rt
 
   void PlaybackTransport::discardPlaybackTransportSnapshot()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->optLastRestorableSession.reset();
   }
 
   void PlaybackTransport::addProvider(std::unique_ptr<audio::BackendProvider> providerPtr)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (providerPtr != nullptr)
     {

@@ -9,7 +9,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -387,13 +386,13 @@ namespace ao::rt::test
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
     auto failures = std::vector<PlaybackFailure>{};
     std::size_t notificationCount = 0;
-    auto startedSub = transportPtr->onStarted([&] { ++startedCount; });
-    auto nowPlayingSub = transportPtr->onNowPlayingChanged([&](PlaybackTransport::NowPlayingChanged const& event)
-                                                           { nowPlaying.push_back(event); });
+    auto startedSub = transportPtr->onStarted([&] noexcept { ++startedCount; });
+    auto nowPlayingSub = transportPtr->onNowPlayingChanged(
+      [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { nowPlaying.push_back(event); });
     auto failureSub =
-      transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+      transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) noexcept { failures.push_back(failure); });
     auto notificationSub = notifications.onFeedUpdated(
-      [&](NotificationFeedUpdate const& update)
+      [&](NotificationFeedUpdate const& update) noexcept
       {
         if (update.mutationKind == NotificationFeedMutationKind::Posted)
         {
@@ -523,7 +522,8 @@ namespace ao::rt::test
     REQUIRE(transportPtr->clearPreparedNext() == firstToken);
 
     auto failures = std::vector<PlaybackFailure>{};
-    auto sub = transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+    auto sub =
+      transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) noexcept { failures.push_back(failure); });
     auto const failingTokenResult = transportPtr->prepareNext(failingCommitment, kSourceListId);
     REQUIRE(failingTokenResult);
     auto const failingToken = *failingTokenResult;
@@ -543,7 +543,7 @@ namespace ao::rt::test
     CHECK_FALSE(transportPtr->clearPreparedNext());
   }
 
-  TEST_CASE("PlaybackTransport token - accepted start contains observer exceptions and completes publication",
+  TEST_CASE("PlaybackTransport token - accepted start publishes in connection order with committed state",
             "[runtime][regression][playback][token]")
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
@@ -553,18 +553,20 @@ namespace ao::rt::test
     auto const replacement = request(TrackId{2}, fixturePath, "Accepted replacement");
     REQUIRE(fixture.playbackTransport.play(current, kSourceListId));
 
+    // Transport observers are noexcept, so what this proves is delivery order:
+    // the started observer already sees the replacement installed, and the
+    // now-playing observer still receives its event afterwards.
     bool callbackEntered = false;
     auto observedTrackId = kInvalidTrackId;
     auto const startedSubscription = fixture.playbackTransport.onStarted(
-      [&]
+      [&] noexcept
       {
         callbackEntered = true;
         observedTrackId = fixture.playbackTransport.state().nowPlaying.trackId;
-        throwException<Exception>("scripted accepted-start observer failure");
       });
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
     auto const nowPlayingSubscription = fixture.playbackTransport.onNowPlayingChanged(
-      [&](PlaybackTransport::NowPlayingChanged const& event) { nowPlaying.push_back(event); });
+      [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { nowPlaying.push_back(event); });
 
     auto const accepted = fixture.playbackTransport.play(replacement, ListId{10});
 

@@ -267,7 +267,7 @@ namespace ao::rt::test
     bool callbackEntered = false;
     bool callbackCompleted = false;
     auto const sequenceSubscription = appPtr->playback().events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         callbackEntered = snapshot.succession.currentTrackId == secondTrackId;
         callbackCompleted = true;

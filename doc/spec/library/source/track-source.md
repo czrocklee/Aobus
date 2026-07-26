@@ -94,8 +94,13 @@ Malformed coordinates, empty ranges, divergent reducer state, and a final sequen
 
 ## Failure and lifetime
 
-Expected query compilation and library read failures remain recoverable at their owning boundary.
+Expected query compilation failures remain recoverable at their owning boundary.
+Library read failures are exceptional and are not translated while consuming a `noexcept` source callback.
 Delta-shape and internal-mirror violations use fail-fast contracts.
+
+The cache is the library's [change-publication replica](../runtime/change-publication.md).
+It applies each committed revision before phase-two observers run, and that application is a `noexcept` contract rather than a recoverable replica transaction.
+Invalidation clears each source snapshot before publishing its terminal event, so an outstanding lease cannot read old size or ids.
 
 Source delivery is synchronous on the callback side.
 Subscriptions release before their source or changes owner; source destruction disconnects subscribers but is not itself a semantic invalidation event.

@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::uimodel
@@ -44,11 +45,34 @@ namespace ao::uimodel
       }
     }
 
+    constexpr std::string_view kPositionPercentStateKey = "positionPercent";
+    constexpr std::string_view kSizeStateKey = "size";
+
+    // Once a state key has been folded back into the node's authored props, the
+    // stored entry keeps only what is left -- or disappears when nothing is.
+    void writeResidualState(LayoutNode const& node,
+                            LayoutComponentStateEntry const& entry,
+                            std::string_view const promotedKey,
+                            LayoutComponentStateDocument& stateDoc)
+    {
+      auto residual = entry;
+      residual.state.erase(std::string{promotedKey});
+
+      if (residual.state.empty())
+      {
+        stateDoc.components.erase(node.id);
+        return;
+      }
+
+      residual.baselineHash = componentBaselineHash(node);
+      stateDoc.components[node.id] = std::move(residual);
+    }
+
     bool promoteSplitState(LayoutNode& node,
                            LayoutComponentStateEntry const& entry,
                            LayoutComponentStateDocument& stateDoc)
     {
-      auto const percentIt = entry.state.find("positionPercent");
+      auto const percentIt = entry.state.find(kPositionPercentStateKey);
 
       if (percentIt == entry.state.end() || !percentIt->second.isNumber())
       {
@@ -58,20 +82,7 @@ namespace ao::uimodel
       auto const percent = std::clamp(percentIt->second.asDouble(), 0.0, 1.0);
       node.props.erase("position");
       node.props["initialPositionPercent"] = LayoutValue{percent};
-
-      auto residual = entry;
-      residual.state.erase("positionPercent");
-
-      if (residual.state.empty())
-      {
-        stateDoc.components.erase(node.id);
-      }
-      else
-      {
-        residual.baselineHash = componentBaselineHash(node);
-        stateDoc.components[node.id] = std::move(residual);
-      }
-
+      writeResidualState(node, entry, kPositionPercentStateKey, stateDoc);
       return true;
     }
 
@@ -79,7 +90,7 @@ namespace ao::uimodel
                                       LayoutComponentStateEntry const& entry,
                                       LayoutComponentStateDocument& stateDoc)
     {
-      auto const sizeIt = entry.state.find("size");
+      auto const sizeIt = entry.state.find(kSizeStateKey);
 
       if (sizeIt == entry.state.end() || !sizeIt->second.isNumber())
       {
@@ -89,20 +100,7 @@ namespace ao::uimodel
       auto const size = std::max<std::int64_t>(50, sizeIt->second.asInt());
       node.props["position"] = LayoutValue{size};
       node.props.erase("initialPositionPercent");
-
-      auto residual = entry;
-      residual.state.erase("size");
-
-      if (residual.state.empty())
-      {
-        stateDoc.components.erase(node.id);
-      }
-      else
-      {
-        residual.baselineHash = componentBaselineHash(node);
-        stateDoc.components[node.id] = std::move(residual);
-      }
-
+      writeResidualState(node, entry, kSizeStateKey, stateDoc);
       return true;
     }
   } // namespace

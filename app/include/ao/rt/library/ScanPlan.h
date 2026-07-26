@@ -20,7 +20,7 @@
 namespace ao::rt
 {
   class ScanApplyOperation;
-  class ScanPlanBuilder;
+  class LibraryScan;
 
   enum class ScanClassification : std::uint8_t
   {
@@ -99,7 +99,7 @@ namespace ao::rt
     bool _executable = true;
 
     friend class ScanApplyOperation;
-    friend class ScanPlanBuilder;
+    friend class LibraryScan;
   };
 
   enum class AudioIdentityPolicy : std::uint8_t

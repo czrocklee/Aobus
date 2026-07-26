@@ -1161,7 +1161,7 @@ namespace ao::tui::test
     auto controller = EventController{fixture.screen, fixture.shell, library, fixture.runtime};
     auto& playback = fixture.runtime.playback();
     auto snapshots = std::vector<rt::PlaybackSnapshot>{};
-    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
+    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot) noexcept
                                                     { snapshots.push_back(snapshot); });
 
     CHECK(controller.handleEvent(ftxui::Event::Character("[")));
@@ -1184,9 +1184,9 @@ namespace ao::tui::test
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto snapshots = std::vector<rt::PlaybackSnapshot>{};
-    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed)
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
                                                       { seekPreviews.push_back(elapsed); });
-    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
+    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot) noexcept
                                                     { snapshots.push_back(snapshot); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
@@ -1215,9 +1215,9 @@ namespace ao::tui::test
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto snapshots = std::vector<rt::PlaybackSnapshot>{};
-    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed)
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
                                                       { seekPreviews.push_back(elapsed); });
-    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot)
+    auto snapshotSub = playback.events().onSnapshot([&snapshots](rt::PlaybackSnapshot const& snapshot) noexcept
                                                     { snapshots.push_back(snapshot); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
@@ -1245,7 +1245,7 @@ namespace ao::tui::test
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = fixture.runtime.playback().events().onSeekPreview(
-      [&seekPreviews](std::chrono::milliseconds const elapsed) { seekPreviews.push_back(elapsed); });
+      [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1264,7 +1264,7 @@ namespace ao::tui::test
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = fixture.runtime.playback().events().onSeekPreview(
-      [&seekPreviews](std::chrono::milliseconds const elapsed) { seekPreviews.push_back(elapsed); });
+      [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1284,7 +1284,7 @@ namespace ao::tui::test
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
     auto previewSub = fixture.runtime.playback().events().onSeekPreview(
-      [&seekPreviews](std::chrono::milliseconds const elapsed) { seekPreviews.push_back(elapsed); });
+      [&seekPreviews](std::chrono::milliseconds const elapsed) noexcept { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};
 
@@ -1360,7 +1360,7 @@ namespace ao::tui::test
     hitRegions.seekRailBox = ftxui::Box{.x_min = 10, .x_max = 30, .y_min = 1, .y_max = 1};
     auto& playback = fixture.runtime.playback();
     auto seekPreviews = std::vector<std::chrono::milliseconds>{};
-    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed)
+    auto previewSub = playback.events().onSeekPreview([&seekPreviews](std::chrono::milliseconds const elapsed) noexcept
                                                       { seekPreviews.push_back(elapsed); });
     auto controller = EventController{
       fixture.screen, fixture.shell, library, fixture.runtime, EventControllerBindings{.hitRegions = &hitRegions}};

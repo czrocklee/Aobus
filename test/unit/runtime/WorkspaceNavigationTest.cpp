@@ -5,7 +5,7 @@
 #include "test/unit/TestUtils.h"
 #include "test/unit/runtime/WorkspaceTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
+#include <ao/async/Signal.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -95,7 +96,7 @@ namespace ao::rt::test
     auto& runtime = fixture.runtime;
 
     auto focusedViewId = kInvalidViewId;
-    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const& changed)
+    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept
                                                    { focusedViewId = changed.snapshot.activeViewId; });
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
@@ -131,7 +132,7 @@ namespace ao::rt::test
     auto const before = runtime.workspace().snapshot();
     auto changes = std::vector<WorkspaceChanged>{};
     auto const sub =
-      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { changes.push_back(changed); });
+      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { changes.push_back(changed); });
 
     REQUIRE(runtime.library().writer().deleteList(fixture.firstListId));
 
@@ -163,7 +164,7 @@ namespace ao::rt::test
 
     bool revealCalled = false;
     auto const sub = runtime.playback().events().onRevealTrackRequested(
-      [&](PlaybackRevealTrackRequest const& req)
+      [&](PlaybackRevealTrackRequest const& req) noexcept
       {
         if (req.trackId == trackId)
         {
@@ -257,7 +258,7 @@ namespace ao::rt::test
     auto const unopened =
       ao::test::requireValue(fixture.runtime.views().createView(TrackListViewConfig{.listId = fixture.secondListId}));
     std::int32_t changeCount = 0;
-    auto const sub = workspace.onChanged([&](WorkspaceChanged const&) { ++changeCount; });
+    auto const sub = workspace.onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
 
     REQUIRE(workspace.focusView(activeViewId));
     REQUIRE(workspace.closeView(unopened));
@@ -276,7 +277,7 @@ namespace ao::rt::test
     requireNavigation(fixture.runtime, fixture.secondListId);
     auto const before = workspace.snapshot();
     auto changed = WorkspaceChanged{};
-    auto const sub = workspace.onChanged([&](WorkspaceChanged const& value) { changed = value; });
+    auto const sub = workspace.onChanged([&](WorkspaceChanged const& value) noexcept { changed = value; });
 
     REQUIRE(workspace.focusView(firstViewId));
 
@@ -286,23 +287,33 @@ namespace ao::rt::test
     CHECK(changed.snapshot == workspace.snapshot());
   }
 
-  TEST_CASE("WorkspaceService - changed observations are deferred and contain observer failures",
+  TEST_CASE("WorkspaceService - changed observations are deferred to contract-fulfilling observers",
             "[runtime][unit][workspace][observation]")
   {
+    // The handler type enforces the noexcept contract. These two
+    // contract-fulfilling observers therefore receive the same committed
+    // snapshot in connection order.
+    STATIC_REQUIRE(
+      std::is_nothrow_invocable_v<async::Signal<WorkspaceChanged const&>::Handler, WorkspaceChanged const&>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<async::Signal<WorkspaceChanged const&>::Handler,
+                                                 decltype([](WorkspaceChanged const&) {})>);
+
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
     auto runtime = makeRuntime(tempDir, std::move(executorPtr));
     auto received = std::vector<WorkspaceChanged>{};
-    auto const throwingSub =
-      runtime.workspace().onChanged([](WorkspaceChanged const&) { throwException<Exception>("observer failed"); });
+    bool leadingObserverEntered = false;
+    auto const leadingSub =
+      runtime.workspace().onChanged([&](WorkspaceChanged const&) noexcept { leadingObserverEntered = true; });
     auto const receivingSub =
-      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) { received.push_back(changed); });
+      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { received.push_back(changed); });
 
     REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     CHECK(received.empty());
     CHECK_NOTHROW(executor->drain());
+    CHECK(leadingObserverEntered);
     REQUIRE(received.size() == 1);
     CHECK(received.front().snapshot == runtime.workspace().snapshot());
   }
@@ -321,14 +332,15 @@ namespace ao::rt::test
       LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second observed"}));
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
+    bool reentrantNavigateSucceeded = false;
     auto const sub = runtime.workspace().onChanged(
-      [&](WorkspaceChanged const& changed)
+      [&](WorkspaceChanged const& changed) noexcept
       {
         received.push_back(changed);
 
         if (received.size() == 1)
         {
-          REQUIRE(runtime.workspace().navigate({.target = secondListId}));
+          reentrantNavigateSucceeded = static_cast<bool>(runtime.workspace().navigate({.target = secondListId}));
         }
       });
 
@@ -337,6 +349,7 @@ namespace ao::rt::test
     REQUIRE(executor->drainUntil([&] { return received.size() == 1; }));
 
     REQUIRE(received.size() == 1);
+    CHECK(reentrantNavigateSucceeded);
     auto const firstObservation = received.front();
     CHECK(firstObservation.snapshot.revision == firstRevision);
     CHECK(runtime.workspace().snapshot().revision == firstRevision + 1);

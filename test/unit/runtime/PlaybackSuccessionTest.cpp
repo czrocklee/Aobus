@@ -15,7 +15,6 @@
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
@@ -195,7 +194,7 @@ namespace ao::rt::test
                                  TrackId const trackId)
     {
       bool settled = false;
-      auto const settlementSubscription = succession.onExplicitStartSettled([&] { settled = true; });
+      auto const settlementSubscription = succession.onExplicitStartSettled([&] noexcept { settled = true; });
 
       if (auto started = succession.playFromView(viewId, trackId); !started)
       {
@@ -539,7 +538,8 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     std::uint32_t changedCount = 0;
-    auto const changedSubscription = succession.onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
+    auto const changedSubscription =
+      succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
 
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     auto const accepted = succession.state();
@@ -578,7 +578,8 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     std::uint32_t settlementCount = 0;
-    auto const settlementSubscription = fixture.successionPtr->onExplicitStartSettled([&] { ++settlementCount; });
+    auto const settlementSubscription =
+      fixture.successionPtr->onExplicitStartSettled([&] noexcept { ++settlementCount; });
 
     REQUIRE(
       playFromViewAndWait(*fixture.successionPtr, fixture.transport.executor, fixture.viewId, fixture.firstTrackId));
@@ -605,7 +606,8 @@ namespace ao::rt::test
     auto const transportBeforeRejection = fixture.playbackTransport.state();
     REQUIRE(sequenceBeforeRejection.optResolvedSuccessor == successor);
     std::uint32_t changedCount = 0;
-    auto const changedSubscription = succession.onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
+    auto const changedSubscription =
+      succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
 
     auto const admitted = succession.playFromView(fixture.viewId, broken);
 
@@ -855,7 +857,7 @@ namespace ao::rt::test
     CHECK(fixture.transport.notificationService.feed().entries.empty());
   }
 
-  TEST_CASE("PlaybackSuccession - accepted launch contains observer exceptions and completes publication",
+  TEST_CASE("PlaybackSuccession - an accepted launch publishes consistent state to connected observers",
             "[runtime][regression][playback-succession][launch]")
   {
     auto fixture = PlaybackSuccessionFixture{};
@@ -864,15 +866,13 @@ namespace ao::rt::test
     auto& playbackTransport = fixture.playbackTransport;
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
 
+    // These contract-fulfilling observers see the launch in connection order,
+    // and publication finishes with state consistent across the two owners.
     bool changedObserverEntered = false;
     auto trailingObserverTrackId = kInvalidTrackId;
-    auto changedSubscription = succession.onChanged(
-      [&](PlaybackSuccessionState const&)
-      {
-        changedObserverEntered = true;
-        throwException<Exception>("scripted accepted succession observer failure");
-      });
-    auto trailingSubscription = succession.onChanged([&](PlaybackSuccessionState const& state)
+    auto changedSubscription =
+      succession.onChanged([&](PlaybackSuccessionState const&) noexcept { changedObserverEntered = true; });
+    auto trailingSubscription = succession.onChanged([&](PlaybackSuccessionState const& state) noexcept
                                                      { trailingObserverTrackId = state.currentTrackId; });
 
     auto const launched = succession.playFromView(fixture.viewId, fixture.thirdTrackId);
@@ -1007,7 +1007,7 @@ namespace ao::rt::test
     auto& succession = *fixture.successionPtr;
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     std::uint32_t changedCount = 0;
-    auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
+    auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
     auto const beforeMove = succession.state();
 
     auto const moved =
@@ -1059,7 +1059,7 @@ namespace ao::rt::test
     auto const beforeAddition = succession.state();
     REQUIRE(beforeAddition.optResolvedSuccessor == fixture.thirdTrackId);
     std::uint32_t changedCount = 0;
-    auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
+    auto const subscription = succession.onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
 
     REQUIRE(fixture.writerFixture.updateMetadata(
       std::array{fixture.firstTrackId}, MetadataPatch{.optYear = std::uint16_t{2005}}));
@@ -1226,7 +1226,7 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     auto events = std::vector<PlaybackTransport::NowPlayingChanged>{};
     auto const subscription = fixture.transport.playbackTransport.onNowPlayingChanged(
-      [&](PlaybackTransport::NowPlayingChanged const& event) { events.push_back(event); });
+      [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { events.push_back(event); });
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     fixture.transport.executor.drain();
     events.clear();
@@ -1248,7 +1248,7 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
     auto events = std::vector<PlaybackTransport::NowPlayingChanged>{};
     auto const subscription = fixture.transport.playbackTransport.onNowPlayingChanged(
-      [&](PlaybackTransport::NowPlayingChanged const& event) { events.push_back(event); });
+      [&](PlaybackTransport::NowPlayingChanged const& event) noexcept { events.push_back(event); });
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     fixture.transport.executor.drain();
     events.clear();
@@ -1313,7 +1313,8 @@ namespace ao::rt::test
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
     std::uint32_t changedCount = 0;
-    auto const subscription = fixture.successionPtr->onChanged([&](PlaybackSuccessionState const&) { ++changedCount; });
+    auto const subscription =
+      fixture.successionPtr->onChanged([&](PlaybackSuccessionState const&) noexcept { ++changedCount; });
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     REQUIRE(changedCount == 1);
     fixture.queueNaturalAdvance();
@@ -1380,8 +1381,8 @@ namespace ao::rt::test
     auto fixture = PlaybackSuccessionTransportFixture{};
     fixture.buildThreeTrackManualView();
     auto failures = std::vector<PlaybackFailure>{};
-    auto const subscription = fixture.transport.playbackTransport.onPlaybackFailure([&](PlaybackFailure const& failure)
-                                                                                    { failures.push_back(failure); });
+    auto const subscription = fixture.transport.playbackTransport.onPlaybackFailure(
+      [&](PlaybackFailure const& failure) noexcept { failures.push_back(failure); });
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     REQUIRE(fixture.transport.renderTarget != nullptr);
 
@@ -1408,8 +1409,8 @@ namespace ao::rt::test
     auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
     fixture.buildSingleTrackManualView();
     auto failures = std::vector<PlaybackFailure>{};
-    auto const subscription =
-      fixture.transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) { failures.push_back(failure); });
+    auto const subscription = fixture.transportPtr->onPlaybackFailure([&](PlaybackFailure const& failure) noexcept
+                                                                      { failures.push_back(failure); });
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     REQUIRE(failureGate.waitForRead());
 
@@ -1475,9 +1476,9 @@ namespace ao::rt::test
     std::uint32_t shuffleEvents = 0;
     std::uint32_t repeatEvents = 0;
     auto const shuffleSubscription =
-      succession.onShuffleModeChanged([&](PlaybackSuccession::ShuffleModeChanged const&) { ++shuffleEvents; });
+      succession.onShuffleModeChanged([&](PlaybackSuccession::ShuffleModeChanged const&) noexcept { ++shuffleEvents; });
     auto const repeatSubscription =
-      succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&) { ++repeatEvents; });
+      succession.onRepeatModeChanged([&](PlaybackSuccession::RepeatModeChanged const&) noexcept { ++repeatEvents; });
 
     succession.next();
     CHECK(succession.state().currentTrackId == fixture.secondTrackId);

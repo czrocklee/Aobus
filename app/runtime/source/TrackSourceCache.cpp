@@ -22,7 +22,6 @@
 #include <algorithm>
 #include <concepts>
 #include <cstddef>
-#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -69,10 +68,14 @@ namespace ao::rt
   TrackSourceCache::TrackSourceCache(library::MusicLibrary const& library, LibraryChanges const& changes)
     : _library{library}, _allTracksPtr{std::make_shared<AllTracksSource>(_library.tracks())}, _smartEvaluator{_library}
   {
-    _changesSubscription = changes.onChanged([this](LibraryChangeSet const& event) { handleLibraryChange(event); });
+    // The cache is the library's one replica: everything the runtime reads
+    // tracks through is derived here, so it applies each revision before the
+    // revision is announced to anyone else.
+    _replicaBinding = changes.bindReplica(
+      "TrackSourceCache", [this](LibraryChangeSet const& event) noexcept { handleLibraryChange(event); });
   }
 
-  void TrackSourceCache::handleLibraryChange(LibraryChangeSet const& event)
+  void TrackSourceCache::handleLibraryChange(LibraryChangeSet const& event) noexcept
   {
     if (event.libraryReset)
     {
@@ -299,60 +302,18 @@ namespace ao::rt
     auto implementationPtr = buildImplementation(*optView, *parentResult);
     auto const parentId = definition.parentId;
     linkGraph(listId, parentId);
-
-    try
-    {
-      sourcePtr->rebind(std::move(definition), *parentResult, std::move(implementationPtr));
-    }
-    catch (...)
-    {
-      if (sourcePtr->state() == TrackSourceState::Live)
-      {
-        linkGraph(listId, sourcePtr->definition().parentId);
-      }
-      else
-      {
-        unlinkGraph(listId);
-      }
-
-      throw;
-    }
+    sourcePtr->rebind(std::move(definition), *parentResult, std::move(implementationPtr));
   }
 
   void TrackSourceCache::applyListMutation(std::move_only_function<void()> mutation)
   {
     ++_listMutationDepth;
-    auto optException = std::exception_ptr{};
-
-    try
-    {
-      mutation();
-    }
-    catch (...)
-    {
-      optException = std::current_exception();
-    }
-
+    mutation();
     --_listMutationDepth;
 
     if (_listMutationDepth == 0)
     {
-      try
-      {
-        drainPendingRefreshes();
-      }
-      catch (...)
-      {
-        if (optException == nullptr)
-        {
-          optException = std::current_exception();
-        }
-      }
-    }
-
-    if (optException != nullptr)
-    {
-      std::rethrow_exception(optException);
+      drainPendingRefreshes();
     }
   }
 
@@ -364,7 +325,6 @@ namespace ao::rt
     }
 
     _refreshDrainActive = true;
-    auto optException = std::exception_ptr{};
 
     while (!_pendingRefreshListIds.empty())
     {
@@ -372,26 +332,11 @@ namespace ao::rt
 
       for (auto const listId : listIds)
       {
-        try
-        {
-          refreshListNow(listId);
-        }
-        catch (...)
-        {
-          if (optException == nullptr)
-          {
-            optException = std::current_exception();
-          }
-        }
+        refreshListNow(listId);
       }
     }
 
     _refreshDrainActive = false;
-
-    if (optException != nullptr)
-    {
-      std::rethrow_exception(optException);
-    }
   }
 
   void TrackSourceCache::eraseList(ListId const listId)
@@ -420,6 +365,11 @@ namespace ao::rt
   {
     if (listId == kAllTracksListId)
     {
+      if (_allTracksPtr->state() != TrackSourceState::Live)
+      {
+        return makeError(Error::Code::InvalidState, "All Tracks source is unavailable");
+      }
+
       return TrackSourceLease{_allTracksPtr};
     }
 
@@ -435,7 +385,12 @@ namespace ao::rt
 
     if (auto const it = _sources.find(listId); it != _sources.end())
     {
-      return TrackSourceLease{it->second};
+      if (it->second->state() == TrackSourceState::Live)
+      {
+        return TrackSourceLease{it->second};
+      }
+
+      eraseList(listId);
     }
 
     auto const transaction = _library.readTransaction();

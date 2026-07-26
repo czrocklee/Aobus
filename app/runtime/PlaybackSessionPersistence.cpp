@@ -27,7 +27,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <expected>
 #include <memory>
 #include <optional>
@@ -106,9 +105,9 @@ namespace ao::rt
 
     _started = true;
     _lastSnapshot = _playback.snapshot();
-    _successionStateSubscription = _succession.onRestorableStateChanged([this] { requestDebouncedSave(); });
+    _successionStateSubscription = _succession.onRestorableStateChanged([this] noexcept { requestDebouncedSave(); });
     _snapshotSubscription =
-      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+      _playback.events().onSnapshot([this](PlaybackSnapshot const& snapshot) noexcept { handleSnapshot(snapshot); });
   }
 
   Result<> PlaybackSessionPersistence::checkpoint()
@@ -310,7 +309,6 @@ namespace ao::rt
       return PlaybackSessionRestoreResult{};
     }
 
-    try
     {
       auto reader = _library.reader();
       auto const currentExists = reader.containsTrack(loaded.currentTrackId);
@@ -414,10 +412,6 @@ namespace ao::rt
       }
 
       return result;
-    }
-    catch (std::exception const& error)
-    {
-      return std::unexpected{makeError(Error::Code::Generic, error.what())};
     }
   }
 

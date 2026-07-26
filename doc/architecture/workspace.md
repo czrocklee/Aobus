@@ -131,7 +131,8 @@ View construction and presentation updates complete before the workspace commit;
 
 Observations are deferred through the same executor and hold only a weak signal owner.
 Each event carries the complete committed snapshot.
-Observer exceptions are contained and logged after all still-connected observers have run, and queued events become harmless when the service is destroyed.
+Observer handlers are `noexcept`: contract-fulfilling handlers observe the committed snapshot, while an escaping exception terminates at its throw point and provides no later-handler guarantee.
+Queued events become harmless when the service is destroyed.
 
 Restore treats a missing group as an empty first-run state.
 Malformed data or an unresolvable view returns a recoverable error, and candidate views created before a later failure are destroyed before the error returns.

@@ -6,13 +6,10 @@
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
-#include <algorithm>
 #include <cstddef>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::uimodel
@@ -51,20 +48,13 @@ namespace ao::uimodel
       return false;
     }
 
-    _groupKey = _groupOptions[optionIndex].key;
+    _groupKey = _groupOptions[optionIndex].value;
     return true;
   }
 
   std::optional<std::size_t> CustomPresentationEditorModel::groupKeyOptionIndex() const
   {
-    auto const it = std::ranges::find(_groupOptions, _groupKey, &TrackGroupKeyOption::key);
-
-    if (it == _groupOptions.end())
-    {
-      return std::nullopt;
-    }
-
-    return static_cast<std::size_t>(std::ranges::distance(_groupOptions.begin(), it));
+    return optionIndexOf(_groupOptions, _groupKey);
   }
 
   void CustomPresentationEditorModel::addSortTerm()
@@ -74,35 +64,17 @@ namespace ao::uimodel
 
   bool CustomPresentationEditorModel::removeSortTerm(std::size_t index)
   {
-    if (index >= _sortTerms.size())
-    {
-      return false;
-    }
-
-    _sortTerms.erase(_sortTerms.begin() + static_cast<std::ptrdiff_t>(index));
-    return true;
+    return eraseElementAt(_sortTerms, index);
   }
 
   bool CustomPresentationEditorModel::moveSortTermUp(std::size_t index)
   {
-    if (index == 0 || index >= _sortTerms.size())
-    {
-      return false;
-    }
-
-    std::swap(_sortTerms[index], _sortTerms[index - 1]);
-    return true;
+    return moveElementUp(_sortTerms, index);
   }
 
   bool CustomPresentationEditorModel::moveSortTermDown(std::size_t index)
   {
-    if (index + 1 >= _sortTerms.size())
-    {
-      return false;
-    }
-
-    std::swap(_sortTerms[index], _sortTerms[index + 1]);
-    return true;
+    return moveElementDown(_sortTerms, index);
   }
 
   bool CustomPresentationEditorModel::setSortFieldByOptionIndex(std::size_t termIndex, std::size_t optionIndex)
@@ -112,7 +84,7 @@ namespace ao::uimodel
       return false;
     }
 
-    _sortTerms[termIndex].field = _sortFieldOptions[optionIndex].field;
+    _sortTerms[termIndex].field = _sortFieldOptions[optionIndex].value;
     return true;
   }
 
@@ -129,14 +101,7 @@ namespace ao::uimodel
 
   std::optional<std::size_t> CustomPresentationEditorModel::optionIndexForSortField(rt::TrackSortField field) const
   {
-    auto const it = std::ranges::find(_sortFieldOptions, field, &TrackSortFieldOption::field);
-
-    if (it == _sortFieldOptions.end())
-    {
-      return std::nullopt;
-    }
-
-    return static_cast<std::size_t>(std::ranges::distance(_sortFieldOptions.begin(), it));
+    return optionIndexOf(_sortFieldOptions, field);
   }
 
   void CustomPresentationEditorModel::addVisibleField()
@@ -146,35 +111,19 @@ namespace ao::uimodel
 
   bool CustomPresentationEditorModel::removeVisibleField(std::size_t index)
   {
-    if (index >= _visibleFields.size() || _visibleFields.size() == 1)
-    {
-      return false;
-    }
-
-    _visibleFields.erase(_visibleFields.begin() + static_cast<std::ptrdiff_t>(index));
-    return true;
+    // A presentation with no visible columns would render nothing, so the last
+    // field is not removable.
+    return _visibleFields.size() != 1 && eraseElementAt(_visibleFields, index);
   }
 
   bool CustomPresentationEditorModel::moveVisibleFieldUp(std::size_t index)
   {
-    if (index == 0 || index >= _visibleFields.size())
-    {
-      return false;
-    }
-
-    std::swap(_visibleFields[index], _visibleFields[index - 1]);
-    return true;
+    return moveElementUp(_visibleFields, index);
   }
 
   bool CustomPresentationEditorModel::moveVisibleFieldDown(std::size_t index)
   {
-    if (index + 1 >= _visibleFields.size())
-    {
-      return false;
-    }
-
-    std::swap(_visibleFields[index], _visibleFields[index + 1]);
-    return true;
+    return moveElementDown(_visibleFields, index);
   }
 
   bool CustomPresentationEditorModel::setVisibleFieldByOptionIndex(std::size_t fieldIndex, std::size_t optionIndex)
@@ -184,20 +133,13 @@ namespace ao::uimodel
       return false;
     }
 
-    _visibleFields[fieldIndex] = _visibleFieldOptions[optionIndex].field;
+    _visibleFields[fieldIndex] = _visibleFieldOptions[optionIndex].value;
     return true;
   }
 
   std::optional<std::size_t> CustomPresentationEditorModel::optionIndexForVisibleField(rt::TrackField field) const
   {
-    auto const it = std::ranges::find(_visibleFieldOptions, field, &TrackVisibleFieldOption::field);
-
-    if (it == _visibleFieldOptions.end())
-    {
-      return std::nullopt;
-    }
-
-    return static_cast<std::size_t>(std::ranges::distance(_visibleFieldOptions.begin(), it));
+    return optionIndexOf(_visibleFieldOptions, field);
   }
 
   rt::CustomTrackPresentationPreset CustomPresentationEditorModel::collectState(std::string_view generatedId) const
@@ -231,7 +173,7 @@ namespace ao::uimodel
 
     for (auto const key : keys)
     {
-      options.push_back({.key = key, .label = std::string{PresentationTextCatalog{}.trackGroupKeyLabel(key)}});
+      options.push_back({.value = key, .label = std::string{PresentationTextCatalog{}.trackGroupKeyLabel(key)}});
     }
 
     return options;
@@ -251,7 +193,7 @@ namespace ao::uimodel
         if (def.optSortField == sortField)
         {
           options.push_back(
-            {.field = sortField, .label = std::string{PresentationTextCatalog{}.trackFieldLabel(def.field)}});
+            {.value = sortField, .label = std::string{PresentationTextCatalog{}.trackFieldLabel(def.field)}});
           break;
         }
       }
@@ -269,7 +211,7 @@ namespace ao::uimodel
       if (def.presentable)
       {
         options.push_back(
-          {.field = def.field, .label = std::string{PresentationTextCatalog{}.trackFieldLabel(def.field)}});
+          {.value = def.field, .label = std::string{PresentationTextCatalog{}.trackFieldLabel(def.field)}});
       }
     }
 

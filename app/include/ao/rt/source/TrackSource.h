@@ -44,8 +44,8 @@ namespace ao::rt
 
     TrackSourceState state() const noexcept { return _state; }
 
-    async::Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler);
-    void invalidate();
+    async::Subscription subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&) noexcept> handler);
+    void invalidate() noexcept;
 
     // Public notification API
     virtual void notifyUpdated(TrackId id);
@@ -63,6 +63,8 @@ namespace ao::rt
     bool publishDeltaBatch(TrackSourceDeltaBatch batch, std::size_t previousSize);
 
   private:
+    virtual void discardSnapshot() noexcept {}
+
     TrackSourceState _state = TrackSourceState::Live;
     async::Signal<TrackSourceDeltaBatch const&> _changedSignal;
 

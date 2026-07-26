@@ -95,8 +95,8 @@ namespace ao::uimodel
     , _playSelection{std::move(playSelection)}
     , _lastSnapshot{playback.snapshot()}
   {
-    _snapshotSub =
-      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
+                                                 { handleSnapshot(snapshot); });
   }
 
   bool PlaybackCommandSurface::execute(PlaybackCommand command)
@@ -198,13 +198,13 @@ namespace ao::uimodel
     return false;
   }
 
-  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackCommandSurface::onAvailabilityChanged(std::move_only_function<void() noexcept> handler)
   {
     return _availabilityChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackCommandSurface::onAvailabilityChanged(PlaybackCommand const command,
-                                                                    std::move_only_function<void()> handler)
+                                                                    std::move_only_function<void() noexcept> handler)
   {
     return _commandAvailabilityChangedSignals[commandIndex(command)].connect(std::move(handler));
   }

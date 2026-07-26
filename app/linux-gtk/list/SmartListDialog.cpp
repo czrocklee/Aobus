@@ -25,10 +25,7 @@
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
-#include <ao/uimodel/library/list/SmartListDraft.h>
-#include <ao/uimodel/library/list/SmartListEditorViewState.h>
-#include <ao/uimodel/library/list/SmartListExpression.h>
-#include <ao/uimodel/library/list/SmartListPreview.h>
+#include <ao/uimodel/library/list/SmartListEditorModel.h>
 #include <ao/uimodel/library/list/SmartListTrackPresentationResolver.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 

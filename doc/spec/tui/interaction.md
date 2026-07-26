@@ -93,7 +93,7 @@ Space and the Soul control pause active playback and resume paused playback even
 From Idle, they resume a restored sequence-owned current track; otherwise they start the selected track.
 Stop is an idempotent silent no-op when playback is already Idle.
 
-Seek press begins a shared `SeekSliderInteractionModel` gesture, pointer motion publishes preview seeks, and release publishes the final seek through `SeekViewModel`.
+Seek press begins a shared `SeekSliderInteractionModel` gesture, pointer motion publishes preview seeks, and release publishes the final seek through `PlaybackPositionViewModel`.
 Release beyond the rail clamps to the rail range.
 Keyboard seek asks the same view model for a clamped five-second relative change and is inert without a known positive duration.
 Keyboard volume asks `VolumeViewModel` for a clamped five-percentage-point relative change, including the shared rule that raising volume clears explicit mute.
@@ -105,7 +105,7 @@ The workspace lower frame edge carries list/view identity on the left and select
 Selected rows and hovered controls use one centralized yellow/black/bold interactive style.
 
 The playback Soul animation consumes shared UIModel aura/color/timing policy while terminal code chooses braille geometry.
-Opening, Buffering, Playing, and Seeking keep periodic animation refresh active; elapsed-time interpolation advances only in the transport states identified as playing by `PlaybackTimeViewModel`.
+Opening, Buffering, Playing, and Seeking keep periodic animation refresh active; elapsed-time interpolation advances only in the transport states identified as playing by `PlaybackPositionViewModel`.
 Short terminals keep the dock to one row before reducing track-table height further.
 
 ## Failure and cancellation

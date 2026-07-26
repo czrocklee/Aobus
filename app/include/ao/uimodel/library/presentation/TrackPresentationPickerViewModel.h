@@ -34,6 +34,12 @@ namespace ao::uimodel
     bool operator==(TrackPresentationPickerState const&) const = default;
   };
 
+  struct TrackPresentationSelection final
+  {
+    rt::ViewId targetViewId = rt::kInvalidViewId;
+    rt::TrackPresentationSpec spec{};
+  };
+
   class TrackPresentationPickerViewModel final
   {
   public:
@@ -50,7 +56,7 @@ namespace ao::uimodel
     TrackPresentationPickerViewModel& operator=(TrackPresentationPickerViewModel&&) = delete;
 
     void refresh();
-    std::optional<rt::TrackPresentationSpec> selectPresentation(std::string_view presentationId);
+    std::optional<TrackPresentationSelection> selectPresentation(std::string_view presentationId);
 
   private:
     TrackPresentationPickerState state() const;

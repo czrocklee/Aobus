@@ -31,6 +31,9 @@ namespace ao::uimodel::test
     format.channels = 1;
     CHECK(audioFormatLabel(format) == "44.1 kHz · 16-bit · Mono");
 
+    format.channels = 0;
+    CHECK(audioFormatLabel(format) == "44.1 kHz · 16-bit · 0 ch");
+
     format.channels = 6;
     format.sampleRate = 48000;
     format.bitDepth = 24;

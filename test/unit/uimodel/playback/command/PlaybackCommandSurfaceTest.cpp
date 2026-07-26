@@ -200,7 +200,7 @@ namespace ao::uimodel::test
     auto commands = PlaybackCommandSurface{fixture.runtime.playback(), [&playSelectionCount] { ++playSelectionCount; }};
 
     std::int32_t playCount = 0;
-    auto sub = commands.onAvailabilityChanged(PlaybackCommand::Play, [&playCount] { ++playCount; });
+    auto sub = commands.onAvailabilityChanged(PlaybackCommand::Play, [&playCount] noexcept { ++playCount; });
 
     CHECK_FALSE(commands.isEnabled(PlaybackCommand::Play));
     CHECK_FALSE(commands.isEnabled(PlaybackCommand::PlayPause));
@@ -225,7 +225,7 @@ namespace ao::uimodel::test
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     std::int32_t count = 0;
-    auto sub = commands.onAvailabilityChanged([&count] { ++count; });
+    auto sub = commands.onAvailabilityChanged([&count] noexcept { ++count; });
 
     REQUIRE(fixture.playFromView(firstTrack));
     CHECK(count > 0);

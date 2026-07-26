@@ -125,11 +125,26 @@ namespace ao::rt
     LibraryChanges(LibraryChanges&&) = delete;
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
-    async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&)> handler) const;
+    // Publication runs in two phases (doc/spec/library/runtime/change-publication.md).
+    //
+    // Phase one delivers the revision to the single bound replica -- the one
+    // consumer that keeps derived state the rest of the runtime reads from.
+    // Applying a committed revision is a noexcept contract: failure is fatal,
+    // not a recoverable publication result. At most one replica may be bound;
+    // the returned handle unbinds. A new binding is rejected while publication
+    // is active. Unbinding does not interrupt a replica already pinned for the
+    // current delivery; it only prevents later deliveries.
+    async::Subscription bindReplica(std::string replicaName,
+                                    std::move_only_function<void(LibraryChangeSet const&) noexcept> apply) const;
+
+    // Phase two announces an applied revision. Reaching an observer means
+    // the replica applied the revision and the library is readable at it.
+    // Observers are noexcept notifications.
+    async::Subscription onChanged(std::move_only_function<void(LibraryChangeSet const&) noexcept> handler) const;
     async::Subscription onLibraryTaskCompleted(
-      std::move_only_function<void(LibraryTaskCompleted const&)> handler) const;
+      std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const;
     async::Subscription onLibraryTaskProgress(
-      std::move_only_function<void(LibraryTaskProgressUpdated const&)> handler) const;
+      std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const;
 
   private:
     friend class LibraryMutationService;
@@ -141,6 +156,6 @@ namespace ao::rt
     void notifyLibraryTaskProgress(LibraryTaskProgressUpdated progress);
 
     struct Impl;
-    std::unique_ptr<Impl> _implPtr;
+    std::shared_ptr<Impl> _implPtr;
   };
 } // namespace ao::rt

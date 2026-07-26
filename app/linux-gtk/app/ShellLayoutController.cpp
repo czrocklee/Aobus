@@ -221,7 +221,7 @@ namespace ao::gtk
     registerTrackActions(registerAction);
 
     _playbackSubs.push_back(
-      commandSurface(_playbackCommandSurface).onAvailabilityChanged([this] { refreshExportedActions(); }));
+      commandSurface(_playbackCommandSurface).onAvailabilityChanged([this] noexcept { refreshExportedActions(); }));
   }
 
   ShellLayoutController::~ShellLayoutController()

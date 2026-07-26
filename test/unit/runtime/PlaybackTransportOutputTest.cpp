@@ -34,19 +34,20 @@ namespace ao::rt::test
     fixture.onDevicesChangedCb(emptyStatus.devices);
 
     bool devicesChangedFired = false;
-    auto sub1 = fixture.playbackTransport.onOutputDevicesChanged([&] { devicesChangedFired = true; });
+    auto sub1 = fixture.playbackTransport.onOutputDevicesChanged([&] noexcept { devicesChangedFired = true; });
 
     bool outputChangedFired = false;
     auto lastOutputDevice = OutputDeviceSelection{};
     auto sub2 = fixture.playbackTransport.onOutputDeviceChanged(
-      [&](auto const& ev)
+      [&](auto const& ev) noexcept
       {
         outputChangedFired = true;
         lastOutputDevice = ev;
       });
 
     auto qualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
-    auto sub3 = fixture.playbackTransport.onQualityChanged([&](auto const& ev) { qualityEvents.push_back(ev); });
+    auto sub3 =
+      fixture.playbackTransport.onQualityChanged([&](auto const& ev) noexcept { qualityEvents.push_back(ev); });
 
     fixture.playbackTransport.setOutputDevice(
       audio::BackendId{"mock_backend"}, audio::DeviceId{"mock_device"}, audio::ProfileId{audio::kProfileShared});
@@ -63,8 +64,8 @@ namespace ao::rt::test
 
     auto qualityFixture = PlaybackTransportFixture<QueuedExecutor>{};
     auto routedQualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
-    auto qualitySub =
-      qualityFixture.playbackTransport.onQualityChanged([&](auto const& ev) { routedQualityEvents.push_back(ev); });
+    auto qualitySub = qualityFixture.playbackTransport.onQualityChanged([&](auto const& ev) noexcept
+                                                                        { routedQualityEvents.push_back(ev); });
 
     qualityFixture.onDevicesChangedCb(qualityFixture.status.devices);
     qualityFixture.executor.drain();
@@ -112,7 +113,7 @@ namespace ao::rt::test
   {
     auto fixture = PlaybackTransportFixture<InlineExecutor>{};
     bool devicesChangedFired = false;
-    auto sub = fixture.playbackTransport.onOutputDevicesChanged([&] { devicesChangedFired = true; });
+    auto sub = fixture.playbackTransport.onOutputDevicesChanged([&] noexcept { devicesChangedFired = true; });
 
     fixture.onDevicesChangedCb(fixture.status.devices);
 

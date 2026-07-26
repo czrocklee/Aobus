@@ -99,9 +99,41 @@ namespace ao::rt::test
       REQUIRE(service.destroyView(viewId));
 
       CHECK_THROWS_AS(std::ignore = service.trackListState(viewId), std::out_of_range);
+
+      // The checked lookup reports the same NotFound the other fallible methods use.
+      auto const found = service.findTrackListState(viewId);
+      REQUIRE_FALSE(found);
+      CHECK(found.error().code == Error::Code::NotFound);
+
       auto const repeated = service.destroyView(viewId);
       REQUIRE_FALSE(repeated);
       CHECK(repeated.error().code == Error::Code::NotFound);
+    }
+
+    SECTION("the checked lookup returns the same state as the precondition form")
+    {
+      auto const found = service.findTrackListState(viewId);
+      REQUIRE(found);
+      CHECK(found->id == service.trackListState(viewId).id);
+      CHECK(found->listId == service.trackListState(viewId).listId);
+    }
+
+    SECTION("the checked projection lookup mirrors the precondition form")
+    {
+      auto const found = service.findTrackListProjection(viewId);
+      REQUIRE(found);
+      CHECK(*found == service.trackListProjection(viewId));
+    }
+
+    SECTION("the checked projection lookup reports NotFound after destroy")
+    {
+      REQUIRE(service.destroyView(viewId));
+
+      CHECK_THROWS_AS(std::ignore = service.trackListProjection(viewId), std::out_of_range);
+
+      auto const found = service.findTrackListProjection(viewId);
+      REQUIRE_FALSE(found);
+      CHECK(found.error().code == Error::Code::NotFound);
     }
 
     SECTION("destroyed views reject launch-context capture")
@@ -116,7 +148,7 @@ namespace ao::rt::test
     SECTION("destroy publishes ViewDestroyed event")
     {
       auto received = kInvalidViewId;
-      auto const sub = service.onDestroyed([&](auto viewId) { received = viewId; });
+      auto const sub = service.onDestroyed([&](auto viewId) noexcept { received = viewId; });
 
       REQUIRE(service.destroyView(viewId));
       CHECK(received == viewId);
@@ -199,14 +231,12 @@ namespace ao::rt::test
     auto const projectionPtr = service.trackListProjection(result);
     REQUIRE(projectionPtr != nullptr);
 
-    bool received = false;
-    auto const sub = projectionPtr->subscribe(
-      [&](TrackListProjectionDeltaBatch const& batch)
-      {
-        CHECK(std::holds_alternative<ProjectionReset>(batch.deltas[0]));
-        received = true;
-      });
+    auto batches = std::vector<TrackListProjectionDeltaBatch>{};
+    auto const sub =
+      projectionPtr->subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
-    CHECK(received);
+    REQUIRE(batches.size() == 1);
+    REQUIRE(batches.front().deltas.size() == 1);
+    CHECK(std::holds_alternative<ProjectionReset>(batches.front().deltas.front()));
   }
 } // namespace ao::rt::test

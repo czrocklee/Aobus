@@ -67,7 +67,7 @@ After progress has been published, task plumbing emits a `Cancelled` terminal ev
 Worker-side `Result` failures resume as `Result` failures on the callback executor.
 If an unexpected exception escapes worker execution, task plumbing carries and rethrows it on the callback side after required task notification cleanup.
 Failure before commit releases maintenance without advancing the library revision.
-Failure while enqueueing or delivering a committed revision leaves the coordinator terminally `Faulted`; task code does not reinterpret that durable mutation as an uncommitted `Result` failure.
+Failure while admitting or enqueueing a committed revision leaves the coordinator terminally `Faulted`; task code does not reinterpret that durable mutation as an uncommitted `Result` failure.
 
 ## Implementation map
 

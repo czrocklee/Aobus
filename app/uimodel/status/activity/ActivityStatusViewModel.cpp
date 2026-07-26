@@ -60,7 +60,7 @@ namespace ao::uimodel
       feedProjection.initialize(initialFeed);
 
       feedUpdatedSub = notifications.onFeedUpdated(
-        [this](rt::NotificationFeedUpdate const& update)
+        [this](rt::NotificationFeedUpdate const& update) noexcept
         {
           if (!update.feedPtr)
           {
@@ -74,9 +74,11 @@ namespace ao::uimodel
       if (options.libraryChanges != nullptr)
       {
         libraryProgressSub = options.libraryChanges->onLibraryTaskProgress(
-          [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event) { handleLibraryTaskProgress(event); });
+          [this](rt::LibraryChanges::LibraryTaskProgressUpdated const& event) noexcept
+          { handleLibraryTaskProgress(event); });
         libraryCompletedSub = options.libraryChanges->onLibraryTaskCompleted(
-          [this](rt::LibraryChanges::LibraryTaskCompleted const& event) { handleLibraryTaskCompleted(event); });
+          [this](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
+          { handleLibraryTaskCompleted(event); });
       }
 
       syncAutoDismissDeadline();

@@ -23,7 +23,6 @@
 #include <algorithm>
 #include <array>
 #include <cstdlib>
-#include <exception>
 #include <expected>
 #include <format>
 #include <functional>
@@ -31,7 +30,6 @@
 #include <optional>
 #include <source_location>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -99,18 +97,17 @@ namespace ao::rt
     ViewService& views;
     WorkspaceSnapshot currentSnapshot;
     NavigationHistory navigationHistory;
-    std::shared_ptr<async::Signal<WorkspaceChanged const&>> changedSignalPtr =
-      std::make_shared<async::Signal<WorkspaceChanged const&>>();
+    async::Signal<WorkspaceChanged const&> changedSignal;
     async::Subscription listsMutatedSub;
 
     Impl(async::Executor& callbackExecutor, ViewService& viewService, LibraryChanges const& changes)
       : executor{callbackExecutor}, views{viewService}
     {
       listsMutatedSub =
-        changes.onChanged([this](LibraryChangeSet const& changeSet) { handleLibraryChange(changeSet); });
+        changes.onChanged([this](LibraryChangeSet const& changeSet) noexcept { handleLibraryChange(changeSet); });
     }
 
-    ~Impl() { changedSignalPtr->disconnectAll(); }
+    ~Impl() { changedSignal.disconnectAll(); }
 
     Impl(Impl const&) = delete;
     Impl& operator=(Impl const&) = delete;
@@ -139,68 +136,11 @@ namespace ao::rt
       };
     }
 
-    static void logFailure(std::string_view const message) noexcept
-    {
-      try
-      {
-        APP_LOG_ERROR("{}", message);
-      }
-      catch (...) // NOLINT(bugprone-empty-catch) -- observation delivery must remain noexcept
-      {
-      }
-    }
-
-    static void logFailure(std::string_view const message, std::string_view const detail) noexcept
-    {
-      try
-      {
-        APP_LOG_ERROR("{}: {}", message, detail);
-      }
-      catch (...) // NOLINT(bugprone-empty-catch) -- observation delivery must remain noexcept
-      {
-      }
-    }
-
-    static void emitChange(std::weak_ptr<async::Signal<WorkspaceChanged const&>> const& weakSignalPtr,
-                           WorkspaceChanged const& changed) noexcept
-    {
-      auto signalPtr = weakSignalPtr.lock();
-
-      if (!signalPtr)
-      {
-        return;
-      }
-
-      try
-      {
-        signalPtr->emit(changed);
-      }
-      catch (std::exception const& error)
-      {
-        logFailure("Workspace observer threw", error.what());
-      }
-      catch (...)
-      {
-        logFailure("Workspace observer threw an unknown exception");
-      }
-    }
-
     void publish(WorkspaceChanged changed) noexcept
     {
-      auto weakSignalPtr = std::weak_ptr<async::Signal<WorkspaceChanged const&>>{changedSignalPtr};
-
-      try
-      {
-        executor.defer([weakSignalPtr, changed = std::move(changed)] noexcept { emitChange(weakSignalPtr, changed); });
-      }
-      catch (std::exception const& error)
-      {
-        logFailure("Failed to queue workspace observation", error.what());
-      }
-      catch (...)
-      {
-        logFailure("Failed to queue workspace observation");
-      }
+      // Signal::post owns the weak-state dance and the noexcept delivery
+      // contract, so a faulty observer can no longer escape into the executor.
+      changedSignal.post(executor, std::move(changed));
     }
 
     void installCommit(PendingCommit pending) noexcept
@@ -224,14 +164,7 @@ namespace ao::rt
         return makeError(Error::Code::InvalidInput, "The invalid view id cannot identify a live workspace view");
       }
 
-      try
-      {
-        return views.trackListState(viewId);
-      }
-      catch (std::out_of_range const&)
-      {
-        return makeError(Error::Code::NotFound, std::format("View {} does not exist", viewId));
-      }
+      return views.findTrackListState(viewId);
     }
 
     std::optional<ViewId> reusableView(ResolvedNavigationTarget const& target) const
@@ -741,10 +674,11 @@ namespace ao::rt
     return _implPtr->goForward();
   }
 
-  async::Subscription WorkspaceService::onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler)
+  async::Subscription WorkspaceService::onChanged(
+    std::move_only_function<void(WorkspaceChanged const&) noexcept> handler)
   {
     _implPtr->ensureOnExecutor();
-    return _implPtr->changedSignalPtr->connect(std::move(handler));
+    return _implPtr->changedSignal.connect(std::move(handler));
   }
 
   std::span<CustomTrackPresentationPreset const> WorkspaceService::customPresets() const

@@ -137,7 +137,7 @@ namespace ao::gtk
     _playingChanged.emit();
   }
 
-  void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch)
+  void TrackListModel::applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch) noexcept
   {
     auto const timer = rt::ScopedTimer{"TrackListModel::applyDeltas"};
 

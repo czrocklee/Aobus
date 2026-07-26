@@ -119,7 +119,7 @@ namespace ao::uimodel
                                          std::function<void(TransportViewState const&)> onRender)
     : _playback{playback}, _commands{commands}, _command{command}, _showLabel{showLabel}, _onRender{std::move(onRender)}
   {
-    _availabilitySub = _commands.onAvailabilityChanged(_command, [this] { refresh(); });
+    _availabilitySub = _commands.onAvailabilityChanged(_command, [this] noexcept { refresh(); });
     refresh();
   }
 

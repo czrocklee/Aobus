@@ -121,7 +121,7 @@ namespace ao::rt
     virtual std::optional<std::size_t> indexOf(TrackId trackId) const noexcept = 0;
 
     virtual async::Subscription subscribe(
-      std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler) = 0;
+      std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler) = 0;
 
   protected:
     TrackListProjection() = default;

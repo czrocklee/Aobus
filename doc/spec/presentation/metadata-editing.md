@@ -67,7 +67,6 @@ Beginning a session binds its explicit targets and immediately reconciles curren
 During its own submission, the session defers availability invalidation until the runtime result supplies the next binding.
 An applied submission replaces the retained binding with that next-revision binding; a later effective commit invalidates it.
 Operational failure, a missing target, stale or unavailable status, or mismatched post-submit availability also invalidates it.
-A durably applied command whose publication exception is contained by the callback executor therefore retains its `Applied` result but leaves the session invalid because that runtime is faulted.
 
 ## Commands and transitions
 
@@ -107,7 +106,7 @@ The current synchronous mutation boundary has no cancellation token; cancellatio
 Stale and unavailable outcomes tell the frontend to reload rather than retry the same session.
 Missing targets reject the session and report the missing-target condition.
 After durable commit, a publication failure faults the runtime; UIModel cannot treat it as an ordinary uncommitted rejection.
-It preserves an applied outcome when available while making the session stale, so the frontend can show committed state but cannot submit through that runtime again.
+The authoring session invalidates itself and propagates that exception to its caller; it does not translate the failure into an `Applied` result.
 
 ## Persistence and versioning
 
@@ -138,7 +137,7 @@ Custom keys are queryable through the custom-variable syntax in the predicate la
 - [`TrackFieldGridSchemaTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp) and [`TrackFieldGridPolicyTest.cpp`](../../../test/unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp) protect field/visibility policy.
 - [`TrackCustomMetadataTest.cpp`](../../../test/unit/uimodel/library/detail/TrackCustomMetadataTest.cpp) protects validation, patches, mixed values, and undo eligibility.
 - [`TagEditTest.cpp`](../../../test/unit/uimodel/library/property/TagEditTest.cpp) protects tag mutations and statuses.
-- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, invalidation, and post-commit faults with both propagating and exception-containing executors.
+- [`TrackAuthoringSessionTest.cpp`](../../../test/unit/uimodel/library/property/TrackAuthoringSessionTest.cpp) protects stable target order, no-op reuse, successful binding advancement, and invalidation after another commit.
 - [`LibraryWriterTest.cpp`](../../../test/unit/runtime/library/LibraryWriterTest.cpp) protects committed multi-target behavior.
 
 ## Related documents

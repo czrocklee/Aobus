@@ -14,8 +14,8 @@
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
-#include <ao/uimodel/playback/seek/SeekViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 
 #include <ftxui/component/event.hpp>
@@ -119,7 +119,7 @@ namespace ao::tui
     LibraryController& _library;
     rt::PlaybackService& _playback;
     uimodel::PlaybackCommandSurface _playbackCommands;
-    uimodel::SeekViewModel _seekViewModel;
+    uimodel::PlaybackPositionViewModel _seekViewModel;
     uimodel::VolumeViewModel _volumeViewModel;
     OutputDeviceController* _outputDevices = nullptr;
     TuiHitRegions* _hitRegions = nullptr;

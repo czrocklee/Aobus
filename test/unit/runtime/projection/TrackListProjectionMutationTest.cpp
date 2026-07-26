@@ -32,7 +32,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
@@ -77,7 +77,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1, id2, id3, id4}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None, .sortBy = {TrackSortTerm{.field = TrackSortField::Title, .ascending = true}}});
@@ -108,7 +108,7 @@ namespace ao::rt::test
 
     auto proj = env.createProjection(ViewId{1});
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    auto sub = proj.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     // No grouping, yes comparator
     proj.setPresentation(TrackPresentationSpec{

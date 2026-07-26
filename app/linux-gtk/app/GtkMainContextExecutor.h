@@ -24,7 +24,7 @@ namespace ao::gtk
     GtkMainContextExecutor& operator=(GtkMainContextExecutor&&) = delete;
 
   private:
-    void wake() override;
+    void wake() noexcept override;
     void executeTask(std::move_only_function<void()>& task) override;
 
     Glib::Dispatcher _dispatcher;

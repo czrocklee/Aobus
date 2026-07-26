@@ -588,20 +588,10 @@ namespace ao::rt
     // consistent on its own, and holding the mutation mutex here would not
     // keep the plan fresh anyway (the lock is released before apply).
     auto scanService = LibraryScan{_implPtr->library};
+    auto publishProgress = _implPtr->makeProgressPublisher();
     auto planResult = scanService.buildPlan(
-      [this](std::filesystem::path const& path)
-      {
-        auto subject = path.filename().string();
-        _implPtr->asyncRuntime.callbackExecutor().dispatch(
-          [this, subject = std::move(subject)]
-          {
-            _implPtr->changes.notifyLibraryTaskProgress(LibraryChanges::LibraryTaskProgressUpdated{
-              .kind = LibraryChanges::LibraryTaskProgressKind::Scanning,
-              .fraction = 0.0,
-              .subject = std::move(subject),
-            });
-          });
-      });
+      [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
+      { publishProgress(LibraryChanges::LibraryTaskProgressKind::Scanning, 0.0, path.filename().string()); });
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 

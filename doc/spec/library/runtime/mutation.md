@@ -148,7 +148,7 @@ The deterministic commit-result test seam is data-only: it terminates the native
 
 `Stale`, `Missing`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata/tag authoring outcomes.
 Input, validation, serialization, and pre-commit storage failures remain `Result` errors.
-After durable commit, publication enqueue or observer failure faults the coordinator and propagates as a committed-publication failure; it is never reported as an ordinary pre-commit error, and the runtime rejects every later mutation.
+After durable commit, revision-admission or publication-enqueue failure faults the coordinator and propagates as a committed-publication failure; it is never reported as an ordinary pre-commit error, and the runtime rejects every later mutation.
 
 ## Persistence and versioning
 

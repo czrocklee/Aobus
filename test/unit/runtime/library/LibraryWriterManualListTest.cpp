@@ -30,7 +30,7 @@ namespace ao::rt::test
     {
       ManualListWriterFixture()
         : writerFixture{libraryFixture.library(), changes}
-        , listSub{changes.onChanged([this](LibraryChangeSet const& event) { listEvents.push_back(event); })}
+        , listSub{changes.onChanged([this](LibraryChangeSet const& event) noexcept { listEvents.push_back(event); })}
       {
       }
 

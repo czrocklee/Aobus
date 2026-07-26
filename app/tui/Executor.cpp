@@ -18,7 +18,7 @@ namespace ao::tui
   {
   }
 
-  void Executor::wake()
+  void Executor::wake() noexcept
   {
     _screen.Post([this] { drainQueuedTasks(); });
   }

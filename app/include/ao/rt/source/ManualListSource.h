@@ -61,6 +61,7 @@ namespace ao::rt
     bool contains(TrackId id) const;
 
   private:
+    void discardSnapshot() noexcept override;
     void ensureLive() const;
     void loadStoredTracks(library::ListView const& view);
     void rebuildEffectiveTracks();

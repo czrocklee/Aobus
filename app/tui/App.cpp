@@ -43,7 +43,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
-#include <ao/uimodel/playback/seek/PlaybackTimeViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -595,9 +595,9 @@ namespace ao::tui
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};
     auto optPreviewElapsed = std::optional<std::chrono::milliseconds>{};
-    auto playbackTime = uimodel::PlaybackTimeViewModel{
+    auto playbackTime = uimodel::PlaybackPositionViewModel{
       playback,
-      [&](uimodel::PlaybackTimeViewState const& view)
+      [&](uimodel::PlaybackPositionViewState const& view)
       {
         clockTickActive.store(shouldTickTransportClock(playback.snapshot().transport.transport));
 
@@ -631,7 +631,7 @@ namespace ao::tui
     runtime.notifications().post(rt::NotificationSeverity::Info, "Ready", rt::NotificationLifetime::transient());
 
     auto playbackSub =
-      playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) { requestRefresh(); });
+      playback.events().onSnapshot([requestRefresh](rt::PlaybackSnapshot const&) noexcept { requestRefresh(); });
     auto outputDevices = OutputDeviceController{playback, requestRefresh};
     auto commandCompletions = CommandCompletionProvider{runtime.completion(), runtime.workspace()};
     auto events = EventController{screen,

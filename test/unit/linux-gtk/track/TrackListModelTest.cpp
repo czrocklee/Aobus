@@ -167,7 +167,7 @@ namespace ao::gtk::test
       }
 
       async::Subscription subscribe(
-        std::move_only_function<void(rt::TrackListProjectionDeltaBatch const&)> handler) override
+        std::move_only_function<void(rt::TrackListProjectionDeltaBatch const&) noexcept> handler) override
       {
         if (_invalidated)
         {

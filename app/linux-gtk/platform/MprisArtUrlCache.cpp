@@ -181,30 +181,38 @@ namespace ao::gtk::platform
           optResult = std::move(optCachedEntry);
         }
       }
-
-      if (!optResult)
-      {
-        auto bytesResult = co_await tasks->loadResourceAsync(resourceId, stopToken);
-
-        if (!bytesResult)
-        {
-          if (bytesResult.error().code == Error::Code::ValueTooLarge)
-          {
-            APP_LOG_WARN("MPRIS cover resource {} exceeds the interactive byte limit", resourceId.raw());
-          }
-        }
-        else if (*bytesResult && !(**bytesResult).empty())
-        {
-          auto bytes = std::move(**bytesResult);
-          co_await runtime->resumeOnWorker(stopToken);
-          optResult = exportResource(cacheDir, resourceId, bytes);
-        }
-      }
     }
     catch (...)
     {
       async::rethrowIfOperationCancelled();
       runtime->reportUnhandledException(std::current_exception(), "MPRIS cover-art materialization workflow");
+    }
+
+    if (!optResult)
+    {
+      auto bytesResult = co_await tasks->loadResourceAsync(resourceId, stopToken);
+
+      if (!bytesResult)
+      {
+        if (bytesResult.error().code == Error::Code::ValueTooLarge)
+        {
+          APP_LOG_WARN("MPRIS cover resource {} exceeds the interactive byte limit", resourceId.raw());
+        }
+      }
+      else if (*bytesResult && !(**bytesResult).empty())
+      {
+        try
+        {
+          auto bytes = std::move(**bytesResult);
+          co_await runtime->resumeOnWorker(stopToken);
+          optResult = exportResource(cacheDir, resourceId, bytes);
+        }
+        catch (...)
+        {
+          async::rethrowIfOperationCancelled();
+          runtime->reportUnhandledException(std::current_exception(), "MPRIS cover-art materialization workflow");
+        }
+      }
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

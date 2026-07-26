@@ -7,7 +7,6 @@
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -22,7 +21,6 @@
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers.hpp>
 
 #include <array>
 #include <optional>
@@ -189,10 +187,10 @@ namespace ao::rt::test
 
     auto allTracksBatches = std::vector<TrackSourceDeltaBatch>{};
     auto smartBatches = std::vector<TrackSourceDeltaBatch>{};
-    auto allTracksSubscription =
-      allTracksLease->subscribe([&](TrackSourceDeltaBatch const& batch) { allTracksBatches.push_back(batch); });
+    auto allTracksSubscription = allTracksLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept
+                                                           { allTracksBatches.push_back(batch); });
     auto smartSubscription =
-      smartSource.subscribe([&](TrackSourceDeltaBatch const& batch) { smartBatches.push_back(batch); });
+      smartSource.subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { smartBatches.push_back(batch); });
 
     auto const result = writerFixture.updateMetadata(std::array{trackId}, MetadataPatch{.optTitle = "After"});
 
@@ -227,7 +225,7 @@ namespace ao::rt::test
       cache.reloadAllTracks();
       optLease.emplace(ao::test::requireValue(cache.acquire(kAllTracksListId)));
       subscription =
-        (*optLease)->subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+        (*optLease)->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
       REQUIRE((*optLease)->size() == 1);
       CHECK((*optLease)->trackIdAt(0) == trackId);
@@ -263,7 +261,8 @@ namespace ao::rt::test
     CHECK(&reacquired.source() == identity);
 
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = lease->subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      lease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     REQUIRE(writer.insertManualListTracks(listId, 0, std::array{trackId}));
 
@@ -302,7 +301,7 @@ namespace ao::rt::test
     auto* const oldIdentity = &oldLease.source();
     auto oldBatches = std::vector<TrackSourceDeltaBatch>{};
     auto oldSubscription =
-      oldLease->subscribe([&](TrackSourceDeltaBatch const& batch) { oldBatches.push_back(batch); });
+      oldLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { oldBatches.push_back(batch); });
 
     REQUIRE(writer.deleteList(listId));
     REQUIRE(oldLease->state() == TrackSourceState::Invalidated);
@@ -347,9 +346,9 @@ namespace ao::rt::test
     auto parentBatches = std::vector<TrackSourceDeltaBatch>{};
     auto childBatches = std::vector<TrackSourceDeltaBatch>{};
     auto parentSubscription =
-      parentAgain->subscribe([&](TrackSourceDeltaBatch const& batch) { parentBatches.push_back(batch); });
+      parentAgain->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { parentBatches.push_back(batch); });
     auto childSubscription =
-      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) { childBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { childBatches.push_back(batch); });
 
     REQUIRE(writer.deleteList(parentId));
 
@@ -386,7 +385,7 @@ namespace ao::rt::test
     auto* const childIdentity = &childLease.source();
     auto childBatches = std::vector<TrackSourceDeltaBatch>{};
     auto childSubscription =
-      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) { childBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { childBatches.push_back(batch); });
 
     REQUIRE(writer.updateList(LibraryWriter::ListDraft{
       .kind = LibraryWriter::ListKind::Manual,
@@ -426,7 +425,8 @@ namespace ao::rt::test
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto* const identity = &lease.source();
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = lease->subscribe([&](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      lease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     draft.listId = listId;
     draft.name = "Metadata only";
@@ -464,7 +464,7 @@ namespace ao::rt::test
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      lease->subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      lease->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     auto const moveResult = writer.moveManualListTracks(listId, std::array{second}, 0);
     REQUIRE(moveResult);
@@ -537,7 +537,7 @@ namespace ao::rt::test
     bool handledInsertion = false;
     auto nestedError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = lease->subscribe(
-      [&](TrackSourceDeltaBatch const& batch)
+      [&](TrackSourceDeltaBatch const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -614,7 +614,7 @@ namespace ao::rt::test
     bool handledInsertion = false;
     auto nestedError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = childLease->subscribe(
-      [&](TrackSourceDeltaBatch const& batch)
+      [&](TrackSourceDeltaBatch const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -640,7 +640,7 @@ namespace ao::rt::test
         snapshotAfterNestedUpdate = sourceTrackIds(childLease.source());
       });
     [[maybe_unused]] auto trailingSubscription =
-      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) { trailingBatches.push_back(batch); });
+      childLease->subscribe([&](TrackSourceDeltaBatch const& batch) noexcept { trailingBatches.push_back(batch); });
 
     auto const result = writer.insertManualListTracks(childId, 1, std::array{inserted});
 
@@ -676,7 +676,7 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceInvalidated>(batches[1].deltas.front()));
   }
 
-  TEST_CASE("TrackSourceCache - reentrant mutations are rejected before an observer exception faults authoring",
+  TEST_CASE("TrackSourceCache - mutations reentered from a delta observer are rejected",
             "[runtime][regression][source][manual-list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -717,7 +717,7 @@ namespace ao::rt::test
     auto intermediateReparentError = Error::Code::Generic;
     auto finalReparentError = Error::Code::Generic;
     [[maybe_unused]] auto subscription = childLease->subscribe(
-      [&](TrackSourceDeltaBatch const& batch)
+      [&](TrackSourceDeltaBatch const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -759,11 +759,9 @@ namespace ao::rt::test
         {
           finalReparentError = finalResult.error().code;
         }
-
-        throwException<Exception>("reentrant observer failure");
       });
 
-    CHECK_THROWS_WITH(writer.insertManualListTracks(childId, 1, std::array{second}), "reentrant observer failure");
+    REQUIRE(writer.insertManualListTracks(childId, 1, std::array{second}));
 
     CHECK(nestedInsertError == Error::Code::InvalidState);
     CHECK(intermediateReparentError == Error::Code::InvalidState);
@@ -784,9 +782,8 @@ namespace ao::rt::test
       CHECK(optView->parentId() == oldParentId);
     }
 
-    auto const rejectedAfterFault = writer.deleteList(finalParentId);
-    REQUIRE_FALSE(rejectedAfterFault);
-    CHECK(rejectedAfterFault.error().code == Error::Code::InvalidState);
+    // Rejecting the reentrant attempts is not a fault: authoring stays open.
+    CHECK(writer.deleteList(finalParentId));
   }
 
   TEST_CASE("TrackSourceCache - hidden manual insert does not publish and re-enters in stored order",
@@ -814,7 +811,7 @@ namespace ao::rt::test
     auto childLease = ao::test::requireValue(cache.acquire(childId));
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      childLease->subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      childLease->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     auto const hiddenInsert = writer.insertManualListTracks(childId, 1, std::array{hidden});
     REQUIRE(hiddenInsert);
@@ -853,7 +850,7 @@ namespace ao::rt::test
     auto lease = ao::test::requireValue(cache.acquire(listId));
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      lease->subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      lease->subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     auto const result = writer.deleteTrack(deleted);
 

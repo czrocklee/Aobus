@@ -55,7 +55,7 @@ namespace ao::rt::test
     auto source = ManualListSource{initialView.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     auto replacementView = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
     source.reloadFromListView(replacementView.view());
@@ -76,7 +76,7 @@ namespace ao::rt::test
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     auto observedSnapshots = std::vector<std::vector<TrackId>>{};
     [[maybe_unused]] auto subscription = source.subscribe(
-      [&source, &batches, &observedSnapshots](TrackSourceDeltaBatch const& batch)
+      [&source, &batches, &observedSnapshots](TrackSourceDeltaBatch const& batch) noexcept
       {
         batches.push_back(batch);
         observedSnapshots.push_back(sourceTrackIds(source));
@@ -101,7 +101,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     source.applyManualTracksInsert(ManualTracksInsert{.storedIndex = 1, .trackIds = {TrackId{2}, TrackId{3}}});
 
@@ -139,7 +139,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     source.applyManualTracksRemove(ManualTracksRemove{
       .removals = {{.start = 4, .trackIds = {TrackId{5}}}, {.start = 1, .trackIds = {TrackId{2}, TrackId{3}}}}});
@@ -163,7 +163,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     source.applyManualTracksMove(ManualTracksMove{
       .removals = {{.start = 4, .trackIds = {TrackId{5}}}, {.start = 2, .trackIds = {TrackId{3}}}},
@@ -195,9 +195,9 @@ namespace ao::rt::test
     auto firstMoveBatches = std::vector<TrackSourceDeltaBatch>{};
     auto tailMoveBatches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto firstMoveSubscription = moveFirstToEnd.subscribe(
-      [&firstMoveBatches](TrackSourceDeltaBatch const& batch) { firstMoveBatches.push_back(batch); });
+      [&firstMoveBatches](TrackSourceDeltaBatch const& batch) noexcept { firstMoveBatches.push_back(batch); });
     [[maybe_unused]] auto tailMoveSubscription = moveTailToFront.subscribe(
-      [&tailMoveBatches](TrackSourceDeltaBatch const& batch) { tailMoveBatches.push_back(batch); });
+      [&tailMoveBatches](TrackSourceDeltaBatch const& batch) noexcept { tailMoveBatches.push_back(batch); });
 
     moveFirstToEnd.applyManualTracksMove(ManualTracksMove{
       .removals = {{.start = 0, .trackIds = {TrackId{1}}}},
@@ -247,7 +247,7 @@ namespace ao::rt::test
     auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDeltaBatch>{};
     [[maybe_unused]] auto subscription =
-      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+      source.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     source.applyManualTracksMove(ManualTracksMove{
       .removals = {{.start = 2, .trackIds = {TrackId{3}}}},

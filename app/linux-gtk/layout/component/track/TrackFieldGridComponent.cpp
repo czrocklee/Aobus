@@ -24,7 +24,7 @@
 #include <ao/rt/completion/MetadataValueCompleter.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
@@ -1133,7 +1133,7 @@ namespace ao::gtk::layout
         _optEditSnapshot.emplace(std::move(snapshot));
         _editSessionPtr = std::move(*sessionResult);
         _editSessionInvalidatedSubscription = _editSessionPtr->onInvalidated(
-          [this]
+          [this] noexcept
           {
             Glib::signal_idle().connect_once(sigc::track_object(
               [this]

@@ -86,7 +86,7 @@ For notification-like services, cover:
 - authoritative expiry and stale timer generations.
 - feed/state projection.
 - immutable update delivery and non-emission for unchanged keyed requests.
-- observer failure and reentrant FIFO delivery when those are part of the service contract.
+- the `noexcept` observer contract and reentrant FIFO delivery when those are part of the service contract.
 
 ## Callback tests
 
@@ -95,7 +95,7 @@ Callback assertions should be specific enough to reject wrong events:
 ```cpp
 auto received = std::vector<NotificationFeedUpdate>{};
 auto sub = service.onFeedUpdated(
-  [&](auto const& update) { received.push_back(update); });
+  [&](auto const& update) noexcept { received.push_back(update); });
 
 service.post(NotificationSeverity::Warning,
              "Device unavailable",
@@ -109,6 +109,8 @@ CHECK(received[0].feedPtr->entries.back().message == NotificationMessage{"Device
 ```
 
 Avoid only checking a boolean unless the contract has no payload.
+Do not invoke `REQUIRE`, `CHECK`, or `FAIL` inside a `noexcept` callback: Catch2 may throw while abort-after is active.
+Record the callback payload or outcome and assert after delivery returns.
 
 ## Subscriptions and lifetime
 
@@ -117,7 +119,7 @@ Keep subscriptions in named variables when their lifetime keeps callbacks connec
 ```cpp
 auto latestFeed = std::shared_ptr<NotificationFeedState const>{};
 auto sub = service.onFeedUpdated(
-  [&](auto const& update) { latestFeed = update.feedPtr; });
+  [&](auto const& update) noexcept { latestFeed = update.feedPtr; });
 ```
 
 For cancellation/lifetime tests, assert both sides:

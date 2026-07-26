@@ -9,7 +9,6 @@
 #include "test/unit/library/TrackTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Sleeper.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
@@ -719,8 +718,8 @@ namespace ao::rt::test
     auto const insertedIds = std::vector{insertedBeforeCurrent};
     auto const removedIds = std::vector{removedSuccessor};
     auto changedStates = std::vector<PlaybackSnapshot>{};
-    auto const changedSubscription = runtime.playback().events().onSnapshot([&](PlaybackSnapshot const& snapshot)
-                                                                            { changedStates.push_back(snapshot); });
+    auto const changedSubscription = runtime.playback().events().onSnapshot(
+      [&](PlaybackSnapshot const& snapshot) noexcept { changedStates.push_back(snapshot); });
 
     auto const inserted = runtime.library().writer().insertManualListTracks(manual.listId, 0, insertedIds);
     REQUIRE(inserted);
@@ -752,7 +751,7 @@ namespace ao::rt::test
     CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Playing);
   }
 
-  TEST_CASE("PlaybackSession - restore contains observer exceptions and defers nested playback commands",
+  TEST_CASE("PlaybackSession - restore defers nested playback commands issued by a snapshot observer",
             "[runtime][regression][playback-session][concurrency]")
   {
     auto tempDir = ao::test::TempDir{};
@@ -779,13 +778,16 @@ namespace ao::rt::test
     bool nestedRestoreAccepted = false;
     auto nestedRestoreError = Error::Code::Generic;
     bool nestedLaunchAccepted = false;
+    auto observedSuccessionTrackId = kInvalidTrackId;
+    auto observedTransportTrackId = kInvalidTrackId;
+    auto observedElapsed = std::chrono::milliseconds{};
     auto snapshotSubscription = runtime.playback().events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         ++snapshotCount;
-        CHECK(snapshot.succession.currentTrackId == firstTrackId);
-        CHECK(snapshot.transport.nowPlaying.trackId == firstTrackId);
-        CHECK(snapshot.transport.elapsed == std::chrono::milliseconds{400});
+        observedSuccessionTrackId = snapshot.succession.currentTrackId;
+        observedTransportTrackId = snapshot.transport.nowPlaying.trackId;
+        observedElapsed = snapshot.transport.elapsed;
 
         if (!nestedCommandRequested)
         {
@@ -801,8 +803,6 @@ namespace ao::rt::test
           auto const nestedLaunch = runtime.playback().commands().startFromView(viewId, secondTrackId);
           nestedLaunchAccepted = nestedLaunch.has_value();
         }
-
-        throwException<Exception>("scripted restored snapshot observer failure");
       });
 
     auto const restored = runtime.restorePlaybackSession();
@@ -810,6 +810,9 @@ namespace ao::rt::test
     REQUIRE(restored);
     REQUIRE(restored->restored);
     CHECK(snapshotCount == 1);
+    CHECK(observedSuccessionTrackId == firstTrackId);
+    CHECK(observedTransportTrackId == firstTrackId);
+    CHECK(observedElapsed == std::chrono::milliseconds{400});
     CHECK(nestedCommandRequested);
     CHECK_FALSE(nestedRestoreAccepted);
     CHECK(nestedRestoreError == Error::Code::InvalidState);
@@ -848,7 +851,7 @@ namespace ao::rt::test
 
     bool queuedRepeat = false;
     auto const snapshotSubscription = runtime.playback().events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
         {
@@ -1352,7 +1355,7 @@ namespace ao::rt::test
     CHECK(projectionPtr->trackIdAt(1) == charlie);
     std::uint32_t projectionBatchCount = 0;
     auto const projectionSubscription =
-      projectionPtr->subscribe([&](TrackListProjectionDeltaBatch const&) { ++projectionBatchCount; });
+      projectionPtr->subscribe([&](TrackListProjectionDeltaBatch const&) noexcept { ++projectionBatchCount; });
     // The subscription synchronously publishes its initial snapshot; measure only the reorder below.
     projectionBatchCount = 0;
 

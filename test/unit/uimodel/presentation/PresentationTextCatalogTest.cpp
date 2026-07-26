@@ -202,4 +202,13 @@ namespace ao::uimodel::test
     CHECK(catalog.libraryTaskProgressCompact(Kind::IndexingAudioIdentity, "literal.flac") ==
           "Indexing audio identity: literal.flac");
   }
+
+  TEST_CASE("PresentationTextCatalog - track filter errors carry the parser diagnostic verbatim",
+            "[uimodel][unit][presentation]")
+  {
+    auto const catalog = PresentationTextCatalog{};
+
+    CHECK(catalog.trackFilterError("unexpected token ')'") == "Filter error: unexpected token ')'");
+    CHECK(catalog.trackFilterError("") == "Filter error: ");
+  }
 } // namespace ao::uimodel::test

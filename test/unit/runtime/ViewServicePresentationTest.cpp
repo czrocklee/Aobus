@@ -180,7 +180,7 @@ namespace ao::rt::test
     REQUIRE(preset != nullptr);
     auto const result = env.requireView(service);
     std::int32_t published = 0;
-    auto const sub = service.onPresentationChanged([&](auto const&) { ++published; });
+    auto const sub = service.onPresentationChanged([&](auto const&) noexcept { ++published; });
     REQUIRE(service.setPresentation(result, preset->spec));
     CHECK(published == 1);
 
@@ -217,7 +217,7 @@ namespace ao::rt::test
     auto const result = env.requireView(service);
 
     auto received = TrackPresentationSpec{};
-    auto const sub = service.onPresentationChanged([&](auto const& ev) { received = ev.presentation; });
+    auto const sub = service.onPresentationChanged([&](auto const& ev) noexcept { received = ev.presentation; });
 
     auto const* preset = builtinTrackPresentationPreset("albums");
     REQUIRE(preset != nullptr);
@@ -235,7 +235,7 @@ namespace ao::rt::test
     auto const result = env.requireView(service);
 
     std::int32_t callCount = 0;
-    auto const sub = service.onPresentationChanged([&](auto const&) { ++callCount; });
+    auto const sub = service.onPresentationChanged([&](auto const&) noexcept { ++callCount; });
 
     auto const* artistPreset = builtinTrackPresentationPreset("artists");
     REQUIRE(artistPreset != nullptr);

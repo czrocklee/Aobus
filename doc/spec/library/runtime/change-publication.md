@@ -3,14 +3,14 @@ id: library.change-publication
 type: spec
 status: current
 domain: library
-summary: Defines revision allocation, ordered changeset publication, and library task notification delivery.
+summary: Defines strict revision admission, two-phase changeset publication through one noexcept replica, and library task notification delivery.
 ---
 # Library change publication
 
 ## Scope
 
 This specification defines the committed revision stream exposed by `LibraryChanges` and its separate library-task progress channels.
-It owns revision allocation, changeset categories, ordering, callback affinity, reentrancy visibility, and publication lifetime.
+It owns revision allocation, changeset categories, ordering, replica application, callback affinity, reentrancy visibility, and publication lifetime.
 
 Mutation semantics belong to [library access and mutation](mutation.md).
 Source consumption of changesets belongs to [track sources](../source/track-source.md).
@@ -23,10 +23,12 @@ This contract belongs to the **application runtime** layer in the [system archit
 ## Terminology
 
 - **Revision** is the unsigned 64-bit committed library sequence stored in the metadata database.
+- **Expected revision** is the only revision the bus accepts after the last acknowledged publication.
 - **Submission** is the private coordinator handoff of one committed changeset and its completion callback.
-- **Publication** is ordered observer delivery on the callback executor.
-- **Holdback** is the set of submitted changesets waiting for preceding revisions.
-- **Publication completion** is the coordinator acknowledgement after every still-connected synchronous observer has run for one revision.
+- **Publication** is ordered delivery of one revision on the callback executor, in two phases.
+- **Replica** is the single bound consumer that keeps the derived state the rest of the runtime reads through. At most one is bound at a time.
+- **Notification** is phase-two observer delivery after replica application.
+- **Publication completion** is the coordinator acknowledgement after both phases have run for one revision.
 
 ## Invariants
 
@@ -34,7 +36,9 @@ This contract belongs to the **application runtime** layer in the [system archit
 - An aborted or preview transaction does not advance the revision.
 - A producer submits a changeset only after the corresponding transaction commits.
 - Only `LibraryMutationService` can submit committed content changes; ordinary consumers receive a const observation surface.
-- Observers receive committed changesets in strictly increasing contiguous revision order even when producers submit out of order.
+- The coordinator submits exactly the expected successor revision and keeps a second commit closed while publication is active.
+- The bus rejects rather than buffers any revision other than that exact successor.
+- A revision is announced to observers only after the bound replica applies it.
 - A callback observes the complete committed library state described by its changeset, including every dictionary mapping referenced by changed records.
 - Authoring becomes available at revision `R` only after publication completion for `R`.
 - Task progress and completion are operational notifications and do not consume library revisions.
@@ -58,19 +62,27 @@ One committed transaction produces at most one changeset.
 The default changes bus publishes synchronously for focused tests.
 Production construction receives a callback executor and the last already-published revision.
 
-Submitting revision `N` before an expected lower revision retains `N` in holdback.
-When the missing revision arrives, the bus delivers it and then drains every now-contiguous held revision.
-No later revision overtakes an earlier one.
+The first submission to the default test bus establishes its revision baseline.
+The production bus expects exactly one greater than the supplied last-published revision.
+A submission with any other revision, or a second submission while that revision is being delivered, is rejected immediately rather than retained for later delivery.
+The coordinator's publication barrier makes the single in-flight submission the normal production topology.
 
 Handlers run on the configured callback executor.
-Every still-connected handler runs even when an earlier handler throws; the first observer failure is retained until delivery and coordinator completion finish.
-The completion callback advances coordinator availability only after those handlers return.
+
+Publication delivers one revision in two phases.
+Phase one hands the changeset to the bound replica through a `noexcept` callable; failure is fatal rather than converted into a publication result.
+Phase two announces the applied revision to observers, so reaching an observer states that the library is readable at that revision.
+A revision with no bound replica proceeds directly to notification.
+Binding a new replica during active publication is rejected. Unbinding does
+not interrupt a replica already pinned for that publication, but no replacement
+may become current until publication completes.
+The expected revision advances only after phase two returns.
+The completion callback advances coordinator availability only after both phases return.
 The coordinator keeps writer admission closed while it delivers the resulting availability notification.
 An `Available(R)` handler may bind targets at `R` because projections are already current, but a mutation attempted reentrantly from that handler is rejected until the notification returns.
 
 A callback-thread attempt to mutate through the same coordinator while publication is active is rejected as reentrant.
 A foreign worker waits for publication completion before acquiring writer ownership.
-Nested revisions from independent test producers may enter holdback, but current-revision delivery completes before any later revision is observed.
 
 ## Task notifications
 
@@ -83,13 +95,16 @@ Scan and YAML operations publish content changes through normal revisioned chang
 ## Failure and lifetime
 
 A failed or aborted pre-commit mutation submits nothing.
-After durable commit, executor enqueue failure or any observer failure completes the coordinator with that exception, moves authoring to terminal `Faulted`, and rejects later live-runtime mutations.
+After durable commit, revision-admission or executor enqueue failure completes the coordinator with that exception, moves authoring to terminal `Faulted`, and rejects later live-runtime mutations.
+Replica and notification handlers are `noexcept`; an exception terminates instead of being translated into recovery, refusal, or branch-local availability.
 The committed revision is not reported as an ordinary failed transaction and is not rolled back or followed by an inferred reset.
-An executor that contains callback exceptions may log rather than propagate the observer exception to the synchronous caller; the coordinator state still becomes `Faulted`, and authoring sessions reconcile that state before accepting a returned binding.
+The direct caller or callback-executor boundary surfaces the failure after the coordinator has entered `Faulted`; the notification framework does not reinterpret it.
 Reopening the runtime rebuilds consumers from durable storage.
 
 The bus outlives its subscriptions and all producers.
 Runtime teardown stops and joins task producers before destroying `LibraryChanges`.
+Queued delivery retains only weak bus state, and coordinator completions retain
+only weak coordinator lifetime state, so a retired owner is never re-entered.
 
 ## Persistence and versioning
 
@@ -100,15 +115,18 @@ Changesets are in-process values and have no persisted or compatibility format.
 ## Implementation map
 
 - [`LibraryChanges.h`](../../../../app/include/ao/rt/library/LibraryChanges.h) defines changesets and subscriptions.
-- [`LibraryChanges.cpp`](../../../../app/runtime/library/LibraryChanges.cpp) owns holdback and executor delivery.
+- [`LibraryChanges.cpp`](../../../../app/runtime/library/LibraryChanges.cpp) owns strict successor admission, one pending publication, and executor delivery.
+- [`Signal.h`](../../../../include/ao/async/Signal.h) carries the noexcept notification contract phase two uses.
+- [`TrackSourceCache.cpp`](../../../../app/runtime/source/TrackSourceCache.cpp) applies revisions to the runtime's derived source state.
 - [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns submission and publication-completion state.
 - [`MetadataStore`](../../../../include/ao/library/MetadataStore.h) owns in-transaction revision reads and bumps.
 - [`WriteTransaction`](../../../../include/ao/library/WriteTransaction.h) completes dictionary-index publication before the producer can submit a changeset.
 
 ## Test map
 
-- [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves in-band revisions, abort behavior, multi-worker holdback, and publication order.
-- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves projection-before-availability ordering, reentrancy closure, and enqueue/observer fault behavior.
+- [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves exact-successor admission, in-band revisions, abort behavior, single-replica binding, and unbound publication.
+- [`TrackSourceCacheTest.cpp`](../../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves source-state application.
+- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves replica-before-notification-before-availability ordering, reentrancy closure, and enqueue fault behavior.
 - Writer, scan, and transfer tests under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) prove changeset contents and post-commit visibility.
 - [`SourcePipelineOracleTest.cpp`](../../../../test/unit/runtime/source/SourcePipelineOracleTest.cpp) proves downstream state matches recomputation across mutation sequences.
 

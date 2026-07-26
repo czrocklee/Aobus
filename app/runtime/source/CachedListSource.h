@@ -73,6 +73,7 @@ namespace ao::rt
     std::optional<std::size_t> indexOf(TrackId id) const override;
 
   private:
+    void discardSnapshot() noexcept override;
     ManualListSource& manualImplementation();
     void syncManualDefinition(ManualListSource const& source);
     void subscribeToImplementation();

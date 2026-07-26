@@ -101,19 +101,18 @@ namespace ao::tui
   {
     auto optPreview = std::optional<CoverArtRows>{};
     auto optKittyPng = std::optional<std::vector<std::byte>>{};
+    auto bytesResult = co_await tasks->loadResourceAsync(resourceId, stopToken);
 
-    try
+    if (!bytesResult)
     {
-      auto bytesResult = co_await tasks->loadResourceAsync(resourceId, stopToken);
-
-      if (!bytesResult)
+      if (bytesResult.error().code == Error::Code::ValueTooLarge)
       {
-        if (bytesResult.error().code == Error::Code::ValueTooLarge)
-        {
-          APP_LOG_WARN("TUI cover resource {} exceeds the interactive byte limit", resourceId.raw());
-        }
+        APP_LOG_WARN("TUI cover resource {} exceeds the interactive byte limit", resourceId.raw());
       }
-      else if (*bytesResult)
+    }
+    else if (*bytesResult)
+    {
+      try
       {
         auto bytes = std::move(**bytesResult);
         co_await runtime->resumeOnWorker(stopToken);
@@ -127,11 +126,11 @@ namespace ao::tui
           optKittyPng = decodeCoverArtPng(bytes, kKittyCoverArtWidth, kKittyCoverArtHeight);
         }
       }
-    }
-    catch (...)
-    {
-      async::rethrowIfOperationCancelled();
-      runtime->reportUnhandledException(std::current_exception(), "TUI cover-art decode workflow");
+      catch (...)
+      {
+        async::rethrowIfOperationCancelled();
+        runtime->reportUnhandledException(std::current_exception(), "TUI cover-art decode workflow");
+      }
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);

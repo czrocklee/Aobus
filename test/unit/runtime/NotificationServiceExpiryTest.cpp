@@ -21,7 +21,8 @@ namespace ao::rt::test
       NotificationExpiryFixture()
         : runtime{executor, 1, exceptions.handler(), &sleeper}
         , service{runtime}
-        , updateSub{service.onFeedUpdated([this](NotificationFeedUpdate const& update) { updates.push_back(update); })}
+        , updateSub{
+            service.onFeedUpdated([this](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); })}
       {
       }
 

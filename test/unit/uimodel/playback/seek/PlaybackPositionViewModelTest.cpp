@@ -10,10 +10,11 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/playback/seek/SeekViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -21,7 +22,7 @@ namespace ao::uimodel::test
   using namespace ao::rt::test;
   using namespace ao::rt;
 
-  TEST_CASE("SeekViewModel - reactive updates", "[uimodel][unit][playback]")
+  TEST_CASE("PlaybackPositionViewModel - reactive updates", "[uimodel][unit][playback]")
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto& playback = fixture.playback;
@@ -29,13 +30,13 @@ namespace ao::uimodel::test
     fixture.addReadyProvider();
     REQUIRE(fixture.executor.drainUntil([&] { return playbackTransport.state().ready; }));
 
-    auto log = ao::test::RenderLog<SeekViewState>{};
-    auto viewModel = SeekViewModel{playback, [&log](auto const& state) { log.render(state); }};
+    auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
+    auto viewModel = PlaybackPositionViewModel{playback, [&log](auto const& state) { log.render(state); }};
 
     SECTION("Initial state is insensitive when idle")
     {
       REQUIRE(!log.empty());
-      CHECK(log.last().enabled == false);
+      CHECK(log.last().seekable == false);
       CHECK(log.last().duration == std::chrono::milliseconds{0});
       CHECK(log.last().elapsed == std::chrono::milliseconds{0});
 
@@ -43,15 +44,6 @@ namespace ao::uimodel::test
       fixture.commands().setShuffleMode(ShuffleMode::On);
       CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
       CHECK(log.empty());
-    }
-
-    SECTION("refresh with override")
-    {
-      log.clear();
-      viewModel.refresh(true, std::chrono::seconds{5});
-      REQUIRE(!log.empty());
-      CHECK(log.last().elapsed == std::chrono::seconds{5});
-      CHECK(log.last().immediateUpdate == true);
     }
 
     SECTION("seek commands")
@@ -77,7 +69,7 @@ namespace ao::uimodel::test
       CHECK(log.last().duration == expectedDuration);
       CHECK(log.last().elapsed == std::chrono::milliseconds{250});
       CHECK(log.last().isPlaying == true);
-      CHECK(log.last().enabled == true);
+      CHECK(log.last().seekable == true);
       CHECK(log.last().immediateUpdate == false);
       CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{0});
 
@@ -87,12 +79,12 @@ namespace ao::uimodel::test
       CHECK(log.last().duration == expectedDuration);
       CHECK(log.last().elapsed == std::chrono::milliseconds{500});
       CHECK(log.last().isPlaying == true);
-      CHECK(log.last().enabled == true);
+      CHECK(log.last().seekable == true);
       CHECK(log.last().immediateUpdate == true);
       CHECK(playbackTransport.state().duration == expectedDuration);
 
       auto seekEvents = std::vector<PlaybackTransport::SeekUpdate>{};
-      auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event)
+      auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event) noexcept
                                                     { seekEvents.push_back(event); });
 
       viewModel.seekBy(std::chrono::milliseconds{200});
@@ -121,12 +113,82 @@ namespace ao::uimodel::test
     SECTION("relative seek is unavailable without a known duration")
     {
       auto seekEvents = std::vector<PlaybackTransport::SeekUpdate>{};
-      auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event)
+      auto seekSub = playbackTransport.onSeekUpdate([&seekEvents](PlaybackTransport::SeekUpdate const& event) noexcept
                                                     { seekEvents.push_back(event); });
 
       viewModel.seekBy(std::chrono::seconds{5});
 
       CHECK(seekEvents.empty());
     }
+  }
+
+  TEST_CASE("PlaybackPositionViewModel - initial view state", "[uimodel][unit][playback]")
+  {
+    auto fixture = ApplicationPlaybackFixture{};
+
+    auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
+    auto const viewModel = PlaybackPositionViewModel{fixture.playback, [&log](auto const& view) { log.render(view); }};
+
+    REQUIRE(!log.empty());
+    CHECK(log.last().elapsed == std::chrono::milliseconds{0});
+    CHECK(log.last().duration == std::chrono::milliseconds{0});
+
+    log.clear();
+    fixture.commands().setShuffleMode(ShuffleMode::On);
+    CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
+    CHECK(log.empty());
+  }
+
+  TEST_CASE("PlaybackPositionViewModel - transport seeks render preview and final modes", "[uimodel][unit][playback]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
+    auto& playback = fixture.playback;
+    auto& playbackTransport = fixture.playbackTransport;
+    fixture.addReadyProvider();
+    REQUIRE(fixture.executor.drainUntil([&] { return playbackTransport.state().ready; }));
+
+    auto log = ao::test::RenderLog<PlaybackPositionViewState>{};
+    auto const viewModel = PlaybackPositionViewModel{playback, [&log](auto const& view) { log.render(view); }};
+
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Seek Test", .artist = "Artist", .album = "Album"});
+    auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
+    auto desc = PlaybackTransport::PlaybackRequest{
+      .item = NowPlayingInfo{.trackId = trackId, .title = "Seek Test", .artist = "Artist"},
+      .input = audio::PlaybackInput{.filePath = fixturePath, .duration = std::chrono::seconds{30}},
+    };
+    log.clear();
+    REQUIRE(playbackTransport.play(desc, kInvalidListId));
+    REQUIRE(
+      fixture.executor.drainUntil([&] { return playbackTransport.state().transport == audio::Transport::Playing; }));
+    fixture.executor.drain();
+    auto const expectedDuration = playbackTransport.state().duration;
+    REQUIRE(expectedDuration > std::chrono::milliseconds{0});
+    // Playback coalesces the preparing and started transitions into one
+    // coherent snapshot, so the view model settles on the playing state rather
+    // than observing each intermediate transport signal.
+    REQUIRE(!log.empty());
+    CHECK(log.last().isPlaying);
+
+    log.clear();
+    playbackTransport.seek(std::chrono::milliseconds{500}, PlaybackTransport::SeekMode::Final);
+    fixture.executor.drain();
+    REQUIRE(!log.empty());
+    CHECK(log.last().duration == expectedDuration);
+    CHECK(log.last().elapsed == std::chrono::milliseconds{500});
+    CHECK(log.last().isPlaying == true);
+    CHECK(log.last().isPreviewing == false);
+    CHECK(log.last().immediateUpdate == true);
+    CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{500});
+
+    log.clear();
+    playbackTransport.seek(std::chrono::milliseconds{250}, PlaybackTransport::SeekMode::Preview);
+    fixture.executor.drain();
+    REQUIRE(!log.empty());
+    CHECK(log.last().duration == expectedDuration);
+    CHECK(log.last().elapsed == std::chrono::milliseconds{250});
+    CHECK(log.last().isPlaying == true);
+    CHECK(log.last().isPreviewing == true);
+    CHECK(log.last().immediateUpdate == false);
+    CHECK(playbackTransport.state().elapsed == std::chrono::milliseconds{500});
   }
 } // namespace ao::uimodel::test

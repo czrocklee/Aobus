@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <deque>
-#include <exception>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -17,10 +16,28 @@
 
 namespace ao::async
 {
+  /**
+   * Multicast event source with subscription-scoped disconnection.
+   *
+   * Handlers are noexcept: an observer is told about something that already
+   * happened, so a failure it reports carries no decision the publisher could
+   * act on -- the state change cannot be undone. A handler that lets an
+   * exception escape therefore terminates the process at the throw point, with
+   * the faulting stack intact, rather than being logged and stepped over while
+   * the observer's state has silently diverged. Handlers that call fallible
+   * operations must contain the failure locally, where enough context remains
+   * to degrade meaningfully.
+   *
+   * `emit` and `post` inherit that guarantee. Both are noexcept, so an
+   * allocation failure while queueing a deferred emission or copying its
+   * arguments also terminates.
+   */
   template<typename... Args>
   class Signal final
   {
   public:
+    using Handler = std::move_only_function<void(Args...) noexcept>;
+
     Signal();
     ~Signal();
 
@@ -29,9 +46,9 @@ namespace ao::async
     Signal(Signal&&) = delete;
     Signal& operator=(Signal&&) = delete;
 
-    Subscription connect(std::move_only_function<void(Args...)> handler);
-    void emit(Args... args);
-    void post(Executor& executor, std::decay_t<Args>... args);
+    Subscription connect(Handler handler);
+    void emit(Args... args) noexcept;
+    void post(Executor& executor, std::decay_t<Args>... args) noexcept;
     bool hasConnectedHandlers() const;
     void disconnectAll();
 
@@ -39,14 +56,14 @@ namespace ao::async
     struct Slot final
     {
       std::size_t id = 0;
-      std::move_only_function<void(Args...)> handler;
+      Handler handler;
       bool connected = true;
     };
 
     class State final
     {
     public:
-      std::size_t connect(std::move_only_function<void(Args...)> handler)
+      std::size_t connect(Handler handler)
       {
         if (!_active)
         {
@@ -58,7 +75,7 @@ namespace ao::async
         return id;
       }
 
-      void emit(Args... args)
+      void emit(Args... args) noexcept
       {
         if (!_active)
         {
@@ -71,32 +88,13 @@ namespace ao::async
         // returns.
         auto const guard = EmitGuard{*this};
         auto const count = _handlers.size();
-        auto firstExceptionPtr = std::exception_ptr{};
 
         for (std::size_t index = 0; index < count && _active; ++index)
         {
           if (auto& slot = _handlers[index]; slot.connected && slot.handler)
           {
-            try
-            {
-              slot.handler(args...);
-            }
-            catch (...)
-            {
-              // One faulty observer must not starve later observers. Preserve
-              // the first failure for the signal owner after every
-              // still-connected slot has run.
-              if (!firstExceptionPtr)
-              {
-                firstExceptionPtr = std::current_exception();
-              }
-            }
+            slot.handler(args...);
           }
-        }
-
-        if (firstExceptionPtr)
-        {
-          std::rethrow_exception(firstExceptionPtr);
         }
       }
 
@@ -178,18 +176,7 @@ namespace ao::async
 
       void compactDisconnected()
       {
-        for (auto it = _handlers.begin(); it != _handlers.end();)
-        {
-          if (!it->connected)
-          {
-            it = _handlers.erase(it);
-          }
-          else
-          {
-            ++it;
-          }
-        }
-
+        std::erase_if(_handlers, [](Slot const& slot) { return !slot.connected; });
         _needsCompact = false;
       }
 
@@ -216,7 +203,7 @@ namespace ao::async
   }
 
   template<typename... Args>
-  Subscription Signal<Args...>::connect(std::move_only_function<void(Args...)> handler)
+  Subscription Signal<Args...>::connect(Handler handler)
   {
     auto const statePtr = _statePtr;
     auto const id = statePtr->connect(std::move(handler));
@@ -237,18 +224,18 @@ namespace ao::async
   }
 
   template<typename... Args>
-  void Signal<Args...>::emit(Args... args)
+  void Signal<Args...>::emit(Args... args) noexcept
   {
     auto const statePtr = _statePtr;
     statePtr->emit(args...);
   }
 
   template<typename... Args>
-  void Signal<Args...>::post(Executor& executor, std::decay_t<Args>... args)
+  void Signal<Args...>::post(Executor& executor, std::decay_t<Args>... args) noexcept
   {
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     executor.defer(
-      [weakStatePtr, ... args = std::move(args)] mutable
+      [weakStatePtr, ... args = std::move(args)] mutable noexcept
       {
         if (auto statePtr = weakStatePtr.lock(); statePtr != nullptr)
         {

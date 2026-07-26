@@ -35,6 +35,7 @@ Integer keys use LMDB native word order and record structs are host-endian; [lib
 ## Transaction access
 
 `MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot.
+Failure to begin the native transaction raises the library's general storage exception; this API has no recoverable typed-error channel.
 `WritableMusicLibrary::acquire(MusicLibrary&)` returns the explicit move-only capability that can create a `WriteTransaction`; `MusicLibrary` exposes no public write-transaction factory.
 The write wrapper owns one native transaction, its transaction-local dictionary writer, the process writer gate, and a shared anchor to the writable capability's lease.
 

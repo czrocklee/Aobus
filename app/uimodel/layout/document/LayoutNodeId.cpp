@@ -122,11 +122,6 @@ namespace ao::uimodel
     }
   } // namespace
 
-  void visitLayoutNode(LayoutNode const& node, LayoutNodeVisitor const& visitor)
-  {
-    visitNodeRecursive(node, visitor);
-  }
-
   void visitLayoutDocumentNodes(LayoutDocument const& doc, LayoutNodeVisitor const& visitor)
   {
     visitNodeRecursive(doc.root, visitor);

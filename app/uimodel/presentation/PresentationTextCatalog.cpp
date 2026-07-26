@@ -12,6 +12,7 @@
 
 #include <array>
 #include <cstddef>
+#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -299,5 +300,10 @@ namespace ao::uimodel
     }
 
     return {};
+  }
+
+  std::string PresentationTextCatalog::trackFilterError(std::string_view const diagnostic) const
+  {
+    return std::format("Filter error: {}", diagnostic);
   }
 } // namespace ao::uimodel

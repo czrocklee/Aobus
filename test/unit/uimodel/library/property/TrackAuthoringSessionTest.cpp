@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
-#include <ao/Exception.h>
-#include <ao/async/Executor.h>
-#include <ao/async/Runtime.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
@@ -18,36 +13,11 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <functional>
 #include <utility>
 #include <vector>
 
 namespace ao::uimodel::test
 {
-  namespace
-  {
-    class SwallowingInlineExecutor final : public async::Executor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-
-      void dispatch(std::move_only_function<void()> task) override
-      {
-        try
-        {
-          task();
-        }
-        catch (...)
-        {
-          // This executor intentionally models a callback boundary that consumes failures.
-          return;
-        }
-      }
-
-      void defer(std::move_only_function<void()> task) override { dispatch(std::move(task)); }
-    };
-  } // namespace
-
   TEST_CASE("TrackAuthoringSession - owns stable targets and becomes stale after another commit",
             "[uimodel][unit][library-authoring]")
   {
@@ -61,7 +31,7 @@ namespace ao::uimodel::test
     CHECK(sessionPtr->isCurrent());
 
     std::size_t invalidatedCount = 0;
-    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] { ++invalidatedCount; });
+    auto subscription = sessionPtr->onInvalidated([&invalidatedCount] noexcept { ++invalidatedCount; });
     auto patch = rt::MetadataPatch{.optTitle = "Applied"};
     auto submitResult = sessionPtr->submitMetadata(patch);
 
@@ -125,46 +95,5 @@ namespace ao::uimodel::test
     REQUIRE(submitResult);
     CHECK(submitResult->status == rt::TrackAuthoringStatus::Stale);
     CHECK(fixture.tags(fixture.trackIds().front()) == std::vector<std::string>{"First"});
-  }
-
-  TEST_CASE("TrackAuthoringSession - post-commit publication failure makes the session stale",
-            "[uimodel][unit][library-authoring]")
-  {
-    auto fixture = TrackAuthoringFixture{1};
-    auto sessionResult = TrackAuthoringSession::begin(fixture.library(), fixture.trackIds());
-    REQUIRE(sessionResult);
-    auto sessionPtr = std::move(*sessionResult);
-    auto throwingSubscription = fixture.changes().onChanged(
-      [](rt::LibraryChangeSet const&) { throwException<Exception>("publication observer failed"); });
-
-    CHECK_THROWS_AS(sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Committed"}), Exception);
-    CHECK_FALSE(sessionPtr->isCurrent());
-    CHECK(fixture.title(fixture.trackIds().front()) == "Committed");
-    CHECK(fixture.library().authoringAvailability().state == rt::LibraryAuthoringState::Faulted);
-  }
-
-  TEST_CASE("TrackAuthoringSession - swallowed publication failure retains applied result but stales the session",
-            "[uimodel][unit][library-authoring]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto const trackId = library::test::addTrack(musicLibrary, library::test::TrackSpec{.title = "Before"});
-    auto executor = SwallowingInlineExecutor{};
-    auto asyncRuntime = async::Runtime{executor};
-    auto initialRead = musicLibrary.readTransaction();
-    auto changes = rt::LibraryChanges{executor, musicLibrary.libraryRevision(initialRead)};
-    auto library = rt::Library{asyncRuntime, musicLibrary, changes};
-    auto sessionResult = TrackAuthoringSession::begin(library, std::array{trackId});
-    REQUIRE(sessionResult);
-    auto sessionPtr = std::move(*sessionResult);
-    auto throwingSubscription =
-      changes.onChanged([](rt::LibraryChangeSet const&) { throwException<Exception>("publication observer failed"); });
-
-    auto submitResult = sessionPtr->submitMetadata(rt::MetadataPatch{.optTitle = "Committed"});
-
-    REQUIRE(submitResult);
-    CHECK(submitResult->status == rt::TrackAuthoringStatus::Applied);
-    CHECK_FALSE(sessionPtr->isCurrent());
-    CHECK(library.authoringAvailability().state == rt::LibraryAuthoringState::Faulted);
   }
 } // namespace ao::uimodel::test

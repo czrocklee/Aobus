@@ -5,11 +5,8 @@
 
 #include "image/ResourceImageLoader.h"
 #include <ao/CoreIds.h>
-#include <ao/async/Subscription.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
 
 #include <cstdint>
-#include <memory>
 
 namespace ao::gtk
 {
@@ -30,18 +27,13 @@ namespace ao::gtk
     void load(ResourceId resourceId);
     void clear();
 
-    void bindToDetailProjection(std::unique_ptr<rt::TrackDetailProjection> projectionPtr);
-
   private:
-    void handleDetailSnapshot(rt::TrackDetailSnapshot const& snap);
     void loadFullSize(ResourceId resourceId);
     void loadThumbnail(ResourceId resourceId);
     std::int32_t thumbnailPhysicalSize() const;
 
     ImageWidget& _widget;
     ResourceImageLoader& _loader;
-    std::unique_ptr<rt::TrackDetailProjection> _detailProjectionPtr;
-    async::Subscription _detailSub;
 
     bool _thumbnailMode = false;
     std::int32_t _thumbnailLogicalSize = 0;

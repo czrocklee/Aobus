@@ -30,7 +30,8 @@ namespace ao::rt::test
     list.reload();
 
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = list.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      list.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     auto t1 = libraryFixture.addTrack(makeSmartListSpec("Old", 2010));
     auto t2 = libraryFixture.addTrack(makeSmartListSpec("New1", 2021));
@@ -113,7 +114,8 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(list) == std::vector{first, second, third});
 
     auto batches = std::vector<TrackSourceDeltaBatch>{};
-    auto subscription = list.subscribe([&batches](TrackSourceDeltaBatch const& batch) { batches.push_back(batch); });
+    auto subscription =
+      list.subscribe([&batches](TrackSourceDeltaBatch const& batch) noexcept { batches.push_back(batch); });
 
     sourcePtr->replaceWithBatch(std::array{first, third, hidden, second},
                                 TrackSourceDeltaBatch{

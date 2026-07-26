@@ -82,15 +82,26 @@ namespace ao::rt
     Result<> openListInView(ViewId viewId, ListId listId);
     Result<PlaybackLaunchSpec> capturePlaybackLaunchSpec(ViewId viewId) const;
 
-    async::Subscription onDestroyed(std::move_only_function<void(ViewId)> handler);
-    async::Subscription onProjectionChanged(std::move_only_function<void(TrackListProjectionChanged const&)> handler);
-    async::Subscription onPresentationChanged(std::move_only_function<void(PresentationChanged const&)> handler);
-    async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler);
-    async::Subscription onListChanged(std::move_only_function<void(ListChanged const&)> handler);
+    async::Subscription onDestroyed(std::move_only_function<void(ViewId) noexcept> handler);
+    async::Subscription onProjectionChanged(
+      std::move_only_function<void(TrackListProjectionChanged const&) noexcept> handler);
+    async::Subscription onPresentationChanged(
+      std::move_only_function<void(PresentationChanged const&) noexcept> handler);
+    async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&) noexcept> handler);
+    async::Subscription onListChanged(std::move_only_function<void(ListChanged const&) noexcept> handler);
 
     std::vector<ViewId> listViews() const;
 
+    // View lookups come in two forms. The precondition form assumes the caller
+    // already holds a live view id, so an unknown id is a programming error and
+    // throws std::out_of_range. The find form reports a missing view through the
+    // same NotFound error as every other fallible method here.
+    //
+    // Observers must use the find form: a queued notification can outlive the
+    // view it names, and observer handlers are noexcept, so a throwing lookup
+    // there terminates the process rather than propagating.
     TrackListViewState trackListState(ViewId viewId) const;
+    Result<TrackListViewState> findTrackListState(ViewId viewId) const;
 
     // Lightweight per-frame accessor returning a reference to the stored presentation
     // spec, avoiding a full TrackListViewState copy (filter/sort/selection) on the
@@ -104,6 +115,7 @@ namespace ao::rt
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
     std::shared_ptr<TrackListProjection> trackListProjection(ViewId viewId);
+    Result<std::shared_ptr<TrackListProjection>> findTrackListProjection(ViewId viewId);
     std::unique_ptr<TrackDetailProjection> detailProjection(DetailTarget const& target,
                                                             WorkspaceService& workspace,
                                                             LibraryChanges const& changes);

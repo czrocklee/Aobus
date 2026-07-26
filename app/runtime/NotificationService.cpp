@@ -20,7 +20,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
-#include <exception>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -267,23 +266,10 @@ namespace ao::rt
       {
         auto update = std::move(pendingUpdates.front());
         pendingUpdates.pop_front();
-
-        try
-        {
-          feedUpdatedSignal.emit(update);
-        }
-        catch (...)
-        {
-          reportObserverFailure(std::current_exception());
-        }
+        feedUpdatedSignal.emit(update);
       }
 
       publishing = false;
-    }
-
-    void reportObserverFailure(std::exception_ptr exceptionPtr) const noexcept
-    {
-      runtime.reportUnhandledException(std::move(exceptionPtr), "notification feed observer");
     }
 
     static async::Task<void> waitForExpiry(async::Runtime* runtime,
@@ -545,7 +531,7 @@ namespace ao::rt
   NotificationService::~NotificationService() = default;
 
   async::Subscription NotificationService::onFeedUpdated(
-    std::move_only_function<void(NotificationFeedUpdate const&)> handler)
+    std::move_only_function<void(NotificationFeedUpdate const&) noexcept> handler)
   {
     _implPtr->ensureOnExecutor();
     return _implPtr->feedUpdatedSignal.connect(std::move(handler));

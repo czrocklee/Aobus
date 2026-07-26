@@ -71,7 +71,7 @@ Signal tests should check emission and, when available, payload:
 
 ```cpp
 std::vector<ChangeEvent> events;
-auto sub = model.signalChanged().connect([&](auto event) { events.push_back(event); });
+auto sub = model.signalChanged().connect([&](auto event) noexcept { events.push_back(event); });
 
 model.setActivePresentationId("albums");
 model.setActivePresentationId("albums");

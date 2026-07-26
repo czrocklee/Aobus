@@ -34,12 +34,12 @@ namespace ao::rt::test
     struct ChangeRecorder final
     {
       explicit ChangeRecorder(LibraryChanges& changes)
-        : tracksSub{
-            changes.onChanged([this](LibraryChangeSet const& event) { tracksMutated += !event.tracksMutated.empty(); })}
+        : tracksSub{changes.onChanged([this](LibraryChangeSet const& event) noexcept
+                                      { tracksMutated += !event.tracksMutated.empty(); })}
         , collectionSub{changes.onChanged(
-            [this](LibraryChangeSet const& event)
+            [this](LibraryChangeSet const& event) noexcept
             { collectionChanged += !event.tracksInserted.empty() || !event.tracksDeleted.empty(); })}
-        , listsSub{changes.onChanged([this](LibraryChangeSet const& event)
+        , listsSub{changes.onChanged([this](LibraryChangeSet const& event) noexcept
                                      { listsMutated += !event.listsUpserted.empty() || !event.listsDeleted.empty(); })}
       {
       }
@@ -204,7 +204,7 @@ namespace ao::rt::test
     auto& writer = writerFixture.writer();
     bool callbackSawDictionary = false;
     [[maybe_unused]] auto subscription = changes.onChanged(
-      [&](LibraryChangeSet const&)
+      [&](LibraryChangeSet const&) noexcept
       { callbackSawDictionary = dictionary.contains("Preview Artist") && dictionary.contains("Preview Key"); });
     auto patch = MetadataPatch{.optArtist = "Preview Artist"};
     patch.customUpdates.emplace("Preview Key", "Preview Value");

@@ -55,11 +55,11 @@ namespace ao::gtk
 
     auto& playback = _runtime.playback();
     setPlayingTrack(playback.snapshot().transport.nowPlaying.trackId);
-    _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot)
+    _snapshotSub = playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
                                                 { setPlayingTrack(snapshot.transport.nowPlaying.trackId); });
 
     _focusSub = _runtime.workspace().onChanged(
-      [this](rt::WorkspaceChanged const& changed)
+      [this](rt::WorkspaceChanged const& changed) noexcept
       {
         if (changed.cause != rt::WorkspaceChangeCause::Presentation &&
             changed.cause != rt::WorkspaceChangeCause::Presets)
@@ -68,10 +68,10 @@ namespace ao::gtk
         }
       });
 
-    _viewDestroyedSub = _runtime.views().onDestroyed([this](auto) { syncLayout(); });
+    _viewDestroyedSub = _runtime.views().onDestroyed([this](auto) noexcept { syncLayout(); });
 
     _projectionChangedSub = _runtime.views().onProjectionChanged(
-      [this](rt::TrackListProjectionChanged const& ev)
+      [this](rt::TrackListProjectionChanged const& ev) noexcept
       {
         auto* entry = find(ev.viewId);
 
@@ -90,7 +90,7 @@ namespace ao::gtk
       });
 
     _presentationChangedSub = _runtime.views().onPresentationChanged(
-      [this](rt::ViewService::PresentationChanged const& ev)
+      [this](rt::ViewService::PresentationChanged const& ev) noexcept
       {
         auto* entry = find(ev.viewId);
 
@@ -143,7 +143,7 @@ namespace ao::gtk
     entry->pagePtr->selectionController().selectTrack(trackId);
   }
 
-  void TrackPageHost::handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev)
+  void TrackPageHost::handleRevealTrack(rt::PlaybackRevealTrackRequest const& ev) noexcept
   {
     auto viewId = rt::ViewId{ev.preferredViewId};
 
@@ -320,15 +320,18 @@ namespace ao::gtk
       return; // Already exists
     }
 
-    auto projPtr = _runtime.views().trackListProjection(viewId);
+    // Reached from the workspace observer, so the snapshot may name a view that
+    // has already been destroyed; the find form reports that instead of throwing.
+    auto const foundProjection = _runtime.views().findTrackListProjection(viewId);
+    auto const foundState = _runtime.views().findTrackListState(viewId);
 
-    if (!projPtr)
+    if (!foundProjection || *foundProjection == nullptr || !foundState)
     {
       return;
     }
 
-    auto const state = _runtime.views().trackListState(viewId);
-    auto const listId = ListId{state.listId};
+    auto const& projPtr = *foundProjection;
+    auto const listId = ListId{foundState->listId};
 
     auto modelPtr = TrackListModel::create(dataProvider);
     modelPtr->bindProjection(projPtr);

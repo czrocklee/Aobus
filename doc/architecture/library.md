@@ -234,8 +234,9 @@ Changing presentation reshapes the projection without changing base-list or filt
 - Live-runtime commits can begin only through the one coordinator-owned writable capability.
 - A mutation becomes observable through the revisioned change bus only after its write transaction commits.
 - The coordinator admits the next mutation only after publication completion, and callback-thread reentrant mutation during publication is rejected.
+- One replica applies a revision before it is announced; notification observers only learn of revisions that replica already applied.
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
-- `LibraryChanges` accepts publication only from the coordinator and serializes contiguous revision delivery onto the callback executor even when worker producers finish out of order.
+- `LibraryChanges` accepts only the coordinator's exact successor revision and completes that publication before another commit can be admitted.
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
 - Cached list sources retain stable identity until deletion or cache teardown; a lease keeps its exact source and
   upstream dependencies alive beyond cache teardown. Ad-hoc filtered sources remain weak-cached while leased.
@@ -251,7 +252,9 @@ Executor hops honor cancellation, while only operations with explicit synchronou
 Cancellation never reinterprets an already committed transaction as uncommitted.
 
 Failure before commit returns through the operation's typed error channel and leaves the prior availability intact.
-Once durable commit succeeds, enqueue or observer failure is a committed-publication fault: the coordinator enters terminal `Faulted`, rejects further live-runtime writes, and requires runtime reopen to rebuild derived state.
+Once durable commit succeeds, revision-admission or enqueue failure is a committed-publication fault: the coordinator enters terminal `Faulted`, rejects further live-runtime writes, and requires runtime reopen.
+`MusicLibrary::readTransaction()` treats transaction-begin failure as an exceptional storage failure rather than a recoverable typed result.
+Notification callbacks do not translate that failure; crossing their `noexcept` boundary is fatal.
 
 `CoreRuntime` destroys source, completion, facade, change-bus, and storage collaborators only after worker tasks are stopped and joined.
 Subscriptions held by sources and projections release before the `LibraryChanges` owner they observe.

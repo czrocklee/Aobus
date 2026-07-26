@@ -16,6 +16,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -114,7 +115,8 @@ namespace ao::rt::test
 
     auto projPtr = env.views.detailProjection(ExplicitViewTarget{reply}, env.workspace, env.changes);
     std::int32_t publicationCount = 0;
-    [[maybe_unused]] auto subscription = projPtr->subscribe([&](TrackDetailSnapshot const&) { ++publicationCount; });
+    [[maybe_unused]] auto subscription =
+      projPtr->subscribe([&](TrackDetailSnapshot const&) noexcept { ++publicationCount; });
     CHECK(publicationCount == 1);
 
     // Mutate a track not in the selection
@@ -123,6 +125,24 @@ namespace ao::rt::test
 
     CHECK(publicationCount == 1);
     CHECK(projPtr->snapshot().trackIds == std::vector{id1});
+  }
+
+  TEST_CASE("TrackDetailProjection - outstanding subscription is safe after projection destruction",
+            "[runtime][unit][track-detail][lifecycle]")
+  {
+    auto env = TrackDetailProjectionFixture{};
+    auto subscription = async::Subscription{};
+    std::int32_t publicationCount = 0;
+
+    {
+      auto projectionPtr =
+        env.views.detailProjection(ExplicitSelectionTarget{std::vector<TrackId>{}}, env.workspace, env.changes);
+      subscription = projectionPtr->subscribe([&](TrackDetailSnapshot const&) noexcept { ++publicationCount; });
+      CHECK(publicationCount == 1);
+    }
+
+    subscription.reset();
+    CHECK(publicationCount == 1);
   }
 
   TEST_CASE("TrackDetailProjection - aggregates common and mixed metadata for multi-select",
@@ -179,7 +199,7 @@ namespace ao::rt::test
 
     // Subscribe to verify notifications
     std::int32_t callCount = 0;
-    auto sub = projPtr->subscribe([&](TrackDetailSnapshot const&) { callCount++; });
+    auto sub = projPtr->subscribe([&](TrackDetailSnapshot const&) noexcept { callCount++; });
     CHECK(callCount == 1); // Called immediately
 
     auto const reply1 = ao::test::requireValue(env.views.createView(TrackListViewConfig{.listId = kAllTracksListId}));

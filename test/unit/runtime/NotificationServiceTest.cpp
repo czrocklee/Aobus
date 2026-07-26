@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/RuntimeTestSupport.h"
-#include <ao/Exception.h>
 #include <ao/async/AsyncExceptionHandler.h>
+#include <ao/async/Signal.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -41,7 +42,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); });
 
     service.post(NotificationSeverity::Info, "test message", NotificationLifetime::history());
 
@@ -89,7 +90,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{{}, limits};
     auto& service = fixture.service;
     std::int32_t updateCount = 0;
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++updateCount; });
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++updateCount; });
 
     service.post(NotificationSeverity::Info, std::string(33, 'x'), NotificationLifetime::history());
     service.post(NotificationSeverity::Info,
@@ -117,7 +118,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{{}, limits};
     auto& service = fixture.service;
     std::int32_t updateCount = 0;
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++updateCount; });
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++updateCount; });
 
     service.post(NotificationRequest{
       .message =
@@ -167,7 +168,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{{}, limits};
     auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); });
 
     service.post(NotificationSeverity::Info, "first", NotificationLifetime::history());
     service.post(NotificationSeverity::Info, "second", NotificationLifetime::history());
@@ -209,7 +210,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{{}, limits};
     auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); });
 
     service.post(NotificationRequest{
       .message = "12345",
@@ -240,7 +241,7 @@ namespace ao::rt::test
     auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
     auto updates = std::vector<NotificationFeedUpdate>{};
-    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) { updates.push_back(update); });
+    auto sub = service.onFeedUpdated([&](NotificationFeedUpdate const& update) noexcept { updates.push_back(update); });
     auto const key = NotificationReportKey{"playback.skipped.current"};
     auto request = NotificationRequest{
       .severity = NotificationSeverity::Warning,
@@ -272,26 +273,30 @@ namespace ao::rt::test
     CHECK(std::get<NotificationReport>(entry.message).count == 2);
   }
 
-  TEST_CASE("NotificationService - observer failure is contained across committed updates",
+  TEST_CASE("NotificationService - contract-fulfilling feed observers see committed updates",
             "[runtime][regression][notification][concurrency]")
   {
-    auto recorder = AsyncExceptionRecorder{};
-    auto fixture = NotificationServiceFixture{recorder.handler()};
+    // The feed cannot act on an observer failure: publication is already
+    // committed. Observers are therefore noexcept; a handler that cannot
+    // degrade locally terminates at the throw point, with no later-observer
+    // guarantee.
+    STATIC_REQUIRE(std::is_nothrow_invocable_v<async::Signal<NotificationFeedUpdate const&>::Handler,
+                                               NotificationFeedUpdate const&>);
+    STATIC_REQUIRE_FALSE(std::is_constructible_v<async::Signal<NotificationFeedUpdate const&>::Handler,
+                                                 decltype([](NotificationFeedUpdate const&) {})>);
+
+    auto fixture = NotificationServiceFixture{};
     auto& service = fixture.service;
+    std::int32_t firstObserverCount = 0;
     std::int32_t laterObserverCount = 0;
-    auto throwingSub =
-      service.onFeedUpdated([](NotificationFeedUpdate const&) { throwException<Exception>("observer failed"); });
-    auto laterSub = service.onFeedUpdated([&](NotificationFeedUpdate const&) { ++laterObserverCount; });
+    auto firstSub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++firstObserverCount; });
+    auto laterSub = service.onFeedUpdated([&](NotificationFeedUpdate const&) noexcept { ++laterObserverCount; });
 
     CHECK_NOTHROW(service.post(NotificationSeverity::Warning, "committed", NotificationLifetime::history()));
     CHECK_NOTHROW(service.post(NotificationSeverity::Info, "later", NotificationLifetime::history()));
 
+    CHECK(firstObserverCount == 2);
     CHECK(laterObserverCount == 2);
-
-    auto const exceptions = recorder.snapshot();
-    REQUIRE(exceptions.size() == 2);
-    checkRecordedException<Exception>(exceptions[0], "notification feed observer");
-    checkRecordedException<Exception>(exceptions[1], "notification feed observer");
   }
 
   TEST_CASE("NotificationService - reentrant report update preserves immutable publication order",
@@ -306,8 +311,9 @@ namespace ao::rt::test
     };
     auto observedFeeds = std::vector<std::shared_ptr<NotificationFeedState const>>{};
     auto observedMessages = std::vector<std::string>{};
+    bool observedNullFeed = false;
     auto mutatingSub = service.onFeedUpdated(
-      [&](NotificationFeedUpdate const& update)
+      [&](NotificationFeedUpdate const& update) noexcept
       {
         if (update.mutationKind == NotificationFeedMutationKind::Posted)
         {
@@ -315,11 +321,15 @@ namespace ao::rt::test
         }
       });
     auto observingSub = service.onFeedUpdated(
-      [&](NotificationFeedUpdate const& update)
+      [&](NotificationFeedUpdate const& update) noexcept
       {
-        CHECK(update.feedPtr);
+        if (!update.feedPtr)
+        {
+          observedNullFeed = true;
+          return;
+        }
 
-        if (!update.feedPtr || update.feedPtr->entries.size() != 1)
+        if (update.feedPtr->entries.size() != 1)
         {
           return;
         }
@@ -334,6 +344,7 @@ namespace ao::rt::test
                              .lifetime = NotificationLifetime::history(),
                            });
 
+    CHECK_FALSE(observedNullFeed);
     REQUIRE(observedFeeds.size() == 2);
     CHECK(observedMessages == std::vector<std::string>{"initial", "updated"});
     CHECK(std::get<std::string>(observedFeeds[0]->entries.front().message) == "initial");
@@ -348,7 +359,7 @@ namespace ao::rt::test
     auto& service = fixture.service;
     bool nestedPosted = false;
     auto sub = service.onFeedUpdated(
-      [&](NotificationFeedUpdate const&)
+      [&](NotificationFeedUpdate const&) noexcept
       {
         if (!nestedPosted)
         {

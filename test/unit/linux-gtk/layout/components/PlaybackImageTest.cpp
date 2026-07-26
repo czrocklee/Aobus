@@ -14,7 +14,6 @@
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/Exception.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -225,8 +224,10 @@ namespace ao::gtk::layout::test
       auto const coverArtId = ResourceId{42};
       imageCachePtr->put(ImageCacheKey::full(coverArtId), ao::gtk::test::makePixbuf(80, 80));
 
-      auto const throwingSubscription = fixture.runtime().playback().events().onSnapshot(
-        [](rt::PlaybackSnapshot const&) { throwException<Exception>("scripted observer failure before cover art"); });
+      // An earlier snapshot observer must not delay the component's own update.
+      bool earlierObserverEntered = false;
+      auto const earlierSubscription = fixture.runtime().playback().events().onSnapshot(
+        [&earlierObserverEntered](rt::PlaybackSnapshot const&) noexcept { earlierObserverEntered = true; });
 
       auto const node = LayoutNode{.type = "playback.image"};
       auto const compPtr = fixture.components().create(ctx, node);
@@ -240,6 +241,7 @@ namespace ao::gtk::layout::test
       startPlayback(fixture.runtime(), coverTrackId);
       ao::gtk::test::drainGtkEvents();
 
+      CHECK(earlierObserverEntered);
       auto const paintablePtr = picture->get_paintable();
       REQUIRE(paintablePtr);
       CHECK(paintablePtr->get_intrinsic_width() == 64 * picture->get_scale_factor());

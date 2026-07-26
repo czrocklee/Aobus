@@ -60,7 +60,9 @@ namespace ao::gtk
     void get_section_vfunc(::guint position, ::guint& outStart, ::guint& outEnd) override;
 
   private:
-    void applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch);
+    // Observer entry point: the projection delivers batches through a noexcept
+    // handler, so a failure here terminates instead of unwinding into GTK.
+    void applyDeltaBatch(rt::TrackListProjectionDeltaBatch const& batch) noexcept;
     void applyResetDelta();
     void applySourceInvalidatedDelta();
     void applyInsertRange(rt::ProjectionInsertRange const& delta);

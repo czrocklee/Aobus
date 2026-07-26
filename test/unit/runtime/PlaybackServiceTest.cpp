@@ -64,7 +64,7 @@ namespace ao::rt::test
     template<typename T>
     concept HasLegacySuccessionAccessor = requires(T& target) { target.playbackSequence(); };
 
-    class RejectingDeferExecutor final : public async::Executor
+    class PreAdmissionRejectingDeferExecutor final : public async::Executor
     {
     public:
       bool isCurrent() const noexcept override { return _delegate.isCurrent(); }
@@ -251,8 +251,8 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                     { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     auto const started = fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId);
     REQUIRE(started);
@@ -286,8 +286,8 @@ namespace ao::rt::test
     fixture.buildThreeTrackManualView();
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                     { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
     REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
@@ -328,8 +328,8 @@ namespace ao::rt::test
     auto fixture = PlaybackServiceFixture<>{};
     fixture.buildThreeTrackManualView();
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                     { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     REQUIRE(fixture.commands().startFromView(fixture.viewId, fixture.firstTrackId));
     REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
@@ -369,10 +369,10 @@ namespace ao::rt::test
     auto commandSurface = uimodel::PlaybackCommandSurface{*playbackPtr, [] {}};
     std::size_t availabilityChanged = 0;
     auto const availabilitySubscription =
-      commandSurface.onAvailabilityChanged([&availabilityChanged] { ++availabilityChanged; });
+      commandSurface.onAvailabilityChanged([&availabilityChanged] noexcept { ++availabilityChanged; });
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const snapshotSubscription = playbackPtr->events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                       { snapshots.push_back(snapshot); });
+    auto const snapshotSubscription = playbackPtr->events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
 
     fixture.onDevicesChangedCb(fixture.status.devices);
     fixture.executor.drain();
@@ -415,8 +415,8 @@ namespace ao::rt::test
   {
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback.events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                   { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const before = fixture.playback.snapshot();
 
     // These calls intentionally bypass PlaybackService to model independent lower-layer
@@ -427,6 +427,29 @@ namespace ao::rt::test
     CHECK(snapshots.empty());
     CHECK(fixture.playback.snapshot() == before);
 
+    fixture.executor.drain();
+
+    REQUIRE(snapshots.size() == 1);
+    CHECK(snapshots.front().succession.shuffle == ShuffleMode::On);
+    CHECK(snapshots.front().succession.repeat == RepeatMode::All);
+  }
+
+  TEST_CASE("PlaybackService - rejected lower-state publication retries on the next observation",
+            "[runtime][regression][playback][concurrency]")
+  {
+    auto fixture = ApplicationPlaybackFixtureT<PreAdmissionRejectingDeferExecutor>{};
+    auto snapshots = std::vector<PlaybackSnapshot>{};
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
+    auto const before = fixture.playback.snapshot();
+
+    fixture.executor.rejectNextDefer();
+    fixture.succession.setShuffleMode(ShuffleMode::On);
+
+    CHECK(snapshots.empty());
+    CHECK(fixture.playback.snapshot() == before);
+
+    fixture.succession.setRepeatMode(RepeatMode::All);
     fixture.executor.drain();
 
     REQUIRE(snapshots.size() == 1);
@@ -454,8 +477,8 @@ namespace ao::rt::test
     fixture.commands().stop();
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback.events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                   { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const before = fixture.playback.snapshot();
 
     fixture.commands().stop();
@@ -474,8 +497,8 @@ namespace ao::rt::test
     fixture.commands().setRepeatMode(RepeatMode::One);
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                     { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const before = fixture.playback().snapshot();
 
     fixture.commands().next();
@@ -496,8 +519,8 @@ namespace ao::rt::test
     REQUIRE(fixture.waitForTrack(fixture.firstTrackId));
 
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback().events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                     { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback().events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const before = fixture.playback().snapshot();
 
     REQUIRE(fixture.application.succession.next());
@@ -513,8 +536,8 @@ namespace ao::rt::test
   {
     auto fixture = ApplicationPlaybackFixture{};
     auto snapshots = std::vector<PlaybackSnapshot>{};
-    auto const subscription = fixture.playback.events().onSnapshot([&snapshots](PlaybackSnapshot const& snapshot)
-                                                                   { snapshots.push_back(snapshot); });
+    auto const subscription = fixture.playback.events().onSnapshot(
+      [&snapshots](PlaybackSnapshot const& snapshot) noexcept { snapshots.push_back(snapshot); });
     auto const before = fixture.playback.snapshot();
 
     fixture.commands().next();
@@ -531,7 +554,7 @@ namespace ao::rt::test
     auto snapshots = std::vector<PlaybackSnapshot>{};
     bool requestedRepeat = false;
     auto const subscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         snapshots.push_back(snapshot);
 
@@ -560,7 +583,7 @@ namespace ao::rt::test
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     bool queuedRepeat = false;
     auto const subscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
         {
@@ -583,11 +606,20 @@ namespace ao::rt::test
   TEST_CASE("PlaybackService - rejected drain scheduling preserves queued command order",
             "[runtime][regression][playback][concurrency]")
   {
-    auto fixture = ApplicationPlaybackFixtureT<RejectingDeferExecutor>{};
+    auto fixture = ApplicationPlaybackFixtureT<PreAdmissionRejectingDeferExecutor>{};
     bool queuedRepeat = false;
+    auto observedRepeats = std::array<RepeatMode, 3>{};
+    std::size_t observedRepeatCount = 0;
     auto const subscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
+        if (observedRepeatCount < observedRepeats.size())
+        {
+          observedRepeats[observedRepeatCount] = snapshot.succession.repeat;
+        }
+
+        ++observedRepeatCount;
+
         if (!queuedRepeat && snapshot.succession.shuffle == ShuffleMode::On)
         {
           queuedRepeat = true;
@@ -600,7 +632,7 @@ namespace ao::rt::test
     // observer command, then the controlled executor rejects that command's
     // first drain request.
     fixture.succession.setShuffleMode(ShuffleMode::On);
-    REQUIRE_THROWS_AS(fixture.executor.drain(), Exception);
+    CHECK_NOTHROW(fixture.executor.drain());
     REQUIRE(queuedRepeat);
     CHECK(fixture.playback.snapshot().succession.shuffle == ShuffleMode::On);
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::Off);
@@ -608,6 +640,9 @@ namespace ao::rt::test
     fixture.commands().setRepeatMode(RepeatMode::One);
     fixture.executor.drain();
 
+    auto const expectedRepeats = std::array{RepeatMode::Off, RepeatMode::All, RepeatMode::One};
+    REQUIRE(observedRepeatCount == 3);
+    CHECK(observedRepeats == expectedRepeats);
     CHECK(fixture.playback.snapshot().succession.repeat == RepeatMode::One);
   }
 
@@ -627,7 +662,7 @@ namespace ao::rt::test
     fixture.application.executor.drain();
     bool queuedCommands = false;
     auto const subscription = fixture.playback().events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         if (!queuedCommands && snapshot.succession.shuffle == ShuffleMode::On)
         {
@@ -657,7 +692,7 @@ namespace ao::rt::test
     bool queuedCommands = false;
     bool startAdmitted = false;
     auto const subscription = fixture.playback().events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         snapshots.push_back(snapshot);
 
@@ -691,9 +726,9 @@ namespace ao::rt::test
     auto fixture = ApplicationPlaybackFixtureT<QueuedExecutor>{};
     std::size_t repeatChanges = 0;
     auto const repeatSubscription = fixture.succession.onRepeatModeChanged(
-      [&repeatChanges](PlaybackSuccession::RepeatModeChanged const&) { ++repeatChanges; });
+      [&repeatChanges](PlaybackSuccession::RepeatModeChanged const&) noexcept { ++repeatChanges; });
     auto snapshotSubscription = fixture.playback.events().onSnapshot(
-      [&](PlaybackSnapshot const& snapshot)
+      [&](PlaybackSnapshot const& snapshot) noexcept
       {
         if (snapshot.succession.shuffle == ShuffleMode::On)
         {

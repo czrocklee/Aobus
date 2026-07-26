@@ -120,7 +120,7 @@ Adding an extension requires the single dispatch entry plus parser, scan, payloa
 
 - Format tests under [`test/unit/media/file/`](../../../test/unit/media/file/) lock exact fields, covers, codecs, payloads, errors, and lifetime behavior.
 - [`FileTest.cpp`](../../../test/integration/media/file/FileTest.cpp) locks real fixtures.
-- [`ScanPlanBuilderTest.cpp`](../../../test/unit/runtime/library/ScanPlanBuilderTest.cpp) locks recognition.
+- [`ScanPlanTest.cpp`](../../../test/unit/runtime/library/ScanPlanTest.cpp) locks recognition.
 - [`AudioIdentityTest.cpp`](../../../test/unit/library/AudioIdentityTest.cpp) locks payload hashing.
 
 ## Related documents

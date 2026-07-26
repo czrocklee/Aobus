@@ -248,7 +248,7 @@ namespace ao::rt::test
     std::int32_t changeCount = 0;
     auto changed = WorkspaceChanged{};
     auto const sub = runtime.workspace().onChanged(
-      [&](WorkspaceChanged const& value)
+      [&](WorkspaceChanged const& value) noexcept
       {
         ++changeCount;
         changed = value;
@@ -310,7 +310,7 @@ namespace ao::rt::test
     auto const configPath = tempDir.path() / "config.yaml";
     writeWorkspaceConfig(configPath, {storedListId.raw()}, 1);
     std::int32_t changeCount = 0;
-    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const&) { ++changeCount; });
+    auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
 
     auto storePtr = std::make_shared<ConfigStore>(configPath, ConfigStore::OpenMode::ReadOnly);
     auto const result = runtime.workspace().restoreSession(*storePtr);

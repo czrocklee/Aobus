@@ -126,7 +126,8 @@ namespace ao::rt::test
     SECTION("detached projection applies representative remove and update batches")
     {
       auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-      auto const sub = proj.subscribe([&](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+      auto const sub =
+        proj.subscribe([&](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
       batches.clear(); // Ignore the subscription's initial Reset snapshot.
 
       auto const removedIds = std::array{ids[100], ids[5000], ids[9999]};
@@ -157,7 +158,7 @@ namespace ao::rt::test
       std::size_t receivedSize = 0;
 
       auto const sub = proj.subscribe(
-        [&](TrackListProjectionDeltaBatch const& batch)
+        [&](TrackListProjectionDeltaBatch const& batch) noexcept
         {
           if (batch.deltas.empty())
           {

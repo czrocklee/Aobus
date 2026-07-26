@@ -87,7 +87,7 @@ namespace ao::rt
     Result<> goBack();
     Result<> goForward();
 
-    async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&)> handler);
+    async::Subscription onChanged(std::move_only_function<void(WorkspaceChanged const&) noexcept> handler);
 
     std::span<CustomTrackPresentationPreset const> customPresets() const;
     Result<> addCustomPreset(CustomTrackPresentationPreset const& preset);

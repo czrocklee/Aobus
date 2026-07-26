@@ -5,8 +5,8 @@
 
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
 #include <ao/uimodel/playback/seek/SeekSliderInteractionModel.h>
-#include <ao/uimodel/playback/seek/SeekViewModel.h>
 
 #include <gdkmm/frameclock.h>
 #include <glibmm/main.h>
@@ -30,7 +30,7 @@ namespace ao::gtk
   } // namespace
 
   SeekControlWidget::SeekControlWidget(rt::PlaybackService& playback)
-    : _seekViewModel{playback, [this](ao::uimodel::SeekViewState const& view) { applyState(view); }}
+    : _seekViewModel{playback, [this](ao::uimodel::PlaybackPositionViewState const& view) { applyState(view); }}
   {
     _scale.set_halign(Gtk::Align::FILL);
     _scale.set_hexpand(true);
@@ -114,11 +114,11 @@ namespace ao::gtk
     return _tickId != 0;
   }
 
-  void SeekControlWidget::applyState(ao::uimodel::SeekViewState const& view)
+  void SeekControlWidget::applyState(ao::uimodel::PlaybackPositionViewState const& view)
   {
     if (view.duration == std::chrono::milliseconds{0})
     {
-      _interaction.applyViewState(view.duration, view.enabled);
+      _interaction.applyViewState(view.duration, view.seekable);
       setScaleRange(std::chrono::milliseconds{0});
       setScaleValue(std::chrono::milliseconds{0});
       _scale.set_sensitive(false);
@@ -128,8 +128,8 @@ namespace ao::gtk
     }
 
     setScaleRange(view.duration);
-    _interaction.applyViewState(view.duration, view.enabled);
-    _scale.set_sensitive(view.enabled);
+    _interaction.applyViewState(view.duration, view.seekable);
+    _scale.set_sensitive(view.seekable);
     _interpolator.updateState(view.elapsed, view.duration, view.isPlaying);
     updateTickState();
 

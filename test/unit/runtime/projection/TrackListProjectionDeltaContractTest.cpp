@@ -122,8 +122,8 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({third, first});
     auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription =
-      projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     sourcePtr->insert(second, 1);
@@ -149,8 +149,8 @@ namespace ao::rt::test
     auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     CHECK(projectionTrackIds(projection) == std::vector{third, first, fourth, second});
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription =
-      projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     libraryFixture.updateTrack(third, [](library::test::TrackSpec& spec) { spec.title = "Updated Third"; });
@@ -158,8 +158,8 @@ namespace ao::rt::test
                                 TrackSourceDeltaBatch{
                                   .deltas =
                                     {
-                                      SourceUpdateRange{.start = 0, .trackIds = {third}},
                                       SourceRemoveRange{.start = 1, .trackIds = {first}},
+                                      SourceUpdateRange{.start = 0, .trackIds = {third}},
                                     },
                                 });
 
@@ -188,7 +188,7 @@ namespace ao::rt::test
     bool insertedDuringReset = false;
 
     [[maybe_unused]] auto subscription = projection.subscribe(
-      [&](TrackListProjectionDeltaBatch const& batch)
+      [&](TrackListProjectionDeltaBatch const& batch) noexcept
       {
         batches.push_back(batch);
 
@@ -221,8 +221,8 @@ namespace ao::rt::test
     auto sourcePtr = makeMutableTrackSource({first, second, third, fourth});
     auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription =
-      projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     sourcePtr->replaceWithBatch(std::vector{second, third, first, fourth},
@@ -260,8 +260,8 @@ namespace ao::rt::test
       .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
     });
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription =
-      projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     sourcePtr->replaceWithBatch(std::vector{first, second, third},
@@ -291,8 +291,8 @@ namespace ao::rt::test
       .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},
     });
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription =
-      projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     batches.clear();
 
     libraryFixture.updateTrack(first, [](library::test::TrackSpec& spec) { spec.title = "Z"; });
@@ -344,8 +344,8 @@ namespace ao::rt::test
 
     auto projection = LiveTrackListProjection{ViewId{1}, TrackSourceLease{sourcePtr}, libraryFixture.library()};
     auto batches = std::vector<TrackListProjectionDeltaBatch>{};
-    [[maybe_unused]] auto subscription =
-      projection.subscribe([&batches](TrackListProjectionDeltaBatch const& batch) { batches.push_back(batch); });
+    [[maybe_unused]] auto subscription = projection.subscribe(
+      [&batches](TrackListProjectionDeltaBatch const& batch) noexcept { batches.push_back(batch); });
     projection.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::None,
       .sortBy = {TrackSortTerm{.field = TrackSortField::Title}},

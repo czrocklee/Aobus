@@ -35,7 +35,9 @@ namespace ao::async
   private:
     void enqueueAndWake(std::move_only_function<void()> task);
 
-    virtual void wake() = 0;
+    // Admission is complete before wake. Event-loop wake failures are fatal
+    // because an accepted task cannot be rolled back safely.
+    virtual void wake() noexcept = 0;
     virtual void executeTask(std::move_only_function<void()>& task) = 0;
 
     std::thread::id _ownerThread;

@@ -224,29 +224,30 @@ namespace ao::rt
 
   ViewService::~ViewService() = default;
 
-  async::Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId)> handler)
+  async::Subscription ViewService::onDestroyed(std::move_only_function<void(ViewId) noexcept> handler)
   {
     return _implPtr->destroyedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onProjectionChanged(
-    std::move_only_function<void(TrackListProjectionChanged const&)> handler)
+    std::move_only_function<void(TrackListProjectionChanged const&) noexcept> handler)
   {
     return _implPtr->projectionChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription ViewService::onPresentationChanged(
-    std::move_only_function<void(PresentationChanged const&)> handler)
+    std::move_only_function<void(PresentationChanged const&) noexcept> handler)
   {
     return _implPtr->presentationChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onSelectionChanged(std::move_only_function<void(SelectionChanged const&)> handler)
+  async::Subscription ViewService::onSelectionChanged(
+    std::move_only_function<void(SelectionChanged const&) noexcept> handler)
   {
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
-  async::Subscription ViewService::onListChanged(std::move_only_function<void(ListChanged const&)> handler)
+  async::Subscription ViewService::onListChanged(std::move_only_function<void(ListChanged const&) noexcept> handler)
   {
     return _implPtr->listChangedSignal.connect(std::move(handler));
   }
@@ -483,6 +484,18 @@ namespace ao::rt
     return _implPtr->views.at(viewId).state;
   }
 
+  Result<TrackListViewState> ViewService::findTrackListState(ViewId const viewId) const
+  {
+    auto const iter = _implPtr->views.find(viewId);
+
+    if (iter == _implPtr->views.end())
+    {
+      return missingViewError(viewId);
+    }
+
+    return iter->second.state;
+  }
+
   TrackPresentationSpec const& ViewService::trackListPresentation(ViewId viewId) const&
   {
     return _implPtr->views.at(viewId).state.presentation;
@@ -499,7 +512,6 @@ namespace ao::rt
 
     auto const transaction = _implPtr->library.readTransaction();
     auto const reader = _implPtr->library.tracks().reader(transaction);
-
     auto totalDuration = std::chrono::milliseconds{0};
 
     for (auto const trackId : it->second.state.selection)
@@ -516,6 +528,18 @@ namespace ao::rt
   std::shared_ptr<TrackListProjection> ViewService::trackListProjection(ViewId viewId)
   {
     return _implPtr->views.at(viewId).projectionPtr;
+  }
+
+  Result<std::shared_ptr<TrackListProjection>> ViewService::findTrackListProjection(ViewId const viewId)
+  {
+    auto const iter = _implPtr->views.find(viewId);
+
+    if (iter == _implPtr->views.end())
+    {
+      return missingViewError(viewId);
+    }
+
+    return iter->second.projectionPtr;
   }
 
   std::unique_ptr<TrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,

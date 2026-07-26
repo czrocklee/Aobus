@@ -64,7 +64,7 @@ namespace ao::rt
 
   private:
     Result<TrackSourceLease> acquire(ListId listId, std::vector<ListId> ancestry);
-    void handleLibraryChange(LibraryChangeSet const& event);
+    void handleLibraryChange(LibraryChangeSet const& event) noexcept;
     void handleLibraryReset();
     void handleIncrementalLibraryChange(LibraryChangeSet const& event);
     std::vector<ListId> applyManualContentChanges(LibraryChangeSet const& event);
@@ -85,7 +85,7 @@ namespace ao::rt
     std::shared_ptr<AllTracksSource> _allTracksPtr;
     SmartListEvaluator _smartEvaluator;
 
-    async::Subscription _changesSubscription;
+    async::Subscription _replicaBinding;
 
     std::size_t _listMutationDepth = 0;
     bool _refreshDrainActive = false;

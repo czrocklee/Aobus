@@ -63,6 +63,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace ao::gtk
 {
@@ -273,10 +274,22 @@ namespace ao::gtk
           *_modelPtr);
       });
 
+    // Constructed from TrackPageHost::ensureViewPage, which runs inside the
+    // workspace observer, so the view id can already be stale here. A page
+    // built without a view keeps the default layout.
+    auto optVisibleFields = std::optional<std::vector<rt::TrackField>>{};
+
     if (_viewId != rt::kInvalidViewId)
     {
-      auto const& presState = _runtime.views().trackListState(_viewId).presentation;
-      _viewHostPtr->columnController().setLayoutAndApply(presState.visibleFields);
+      if (auto const found = _runtime.views().findTrackListState(_viewId); found)
+      {
+        optVisibleFields = found->presentation.visibleFields;
+      }
+    }
+
+    if (optVisibleFields)
+    {
+      _viewHostPtr->columnController().setLayoutAndApply(*optVisibleFields);
     }
     else
     {

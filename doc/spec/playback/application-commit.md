@@ -137,6 +137,10 @@ same-subject restart, terminal idle, and successful restore advance only the
 position identity. Provider, readiness, quality, prepared-next, and
 natural-advance observations received outside a command schedule one deferred
 publication; observations accepted in the same executor turn coalesce.
+If the executor rejects that deferred task before admission, the service keeps
+the last coherent snapshot and clears its scheduling marker. The next lower
+observation retries publication from the then-current lower state; it does not
+publish synchronously on the signal stack.
 
 ### Restore
 
@@ -151,9 +155,10 @@ nothing. Restore never advances `PlaybackFinalSeekRevision`.
 
 ## Observation
 
-Snapshot publication is exception-contained: one observer failure does not
-prevent remaining observers or commit completion. Observer-issued commands join
-the queue.
+Snapshot observers are `noexcept` (see [signal delivery](../async/signal.md)),
+so contract-fulfilling observers run synchronously in connection order.
+An escaping exception terminates at the callback boundary and provides no later-observer guarantee.
+Observer-issued commands join the queue.
 
 Seek previews carry only their elapsed position and do not alter the snapshot.
 Reveal requests carry their navigation fields. Events produced within a command
@@ -184,8 +189,9 @@ boundary recovery policy.
 
 An unexpected exception is an invariant fault. Before propagating it, the
 service settles observed state, closes commit bookkeeping, and attempts to keep
-the queue drain live. If scheduling a drain throws, its marker is rolled back so
-a later admission can retry.
+the queue drain live. A pre-admission drain-scheduling rejection is contained:
+the marker is rolled back, the FIFO remains intact, and a later command
+admission retries the drain without overtaking queued commands.
 
 Command supersession is independent from prepared-next tokens, Engine item ids,
 audio cancellation barriers, and persisted session state.
@@ -222,7 +228,7 @@ producers while succession and the remaining runtime graph are alive.
   protects coherent restore, repeated-restore baselines, backlog/reentrant restore
   rejection, and deferred nested commands.
 - [`PlaybackTransportTokenTest.cpp`](../../../test/unit/runtime/PlaybackTransportTokenTest.cpp)
-  protects internal event delivery despite observer exceptions.
+  protects internal event delivery order across an accepted replacement.
 
 ## Related documents
 

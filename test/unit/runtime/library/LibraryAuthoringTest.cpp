@@ -98,7 +98,7 @@ namespace ao::rt::test
     };
   } // namespace
 
-  TEST_CASE("Library authoring - applied change publishes projections before the next binding",
+  TEST_CASE("Library authoring - applied change updates the replica before notifications and the next binding",
             "[runtime][unit][library-authoring]")
   {
     auto fixture = AuthoringFixture{};
@@ -107,10 +107,12 @@ namespace ao::rt::test
 
     auto order = std::vector<std::string>{};
     bool reboundFromAvailability = false;
-    auto changedSubscription =
-      fixture.runtimeLibrary().changes().onChanged([&order](LibraryChangeSet const&) { order.emplace_back("change"); });
+    auto replicaBinding = fixture.runtimeLibrary().changes().bindReplica(
+      "TestProjectionReplica", [&order](LibraryChangeSet const&) noexcept { order.emplace_back("replica"); });
+    auto changedSubscription = fixture.runtimeLibrary().changes().onChanged([&order](LibraryChangeSet const&) noexcept
+                                                                            { order.emplace_back("change"); });
     auto availabilitySubscription = fixture.runtimeLibrary().onAuthoringAvailabilityChanged(
-      [&fixture, &order, &reboundFromAvailability](LibraryAuthoringAvailability const& availability)
+      [&fixture, &order, &reboundFromAvailability](LibraryAuthoringAvailability const& availability) noexcept
       {
         if (availability.state == LibraryAuthoringState::Available)
         {
@@ -129,7 +131,7 @@ namespace ao::rt::test
     REQUIRE(authoringResult->optNextTargets);
     CHECK(authoringResult->optNextTargets->libraryRevision() == boundResult->libraryRevision() + 1U);
     CHECK(std::ranges::equal(authoringResult->optNextTargets->trackIds(), boundResult->trackIds()));
-    CHECK(order == std::vector<std::string>{"change", "available"});
+    CHECK(order == std::vector<std::string>{"replica", "change", "available"});
     CHECK(reboundFromAvailability);
     CHECK(fixture.title() == "After");
   }
@@ -142,7 +144,7 @@ namespace ao::rt::test
     REQUIRE(boundResult);
     bool nestedMutationRejected = false;
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
-      [&](LibraryChangeSet const&)
+      [&](LibraryChangeSet const&) noexcept
       {
         auto nestedResult = fixture.runtimeLibrary().writer().createList(
           LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Nested mutation"});
@@ -182,8 +184,8 @@ namespace ao::rt::test
     REQUIRE(boundResult);
 
     std::size_t changedCount = 0;
-    auto changedSubscription =
-      fixture.runtimeLibrary().changes().onChanged([&changedCount](LibraryChangeSet const&) { ++changedCount; });
+    auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
+      [&changedCount](LibraryChangeSet const&) noexcept { ++changedCount; });
     auto patch = MetadataPatch{};
     patch.optTitle = "Before";
 
@@ -209,7 +211,7 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto observed = std::vector<LibraryAuthoringAvailability>{};
     auto subscription = mutationService.onAvailabilityChanged(
-      [&observed](LibraryAuthoringAvailability const& availability) { observed.push_back(availability); });
+      [&observed](LibraryAuthoringAvailability const& availability) noexcept { observed.push_back(availability); });
 
     auto invalidResult = mutationService.beginMaintenance(LibraryMaintenanceKind::None);
     REQUIRE_FALSE(invalidResult);
@@ -318,52 +320,6 @@ namespace ao::rt::test
     CHECK_FALSE(start.optMutation);
   }
 
-  TEST_CASE("Library authoring - observer failure after commit faults further authoring",
-            "[runtime][unit][library-authoring]")
-  {
-    auto fixture = AuthoringFixture{};
-    auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-    REQUIRE(boundResult);
-
-    auto throwingSubscription = fixture.runtimeLibrary().changes().onChanged(
-      [](LibraryChangeSet const&) { throwException<Exception>("observer failed"); });
-    auto patch = MetadataPatch{};
-    patch.optTitle = "Committed";
-
-    CHECK_THROWS_AS(fixture.runtimeLibrary().writer().updateMetadata(*boundResult, patch), Exception);
-    CHECK(fixture.title() == "Committed");
-    CHECK(fixture.runtimeLibrary().authoringAvailability().state == LibraryAuthoringState::Faulted);
-    CHECK_FALSE(fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()}));
-  }
-
-  TEST_CASE("Library authoring - availability observer failure publishes terminal fault best effort",
-            "[runtime][unit][library-authoring]")
-  {
-    auto fixture = AuthoringFixture{};
-    auto boundResult = fixture.runtimeLibrary().bindTrackTargets(std::array{fixture.trackId()});
-    REQUIRE(boundResult);
-    auto throwingSubscription = fixture.runtimeLibrary().onAuthoringAvailabilityChanged(
-      [](LibraryAuthoringAvailability const& availability)
-      {
-        if (availability.state == LibraryAuthoringState::Available)
-        {
-          throwException<Exception>("availability observer failed");
-        }
-      });
-    auto observedStates = std::vector<LibraryAuthoringState>{};
-    auto recordingSubscription = fixture.runtimeLibrary().onAuthoringAvailabilityChanged(
-      [&observedStates](LibraryAuthoringAvailability const& availability)
-      { observedStates.push_back(availability.state); });
-
-    CHECK_THROWS_AS(
-      fixture.runtimeLibrary().writer().updateMetadata(*boundResult, MetadataPatch{.optTitle = "Committed"}),
-      Exception);
-
-    CHECK(fixture.title() == "Committed");
-    CHECK(fixture.runtimeLibrary().authoringAvailability().state == LibraryAuthoringState::Faulted);
-    CHECK(observedStates == std::vector{LibraryAuthoringState::Available, LibraryAuthoringState::Faulted});
-  }
-
   TEST_CASE("Library authoring - publication enqueue failure after commit faults the mutationService",
             "[runtime][unit][library-authoring]")
   {
@@ -419,7 +375,7 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto observed = std::vector<LibraryAuthoringAvailability>{};
     auto subscription = mutationService.onAvailabilityChanged(
-      [&observed](LibraryAuthoringAvailability const& availability) { observed.push_back(availability); });
+      [&observed](LibraryAuthoringAvailability const& availability) noexcept { observed.push_back(availability); });
 
     auto commitFuture = std::async(std::launch::async,
                                    [&mutationService]

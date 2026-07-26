@@ -25,7 +25,7 @@ namespace ao::uimodel
       : library{libraryValue}, targets{std::move(targetsValue)}
     {
       availabilitySubscription = library.onAuthoringAvailabilityChanged(
-        [this](rt::LibraryAuthoringAvailability const& availability) { handleAvailability(availability); });
+        [this](rt::LibraryAuthoringAvailability const& availability) noexcept { handleAvailability(availability); });
       handleAvailability(library.authoringAvailability());
     }
 
@@ -180,7 +180,7 @@ namespace ao::uimodel
     return _implPtr->targets.trackIds();
   }
 
-  async::Subscription TrackAuthoringSession::onInvalidated(std::move_only_function<void()> handler) const
+  async::Subscription TrackAuthoringSession::onInvalidated(std::move_only_function<void() noexcept> handler) const
   {
     return _implPtr->invalidated.connect(std::move(handler));
   }

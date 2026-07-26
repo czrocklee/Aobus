@@ -31,7 +31,6 @@ namespace ao::uimodel
 
   using LayoutNodeVisitor = std::function<void(LayoutNode const&)>;
 
-  void visitLayoutNode(LayoutNode const& node, LayoutNodeVisitor const& visitor);
   void visitLayoutDocumentNodes(LayoutDocument const& doc, LayoutNodeVisitor const& visitor);
   void visitExpandedLayoutNodes(PreparedLayout const& layout, LayoutNodeVisitor const& visitor);
 

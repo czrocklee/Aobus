@@ -13,11 +13,11 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/media/file/File.h>
 #include <ao/media/flac/MetadataBlockLayout.h>
+#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
 #include <runtime/library/ScanApplyOperation.h>
-#include <runtime/library/ScanPlanBuilder.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -156,7 +156,7 @@ namespace ao::rt::test
     }
   } // namespace
 
-  TEST_CASE("ScanPlanBuilder - classifies supported and hidden entries", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - classifies supported and hidden entries", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -201,7 +201,7 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::New) == 1);
@@ -230,7 +230,7 @@ namespace ao::rt::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("ScanPlanBuilder - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
+  TEST_CASE("ScanPlan - reports IO errors while scanning", "[runtime][unit][library-scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -250,7 +250,7 @@ namespace ao::rt::test
     }
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
 
     // We expect:
@@ -286,20 +286,20 @@ namespace ao::rt::test
     CHECK(foundRestricted);
   }
 
-  TEST_CASE("ScanPlanBuilder - handles empty roots", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - handles empty roots", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = std::filesystem::path{temp.path()} / "empty_music";
     std::filesystem::create_directories(musicRoot);
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.empty());
   }
 
-  TEST_CASE("ScanPlanBuilder - treats missing roots as fatal", "[runtime][unit][library-scan][error]")
+  TEST_CASE("ScanPlan - treats missing roots as fatal", "[runtime][unit][library-scan][error]")
   {
     auto const temp = ao::test::TempDir{};
     // Point the library at a music root that does not exist. The database still
@@ -308,14 +308,14 @@ namespace ao::rt::test
     auto const musicRoot = std::filesystem::path{temp.path()} / "does_not_exist";
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const result = scanner.buildPlan();
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("ScanPlanBuilder - classifies unambiguous moved files by audio identity", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - classifies unambiguous moved files by audio identity", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -330,7 +330,7 @@ namespace ao::rt::test
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     putManifestEntry(ml, "old-name.flac", TrackId{42}, identity);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
@@ -345,7 +345,7 @@ namespace ao::rt::test
     CHECK(plan.count(ScanClassification::New) == 0);
   }
 
-  TEST_CASE("ScanPlanBuilder - relinks moved files after metadata retag", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - relinks moved files after metadata retag", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -362,7 +362,7 @@ namespace ao::rt::test
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
     putManifestEntry(ml, "old-title.flac", TrackId{42}, identity);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
@@ -375,7 +375,7 @@ namespace ao::rt::test
     CHECK(item.audioSignature == identity.signature);
   }
 
-  TEST_CASE("ScanPlanBuilder - leaves equal-length signature mismatches unresolved", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - leaves equal-length signature mismatches unresolved", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -396,7 +396,7 @@ namespace ao::rt::test
                      TrackId{42},
                      AudioIdentity{.payloadLength = actualIdentity.payloadLength, .signature = wrongSignature});
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::Moved) == 0);
@@ -429,7 +429,7 @@ namespace ao::rt::test
     CHECK(foundMissing);
   }
 
-  TEST_CASE("ScanPlanBuilder - leaves duplicate-content moves unresolved", "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - leaves duplicate-content moves unresolved", "[runtime][unit][library][scan]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -449,7 +449,7 @@ namespace ao::rt::test
     putManifestEntry(ml, "old/copy-a.flac", TrackId{100}, identity);
     putManifestEntry(ml, "old/copy-b.flac", TrackId{200}, identity);
 
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto plan = scanner.buildPlan().value();
 
     CHECK(plan.count(ScanClassification::Moved) == 0);
@@ -481,8 +481,7 @@ namespace ao::rt::test
     CHECK(consumedResult.error().code == Error::Code::InvalidState);
   }
 
-  TEST_CASE("ScanPlanBuilder - explicit relink rejects pending and mismatched identities",
-            "[runtime][unit][library][scan]")
+  TEST_CASE("ScanPlan - explicit relink rejects pending and mismatched identities", "[runtime][unit][library][scan]")
   {
     SECTION("pending identity")
     {
@@ -493,7 +492,7 @@ namespace ao::rt::test
 
       auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
       putManifestEntry(ml, "old.flac", TrackId{100}, AudioIdentity{});
-      auto plan = ScanPlanBuilder{ml}.buildPlan().value();
+      auto plan = LibraryScan{ml}.buildPlan().value();
 
       auto result = std::move(plan).makeRelinkPlan("old.flac", "new.flac");
       REQUIRE_FALSE(result);
@@ -514,7 +513,7 @@ namespace ao::rt::test
       competingIdentity.signature.bytes.front() ^= std::byte{1};
       putManifestEntry(ml, "old-basic.flac", TrackId{100}, basicIdentity);
       putManifestEntry(ml, "old-competing.flac", TrackId{200}, competingIdentity);
-      auto plan = ScanPlanBuilder{ml}.buildPlan().value();
+      auto plan = LibraryScan{ml}.buildPlan().value();
 
       REQUIRE(plan.count(ScanClassification::New) == 1);
       REQUIRE(plan.count(ScanClassification::Missing) == 2);
@@ -524,7 +523,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ScanPlanBuilder - canonicalizes URI edge cases", "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - canonicalizes URI edge cases", "[runtime][unit][library-scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const& root = temp.path();
@@ -534,7 +533,7 @@ namespace ao::rt::test
     createFile(musicRoot / "nested" / "dir" / "song.flac");
 
     auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{root} / "db");
-    auto scanner = ScanPlanBuilder{ml};
+    auto scanner = LibraryScan{ml};
     auto const plan = scanner.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
@@ -548,7 +547,7 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ScanPlanBuilder - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -561,7 +560,7 @@ namespace ao::rt::test
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     putManifestEntry(library, "alias.flac", TrackId{42}, AudioIdentity{});
-    auto const plan = ScanPlanBuilder{library}.buildPlan().value();
+    auto const plan = LibraryScan{library}.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
     CHECK(plan.count(ScanClassification::New) == 0);
@@ -571,7 +570,7 @@ namespace ao::rt::test
     CHECK(plan.items().front().errorMessage.contains("outside the library root"));
   }
 
-  TEST_CASE("ScanPlanBuilder - in-root symlinks use one canonical target URI", "[runtime][unit][library-scan][uri]")
+  TEST_CASE("ScanPlan - in-root symlinks use one canonical target URI", "[runtime][unit][library-scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
     auto const musicRoot = temp.path() / "music";
@@ -581,7 +580,7 @@ namespace ao::rt::test
     auto const symlink = ao::test::SymlinkFixture{actualFile, musicRoot / "alias.flac", ao::test::SymlinkType::File};
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
-    auto const plan = ScanPlanBuilder{library}.buildPlan().value();
+    auto const plan = LibraryScan{library}.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
     CHECK(plan.count(ScanClassification::New) == 1);
@@ -589,7 +588,7 @@ namespace ao::rt::test
     CHECK(plan.items().front().fullPath == std::filesystem::canonical(actualFile));
   }
 
-  TEST_CASE("ScanPlanBuilder - an escaping directory symlink does not mark descendants missing",
+  TEST_CASE("ScanPlan - an escaping directory symlink does not mark descendants missing",
             "[runtime][regression][library-scan][uri]")
   {
     auto const temp = ao::test::TempDir{};
@@ -602,7 +601,7 @@ namespace ao::rt::test
 
     auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
     putManifestEntry(library, "alias/song.flac", TrackId{42}, AudioIdentity{});
-    auto const plan = ScanPlanBuilder{library}.buildPlan().value();
+    auto const plan = LibraryScan{library}.buildPlan().value();
 
     REQUIRE(plan.size() == 1);
     CHECK(plan.count(ScanClassification::Missing) == 0);

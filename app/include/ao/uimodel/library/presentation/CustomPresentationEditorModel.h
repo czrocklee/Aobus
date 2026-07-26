@@ -6,32 +6,29 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 
+#include <algorithm>
 #include <cstddef>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::uimodel
 {
-  struct TrackGroupKeyOption final
+  // A choice offered by a dropdown: the value it selects plus its authored label.
+  template<typename T>
+  struct LabeledOption final
   {
-    rt::TrackGroupKey key = rt::TrackGroupKey::None;
+    T value{};
     std::string label;
   };
 
-  struct TrackSortFieldOption final
-  {
-    rt::TrackSortField field = rt::TrackSortField::Title;
-    std::string label;
-  };
-
-  struct TrackVisibleFieldOption final
-  {
-    rt::TrackField field = rt::TrackField::Title;
-    std::string label;
-  };
+  using TrackGroupKeyOption = LabeledOption<rt::TrackGroupKey>;
+  using TrackSortFieldOption = LabeledOption<rt::TrackSortField>;
+  using TrackVisibleFieldOption = LabeledOption<rt::TrackField>;
 
   class CustomPresentationEditorModel final
   {
@@ -71,6 +68,58 @@ namespace ao::uimodel
     rt::CustomTrackPresentationPreset collectState(std::string_view generatedId) const;
 
   private:
+    // The sort-term and visible-field lists offer the same reordering gestures,
+    // and every dropdown resolves a current value back to its option index.
+
+    template<typename T>
+    static bool moveElementUp(std::vector<T>& elements, std::size_t index)
+    {
+      if (index == 0 || index >= elements.size())
+      {
+        return false;
+      }
+
+      std::swap(elements[index], elements[index - 1]);
+      return true;
+    }
+
+    template<typename T>
+    static bool moveElementDown(std::vector<T>& elements, std::size_t index)
+    {
+      if (index + 1 >= elements.size())
+      {
+        return false;
+      }
+
+      std::swap(elements[index], elements[index + 1]);
+      return true;
+    }
+
+    template<typename T>
+    static bool eraseElementAt(std::vector<T>& elements, std::size_t index)
+    {
+      if (index >= elements.size())
+      {
+        return false;
+      }
+
+      elements.erase(elements.begin() + static_cast<std::ptrdiff_t>(index));
+      return true;
+    }
+
+    template<typename T>
+    static std::optional<std::size_t> optionIndexOf(std::vector<LabeledOption<T>> const& options, T value)
+    {
+      auto const iter = std::ranges::find(options, value, &LabeledOption<T>::value);
+
+      if (iter == options.end())
+      {
+        return std::nullopt;
+      }
+
+      return static_cast<std::size_t>(std::ranges::distance(options.begin(), iter));
+    }
+
     static std::vector<TrackGroupKeyOption> makeGroupOptions();
     static std::vector<TrackSortFieldOption> makeSortFieldOptions();
     static std::vector<TrackVisibleFieldOption> makeVisibleFieldOptions();

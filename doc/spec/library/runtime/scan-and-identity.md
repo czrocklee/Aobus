@@ -135,7 +135,7 @@ Cancellation is cooperative during payload hashing and before commit.
 ## Implementation map
 
 - [`LibraryScan.h`](../../../../app/include/ao/rt/library/LibraryScan.h) and [`ScanPlan.h`](../../../../app/include/ao/rt/library/ScanPlan.h) define the shared scan surface.
-- [`ScanPlanBuilder.cpp`](../../../../app/runtime/library/ScanPlanBuilder.cpp) owns planning and move matching.
+- [`LibraryScan.cpp`](../../../../app/runtime/library/LibraryScan.cpp) owns planning and move matching.
 - [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns transactional application.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns maintenance lifetime and prepare/apply worker composition.
 - [`AudioIdentity.h`](../../../../include/ao/library/AudioIdentity.h) owns identity calculation.
@@ -143,7 +143,7 @@ Cancellation is cooperative during payload hashing and before commit.
 
 ## Test map
 
-- [`ScanPlanBuilderTest.cpp`](../../../../test/unit/runtime/library/ScanPlanBuilderTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
+- [`ScanPlanTest.cpp`](../../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
 - [`ScanApplyOperationTest.cpp`](../../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves binding rejection, replay protection, prepared-file revalidation, atomic application, curated-metadata preservation, relinking, failures, progress, and cancellation.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
 - [`AudioIdentityTest.cpp`](../../../../test/unit/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.

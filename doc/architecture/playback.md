@@ -307,7 +307,8 @@ Adoption installs the source error callback and starts its decode thread; explic
 Session restore, an unprepared Next/Previous fallback, and output-route reopening retain their synchronous audio paths.
 The playback-session debounce delay sleeps outside the callback executor, but snapshot construction and the one-shot `ConfigStore` save run synchronously after resuming on it.
 
-Runtime lower-layer signals are delivered synchronously within the callback domain and are exception-contained by their owner.
+Runtime lower-layer signals are delivered synchronously within the callback domain, and their handlers are `noexcept`.
+Contract-fulfilling handlers complete in connection order; an escaping exception violates the contract and terminates at its throw point, with no guarantee that later handlers run.
 Public playback observation is delivered only by `PlaybackService`; a command requested from one of its observers enters the service FIFO and executes on a later executor turn.
 Explicit start and restore use silent lower-owner installation, so succession never has to react to the transport publication of its own command and no publication-depth, privileged-mutation, installation, or restore guard is required.
 

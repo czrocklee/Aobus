@@ -54,9 +54,10 @@ Each publication occurs after final snapshot state is installed.
 ## Failure and lifetime
 
 Missing tracks contribute no loaded values and are not fatal.
-Unexpected storage failures follow the runtime storage-result boundary.
+Storage and invariant failures are not translated into projection availability; crossing a `noexcept` callback boundary is fatal.
 
 The projection releases workspace, view, and library-change subscriptions before those borrowed owners are destroyed.
+Its observer signal weak-invalidates outstanding subscriptions when the projection itself is destroyed.
 
 ## Implementation map
 

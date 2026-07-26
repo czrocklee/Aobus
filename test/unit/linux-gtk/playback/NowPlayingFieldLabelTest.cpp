@@ -139,7 +139,7 @@ namespace ao::gtk::test
       REQUIRE(gtkLabel);
 
       auto optRequest = std::optional<rt::PlaybackRevealTrackRequest>{};
-      auto sub = runtime.playback().events().onRevealTrackRequested([&](auto const& ev) { optRequest = ev; });
+      auto sub = runtime.playback().events().onRevealTrackRequested([&](auto const& ev) noexcept { optRequest = ev; });
 
       auto const trackId = addPlayableTrack(runtime, "Reveal Song", "Reveal Artist");
       startPlayback(runtime, trackId);
@@ -167,7 +167,7 @@ namespace ao::gtk::test
 
       bool started = false;
       auto startSub = runtime.playback().events().onSnapshot(
-        [&](rt::PlaybackSnapshot const& snapshot)
+        [&](rt::PlaybackSnapshot const& snapshot) noexcept
         { started = snapshot.transport.transport == audio::Transport::Playing; });
       REQUIRE(emitGesturePressed(*gtkLabel, 1, 2.0, 3.0, Gtk::PropagationPhase::BUBBLE));
       drainGtkEvents();

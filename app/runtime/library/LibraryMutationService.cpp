@@ -15,11 +15,13 @@
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
 #include <format>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -29,6 +31,72 @@
 
 namespace ao::rt
 {
+  struct LibraryMutationService::MaintenanceGuard::LifetimeState final
+  {
+    explicit LifetimeState(LibraryMutationService* ownerValue) noexcept
+      : _owner{ownerValue}
+    {
+    }
+
+    template<typename Operation>
+    void invokeIfAlive(Operation&& operation)
+    {
+      auto* liveOwner = static_cast<LibraryMutationService*>(nullptr);
+
+      {
+        auto const lock = std::scoped_lock{_mutex};
+
+        if (_owner == nullptr)
+        {
+          return;
+        }
+
+        liveOwner = _owner;
+        ++_activeCalls;
+      }
+
+      try
+      {
+        std::invoke(std::forward<Operation>(operation), *liveOwner);
+      }
+      catch (...)
+      {
+        releaseCall();
+        throw;
+      }
+
+      releaseCall();
+    }
+
+    void retire() noexcept
+    {
+      auto lock = std::unique_lock{_mutex};
+      _owner = nullptr;
+      _callsCompleted.wait(lock, [this] { return _activeCalls == 0; });
+    }
+
+  private:
+    void releaseCall() noexcept
+    {
+      bool allCallsCompleted = false;
+      {
+        auto const lock = std::scoped_lock{_mutex};
+        --_activeCalls;
+        allCallsCompleted = _activeCalls == 0;
+      }
+
+      if (allCallsCompleted)
+      {
+        _callsCompleted.notify_all();
+      }
+    }
+
+    std::mutex _mutex;
+    std::condition_variable _callsCompleted;
+    LibraryMutationService* _owner;
+    std::size_t _activeCalls = 0;
+  };
+
   namespace
   {
     std::uint64_t nextRuntimeInstanceId() noexcept
@@ -89,22 +157,23 @@ namespace ao::rt
     return _owner->commit(*this, std::move(changeSet));
   }
 
-  LibraryMutationService::MaintenanceGuard::MaintenanceGuard(LibraryMutationService& owner,
+  LibraryMutationService::MaintenanceGuard::MaintenanceGuard(std::weak_ptr<LifetimeState> lifetimeStatePtr,
                                                              std::uint64_t generation) noexcept
-    : _owner{&owner}, _generation{generation}
+    : _lifetimeStatePtr{std::move(lifetimeStatePtr)}, _generation{generation}
   {
   }
 
   LibraryMutationService::MaintenanceGuard::~MaintenanceGuard()
   {
-    if (_owner != nullptr)
+    if (auto const lifetimeStatePtr = _lifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
     {
-      _owner->finishMaintenance(_generation);
+      lifetimeStatePtr->invokeIfAlive([generation = _generation](LibraryMutationService& owner) noexcept
+                                      { owner.finishMaintenance(generation); });
     }
   }
 
   LibraryMutationService::MaintenanceGuard::MaintenanceGuard(MaintenanceGuard&& other) noexcept
-    : _owner{std::exchange(other._owner, nullptr)}, _generation{std::exchange(other._generation, 0)}
+    : _lifetimeStatePtr{std::move(other._lifetimeStatePtr)}, _generation{std::exchange(other._generation, 0)}
   {
   }
 
@@ -116,12 +185,16 @@ namespace ao::rt
     , _library{_writableLibrary.library()}
     , _changes{changes}
     , _runtimeInstanceId{nextRuntimeInstanceId()}
+    , _lifetimeStatePtr{std::make_shared<MaintenanceGuard::LifetimeState>(this)}
     , _lastCommittedRevision{currentLibraryRevision(_library)}
     , _availableRevision{_lastCommittedRevision}
   {
   }
 
-  LibraryMutationService::~LibraryMutationService() = default;
+  LibraryMutationService::~LibraryMutationService()
+  {
+    _lifetimeStatePtr->retire();
+  }
 
   LibraryAuthoringAvailability LibraryMutationService::availability() const
   {
@@ -130,7 +203,7 @@ namespace ao::rt
   }
 
   async::Subscription LibraryMutationService::onAvailabilityChanged(
-    std::move_only_function<void(LibraryAuthoringAvailability const&)> handler) const
+    std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const
   {
     return _availabilityChanged.connect(std::move(handler));
   }
@@ -308,7 +381,7 @@ namespace ao::rt
 
     try
     {
-      _callbackExecutor.dispatch([this, expected] { emitAvailability(expected); });
+      dispatchAvailability(expected);
     }
     catch (...)
     {
@@ -323,7 +396,7 @@ namespace ao::rt
       throw;
     }
 
-    return MaintenanceGuard{*this, generation};
+    return MaintenanceGuard{_lifetimeStatePtr, generation};
   }
 
   Result<LibraryMutationService::Mutation> LibraryMutationService::beginMaintenanceMutation(
@@ -339,7 +412,7 @@ namespace ao::rt
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
 
-      if (guard._owner != this || guard._generation != _maintenanceGeneration)
+      if (guard._lifetimeStatePtr.lock() != _lifetimeStatePtr || guard._generation != _maintenanceGeneration)
       {
         return makeError(Error::Code::InvalidState, "Library maintenance session is no longer active");
       }
@@ -396,7 +469,7 @@ namespace ao::rt
     if (optFaulted)
     {
       finishMutation();
-      _callbackExecutor.dispatch([this, expected = *optFaulted] { emitAvailability(expected); });
+      dispatchAvailability(*optFaulted);
       return makeError(
         Error::Code::InvalidState,
         std::format("Library revision gap before commit: expected {}, got {}", expectedRevision, revision));
@@ -431,9 +504,17 @@ namespace ao::rt
 
     try
     {
-      _changes.publishFromCoordinator(std::move(changeSet),
-                                      [this, revision](std::exception_ptr failure)
-                                      { handlePublication(revision, std::move(failure)); });
+      _changes.publishFromCoordinator(
+        std::move(changeSet),
+        [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr},
+         revision](std::exception_ptr failure)
+        {
+          if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
+          {
+            lifetimeStatePtr->invokeIfAlive([revision, &failure](LibraryMutationService& owner)
+                                            { owner.handlePublication(revision, std::move(failure)); });
+          }
+        });
     }
     catch (...)
     {
@@ -487,7 +568,7 @@ namespace ao::rt
       {
         try
         {
-          _callbackExecutor.dispatch([this, expected = *optFaulted] { emitAvailability(expected); });
+          dispatchAvailability(*optFaulted);
         }
         catch (...)
         {
@@ -517,7 +598,7 @@ namespace ao::rt
 
     try
     {
-      _callbackExecutor.dispatch([this, expected] { emitAvailability(expected); });
+      dispatchAvailability(expected);
     }
     catch (...)
     {
@@ -558,27 +639,29 @@ namespace ao::rt
 
     if (shouldEmit)
     {
-      try
+      if (_callbackExecutor.isCurrent())
       {
-        if (_callbackExecutor.isCurrent())
-        {
-          emitAvailability(expected);
-        }
-        else
-        {
-          _callbackExecutor.dispatch([this, expected] { emitAvailability(expected); });
-        }
+        emitAvailability(expected);
       }
-      catch (...)
+      else
       {
-        if (!completionFailure)
+        // Only the enqueue can fail here. Availability observers are noexcept
+        // notifications, so nothing they do can fault a committed publication.
+        try
         {
-          completionFailure = std::current_exception();
+          dispatchAvailability(expected);
         }
+        catch (...)
+        {
+          if (!completionFailure)
+          {
+            completionFailure = std::current_exception();
+          }
 
-        auto const stateLock = std::scoped_lock{_stateMutex};
-        _state = LibraryAuthoringState::Faulted;
-        _maintenanceKind = LibraryMaintenanceKind::None;
+          auto const stateLock = std::scoped_lock{_stateMutex};
+          _state = LibraryAuthoringState::Faulted;
+          _maintenanceKind = LibraryMaintenanceKind::None;
+        }
       }
     }
 
@@ -595,7 +678,20 @@ namespace ao::rt
     }
   }
 
-  void LibraryMutationService::emitAvailability(LibraryAuthoringAvailability const& expected)
+  void LibraryMutationService::dispatchAvailability(LibraryAuthoringAvailability expected)
+  {
+    _callbackExecutor.dispatch(
+      [weakLifetimeStatePtr = std::weak_ptr<MaintenanceGuard::LifetimeState>{_lifetimeStatePtr}, expected]
+      {
+        if (auto const lifetimeStatePtr = weakLifetimeStatePtr.lock(); lifetimeStatePtr != nullptr)
+        {
+          lifetimeStatePtr->invokeIfAlive([expected](LibraryMutationService& owner) noexcept
+                                          { owner.emitAvailability(expected); });
+        }
+      });
+  }
+
+  void LibraryMutationService::emitAvailability(LibraryAuthoringAvailability const& expected) noexcept
   {
     {
       auto const stateLock = std::scoped_lock{_stateMutex};
@@ -606,37 +702,7 @@ namespace ao::rt
       }
     }
 
-    try
-    {
-      _availabilityChanged.emit(expected);
-    }
-    catch (...)
-    {
-      auto const failure = std::current_exception();
-      auto faulted = LibraryAuthoringAvailability{};
-
-      {
-        auto const stateLock = std::scoped_lock{_stateMutex};
-        _state = LibraryAuthoringState::Faulted;
-        _maintenanceKind = LibraryMaintenanceKind::None;
-        faulted = availabilityLocked();
-      }
-
-      if (expected.state != LibraryAuthoringState::Faulted)
-      {
-        try
-        {
-          _availabilityChanged.emit(faulted);
-        }
-        catch (...)
-        {
-          // Fault notification is best effort; preserve the first observer failure.
-          std::rethrow_exception(failure);
-        }
-      }
-
-      std::rethrow_exception(failure);
-    }
+    _availabilityChanged.emit(expected);
   }
 
   LibraryAuthoringAvailability LibraryMutationService::availabilityLocked() const noexcept

@@ -23,7 +23,8 @@ namespace ao::rt
 {
   TrackSource::~TrackSource() = default;
 
-  async::Subscription TrackSource::subscribe(std::move_only_function<void(TrackSourceDeltaBatch const&)> handler)
+  async::Subscription TrackSource::subscribe(
+    std::move_only_function<void(TrackSourceDeltaBatch const&) noexcept> handler)
   {
     if (!handler)
     {
@@ -39,7 +40,7 @@ namespace ao::rt
     return _changedSignal.connect(std::move(handler));
   }
 
-  void TrackSource::invalidate()
+  void TrackSource::invalidate() noexcept
   {
     if (_state == TrackSourceState::Invalidated)
     {
@@ -47,6 +48,7 @@ namespace ao::rt
     }
 
     _state = TrackSourceState::Invalidated;
+    discardSnapshot();
     _changedSignal.emit(TrackSourceDeltaBatch{.deltas = {SourceInvalidated{}}});
     _changedSignal.disconnectAll();
   }

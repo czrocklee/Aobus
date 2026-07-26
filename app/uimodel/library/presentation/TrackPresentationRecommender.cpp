@@ -57,8 +57,6 @@ namespace ao::uimodel
       bool hasGenre() const noexcept { return _hasGenre; }
       bool hasYear() const noexcept { return _hasYear; }
       bool hasAlbumArtist() const noexcept { return _hasAlbumArtist; }
-      bool hasArtist() const noexcept { return _hasArtist; }
-      bool hasAlbum() const noexcept { return _hasAlbum; }
       bool hasTechnical() const noexcept { return _hasTechnical; }
 
     private:
@@ -84,8 +82,6 @@ namespace ao::uimodel
           case query::Field::GenreId: _hasGenre = true; break;
           case query::Field::Year: _hasYear = true; break;
           case query::Field::AlbumArtistId: _hasAlbumArtist = true; break;
-          case query::Field::ArtistId: _hasArtist = true; break;
-          case query::Field::AlbumId: _hasAlbum = true; break;
           case query::Field::SampleRate:
           case query::Field::BitDepth:
           case query::Field::Bitrate: _hasTechnical = true; break;
@@ -99,8 +95,6 @@ namespace ao::uimodel
       bool _hasGenre = false;
       bool _hasYear = false;
       bool _hasAlbumArtist = false;
-      bool _hasArtist = false;
-      bool _hasAlbum = false;
       bool _hasTechnical = false;
     };
 
@@ -191,11 +185,8 @@ namespace ao::uimodel
       return findPreset("artists");
     }
 
-    if (visitor.hasArtist() || visitor.hasAlbum())
-    {
-      return findPreset("albums");
-    }
-
+    // Artist and album queries fall through on purpose: "albums" is already the
+    // default, so they need no branch of their own.
     return fallbackSpec;
   }
 } // namespace ao::uimodel

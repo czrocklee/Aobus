@@ -32,7 +32,7 @@ namespace ao::rt
     loadStoredTracks(view);
     rebuildEffectiveTracks();
     _parentSubscription =
-      _parentLease->subscribe([this](TrackSourceDeltaBatch const& batch) { handleParentBatch(batch); });
+      _parentLease->subscribe([this](TrackSourceDeltaBatch const& batch) noexcept { handleParentBatch(batch); });
   }
 
   ManualListSource::~ManualListSource()
@@ -141,6 +141,13 @@ namespace ao::rt
   std::optional<std::size_t> ManualListSource::indexOf(TrackId const id) const
   {
     return _effectiveTracks.indexOf(id);
+  }
+
+  void ManualListSource::discardSnapshot() noexcept
+  {
+    _parentSubscription.reset();
+    _storedTracks.clear();
+    _effectiveTracks.clear();
   }
 
   void ManualListSource::ensureLive() const

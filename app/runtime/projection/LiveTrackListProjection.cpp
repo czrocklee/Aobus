@@ -1215,6 +1215,14 @@ namespace ao::rt
 
       sourceInvalidated = true;
       sourceSubscription.reset();
+      sourceOrder.clear();
+      orderIndex.clear();
+      rowIndexByTrackId.clear();
+      sections.clear();
+      dictionaryTextCache.clear();
+      stringArena.clear();
+      normScratch.clear();
+      rowsTouchedSinceRebuild = 0;
       auto const batch = TrackListProjectionDeltaBatch{.deltas = {ProjectionSourceInvalidated{}}};
       changedSignal.emit(batch);
       changedSignal.disconnectAll();
@@ -1366,7 +1374,7 @@ namespace ao::rt
     : _implPtr{std::make_unique<Impl>(viewId, std::move(sourceLease), library)}
   {
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
-      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) { impl->handleSourceBatch(batch); });
+      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) noexcept { impl->handleSourceBatch(batch); });
   }
 
   LiveTrackListProjection::LiveTrackListProjection(ViewId viewId,
@@ -1381,7 +1389,7 @@ namespace ao::rt
     }
 
     _implPtr->sourceSubscription = _implPtr->sourceLease->subscribe(
-      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) { impl->handleSourceBatch(batch); });
+      [impl = _implPtr.get()](TrackSourceDeltaBatch const& batch) noexcept { impl->handleSourceBatch(batch); });
   }
 
   LiveTrackListProjection::~LiveTrackListProjection() = default;
@@ -1525,7 +1533,7 @@ namespace ao::rt
   }
 
   async::Subscription LiveTrackListProjection::subscribe(
-    std::move_only_function<void(TrackListProjectionDeltaBatch const&)> handler)
+    std::move_only_function<void(TrackListProjectionDeltaBatch const&) noexcept> handler)
   {
     if (!handler)
     {
@@ -1540,8 +1548,8 @@ namespace ao::rt
 
     auto handlerPtr =
       std::make_shared<std::move_only_function<void(TrackListProjectionDeltaBatch const&)>>(std::move(handler));
-    auto subscription = _implPtr->changedSignal.connect([handlerPtr](TrackListProjectionDeltaBatch const& batch)
-                                                        { (*handlerPtr)(batch); });
+    auto subscription = _implPtr->changedSignal.connect(
+      [handlerPtr](TrackListProjectionDeltaBatch const& batch) noexcept { (*handlerPtr)(batch); });
 
     (*handlerPtr)(TrackListProjectionDeltaBatch{.deltas = {ProjectionReset{}}});
 

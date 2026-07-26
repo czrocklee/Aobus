@@ -79,8 +79,8 @@ namespace ao::uimodel
     , _onRender{std::move(onRender)}
     , _lastOutput{playback.snapshot().transport.output}
   {
-    _snapshotSub =
-      _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) { handleSnapshot(snapshot); });
+    _snapshotSub = _playback.events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
+                                                 { handleSnapshot(snapshot); });
   }
 
   void OutputDeviceViewModel::selectOutputDevice(audio::BackendId const& backendId,

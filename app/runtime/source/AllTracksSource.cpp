@@ -25,6 +25,11 @@ namespace ao::rt
 
   void AllTracksSource::reloadFromStore(library::ReadTransaction const& transaction)
   {
+    if (state() == TrackSourceState::Invalidated)
+    {
+      return;
+    }
+
     auto const reader = _store.reader(transaction);
     auto ids = std::vector<TrackId>{};
     ids.reserve(1000);
@@ -54,6 +59,11 @@ namespace ao::rt
   void AllTracksSource::applyCollectionChange(std::span<TrackId const> const inserted,
                                               std::span<TrackId const> const removed)
   {
+    if (state() == TrackSourceState::Invalidated)
+    {
+      return;
+    }
+
     auto const previousSize = _trackIds.size();
     auto builder = TrackSourceDeltaBuilder{previousSize};
     auto insertedIds = std::vector<TrackId>{inserted.begin(), inserted.end()};
@@ -143,5 +153,10 @@ namespace ao::rt
     }
 
     return std::nullopt;
+  }
+
+  void AllTracksSource::discardSnapshot() noexcept
+  {
+    _trackIds.clear();
   }
 } // namespace ao::rt

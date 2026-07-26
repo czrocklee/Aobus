@@ -12,14 +12,8 @@
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
-#include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Transport.h>
-#include <ao/library/CoverArt.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
@@ -38,9 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <exception>
 #include <expected>
-#include <filesystem>
 #include <format>
 #include <functional>
 #include <memory>
@@ -49,7 +41,6 @@
 #include <source_location>
 #include <span>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -58,73 +49,6 @@ namespace ao::rt
   namespace
   {
     constexpr std::size_t kMaxConsecutivePlaybackFailures = 3;
-
-    Result<PlaybackTransport::PlaybackRequest> playbackRequestForTrack(library::MusicLibrary const& library,
-                                                                       TrackId const trackId)
-    {
-      auto const transaction = library.readTransaction();
-      auto reader = library.tracks().reader(transaction);
-      auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
-
-      if (!optView)
-      {
-        return makeError(Error::Code::NotFound, "track not found");
-      }
-
-      auto const& view = *optView;
-      auto const metadata = view.metadata();
-      auto const property = view.property();
-      auto optFilePath = std::optional<std::filesystem::path>{};
-
-      if (auto const uriText = property.uri(); !uriText.empty())
-      {
-        auto uri = library::LibraryUri::parse(uriText);
-
-        if (!uri)
-        {
-          return makeError(
-            Error::Code::CorruptData,
-            std::format("track {} contains an invalid library URI: {}", trackId.raw(), uri.error().message));
-        }
-
-        auto resolved = uri->resolveUnder(library.rootPath());
-
-        if (!resolved)
-        {
-          return std::unexpected{resolved.error()};
-        }
-
-        optFilePath = std::move(*resolved);
-      }
-
-      auto request = PlaybackTransport::PlaybackRequest{
-        .item =
-          NowPlayingInfo{
-            .trackId = trackId,
-            .coverArtId = view.coverArt()
-                            .primary()
-                            .transform([](library::CoverArt const cover) { return cover.resourceId; })
-                            .value_or(kInvalidResourceId),
-            .title = std::string{metadata.title()},
-            .artist = std::string{library.dictionary().getOrDefault(metadata.artistId())},
-            .album = std::string{library.dictionary().getOrDefault(metadata.albumId())},
-          },
-        .input =
-          audio::PlaybackInput{
-            .duration = property.duration(),
-            .sampleRateHint = property.sampleRate().raw(),
-            .channelsHint = property.channels().raw(),
-            .bitDepthHint = property.bitDepth().raw(),
-          },
-      };
-
-      if (optFilePath)
-      {
-        request.input.filePath = *optFilePath;
-      }
-
-      return request;
-    }
 
     bool isRecoverableTrackFailure(PlaybackFailure const& failure) noexcept
     {
@@ -146,64 +70,6 @@ namespace ao::rt
       }
 
       std::abort();
-    }
-
-    template<typename Publish>
-    void publishSequenceObserverSafely(std::string_view const eventName, Publish&& publish) noexcept
-    {
-      try
-      {
-        std::forward<Publish>(publish)();
-      }
-      catch (std::exception const& error)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback sequence {} observer threw: {}", eventName, error.what());
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- observer containment must remain noexcept
-        {
-        }
-      }
-      catch (...)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback sequence {} observer threw an unknown exception", eventName);
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- observer containment must remain noexcept
-        {
-        }
-      }
-    }
-
-    template<typename Step>
-    void runAcceptedRestoreStepSafely(std::string_view const stepName, Step&& step) noexcept
-    {
-      try
-      {
-        std::forward<Step>(step)();
-      }
-      catch (std::exception const& error)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback restore {} failed after acceptance: {}", stepName, error.what());
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- accepted restore must remain noexcept
-        {
-        }
-      }
-      catch (...)
-      {
-        try
-        {
-          APP_LOG_ERROR("Playback restore {} failed after acceptance with an unknown exception", stepName);
-        }
-        catch (...) // NOLINT(bugprone-empty-catch) -- accepted restore must remain noexcept
-        {
-        }
-      }
     }
   } // namespace
 
@@ -329,7 +195,7 @@ namespace ao::rt
 
       if (semanticChanged && !isClosing())
       {
-        publishSequenceObserverSafely("state-changed", [this] { changedSignal.emit(state); });
+        changedSignal.emit(state);
       }
     }
 
@@ -352,7 +218,7 @@ namespace ao::rt
     {
       if (!isClosing())
       {
-        publishSequenceObserverSafely("restorable-state-changed", [this] { restorableStateChangedSignal.emit(); });
+        restorableStateChangedSignal.emit();
       }
     }
 
@@ -431,7 +297,7 @@ namespace ao::rt
 
       if (!isClosing())
       {
-        publishSequenceObserverSafely("explicit-start-settled", [this] { explicitStartSettledSignal.emit(); });
+        explicitStartSettledSignal.emit();
       }
     }
 
@@ -446,7 +312,7 @@ namespace ao::rt
       }
 
       captureRestorableSnapshot();
-      auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
+      auto const optDisarmedToken = transport.clearPreparedNext();
       sessionPtr->invalidatePreparedNext(optDisarmedToken);
       sessionPtr.reset();
       restartDeadline.clearSession();
@@ -467,7 +333,7 @@ namespace ao::rt
       captureRestorableSnapshot();
       stoppingTransport = true;
 
-      if (auto const barrier = transport.stopSuccession(); sessionPtr)
+      if (auto const barrier = transport.stop(); sessionPtr)
       {
         sessionPtr->clearPreparedCoveredBy(barrier);
       }
@@ -562,7 +428,7 @@ namespace ao::rt
 
       if (sourceInvalidated)
       {
-        auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
+        auto const optDisarmedToken = transport.clearPreparedNext();
         sessionPtr->invalidatePreparedNext(optDisarmedToken);
         captureRestorableSnapshot();
       }
@@ -674,7 +540,7 @@ namespace ao::rt
       if (!sessionPtr)
       {
         cancelPendingLookahead();
-        std::ignore = transport.clearSuccessionPreparedNext();
+        std::ignore = transport.clearPreparedNext();
         return false;
       }
 
@@ -695,7 +561,7 @@ namespace ao::rt
       }
 
       cancelPendingLookahead();
-      auto const optDisarmedToken = transport.clearSuccessionPreparedNext();
+      auto const optDisarmedToken = transport.clearPreparedNext();
       registry.invalidate(optDisarmedToken);
 
       if (!optSuccessor)
@@ -716,7 +582,7 @@ namespace ao::rt
         return makeError(Error::Code::InvalidState, "No active playback sequence");
       }
 
-      auto barrier = transport.playSuccessionTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId);
+      auto barrier = transport.playTrack(trackId, sessionPtr->cursor().launchSpec().sourceListId, false);
 
       if (!barrier)
       {
@@ -1078,7 +944,7 @@ namespace ao::rt
           return PlaybackFailureDisposition::Unhandled;
         });
       idleSubscription = transport.onIdle(
-        [this]
+        [this] noexcept
         {
           if (!isClosing() && sessionPtr && !stoppingTransport && transport.state().transport == audio::Transport::Idle)
           {
@@ -1086,7 +952,7 @@ namespace ao::rt
           }
         });
       nowPlayingSubscription = transport.onNowPlayingChanged(
-        [this](PlaybackTransport::NowPlayingChanged const& event)
+        [this](PlaybackTransport::NowPlayingChanged const& event) noexcept
         {
           if (!isClosing())
           {
@@ -1094,7 +960,7 @@ namespace ao::rt
           }
         });
       outputSubscription = transport.onOutputDeviceChanged(
-        [this](OutputDeviceSelection const&)
+        [this](OutputDeviceSelection const&) noexcept
         {
           if (!isClosing())
           {
@@ -1103,7 +969,7 @@ namespace ao::rt
           }
         });
       seekSubscription = transport.onSeekUpdate(
-        [this](PlaybackTransport::SeekUpdate const& event)
+        [this](PlaybackTransport::SeekUpdate const& event) noexcept
         {
           if (!isClosing() && sessionPtr && event.mode == PlaybackTransport::SeekMode::Final)
           {
@@ -1117,7 +983,7 @@ namespace ao::rt
           }
         });
       startedSubscription = transport.onStarted(
-        [this]
+        [this] noexcept
         {
           if (!isClosing() && sessionPtr)
           {
@@ -1125,7 +991,7 @@ namespace ao::rt
           }
         });
       pausedSubscription = transport.onPaused(
-        [this]
+        [this] noexcept
         {
           if (!isClosing() && sessionPtr)
           {
@@ -1133,7 +999,7 @@ namespace ao::rt
           }
         });
       stoppedSubscription = transport.onStopped(
-        [this]
+        [this] noexcept
         {
           if (!isClosing() && !stoppingTransport)
           {
@@ -1202,6 +1068,12 @@ namespace ao::rt
     bool stoppingTransport = false;
   };
 
+  PlaybackSuccession::Impl* PlaybackSuccession::checkedImpl(std::source_location const location) const
+  {
+    _implPtr->ensureOnExecutor(location);
+    return _implPtr.get();
+  }
+
   PlaybackSuccession::PlaybackSuccession(async::Executor& executor,
                                          ViewService& views,
                                          TrackSourceCache& sources,
@@ -1218,8 +1090,7 @@ namespace ao::rt
 
   Result<> PlaybackSuccession::playFromView(ViewId const viewId, TrackId const startTrackId)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->cancelPendingStart();
     impl->cancelPendingLookahead();
 
@@ -1272,22 +1143,19 @@ namespace ao::rt
 
   bool PlaybackSuccession::hasNext() const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->state.hasNext;
   }
 
   bool PlaybackSuccession::hasPrevious() const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->state.hasPrevious;
   }
 
   bool PlaybackSuccession::next()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->cancelPendingStart();
     impl->cancelPendingLookahead();
 
@@ -1305,8 +1173,7 @@ namespace ao::rt
 
   bool PlaybackSuccession::previous()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->cancelPendingStart();
     impl->cancelPendingLookahead();
 
@@ -1337,16 +1204,14 @@ namespace ao::rt
 
   void PlaybackSuccession::clear()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     impl->deactivateSession();
   }
 
   void PlaybackSuccession::setShuffleMode(ShuffleMode const mode)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (impl->shuffleMode == mode)
     {
@@ -1363,16 +1228,14 @@ namespace ao::rt
 
     impl->synchronizeState();
 
-    publishSequenceObserverSafely(
-      "shuffle-mode-changed", [&] { impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode}); });
+    impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = mode});
 
     impl->notifyRestorableStateChanged();
   }
 
   void PlaybackSuccession::setRepeatMode(RepeatMode const mode)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (impl->repeatMode == mode)
     {
@@ -1389,54 +1252,47 @@ namespace ao::rt
 
     impl->synchronizeState();
 
-    publishSequenceObserverSafely(
-      "repeat-mode-changed", [&] { impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode}); });
+    impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = mode});
 
     impl->notifyRestorableStateChanged();
   }
 
   PlaybackSuccessionState const& PlaybackSuccession::state() const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->state;
   }
 
   async::Subscription PlaybackSuccession::onChanged(
-    std::move_only_function<void(PlaybackSuccessionState const&)> handler)
+    std::move_only_function<void(PlaybackSuccessionState const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->changedSignal.connect(std::move(handler));
   }
 
-  async::Subscription PlaybackSuccession::onExplicitStartSettled(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSuccession::onExplicitStartSettled(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->explicitStartSettledSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onShuffleModeChanged(
-    std::move_only_function<void(ShuffleModeChanged const&)> handler)
+    std::move_only_function<void(ShuffleModeChanged const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->shuffleModeChangedSignal.connect(std::move(handler));
   }
 
   async::Subscription PlaybackSuccession::onRepeatModeChanged(
-    std::move_only_function<void(RepeatModeChanged const&)> handler)
+    std::move_only_function<void(RepeatModeChanged const&) noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->repeatModeChangedSignal.connect(std::move(handler));
   }
 
   bool PlaybackSuccession::hasActivePlaybackSession() const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->sessionPtr != nullptr;
   }
 
@@ -1444,8 +1300,7 @@ namespace ao::rt
                                                           TrackId& currentTrackId,
                                                           std::size_t& anchorIndex) const
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (impl->sessionPtr)
     {
@@ -1474,8 +1329,7 @@ namespace ao::rt
     ShuffleMode const restoredShuffleMode,
     RepeatMode const restoredRepeatMode)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return PlaybackCursorSession::createForRestore(std::move(launchSpec),
                                                    currentTrackId,
                                                    anchorIndex,
@@ -1486,14 +1340,13 @@ namespace ao::rt
                                                    impl->makeCandidateChooser());
   }
 
-  // Executor-affinity failure deliberately terminates this otherwise contained noexcept commit.
+  // Every accepted restore step is part of this noexcept commit.
   void PlaybackSuccession::commitPlaybackSessionRestore(std::unique_ptr<PlaybackCursorSession> sessionPtr,
                                                         ShuffleMode const restoredShuffleMode,
                                                         RepeatMode const restoredRepeatMode,
                                                         std::chrono::milliseconds const elapsed) noexcept
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
 
     if (!sessionPtr)
     {
@@ -1505,33 +1358,27 @@ namespace ao::rt
     impl->shuffleMode = restoredShuffleMode;
     impl->repeatMode = restoredRepeatMode;
     impl->resetFailureState();
-    runAcceptedRestoreStepSafely("projection observation", [&] { impl->startObservingCurrentSession(); });
-    runAcceptedRestoreStepSafely("restart deadline", [&] { impl->restartDeadline.replaceSession(elapsed, false); });
-    runAcceptedRestoreStepSafely("prepared successor", [&] { impl->reprepareNext(false); });
-    runAcceptedRestoreStepSafely("state publication", [&] { impl->synchronizeState(); });
-    publishSequenceObserverSafely(
-      "shuffle-mode-changed",
-      [&] { impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = restoredShuffleMode}); });
+    impl->startObservingCurrentSession();
+    impl->restartDeadline.replaceSession(elapsed, false);
+    impl->reprepareNext(false);
+    impl->synchronizeState();
+    impl->shuffleModeChangedSignal.emit(ShuffleModeChanged{.mode = restoredShuffleMode});
 
     if (!impl->isClosing())
     {
-      publishSequenceObserverSafely(
-        "repeat-mode-changed",
-        [&] { impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = restoredRepeatMode}); });
+      impl->repeatModeChangedSignal.emit(RepeatModeChanged{.mode = restoredRepeatMode});
     }
   }
 
   void PlaybackSuccession::discardPlaybackSessionSnapshot()
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     impl->optLastRestorableSnapshot.reset();
   }
 
-  async::Subscription PlaybackSuccession::onRestorableStateChanged(std::move_only_function<void()> handler)
+  async::Subscription PlaybackSuccession::onRestorableStateChanged(std::move_only_function<void() noexcept> handler)
   {
-    auto* const impl = _implPtr.get();
-    impl->ensureOnExecutor();
+    auto* const impl = checkedImpl();
     return impl->restorableStateChangedSignal.connect(std::move(handler));
   }
 } // namespace ao::rt

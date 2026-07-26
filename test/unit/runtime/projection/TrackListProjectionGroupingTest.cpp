@@ -39,7 +39,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1, id2, id3, id4, id5}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
                                                .sortBy = {
@@ -137,7 +137,7 @@ namespace ao::rt::test
     env.setupFiltered(ids);
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
                                                .sortBy = {
@@ -233,7 +233,7 @@ namespace ao::rt::test
     env.setupFiltered({{coldplay, beatles}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{
       .groupBy = TrackGroupKey::Artist,
@@ -256,7 +256,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::None,
                                                .sortBy = {
@@ -277,7 +277,7 @@ namespace ao::rt::test
     env.setupFiltered({});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
                                                .sortBy = {
@@ -297,7 +297,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Artist,
                                                .sortBy = {
@@ -317,7 +317,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Year,
                                                .sortBy = {
@@ -341,7 +341,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
                                                .sortBy = {
@@ -366,7 +366,7 @@ namespace ao::rt::test
     env.setupFiltered({});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Genre,
                                                .sortBy = {
@@ -393,7 +393,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
                                                .sortBy = {
@@ -415,7 +415,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     proj.setPresentation(TrackPresentationSpec{.groupBy = TrackGroupKey::Album,
                                                .sortBy = {
@@ -449,7 +449,7 @@ namespace ao::rt::test
     env.setupFiltered({{id1, id2}});
 
     auto proj = env.createProjection(ViewId{1});
-    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) {});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
 
     SECTION("Group by Genre")
     {

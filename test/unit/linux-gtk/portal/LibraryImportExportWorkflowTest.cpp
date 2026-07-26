@@ -139,10 +139,11 @@ namespace ao::gtk::test
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     auto optCompletedCount = std::optional<std::size_t>{};
+    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
       {
-        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
       });
 
@@ -152,6 +153,8 @@ namespace ao::gtk::test
       pumpGtkEventsUntil([&fixture, &optCompletedCount]
                          { return optCompletedCount && !fixture.runtime().notifications().feed().entries.empty(); }));
 
+    REQUIRE(optCompletionStatus);
+    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 0);
     auto const feed = fixture.runtime().notifications().feed();
@@ -171,15 +174,16 @@ namespace ao::gtk::test
     copyMetadataFixtureToLibrary(fixture);
 
     auto optCompletedCount = std::optional<std::size_t>{};
+    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
     auto progressEvents = std::vector<rt::LibraryChanges::LibraryTaskProgressUpdated>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
       {
-        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
       });
     auto progressSub = fixture.runtime().library().changes().onLibraryTaskProgress(
-      [&progressEvents](auto const& event) { progressEvents.push_back(event); });
+      [&progressEvents](auto const& event) noexcept { progressEvents.push_back(event); });
 
     workflow.scan();
     REQUIRE(pumpGtkEventsUntil(
@@ -188,6 +192,8 @@ namespace ao::gtk::test
         return progressEvents.size() == 4 && optCompletedCount && mutationCallbackCount == 1 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
+    REQUIRE(optCompletionStatus);
+    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
     CHECK(optCompletedCount == 1U);
     CHECK(mutationCallbackCount == 1);
     REQUIRE(progressEvents.size() == 4);
@@ -206,6 +212,7 @@ namespace ao::gtk::test
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
     optCompletedCount.reset();
+    optCompletionStatus.reset();
     progressEvents.clear();
 
     workflow.scan();
@@ -217,6 +224,8 @@ namespace ao::gtk::test
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
       }));
 
+    REQUIRE(optCompletionStatus);
+    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
     CHECK(optCompletedCount == 0U);
     CHECK(mutationCallbackCount == 1);
     REQUIRE(progressEvents.size() == 1);
@@ -264,10 +273,11 @@ namespace ao::gtk::test
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     auto optCompletedCount = std::optional<std::size_t>{};
+    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
       {
-        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
       });
 
@@ -283,6 +293,8 @@ namespace ao::gtk::test
                hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file");
       }));
 
+    REQUIRE(optCompletionStatus);
+    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
     CHECK(mutationCallbackCount == 2);
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
@@ -301,10 +313,11 @@ namespace ao::gtk::test
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
     auto optCompletedCount = std::optional<std::size_t>{};
+    auto optCompletionStatus = std::optional<rt::LibraryChanges::LibraryTaskCompletionStatus>{};
     auto completedSub = fixture.runtime().library().changes().onLibraryTaskCompleted(
-      [&optCompletedCount](rt::LibraryChanges::LibraryTaskCompleted const& event)
+      [&optCompletedCount, &optCompletionStatus](rt::LibraryChanges::LibraryTaskCompleted const& event) noexcept
       {
-        CHECK(event.status == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
+        optCompletionStatus = event.status;
         optCompletedCount = event.affectedCount;
       });
 
@@ -319,6 +332,8 @@ namespace ao::gtk::test
                hasNotification(fixture, rt::NotificationSeverity::Warning, "1 missing file needs review");
       }));
 
+    REQUIRE(optCompletionStatus);
+    CHECK(*optCompletionStatus == rt::LibraryChanges::LibraryTaskCompletionStatus::Succeeded);
     CHECK(mutationCallbackCount == 1);
   }
 
