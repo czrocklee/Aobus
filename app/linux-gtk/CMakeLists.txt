@@ -4,6 +4,7 @@ add_custom_command(
     COMMAND ${GLIB_COMPILE_RESOURCES_EXECUTABLE}
             --target=${CMAKE_CURRENT_BINARY_DIR}/resources.c
             --sourcedir=${CMAKE_CURRENT_SOURCE_DIR}
+            --sourcedir=${CMAKE_SOURCE_DIR}
             --generate-source
             --dependency-file=${CMAKE_CURRENT_BINARY_DIR}/resources.c.d
             ${CMAKE_CURRENT_SOURCE_DIR}/aobus.gresource.xml
@@ -88,6 +89,7 @@ add_library(aobus-gtk-lib STATIC
     playback/VolumeControlWidget.cpp
     playback/SeekControlWidget.cpp
 
+    image/CoverArtView.cpp
     image/ImageCache.cpp
     image/ResourceImageController.cpp
     image/ResourceImageLoader.cpp

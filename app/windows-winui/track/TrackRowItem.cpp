@@ -148,7 +148,8 @@ namespace winrt::Aobus::implementation
                              std::uint32_t const groupCount,
                              std::string primary,
                              std::string secondary,
-                             std::string tertiary)
+                             std::string tertiary,
+                             std::string coverArtMonogram)
     : _displayIndex{displayIndex}
     , _index{sourceIndex}
     , _coverArtId{coverArtId}
@@ -157,6 +158,7 @@ namespace winrt::Aobus::implementation
     , _title{winrt::to_hstring(primary)}
     , _artist{winrt::to_hstring(secondary)}
     , _album{winrt::to_hstring(tertiary)}
+    , _coverArtMonogram{winrt::to_hstring(coverArtMonogram)}
   {
   }
 } // namespace winrt::Aobus::implementation

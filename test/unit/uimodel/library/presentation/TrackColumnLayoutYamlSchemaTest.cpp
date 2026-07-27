@@ -10,8 +10,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <string_view>
-
 namespace ao::uimodel::test
 {
   TEST_CASE("TrackColumnLayoutYamlSchema - round-trip uses stable field ids", "[uimodel][unit][track-column-layout]")

@@ -5,17 +5,18 @@
 
 #include "image/ResourceImageLoader.h"
 #include <ao/CoreIds.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <cstdint>
 
 namespace ao::gtk
 {
-  class ImageWidget;
+  class CoverArtView;
 
   class ResourceImageController final
   {
   public:
-    ResourceImageController(ImageWidget& widget, ResourceImageLoader& loader);
+    ResourceImageController(CoverArtView& widget, ResourceImageLoader& loader);
     ~ResourceImageController() = default;
 
     ResourceImageController(ResourceImageController const&) = delete;
@@ -24,6 +25,7 @@ namespace ao::gtk
     ResourceImageController& operator=(ResourceImageController&&) = delete;
 
     void enableThumbnailMode(std::int32_t logicalSizePx);
+    void setPlaceholderPresentation(uimodel::CoverArtPlaceholderPresentation presentation);
     void load(ResourceId resourceId);
     void clear();
 
@@ -32,10 +34,12 @@ namespace ao::gtk
     void loadThumbnail(ResourceId resourceId);
     std::int32_t thumbnailPhysicalSize() const;
 
-    ImageWidget& _widget;
+    CoverArtView& _widget;
     ResourceImageLoader& _loader;
 
+    uimodel::CoverArtPlaceholderPresentation _placeholderPresentation{};
     bool _thumbnailMode = false;
+    bool _showingPlaceholder = false;
     std::int32_t _thumbnailLogicalSize = 0;
     ResourceImageLoader::Request _request;
   };

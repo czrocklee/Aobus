@@ -12,6 +12,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
@@ -93,6 +94,11 @@ namespace ao::gtk
     void clearStatusMessage();
 
     void setPlayingTrackId(TrackId trackId);
+    void setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle style);
+    uimodel::CoverArtPlaceholderStyle groupCoverPlaceholderStyle() const noexcept
+    {
+      return _groupCoverPlaceholderStyle;
+    }
 
     void applyPresentation(rt::TrackPresentationSpec const& presentation);
 
@@ -126,6 +132,8 @@ namespace ao::gtk
     Glib::RefPtr<Gtk::MultiSelection> _selectionModelPtr;
     Glib::RefPtr<Gtk::SignalListItemFactory> _sectionHeaderFactoryPtr;
     TrackId _playingTrackId{kInvalidTrackId};
+    uimodel::CoverArtPlaceholderStyle _groupCoverPlaceholderStyle{
+      uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::GroupHeading)};
 
     sigc::scoped_connection _themeRefreshConnection;
     sigc::scoped_connection _modelChangedConnection;

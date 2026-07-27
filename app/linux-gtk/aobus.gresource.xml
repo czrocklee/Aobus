@@ -9,5 +9,10 @@
     <file>css/_modern.css</file>
     <file>layout/default_layout.yaml</file>
     <file>layout/modern_layout.yaml</file>
+    <file alias="image/no-cover/note.svg">asset/ui/no-cover/note.svg</file>
+    <file alias="image/no-cover/vinyl.svg">asset/ui/no-cover/vinyl.svg</file>
+    <file alias="image/no-cover/equalizer.svg">asset/ui/no-cover/equalizer.svg</file>
+    <file alias="image/no-cover/soul.svg">asset/brand/SoulMark.svg</file>
+    <file alias="brand/LICENSE.txt">asset/brand/LICENSE.txt</file>
   </gresource>
 </gresources>

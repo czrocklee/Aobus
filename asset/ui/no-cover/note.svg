@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 Aobus Contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <g stroke="#D8DCE3"
+     stroke-width="13"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     opacity="0.64">
+    <path d="M105 166V85l70-16v78" />
+    <ellipse cx="81" cy="174" rx="25" ry="18" transform="rotate(-12 81 174)" fill="#D8DCE3" stroke="none" />
+    <ellipse cx="151" cy="154" rx="25" ry="18" transform="rotate(-12 151 154)" fill="#D8DCE3" stroke="none" />
+  </g>
+</svg>

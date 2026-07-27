@@ -2,7 +2,20 @@ if(NOT WIN32)
   message(FATAL_ERROR "The WinUI frontend is available only on native Windows.")
 endif()
 
+set(AOBUS_NO_COVER_NOTE_ASSET "${CMAKE_SOURCE_DIR}/asset/ui/no-cover/note.svg")
+set(AOBUS_NO_COVER_VINYL_ASSET "${CMAKE_SOURCE_DIR}/asset/ui/no-cover/vinyl.svg")
+set(AOBUS_NO_COVER_EQUALIZER_ASSET "${CMAKE_SOURCE_DIR}/asset/ui/no-cover/equalizer.svg")
+set(AOBUS_SOUL_MARK_ASSET "${CMAKE_SOURCE_DIR}/asset/brand/SoulMark.svg")
+set(AOBUS_BRAND_LICENSE_ASSET "${CMAKE_SOURCE_DIR}/asset/brand/LICENSE.txt")
+set(AOBUS_NO_COVER_ASSETS
+  ${AOBUS_NO_COVER_NOTE_ASSET}
+  ${AOBUS_NO_COVER_VINYL_ASSET}
+  ${AOBUS_NO_COVER_EQUALIZER_ASSET}
+  ${AOBUS_SOUL_MARK_ASSET}
+  ${AOBUS_BRAND_LICENSE_ASSET})
+
 add_executable(aobus-winui WIN32
+  ${AOBUS_NO_COVER_ASSETS}
   App.xaml
   App.xaml.cpp
   App.xaml.h
@@ -15,6 +28,10 @@ add_executable(aobus-winui WIN32
   app/WinUiDependencies.h
   image/CoverArtPresenter.cpp
   image/CoverArtPresenter.h
+  image/CoverArtPlaceholderRenderer.cpp
+  image/CoverArtPlaceholderRenderer.h
+  image/WindowsCoverArtLoader.cpp
+  image/WindowsCoverArtLoader.h
   platform/MemoryRandomAccessStream.cpp
   platform/MemoryRandomAccessStream.h
   platform/ScopedBooleanFlag.h
@@ -81,6 +98,10 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
   app/WinUiDependencies.h
   image/CoverArtPresenter.cpp
   image/CoverArtPresenter.h
+  image/CoverArtPlaceholderRenderer.cpp
+  image/CoverArtPlaceholderRenderer.h
+  image/WindowsCoverArtLoader.cpp
+  image/WindowsCoverArtLoader.h
   platform/MemoryRandomAccessStream.cpp
   platform/MemoryRandomAccessStream.h
   platform/ScopedBooleanFlag.h
@@ -128,6 +149,7 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
   track/TrackQuickFilterControl.h
   track/TrackRowItem.cpp
   track/TrackRowItem.h)
+source_group("Asset" FILES ${AOBUS_NO_COVER_ASSETS})
 
 set_source_files_properties(App.xaml PROPERTIES
   VS_XAML_TYPE ApplicationDefinition)
@@ -140,6 +162,26 @@ set_source_files_properties(Resources/en-US/Resources.resw PROPERTIES
   VS_TOOL_OVERRIDE PRIResource)
 set_source_files_properties(app.manifest PROPERTIES
   VS_TOOL_OVERRIDE Manifest)
+set_source_files_properties(${AOBUS_NO_COVER_NOTE_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\NoCover\\note.svg")
+set_source_files_properties(${AOBUS_NO_COVER_VINYL_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\NoCover\\vinyl.svg")
+set_source_files_properties(${AOBUS_NO_COVER_EQUALIZER_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\NoCover\\equalizer.svg")
+set_source_files_properties(${AOBUS_SOUL_MARK_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\Brand\\SoulMark.svg")
+set_source_files_properties(${AOBUS_BRAND_LICENSE_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\Brand\\LICENSE.txt")
 set_source_files_properties(App.xaml.cpp PROPERTIES
   VS_SETTINGS "DependentUpon=App.xaml")
 set_source_files_properties(App.xaml.h PROPERTIES

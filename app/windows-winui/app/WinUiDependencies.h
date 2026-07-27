@@ -24,17 +24,18 @@ namespace ao::winui
   class CoverArtPresenter;
   class LibrarySession;
   class TrackListController;
+  class WindowsCoverArtLoader;
   class WindowsThemeCoordinator;
 
   struct WindowsUiViewDependencies final
   {
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox quickFilterInput{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Image inspectorCoverImage{nullptr};
-    winrt::Microsoft::UI::Xaml::UIElement inspectorCoverPlaceholder{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Grid inspectorCoverPlaceholder{nullptr};
     TrackDetailControlConfig trackDetail;
     ActivityStatusControlConfig activityStatus;
     winrt::Microsoft::UI::Xaml::Controls::Image nowPlayingCoverImage{nullptr};
-    winrt::Microsoft::UI::Xaml::UIElement nowPlayingCoverPlaceholder{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Grid nowPlayingCoverPlaceholder{nullptr};
   };
 
   /// Construction-scoped borrowed collaborators for WinUI controls.
@@ -49,6 +50,7 @@ namespace ao::winui
     rt::AppRuntime& playbackRuntime;
     uimodel::PlaybackCommandSurface& playbackCommands;
     TrackListController& trackList;
+    WindowsCoverArtLoader& coverArtLoader;
     CoverArtPresenter& inspectorCoverArt;
     CoverArtPresenter& nowPlayingCoverArt;
     WindowsThemeCoordinator& theme;

@@ -6,6 +6,7 @@
 #include "app/LibrarySession.h"
 #include "app/WindowsUiCoordinator.h"
 #include "image/CoverArtPresenter.h"
+#include "image/WindowsCoverArtLoader.h"
 #include "pch.h"
 #include "platform/SmtcBridge.h"
 #include "platform/WindowsStringResources.h"
@@ -230,6 +231,16 @@ namespace winrt::Aobus::implementation
                                                                                                      ->updateBrowserHeader();
                                                                                                  }
                                                                                                },
+                                                                                               .onLibraryChanging =
+                                                                                                 [weak]
+                                                                                               {
+                                                                                                 if (auto self =
+                                                                                                       weak.get())
+                                                                                                 {
+                                                                                                   self
+                                                                                                     ->clearGroupCoverPresenters();
+                                                                                                 }
+                                                                                               },
                                                                                                .onLibraryChanged =
                                                                                                  [weak]
                                                                                                {
@@ -287,17 +298,18 @@ namespace winrt::Aobus::implementation
                                                                                                }});
     auto const dependencies = _coordinatorPtr->uiDependencies();
     _trackListPtr = &dependencies.trackList;
+    _coverArtLoaderPtr = &dependencies.coverArtLoader;
     _nowPlayingCoverArtPtr = &dependencies.nowPlayingCoverArt;
     _themePtr = &dependencies.theme;
 
-    reconcileLibrary();
-    bindPlayback();
-    restoreWindowPlacement();
-    applyShellState(RootGrid().ActualWidth());
     if (auto theme = _themePtr->reload())
     {
       applyTheme(*theme);
     }
+    reconcileLibrary();
+    bindPlayback();
+    restoreWindowPlacement();
+    applyShellState(RootGrid().ActualWidth());
     ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(session.libraryRuntime().musicRoot())));
     updateStatus(ao::winui::resourceString("Ready"));
   }
@@ -310,6 +322,7 @@ namespace winrt::Aobus::implementation
     }
     _shutdown = true;
 
+    clearGroupCoverPresenters();
     if (_coordinatorPtr)
     {
       _coordinatorPtr->retire();
@@ -338,6 +351,7 @@ namespace winrt::Aobus::implementation
     _audioPipelineToolTipPtr.reset();
     _playbackControlsPtr.reset();
     _trackListPtr = nullptr;
+    _coverArtLoaderPtr = nullptr;
     _nowPlayingCoverArtPtr = nullptr;
     _themePtr = nullptr;
     _coordinatorPtr.reset();

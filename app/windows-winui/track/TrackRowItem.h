@@ -43,7 +43,8 @@ namespace winrt::Aobus::implementation
                  std::uint32_t groupCount,
                  std::string primary,
                  std::string secondary,
-                 std::string tertiary);
+                 std::string tertiary,
+                 std::string coverArtMonogram);
 
     std::uint32_t DisplayIndex() const noexcept { return _displayIndex; }
     std::uint32_t Index() const noexcept { return _index; }
@@ -56,6 +57,7 @@ namespace winrt::Aobus::implementation
     hstring Title() const noexcept { return _title; }
     hstring Artist() const noexcept { return _artist; }
     hstring Album() const noexcept { return _album; }
+    hstring CoverArtMonogram() const noexcept { return _coverArtMonogram; }
     Windows::Foundation::Collections::IVectorView<Windows::Foundation::IInspectable> Cells() const
     {
       return _cells.GetView();
@@ -71,6 +73,7 @@ namespace winrt::Aobus::implementation
     hstring _title;
     hstring _artist;
     hstring _album;
+    hstring _coverArtMonogram;
     Windows::Foundation::Collections::IVector<Windows::Foundation::IInspectable> _cells{
       single_threaded_vector<Windows::Foundation::IInspectable>()};
   };

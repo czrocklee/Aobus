@@ -63,6 +63,7 @@ target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
+    uimodel/presentation/CoverArtPlaceholder.cpp
     uimodel/presentation/PresentationTextCatalog.cpp
     uimodel/layout/action/LayoutActionCatalog.cpp
     uimodel/layout/action/LayoutActionValidator.cpp

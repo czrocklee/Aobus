@@ -3,9 +3,10 @@
 
 #include "image/ResourceImageController.h"
 
-#include "image/ImageWidget.h"
+#include "image/CoverArtView.h"
 #include "image/ResourceImageLoader.h"
 #include <ao/CoreIds.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
@@ -13,11 +14,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace ao::gtk
 {
-  ResourceImageController::ResourceImageController(ImageWidget& widget, ResourceImageLoader& loader)
-    : _widget{widget}, _loader{loader}
+  ResourceImageController::ResourceImageController(CoverArtView& widget, ResourceImageLoader& loader)
+    : _widget{widget}
+    , _loader{loader}
+    , _placeholderPresentation{
+        uimodel::makeCoverArtPlaceholderPresentation(uimodel::CoverArtPlaceholderStyle::Note, {})}
   {
   }
 
@@ -31,6 +36,15 @@ namespace ao::gtk
   {
     _request.reset();
 
+    if (resourceId == kInvalidResourceId)
+    {
+      _showingPlaceholder = true;
+      _widget.showPlaceholder(_placeholderPresentation);
+      return;
+    }
+
+    _showingPlaceholder = false;
+
     if (_thumbnailMode)
     {
       loadThumbnail(resourceId);
@@ -43,17 +57,22 @@ namespace ao::gtk
   void ResourceImageController::clear()
   {
     _request.reset();
+    _showingPlaceholder = false;
     _widget.clearImage();
+  }
+
+  void ResourceImageController::setPlaceholderPresentation(uimodel::CoverArtPlaceholderPresentation presentation)
+  {
+    _placeholderPresentation = std::move(presentation);
+
+    if (_showingPlaceholder)
+    {
+      _widget.showPlaceholder(_placeholderPresentation);
+    }
   }
 
   void ResourceImageController::loadFullSize(ResourceId const resourceId)
   {
-    if (resourceId == kInvalidResourceId)
-    {
-      _widget.clearImage();
-      return;
-    }
-
     if (auto cachedPtr = _loader.getFull(resourceId); cachedPtr)
     {
       _widget.setImagePixbuf(cachedPtr);
@@ -76,12 +95,6 @@ namespace ao::gtk
 
   void ResourceImageController::loadThumbnail(ResourceId const resourceId)
   {
-    if (resourceId == kInvalidResourceId)
-    {
-      _widget.clearImage();
-      return;
-    }
-
     auto const physicalSize = thumbnailPhysicalSize();
 
     if (auto cachedPtr = _loader.getThumbnail(resourceId, physicalSize); cachedPtr)

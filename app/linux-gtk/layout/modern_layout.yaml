@@ -127,6 +127,7 @@ templates:
               - type: playback.image
                 props:
                   action: jumpToAlbum
+                  placeholderStyle: equalizer
                   targetSize: 58
                   forceSquare: true
                 layout:
@@ -137,6 +138,7 @@ templates:
                 tooltip:
                   type: playback.image
                   props:
+                    placeholderStyle: vinyl
                     targetSize: 500
                   layout:
                     cssClasses:

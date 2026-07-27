@@ -5,6 +5,7 @@
 
 #include "app/LibrarySession.h"
 #include "image/CoverArtPresenter.h"
+#include "image/WindowsCoverArtLoader.h"
 #include "status/ActivityStatusControl.h"
 #include "theme/WindowsThemeCoordinator.h"
 #include "track/TrackDetailControl.h"
@@ -12,6 +13,7 @@
 #include "track/TrackQuickFilterControl.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <utility>
 
@@ -33,11 +35,19 @@ namespace ao::winui
             }
           },
         }}
-      , inspectorCoverArt{std::move(views.inspectorCoverImage), std::move(views.inspectorCoverPlaceholder)}
+      , theme{session.stateRoot() / "windows-theme.yaml"}
+      , inspectorCoverArt{std::move(views.inspectorCoverImage),
+                          std::move(views.inspectorCoverPlaceholder),
+                          libraryCoverArtLoader,
+                          theme,
+                          uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector)}
       , trackDetail{std::move(views.trackDetail)}
       , activityStatus{std::move(views.activityStatus)}
-      , nowPlayingCoverArt{std::move(views.nowPlayingCoverImage), std::move(views.nowPlayingCoverPlaceholder)}
-      , theme{session.stateRoot() / "windows-theme.yaml"}
+      , nowPlayingCoverArt{std::move(views.nowPlayingCoverImage),
+                           std::move(views.nowPlayingCoverPlaceholder),
+                           playbackCoverArtLoader,
+                           theme,
+                           uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)}
     {
       trackList.setOnChanged(
         [this]
@@ -55,6 +65,7 @@ namespace ao::winui
                               trackDetail.unbind();
                               quickFilter.unbind();
                               trackList.unbind();
+                              libraryCoverArtLoader.unbind();
 
                               if (callbacks.onLibraryChanging)
                               {
@@ -77,6 +88,7 @@ namespace ao::winui
                               [this]
                             {
                               nowPlayingCoverArt.unbind();
+                              playbackCoverArtLoader.unbind();
 
                               if (callbacks.onPlaybackChanging)
                               {
@@ -113,13 +125,18 @@ namespace ao::winui
 
     void bindLibrary()
     {
+      libraryCoverArtLoader.bind(session.libraryRuntimePtr());
       trackList.bind(session.libraryRuntimePtr(), session.columnLayouts());
       quickFilter.bind(session.libraryRuntimePtr());
       trackDetail.bind(dependencies());
       activityStatus.bind(session.libraryRuntimePtr());
     }
 
-    void bindPlayback() { nowPlayingCoverArt.bind(session.playbackRuntimePtr()); }
+    void bindPlayback()
+    {
+      playbackCoverArtLoader.bind(session.playbackRuntimePtr());
+      nowPlayingCoverArt.bind();
+    }
 
     void retire()
     {
@@ -136,6 +153,8 @@ namespace ao::winui
       quickFilter.unbind();
       trackList.unbind();
       nowPlayingCoverArt.unbind();
+      libraryCoverArtLoader.unbind();
+      playbackCoverArtLoader.unbind();
       callbacks = {};
     }
 
@@ -147,6 +166,7 @@ namespace ao::winui
         .playbackRuntime = session.playbackRuntime(),
         .playbackCommands = session.playbackCommands(),
         .trackList = trackList,
+        .coverArtLoader = libraryCoverArtLoader,
         .inspectorCoverArt = inspectorCoverArt,
         .nowPlayingCoverArt = nowPlayingCoverArt,
         .theme = theme,
@@ -157,11 +177,13 @@ namespace ao::winui
     WindowsUiCoordinatorCallbacks callbacks;
     TrackListController trackList;
     TrackQuickFilterControl quickFilter;
+    WindowsThemeCoordinator theme;
+    WindowsCoverArtLoader libraryCoverArtLoader;
     CoverArtPresenter inspectorCoverArt;
     TrackDetailControl trackDetail;
     ActivityStatusControl activityStatus;
+    WindowsCoverArtLoader playbackCoverArtLoader;
     CoverArtPresenter nowPlayingCoverArt;
-    WindowsThemeCoordinator theme;
     bool active = true;
   };
 

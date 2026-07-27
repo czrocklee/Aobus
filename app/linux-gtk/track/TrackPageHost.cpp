@@ -22,6 +22,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <gtkmm/stack.h>
 #include <gtkmm/widget.h>
@@ -311,6 +312,24 @@ namespace ao::gtk
     }
   }
 
+  void TrackPageHost::setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle const style)
+  {
+    if (_groupCoverPlaceholderStyle == style)
+    {
+      return;
+    }
+
+    _groupCoverPlaceholderStyle = style;
+
+    for (auto& [id, entry] : _trackPages)
+    {
+      if (entry.pagePtr)
+      {
+        entry.pagePtr->setGroupCoverPlaceholderStyle(style);
+      }
+    }
+  }
+
   void TrackPageHost::ensureViewPage(rt::ViewId viewId, TrackRowCache& dataProvider)
   {
     if (_trackPages.contains(viewId))
@@ -336,6 +355,7 @@ namespace ao::gtk
 
     auto trackPagePtr = std::make_unique<TrackViewPage>(
       listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, foundState->presentation);
+    trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 
     auto listName = std::string{"List"};

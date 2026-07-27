@@ -101,7 +101,8 @@ If you are an AI agent working on this project, please read [AGENTS.md](AGENTS.m
 The Aobus source code is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
 
 **Brand Assets Exception:**
-The Aobus logo and its associated design documentation located in the `asset/brand/` directory are the personal intellectual property of YANG LI and are **NOT** covered by the MIT License. All rights are reserved. Usage of these brand assets in derivative works or third-party products requires explicit written permission.
+The Aobus logo and its associated design documentation under `asset/brand/` are the personal intellectual property of YANG LI and are **NOT** covered by the MIT License.
+Their [brand asset license](asset/brand/LICENSE.txt) permits unmodified bundled distribution with Aobus while reserving modification, standalone reuse, and other brand rights.
 
 ---
 

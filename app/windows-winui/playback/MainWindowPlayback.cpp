@@ -25,7 +25,6 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <memory>
-#include <string_view>
 #include <utility>
 
 namespace winrt::Aobus::implementation
@@ -143,7 +142,7 @@ namespace winrt::Aobus::implementation
                                                                    : to_hstring(state.artist));
     if (_nowPlayingCoverArtPtr)
     {
-      _nowPlayingCoverArtPtr->select(state.coverArtId);
+      _nowPlayingCoverArtPtr->select(state.coverArtId, state.coverArtPlaceholderIdentity, true);
     }
     if (_audioPipelineToolTipPtr)
     {

@@ -24,6 +24,7 @@ namespace Aobus
         String Title{ get; };
         String Artist{ get; };
         String Album{ get; };
+        String CoverArtMonogram{ get; };
         Windows.Foundation.Collections.IVectorView<Object> Cells{ get; };
     }
 

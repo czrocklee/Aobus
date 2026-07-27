@@ -21,9 +21,12 @@ The application uses your selected appearance, shell layout, output device, and 
    Resolve any reported conflicts before relying on the new chord.
 6. To change shell structure, choose **View → Edit Layout...** or use **Edit Layout...** on the Layout preference page.
    Apply changes to preview them, save to make the authored layout durable, or cancel to restore the pre-editor runtime state.
-7. Resize collapsible panels directly in the workspace.
+7. To change a missing-cover design, select the corresponding `tracks.table`, `track.coverArt`, or `playback.image` component in the Layout Editor and choose `monogram`, `note`, `vinyl`, `equalizer`, or `soul` for its placeholder property.
+   Group headings, track detail, and Now Playing are independent choices; this is layout authoring and has no separate preference page.
+   Every style draws only its foreground symbol or text over the surrounding surface; the placeholder has no tile background.
+8. Resize collapsible panels directly in the workspace.
    Choose **View → Save Current Panel Sizes as Layout Defaults** only when those sizes should become authored defaults.
-8. Choose **View → Reset Runtime Layout State** to discard remembered component state and return to the current authored defaults.
+9. Choose **View → Reset Runtime Layout State** to discard remembered component state and return to the current authored defaults.
 
 Panel state and authored layout are different authorities: ordinary resizing changes versioned runtime component state, while saving defaults promotes current sizes into the layout document.
 
@@ -32,6 +35,7 @@ Panel state and authored layout are different authorities: ordinary resizing cha
 - Theme and layout changes appear in the active window immediately.
 - The selected output device appears in the playback/output surface.
 - A changed shortcut invokes the intended action and no conflict remains in the Keyboard page.
+- Missing covers use the selected style in each edited location; existing cover art still replaces the placeholder.
 - Restarting Aobus restores saved preferences and state; canceled layout-editor changes do not reappear.
 
 ## Related documents

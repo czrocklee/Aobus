@@ -13,9 +13,11 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <functional>
 #include <iterator>
@@ -130,6 +132,12 @@ namespace ao::uimodel
   {
     auto view = NowPlayingViewState{};
     view.coverArtId = state.nowPlaying.coverArtId;
+    auto const placeholderCandidates = std::array<std::string_view, 3>{
+      state.nowPlaying.album,
+      state.nowPlaying.artist,
+      state.nowPlaying.title,
+    };
+    view.coverArtPlaceholderIdentity = makeCoverArtPlaceholderIdentity(placeholderCandidates);
 
     if (state.nowPlaying.title.empty())
     {

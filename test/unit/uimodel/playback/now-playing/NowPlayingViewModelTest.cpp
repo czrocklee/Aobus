@@ -62,12 +62,14 @@ namespace ao::uimodel::test
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
       desc.item.coverArtId = ResourceId{42};
+      desc.item.album = "Album";
 
       REQUIRE(playbackTransport.play(desc, ListId{1}));
       REQUIRE(!log.empty());
       CHECK(log.last().coverArtId == ResourceId{42});
       CHECK(log.last().title == "Song");
       CHECK(log.last().artist == "Artist");
+      CHECK(log.last().coverArtPlaceholderIdentity.primaryText == "Album");
       CHECK(log.last().combinedStatus == "Artist - Song");
 
       CHECK(NowPlayingViewModel::fieldText(log.last(), rt::TrackField::Title) == "Song");

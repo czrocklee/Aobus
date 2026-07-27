@@ -3,18 +3,20 @@
 
 #include "image/CoverArtPresenter.h"
 
+#include "image/CoverArtPlaceholderRenderer.h"
+#include "image/WindowsCoverArtLoader.h"
 #include "platform/MemoryRandomAccessStream.h"
-#include <ao/async/OperationCancelled.h>
-#include <ao/rt/AppRuntime.h>
+#include "theme/WindowsThemeCoordinator.h"
 #include <ao/rt/Log.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <winrt/Microsoft.UI.Xaml.Media.Imaging.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 
-#include <exception>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
-#include <stop_token>
+#include <span>
 #include <utility>
 
 namespace ao::winui
@@ -22,17 +24,22 @@ namespace ao::winui
   struct CoverArtPresenter::State final
   {
     winrt::Microsoft::UI::Xaml::Controls::Image image{nullptr};
-    winrt::Microsoft::UI::Xaml::UIElement placeholder{nullptr};
-    uimodel::CoverArtRequestModel requests{};
+    winrt::Microsoft::UI::Xaml::Controls::Grid placeholder{nullptr};
+    uimodel::CoverArtPlaceholderStyle style = uimodel::CoverArtPlaceholderStyle::Note;
+    std::uint64_t generation = 0;
     bool active = false;
   };
 
   CoverArtPresenter::CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
-                                       winrt::Microsoft::UI::Xaml::UIElement placeholder)
-    : _statePtr{std::make_shared<State>()}
+                                       winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
+                                       WindowsCoverArtLoader& loader,
+                                       WindowsThemeCoordinator& theme,
+                                       uimodel::CoverArtPlaceholderStyle const style)
+    : _statePtr{std::make_shared<State>()}, _loader{loader}, _theme{theme}
   {
     _statePtr->image = std::move(image);
     _statePtr->placeholder = std::move(placeholder);
+    _statePtr->style = style;
   }
 
   CoverArtPresenter::~CoverArtPresenter()
@@ -40,104 +47,81 @@ namespace ao::winui
     unbind();
   }
 
-  void CoverArtPresenter::bind(std::shared_ptr<rt::AppRuntime> runtimePtr)
+  void CoverArtPresenter::bind()
   {
     unbind();
-    _runtimePtr = std::move(runtimePtr);
     _statePtr->active = true;
   }
 
   void CoverArtPresenter::unbind()
   {
-    _task.reset();
+    _request.reset();
     _statePtr->active = false;
-    _statePtr->requests.reset();
+    ++_statePtr->generation;
     _statePtr->image.Source(nullptr);
-    _statePtr->placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Visible);
-    _runtimePtr.reset();
+    _statePtr->image.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
+    _statePtr->placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
   }
 
-  void CoverArtPresenter::select(ResourceId const resourceId)
+  void CoverArtPresenter::select(ResourceId const resourceId,
+                                 uimodel::CoverArtPlaceholderIdentity identity,
+                                 bool const hasEntity)
   {
-    _task.reset();
-    if (!_statePtr->active || !_runtimePtr || resourceId == kInvalidResourceId)
+    _request.reset();
+    auto const generation = ++_statePtr->generation;
+    _statePtr->image.Source(nullptr);
+    _statePtr->image.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
+    _statePtr->placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
+
+    if (!_statePtr->active || !hasEntity)
     {
-      _statePtr->requests.clearSelection();
-      _statePtr->image.Source(nullptr);
+      return;
+    }
+
+    if (resourceId == kInvalidResourceId)
+    {
+      auto const presentation = uimodel::makeCoverArtPlaceholderPresentation(_statePtr->style, identity);
+      renderCoverArtPlaceholder(_statePtr->placeholder, presentation, _theme.theme().shared.accent);
       _statePtr->placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Visible);
       return;
     }
 
-    auto const token = _statePtr->requests.select(resourceId);
-    if (!_statePtr->requests.cached(resourceId).empty())
+    auto const state = std::weak_ptr<State>{_statePtr};
+    _request = _loader.request(resourceId,
+                               [state, generation](std::span<std::byte const> const bytes)
+                               {
+                                 auto statePtr = state.lock();
+                                 if (!statePtr || !statePtr->active || statePtr->generation != generation)
+                                 {
+                                   return;
+                                 }
+                                 display(*statePtr, generation, bytes);
+                               });
+  }
+
+  void CoverArtPresenter::display(State& state, std::uint64_t const generation, std::span<std::byte const> const bytes)
+  {
+    if (!state.active || state.generation != generation || bytes.empty())
     {
-      display(*_statePtr, token);
       return;
     }
 
-    _statePtr->image.Source(nullptr);
-    _statePtr->placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Visible);
-
-    auto const state = std::weak_ptr<State>{_statePtr};
-    auto* const tasks = &_runtimePtr->library().taskService();
-    auto* const runtime = &_runtimePtr->async();
-    // The runtime and task service outlive the presenter task. Presenter-owned
-    // UI state is touched only after the cancellation-checked callback hop.
-    _task = runtime->spawnCancellable([state, tasks, runtime, token](std::stop_token const stopToken) mutable
-                                      { return load(state, tasks, runtime, token, stopToken); });
-  }
-
-  async::Task<void> CoverArtPresenter::load(std::weak_ptr<State> const state,
-                                            rt::LibraryTaskService* const tasks,
-                                            async::Runtime* const runtime,
-                                            uimodel::CoverArtRequestToken const token,
-                                            std::stop_token const stopToken)
-  {
     try
     {
-      auto bytes = co_await tasks->loadResourceAsync(token.resourceId, stopToken);
-      if (!bytes || !*bytes)
-      {
-        co_return;
-      }
-
-      auto payload = std::move(**bytes);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
-      auto statePtr = state.lock();
-      if (!statePtr || !statePtr->active || !statePtr->requests.store(token, std::move(payload)))
-      {
-        co_return;
-      }
-      display(*statePtr, token);
-      statePtr.reset();
-    }
-    catch (async::OperationCancelled const&)
-    {
-    }
-    catch (...)
-    {
-      runtime->reportUnhandledException(std::current_exception(), "Windows inspector cover-art workflow");
-    }
-  }
-
-  void CoverArtPresenter::display(State& state, uimodel::CoverArtRequestToken const token)
-  {
-    try
-    {
-      auto const cached = state.requests.cached(token.resourceId);
-      auto stream = makeMemoryRandomAccessStream(cached);
+      auto stream = makeMemoryRandomAccessStream(bytes);
       auto bitmap = winrt::Microsoft::UI::Xaml::Media::Imaging::BitmapImage{};
       bitmap.SetSource(stream);
-      if (!state.active || !state.requests.accepts(token))
+      if (!state.active || state.generation != generation)
       {
         return;
       }
       state.image.Source(bitmap);
+      state.image.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Visible);
       state.placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
     }
     catch (winrt::hresult_error const& error)
     {
-      APP_LOG_WARN("Windows inspector cover-art decode failed: {}", winrt::to_string(error.message()));
+      APP_LOG_WARN("Windows cover-art decode failed: {}", winrt::to_string(error.message()));
     }
   }
 } // namespace ao::winui

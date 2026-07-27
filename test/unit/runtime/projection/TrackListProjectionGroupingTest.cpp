@@ -9,6 +9,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -504,6 +505,43 @@ namespace ao::rt::test
       REQUIRE(proj.groupCount() == 2);
       CHECK(trackGroupHeadingText(proj.groupAt(0).heading.primary) == "New York Philharmonic");
       CHECK(trackGroupHeadingText(proj.groupAt(1).heading.primary) == "Vienna Philharmonic");
+    }
+  }
+
+  TEST_CASE("TrackListProjection - every grouping supplies a semantic primary heading", "[runtime][unit][projection]")
+  {
+    auto env = TrackListProjectionFixture{};
+    auto const trackId = env.libraryFixture.addTrack(library::test::makeEmptyTrackSpec("t1.flac"));
+    env.setupFiltered({{trackId}});
+
+    auto proj = env.createProjection(ViewId{1});
+    auto sub = proj.subscribe([](TrackListProjectionDeltaBatch const&) noexcept {});
+
+    struct GroupCase final
+    {
+      TrackGroupKey key;
+      MissingTrackValueKind missingKind;
+    };
+
+    constexpr auto kCases = std::array{
+      GroupCase{TrackGroupKey::Artist, MissingTrackValueKind::Artist},
+      GroupCase{TrackGroupKey::Album, MissingTrackValueKind::Album},
+      GroupCase{TrackGroupKey::AlbumArtist, MissingTrackValueKind::Artist},
+      GroupCase{TrackGroupKey::Genre, MissingTrackValueKind::Genre},
+      GroupCase{TrackGroupKey::Composer, MissingTrackValueKind::Composer},
+      GroupCase{TrackGroupKey::Conductor, MissingTrackValueKind::Conductor},
+      GroupCase{TrackGroupKey::Ensemble, MissingTrackValueKind::Ensemble},
+      GroupCase{TrackGroupKey::Work, MissingTrackValueKind::Work},
+      GroupCase{TrackGroupKey::Year, MissingTrackValueKind::Year},
+    };
+
+    for (auto const& testCase : kCases)
+    {
+      INFO("Track group key " << static_cast<std::uint32_t>(testCase.key));
+      proj.setPresentation(TrackPresentationSpec{.groupBy = testCase.key});
+
+      REQUIRE(proj.groupCount() == 1);
+      CHECK(trackGroupHeadingMissingKind(proj.groupAt(0).heading.primary) == testCase.missingKind);
     }
   }
 } // namespace ao::rt::test

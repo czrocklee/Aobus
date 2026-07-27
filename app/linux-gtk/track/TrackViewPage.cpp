@@ -4,7 +4,7 @@
 #include "track/TrackViewPage.h"
 
 #include "app/GtkStyleRuntime.h"
-#include "image/ImageWidget.h"
+#include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "image/ResourceImageLoader.h"
@@ -29,6 +29,7 @@
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <gdkmm/rectangle.h>
@@ -78,16 +79,17 @@ namespace ao::gtk
     class TrackSectionCoverSlot final : public Gtk::Widget
     {
     public:
-      TrackSectionCoverSlot(ImageWidget& imageWidget, std::int32_t size)
+      TrackSectionCoverSlot(CoverArtView& imageWidget, std::int32_t size)
         : _imageWidget{imageWidget}, _size{std::max(0, size)}
       {
         set_overflow(Gtk::Overflow::HIDDEN);
         _imageWidget.setTargetSize(_size);
         _imageWidget.setMaxRenderSize(_size, _size);
         _imageWidget.setForceSquareTarget(true);
-        _imageWidget.set_halign(Gtk::Align::CENTER);
-        _imageWidget.set_valign(Gtk::Align::CENTER);
-        _imageWidget.set_expand(false);
+        _imageWidget.set_halign(Gtk::Align::FILL);
+        _imageWidget.set_valign(Gtk::Align::FILL);
+        _imageWidget.set_hexpand(true);
+        _imageWidget.set_vexpand(true);
         _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
         _imageWidget.set_parent(*this);
       }
@@ -126,17 +128,19 @@ namespace ao::gtk
       }
 
     private:
-      ImageWidget& _imageWidget;
+      CoverArtView& _imageWidget;
       std::int32_t _size = 0;
     };
 
     class TrackSectionHeaderWidget final : public Gtk::Box
     {
     public:
-      explicit TrackSectionHeaderWidget(ResourceImageLoader& thumbnailLoader)
+      TrackSectionHeaderWidget(ResourceImageLoader& thumbnailLoader,
+                               uimodel::CoverArtPlaceholderStyle const placeholderStyle)
         : Gtk::Box{Gtk::Orientation::HORIZONTAL}
         , _coverArtSlot{_coverArt, layout::kSectionCoverLogicalSize}
         , _coverArtController{_coverArt, thumbnailLoader}
+        , _placeholderStyle{placeholderStyle}
       {
         set_spacing(layout::kSpacingXLarge);
         add_css_class("ao-track-section-box");
@@ -181,7 +185,7 @@ namespace ao::gtk
         subtitleBox->append(_countLabel);
       }
 
-      void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count, bool reserveCoverSlot)
+      void bind(rt::TrackGroupSectionSnapshot const& snap, ::guint count, bool hasSection)
       {
         auto const heading = uimodel::formatTrackGroupHeading(uimodel::PresentationTextCatalog{}, snap.heading);
         _primaryLabel.set_text(heading.primaryText);
@@ -201,10 +205,16 @@ namespace ao::gtk
         _secondaryLabel.set_visible(!heading.secondaryText.empty());
         _tertiaryLabel.set_visible(!heading.tertiaryText.empty());
         _separatorLabel.set_visible(!heading.secondaryText.empty() && !heading.tertiaryText.empty());
-        _coverArtSlot.set_visible(reserveCoverSlot);
+        _coverArtSlot.set_visible(hasSection);
 
-        if (reserveCoverSlot && snap.imageId != kInvalidResourceId)
+        if (hasSection)
         {
+          auto const identity = uimodel::CoverArtPlaceholderIdentity{
+            .primaryText = heading.primaryText,
+            .optMonogram = uimodel::trackGroupCoverArtMonogram(snap.heading),
+          };
+          _coverArtController.setPlaceholderPresentation(
+            uimodel::makeCoverArtPlaceholderPresentation(_placeholderStyle, identity));
           _coverArtController.load(snap.imageId);
         }
         else
@@ -214,9 +224,10 @@ namespace ao::gtk
       }
 
     private:
-      ImageWidget _coverArt;
+      CoverArtView _coverArt;
       TrackSectionCoverSlot _coverArtSlot;
       ResourceImageController _coverArtController;
+      uimodel::CoverArtPlaceholderStyle _placeholderStyle;
       Gtk::Label _primaryLabel;
       Gtk::Label _secondaryLabel;
       Gtk::Label _separatorLabel;
@@ -329,7 +340,7 @@ namespace ao::gtk
           return;
         }
 
-        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_thumbnailLoader);
+        auto* const widget = Gtk::make_managed<TrackSectionHeaderWidget>(_thumbnailLoader, _groupCoverPlaceholderStyle);
         headerPtr->set_child(*widget);
       });
 
@@ -345,29 +356,33 @@ namespace ao::gtk
         }
 
         auto snap = rt::TrackGroupSectionSnapshot{};
-        bool reserveCoverSlot = false;
+        bool hasSection = false;
 
         if (auto* const proj = _modelPtr->projection(); proj != nullptr)
         {
-          reserveCoverSlot = proj->presentation().groupBy == rt::TrackGroupKey::Album;
           auto const start = headerPtr->get_start();
 
           if (auto const optGroupIndex = proj->groupIndexAt(start); optGroupIndex)
           {
             snap = proj->groupAt(*optGroupIndex);
+            hasSection = true;
 
             // Warm the next section's cover so its header binds from cache as the
             // user scrolls down. Decode budget mirrors the section thumbnail size.
             if (auto const nextGroupIndex = *optGroupIndex + 1; nextGroupIndex < proj->groupCount())
             {
               auto const nextImageId = proj->groupAt(nextGroupIndex).imageId;
-              auto const scale = std::max(1, _viewHostPtr->columnView().get_scale_factor());
-              _thumbnailLoader.prefetchThumbnail(nextImageId, layout::kSectionCoverLogicalSize * scale);
+
+              if (nextImageId != kInvalidResourceId)
+              {
+                auto const scale = std::max(1, _viewHostPtr->columnView().get_scale_factor());
+                _thumbnailLoader.prefetchThumbnail(nextImageId, layout::kSectionCoverLogicalSize * scale);
+              }
             }
           }
         }
 
-        widget->bind(snap, headerPtr->get_n_items(), reserveCoverSlot);
+        widget->bind(snap, headerPtr->get_n_items(), hasSection);
       });
 
     _viewHostPtr->columnView().set_header_factory(_sectionHeaderFactoryPtr);
@@ -412,6 +427,21 @@ namespace ao::gtk
   {
     _playingTrackId = trackId;
     _viewHostPtr->selectionController().setPlayingTrackId(trackId);
+  }
+
+  void TrackViewPage::setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle const style)
+  {
+    if (_groupCoverPlaceholderStyle == style)
+    {
+      return;
+    }
+
+    _groupCoverPlaceholderStyle = style;
+
+    // Header widgets belong to the current column-view generation. Detaching
+    // the factory retires them before replacements receive this stable value.
+    _viewHostPtr->columnView().set_header_factory({});
+    updateSectionHeaders();
   }
 
   void TrackViewPage::rebuildColumnView(std::span<rt::TrackField const> visibleFields)

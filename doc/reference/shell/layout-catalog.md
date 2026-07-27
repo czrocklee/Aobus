@@ -48,6 +48,21 @@ Action-capable components can expose these standard props according to their pol
 
 `template` is a special document node type handled by expansion and is not a registered GTK component.
 
+### Cover-art placeholder properties
+
+The three graphical cover locations expose an enum property with the exact values `monogram`, `note`, `vinyl`, `equalizer`, and `soul`.
+These properties are authored in the layout YAML and are shown by the Layout Editor; they are not application preferences.
+
+| Component | Property | Default |
+| --- | --- | --- |
+| `tracks.table` | `groupCoverPlaceholderStyle` | `monogram` |
+| `track.coverArt` | `placeholderStyle` | `vinyl` |
+| `playback.image` | `placeholderStyle` | `equalizer` |
+
+The shipped Classic/default and Modern layouts declare their intended values explicitly.
+The 500-pixel cover inside the Modern playback tooltip uses `vinyl`, while its 58-pixel persistent Now Playing image uses `equalizer`.
+Unknown authored values fall back to the component default.
+
 ## Action descriptor surface
 
 An action descriptor contains `id`, `label`, `category`, and a capability mask.

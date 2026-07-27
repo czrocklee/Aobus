@@ -12,6 +12,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <map>
 #include <memory>
@@ -76,6 +77,11 @@ namespace ao::gtk
     TrackPageEntry const* currentVisible() const;
 
     void setPlayingTrack(TrackId trackId);
+    void setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle style);
+    uimodel::CoverArtPlaceholderStyle groupCoverPlaceholderStyle() const noexcept
+    {
+      return _groupCoverPlaceholderStyle;
+    }
 
     /**
      * @return The list ID of the currently visible page, or rt::kAllTracksListId if none.
@@ -113,6 +119,8 @@ namespace ao::gtk
 
     std::map<rt::ViewId, TrackPageEntry> _trackPages;
     TrackId _playingTrackId{kInvalidTrackId};
+    uimodel::CoverArtPlaceholderStyle _groupCoverPlaceholderStyle{
+      uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::GroupHeading)};
     TrackRowCache* _activeDataProvider = nullptr;
   };
 } // namespace ao::gtk

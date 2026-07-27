@@ -4,6 +4,7 @@
 #include "track/TrackViewPage.h"
 
 #include "../../TestUtils.h"
+#include "image/CoverArtView.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "layout/LayoutConstants.h"
@@ -53,6 +54,7 @@ namespace ao::gtk::test
                                                               .album = album,
                                                               .albumArtist = "Album Artist",
                                                               .uri = "track.flac",
+                                                              .year = 2023,
                                                               .trackNumber = 1,
                                                               .duration = std::chrono::minutes{3}});
     }
@@ -142,6 +144,12 @@ namespace ao::gtk::test
       REQUIRE(coverSlot != nullptr);
       CHECK(coverSlot->get_visible());
       CHECK(findLabelByText(page, "• (1 track)") != nullptr);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(coverSlot->get_first_child());
+      REQUIRE(coverArt != nullptr);
+      CHECK(coverArt->get_width() >= layout::kSectionCoverLogicalSize);
+      CHECK(coverArt->get_height() >= layout::kSectionCoverLogicalSize);
+      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->placeholderPresentation().monogram == "A");
 
       std::int32_t minSize = {};
       std::int32_t natSizeHoriz = {};
@@ -154,6 +162,34 @@ namespace ao::gtk::test
       CHECK(natSizeHoriz == natSizeVert);
       CHECK(natSizeHoriz >= layout::kSectionCoverLogicalSize);
       CHECK(natSizeHoriz <= layout::kSectionCoverLogicalSize + 2);
+    }
+
+    SECTION("non-album grouped section header displays its semantic monogram")
+    {
+      auto sourcePtr = std::make_shared<rt::test::MutableTrackSource>();
+      sourcePtr->addInitial(albumTrackId);
+
+      auto projectionPtr = std::make_shared<rt::TrackListProjection>(
+        rt::ViewId{1}, rt::TrackSourceLease{sourcePtr}, runtime.musicLibrary());
+      auto presentation = rt::TrackPresentationSpec{
+        .groupBy = rt::TrackGroupKey::Year,
+        .sortBy = {{.field = rt::TrackSortField::Year}},
+      };
+      projectionPtr->setPresentation(presentation);
+      modelPtr->bindProjection(projectionPtr);
+      page.applyPresentation(projectionPtr->presentation());
+
+      window.set_default_size(600, 320);
+      window.set_visible(true);
+      drainGtkEvents();
+
+      auto* const coverSlot = findWidgetByClass<Gtk::Widget>(page, "ao-track-section-cover");
+      REQUIRE(coverSlot != nullptr);
+      CHECK(coverSlot->get_visible());
+      auto* const coverArt = dynamic_cast<CoverArtView*>(coverSlot->get_first_child());
+      REQUIRE(coverArt != nullptr);
+      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->placeholderPresentation().monogram == "23");
     }
   }
 

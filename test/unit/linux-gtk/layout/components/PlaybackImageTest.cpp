@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/linux-gtk/image/CoverArtView.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/image/ResourceImageLoader.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
@@ -19,6 +20,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/utility/Base64.h>
 
 #include <catch2/catch_approx.hpp>
@@ -29,7 +31,6 @@
 #include <gtkmm/button.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollermotion.h>
-#include <gtkmm/picture.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
 
@@ -48,6 +49,7 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+  using ao::gtk::test::emitClicked;
   using ao::gtk::test::findWidget;
   using ao::gtk::test::hasController;
 
@@ -114,27 +116,34 @@ namespace ao::gtk::layout::test
   {
     auto mutableCoverTrackId = kInvalidTrackId;
     auto coverTrackId = kInvalidTrackId;
-    auto fixture = LayoutRuntimeFixture{"io.github.aobus.playback_image_test",
-                                        [&](library::MusicLibrary& musicLibrary)
-                                        {
-                                          auto const fixtureUri = audio::test::installAudioFixture(
-                                            musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
-                                          mutableCoverTrackId =
-                                            library::test::addTrack(musicLibrary,
+    auto noCoverTrackId = kInvalidTrackId;
+    auto fixture =
+      LayoutRuntimeFixture{"io.github.aobus.playback_image_test",
+                           [&](library::MusicLibrary& musicLibrary)
+                           {
+                             auto const fixtureUri = audio::test::installAudioFixture(
+                               musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
+                             mutableCoverTrackId = library::test::addTrack(musicLibrary,
+                                                                           library::test::TrackSpec{
+                                                                             .title = "Mutable Cover Track",
+                                                                             .uri = fixtureUri,
+                                                                             .coverArtId = ResourceId{42},
+                                                                             .duration = std::chrono::seconds{1},
+                                                                           });
+                             coverTrackId = library::test::addTrack(musicLibrary,
                                                                     library::test::TrackSpec{
-                                                                      .title = "Mutable Cover Track",
+                                                                      .title = "Cover Track",
                                                                       .uri = fixtureUri,
                                                                       .coverArtId = ResourceId{42},
                                                                       .duration = std::chrono::seconds{1},
                                                                     });
-                                          coverTrackId = library::test::addTrack(musicLibrary,
-                                                                                 library::test::TrackSpec{
-                                                                                   .title = "Cover Track",
-                                                                                   .uri = fixtureUri,
-                                                                                   .coverArtId = ResourceId{42},
-                                                                                   .duration = std::chrono::seconds{1},
-                                                                                 });
-                                        }};
+                             noCoverTrackId = library::test::addTrack(musicLibrary,
+                                                                      library::test::TrackSpec{
+                                                                        .title = "No Cover Track",
+                                                                        .uri = fixtureUri,
+                                                                        .duration = std::chrono::seconds{1},
+                                                                      });
+                           }};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
       fixture.runtime().library().taskService(), *imageCachePtr, fixture.runtime().async());
@@ -153,8 +162,13 @@ namespace ao::gtk::layout::test
       REQUIRE(button != nullptr);
       auto* const picture = button->get_child();
       REQUIRE(picture != nullptr);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(picture);
+      REQUIRE(coverArt != nullptr);
 
       CHECK_FALSE(picture->has_css_class("ao-nowplaying-image-thumb"));
+      CHECK(button->get_visible());
+      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
 
       std::int32_t width = -1;
       std::int32_t height = -1;
@@ -178,11 +192,11 @@ namespace ao::gtk::layout::test
       REQUIRE(button != nullptr);
       auto* const slot = button->get_child();
       REQUIRE(slot != nullptr);
-      auto* const picture = dynamic_cast<Gtk::Picture*>(slot->get_first_child());
-      REQUIRE(picture != nullptr);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(slot->get_first_child());
+      REQUIRE(coverArt != nullptr);
 
       CHECK(button->get_overflow() == Gtk::Overflow::HIDDEN);
-      CHECK(picture->get_overflow() == Gtk::Overflow::HIDDEN);
+      CHECK(coverArt->get_overflow() == Gtk::Overflow::HIDDEN);
       CHECK_FALSE(widget.get_hexpand());
       CHECK_FALSE(widget.get_vexpand());
 
@@ -194,7 +208,7 @@ namespace ao::gtk::layout::test
 
       std::int32_t width = 0;
       std::int32_t height = 0;
-      picture->get_size_request(width, height);
+      coverArt->get_size_request(width, height);
       CHECK(width == -1);
       CHECK(height == -1);
 
@@ -211,8 +225,8 @@ namespace ao::gtk::layout::test
       CHECK(natural == 0);
 
       slot->size_allocate(Gtk::Allocation{0, 0, 60, 64}, -1);
-      CHECK(picture->get_width() == 60);
-      CHECK(picture->get_height() == 60);
+      CHECK(coverArt->get_width() == 60);
+      CHECK(coverArt->get_height() == 60);
       CHECK(button->get_opacity() == Catch::Approx{0.5}.margin(0.01));
     }
 
@@ -235,23 +249,58 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
       auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(button != nullptr);
-      auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
-      REQUIRE(picture != nullptr);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(button->get_child());
+      REQUIRE(coverArt != nullptr);
 
       startPlayback(fixture.runtime(), coverTrackId);
       ao::gtk::test::drainGtkEvents();
 
       CHECK(earlierObserverEntered);
-      auto const paintablePtr = picture->get_paintable();
+      auto const paintablePtr = coverArt->imagePaintable();
       REQUIRE(paintablePtr);
-      CHECK(paintablePtr->get_intrinsic_width() == 64 * picture->get_scale_factor());
-      CHECK(paintablePtr->get_intrinsic_height() == 64 * picture->get_scale_factor());
+      CHECK(paintablePtr->get_intrinsic_width() == 64 * coverArt->get_scale_factor());
+      CHECK(paintablePtr->get_intrinsic_height() == 64 * coverArt->get_scale_factor());
 
       fixture.runtime().playback().commands().stop();
       ao::gtk::test::drainGtkEvents();
 
-      CHECK_FALSE(button->get_visible());
-      CHECK_FALSE(picture->get_paintable());
+      CHECK(button->get_visible());
+      CHECK_FALSE(coverArt->hasImage());
+      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Equalizer);
+    }
+
+    SECTION("no-cover placeholder preserves the configured playback action")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime());
+      ao::gtk::test::drainGtkEvents();
+
+      auto node = LayoutNode{.type = "playback.image"};
+      node.props["action"] = LayoutValue{std::string{"jumpToAlbum"}};
+      node.props["placeholderStyle"] = LayoutValue{std::string{"monogram"}};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(button->get_child());
+      REQUIRE(coverArt != nullptr);
+
+      auto revealedTrackId = kInvalidTrackId;
+      auto const revealSubscription = fixture.runtime().playback().events().onRevealTrackRequested(
+        [&revealedTrackId](auto const& request) noexcept { revealedTrackId = request.trackId; });
+
+      startPlayback(fixture.runtime(), noCoverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(button->get_visible());
+      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Monogram);
+      CHECK(coverArt->placeholderPresentation().monogram == "A");
+
+      emitClicked(*button);
+
+      CHECK(revealedTrackId == noCoverTrackId);
     }
 
     SECTION("current track cover art follows library mutations")
@@ -270,15 +319,16 @@ namespace ao::gtk::layout::test
       REQUIRE(compPtr != nullptr);
       auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(button != nullptr);
-      auto* const picture = dynamic_cast<Gtk::Picture*>(button->get_child());
-      REQUIRE(picture != nullptr);
-      CHECK_FALSE(button->get_visible());
+      auto* const coverArt = dynamic_cast<CoverArtView*>(button->get_child());
+      REQUIRE(coverArt != nullptr);
+      CHECK(button->get_visible());
+      CHECK(coverArt->showingPlaceholder());
 
       startPlayback(fixture.runtime(), mutableCoverTrackId);
       ao::gtk::test::drainGtkEvents();
 
       REQUIRE(button->get_visible());
-      auto const firstPaintablePtr = picture->get_paintable();
+      auto const firstPaintablePtr = coverArt->imagePaintable();
       REQUIRE(firstPaintablePtr);
 
       std::int32_t importCount = 0;
@@ -295,7 +345,7 @@ namespace ao::gtk::layout::test
       REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&importCount] { return importCount == 1; }));
 
       REQUIRE(button->get_visible());
-      auto const secondPaintablePtr = picture->get_paintable();
+      auto const secondPaintablePtr = coverArt->imagePaintable();
       REQUIRE(secondPaintablePtr);
       CHECK(secondPaintablePtr != firstPaintablePtr);
 
@@ -303,8 +353,8 @@ namespace ao::gtk::layout::test
       workflow.importFrom(importPath);
       REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&importCount] { return importCount == 2; }));
 
-      CHECK_FALSE(button->get_visible());
-      CHECK_FALSE(picture->get_paintable());
+      CHECK(button->get_visible());
+      CHECK(coverArt->showingPlaceholder());
     }
   }
 

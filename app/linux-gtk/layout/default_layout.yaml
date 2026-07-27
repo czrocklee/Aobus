@@ -114,6 +114,8 @@ templates:
         layout:
           vexpand: true
       - type: playback.image
+        props:
+          placeholderStyle: equalizer
         layout:
           heightRequest: 50
   track.defaultDetailPane:
@@ -145,6 +147,7 @@ templates:
               - type: track.coverArt
                 props:
                   forceSquare: true
+                  placeholderStyle: vinyl
                   targetSize: 320
                 layout:
                   halign: center
@@ -197,6 +200,7 @@ templates:
   tracks.defaultWorkspace:
     type: tracks.table
     props:
+      groupCoverPlaceholderStyle: monogram
       view: workspace.focused
     layout:
       vexpand: true

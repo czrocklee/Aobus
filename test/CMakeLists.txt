@@ -179,6 +179,7 @@ add_executable(ao_core_test
     unit/uimodel/layout/shell/DesktopShellPolicyTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
     unit/uimodel/layout/shell/WindowsDesktopSettingsYamlSchemaTest.cpp
+    unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
     unit/uimodel/presentation/PresentationTextCatalogTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 Aobus Contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="eq" x1="36" y1="32" x2="220" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5AA8B5" />
+      <stop offset="1" stop-color="#6877A4" />
+    </linearGradient>
+  </defs>
+  <g fill="url(#eq)" opacity="0.72">
+    <rect x="36" y="96" width="28" height="72" rx="14" />
+    <rect x="75" y="52" width="28" height="152" rx="14" />
+    <rect x="114" y="80" width="28" height="104" rx="14" />
+    <rect x="153" y="32" width="28" height="192" rx="14" />
+    <rect x="192" y="108" width="28" height="52" rx="14" />
+  </g>
+</svg>

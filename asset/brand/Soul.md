@@ -70,4 +70,5 @@ The system is tuned around the Golden Ratio (`phi ~= 1.618`) to keep the animati
 ---
 
 **Copyright (c) 2026 YANG LI. All Rights Reserved.**
-The "Aobus Soul" design and its mathematical implementation are proprietary brand assets. Usage in third-party projects requires explicit written permission.
+The "Aobus Soul" design and its mathematical implementation are proprietary brand assets.
+The limited permission for unmodified bundled distribution with Aobus is defined in [LICENSE.txt](LICENSE.txt); all other third-party use requires explicit written permission.

@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/ThemeCoordinator.h"
+#include "app/linux-gtk/image/CoverArtView.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/image/ResourceImageLoader.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
@@ -36,6 +37,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/menu.h>
@@ -304,8 +306,33 @@ namespace ao::gtk::layout::test
 
       widget.size_allocate(Gtk::Allocation{0, 0, 180, 300}, -1);
       CHECK(widget.get_width() == 180);
+      CHECK(imageWidget->get_width() == 180);
+      CHECK(imageWidget->get_height() == 180);
 
       fixture.window().unset_child();
+    }
+
+    SECTION("track.coverArt displays a no-cover placeholder for missing art")
+    {
+      auto& scope = fixture.attachTrackDetailScope();
+      auto node = LayoutNode{.type = "track.coverArt"};
+      node.props["placeholderStyle"] = LayoutValue{"soul"};
+      auto const compPtr = fixture.create(node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const coverArt = dynamic_cast<CoverArtView*>(compPtr->widget().get_first_child());
+      REQUIRE(coverArt != nullptr);
+      CHECK_FALSE(coverArt->get_visible());
+
+      auto selected = rt::TrackDetailSnapshot{};
+      selected.selectionKind = rt::SelectionKind::Single;
+      selected.trackIds = {undoTrackId};
+      scope.setSnapshot(std::move(selected));
+      drainGtkEvents();
+
+      CHECK(coverArt->get_visible());
+      CHECK(coverArt->showingPlaceholder());
+      CHECK(coverArt->placeholderPresentation().style == CoverArtPlaceholderStyle::Soul);
     }
 
     SECTION("track.fieldGrid creates grid and acts as scope subscriber")

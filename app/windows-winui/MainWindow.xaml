@@ -97,8 +97,19 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Width="48" Height="48" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                            <FontIcon Glyph="&#xE8D6;" FontSize="20" Opacity="0.55" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Border
+                            Width="48"
+                            Height="48"
+                            CornerRadius="6"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="1">
+                            <Grid
+                                DataContextChanged="OnGroupCoverDataContextChanged"
+                                Loaded="OnGroupCoverLoaded"
+                                Unloaded="OnGroupCoverUnloaded">
+                                <Grid />
+                                <Image Stretch="UniformToFill" Visibility="Collapsed" />
+                            </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                             <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
@@ -308,13 +319,7 @@
                                     CornerRadius="16"
                                     Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
                                     <Grid>
-                                        <FontIcon
-                                            x:Name="InspectorCoverPlaceholder"
-                                            Glyph="&#xE8D6;"
-                                            FontSize="56"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Opacity="0.28" />
+                                        <Grid x:Name="InspectorCoverPlaceholder" />
                                         <Image x:Name="InspectorCoverImage" Stretch="Uniform" />
                                     </Grid>
                                 </Border>
@@ -427,12 +432,7 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="62" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                             <Border Width="58" Height="58" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
                                 <Grid>
-                                    <FontIcon
-                                        x:Name="NowPlayingCoverPlaceholder"
-                                        Glyph="&#xE8D6;"
-                                        Opacity="0.4"
-                                        HorizontalAlignment="Center"
-                                        VerticalAlignment="Center" />
+                                    <Grid x:Name="NowPlayingCoverPlaceholder" />
                                     <Image x:Name="NowPlayingCoverImage" Stretch="UniformToFill" />
                                 </Grid>
                             </Border>

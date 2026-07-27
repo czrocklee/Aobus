@@ -17,6 +17,7 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/stack.h>
@@ -61,6 +62,22 @@ namespace ao::gtk::test
 
       // Should have created a page for All Tracks
       CHECK(host.activeListId() == rt::kAllTracksListId);
+    }
+
+    SECTION("group placeholder style reaches future and existing page generations")
+    {
+      host.setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle::Vinyl);
+      REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
+      host.rebuild(cache);
+      drainGtkEvents();
+
+      auto* const context = host.currentVisible();
+      REQUIRE(context != nullptr);
+      REQUIRE(context->pagePtr != nullptr);
+      CHECK(context->pagePtr->groupCoverPlaceholderStyle() == uimodel::CoverArtPlaceholderStyle::Vinyl);
+
+      host.setGroupCoverPlaceholderStyle(uimodel::CoverArtPlaceholderStyle::Soul);
+      CHECK(context->pagePtr->groupCoverPlaceholderStyle() == uimodel::CoverArtPlaceholderStyle::Soul);
     }
 
     SECTION("track activation starts from the owning view identity")

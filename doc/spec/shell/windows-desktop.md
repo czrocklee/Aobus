@@ -91,10 +91,14 @@ surface keeps headers and rows aligned when minimum widths overflow.
 Presentation grouping inserts non-playable group headers through a display-index adapter while retaining projection row indices as the playback authority.
 The native item view reports the complete display count while materializing rows
 on demand; its row-model least-recently-used cache holds at most 2048 entries.
-Inspector cover art is asynchronous, holds at most 128 cached results, and
-ignores results from superseded selections. Now Playing artwork is loaded
-asynchronously from the playback runtime, including while playback temporarily
-retains the retiring library runtime.
+Cover art is asynchronous and ignores results from superseded selections.
+One library-runtime loader coalesces group-heading and Inspector requests and holds at most 128 encoded-byte cache entries.
+Now Playing artwork uses the playback runtime, including while playback temporarily retains the retiring library runtime, and has an independent bounded cache.
+An invalid cover resource id displays `monogram` for a realized group heading, `vinyl` in Inspector, and `equalizer` in Now Playing.
+Now Playing continues to display `equalizer` before playback starts and after transport returns to idle.
+Windows exposes no placeholder preference in this version.
+A valid resource id hides its placeholder while loading; absence or decode failure remains empty rather than being presented as confirmed no-cover.
+When no group-heading or Inspector entity exists, both placeholder and decoded cover are hidden.
 
 The Classic playback strip is ordered Soul, Play/Pause, Stop, Seek, Time, Volume. Clicking Classic Soul opens output selection, right-clicking opens the system menu, holding opens a full-screen Soul surface, and hovering describes the audio pipeline.
 
@@ -126,6 +130,8 @@ Exact paths, fields, defaults, validation, and versioning are defined by the [Wi
 ## Frontend observations
 
 Modern uses an integrated title bar, navigation, primary table, optional inspector, and persistent Now Playing surface. Classic uses a system title bar and dense desktop chrome. Neither visual treatment changes the runtime meaning of playback, output, selection, quality, or Soul aura.
+WinUI packages the shared `note`, `vinyl`, and `equalizer` SVG sources plus the Soul brand mark and its license, even though the fixed Windows slot mapping currently selects only `monogram`, `vinyl`, and `equalizer`.
+UIModel supplies style, monogram, and deterministic monogram foreground-color values; WinUI owns transparent XAML foreground rendering, responsive vinyl geometry, its current-theme-accent outer ring and one-third-diameter muted center label, and asset decoding.
 
 ## Implementation map
 
@@ -133,7 +139,8 @@ Modern uses an integrated title bar, navigation, primary table, optional inspect
 - [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns prepare-then-swap and playback-runtime retention, using the shared [`LibraryScanWorkflow`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h).
 - [`MainWindow`](../../../app/windows-winui/MainWindow.xaml) defines both native shells.
 - [`MainWindowShell.cpp`](../../../app/windows-winui/shell/MainWindowShell.cpp), [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp), and [`MainWindowPlayback.cpp`](../../../app/windows-winui/playback/MainWindowPlayback.cpp) partition code-behind behavior by owner; XAML and generated code-behind declarations remain at the target root because WinUI generated-file association requires them.
-- [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h), and [`CoverArtRequestModel`](../../../app/include/ao/uimodel/library/track/CoverArtRequestModel.h) own grouped lazy-table and artwork policy.
+- [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table.
+- [`CoverArtPlaceholder`](../../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h), [`WindowsCoverArtLoader`](../../../app/windows-winui/image/WindowsCoverArtLoader.h), and [`CoverArtPresenter`](../../../app/windows-winui/image/CoverArtPresenter.h) own shared placeholder policy and WinUI delivery.
 - [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
 - [`SmtcBridge`](../../../app/windows-winui/platform/SmtcBridge.h) and [`WindowsThemeCoordinator`](../../../app/windows-winui/theme/WindowsThemeCoordinator.h) own Windows media and theme adapters.
 - [`WindowsStringResources`](../../../app/windows-winui/platform/WindowsStringResources.h) resolves dynamic authored copy from the same PRI resource system used by XAML `x:Uid`.

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "PlaybackComponentRegistrations.h"
-#include "image/ImageWidget.h"
+#include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -22,6 +22,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <gdkmm/cursor.h>
 #include <gtkmm/button.h>
@@ -32,9 +33,12 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
+#include <utility>
 
 namespace ao::gtk::layout
 {
@@ -46,7 +50,7 @@ namespace ao::gtk::layout
     class PassiveImageSlot final : public Gtk::Widget
     {
     public:
-      PassiveImageSlot(ImageWidget& imageWidget, std::int32_t widthHint)
+      PassiveImageSlot(CoverArtView& imageWidget, std::int32_t widthHint)
         : _imageWidget{imageWidget}, _widthHint{std::max(0, widthHint)}
       {
         _imageWidget.set_parent(*this);
@@ -86,7 +90,7 @@ namespace ao::gtk::layout
       }
 
     private:
-      ImageWidget& _imageWidget;
+      CoverArtView& _imageWidget;
       std::int32_t _widthHint = 0;
     };
 
@@ -112,9 +116,23 @@ namespace ao::gtk::layout
           return;
         }
 
-        _imageWidgetPtr = std::make_unique<ImageWidget>();
+        _imageWidgetPtr = std::make_unique<CoverArtView>();
         _imageControllerPtr =
           std::make_unique<ResourceImageController>(*_imageWidgetPtr, *ctx.dependencies.imageLoader);
+        auto const defaultStyle =
+          uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying);
+        auto const styleId = node.propertyOr<std::string>(
+          "placeholderStyle", std::string{uimodel::coverArtPlaceholderStyleId(defaultStyle)});
+        auto const optParsedStyle = uimodel::parseCoverArtPlaceholderStyle(styleId);
+        _placeholderStyle = optParsedStyle.value_or(defaultStyle);
+
+        if (!optParsedStyle)
+        {
+          APP_LOG_WARN("playback.image: unknown placeholderStyle '{}'; using '{}'",
+                       styleId,
+                       uimodel::coverArtPlaceholderStyleId(defaultStyle));
+        }
+
         _imageWidgetPtr->set_overflow(Gtk::Overflow::HIDDEN);
 
         auto const targetSize = node.propertyOr<std::int64_t>("targetSize", kThumbnailSize);
@@ -224,14 +242,26 @@ namespace ao::gtk::layout
           transport.transport == audio::Transport::Idle ? kInvalidTrackId : transport.nowPlaying.trackId;
         auto const coverArtId =
           transport.transport == audio::Transport::Idle ? kInvalidResourceId : transport.nowPlaying.coverArtId;
+        auto const candidates = std::array<std::string_view, 3>{
+          transport.nowPlaying.album,
+          transport.nowPlaying.artist,
+          transport.nowPlaying.title,
+        };
+        auto identity = transport.transport == audio::Transport::Idle
+                          ? uimodel::CoverArtPlaceholderIdentity{}
+                          : uimodel::makeCoverArtPlaceholderIdentity(candidates);
 
-        if (trackId == _currentTrackId && coverArtId == _currentCoverArtId)
+        if (_synced && trackId == _currentTrackId && coverArtId == _currentCoverArtId && identity == _currentIdentity)
         {
           return;
         }
 
+        _synced = true;
         _currentTrackId = trackId;
         _currentCoverArtId = coverArtId;
+        _currentIdentity = std::move(identity);
+        _imageControllerPtr->setPlaceholderPresentation(
+          uimodel::makeCoverArtPlaceholderPresentation(_placeholderStyle, _currentIdentity));
         updateImage();
       }
 
@@ -257,33 +287,23 @@ namespace ao::gtk::layout
 
       void updateImage()
       {
-        if (_currentTrackId == kInvalidTrackId)
-        {
-          _imageControllerPtr->clear();
-          _button.set_visible(false);
-          return;
-        }
-
-        if (_currentCoverArtId != kInvalidResourceId)
-        {
-          _imageControllerPtr->load(_currentCoverArtId);
-          _button.set_visible(true);
-          return;
-        }
-
-        _imageControllerPtr->clear();
-        _button.set_visible(false);
+        _imageControllerPtr->load(_currentCoverArtId);
+        _button.set_visible(true);
       }
 
       rt::AppRuntime& _runtime;
       Action _action = Action::None;
-      std::unique_ptr<ImageWidget> _imageWidgetPtr;
+      std::unique_ptr<CoverArtView> _imageWidgetPtr;
       std::unique_ptr<ResourceImageController> _imageControllerPtr;
       std::unique_ptr<PassiveImageSlot> _passiveSlotPtr;
       Gtk::Button _button;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
       ResourceId _currentCoverArtId = kInvalidResourceId;
+      bool _synced = false;
+      uimodel::CoverArtPlaceholderStyle _placeholderStyle{
+        uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)};
+      uimodel::CoverArtPlaceholderIdentity _currentIdentity{};
       async::Subscription _snapshotSub;
       async::Subscription _tracksMutatedSub;
     };
@@ -311,7 +331,12 @@ namespace ao::gtk::layout
                                            .kind = LayoutPropertyKind::Enum,
                                            .label = "Action",
                                            .defaultValue = LayoutValue{"none"},
-                                           .enumValues = {"none", "jumpToAlbum"}}},
+                                           .enumValues = {"none", "jumpToAlbum"}},
+                                          {.name = "placeholderStyle",
+                                           .kind = LayoutPropertyKind::Enum,
+                                           .label = "Placeholder Style",
+                                           .defaultValue = LayoutValue{"equalizer"},
+                                           .enumValues = coverArtPlaceholderStyleIds()}},
                                 .minChildren = 0,
                                 .optMaxChildren = 0,
                                 .actionPolicy = uimodel::kExternalSecondaryActions},

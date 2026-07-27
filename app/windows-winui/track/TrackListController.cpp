@@ -91,14 +91,17 @@ namespace ao::winui
         if (item->kind == uimodel::TrackDisplayItemKind::GroupHeader)
         {
           auto const group = _projectionPtr->groupAt(item->groupIndex);
-          auto const heading = uimodel::formatTrackGroupHeading(kHeadingText, group.heading);
-          return winrt::make<winrt::Aobus::implementation::TrackRowItem>(static_cast<std::uint32_t>(displayIndex),
-                                                                         static_cast<std::uint32_t>(item->sourceIndex),
-                                                                         group.imageId.raw(),
-                                                                         static_cast<std::uint32_t>(group.rows.count),
-                                                                         heading.primaryText,
-                                                                         heading.secondaryText,
-                                                                         heading.tertiaryText);
+          auto heading = uimodel::formatTrackGroupHeading(kHeadingText, group.heading);
+          auto optMonogram = uimodel::trackGroupCoverArtMonogram(group.heading);
+          return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
+            static_cast<std::uint32_t>(displayIndex),
+            static_cast<std::uint32_t>(item->sourceIndex),
+            group.imageId.raw(),
+            static_cast<std::uint32_t>(group.rows.count),
+            std::move(heading.primaryText),
+            std::move(heading.secondaryText),
+            std::move(heading.tertiaryText),
+            optMonogram ? std::move(*optMonogram) : std::string{});
         }
 
         auto const* row = _rows.rowAt(item->sourceIndex);

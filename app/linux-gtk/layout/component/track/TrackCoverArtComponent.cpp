@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
-#include "image/ImageWidget.h"
+#include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
 #include "layout/component/track/TrackDetailScope.h"
@@ -11,9 +11,13 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/Log.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/label.h>
@@ -21,9 +25,11 @@
 #include <gtkmm/widget.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::gtk::layout
@@ -37,7 +43,7 @@ namespace ao::gtk::layout
       class CoverArtSlot final : public Gtk::Widget
       {
       public:
-        explicit CoverArtSlot(ImageWidget& imageWidget)
+        explicit CoverArtSlot(CoverArtView& imageWidget)
           : _imageWidget{imageWidget}
         {
           set_overflow(Gtk::Overflow::HIDDEN);
@@ -114,7 +120,7 @@ namespace ao::gtk::layout
         }
 
       private:
-        ImageWidget& _imageWidget;
+        CoverArtView& _imageWidget;
         std::int32_t _targetSize = 0;
       };
 
@@ -128,9 +134,23 @@ namespace ao::gtk::layout
         }
 
         _imageControllerPtr = std::make_unique<ResourceImageController>(_imageWidget, *ctx.dependencies.imageLoader);
-        _imageWidget.set_halign(Gtk::Align::CENTER);
-        _imageWidget.set_valign(Gtk::Align::CENTER);
-        _imageWidget.set_expand(false);
+        auto const defaultStyle = uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector);
+        auto const styleId = node.propertyOr<std::string>(
+          "placeholderStyle", std::string{uimodel::coverArtPlaceholderStyleId(defaultStyle)});
+        auto const optParsedStyle = uimodel::parseCoverArtPlaceholderStyle(styleId);
+        _placeholderStyle = optParsedStyle.value_or(defaultStyle);
+
+        if (!optParsedStyle)
+        {
+          APP_LOG_WARN("track.coverArt: unknown placeholderStyle '{}'; using '{}'",
+                       styleId,
+                       uimodel::coverArtPlaceholderStyleId(defaultStyle));
+        }
+
+        _imageWidget.set_halign(Gtk::Align::FILL);
+        _imageWidget.set_valign(Gtk::Align::FILL);
+        _imageWidget.set_hexpand(true);
+        _imageWidget.set_vexpand(true);
         _imageWidget.set_overflow(Gtk::Overflow::HIDDEN);
 
         auto targetSize =
@@ -185,22 +205,30 @@ namespace ao::gtk::layout
     private:
       void updateImage(rt::TrackDetailSnapshot const& snap)
       {
-        if (snap.singleCoverArtId == kInvalidResourceId)
+        if (snap.selectionKind == rt::SelectionKind::None)
         {
           _imageControllerPtr->clear();
-          _imageWidget.set_visible(true);
+          _imageWidget.set_visible(false);
+          return;
         }
-        else
-        {
-          _imageControllerPtr->load(snap.singleCoverArtId);
-          _imageWidget.set_visible(true);
-        }
+
+        auto const album = uimodel::formatTrackFieldDisplayText(rt::TrackField::Album, snap, "", false);
+        auto const albumArtist = uimodel::formatTrackFieldDisplayText(rt::TrackField::AlbumArtist, snap, "", false);
+        auto const artist = uimodel::formatTrackFieldDisplayText(rt::TrackField::Artist, snap, "", false);
+        auto const title = uimodel::formatTrackFieldDisplayText(rt::TrackField::Title, snap, "", false);
+        auto const candidates = std::array<std::string_view, 4>{album, albumArtist, artist, title};
+        _imageControllerPtr->setPlaceholderPresentation(uimodel::makeCoverArtPlaceholderPresentation(
+          _placeholderStyle, uimodel::makeCoverArtPlaceholderIdentity(candidates)));
+        _imageControllerPtr->load(snap.singleCoverArtId);
+        _imageWidget.set_visible(true);
       }
 
-      ImageWidget _imageWidget;
+      CoverArtView _imageWidget;
       std::unique_ptr<ResourceImageController> _imageControllerPtr;
       CoverArtSlot _slot;
       Gtk::Label* _error = nullptr;
+      uimodel::CoverArtPlaceholderStyle _placeholderStyle{
+        uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector)};
       sigc::connection _scopeConn;
     };
 
@@ -223,7 +251,12 @@ namespace ao::gtk::layout
                  {.name = "forceSquare",
                   .kind = LayoutPropertyKind::Bool,
                   .label = "Force Square",
-                  .defaultValue = LayoutValue{true}}},
+                  .defaultValue = LayoutValue{true}},
+                 {.name = "placeholderStyle",
+                  .kind = LayoutPropertyKind::Enum,
+                  .label = "Placeholder Style",
+                  .defaultValue = LayoutValue{"vinyl"},
+                  .enumValues = coverArtPlaceholderStyleIds()}},
        .layoutProps = {{.name = "widthRequest", .kind = LayoutPropertyKind::Int, .label = "Width Request"},
                        {.name = "heightRequest", .kind = LayoutPropertyKind::Int, .label = "Height Request"},
                        {.name = "cssClasses", .kind = LayoutPropertyKind::String, .label = "CSS Classes"}},

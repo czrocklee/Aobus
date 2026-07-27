@@ -4,6 +4,7 @@
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "image/CoverArtPresenter.h"
+#include "image/WindowsCoverArtLoader.h"
 #include "pch.h"
 #include "platform/ScopedBooleanFlag.h"
 #include "platform/WindowsStringResources.h"
@@ -17,6 +18,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
 
@@ -282,6 +284,85 @@ namespace winrt::Aobus::implementation
     auto const width = _trackListPtr->contentWidth();
     ModernTrackSurface().Width(width);
     ClassicTrackSurface().Width(width);
+  }
+
+  void MainWindow::OnGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
+                                      Microsoft::UI::Xaml::RoutedEventArgs const&)
+  {
+    refreshGroupCoverPresenter(sender);
+  }
+
+  void MainWindow::OnGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
+                                                  Microsoft::UI::Xaml::DataContextChangedEventArgs const&)
+  {
+    refreshGroupCoverPresenter(sender);
+  }
+
+  void MainWindow::refreshGroupCoverPresenter(Windows::Foundation::IInspectable const& sender)
+  {
+    auto const tile = sender.try_as<Microsoft::UI::Xaml::Controls::Grid>();
+    if (!tile)
+    {
+      return;
+    }
+
+    auto const key = reinterpret_cast<std::uintptr_t>(winrt::get_unknown(tile));
+    auto presenterIt = _groupCoverPresenters.find(key);
+    auto const row = tile.DataContext().try_as<Aobus::TrackRowItem>();
+    if (!row || !row.IsGroupHeader() || !_coverArtLoaderPtr || !_themePtr || tile.Children().Size() < 2)
+    {
+      if (presenterIt != _groupCoverPresenters.end())
+      {
+        presenterIt->second->select(ao::kInvalidResourceId, ao::uimodel::CoverArtPlaceholderIdentity{}, false);
+      }
+      return;
+    }
+
+    auto const placeholder = tile.Children().GetAt(0).try_as<Microsoft::UI::Xaml::Controls::Grid>();
+    auto const image = tile.Children().GetAt(1).try_as<Microsoft::UI::Xaml::Controls::Image>();
+    if (!placeholder || !image)
+    {
+      if (presenterIt != _groupCoverPresenters.end())
+      {
+        presenterIt->second->select(ao::kInvalidResourceId, ao::uimodel::CoverArtPlaceholderIdentity{}, false);
+      }
+      return;
+    }
+
+    if (presenterIt == _groupCoverPresenters.end())
+    {
+      auto presenter = std::make_unique<ao::winui::CoverArtPresenter>(
+        image,
+        placeholder,
+        *_coverArtLoaderPtr,
+        *_themePtr,
+        ao::uimodel::defaultCoverArtPlaceholderStyle(ao::uimodel::CoverArtPlaceholderSlot::GroupHeading));
+      presenter->bind();
+      presenterIt = _groupCoverPresenters.emplace(key, std::move(presenter)).first;
+    }
+
+    auto identity = ao::uimodel::CoverArtPlaceholderIdentity{
+      .primaryText = winrt::to_string(row.Title()),
+    };
+    if (auto monogram = winrt::to_string(row.CoverArtMonogram()); !monogram.empty())
+    {
+      identity.optMonogram = std::move(monogram);
+    }
+    presenterIt->second->select(ao::ResourceId{row.CoverArtId()}, std::move(identity), true);
+  }
+
+  void MainWindow::OnGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
+                                        Microsoft::UI::Xaml::RoutedEventArgs const&)
+  {
+    if (auto const tile = sender.try_as<Microsoft::UI::Xaml::Controls::Grid>())
+    {
+      _groupCoverPresenters.erase(reinterpret_cast<std::uintptr_t>(winrt::get_unknown(tile)));
+    }
+  }
+
+  void MainWindow::clearGroupCoverPresenters()
+  {
+    _groupCoverPresenters.clear();
   }
 
   void MainWindow::OnTrackViewportSizeChanged(Windows::Foundation::IInspectable const& sender,

@@ -15,12 +15,14 @@
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Windows.Foundation.h>
 
+#include <array>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -333,7 +335,7 @@ namespace ao::winui
 
     _runtimePtr = dependencies.session.libraryRuntimePtr();
     _coverArtPtr = &dependencies.inspectorCoverArt;
-    _coverArtPtr->bind(_runtimePtr);
+    _coverArtPtr->bind();
 
     try
     {
@@ -390,7 +392,13 @@ namespace ao::winui
 
     if (_coverArtPtr != nullptr)
     {
-      _coverArtPtr->select(_snapshot.singleCoverArtId);
+      auto const album = uimodel::formatTrackFieldDisplayText(rt::TrackField::Album, _snapshot, "", false);
+      auto const albumArtist = uimodel::formatTrackFieldDisplayText(rt::TrackField::AlbumArtist, _snapshot, "", false);
+      auto const artist = uimodel::formatTrackFieldDisplayText(rt::TrackField::Artist, _snapshot, "", false);
+      auto const title = uimodel::formatTrackFieldDisplayText(rt::TrackField::Title, _snapshot, "", false);
+      auto const candidates = std::array<std::string_view, 4>{album, albumArtist, artist, title};
+      _coverArtPtr->select(
+        _snapshot.singleCoverArtId, uimodel::makeCoverArtPlaceholderIdentity(candidates), hasSelection(_snapshot));
     }
   }
 

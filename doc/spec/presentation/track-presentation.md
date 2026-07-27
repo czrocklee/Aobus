@@ -26,6 +26,7 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 - An empty sort preserves source order exactly.
 - Sorts are stable for equal keys.
 - A redundant field is suppressed only when the group header presents the same fact.
+- Every materialized group section has a nonempty primary display value after UIModel formatting.
 - Album groups use `(album artist, album)` identity; Work groups use `(composer, work)` identity.
 - Movement sorting compares numeric movement number rather than movement-name text.
 
@@ -33,6 +34,7 @@ Runtime presentation values, built-ins, normalization, and projection interpreta
 
 Runtime group headers contain three structured slots.
 Each slot retains absence, raw text, a numeric year, or a typed `MissingTrackValueKind`; compound album/work keys retain the secondary album-artist or composer value independently.
+Every grouping populates the primary slot with raw text, a numeric year, or a typed missing value before materializing a section.
 Unknown group values remain distinct semantic keys rather than merging with an unrelated concrete value or becoming English inside runtime.
 UIModel resolves the slots through `PresentationTextCatalog`, and frontend adapters own only markup and geometry.
 

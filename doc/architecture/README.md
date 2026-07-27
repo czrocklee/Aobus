@@ -100,7 +100,7 @@ This table records primary structural relationships rather than every document l
 | [Application shell](application-shell.md) | Presentation boundaries, UIModel layout values and policy, runtime services, managed state, and desktop lifecycle | GTK widget tree and editor; WinUI Modern/Classic native shells |
 | [Presentation](presentation.md) | Runtime snapshots and commands from domain and application systems | GTK, WinUI, TUI, and non-interactive CLI adaptation |
 | [Audio quality](audio-quality.md) | Playback route evidence and execution generations | Runtime quality state, shared presentation policy, GTK, and TUI |
-| [Resource delivery](resource-delivery.md) | Media cover evidence, library blobs and references, playback/projection identities | GTK images, TUI artwork, MPRIS art URLs, and CLI export |
+| [Resource delivery](resource-delivery.md) | Media cover evidence, library blobs and references, playback/projection identities | GTK and WinUI images, TUI artwork, MPRIS art URLs, and CLI export |
 
 ## Capability coverage
 
@@ -119,7 +119,7 @@ The table tracks capability families with architecture-bearing boundaries, not e
 | Smart Lists, filtering, completion, and scalar formatting | [Track expression](track-expression.md) | Current | Presentation remains a separate owner for track-list shape and rendering. |
 | Interactive playback and platform audio output | [Playback](playback.md) | Current | Session persistence and audio-execution behavior remains delegated to the playback specification and reference owners. |
 | Audio-quality evidence and presentation | [Audio quality](audio-quality.md) | Current | The slice remains subordinate to playback and presentation ownership. |
-| Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | Interactive reads are bounded and asynchronous; GTK, TUI, and MPRIS own worker transforms, cancellation, and stale-result suppression. |
+| Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | Interactive reads are bounded and asynchronous; GTK, WinUI, TUI, and MPRIS own frontend transforms, cancellation, and stale-result suppression. |
 | Workspace views, navigation, and semantic sessions | [Workspace](workspace.md) | Current | Exact navigation and restore behavior remains delegated to workspace specifications. |
 | Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | GTK and WinUI use distinct prepare-before-release replacement owners; TUI retains a single-runtime lifecycle. |
 | Application shell, layout document, actions, component state, and widget construction | [Application shell](application-shell.md) | Current | Declarative construction is GTK-specific; WinUI uses fixed native dual shells and TUI retains an independent terminal shell. |

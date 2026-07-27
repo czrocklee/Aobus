@@ -4,6 +4,7 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -12,6 +13,8 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace ao::gtk::layout::editor::test
 {
@@ -224,6 +227,27 @@ namespace ao::gtk::layout::editor::test
       {
         auto const optDesc = registry.descriptor(std::string{type});
         CHECK(optDesc);
+      }
+    }
+
+    SECTION("cover-art placeholder choices are exposed as enum properties")
+    {
+      auto const cases = std::to_array<std::pair<std::string_view, std::string_view>>({
+        {"tracks.table", "groupCoverPlaceholderStyle"},
+        {"track.coverArt", "placeholderStyle"},
+        {"playback.image", "placeholderStyle"},
+      });
+      auto const expected = coverArtPlaceholderStyleIds();
+
+      for (auto const& [type, property] : cases)
+      {
+        auto const optDescriptor = registry.descriptor(std::string{type});
+        REQUIRE(optDescriptor);
+        auto const found = std::ranges::find_if(
+          optDescriptor->props, [property](auto const& candidate) { return candidate.name == property; });
+        REQUIRE(found != optDescriptor->props.end());
+        CHECK(found->kind == LayoutPropertyKind::Enum);
+        CHECK(found->enumValues == expected);
       }
     }
   }

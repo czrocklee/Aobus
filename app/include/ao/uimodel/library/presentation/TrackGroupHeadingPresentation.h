@@ -6,6 +6,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
+#include <optional>
 #include <string>
 
 namespace ao::uimodel
@@ -21,4 +22,5 @@ namespace ao::uimodel
 
   TrackGroupHeadingPresentation formatTrackGroupHeading(PresentationTextCatalog const& textCatalog,
                                                         rt::TrackGroupHeading const& heading);
+  std::optional<std::string> trackGroupCoverArtMonogram(rt::TrackGroupHeading const& heading);
 } // namespace ao::uimodel

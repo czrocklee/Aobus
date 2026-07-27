@@ -7,9 +7,11 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ao::uimodel
@@ -29,6 +31,7 @@ namespace ao::winui
   class TrackListController;
   class WindowsUiCoordinator;
   class WindowsThemeCoordinator;
+  class WindowsCoverArtLoader;
 }
 
 namespace winrt::Aobus::implementation
@@ -82,6 +85,12 @@ namespace winrt::Aobus::implementation
                                Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnInspectorToggleClicked(Windows::Foundation::IInspectable const&,
                                   Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
+                            Microsoft::UI::Xaml::RoutedEventArgs const&);
+    void OnGroupCoverDataContextChanged(Microsoft::UI::Xaml::FrameworkElement const& sender,
+                                        Microsoft::UI::Xaml::DataContextChangedEventArgs const&);
+    void OnGroupCoverUnloaded(Windows::Foundation::IInspectable const& sender,
+                              Microsoft::UI::Xaml::RoutedEventArgs const&);
 
   private:
     struct NavigationEntry final
@@ -96,6 +105,8 @@ namespace winrt::Aobus::implementation
     void navigateTo(NavigationEntry const& entry);
     void updateBrowserHeader();
     void updateTrackSurfaceWidth();
+    void refreshGroupCoverPresenter(Windows::Foundation::IInspectable const& sender);
+    void clearGroupCoverPresenters();
     void unbindPlayback();
     void bindPlayback();
     void applyShellState(double width);
@@ -116,6 +127,7 @@ namespace winrt::Aobus::implementation
     ao::winui::LibrarySession* _session = nullptr;
     std::unique_ptr<ao::winui::WindowsUiCoordinator> _coordinatorPtr;
     ao::winui::TrackListController* _trackListPtr = nullptr;
+    ao::winui::WindowsCoverArtLoader* _coverArtLoaderPtr = nullptr;
     ao::winui::CoverArtPresenter* _nowPlayingCoverArtPtr = nullptr;
     std::unique_ptr<ao::winui::SmtcBridge> _smtcPtr;
     ao::winui::WindowsThemeCoordinator* _themePtr = nullptr;
@@ -131,6 +143,7 @@ namespace winrt::Aobus::implementation
     bool _applyingNavigation = false;
     bool _applyingTrackSelection = false;
     std::map<ao::ListId, NavigationEntry> _navigationEntriesById;
+    std::unordered_map<std::uintptr_t, std::unique_ptr<ao::winui::CoverArtPresenter>> _groupCoverPresenters;
     bool _hasAppWindowChangedToken = false;
     bool _hasClosedToken = false;
     bool _hasSoulWindowChangedToken = false;

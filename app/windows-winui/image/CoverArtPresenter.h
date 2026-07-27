@@ -3,29 +3,29 @@
 
 #pragma once
 
+#include "image/WindowsCoverArtLoader.h"
 #include <ao/CoreIds.h>
-#include <ao/async/Runtime.h>
-#include <ao/async/Task.h>
-#include <ao/uimodel/library/track/CoverArtRequestModel.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
-
-namespace ao::rt
-{
-  class AppRuntime;
-  class LibraryTaskService;
-}
+#include <span>
 
 namespace ao::winui
 {
+  class WindowsThemeCoordinator;
+
   class CoverArtPresenter final
   {
   public:
     CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
-                      winrt::Microsoft::UI::Xaml::UIElement placeholder);
+                      winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
+                      WindowsCoverArtLoader& loader,
+                      WindowsThemeCoordinator& theme,
+                      uimodel::CoverArtPlaceholderStyle style);
     ~CoverArtPresenter();
 
     CoverArtPresenter(CoverArtPresenter const&) = delete;
@@ -33,22 +33,18 @@ namespace ao::winui
     CoverArtPresenter(CoverArtPresenter&&) = delete;
     CoverArtPresenter& operator=(CoverArtPresenter&&) = delete;
 
-    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr);
+    void bind();
     void unbind();
-    void select(ResourceId resourceId);
+    void select(ResourceId resourceId, uimodel::CoverArtPlaceholderIdentity identity, bool hasEntity);
 
   private:
     struct State;
 
-    static async::Task<void> load(std::weak_ptr<State> state,
-                                  rt::LibraryTaskService* tasks,
-                                  async::Runtime* runtime,
-                                  uimodel::CoverArtRequestToken token,
-                                  std::stop_token stopToken);
-    static void display(State& state, uimodel::CoverArtRequestToken token);
+    static void display(State& state, std::uint64_t generation, std::span<std::byte const> bytes);
 
     std::shared_ptr<State> _statePtr;
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
-    async::TaskHandle _task;
+    WindowsCoverArtLoader& _loader;
+    WindowsThemeCoordinator& _theme;
+    WindowsCoverArtLoader::Request _request;
   };
 } // namespace ao::winui

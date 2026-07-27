@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 Aobus Contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <clipPath id="sheenBand">
+      <path clip-rule="evenodd" d="M128 15a113 113 0 1 0 0.0001 0ZM128 85.333a42.667 42.667 0 1 1-0.0001 0Z" />
+    </clipPath>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF" stop-opacity="0" />
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.04" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <path fill-rule="evenodd" d="M128 13a115 115 0 1 0 0.0001 0ZM128 125a3 3 0 1 1-0.0001 0Z" fill="#10141A" />
+  <g clip-path="url(#sheenBand)">
+    <rect x="13" y="13" width="230" height="230" fill="url(#sheen)" transform="rotate(-24 128 128)" />
+  </g>
+</svg>

@@ -8,6 +8,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
 #include <cstdint>
@@ -59,6 +60,7 @@ namespace ao::uimodel
     ResourceId coverArtId = kInvalidResourceId;
     std::string streamInfo;
     AudioPipelineViewState audioPipeline{};
+    CoverArtPlaceholderIdentity coverArtPlaceholderIdentity{};
     AudioQualityCategory qualityCategory = AudioQualityCategory::Unknown;
     bool isActive = false;
 

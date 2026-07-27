@@ -382,7 +382,7 @@ namespace ao::rt
       std::rethrow_exception(exceptionPtr);
     }
 
-    void notifyCompleted(LibraryTaskCompletionStatus const status, std::size_t const affectedCount = 0)
+    void notifyCompleted(LibraryTaskCompletionStatus const status, std::size_t const affectedCount = 0) const
     {
       auto const event = LibraryTaskCompleted{.status = status, .affectedCount = affectedCount};
       signalsPtr->completed.emit(event);

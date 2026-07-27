@@ -3,6 +3,7 @@
 
 #include "image/ImageWidget.h"
 
+#include "image/CoverArtView.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageController.h"
 #include "image/ResourceImageLoader.h"
@@ -11,12 +12,17 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/drawingarea.h>
+#include <gtkmm/label.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 namespace ao::gtk::test
 {
@@ -224,6 +230,111 @@ namespace ao::gtk::test
     }
   }
 
+  TEST_CASE("CoverArtView - renders every placeholder style and yields to real artwork",
+            "[gtk][unit][image][cover-art]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto widget = CoverArtView{};
+    auto const identity = uimodel::makeCoverArtPlaceholderIdentity(std::array<std::string_view, 1>{"Synthetic Sun"});
+
+    for (auto const style : {uimodel::CoverArtPlaceholderStyle::Monogram,
+                             uimodel::CoverArtPlaceholderStyle::Note,
+                             uimodel::CoverArtPlaceholderStyle::Vinyl,
+                             uimodel::CoverArtPlaceholderStyle::Equalizer,
+                             uimodel::CoverArtPlaceholderStyle::Soul})
+    {
+      widget.showPlaceholder(uimodel::makeCoverArtPlaceholderPresentation(style, identity));
+      CHECK(widget.showingPlaceholder());
+      CHECK(widget.placeholderPresentation().style == style);
+      CHECK_FALSE(widget.hasImage());
+    }
+
+    widget.setTargetSize(56);
+    widget.setImagePixbuf(makePixbuf(80, 80));
+    drainGtkEvents();
+
+    CHECK_FALSE(widget.showingPlaceholder());
+    CHECK(widget.hasImage());
+
+    widget.clearImage();
+    CHECK_FALSE(widget.showingPlaceholder());
+    CHECK_FALSE(widget.hasImage());
+  }
+
+  TEST_CASE("CoverArtView - compact monogram reduces two-scalar text within the cover",
+            "[gtk][regression][cover-art][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto widget = CoverArtView{};
+    auto const regularIdentity =
+      uimodel::makeCoverArtPlaceholderIdentity(std::array<std::string_view, 1>{"Synthetic Sun"});
+    widget.setTargetSize(48);
+    widget.showPlaceholder(
+      uimodel::makeCoverArtPlaceholderPresentation(uimodel::CoverArtPlaceholderStyle::Monogram, regularIdentity));
+
+    auto allocationHost = AllocationHost{widget};
+    allocationHost.allocateChild(48, 48);
+    drainGtkEvents();
+
+    auto* const label = findWidgetByClass<Gtk::Label>(widget, "ao-cover-monogram");
+    REQUIRE(label != nullptr);
+    auto const layoutPtr = label->get_layout();
+    REQUIRE(layoutPtr);
+    std::int32_t textWidth = 0;
+    std::int32_t regularTextHeight = 0;
+    layoutPtr->get_pixel_size(textWidth, regularTextHeight);
+
+    auto const compactPresentation =
+      uimodel::makeCoverArtPlaceholderPresentation(uimodel::CoverArtPlaceholderStyle::Monogram,
+                                                   uimodel::CoverArtPlaceholderIdentity{
+                                                     .primaryText = "2023",
+                                                     .optMonogram = "23",
+                                                   });
+    REQUIRE(compactPresentation.monogramSize == uimodel::CoverArtPlaceholderMonogramSize::Compact);
+    widget.showPlaceholder(compactPresentation);
+    allocationHost.allocateChild(48, 48);
+    drainGtkEvents();
+
+    auto const compactLayoutPtr = label->get_layout();
+    REQUIRE(compactLayoutPtr);
+    std::int32_t compactTextWidth = 0;
+    std::int32_t compactTextHeight = 0;
+    compactLayoutPtr->get_pixel_size(compactTextWidth, compactTextHeight);
+
+    CHECK(compactTextHeight < regularTextHeight);
+    CHECK(label->get_width() >= compactTextWidth);
+    CHECK(label->get_height() >= compactTextHeight);
+  }
+
+  TEST_CASE("CoverArtView - vinyl decoration follows the cover allocation", "[gtk][regression][cover-art][geometry]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto widget = CoverArtView{};
+    widget.setTargetSize(48);
+    widget.showPlaceholder(uimodel::makeCoverArtPlaceholderPresentation(uimodel::CoverArtPlaceholderStyle::Vinyl,
+                                                                        uimodel::CoverArtPlaceholderIdentity{
+                                                                          .primaryText = "Synthetic Sun",
+                                                                        }));
+
+    auto allocationHost = AllocationHost{widget};
+    allocationHost.allocateChild(48, 48);
+    drainGtkEvents();
+
+    auto* const decoration = findWidgetByClass<Gtk::DrawingArea>(widget, "ao-cover-vinyl-decoration");
+    REQUIRE(decoration != nullptr);
+    CHECK(decoration->get_visible());
+    CHECK(decoration->get_width() == widget.get_width());
+    CHECK(decoration->get_height() == widget.get_height());
+
+    widget.setTargetSize(180);
+    allocationHost.allocateChild(180, 180);
+    drainGtkEvents();
+
+    CHECK(decoration->get_visible());
+    CHECK(decoration->get_width() == widget.get_width());
+    CHECK(decoration->get_height() == widget.get_height());
+  }
+
   TEST_CASE("ResourceImageController - binds placeholder and loaded image states", "[gtk][unit][image]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -239,30 +350,53 @@ namespace ao::gtk::test
       auto const resourceId = ResourceId{42};
       imageCache.put(ImageCacheKey::full(resourceId), makePixbuf(80, 80));
 
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
 
       widget.setTargetSize(56);
       controller.load(resourceId);
       drainGtkEvents();
 
-      auto const paintablePtr = widget.get_paintable();
-      REQUIRE(paintablePtr);
-      CHECK(paintablePtr->get_intrinsic_width() == 56 * widget.get_scale_factor());
-      CHECK(paintablePtr->get_intrinsic_height() == 56 * widget.get_scale_factor());
+      CHECK(widget.hasImage());
     }
 
     SECTION("full-size cache miss clears the placeholder and completes asynchronously")
     {
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
       widget.setTargetSize(56);
 
+      controller.load(kInvalidResourceId);
+      drainGtkEvents();
+      REQUIRE(widget.showingPlaceholder());
+
       controller.load(fullResourceId);
 
-      CHECK_FALSE(widget.get_paintable());
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
+      CHECK_FALSE(widget.showingPlaceholder());
+      CHECK_FALSE(widget.hasImage());
+      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
       CHECK(loader.getFull(fullResourceId));
+    }
+
+    SECTION("missing valid resource leaves the widget empty")
+    {
+      auto const missingId = ResourceId{987654};
+      auto widget = CoverArtView{};
+      auto controller = ResourceImageController{widget, loader};
+      widget.setTargetSize(56);
+
+      controller.load(kInvalidResourceId);
+      drainGtkEvents();
+      REQUIRE(widget.showingPlaceholder());
+
+      controller.load(missingId);
+      bool missingSettled = false;
+      [[maybe_unused]] auto const settlementProbe =
+        loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
+
+      CHECK_FALSE(widget.hasImage());
+      REQUIRE(pumpUntil([&] { return missingSettled; }));
+      CHECK_FALSE(widget.hasImage());
     }
 
     SECTION("stale full-size completion cannot clear a newer cached image")
@@ -270,7 +404,7 @@ namespace ao::gtk::test
       auto const missingId = ResourceId{987654};
       auto const cachedId = ResourceId{4242};
       imageCache.put(ImageCacheKey::full(cachedId), makePixbuf(96));
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
       widget.setTargetSize(56);
 
@@ -280,10 +414,10 @@ namespace ao::gtk::test
         loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
       controller.load(cachedId);
 
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
+      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
       REQUIRE(pumpUntil([&] { return missingSettled; }));
       drainGtkEvents();
-      CHECK(widget.get_paintable());
+      CHECK(widget.hasImage());
     }
   }
 
@@ -305,7 +439,7 @@ namespace ao::gtk::test
       // A large square source so we can prove the cached result is downscaled.
       auto const resourceId = thumbnailResourceId;
 
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
@@ -325,8 +459,8 @@ namespace ao::gtk::test
       CHECK(cachedPtr->get_height() <= expectedSide);
       CHECK(cachedPtr->get_width() < 256);
 
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
-      CHECK(widget.get_paintable());
+      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
+      CHECK(widget.hasImage());
     }
 
     SECTION("cache hit renders synchronously without touching the database")
@@ -336,24 +470,26 @@ namespace ao::gtk::test
       auto const resourceId = ResourceId{9001};
       thumbnailCache.put(ImageCacheKey::thumbnail(resourceId, kLogicalSize), makePixbuf(kLogicalSize, kLogicalSize));
 
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
       drainGtkEvents();
 
-      CHECK(widget.get_paintable());
+      CHECK(widget.hasImage());
     }
 
-    SECTION("invalid resource id clears the image")
+    SECTION("invalid resource id displays the no-cover placeholder")
     {
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
+      widget.setTargetSize(kLogicalSize);
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(kInvalidResourceId);
       drainGtkEvents();
 
-      CHECK_FALSE(widget.get_paintable());
+      CHECK(widget.showingPlaceholder());
+      CHECK(widget.placeholderPresentation().style == uimodel::CoverArtPlaceholderStyle::Note);
     }
 
     SECTION("destroying a widget mid-decode is safe")
@@ -361,7 +497,7 @@ namespace ao::gtk::test
       auto const resourceId = thumbnailResourceId;
 
       {
-        auto widget = ImageWidget{};
+        auto widget = CoverArtView{};
         auto controller = ResourceImageController{widget, loader};
         controller.enableThumbnailMode(kLogicalSize);
         controller.load(resourceId);
@@ -376,12 +512,12 @@ namespace ao::gtk::test
       REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kLogicalSize)); }));
 
       // The runtime remains usable afterwards.
-      auto widget = ImageWidget{};
+      auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(widget.get_paintable()); }));
-      CHECK(widget.get_paintable());
+      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
+      CHECK(widget.hasImage());
     }
   }
 } // namespace ao::gtk::test

@@ -11,6 +11,29 @@
 
 namespace ao::uimodel::test
 {
+  TEST_CASE("CoverArtByteCache - shared cache is bounded and ignores invalid payloads", "[uimodel][unit][cover-art]")
+  {
+    auto cache = CoverArtByteCache{2};
+    CHECK_FALSE(cache.store(kInvalidResourceId, {std::byte{0x00}}));
+    CHECK_FALSE(cache.store(ResourceId{1}, {}));
+    CHECK(cache.store(ResourceId{1}, {std::byte{0x01}}));
+    CHECK(cache.store(ResourceId{2}, {std::byte{0x02}}));
+    CHECK(cache.store(ResourceId{1}, {std::byte{0x0A}}));
+    auto const replaced = cache.cached(ResourceId{1});
+    REQUIRE(replaced.size() == 1);
+    CHECK(replaced[0] == std::byte{0x0A});
+
+    CHECK(cache.store(ResourceId{3}, {std::byte{0x03}}));
+
+    CHECK(cache.cachedCount() == 2);
+    CHECK_FALSE(cache.cached(ResourceId{1}).empty());
+    CHECK(cache.cached(ResourceId{2}).empty());
+    CHECK_FALSE(cache.cached(ResourceId{3}).empty());
+
+    cache.reset();
+    CHECK(cache.cachedCount() == 0);
+  }
+
   TEST_CASE("CoverArtRequestModel - selection generation suppresses stale asynchronous results",
             "[uimodel][unit][cover-art]")
   {
@@ -21,6 +44,8 @@ namespace ao::uimodel::test
     CHECK_FALSE(model.accepts(first));
     CHECK(model.accepts(second));
     CHECK_FALSE(model.store(first, {std::byte{0x10}}));
+    CHECK_FALSE(model.store(second, {}));
+    CHECK(model.cachedCount() == 0);
     CHECK(model.store(second, {std::byte{0x11}, std::byte{0x12}}));
 
     auto const cached = model.cached(ResourceId{11});

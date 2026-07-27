@@ -6,8 +6,10 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include "track/TrackPageHost.h"
+#include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
@@ -17,6 +19,7 @@
 #include <gtkmm/widget.h>
 
 #include <memory>
+#include <string>
 
 namespace ao::gtk::layout
 {
@@ -29,13 +32,29 @@ namespace ao::gtk::layout
     class TracksTableComponent final : public LayoutComponent
     {
     public:
-      TracksTableComponent(LayoutBuildContext& ctx, LayoutNode const& /*node*/)
+      TracksTableComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
         if (ctx.dependencies.trackPageHost == nullptr)
         {
           _container.append(*Gtk::make_managed<Gtk::Label>("Error: trackPageHost missing"));
           return;
         }
+
+        auto const defaultStyle =
+          uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::GroupHeading);
+        auto const styleId = node.propertyOr<std::string>(
+          "groupCoverPlaceholderStyle", std::string{uimodel::coverArtPlaceholderStyleId(defaultStyle)});
+        auto const optParsedStyle = uimodel::parseCoverArtPlaceholderStyle(styleId);
+        auto const style = optParsedStyle.value_or(defaultStyle);
+
+        if (!optParsedStyle)
+        {
+          APP_LOG_WARN("tracks.table: unknown groupCoverPlaceholderStyle '{}'; using '{}'",
+                       styleId,
+                       uimodel::coverArtPlaceholderStyleId(defaultStyle));
+        }
+
+        ctx.dependencies.trackPageHost->setGroupCoverPlaceholderStyle(style);
 
         Gtk::Stack& stack = ctx.dependencies.trackPageHost->stack();
         _container.append(stack);
@@ -63,7 +82,12 @@ namespace ao::gtk::layout
                                 .props = {{.name = "view",
                                            .kind = LayoutPropertyKind::String,
                                            .label = "View Source",
-                                           .defaultValue = LayoutValue{"workspace.focused"}}},
+                                           .defaultValue = LayoutValue{"workspace.focused"}},
+                                          {.name = "groupCoverPlaceholderStyle",
+                                           .kind = LayoutPropertyKind::Enum,
+                                           .label = "Group Cover Placeholder",
+                                           .defaultValue = LayoutValue{"monogram"},
+                                           .enumValues = coverArtPlaceholderStyleIds()}},
                                 .minChildren = 0,
                                 .optMaxChildren = 0},
                                createTracksTable);

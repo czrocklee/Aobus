@@ -939,3 +939,6 @@ columnview row.ao-missing-row label {
   border-color: transparent;
   box-shadow: none;
 }
+.ao-cover-vinyl-decoration {
+  color: @theme_selected_bg_color;
+}
