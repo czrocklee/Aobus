@@ -311,12 +311,13 @@ namespace ao::gtk
         _previewFilteredListPtr.reset();
         _previewModelPtr.reset();
 
-        auto parentResult = _runtime.sources().acquire(_parentListId);
+        auto const sourceListId = rt::resolveParentSourceId(_parentListId);
+        auto parentResult = _runtime.sources().acquire(sourceListId);
 
         if (!parentResult)
         {
           APP_LOG_ERROR(
-            "Cannot build smart-list preview for source {}: {}", _parentListId, parentResult.error().message);
+            "Cannot build smart-list preview for source {}: {}", sourceListId, parentResult.error().message);
           updateSourceLabels();
           updateDialogState();
           showError(parentResult.error().message);
@@ -347,9 +348,8 @@ namespace ao::gtk
   void SmartListDialog::updateSourceLabels()
   {
     auto inheritedExpr = std::string{};
-    auto const isAllTracks = (_parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId);
 
-    if (!isAllTracks)
+    if (auto const isAllTracks = rt::isVirtualListId(_parentListId); !isAllTracks)
     {
       auto scope = _runtime.library().reader();
 
@@ -385,7 +385,7 @@ namespace ao::gtk
       .hasError = hasError,
       .errorMessage = optError ? optError->message : std::string{},
       .matchCount = hasPreviewSource ? _previewFilteredListPtr->size() : 0,
-      .isAllTracks = _parentListId == rt::kAllTracksListId || _parentListId == kInvalidListId,
+      .isAllTracks = rt::isVirtualListId(_parentListId),
     });
   }
 

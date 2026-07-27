@@ -340,7 +340,7 @@ namespace ao::gtk
 
     auto listName = std::string{"List"};
 
-    if (listId != rt::kAllTracksListId && listId != kInvalidListId)
+    if (!rt::isVirtualListId(listId))
     {
       auto scope = _runtime.library().reader();
 

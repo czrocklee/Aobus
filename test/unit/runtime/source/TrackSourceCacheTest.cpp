@@ -888,4 +888,29 @@ namespace ao::rt::test
     CHECK(&first.source() == &second.source());
     CHECK(&first.source() != &different.source());
   }
+
+  TEST_CASE("TrackSourceCache - a list stored at the root derives from All Tracks",
+            "[runtime][unit][source][track-source-cache]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const kept = libraryFixture.addTrack("Keep");
+    libraryFixture.addTrack("Drop");
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto const listId = ao::test::requireValue(writerFixture.writer().createList(LibraryWriter::ListDraft{
+      .kind = LibraryWriter::ListKind::Smart,
+      .parentId = kInvalidListId,
+      .name = "Root smart list",
+      .expression = "$title = \"Keep\"",
+    }));
+
+    auto cache = TrackSourceCache{libraryFixture.library(), changes};
+    cache.reloadAllTracks();
+
+    // A root list stores parentId kInvalidListId, which acquire() rejects on its
+    // own. The cache must resolve it to the All Tracks root before recursing.
+    auto lease = ao::test::requireValue(cache.acquire(listId));
+    CHECK(lease->state() == TrackSourceState::Live);
+    CHECK(sourceTrackIds(lease.source()) == std::vector{kept});
+  }
 } // namespace ao::rt::test

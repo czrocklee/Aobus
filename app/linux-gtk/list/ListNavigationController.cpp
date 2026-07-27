@@ -327,7 +327,7 @@ namespace ao::gtk
 
     auto const listId = _panelPtr->selectedListId();
 
-    if (listId == kInvalidListId || listId == rt::kAllTracksListId)
+    if (rt::isVirtualListId(listId))
     {
       return;
     }
@@ -344,7 +344,7 @@ namespace ao::gtk
 
     auto const listId = _panelPtr->selectedListId();
 
-    if (listId == kInvalidListId || listId == rt::kAllTracksListId)
+    if (rt::isVirtualListId(listId))
     {
       return;
     }

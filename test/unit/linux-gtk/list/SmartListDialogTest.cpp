@@ -112,4 +112,51 @@ namespace ao::gtk::test
 
     CHECK(okButton->get_sensitive());
   }
+
+  // A list created from the library root, and any top-level list opened for
+  // editing, carries parentId kInvalidListId. The source cache rejects that id
+  // outright, so the dialog must resolve it to the All Tracks root or the
+  // preview never builds and the editor opens showing an acquisition error.
+  TEST_CASE("SmartListDialog - root parent previews against All Tracks", "[gtk][regression][list][dialog]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library()};
+
+    auto dialog = SmartListDialog{window, fixture.runtime(), kInvalidListId, cache};
+
+    drainGtkEvents();
+
+    bool visibleError = false;
+
+    for (auto* const label : collectAll<Gtk::Label>(dialog))
+    {
+      visibleError =
+        visibleError || (label->get_visible() && !label->get_text().empty() && label->has_css_class("ao-layout-error"));
+    }
+
+    CHECK_FALSE(visibleError);
+
+    Gtk::Entry* nameEntry = nullptr;
+
+    for (auto* const entry : collectAll<Gtk::Entry>(dialog))
+    {
+      if (entry->get_placeholder_text() == "List name")
+      {
+        nameEntry = entry;
+        break;
+      }
+    }
+
+    REQUIRE(nameEntry != nullptr);
+
+    auto* const okButton = findButtonByLabel(dialog, "Create");
+    REQUIRE(okButton != nullptr);
+
+    nameEntry->set_text("Root List");
+    drainGtkEvents();
+
+    CHECK(okButton->get_sensitive());
+  }
 } // namespace ao::gtk::test

@@ -13,7 +13,7 @@ namespace ao::uimodel
 
     state.canCreate = true;
 
-    if (selectedListId != kInvalidListId && selectedListId != rt::kAllTracksListId)
+    if (!rt::isVirtualListId(selectedListId))
     {
       state.canEdit = true;
       state.canDelete = !selectedListHasChildren;
@@ -24,7 +24,7 @@ namespace ao::uimodel
 
   ListId parentForNewSmartList(ListId selectedListId)
   {
-    if (selectedListId != kInvalidListId && selectedListId != rt::kAllTracksListId)
+    if (!rt::isVirtualListId(selectedListId))
     {
       return selectedListId;
     }

@@ -114,7 +114,7 @@ namespace ao::gtk
         });
       };
 
-      if (listId == rt::kAllTracksListId || listId == kInvalidListId)
+      if (rt::isVirtualListId(listId))
       {
         return fallback();
       }

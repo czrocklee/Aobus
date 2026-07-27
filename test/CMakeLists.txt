@@ -273,6 +273,7 @@ add_executable(ao_core_test
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
+    unit/runtime/source/VirtualListIdsTest.cpp
     unit/runtime/projection/TrackDetailProjectionTest.cpp
     unit/runtime/library/AudioIdentityIndexerTest.cpp
     unit/runtime/library/LibraryScanTest.cpp

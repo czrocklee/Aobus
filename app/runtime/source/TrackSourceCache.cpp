@@ -283,8 +283,7 @@ namespace ao::rt
       return;
     }
 
-    auto parentResult =
-      definition.parentId == kInvalidListId ? acquire(kAllTracksListId) : acquire(definition.parentId);
+    auto parentResult = acquire(resolveParentSourceId(definition.parentId));
 
     if (!parentResult)
     {
@@ -334,7 +333,7 @@ namespace ao::rt
 
   void TrackSourceCache::eraseList(ListId const listId)
   {
-    if (listId == kInvalidListId || listId == kAllTracksListId)
+    if (isVirtualListId(listId))
     {
       return;
     }
@@ -395,8 +394,7 @@ namespace ao::rt
     }
 
     ancestry.push_back(listId);
-    auto parentResult = optView->parentId() == kInvalidListId ? acquire(kAllTracksListId, std::move(ancestry))
-                                                              : acquire(optView->parentId(), std::move(ancestry));
+    auto parentResult = acquire(resolveParentSourceId(optView->parentId()), std::move(ancestry));
 
     if (!parentResult)
     {
