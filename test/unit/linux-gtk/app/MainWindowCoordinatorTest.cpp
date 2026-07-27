@@ -129,7 +129,7 @@ namespace ao::gtk::test
     auto const layoutPath = rt::LibraryPaths{runtime.musicRoot()}.managedDataPath() / "gtk_layout.yaml";
     std::filesystem::create_directories(layoutPath.parent_path());
     auto const stored = std::string{"trackView.columnLayouts:\n"
-                                    "  version: 2\n"
+                                    "  version: 3\n"
                                     "  layouts: []\n"
                                     "trackView.presentations:\n"
                                     "  version: 1\n"
@@ -164,16 +164,24 @@ namespace ao::gtk::test
     auto const trackId = addTrackWithTitle(runtime, "Before Import");
     auto const rowBeforePtr = coordinator.trackRowCache()->trackRow(trackId);
     REQUIRE(rowBeforePtr);
-    CHECK(rowBeforePtr->fieldText(rt::TrackField::Title) == "Before Import");
+    TrackRowObject const& rowBefore = *rowBeforePtr;
+    auto const titleBefore = rowBefore.fieldText(rt::TrackField::Title);
+    CHECK(titleBefore == "Before Import");
 
     updateTrackTitle(runtime, trackId, "After Import");
-    CHECK(coordinator.trackRowCache()->trackRow(trackId)->fieldText(rt::TrackField::Title) == "Before Import");
+    auto const cachedRowPtr = coordinator.trackRowCache()->trackRow(trackId);
+    REQUIRE(cachedRowPtr);
+    TrackRowObject const& cachedRow = *cachedRowPtr;
+    auto const cachedTitle = cachedRow.fieldText(rt::TrackField::Title);
+    CHECK(cachedTitle == "Before Import");
 
     coordinator.importExport().callbacks().onLibraryDataMutated();
 
     auto const rowAfterPtr = coordinator.trackRowCache()->trackRow(trackId);
     REQUIRE(rowAfterPtr);
-    CHECK(rowAfterPtr->fieldText(rt::TrackField::Title) == "After Import");
+    TrackRowObject const& rowAfter = *rowAfterPtr;
+    auto const titleAfter = rowAfter.fieldText(rt::TrackField::Title);
+    CHECK(titleAfter == "After Import");
   }
 
   TEST_CASE("MainWindowCoordinator - partial output preferences fall back to session output",

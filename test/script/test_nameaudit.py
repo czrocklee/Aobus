@@ -60,7 +60,7 @@ class NameAuditTest(unittest.TestCase):
                 ("test-double", "Fake/Mock/Spy/Stub types belong in tests"),
                 (
                     "role-location",
-                    "Controller types must live under one of: app/linux-gtk/, app/tui/, "
+                    "Controller types must live under one of: app/linux-gtk/, app/tui/, app/windows-winui/, "
                     "test/unit/linux-gtk/, test/unit/tui/",
                 ),
             ],

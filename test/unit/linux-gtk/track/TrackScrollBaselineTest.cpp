@@ -120,7 +120,7 @@ namespace ao::gtk::test
 
     for (auto const id : ids)
     {
-      auto const rowPtr = cache.trackRow(id);
+      Glib::RefPtr<TrackRowObject> const rowPtr = cache.trackRow(id);
 
       for (auto const field : kBenchFields)
       {
@@ -141,7 +141,7 @@ namespace ao::gtk::test
     {
       for (auto const id : ids)
       {
-        auto const rowPtr = cache.trackRow(id);
+        Glib::RefPtr<TrackRowObject> const rowPtr = cache.trackRow(id);
 
         for (auto const field : kBenchFields)
         {

@@ -99,6 +99,39 @@ namespace ao::uimodel::test
     CHECK(kAobusSoulNightField == AobusSoulRgb{.red = 0x11, .green = 0x18, .blue = 0x27});
   }
 
+  TEST_CASE("AobusSoul - gradient keeps a cyan core and counter-shifted quality body",
+            "[uimodel][unit][playback][soul]")
+  {
+    auto const stationary = aobusSoulGradientColors(kAobusSoulTurbulent, 0.0);
+    CHECK(stationary.core == AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF});
+    CHECK(stationary.body == AobusSoulRgb{.red = 0xF5, .green = 0x9E, .blue = 0x0B});
+
+    auto const flowing = aobusSoulGradientColors(kAobusSoulTurbulent, 10.0);
+    CHECK(flowing.core == AobusSoulRgb{.red = 0x00, .green = 0xBA, .blue = 0xFF});
+    CHECK(flowing.body == AobusSoulRgb{.red = 0xF5, .green = 0x77, .blue = 0x0B});
+  }
+
+  TEST_CASE("AobusSoul - geometry is one immutable cross-frontend recipe", "[uimodel][unit][playback][soul]")
+  {
+    CHECK(kAobusSoulGeometry.referenceHeight == 65.0);
+    CHECK(kAobusSoulGeometry.radius == 30.0);
+    CHECK(kAobusSoulGeometry.anchorStrokeWidth == 10.0);
+    CHECK(kAobusSoulGeometry.baseStrokeWidth == 9.0);
+    CHECK(kAobusSoulGeometry.innerGlyphRadius == 14.0);
+    CHECK(kAobusSoulGeometry.innerGlyphBarOffset == 5.6);
+    CHECK(kAobusSoulGeometry.innerGlyphBarHalfHeight == 9.8);
+    CHECK(kAobusSoulGeometry.logoCenterOffset == 43.5);
+    CHECK(kAobusSoulCoreGradientStop == 0.382);
+  }
+
+  TEST_CASE("AobusSoul - frame updates require visible active playback", "[uimodel][unit][playback][soul]")
+  {
+    CHECK(shouldAnimateAobusSoul(true, true, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(false, true, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(true, false, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(true, true, true));
+  }
+
   TEST_CASE("AobusSoul - motion recipe exposes the shared GTK and TUI timing phases", "[uimodel][unit][playback][soul]")
   {
     auto const initial = aobusSoulMotionAt(std::chrono::duration<double>{0.0});

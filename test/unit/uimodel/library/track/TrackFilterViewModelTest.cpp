@@ -3,6 +3,7 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -77,17 +78,33 @@ namespace ao::uimodel::test
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
   }
 
-  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression", "[uimodel][unit][track-filter]")
+  TEST_CASE("TrackFilterViewModel - plain text resolves to quick search expression",
+            "[uimodel][unit][track-filter][regression]")
   {
     auto fixture = TrackFilterFixture{};
-    fixture.focusAllTracksView();
+    auto const aimerTrackId =
+      fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Brave Shine", .artist = "Aimer"});
+    fixture.libraryFixture.addTrack(library::test::TrackSpec{.title = "Hysteria", .artist = "Muse"});
+    fixture.trackSourceCache.reloadAllTracks();
+    auto const viewId = fixture.focusAllTracksView();
 
-    fixture.viewModel.updateFilter("Beatles");
+    fixture.viewModel.updateFilter("Aimer");
 
-    CHECK(fixture.renderLog.last().entryText == "Beatles");
-    CHECK(fixture.renderLog.last().resolvedExpression.contains("$title ~ \"Beatles\""));
-    CHECK(fixture.renderLog.last().resolvedExpression.contains("$artist ~ \"Beatles\""));
+    CHECK(fixture.renderLog.last().entryText == "Aimer");
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("$title ~ \"Aimer\""));
+    CHECK(fixture.renderLog.last().resolvedExpression.contains("$artist ~ \"Aimer\""));
     CHECK(fixture.renderLog.last().canCreateSmartList == true);
+    auto const projectionPtr = ao::test::requireValue(fixture.viewService.findTrackListProjection(viewId));
+    REQUIRE(projectionPtr != nullptr);
+    REQUIRE(projectionPtr->size() == 1);
+    CHECK(projectionPtr->trackIdAt(0) == aimerTrackId);
+    CHECK_FALSE(fixture.viewService.trackListState(viewId).optFilterError);
+
+    fixture.viewModel.updateFilter("");
+
+    auto const clearedProjectionPtr = ao::test::requireValue(fixture.viewService.findTrackListProjection(viewId));
+    REQUIRE(clearedProjectionPtr != nullptr);
+    REQUIRE(clearedProjectionPtr->size() == 2);
   }
 
   TEST_CASE("TrackFilterViewModel - multiple plain text terms resolve to conjunction", "[uimodel][unit][track-filter]")

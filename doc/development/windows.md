@@ -7,8 +7,8 @@ summary: Defines the native Windows setup, build, test, and local-state workflow
 ---
 # Windows development
 
-The native Windows build provides the CLI and FTXUI terminal applications, a
-WinUI 3 bootstrap frontend, the shared core libraries, native tests, and a
+The native Windows build provides the CLI and FTXUI terminal applications, the
+native WinUI 3 desktop frontend, the shared core libraries, native tests, and a
 dedicated clang-tidy configuration. The GTK frontend and council tool are not
 available in the Windows development profile.
 

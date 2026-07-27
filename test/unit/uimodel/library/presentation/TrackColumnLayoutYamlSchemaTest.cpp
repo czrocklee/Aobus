@@ -19,18 +19,19 @@ namespace ao::uimodel::test
     auto state = TrackColumnLayoutState{};
     state.listLayouts[ListId{10}] = {
       TrackColumnState{.field = rt::TrackField::Artist, .weight = 1.75},
-      TrackColumnState{.field = rt::TrackField::Duration, .width = 200},
+      TrackColumnState{.field = rt::TrackField::Duration, .width = 200, .visible = false},
     };
 
     auto const document = toTrackColumnLayoutDocument(state);
 
     REQUIRE(document);
-    CHECK(document->version == 1);
+    CHECK(document->version == 2);
     REQUIRE(document->layouts.size() == 1);
     CHECK(document->layouts[0].listId == 10);
     REQUIRE(document->layouts[0].columns.size() == 2);
     CHECK(document->layouts[0].columns[0].field == "artist");
     CHECK(document->layouts[0].columns[1].field == "duration");
+    CHECK_FALSE(document->layouts[0].columns[1].visible);
 
     auto const decoded = trackColumnLayoutStateFromDocument(*document);
 
@@ -56,7 +57,7 @@ namespace ao::uimodel::test
 
     SECTION("Unsupported version")
     {
-      document.version = 2;
+      document.version = 3;
       auto const result = trackColumnLayoutStateFromDocument(document);
 
       REQUIRE_FALSE(result);
@@ -159,9 +160,10 @@ namespace ao::uimodel::test
     auto tree = ryml::Tree{yaml::callbacks()};
 
     REQUIRE(TrackColumnLayoutYamlSchema{}.serialize(tree.rootref(), state));
-    CHECK(yaml::scalarView(tree.rootref()["version"]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["version"]) == "2");
     REQUIRE(tree.rootref()["layouts"].is_seq());
     CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["field"]) == "artist");
+    CHECK(yaml::scalarView(tree.rootref()["layouts"][0]["columns"][0]["visible"]) == "true");
 
     auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
     REQUIRE(decoded);
@@ -184,7 +186,7 @@ namespace ao::uimodel::test
 
     SECTION("Missing required fields are rejected")
     {
-      auto const* source = "version: 1\n";
+      auto const* source = "version: 2\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
@@ -196,7 +198,7 @@ namespace ao::uimodel::test
 
     SECTION("Unknown structural keys are rejected")
     {
-      auto const* source = "version: 1\nlayouts: []\nfuture: true\n";
+      auto const* source = "version: 2\nlayouts: []\nfuture: true\n";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
       auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
@@ -209,13 +211,14 @@ namespace ao::uimodel::test
     SECTION("Malformed nested entries reject the whole candidate")
     {
       auto const* source = R"(
-        version: 1
+        version: 2
         layouts:
           - listId: 10
             columns:
               - field: artist
                 width: -1
                 weight: malformed
+                visible: true
       )";
       auto tree = ryml::Tree{yaml::callbacks()};
       ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
@@ -224,6 +227,26 @@ namespace ao::uimodel::test
       REQUIRE_FALSE(decoded);
       CHECK(decoded.error().code == Error::Code::FormatRejected);
       CHECK(decoded.error().message.contains("weight"));
+    }
+
+    SECTION("Column visibility is required")
+    {
+      auto const* source = R"(
+        version: 2
+        layouts:
+          - listId: 10
+            columns:
+              - field: artist
+                width: -1
+                weight: 1
+      )";
+      auto tree = ryml::Tree{yaml::callbacks()};
+      ryml::parse_in_arena(ryml::to_csubstr(source), &tree);
+      auto const decoded = TrackColumnLayoutYamlSchema{}.deserialize(tree.rootref(), TrackColumnLayoutState{});
+
+      REQUIRE_FALSE(decoded);
+      CHECK(decoded.error().code == Error::Code::FormatRejected);
+      CHECK(decoded.error().message.contains("visible"));
     }
   }
 } // namespace ao::uimodel::test

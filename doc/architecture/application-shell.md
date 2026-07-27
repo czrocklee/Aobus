@@ -9,11 +9,11 @@ summary: Defines ownership and lifetime boundaries for the declarative shell, ac
 
 ## Scope
 
-This document owns the structural graph that turns a platform-neutral layout document and action/component metadata into Aobus's live GTK application shell.
-It covers layout-session authority, catalogs, GTK registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown.
+This document owns the structural graph of Aobus desktop application shells.
+It covers the GTK declarative layout session, catalogs, registries and factories, action activation and Gio export, per-build dependency wiring, component runtime state, editor rebuilds, shortcuts, and teardown. It also owns the WinUI Modern/Classic shell boundary, stable session ownership, responsive policy, and native adapter placement.
 
 It does not own the semantic state rendered by a track, playback, workspace, status, or resource component.
-It also does not make the GTK declarative layout system a cross-frontend contract: TUI currently builds its terminal shell independently.
+It does not make the GTK declarative layout system a cross-frontend contract: WinUI uses fixed native shells and TUI builds its terminal shell independently.
 
 The subject qualifies as an application-system architecture because it has an independent document, catalog, construction, action, persistence, rebuild, and lifetime graph that presentation alone cannot explain without absorbing GTK shell orchestration.
 
@@ -40,6 +40,19 @@ GTK MainWindow owns ShellLayoutController
 The [presentation architecture](presentation.md) owns the broader runtime/UIModel/frontend split.
 This document refines the shell-specific composition inside that split and does not move widget types into UIModel.
 
+WinUI follows a parallel native composition:
+
+```text
+App owns DispatcherQueueExecutor + LibrarySession + MainWindow
+  -> shared DesktopShellPolicy + settings/theme schemas
+  -> MainWindow retains Modern and Classic XAML trees
+     -> WindowsUiCoordinator owns the LibrarySession callback boundary
+        -> TrackListController + cover-art presenters + theme coordinator
+     -> playback leaf controls own native event tokens + UIModel bindings
+     -> mode switch changes visibility and title-bar ownership
+  -> SMTC, picker, AppWindow, and WASAPI adapters remain Windows-local
+```
+
 ## Responsibilities
 
 ### Platform-neutral shell language
@@ -56,6 +69,16 @@ The controller is the current GTK shell composition owner: it selects and loads 
 This is a broad current responsibility set, not a general-purpose runtime facade.
 Customized-layout load/save/remove operations and candidate preparation return typed results; component-state persistence retains its narrower optional/Boolean contract.
 The underlying grouped store provides fail-closed one-shot replacement without generic commit receipts or a blocked-store recovery mode.
+
+### WinUI shell owner
+
+`App` owns the dispatcher, `LibrarySession`, and `MainWindow` in destruction-safe order. `LibrarySession` remains alive across shell switches and owns active-library replacement, playback-command binding, and Windows settings. `MainWindow` owns both XAML trees for its lifetime and switches only presentation visibility and title-bar mode.
+
+`WindowsUiCoordinator` is the one window-scoped owner of the exclusive `LibrarySession` callback registration. It owns the stable track-list, cover-art, and theme collaborators and retires that registration before releasing them. `WinUiDependencies` is a construction-scoped aggregate of borrowed references: a consumer unpacks only the narrow references it retains and requests a fresh aggregate after a library or playback runtime replacement.
+
+Playback buttons, Soul transport, seek, time, and volume adapters are leaf controls. Each leaf owns every XAML event token it registers and its corresponding UIModel ViewModel, starts every bind with an idempotent unbind, and reconciles the native control from the ViewModel's initial callback. Modern and Classic use separate native adapters even when they render the same semantic command.
+
+Shared UIModel values own responsive breakpoints, Soul constants and animation gating, bounded row and artwork caching, and strict Windows settings/theme schemas. WinUI owns XAML controls, HWND and `AppWindow` adaptation, `DispatcherQueue` delivery, FolderPicker, SMTC, and WASAPI provider registration.
 
 ### Component and action registries
 
@@ -91,6 +114,9 @@ GTK translates those chords to native accelerator syntax and applies eligible wi
 - The action registry owns activation and availability; a component binding or keymap is a reference, not a parallel handler.
 - Gio export and shortcut application stop at the GTK boundary.
 - TUI may reuse action, keymap, or layout values deliberately, but the current GTK document cannot be described as the TUI shell authority.
+- WinUI does not parse or adapt the GTK layout document. Its fixed native shells consume shared semantic policy without introducing a second runtime authority.
+- `WinUiDependencies` may be passed during construction or binding but cannot be retained as a service locator. Replaceable runtime and command references are reacquired after the corresponding `LibrarySession` callback.
+- A WinUI leaf adapter owns only its native controls, native event registrations, and narrow UIModel bindings. It does not reach through `MainWindow` for ordinary playback state or commands.
 - Presentation owners define the semantic values a component renders; shell owns placement, construction, binding, and component lifetime.
 
 ## Data and control flow
@@ -139,6 +165,19 @@ component interaction
 Reset removes runtime component state without changing authored YAML.
 Panel-size promotion moves eligible splitter size values into authored defaults and retains non-promoted state with a refreshed baseline.
 
+### WinUI runtime replacement
+
+```text
+LibrarySession announces library/playback changing
+  -> WindowsUiCoordinator and MainWindow unbind observers of the old source
+  -> LibrarySession commits the prepared replacement
+  -> LibrarySession announces changed
+  -> MainWindow requests fresh WinUiDependencies
+  -> stable controllers and leaf controls bind and reconcile immediately
+```
+
+The changing callback is the last point at which an adapter may safely detach from the retiring source. The changed callback never reuses runtime or command references captured from an earlier dependency aggregate.
+
 ## Structural constraints
 
 - One `ShellLayoutController` and one active `LayoutHost` belong to one GTK `MainWindow`.
@@ -153,6 +192,12 @@ Panel-size promotion moves eligible splitter size values into authored defaults 
 - A detached tree captures the next generation; commit advances that generation before destroying the retiring tree.
 - Authored layouts, component runtime state, global preset selection, and keyboard overrides remain separate persistence classes.
 - Unknown component and template references become visible diagnostic components rather than undefined factory calls.
+- For WinUI, one main window owns both shell trees. Modern is the default. Switching shell mode cannot replace the active `LibrarySession`, initiate scanning, or stop playback.
+- WinUI responsive layout may collapse side regions but cannot hide the track list or playback controls. Classic Soul remains a separate 32 by 32 glyph-free control before ordinary Play/Pause and Stop controls.
+- One `WindowsUiCoordinator` owns the `LibrarySession` callback sink for one WinUI main window.
+- A WinUI dependency aggregate is bounded to one construction or bind operation and is not stored.
+- Each playback leaf owns and revokes its native event token while its XAML element is still alive. Its `bind` operation first performs an idempotent `unbind`.
+- Modern Soul transport owns Play/Pause and glyph rendering. Classic Soul owns no transport command or glyph and remains independent from Classic Play/Pause and Stop.
 
 ## Failure, cancellation, and lifetime boundaries
 
@@ -173,6 +218,13 @@ During teardown the controller clears the host while runtime state, stores, regi
 The final clear does not advance the state generation, allowing the current component tree to flush pending state before its owners disappear.
 Editor theme and callback tokens are released before the controller's collaborators.
 
+WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the shared session. `WindowsUiCoordinator::retire()` first clears the session callback registration, then unbinds its owned collaborators. Playback leaf destructors unbind their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
+
+Library replacement prepares a candidate runtime while the active runtime remains usable.
+The candidate loads an existing canonical database directly, or completes an initial scan when the selected root is new.
+The session then unbinds library observers immediately before committing the candidate.
+Cancellation or failure destroys only the candidate.
+
 ## Implementation map
 
 - [`LayoutDocument`](../../app/include/ao/uimodel/layout/document/LayoutDocument.h), [`LayoutNode`](../../app/include/ao/uimodel/layout/document/LayoutNode.h), and [`LayoutPreparation`](../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) own the platform-neutral document and preparation proof.
@@ -181,6 +233,10 @@ Editor theme and callback tokens are released before the controller's collaborat
 - [`ComponentRegistry`](../../app/linux-gtk/layout/runtime/ComponentRegistry.h), [`ActionRegistry`](../../app/linux-gtk/layout/runtime/ActionRegistry.h), [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h), and [`LayoutHost`](../../app/linux-gtk/layout/runtime/LayoutHost.h) own GTK construction and activation.
 - [`ShellLayoutStore`](../../app/linux-gtk/app/ShellLayoutStore.h) and [`ShellLayoutComponentStateStore`](../../app/linux-gtk/app/ShellLayoutComponentStateStore.h) own customized layouts and component state.
 - [`KeymapModel`](../../app/include/ao/uimodel/input/KeymapModel.h), [`KeymapApplicator.cpp`](../../app/linux-gtk/app/KeymapApplicator.cpp), and [`ShortcutEditorWidget.cpp`](../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) own neutral policy and GTK adaptation.
+- [`App`](../../app/windows-winui/App.xaml.h), [`LibrarySession`](../../app/windows-winui/app/LibrarySession.h), and [`MainWindow`](../../app/windows-winui/MainWindow.xaml) own the WinUI shell and stable-session composition; shell, track, and playback code-behind methods are compiled from their matching subsystem directories.
+- [`WindowsUiCoordinator`](../../app/windows-winui/app/WindowsUiCoordinator.h) owns the WinUI session callback boundary, while [`WinUiDependencies`](../../app/windows-winui/app/WinUiDependencies.h) is the construction-scoped borrowed dependency aggregate.
+- [`PlaybackControls`](../../app/windows-winui/playback/PlaybackControls.h) composes the fixed Modern and Classic playback surfaces. [`TransportButton`](../../app/windows-winui/playback/TransportButton.h), [`SoulTransportButton`](../../app/windows-winui/playback/SoulTransportButton.h), [`OutputDeviceControl`](../../app/windows-winui/playback/OutputDeviceControl.h), [`SeekControl`](../../app/windows-winui/playback/SeekControl.h), [`PlaybackTimeControl`](../../app/windows-winui/playback/PlaybackTimeControl.h), and [`VolumeControl`](../../app/windows-winui/playback/VolumeControl.h) own playback leaf adaptation.
+- [`DesktopShellPolicy`](../../app/include/ao/uimodel/layout/shell/DesktopShellPolicy.h) and [`AobusSoulViewModel`](../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) own shared Windows shell and Soul policy.
 
 ## Test map
 
@@ -189,6 +245,7 @@ Editor theme and callback tokens are released before the controller's collaborat
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) protects shell ownership by the window.
 - Keymap tests under [`test/unit/uimodel/input/`](../../test/unit/uimodel/input/) and [`ShortcutEditorWidgetTest.cpp`](../../test/unit/linux-gtk/preference/ShortcutEditorWidgetTest.cpp) protect neutral and GTK shortcut boundaries.
 - The UIModel organization guardrail in [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) protects platform-neutral placement.
+- Windows UIModel tests under [`test/unit/uimodel/`](../../test/unit/uimodel/) protect breakpoints, persistence, theme fallback, Soul constants, playback ViewModels, and bounded caches. Native `winui` Debug and Release builds protect XAML and Windows adapter composition; the current repository has no WinUI widget-test host.
 
 ## Related documents
 
@@ -204,3 +261,5 @@ Editor theme and callback tokens are released before the controller's collaborat
 - [Layout component-state reference](../reference/shell/layout-state.md)
 - [Layout catalog and action reference](../reference/shell/layout-catalog.md)
 - [Keyboard map reference](../reference/shell/keymap.md)
+- [Windows desktop shell specification](../spec/shell/windows-desktop.md)
+- [Windows desktop state reference](../reference/windows/desktop-state.md)

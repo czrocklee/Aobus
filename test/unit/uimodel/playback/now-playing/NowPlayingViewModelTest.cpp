@@ -61,9 +61,11 @@ namespace ao::uimodel::test
     SECTION("Metadata formatting")
     {
       auto desc = playbackRequest(TrackId{1}, "Song", "Artist");
+      desc.item.coverArtId = ResourceId{42};
 
       REQUIRE(playbackTransport.play(desc, ListId{1}));
       REQUIRE(!log.empty());
+      CHECK(log.last().coverArtId == ResourceId{42});
       CHECK(log.last().title == "Song");
       CHECK(log.last().artist == "Artist");
       CHECK(log.last().combinedStatus == "Artist - Song");
@@ -190,6 +192,7 @@ namespace ao::uimodel::test
     REQUIRE(!log.empty());
     CHECK(log.last().audioPipeline.deviceName == "System Default");
     CHECK(log.last().audioPipeline.deviceIconKind == AudioIconKind::AudioServer);
+    CHECK(log.last().audioPipeline.plainTextFallback.starts_with("Audio Pipeline:\n"));
   }
 
   TEST_CASE("NowPlayingViewModel - refreshes from playback events until destroyed", "[uimodel][unit][playback]")

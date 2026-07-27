@@ -300,15 +300,16 @@ namespace ao::gtk
       _optPendingUserResize.reset();
     }
 
-    auto layout = std::vector<uimodel::TrackColumnState>{};
-    layout.reserve(specs.size());
+    auto const& stored = _layoutStore.layoutForList(_listId);
+    auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
+    visibleLayout.reserve(specs.size());
 
     for (auto const& spec : specs)
     {
-      layout.push_back(uimodel::canonicalTrackColumnState(spec));
+      visibleLayout.push_back(uimodel::canonicalTrackColumnState(spec));
     }
 
-    _layoutStore.updateLayout(_listId, layout);
+    _layoutStore.updateLayout(_listId, uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout));
 
     if (viewportWidth > 0)
     {
@@ -419,8 +420,7 @@ namespace ao::gtk
   std::vector<rt::TrackField> TrackColumnController::visibleFieldsInStoredOrder(
     std::span<rt::TrackField const> visibleFields) const
   {
-    auto const activeOrder = _layoutStore.activeFieldOrder();
-    return uimodel::visibleTrackFieldsInStoredOrder(visibleFields, activeOrder);
+    return uimodel::visibleTrackFieldsInStoredLayout(visibleFields, _layoutStore.layoutForList(_listId));
   }
 
   void TrackColumnController::updateColumnVisibility(std::span<rt::TrackField const> visibleFields)

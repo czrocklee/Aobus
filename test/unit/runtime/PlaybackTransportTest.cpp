@@ -149,7 +149,7 @@ namespace ao::rt::test
   }
 
   TEST_CASE("PlaybackTransport playback - natural advance commits prepared track without idle",
-            "[runtime][unit][playback][gapless]")
+            "[runtime][unit][playback][concurrency]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
     fixture.onDevicesChangedCb(fixture.status.devices);
@@ -182,13 +182,8 @@ namespace ao::rt::test
     // marshals it onto the executor, which drain() runs on this thread.
     auto buffer = std::array<std::byte, 4096>{};
 
-    for (std::int32_t i = 0; i < 100000 && nowPlaying.empty(); ++i)
-    {
-      fixture.renderTarget->renderPcm(buffer);
-      fixture.executor.drain();
-    }
-
-    REQUIRE_FALSE(nowPlaying.empty());
+    REQUIRE(
+      driveRenderUntil(*fixture.renderTarget, fixture.executor, buffer, [&nowPlaying] { return !nowPlaying.empty(); }));
 
     // Item-id match: the prepared request is committed as now-playing, exactly
     // once, without an idle in between (idle would send playback down the

@@ -9,7 +9,7 @@ summary: Defines construction, restoration, replacement, checkpointing, and tear
 
 ## Scope
 
-This document owns how GTK and TUI construct, retain, restore, checkpoint, replace, and destroy a library-bound `AppRuntime` graph.
+This document owns how GTK, WinUI, and TUI construct, retain, restore, checkpoint, replace, and destroy a library-bound `AppRuntime` graph.
 It defines composition-root responsibilities, global versus per-library state lifetimes, observer ordering, and current frontend differences.
 
 It does not own workspace state semantics, playback succession, managed-state schemas, presentation policy, or exact GTK transitions.
@@ -18,10 +18,10 @@ Those facts belong to workspace, playback, persistence, presentation, specificat
 ## System context
 
 The [architecture landscape](README.md) classifies interactive session lifecycle as an application system.
-The [system architecture](system-overview.md) makes GTK and TUI composition roots and places `AppRuntime` in application runtime.
+The [system architecture](system-overview.md) makes GTK, WinUI, and TUI composition roots and places `AppRuntime` in application runtime.
 
 ```text
-GTK or TUI composition root
+GTK, WinUI, or TUI composition root
   -> callback executor + paths + stores + audio providers
   -> AppRuntime
        CoreRuntime + workspace/views + playback + session persistence
@@ -32,7 +32,7 @@ GTK or TUI composition root
 ```
 
 There is no current frontend-neutral lifecycle service.
-GTK coordinates a restorable, replaceable window/runtime pair, while TUI creates one runtime for the selected root and does not run the GTK restoration and checkpoint sequence.
+GTK coordinates a restorable, replaceable window/runtime pair. WinUI retains one window-independent `LibrarySession` and swaps a prepared library runtime while allowing the retiring runtime to finish playback. TUI creates one runtime for the selected root and does not run either desktop replacement sequence.
 
 ## Responsibilities
 
@@ -63,9 +63,24 @@ TUI constructs one `AppRuntime` for the command-line-selected root and retains i
 It opens an initial All Tracks view through `LibraryController`.
 It currently does not restore and checkpoint workspace or playback sessions around its event loop, so GTK lifecycle behavior must not be described as frontend-neutral current policy.
 
+### WinUI composition root
+
+WinUI `App` owns one dispatcher executor, stable `LibrarySession`, and main window.
+The session owns application-global settings and a replaceable library runtime.
+Opening a different root creates a separate candidate runtime.
+An existing canonical database is loaded without an implicit scan, while a new root completes its initial scan before commit.
+Rescan uses the active runtime's transactional scan workflow so the process never opens the same LMDB environment twice, then reloads the active projections after successful completion.
+Library-bound window controllers detach immediately before a root swap and bind the new runtime afterward.
+Each constructed runtime reloads library-backed sources before restoring its
+per-library workspace. The session checkpoints that workspace with durable
+desktop-state changes, before replacing its library authority, and during
+teardown.
+
+Playback may retain the retiring runtime while transport is active. Once idle, the session binds the shared playback command surface to the active library runtime. Modern/Classic switching does not participate in this lifecycle.
+
 ## Boundaries and dependency direction
 
-- Frontends construct `AppRuntime`; application runtime never depends on UIModel, GTK, TUI, platform paths, or toolkit lifecycle types.
+- Frontends construct `AppRuntime`; application runtime never depends on UIModel, GTK, WinUI, TUI, platform paths, or toolkit lifecycle types.
 - The [workspace architecture](workspace.md) owns view and aggregate semantics inside the runtime graph.
 - The [playback architecture](playback.md) owns restorable listening intent and audio teardown inside the graph.
 - The [persistence and managed-state architecture](persistence-and-managed-state.md) owns store, path, schema, and durable-write boundaries.
@@ -122,6 +137,8 @@ GTK requests a final checkpoint, removes the active window, and releases fronten
 
 TUI exits its event loop, stops runtime work, and releases its single composition without the GTK checkpoint and replacement protocol.
 
+WinUI closes the window, detaches session and native-media callbacks, releases XAML controllers, then destroys `LibrarySession`. The session cancels candidate work and releases playback observers and runtime graphs while its stores and dispatcher still exist.
+
 ## Structural constraints
 
 - One interactive runtime is bound to one music root and database path for its complete lifetime.
@@ -129,7 +146,7 @@ TUI exits its event loop, stops runtime work, and releases its single compositio
 - Application-global and per-library managed state have distinct lifetimes.
 - Frontend observers and callbacks cannot outlive the runtime services they address.
 - Runtime callback producers quiesce before their targets are destroyed.
-- Current GTK and TUI lifecycle asymmetry is explicit and cannot be hidden behind a proposed common abstraction.
+- Current GTK, WinUI, and TUI lifecycle asymmetry is explicit and cannot be hidden behind a proposed common abstraction.
 - Workspace, playback, persistence, presentation, and runtime execution retain ownership of their internal state and behavior.
 
 ## Failure, cancellation, and lifetime boundaries
@@ -148,12 +165,17 @@ Replacing the pair destroys that coordinator; a completion delivered afterward c
 Native cancellation is requested during teardown but is not the lifetime proof.
 Application shutdown closes the outer callback scope and cancels its single pending idle registration before saving and releasing the active pair.
 
+WinUI candidate creation or loading failures, initial-scan and explicit-rescan planning, application, reload, and cancellation failures keep the current library runtime and durable selected path unchanged.
+Its dispatcher executor is the only route by which runtime callbacks may update XAML.
+Old window controllers are unbound before the retiring library graph is released, and stale asynchronous artwork is rejected independently by request generation.
+
 ## Implementation map
 
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) and [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) own interactive composition and playback-first teardown.
 - [`LibraryWindowLifecycle.cpp`](../../app/linux-gtk/app/LibraryWindowLifecycle.cpp), [`MainWindow.cpp`](../../app/linux-gtk/app/MainWindow.cpp), [`MainWindowCoordinator.cpp`](../../app/linux-gtk/app/MainWindowCoordinator.cpp), and [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp) own GTK prepare/activate composition, replacement ordering, checkpointing, and pair lifetime.
 - [`ImportExportCoordinator`](../../app/linux-gtk/portal/ImportExportCoordinator.h) and [`MainContextCallbackScope`](../../app/linux-gtk/common/MainContextCallbackScope.h) own the guarded native chooser handoff into that lifecycle.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) and [`LibraryController.cpp`](../../app/tui/LibraryController.cpp) own the current TUI process composition.
+- [`App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), [`LibrarySession.cpp`](../../app/windows-winui/app/LibrarySession.cpp), and [`DispatcherQueueExecutor.cpp`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) own WinUI composition, replacement, and callback affinity.
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) owns the lower non-interactive composition and async shutdown boundary.
 
 ## Test map
@@ -167,6 +189,7 @@ Application shutdown closes the outer callback scope and cancels its single pend
 - [`ImportExportCoordinatorTest.cpp`](../../test/unit/linux-gtk/portal/ImportExportCoordinatorTest.cpp) protects native chooser policy and handoff.
 - [`HeadlessShellTest.cpp`](../../test/unit/runtime/HeadlessShellTest.cpp) protects frontend-neutral reconstruction primitives without asserting a common lifecycle owner.
 - [`LibraryControllerTest.cpp`](../../test/unit/tui/LibraryControllerTest.cpp) protects the current TUI composition path.
+- [`WindowsDesktopSettingsYamlSchemaTest.cpp`](../../test/unit/uimodel/layout/shell/WindowsDesktopSettingsYamlSchemaTest.cpp), bounded-cache tests, and native WinUI builds protect the platform-neutral and native portions of the Windows lifecycle.
 
 ## Related documents
 
@@ -178,4 +201,5 @@ Application shutdown closes the outer callback scope and cancels its single pend
 - [Persistence and managed-state architecture](persistence-and-managed-state.md)
 - [Presentation architecture](presentation.md)
 - [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md)
+- [Windows desktop shell specification](../spec/shell/windows-desktop.md)
 - [Workspace session specification](../spec/workspace/session.md)

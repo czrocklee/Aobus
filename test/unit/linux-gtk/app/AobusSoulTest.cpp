@@ -68,6 +68,15 @@ namespace ao::gtk::test
       CHECK(soul.aura() == color);
     }
 
+    SECTION("presentation geometry setters retain custom values")
+    {
+      soul.setBaseStrokeWidth(5.0F);
+      soul.setInnerGlyphScale(0.85F);
+
+      CHECK(soul.baseStrokeWidth() == 5.0F);
+      CHECK(soul.innerGlyphScale() == 0.85F);
+    }
+
     SECTION("brand aura tokens map to source-of-truth colors")
     {
       CHECK(AobusSoul::mapSoulAura(uimodel::SoulAura::Dormant) == Gdk::RGBA{"#00E5FF"});

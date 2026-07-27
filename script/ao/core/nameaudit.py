@@ -17,11 +17,11 @@ ROLE_ALLOWED_PREFIXES: dict[str, tuple[str, ...]] = {
     "Component": ("app/linux-gtk/layout/", "test/unit/linux-gtk/layout/"),
     "Dialog": ("app/linux-gtk/", "test/unit/linux-gtk/"),
     "Widget": ("app/linux-gtk/", "test/unit/linux-gtk/"),
-    "Panel": ("app/linux-gtk/", "app/tui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Controller": ("app/linux-gtk/", "app/tui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Coordinator": ("app/linux-gtk/", "app/tui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Host": ("app/linux-gtk/", "app/tui/", "test/unit/linux-gtk/", "test/unit/tui/"),
-    "Bridge": ("app/linux-gtk/", "app/tui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Panel": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Controller": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Coordinator": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Host": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
+    "Bridge": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),
 }
 
 ROLE_SUFFIXES = tuple(sorted(ROLE_ALLOWED_PREFIXES, key=len, reverse=True))

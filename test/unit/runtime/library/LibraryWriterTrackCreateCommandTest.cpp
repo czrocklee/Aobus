@@ -9,6 +9,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/utility/Path.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -21,7 +22,7 @@ namespace ao::rt::test
 {
   namespace
   {
-    std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)
+    std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::filesystem::path const& name)
     {
       auto const source = std::filesystem::path{AUDIO_TEST_DATA_DIR} / "empty.flac";
 
@@ -112,6 +113,35 @@ namespace ao::rt::test
                                 .get(trackIdResult->trackId, library::TrackStore::Reader::LoadMode::Both);
     REQUIRE(optTrackView);
     CHECK(optTrackView->property().uri() == "relative.flac");
+  }
+
+  TEST_CASE("LibraryWriter - createTrackFromFile preserves a UTF-8 URI", "[runtime][regression][library][track-create]")
+  {
+    auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
+                                      "Dvo\xC5\x99\xC3\xA1k.flac"};
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
+    auto const mediaPath = copyFixtureAudio(libraryFixture, utility::pathFromUtf8(expected));
+
+    if (!std::filesystem::exists(mediaPath))
+    {
+      SUCCEED("Skipping test because test file is missing");
+      return;
+    }
+
+    auto const created = writer.createTrackFromFile(mediaPath);
+
+    REQUIRE(created);
+    auto transaction = libraryFixture.library().readTransaction();
+    auto const optTrack = libraryFixture.library()
+                            .tracks()
+                            .reader(transaction)
+                            .get(created->trackId, library::TrackStore::Reader::LoadMode::Both);
+    REQUIRE(optTrack);
+    CHECK(optTrack->property().uri() == expected);
+    CHECK(libraryFixture.library().manifest().reader(transaction).get(expected));
   }
 
   TEST_CASE("LibraryWriter - createTrackFromFile rejects unsupported files with Result errors",

@@ -129,6 +129,24 @@ namespace ao::gtk::layout::editor::test
       CHECK(hasProp("size"));
     }
 
+    SECTION("Soul components expose presentation geometry props")
+    {
+      for (auto const* const type : {"playback.soulButton", "playback.soulPlayPauseButton"})
+      {
+        auto const optDesc = registry.descriptor(type);
+
+        REQUIRE(optDesc);
+        auto const hasProp = [&](std::string_view const name)
+        {
+          return std::ranges::any_of(
+            optDesc->props, [name](LayoutPropertyDescriptor const& prop) { return prop.name == name; });
+        };
+
+        CHECK(hasProp("strokeWidth"));
+        CHECK(hasProp("glyphScale"));
+      }
+    }
+
     SECTION("playback.qualityIndicator has gesture action props")
     {
       auto const optDesc = registry.descriptor("playback.qualityIndicator");

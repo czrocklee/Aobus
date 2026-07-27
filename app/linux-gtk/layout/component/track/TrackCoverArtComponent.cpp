@@ -11,7 +11,7 @@
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
 #include <ao/CoreIds.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 

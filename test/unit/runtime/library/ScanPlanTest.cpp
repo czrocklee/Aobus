@@ -16,6 +16,7 @@
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/Xxh3.h>
 #include <runtime/library/ScanApplyOperation.h>
 
@@ -545,6 +546,25 @@ namespace ao::rt::test
       CHECK_FALSE(item.uri.contains('\\'));
       CHECK_FALSE(item.uri.contains("./"));
     }
+  }
+
+  TEST_CASE("ScanPlan - preserves UTF-8 names on native filesystems", "[runtime][regression][library-scan]")
+  {
+    auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
+                                      "Dvo\xC5\x99\xC3\xA1k.flac"};
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = temp.path() / "music";
+    auto const mediaPath = musicRoot / utility::pathFromUtf8(expected);
+    std::filesystem::create_directories(mediaPath.parent_path());
+    createFile(mediaPath);
+
+    auto library = library::test::makeTestMusicLibrary(musicRoot, temp.path() / "db");
+    auto const plan = LibraryScan{library}.buildPlan();
+
+    REQUIRE(plan);
+    REQUIRE(plan->size() == 1);
+    CHECK(plan->items().front().uri == expected);
+    CHECK(plan->items().front().fullPath == mediaPath);
   }
 
   TEST_CASE("ScanPlan - rejects file symlinks escaping the music root", "[runtime][unit][library-scan][uri]")

@@ -25,7 +25,9 @@ The [system architecture](../../architecture/system-overview.md) places generic 
 The [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md) owns semantic and writer authority for every managed-state family.
 
 The runtime [`ConfigStore`](../../../app/include/ao/rt/ConfigStore.h) provides the common top-level group container.
-Runtime and UIModel payload owners define their types and schemas; GTK and TUI select concrete store files according to the [managed file locations reference](location.md).
+Runtime and UIModel payload owners define their types and schemas; GTK and TUI
+select concrete store files according to the [managed file locations
+reference](location.md), while the Windows state reference owns the WinUI path.
 The standalone shell component-state store uses the shared YAML and atomic-file mechanisms directly and is included here so the managed-document registry is complete.
 
 ## Surface
@@ -40,6 +42,7 @@ The location reference owns the exact mapping from these names to Linux defaults
 | Global GTK config | One application-global GTK file. | `AppConfigStore` over one `ConfigStore`. | `window`, `runtime`, `session`, `shortcuts`, plus `playback-session` for the active library runtime. |
 | Runtime workspace config | One file associated with the selected library or TUI override. | The `ConfigStore` owned by `AppRuntime`. | `workspace`; also `playback-session` when no separate playback store is injected. |
 | GTK library presentation | One per-library GTK file. | `GtkLayoutStateStore` over one `ConfigStore`. | `trackView.columnLayouts` and `trackView.presentations`. |
+| Windows desktop settings | One application-global WinUI file. | `LibrarySession` over one `ConfigStore`. | `desktop`, `trackView.columnLayouts`, and `trackView.presentations`. |
 | Shell layout preset | One user-authored file per preset id. | `ShellLayoutStore` creates a `ConfigStore` per operation. | `layout`. |
 | Shell component state | One runtime-state file per preset id. | `ShellLayoutComponentStateStore` uses a standalone YAML document. | Document root; it has no `ConfigStore` group. |
 
@@ -56,8 +59,11 @@ It does not denote nested mappings.
 | Global GTK config | `shortcuts` | `ao::uimodel::KeymapOverrides` | UIModel `KeymapOverridesYamlSchema`. | None. | `ao::uimodel::saveKeymap` through `AppConfigStore`. |
 | Injected playback-session document | `playback-session` | `ao::rt::PlaybackSessionState` | Runtime `PlaybackSessionYamlSchema`. | Required `schemaVersion`; current value `3`. | `PlaybackSessionPersistence`. |
 | Runtime workspace config | `workspace` | [`ao::rt::WorkspaceSessionState`](../workspace/session-state.md) | Runtime `WorkspaceSessionYamlSchema`. | Required `presentationVersion`; current value `1`. | `WorkspaceService`. |
-| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| GTK library presentation | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | `GtkLayoutStateStore`. |
 | GTK library presentation | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | `GtkLayoutStateStore`. |
+| Windows desktop settings | `desktop` | `ao::uimodel::WindowsDesktopSettings`. | UIModel `WindowsDesktopSettingsYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
+| Windows desktop settings | `trackView.columnLayouts` | `ao::uimodel::TrackColumnLayoutDocument` converted to `TrackColumnLayoutState`. | UIModel `TrackColumnLayoutYamlSchema`. | Required `version`; current value `2`. | WinUI `LibrarySession`. |
+| Windows desktop settings | `trackView.presentations` | `ao::uimodel::ListPresentationPreferenceDocument` converted to `ListPresentationPreferenceState`. | UIModel `ListPresentationPreferenceYamlSchema`. | Required `version`; current value `1`. | WinUI `LibrarySession`. |
 | Shell layout preset | `layout` | `ao::uimodel::LayoutDocument` | UIModel `LayoutDocumentYamlSchema`. | Required `version`; accepted value `1`. | Shell-layout workflow through `ShellLayoutStore`. |
 | Shell component state | No group; standalone root. | `ao::uimodel::LayoutComponentStateDocument` | UIModel `LayoutComponentStateYamlSchema`. | Root `version = 1`; each entry has `stateVersion = 1`. | Layout runtime and promotion workflow through `ShellLayoutComponentStateStore`. |
 
@@ -152,7 +158,9 @@ The registry fixes the group-to-type association, but these domain owners define
 - The [grouped configuration store specification](../../spec/persistence/config-store.md) owns explicit schema invocation, missing-group presence results, candidate isolation, and multi-group atomic replacement, not payload deserialization policy.
 - `playback-session` accepts only schema version `3`, uses explicit enum and identifier mappings, and validates the complete structural and semantic candidate.
 - `workspace` accepts only presentation version `1` and validates its complete stable presentation vocabulary before view creation.
-- Both GTK presentation groups accept only version `1` and validate complete candidates before replacing seeded UIModel state.
+- Desktop column-layout groups accept only version `2`; desktop
+  list-presentation groups accept only version `1`. Each validates a complete
+  candidate before replacing seeded UIModel state.
 - Shell layout files require a readable `layout` group whose payload contains `version` and `root`; `templates` is optional.
 - Shell component-state roots require `version`, `preset`, and `components`; each component entry requires `type`, `stateVersion`, `baselineHash`, and `state`.
 - A component-state file name's preset id must equal the deserialized root `preset` value before the store returns the document.
@@ -167,7 +175,9 @@ This registry does not convert schema membership into restore success.
 | `window`, `runtime`, and `session` | No explicit version or migration. Their schemas retain seeded values for missing known fields and tolerate unknown fields while rejecting duplicates and malformed known fields. |
 | `shortcuts` | No explicit version or migration. Action ids are dynamic; the schema strictly validates the mapping/sequence/scalar structure, and keymap semantics handle unknown actions and invalid chord text. |
 | `workspace` | Nested presentation vocabulary version `1`, strict deserialization, stable textual ids, and no unversioned migration. The [workspace session state reference](../workspace/session-state.md) owns remaining root compatibility limits. |
-| `trackView.columnLayouts` and `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
+| `trackView.columnLayouts` | Independent payload version `2`, strict deserialization, stable text identities, required visibility, and no earlier-version migration. |
+| `trackView.presentations` | Independent payload version `1`, strict deserialization, stable text identities, and no unversioned migration. |
+| Windows `desktop` | Explicit version `2`; other versions are rejected rather than migrated. Exact fields belong to the [Windows desktop state reference](../windows/desktop-state.md). |
 | `playback-session` | Explicit schema version `3`; other versions are rejected rather than migrated. |
 | `layout` | Required version `1`; unsupported versions are rejected before the root or templates are interpreted. No legacy or reflected fallback is attempted. |
 | Shell component state | Required file version `1` and entry version `1`; unsupported versions are rejected before version-specific payload interpretation. No legacy fallback is attempted. |

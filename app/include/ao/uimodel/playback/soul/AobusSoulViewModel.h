@@ -39,6 +39,14 @@ namespace ao::uimodel
     friend bool operator==(AobusSoulRgb const&, AobusSoulRgb const&) = default;
   };
 
+  struct AobusSoulGradientColors final
+  {
+    AobusSoulRgb core{};
+    AobusSoulRgb body{};
+
+    friend bool operator==(AobusSoulGradientColors const&, AobusSoulGradientColors const&) = default;
+  };
+
   struct AobusSoulMotionFrame final
   {
     double breath = 0.0;
@@ -46,6 +54,20 @@ namespace ao::uimodel
     double rotationDegrees = 0.0;
     double luminance = 1.0;
     double hueShiftDegrees = 0.0;
+  };
+
+  struct AobusSoulGeometry final
+  {
+    double referenceHeight = 65.0;
+    double radius = 30.0;
+    double anchorStrokeWidth = 10.0;
+    double baseStrokeWidth = 9.0;
+    double innerGlyphRadius = 14.0;
+    double innerGlyphBarOffset = 5.6;
+    double innerGlyphBarHalfHeight = 9.8;
+    double logoCenterOffset = 43.5;
+
+    friend bool operator==(AobusSoulGeometry const&, AobusSoulGeometry const&) = default;
   };
 
   inline constexpr double kAobusSoulGoldenRatio = std::numbers::phi;
@@ -61,6 +83,7 @@ namespace ao::uimodel
   inline constexpr double kAobusSoulOpacityVariance = (1.0 - kAobusSoulOpacityFloor) / 2.0;
   inline constexpr double kAobusSoulCoreGradientStop = 0.382;
   inline constexpr double kAobusSoulMaxHueShiftDegrees = 10.0;
+  inline constexpr auto kAobusSoulGeometry = AobusSoulGeometry{};
 
   inline constexpr auto kAobusSoulBrandCyan = AobusSoulRgb{.red = 0x06, .green = 0xB6, .blue = 0xD4};
   inline constexpr auto kAobusSoulUiCyan = AobusSoulRgb{.red = 0x00, .green = 0xE5, .blue = 0xFF};
@@ -83,9 +106,11 @@ namespace ao::uimodel
   SoulAura resolveSoulAura(bool playing, bool ready, rt::QualityState const& signal) noexcept;
   AobusSoulRgb aobusSoulAuraRgb(SoulAura aura) noexcept;
   AobusSoulRgb aobusSoulShiftRgb(AobusSoulRgb color, double shiftDegrees) noexcept;
+  AobusSoulGradientColors aobusSoulGradientColors(AobusSoulRgb aura, double hueShiftDegrees) noexcept;
   AobusSoulRgb aobusSoulMixRgb(AobusSoulRgb from, AobusSoulRgb to, double fraction) noexcept;
   AobusSoulRgb aobusSoulScaleRgb(AobusSoulRgb color, double factor) noexcept;
   AobusSoulMotionFrame aobusSoulMotionAt(std::chrono::duration<double> elapsed) noexcept;
+  bool shouldAnimateAobusSoul(bool playing, bool visible, bool minimized) noexcept;
 
   class AobusSoulViewModel final
   {

@@ -17,13 +17,13 @@ Those facts belong in specifications, reference documents, and the focused archi
 
 ## System context
 
-Aobus ships three established frontends over a shared C++ core and application
-runtime, plus a WinUI bootstrap used to grow the native Windows frontend.
+Aobus ships four interactive or automation frontends over a shared C++ core and
+application runtime, including a native WinUI desktop frontend.
 
 ```text
 GTK -> ao_app_uimodel -> ao_app_runtime -> core libraries
 TUI -> ao_app_uimodel -> ao_app_runtime -> core libraries
-WinUI bootstrap ------> ao_app_runtime -> core libraries
+WinUI -> ao_app_uimodel -> ao_app_runtime -> core libraries
 CLI -----------------> ao_app_runtime -> core libraries
 
 core libraries: utility, async, lmdb, media, library, query, audio
@@ -35,9 +35,8 @@ The core libraries provide storage, encoded-media reading, query, asynchronous, 
 `ao_app_runtime` composes those primitives into frontend-neutral services.
 `ao_app_uimodel` turns runtime state and commands into platform-neutral presentation state and interaction policy.
 GTK and TUI bind runtime and UIModel state to their native event loops and rendering systems.
-The WinUI bootstrap proves the C++/WinRT, XAML, runtime, and shared-library
-composition path; product behavior added there must consume the same runtime
-and UIModel authorities rather than creating Windows-only policy.
+WinUI binds the same runtime and UIModel authorities to C++/WinRT, XAML,
+DispatcherQueue, WASAPI, SMTC, and native Windows picker services.
 The CLI uses `ao_app_runtime` directly when an interactive presentation model is unnecessary.
 
 ## Responsibilities
@@ -78,9 +77,9 @@ Frontends use the runtime path contract for standard per-library locations while
 
 GTK additionally owns widgets, CSS, dialogs, portals, GLib integration, and GTK-specific layout construction.
 TUI owns FTXUI rendering, terminal input, overlays, and its event-loop adapter.
-WinUI owns Windows App SDK application/window lifetime, XAML resources, and
-Windows dispatcher adaptation. Its current bootstrap does not yet claim the
-complete interactive presentation behavior owned by GTK and TUI.
+WinUI owns Windows App SDK application/window lifetime, XAML resources,
+Windows dispatcher adaptation, native picker and media-session integration,
+and its Modern and Classic presentation shells.
 The CLI owns argument parsing and output encoding around `CoreRuntime` operations.
 
 ## Boundaries and dependency direction
@@ -135,7 +134,7 @@ These routes expose where a change crosses architecture owners without duplicati
 | Track discovery and organization | UI authoring or CLI expression -> query compilation/evaluation -> live source membership -> projection shape -> frontend adaptation | [Track expression](track-expression.md), [library](library.md), and [presentation](presentation.md) |
 | Interactive playback | Frontend command -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
 | Session restore and active-library replacement | Frontend composition root -> managed-state candidate -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |
-| GTK shell construction | Layout preset and component state -> UIModel document/catalog policy -> GTK registries and factories -> widget tree and action bridge | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
+| Desktop shell construction | GTK layout policy -> GTK registries and widget tree; or WinUI shared policy -> native Modern/Classic XAML surfaces | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
 | Failure reporting | Subsystem failure -> typed result or event -> owning recovery boundary -> runtime notification or application-leaf presentation | [Failure and reporting](failure-and-reporting.md) plus the originating subsystem architecture |
 | Audio-quality presentation | Engine and provider evidence -> Player analysis -> runtime snapshot -> shared UIModel interpretation -> GTK or TUI rendering | [Audio quality](audio-quality.md), refining [playback](playback.md) and [presentation](presentation.md) |
 

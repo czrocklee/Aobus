@@ -18,6 +18,7 @@ namespace ao::uimodel
     rt::TrackField field = rt::TrackField::Title;
     std::int32_t width = -1;
     double weight = -1.0;
+    bool visible = true;
 
     bool operator==(TrackColumnState const&) const = default;
   };

@@ -99,3 +99,4 @@ Use the [specification template](../template/spec.md).
 - [Shell layout lifecycle](shell/layout-lifecycle.md) defines preset selection, loading, template expansion, GTK construction, editor rebuilds, component state, and teardown.
 - [Keyboard shortcuts](shell/keyboard-shortcut.md) define neutral merge, conflicts, live editing, persistence, and GTK accelerator application.
 - [Shell layout adaptation](shell/layout-adaptation.md) defines allocation-driven responsiveness, image targets, responsive classes, and collapsible splits.
+- [Windows desktop shell](shell/windows-desktop.md) defines native Modern and Classic modes, shared session lifetime, library replacement, responsive behavior, and Windows integration.

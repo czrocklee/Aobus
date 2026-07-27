@@ -21,6 +21,7 @@ add_executable(ao_core_test
     unit/utility/Base64Test.cpp
     unit/utility/Xxh3Test.cpp
     unit/utility/MappedFileTest.cpp
+    unit/utility/PathTest.cpp
     unit/utility/ByteViewTest.cpp
     unit/utility/StringArenaTest.cpp
     unit/utility/StrongTypeTest.cpp
@@ -165,6 +166,7 @@ add_executable(ao_core_test
     unit/uimodel/input/KeymapStoreTest.cpp
     unit/uimodel/preference/PreferencesEditorModelTest.cpp
     unit/uimodel/preference/ThemePresetTest.cpp
+    unit/uimodel/preference/WindowsThemeTest.cpp
     unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
     unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
     unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
@@ -174,7 +176,9 @@ add_executable(ao_core_test
     unit/uimodel/layout/document/LayoutModelTest.cpp
     unit/uimodel/layout/document/LayoutPreparationTest.cpp
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
+    unit/uimodel/layout/shell/DesktopShellPolicyTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
+    unit/uimodel/layout/shell/WindowsDesktopSettingsYamlSchemaTest.cpp
     unit/uimodel/presentation/PresentationTextCatalogTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
@@ -198,6 +202,10 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TrackAuthoringSessionTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
+    unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
+    unit/uimodel/library/track/CoverArtRequestModelTest.cpp
+    unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp
+    unit/uimodel/library/track/TrackDisplayIndexTest.cpp
     unit/uimodel/library/track/TrackCountFormatterTest.cpp
     unit/uimodel/library/track/TrackFilterCompleterTest.cpp
     unit/uimodel/library/track/TrackFilterResolverTest.cpp

@@ -18,6 +18,7 @@
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +48,16 @@ namespace ao::gtk::portal
                     error.message,
                     error.location.file_name(),
                     error.location.line());
+    }
+
+    void logScanPlan(uimodel::LibraryScanPlanSummary const& summary)
+    {
+      APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors",
+                   summary.newCount,
+                   summary.changedCount,
+                   summary.movedCount,
+                   summary.missingCount,
+                   summary.errorCount);
     }
 
     std::string relinkedScanMessage(std::size_t relinkedCount)
@@ -136,26 +147,24 @@ namespace ao::gtk::portal
 
   async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
   {
-    auto optPlan = co_await buildScanPlanOrReportFailure(stopToken);
+    auto result = co_await uimodel::runLibraryScanWorkflow(&_runtime.library().taskService(), mode, stopToken);
 
-    if (!optPlan)
+    if (!result)
     {
+      auto const& failure = result.error();
+
+      if (failure.optPlanSummary)
+      {
+        logScanPlan(*failure.optPlanSummary);
+      }
+
+      auto const* const action =
+        failure.stage == uimodel::LibraryScanWorkflowStage::Applying ? "Scan apply failed" : "Scan failed";
+      presentFailure(action, "Scan failed", failure.error);
       co_return;
     }
 
-    if (reportIfNoActionableWork(*optPlan))
-    {
-      co_return;
-    }
-
-    APP_LOG_INFO("Scan plan: {} new, {} changed, {} moved, {} missing, {} errors",
-                 optPlan->count(rt::ScanClassification::New),
-                 optPlan->count(rt::ScanClassification::Changed),
-                 optPlan->count(rt::ScanClassification::Moved),
-                 optPlan->count(rt::ScanClassification::Missing),
-                 optPlan->count(rt::ScanClassification::Error));
-
-    co_await applyScanPlanWithProgress(std::move(*optPlan), mode, stopToken);
+    presentScanResult(std::move(*result));
   }
 
   async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
@@ -288,99 +297,67 @@ namespace ao::gtk::portal
       rt::NotificationSeverity::Info, "Library imported successfully", rt::NotificationLifetime::transient());
   }
 
-  async::Task<std::optional<rt::ScanPlan>> LibraryImportExportWorkflow::buildScanPlanOrReportFailure(
-    std::stop_token const stopToken)
+  void LibraryImportExportWorkflow::presentScanResult(uimodel::LibraryScanWorkflowResult result)
   {
-    auto result = co_await _runtime.library().taskService().buildScanPlanAsync(stopToken);
-
-    if (!result)
-    {
-      presentFailure("Scan failed", "Scan failed", result.error());
-      co_return std::nullopt;
-    }
-
-    co_return std::move(*result);
-  }
-
-  bool LibraryImportExportWorkflow::reportIfNoActionableWork(rt::ScanPlan const& plan)
-  {
-    if (plan.count(rt::ScanClassification::New) != 0 || plan.count(rt::ScanClassification::Changed) != 0 ||
-        plan.count(rt::ScanClassification::Moved) != 0 || plan.count(rt::ScanClassification::Missing) != 0)
-    {
-      return false;
-    }
-
-    if (plan.count(rt::ScanClassification::Error) == 0)
+    if (result.disposition == uimodel::LibraryScanPlanDisposition::UpToDate)
     {
       _runtime.notifications().post(
         rt::NotificationSeverity::Info, "Library is up to date", rt::NotificationLifetime::transient());
-      return true;
+      return;
     }
 
-    for (auto const& item : plan.items())
+    if (result.disposition == uimodel::LibraryScanPlanDisposition::ErrorsOnly)
     {
-      if (item.classification == rt::ScanClassification::Error)
+      for (auto const& issue : result.issues)
       {
-        APP_LOG_ERROR("Failed to scan {}: {}", item.uri, item.errorMessage);
+        APP_LOG_ERROR("Failed to scan {}: {}", issue.uri, issue.message);
       }
+
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::history());
+      return;
     }
 
-    _runtime.notifications().post(rt::NotificationSeverity::Error, "Scan failed", rt::NotificationLifetime::history());
-    return true;
-  }
+    logScanPlan(result.summary);
 
-  async::Task<void> LibraryImportExportWorkflow::applyScanPlanWithProgress(rt::ScanPlan plan,
-                                                                           ScanRequestMode mode,
-                                                                           std::stop_token const stopToken)
-  {
-    auto options = rt::ScanApplyOptions{};
-
-    if (mode == ScanRequestMode::FastBootstrap)
+    if (!result.optApplyResult)
     {
-      options.audioIdentityPolicy = rt::AudioIdentityPolicy::DeferNew;
+      presentInternalFailure("Scan failed: Internal error");
+      return;
     }
 
-    auto result = co_await _runtime.library().taskService().applyScanPlanAsync(std::move(plan), options, stopToken);
-
-    if (!result)
+    if (result.mutatedLibrary() && _callbacks.onLibraryDataMutated)
     {
-      presentFailure("Scan apply failed", "Scan failed", result.error());
+      _callbacks.onLibraryDataMutated();
+    }
+
+    if (auto const& applied = *result.optApplyResult; applied.failureCount > 0)
+    {
+      auto message = std::string{"Scan completed with errors"};
+
+      if (applied.missingCount > 0 || !applied.relinkedIds.empty())
+      {
+        message += std::format("; {}", scanCompletionSummary(applied));
+      }
+
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Warning, std::move(message), rt::NotificationLifetime::history());
+    }
+    else if (result.optApplyResult->missingCount > 0)
+    {
+      _runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                    scanCompletionSummary(*result.optApplyResult),
+                                    rt::NotificationLifetime::history());
     }
     else
     {
-      if ((!result->insertedIds.empty() || !result->mutatedIds.empty() || !result->relinkedIds.empty()) &&
-          _callbacks.onLibraryDataMutated)
-      {
-        _callbacks.onLibraryDataMutated();
-      }
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Info, scanCompletionSummary(applied), rt::NotificationLifetime::transient());
+    }
 
-      if (result->failureCount > 0)
-      {
-        auto message = std::string{"Scan completed with errors"};
-
-        if (result->missingCount > 0 || !result->relinkedIds.empty())
-        {
-          message += std::format("; {}", scanCompletionSummary(*result));
-        }
-
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Warning, std::move(message), rt::NotificationLifetime::history());
-      }
-      else if (result->missingCount > 0)
-      {
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Warning, scanCompletionSummary(*result), rt::NotificationLifetime::history());
-      }
-      else
-      {
-        _runtime.notifications().post(
-          rt::NotificationSeverity::Info, scanCompletionSummary(*result), rt::NotificationLifetime::transient());
-      }
-
-      if (mode == ScanRequestMode::FastBootstrap)
-      {
-        startAudioIdentityIndexing();
-      }
+    if (result.shouldBackfillAudioIdentity)
+    {
+      startAudioIdentityIndexing();
     }
   }
 

@@ -593,19 +593,23 @@ if(WIN32)
   endif()
 
   find_path(ALAC_INCLUDE_DIR NAMES alac/ALACDecoder.h HINTS "${AOBUS_ALAC_PREFIX}/include" REQUIRED)
-  find_library(ALAC_LIBRARY_RELEASE NAMES libalac alac HINTS "${AOBUS_ALAC_PREFIX}/lib" REQUIRED)
-  find_library(ALAC_LIBRARY_DEBUG
+  find_library(AOBUS_ALAC_LIBRARY_RELEASE
+    NAMES libalac alac
+    HINTS "${AOBUS_ALAC_PREFIX}/lib"
+    NO_DEFAULT_PATH
+    REQUIRED)
+  find_library(AOBUS_ALAC_LIBRARY_DEBUG
     NAMES libalac alac
     HINTS "${AOBUS_ALAC_PREFIX}/debug/lib"
     NO_DEFAULT_PATH)
-  if(NOT ALAC_LIBRARY_DEBUG)
-    set(ALAC_LIBRARY_DEBUG "${ALAC_LIBRARY_RELEASE}")
+  if(NOT AOBUS_ALAC_LIBRARY_DEBUG)
+    set(AOBUS_ALAC_LIBRARY_DEBUG "${AOBUS_ALAC_LIBRARY_RELEASE}")
   endif()
   add_library(PkgALAC INTERFACE)
   target_include_directories(PkgALAC INTERFACE "${ALAC_INCLUDE_DIR}")
   target_link_libraries(PkgALAC INTERFACE
-    "$<$<CONFIG:Debug>:${ALAC_LIBRARY_DEBUG}>"
-    "$<$<NOT:$<CONFIG:Debug>>:${ALAC_LIBRARY_RELEASE}>")
+    "$<$<CONFIG:Debug>:${AOBUS_ALAC_LIBRARY_DEBUG}>"
+    "$<$<NOT:$<CONFIG:Debug>>:${AOBUS_ALAC_LIBRARY_RELEASE}>")
 
   find_package(fdk-aac CONFIG REQUIRED)
   add_library(PkgFDKAAC INTERFACE)

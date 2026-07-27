@@ -48,6 +48,8 @@ namespace ao::gtk
     bool isBreathing() const;
     bool isTickActive() const;
     bool shouldShowFullLogo() const;
+    float baseStrokeWidth() const;
+    float innerGlyphScale() const;
     Gdk::RGBA aura() const;
 
     static Gdk::RGBA mapSoulAura(uimodel::SoulAura aura);
@@ -69,7 +71,6 @@ namespace ao::gtk
   private:
     struct Impl;
 
-    static Gdk::RGBA shiftColor(Gdk::RGBA const& color, float shift) noexcept;
     void startTickIfNeeded();
     void stopTick();
 

@@ -32,7 +32,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>

@@ -10,11 +10,9 @@
 #include <ao/async/Task.h>
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/ScanPlan.h>
+#include <ao/uimodel/library/task/LibraryScanWorkflow.h>
 
-#include <cstdint>
 #include <filesystem>
-#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -26,11 +24,7 @@ namespace ao::rt
 
 namespace ao::gtk::portal
 {
-  enum class ScanRequestMode : std::uint8_t
-  {
-    Eager,
-    FastBootstrap
-  };
+  using ScanRequestMode = uimodel::LibraryScanMode;
 
   /**
    * LibraryImportExportWorkflow owns the background scan/import/export operations and their UI presentation:
@@ -67,13 +61,8 @@ namespace ao::gtk::portal
     void applyPreparedImport(ImportExportCallbacks callbacks, rt::LibraryImportPlan plan);
     async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode, std::stop_token stopToken);
 
-    // Scan-library pipeline split into coroutine + sync helpers so that scanWorkflow() stays a flat orchestrator.
-    async::Task<std::optional<rt::ScanPlan>> buildScanPlanOrReportFailure(std::stop_token stopToken);
-    async::Task<void> applyScanPlanWithProgress(rt::ScanPlan plan, ScanRequestMode mode, std::stop_token stopToken);
     void startAudioIdentityIndexing();
-    // Returns true when the plan has no New/Changed/Missing items; in that case the appropriate
-    // notification is posted and the caller should return.
-    bool reportIfNoActionableWork(rt::ScanPlan const& plan);
+    void presentScanResult(uimodel::LibraryScanWorkflowResult result);
 
     // Presents a Result error: structured log of the error plus an error-severity notification.
     void presentFailure(std::string_view action, std::string const& notificationMessage, Error const& error);

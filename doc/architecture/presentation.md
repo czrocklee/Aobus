@@ -84,11 +84,14 @@ Those are authoring and recommendation policies: UIModel does not evaluate membe
 UIModel also owns the shared list-navigation tree projection.
 It derives effective parent relationships, malformed-parent recovery, and stable sibling order once for GTK and TUI adapters.
 
-UIModel owns semantic track-field column roles, including sizing and start/end alignment.
-GTK and TUI translate those roles to native geometry without maintaining independent field classifications.
+UIModel owns semantic track-field column roles, including sizing, start/end
+alignment, persisted visibility, and stored-order projection.
+GTK, WinUI, and TUI translate those roles to native geometry without maintaining
+independent field classifications.
 
 UIModel owns versioned semantic schemas for its per-library column-layout and list-presentation preference state.
-The schemas produce and validate platform-neutral documents; they do not choose paths or perform GTK lifecycle saves.
+The schemas produce and validate platform-neutral documents; they do not choose
+paths or perform frontend lifecycle saves.
 
 UIModel owns the closed application-theme choices and their stable string ids.
 Runtime persists the selected id as opaque application-preference text, while GTK maps the resolved UIModel choice to CSS classes.
@@ -124,11 +127,13 @@ Its list chooser consumes the shared UIModel list-tree projection, and its comma
 ### WinUI
 
 WinUI owns Windows App SDK application/window lifetime, XAML resources,
-dispatcher adaptation, and Windows-native controls. The current target is a
-bootstrap shell that validates this composition path; it does not yet duplicate
-GTK/TUI product behavior. As behavior is added, it consumes runtime state and
-UIModel presentation policy under the same dependency direction and keeps
-Windows-only lifecycle and rendering details in the frontend.
+dispatcher adaptation, Windows-native controls, FolderPicker, SMTC, and native
+WASAPI registration. Its Modern and Classic shells consume the same runtime
+playback, workspace, track-row, cover-art, quality, and Soul authorities. Shared
+UIModel owns its responsive breakpoints, strict settings/theme schemas, grouped
+display-index mapping, bounded row and artwork cache policy, and Soul geometry
+and motion; WinUI owns XAML rendering, HWND integration, visibility, pointer
+gestures, and frame scheduling.
 
 ### CLI
 
@@ -256,6 +261,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
+- [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`WindowsStringResources`](../../app/windows-winui/platform/WindowsStringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
 - [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization, dependency, and platform-vocabulary constraints.
 
 ## Test map

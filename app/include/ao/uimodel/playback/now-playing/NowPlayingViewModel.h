@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/TrackField.h>
@@ -55,6 +56,7 @@ namespace ao::uimodel
 
   struct NowPlayingViewState final
   {
+    ResourceId coverArtId = kInvalidResourceId;
     std::string streamInfo;
     AudioPipelineViewState audioPipeline{};
     AudioQualityCategory qualityCategory = AudioQualityCategory::Unknown;

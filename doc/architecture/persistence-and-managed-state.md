@@ -32,6 +32,7 @@ user application directories
   -> AppConfigStore                         global GTK preferences/session
   -> ShellLayoutStore                       customized layout documents
   -> ShellLayoutComponentStateStore         transient component state
+  -> WinUI desktop settings and theme       native shell state and semantic tokens
   -> caches/logs                             regenerable operational data
 ```
 
@@ -92,7 +93,8 @@ Persistence through a shared file mechanism does not transfer that responsibilit
 | Global GTK window, preferences, application session, and keymap state | The GTK workflow plus the runtime/UIModel value owner for each payload | `AppConfigStore` and the GTK composition root |
 | Customized shell layout documents | UIModel layout document and validation code, coordinated by the GTK shell-layout workflow | `ShellLayoutStore`, one document per preset |
 | Shell layout component runtime state | UIModel component-state model, pruning, and promotion rules | `ShellLayoutComponentStateStore` |
-| Per-library column and list-presentation preferences | UIModel presentation state and the GTK window workflow | `GtkLayoutStateStore` |
+| Desktop column and list-presentation preferences | UIModel presentation state plus the GTK and WinUI window workflows | `GtkLayoutStateStore` per library; WinUI `LibrarySession` under the platform application-data root |
+| Windows desktop session and semantic theme | UIModel Windows settings/theme schemas and the WinUI lifecycle | WinUI `LibrarySession`, `ConfigStore`, and theme coordinator under the platform application-data root |
 
 Global state may contain per-library track or list identities only when lifecycle ownership pairs that payload with the active library and validates those identities before restore.
 Unrelated global preferences cannot retain such identities.
@@ -133,6 +135,7 @@ A specialized store may bypass `ConfigStore` when its document boundary, synchro
 It does not discover XDG, GLib, terminal, or command-line locations.
 
 GTK and TUI select platform directories, a music root, and explicit overrides; use `LibraryPaths` for standard per-library locations; construct stores before `AppRuntime`; and keep any borrowed store alive until runtime persistence has shut down.
+WinUI selects the Windows local application-data root, retains independent desktop-settings, playback-session, and theme files across Modern/Classic switches, and uses the selected music root only for library-bound runtime state.
 `AppRuntime` owns its workspace store and borrows an explicitly supplied playback-session store; when none is supplied, playback session and workspace use the same owned instance.
 
 GTK supplies its global `AppConfigStore` as the playback-session store while supplying a per-library workspace store separately.
@@ -205,6 +208,8 @@ Only after the candidate is active and the old pair is released does GTK record 
 That selected-path save is best-effort: failure retains the previous durable path without rolling back the usable in-process candidate.
 Global layout customization and application preferences survive the replacement; library database, workspace, and per-library presentation state change with the selected root.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns the orchestration and lifetime order; this document owns which state and stores survive that transition, while the [workspace architecture](workspace.md) owns the workspace candidate's semantics.
+
+WinUI likewise prepares and scans a fresh runtime before replacing its active library runtime for a different root. Its desktop settings, semantic theme, main window, and shell mode survive the swap. A successful swap atomically records the selected root best-effort; cancellation or failure preserves both the active runtime and its previously durable root. Same-root rescan instead uses the active runtime's transactional scan workflow and reloads its projections after success, avoiding a duplicate LMDB environment.
 
 ## Structural constraints
 

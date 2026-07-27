@@ -67,8 +67,8 @@ These documents own interactive composition or shared application policy above t
 |---|---|
 | [Workspace architecture](workspace.md) | Runtime view identity, source and projection ownership, open/focused workspace state, navigation, and semantic sessions. |
 | [Interactive session lifecycle architecture](interactive-session-lifecycle.md) | Interactive runtime construction, restoration, checkpointing, active-library replacement, and teardown. |
-| [Application shell architecture](application-shell.md) | Declarative shell documents, catalogs, GTK construction, actions, component state, editing, shortcuts, and teardown. |
-| [Presentation architecture](presentation.md) | Runtime, UIModel, GTK, TUI, and CLI presentation responsibilities. |
+| [Application shell architecture](application-shell.md) | GTK declarative shell ownership plus WinUI Modern/Classic composition, shared policy, actions, state, and teardown. |
+| [Presentation architecture](presentation.md) | Runtime, UIModel, GTK, WinUI, TUI, and CLI presentation responsibilities. |
 
 ### End-to-end vertical slices
 
@@ -97,8 +97,8 @@ This table records primary structural relationships rather than every document l
 | [Playback](playback.md) | Library identities and sources, runtime execution, managed state | Audio quality, presentation, and platform output adapters |
 | [Workspace](workspace.md) | Library sources, track expressions, presentation values, runtime execution, and managed-state boundaries | Interactive session lifecycle, application-level reveal composition, and presentation consumers |
 | [Interactive session lifecycle](interactive-session-lifecycle.md) | Runtime execution, persistence, library, workspace, playback, and failure authorities | Presentation and frontend composition roots |
-| [Application shell](application-shell.md) | Presentation boundaries, UIModel layout values, runtime services, managed state, and GTK lifecycle | GTK widget tree, actions, editor, component state, and shortcuts |
-| [Presentation](presentation.md) | Runtime snapshots and commands from domain and application systems | GTK, TUI, and non-interactive CLI adaptation |
+| [Application shell](application-shell.md) | Presentation boundaries, UIModel layout values and policy, runtime services, managed state, and desktop lifecycle | GTK widget tree and editor; WinUI Modern/Classic native shells |
+| [Presentation](presentation.md) | Runtime snapshots and commands from domain and application systems | GTK, WinUI, TUI, and non-interactive CLI adaptation |
 | [Audio quality](audio-quality.md) | Playback route evidence and execution generations | Runtime quality state, shared presentation policy, GTK, and TUI |
 | [Resource delivery](resource-delivery.md) | Media cover evidence, library blobs and references, playback/projection identities | GTK images, TUI artwork, MPRIS art URLs, and CLI export |
 
@@ -121,8 +121,8 @@ The table tracks capability families with architecture-bearing boundaries, not e
 | Audio-quality evidence and presentation | [Audio quality](audio-quality.md) | Current | The slice remains subordinate to playback and presentation ownership. |
 | Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | Interactive reads are bounded and asynchronous; GTK, TUI, and MPRIS own worker transforms, cancellation, and stale-result suppression. |
 | Workspace views, navigation, and semantic sessions | [Workspace](workspace.md) | Current | Exact navigation and restore behavior remains delegated to workspace specifications. |
-| Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | GTK uses prepare-before-release replacement; GTK and TUI intentionally retain separate lifecycle owners. |
-| Application shell, layout document, actions, component state, and widget construction | [Application shell](application-shell.md) | Current | Current declarative construction is GTK-specific; TUI retains an independent terminal shell. |
+| Interactive startup, checkpointing, switching, and shutdown | [Interactive session lifecycle](interactive-session-lifecycle.md) | Current | GTK and WinUI use distinct prepare-before-release replacement owners; TUI retains a single-runtime lifecycle. |
+| Application shell, layout document, actions, component state, and widget construction | [Application shell](application-shell.md) | Current | Declarative construction is GTK-specific; WinUI uses fixed native dual shells and TUI retains an independent terminal shell. |
 | Shared presentation policy and frontend adaptation | [Presentation](presentation.md) | Current | Exact UI behavior remains delegated to the presentation, shell, and frontend specification and reference owners. |
 | Metadata ingestion and editing from frontend intent through library publication | [Presentation](presentation.md) | Current | Presentation owns edit-session and frontend adaptation structure and delegates revision-bound admission, commit, and publication to the library architecture. |
 | Platform services such as portals and MPRIS | [Presentation](presentation.md) owns the adapter edge | Partial | Native file-dialog completions now have a coordinator-scoped lifetime boundary; remaining portal and MPRIS contracts still require focused migration. |

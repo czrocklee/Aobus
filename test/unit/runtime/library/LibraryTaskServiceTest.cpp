@@ -26,10 +26,12 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/Path.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>
@@ -184,24 +186,25 @@ namespace ao::rt::test
 
     async::Task<void> applyScanPlanAndRecordCancellation(LibraryTaskService* service,
                                                          ScanPlan plan,
-                                                         AsyncTestState<bool> sawFingerprinting,
+                                                         AsyncTestState<bool> fingerprintingEntered,
+                                                         AsyncBarrier* fingerprintingRelease,
                                                          AsyncTestState<bool> sawCancellation,
-                                                         AsyncBarrier* cancellationGate,
                                                          std::stop_token const stopToken)
     {
       try
       {
-        auto progress = [sawFingerprinting, cancellationGate](ScanApplyProgress const& update)
-        {
-          if (update.stage == ScanApplyProgressStage::Fingerprinting && update.path.filename() == "song.flac" &&
-              !sawFingerprinting.load())
+        [[maybe_unused]] auto result = co_await service->applyScanPlanAsync(
+          std::move(plan),
+          {},
+          stopToken,
+          [fingerprintingEntered, fingerprintingRelease](ScanApplyProgress const& progress)
           {
-            sawFingerprinting.set(true);
-            cancellationGate->wait();
-          }
-        };
-        [[maybe_unused]] auto result =
-          co_await service->applyScanPlanAsync(std::move(plan), {}, stopToken, std::move(progress));
+            if (progress.stage == ScanApplyProgressStage::Fingerprinting && !fingerprintingEntered.load())
+            {
+              fingerprintingEntered.set(true);
+              fingerprintingRelease->wait();
+            }
+          });
       }
       catch (async::OperationCancelled const&)
       {
@@ -608,6 +611,33 @@ namespace ao::rt::test
     REQUIRE(result);
   }
 
+  TEST_CASE("LibraryTaskService - scan progress preserves UTF-8 filenames", "[runtime][regression][library-task]")
+  {
+    auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82.flac"};
+    auto libraryFixture = MusicLibraryFixture{};
+    std::filesystem::copy_file(
+      audio::test::requireAudioFixture("basic_metadata.flac"), libraryFixture.root() / utility::pathFromUtf8(expected));
+    auto executor = InlineExecutor{};
+    auto runtime = async::Runtime{executor};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto progressEvents = std::vector<LibraryTaskProgressUpdated>{};
+    [[maybe_unused]] auto subscription =
+      service.onProgress([&](LibraryTaskProgressUpdated const& event) noexcept { progressEvents.push_back(event); });
+
+    auto future = runtime.spawn(service.buildScanPlanAsync());
+    auto const result = future.get();
+
+    REQUIRE(result);
+    REQUIRE(result->size() == 1);
+    CHECK(result->items().front().uri == expected);
+    CHECK(
+      std::ranges::any_of(progressEvents,
+                          [&](LibraryTaskProgressUpdated const& event)
+                          { return event.kind == LibraryTaskProgressKind::Scanning && event.subject == expected; }));
+  }
+
   TEST_CASE("LibraryTaskService - applyScanPlanAsync succeeds with empty plan", "[runtime][unit][library-task][scan]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -753,7 +783,9 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
-    auto const firstFile = libraryFixture.root() / "first.flac";
+    auto const firstFile =
+      libraryFixture.root() /
+      utility::pathFromUtf8("\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82.flac");
     auto const secondFile = libraryFixture.root() / "second.flac";
     std::filesystem::copy_file(sourceFile, firstFile);
     std::filesystem::copy_file(sourceFile, secondFile);
@@ -770,7 +802,7 @@ namespace ao::rt::test
 
     for (auto const& item : plan.items())
     {
-      expectedNames.push_back(item.fullPath.filename().string());
+      expectedNames.push_back(utility::pathToUtf8(item.fullPath.filename()));
     }
 
     std::filesystem::remove(firstFile);
@@ -818,30 +850,29 @@ namespace ao::rt::test
     auto plan = scanService.buildPlan().value();
     REQUIRE(plan.count(ScanClassification::New) == 1);
 
-    auto sawFingerprinting = AsyncTestState<bool>::create(false);
+    auto fingerprintingEntered = AsyncTestState<bool>::create(false);
+    auto fingerprintingRelease = AsyncBarrier{};
     auto sawCancellation = AsyncTestState<bool>::create(false);
     auto completionStatus = AsyncTestState<LibraryTaskCompletionStatus>::create(LibraryTaskCompletionStatus::Succeeded);
-    auto cancellationGate = AsyncBarrier{};
     auto completionSub = runtimeLibrary.taskService().onCompleted(
       [completionStatus](LibraryTaskCompleted const& event) noexcept { completionStatus.set(event.status); });
 
     auto taskHandle = runtime.spawnCancellable(
       [service = &service,
        plan = std::move(plan),
-       sawFingerprinting,
-       sawCancellation,
-       cancellationGate = &cancellationGate](std::stop_token const stopToken) mutable
+       fingerprintingEntered,
+       fingerprintingBarrier = &fingerprintingRelease,
+       sawCancellation](std::stop_token const stopToken) mutable
       {
         return applyScanPlanAndRecordCancellation(
-          service, std::move(plan), sawFingerprinting, sawCancellation, cancellationGate, stopToken);
+          service, std::move(plan), fingerprintingEntered, fingerprintingBarrier, sawCancellation, stopToken);
       });
 
-    auto const fingerprintingSeen = sawFingerprinting.waitUntil(true);
+    REQUIRE(fingerprintingEntered.waitUntil(true));
     taskHandle.reset();
-    cancellationGate.release();
-    REQUIRE(fingerprintingSeen);
+    fingerprintingRelease.release();
     REQUIRE(sawCancellation.waitUntil(true));
-    CHECK(sawFingerprinting.load());
+    CHECK(fingerprintingEntered.load());
     CHECK(completionStatus.load() == LibraryTaskCompletionStatus::Cancelled);
 
     auto transaction = libraryFixture.library().readTransaction();

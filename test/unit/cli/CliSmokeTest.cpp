@@ -4,6 +4,7 @@
 #include "CliTestSupport.h"
 #include "Run.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AppVersion.h>
@@ -13,6 +14,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_message.hpp>
@@ -833,6 +835,21 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["failures"]) == "0");
 
     checkDomainFailure(fixture.run({"lib", "fingerprint"}), "lib fingerprint requires --pending");
+  }
+
+  TEST_CASE("CLI - verbose scan reports UTF-8 paths", "[cli][regression][scan]")
+  {
+    auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82.flac"};
+    auto fixture = CliFixture{};
+    std::filesystem::copy_file(
+      audio::test::requireAudioFixture("basic_metadata.flac"), fixture.root() / utility::pathFromUtf8(expected));
+
+    auto const result = fixture.run({"scan", "--defer-fingerprint", "--verbose"});
+
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.err, "scan:"));
+    CHECK(contains(result.err, expected));
+    CHECK(contains(result.err, "apply:"));
   }
 
   TEST_CASE("CLI - scan reports moved files", "[cli][workflow][scan]")

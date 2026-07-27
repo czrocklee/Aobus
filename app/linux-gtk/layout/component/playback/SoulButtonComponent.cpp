@@ -27,7 +27,7 @@ namespace ao::gtk::layout
   {
     using uimodel::kAllExternalActions;
 
-    constexpr double kDefaultStrokeWidth = 9.0;
+    constexpr double kDefaultStrokeWidth = uimodel::kAobusSoulGeometry.baseStrokeWidth;
 
     /**
      * @brief playback.soulButton

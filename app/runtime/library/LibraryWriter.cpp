@@ -22,6 +22,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/utility/Path.h>
 
 #include <algorithm>
 #include <chrono>
@@ -324,7 +325,7 @@ namespace ao::rt
       {
         return makeError(
           Error::Code::IoError,
-          std::format("failed to resolve music root '{}': {}", library.rootPath().string(), ec.message()));
+          std::format("failed to resolve music root '{}': {}", utility::pathToUtf8(library.rootPath()), ec.message()));
       }
 
       bool sawOutsideRoot = false;
@@ -342,7 +343,7 @@ namespace ao::rt
 
         auto const rel = fullPath.lexically_relative(root);
 
-        auto uri = library::LibraryUri::parse(rel.generic_string());
+        auto uri = library::LibraryUri::parse(utility::pathToGenericUtf8(rel));
 
         if (!uri)
         {
@@ -373,11 +374,11 @@ namespace ao::rt
         if (sawOutsideRoot)
         {
           return makeError(
-            Error::Code::InvalidInput, std::format("track file is outside music root: {}", path.string()));
+            Error::Code::InvalidInput, std::format("track file is outside music root: {}", utility::pathToUtf8(path)));
         }
 
         return makeError(
-          Error::Code::NotFound, std::format("track file not found under music root: {}", path.string()));
+          Error::Code::NotFound, std::format("track file not found under music root: {}", utility::pathToUtf8(path)));
       }
 
       return std::move(*optTarget);
@@ -1740,7 +1741,7 @@ namespace ao::rt
     {
       return makeError(
         Error::Code::IoError,
-        std::format("failed to inspect track file '{}': {}", target.fullPath.string(), fileEc.message()));
+        std::format("failed to inspect track file '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
     }
 
     auto const lastWriteTime = std::filesystem::last_write_time(target.fullPath, fileEc);
@@ -1749,7 +1750,8 @@ namespace ao::rt
     {
       return makeError(
         Error::Code::IoError,
-        std::format("failed to read track file timestamp '{}': {}", target.fullPath.string(), fileEc.message()));
+        std::format(
+          "failed to read track file timestamp '{}': {}", utility::pathToUtf8(target.fullPath), fileEc.message()));
     }
 
     auto manifestBuilder = library::FileManifestBuilder::makeEmpty();

@@ -78,3 +78,7 @@ Use the [reference template](../template/reference.md).
 ## TUI
 
 - [TUI command surface](tui/command.md) enumerates startup options, commands, aliases, keys, overlays, mouse targets, and default paths.
+
+## Windows
+
+- [Windows desktop state](windows/desktop-state.md) enumerates native desktop settings and semantic theme files, fields, defaults, validation, and versioning.

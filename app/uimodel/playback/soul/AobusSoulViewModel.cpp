@@ -148,6 +148,14 @@ namespace ao::uimodel
     }
   }
 
+  AobusSoulGradientColors aobusSoulGradientColors(AobusSoulRgb const aura, double const hueShiftDegrees) noexcept
+  {
+    return AobusSoulGradientColors{
+      .core = aobusSoulShiftRgb(kAobusSoulUiCyan, hueShiftDegrees),
+      .body = aobusSoulShiftRgb(aura, -hueShiftDegrees),
+    };
+  }
+
   AobusSoulMotionFrame aobusSoulMotionAt(std::chrono::duration<double> const elapsed) noexcept
   {
     auto const breathingPhase = soulPhase(elapsed, kAobusSoulBreathingPeriod);
@@ -161,6 +169,11 @@ namespace ao::uimodel
       .rotationDegrees = rotationRadians * kFullCircleDegrees / (kHalfScale * std::numbers::pi),
       .luminance = kAobusSoulOpacityBase + (kAobusSoulOpacityVariance * std::sin(opacityPhase)),
       .hueShiftDegrees = kAobusSoulMaxHueShiftDegrees * std::sin(huePhase)};
+  }
+
+  bool shouldAnimateAobusSoul(bool const playing, bool const visible, bool const minimized) noexcept
+  {
+    return playing && visible && !minimized;
   }
 
   SoulAura resolveSoulAura(bool const playing, bool const ready, rt::QualityState const& signal) noexcept

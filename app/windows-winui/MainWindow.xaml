@@ -6,28 +6,792 @@
     xmlns:local="using:Aobus"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <Border
-            MaxWidth="640"
-            Padding="32"
-            HorizontalAlignment="Center"
-            VerticalAlignment="Center">
-            <StackPanel Spacing="16">
-                <TextBlock
-                    FontSize="32"
-                    Style="{ThemeResource TitleTextBlockStyle}"
-                    Text="Aobus for Windows" />
-                <TextBlock
-                    Text="The WinUI 3 frontend is running from Aobus' CMake and MSBuild pipeline."
-                    TextWrapping="Wrap" />
-                <Button
+    <Grid x:Name="RootGrid" SizeChanged="OnRootSizeChanged">
+        <Grid.Resources>
+            <Style x:Key="ChromeLessButtonStyle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="18" />
+                <Setter Property="MinWidth" Value="36" />
+                <Setter Property="MinHeight" Value="36" />
+                <Setter Property="Padding" Value="8" />
+            </Style>
+            <Style x:Key="ColumnHeaderButtonStyle" TargetType="Button" BasedOn="{StaticResource ChromeLessButtonStyle}">
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="MinHeight" Value="28" />
+                <Setter Property="Padding" Value="8,0" />
+                <Setter Property="HorizontalContentAlignment" Value="Left" />
+            </Style>
+            <Style x:Key="TrackListItemStyle" TargetType="ListViewItem">
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
+            <Style x:Key="InspectorSectionHeaderStyle" TargetType="Button" BasedOn="{StaticResource ChromeLessButtonStyle}">
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+            <DataTemplate x:Key="TrackCellTemplate" x:DataType="local:TrackCellItem">
+                <Grid Width="{x:Bind Width}" Height="32" Padding="8,0">
+                    <TextBlock
+                        Text="{x:Bind Text}"
+                        TextAlignment="{x:Bind Alignment}"
+                        TextTrimming="CharacterEllipsis"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Center" />
+                </Grid>
+            </DataTemplate>
+            <DataTemplate x:Key="TrackHeaderCellTemplate" x:DataType="local:TrackCellItem">
+                <Grid Width="{x:Bind Width}" Height="32">
+                    <Button
+                        Width="{x:Bind Width}"
+                        Tag="{x:Bind FieldId}"
+                        Click="OnColumnHeaderClicked"
+                        HorizontalContentAlignment="Stretch"
+                        Style="{StaticResource ColumnHeaderButtonStyle}">
+                        <Button.ContextFlyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem
+                                    x:Uid="MoveColumnLeftMenuItem"
+                                    Text="Move left"
+                                    Tag="{x:Bind FieldId}"
+                                    Click="OnColumnMoveLeftClicked" />
+                                <MenuFlyoutItem
+                                    x:Uid="MoveColumnRightMenuItem"
+                                    Text="Move right"
+                                    Tag="{x:Bind FieldId}"
+                                    Click="OnColumnMoveRightClicked" />
+                            </MenuFlyout>
+                        </Button.ContextFlyout>
+                        <TextBlock
+                            Text="{x:Bind Text}"
+                            TextAlignment="{x:Bind Alignment}"
+                            TextTrimming="CharacterEllipsis"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center" />
+                    </Button>
+                    <Thumb
+                        Width="7"
+                        HorizontalAlignment="Right"
+                        Background="Transparent"
+                        Tag="{x:Bind FieldId}"
+                        DragCompleted="OnColumnResizeCompleted" />
+                </Grid>
+            </DataTemplate>
+            <DataTemplate x:Key="TrackRowTemplate" x:DataType="local:TrackRowItem">
+                <StackPanel>
+                    <Grid
+                        Height="{x:Bind GroupHeight}"
+                        Padding="10,8"
+                        ColumnSpacing="12"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="48" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="48" Height="48" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <FontIcon Glyph="&#xE8D6;" FontSize="20" Opacity="0.55" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{x:Bind Artist}" FontSize="12" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{x:Bind Album}" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Opacity="0.55">
+                            <TextBlock Text="{x:Bind GroupCount}" />
+                            <TextBlock x:Uid="GroupTracksSuffix" Text="tracks" />
+                        </StackPanel>
+                    </Grid>
+                    <ItemsControl
+                        Height="{x:Bind RowHeight}"
+                        ItemsSource="{x:Bind Cells}"
+                        ItemTemplate="{StaticResource TrackCellTemplate}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </DataTemplate>
+            <DataTemplate x:Key="ClassicNavigationNodeTemplate">
+                <ContentPresenter
+                    Content="{Binding Content}"
+                    HorizontalContentAlignment="Stretch" />
+            </DataTemplate>
+        </Grid.Resources>
+
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="TitleBarRow" Height="40" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TitleBarGrid" Grid.Row="0" Padding="16,0" Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Uid="AppTitle" Text="Aobus" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock
+                x:Name="ModernLibraryPath"
+                Grid.Column="1"
+                Margin="14,0,150,0"
+                FontSize="12"
+                Opacity="0.55"
+                TextTrimming="CharacterEllipsis"
+                VerticalAlignment="Center" />
+        </Grid>
+
+        <Grid x:Name="ModernShell" Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="88" />
+            </Grid.RowDefinitions>
+
+            <NavigationView
+                x:Name="ModernNavigation"
+                IsBackButtonVisible="Collapsed"
+                IsSettingsVisible="False"
+                IsPaneOpen="True"
+                OpenPaneLength="236"
+                CompactPaneLength="48"
+                x:Uid="ModernNavigation"
+                PaneTitle="Library"
+                PaneDisplayMode="Left"
+                SelectionChanged="OnNavigationSelectionChanged">
+                <NavigationView.Content>
+                    <Grid x:Name="ModernWorkspace">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="ModernInspectorColumn" Width="320" />
+                        </Grid.ColumnDefinitions>
+
+                        <Thumb
+                            x:Name="ModernNavigationSplitter"
+                            Width="6"
+                            HorizontalAlignment="Left"
+                            Background="Transparent"
+                            Tag="navigation"
+                            Canvas.ZIndex="20"
+                            DragDelta="OnPaneResizeDelta"
+                            DragCompleted="OnPaneResizeCompleted" />
+
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="56" />
+                                <RowDefinition Height="32" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Padding="12,8" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition x:Name="ModernFilterColumn" Width="420" />
+                                    <ColumnDefinition x:Name="ModernSummaryColumn" Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    x:Name="ModernPresentationButton"
+                                    x:Uid="ModernPresentationButton"
+                                    Content="Library"
+                                    MinWidth="112"
+                                    HorizontalContentAlignment="Left"
+                                    Click="OnPresentationClicked" />
+                                <AutoSuggestBox
+                                    x:Name="ModernFilter"
+                                    x:Uid="ModernFilter"
+                                    Grid.Column="1"
+                                    QueryIcon="Find"
+                                    PlaceholderText="Filter tracks" />
+                                <StackPanel x:Name="ModernBrowserSummary" Grid.Column="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <TextBlock x:Name="ModernSelectionSummary" x:Uid="ModernSelectionSummary" Text="No selection" Opacity="0.55" />
+                                    <TextBlock Text="·" Opacity="0.35" />
+                                    <TextBlock x:Name="ModernTrackCount" x:Uid="ModernTrackCount" Text="0 tracks" Opacity="0.55" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="InspectorToggleButton"
+                                    x:Uid="InspectorToggleButton"
+                                    Grid.Column="3"
+                                    Style="{StaticResource ChromeLessButtonStyle}"
+                                    Click="OnInspectorToggleClicked"
+                                    ToolTipService.ToolTip="Track details">
+                                    <FontIcon Glyph="&#xE946;" />
+                                </Button>
+                                <Button
+                                    x:Uid="ModernMoreButton"
+                                    Grid.Column="4"
+                                    Style="{StaticResource ChromeLessButtonStyle}"
+                                    ToolTipService.ToolTip="More">
+                                    <FontIcon Glyph="&#xE712;" />
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem x:Uid="ModernOpenLibraryMenuItem" Text="Open Library..." Click="OnOpenLibraryClicked" />
+                                            <MenuFlyoutItem x:Uid="ModernRescanMenuItem" Text="Rescan Library" Click="OnRescanClicked" />
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem x:Uid="ModernColumnsMenuItem" Text="Columns..." Click="OnColumnsClicked" />
+                                            <MenuFlyoutItem x:Uid="ClassicModeMenuItem" Text="Classic Mode" Click="OnToggleModeClicked" />
+                                            <MenuFlyoutItem x:Uid="ModernReloadThemeMenuItem" Text="Reload Theme" Click="OnReloadThemeClicked" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
+
+                            <ScrollViewer
+                                x:Name="ModernTrackViewport"
+                                Grid.Row="1"
+                                Grid.RowSpan="2"
+                                HorizontalScrollBarVisibility="Auto"
+                                HorizontalScrollMode="Enabled"
+                                SizeChanged="OnTrackViewportSizeChanged"
+                                Tag="{ThemeResource ScrollBarSize}"
+                                VerticalScrollBarVisibility="Disabled"
+                                VerticalScrollMode="Disabled">
+                                <Grid x:Name="ModernTrackSurface" Width="1200">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="32" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <ItemsControl
+                                        x:Name="ModernColumnHeaders"
+                                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        ItemTemplate="{StaticResource TrackHeaderCellTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                    <ListView
+                                        x:Name="ModernTrackList"
+                                        Grid.Row="1"
+                                        ItemContainerStyle="{StaticResource TrackListItemStyle}"
+                                        ItemTemplate="{StaticResource TrackRowTemplate}"
+                                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                        ScrollViewer.HorizontalScrollMode="Disabled"
+                                        SelectionMode="Extended"
+                                        SelectionChanged="OnTrackSelectionChanged"
+                                        DoubleTapped="OnTrackDoubleTapped" />
+                                </Grid>
+                            </ScrollViewer>
+                        </Grid>
+
+                        <Border
+                            x:Name="ModernInspector"
+                            Grid.Column="1"
+                            Margin="0,12,12,12"
+                            Padding="0"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="16">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Border
+                                    x:Name="InspectorCoverSlot"
+                                    Width="274"
+                                    Height="274"
+                                    Margin="16,16,16,12"
+                                    HorizontalAlignment="Center"
+                                    CornerRadius="16"
+                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                    <Grid>
+                                        <FontIcon
+                                            x:Name="InspectorCoverPlaceholder"
+                                            Glyph="&#xE8D6;"
+                                            FontSize="56"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Opacity="0.28" />
+                                        <Image x:Name="InspectorCoverImage" Stretch="Uniform" />
+                                    </Grid>
+                                </Border>
+                                <ScrollViewer
+                                    x:Name="InspectorFieldScroll"
+                                    Grid.Row="1"
+                                    HorizontalScrollBarVisibility="Disabled"
+                                    VerticalScrollBarVisibility="Auto">
+                                    <StackPanel
+                                        x:Name="InspectorDetailContent"
+                                        Margin="16,0,16,16"
+                                        Spacing="4">
+                                        <Button
+                                            x:Name="InspectorMetadataHeaderButton"
+                                            Style="{StaticResource InspectorSectionHeaderStyle}">
+                                            <Grid>
+                                                <Rectangle
+                                                    Height="1"
+                                                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                                    VerticalAlignment="Center" />
+                                                <Border
+                                                    Margin="2,0,0,0"
+                                                    Padding="0,0,8,0"
+                                                    HorizontalAlignment="Left"
+                                                    Background="{Binding Background, ElementName=ModernInspector}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <FontIcon x:Name="InspectorMetadataChevron" Glyph="&#xE70D;" FontSize="10" />
+                                                        <TextBlock
+                                                            x:Name="InspectorMetadataHeader"
+                                                            x:Uid="InspectorMetadataHeader"
+                                                            Text="Metadata"
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold"
+                                                            CharacterSpacing="80" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                        </Button>
+                                        <StackPanel x:Name="InspectorMetadataRows" Spacing="4" />
+                                        <Button
+                                            x:Name="InspectorShowEmpty"
+                                            x:Uid="InspectorShowEmpty"
+                                            Content="Show empty fields"
+                                            HorizontalAlignment="Left"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="8,4"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                        <Button
+                                            x:Name="InspectorTechnicalHeaderButton"
+                                            Margin="0,4,0,0"
+                                            Style="{StaticResource InspectorSectionHeaderStyle}">
+                                            <Grid>
+                                                <Rectangle
+                                                    Height="1"
+                                                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                                    VerticalAlignment="Center" />
+                                                <Border
+                                                    Margin="2,0,0,0"
+                                                    Padding="0,0,8,0"
+                                                    HorizontalAlignment="Left"
+                                                    Background="{Binding Background, ElementName=ModernInspector}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <FontIcon x:Name="InspectorTechnicalChevron" Glyph="&#xE76C;" FontSize="10" />
+                                                        <TextBlock
+                                                            x:Name="InspectorTechnicalHeader"
+                                                            x:Uid="InspectorTechnicalHeader"
+                                                            Text="Audio Properties"
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold"
+                                                            CharacterSpacing="80" />
+                                                    </StackPanel>
+                                                </Border>
+                                            </Grid>
+                                        </Button>
+                                        <StackPanel x:Name="InspectorTechnicalRows" Spacing="4" Visibility="Collapsed" />
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </Border>
+                        <Thumb
+                            x:Name="ModernInspectorSplitter"
+                            Grid.Column="1"
+                            Width="6"
+                            HorizontalAlignment="Left"
+                            Background="Transparent"
+                            Tag="inspector"
+                            Canvas.ZIndex="20"
+                            DragDelta="OnPaneResizeDelta"
+                            DragCompleted="OnPaneResizeCompleted" />
+                    </Grid>
+                </NavigationView.Content>
+            </NavigationView>
+
+            <Border
+                x:Name="ModernNowPlaying"
+                Grid.Row="1"
+                Padding="0"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0">
+                <Grid>
+                    <Grid Padding="16,8" ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition x:Name="ModernNowPlayingInfoColumn" Width="2*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition x:Name="ModernNowPlayingRightColumn" Width="2*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid x:Name="ModernNowPlayingInfo">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="62" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Border Width="58" Height="58" CornerRadius="6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+                                <Grid>
+                                    <FontIcon
+                                        x:Name="NowPlayingCoverPlaceholder"
+                                        Glyph="&#xE8D6;"
+                                        Opacity="0.4"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center" />
+                                    <Image x:Name="NowPlayingCoverImage" Stretch="UniformToFill" />
+                                </Grid>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="12,0,0,0" Spacing="4" VerticalAlignment="Center">
+                                <TextBlock x:Name="ModernNowPlayingTitle" x:Uid="ModernNowPlayingTitle" Text="Not Playing" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="ModernNowPlayingArtist" FontSize="12" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                            <Button x:Name="ModernOutputButton" x:Uid="ModernOutputButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="Output device"><FontIcon Glyph="&#xE7F5;" /></Button>
+                            <TextBlock x:Name="ModernElapsed" Text="0:00" FontSize="11" Opacity="0.55" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" Spacing="16" VerticalAlignment="Center">
+                                <Button x:Name="ModernShuffleButton" x:Uid="ModernShuffleButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="Shuffle"><SymbolIcon Symbol="Shuffle" /></Button>
+                                <Button x:Name="ModernPreviousButton" x:Uid="ModernPreviousButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="Previous"><SymbolIcon Symbol="Previous" /></Button>
+                                <Button x:Name="ModernSoulButton" x:Uid="ModernSoulButton" Width="60" Height="60" MinWidth="60" MinHeight="60" Padding="0" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+                                    <local:AobusSoulControl x:Name="ModernSoul" />
+                                </Button>
+                                <Button x:Name="ModernNextButton" x:Uid="ModernNextButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="Next"><SymbolIcon Symbol="Next" /></Button>
+                                <Button x:Name="ModernRepeatButton" x:Uid="ModernRepeatButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="Repeat"><SymbolIcon Symbol="RepeatAll" /></Button>
+                            </StackPanel>
+                            <TextBlock x:Name="ModernDuration" Text="0:00" FontSize="11" Opacity="0.55" VerticalAlignment="Center" />
+                            <Button x:Name="ModernVolumeButton" x:Uid="ModernVolumeButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="Volume">
+                                <SymbolIcon Symbol="Volume" />
+                                <Button.Flyout>
+                                    <Flyout Placement="Top">
+                                        <StackPanel Width="180" Spacing="6">
+                                            <TextBlock x:Uid="VolumeHeading" Text="Volume" FontWeight="SemiBold" />
+                                            <Slider x:Name="ModernVolume" Minimum="0" Maximum="1" Value="1" />
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel x:Name="ModernNowPlayingRight" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="16">
+                            <Grid x:Name="ModernActivityStatus" Visibility="Collapsed" ColumnSpacing="4" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    x:Name="ModernActivityDetailButton"
+                                    Style="{StaticResource ChromeLessButtonStyle}"
+                                    MinWidth="0"
+                                    Padding="4,2">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                        <ProgressRing
+                                            x:Name="ModernActivitySpinner"
+                                            Width="14"
+                                            Height="14"
+                                            IsActive="False"
+                                            Visibility="Collapsed" />
+                                        <FontIcon
+                                            x:Name="ModernActivityStatusIcon"
+                                            FontSize="16"
+                                            Visibility="Collapsed" />
+                                        <TextBlock
+                                            x:Name="ModernActivityLabel"
+                                            MaxWidth="220"
+                                            FontSize="11"
+                                            TextTrimming="CharacterEllipsis"
+                                            VerticalAlignment="Center" />
+                                        <ProgressBar
+                                            x:Name="ModernActivityProgress"
+                                            Width="48"
+                                            Height="4"
+                                            Minimum="0"
+                                            Maximum="1"
+                                            Visibility="Collapsed"
+                                            VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button
+                                    x:Name="ModernActivityDismissButton"
+                                    x:Uid="ModernActivityDismissButton"
+                                    Grid.Column="1"
+                                    Style="{StaticResource ChromeLessButtonStyle}"
+                                    MinWidth="0"
+                                    Padding="4,2"
+                                    Visibility="Collapsed"
+                                    ToolTipService.ToolTip="Hide status">
+                                    <FontIcon Glyph="&#xE711;" FontSize="10" />
+                                </Button>
+                            </Grid>
+                            <Button x:Uid="NowPlayingMoreButton" Style="{StaticResource ChromeLessButtonStyle}" ToolTipService.ToolTip="More">
+                                <FontIcon Glyph="&#xE712;" />
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem x:Uid="NowPlayingStopMenuItem" Text="Stop" Click="OnStopClicked" />
+                                        <MenuFlyoutItem x:Uid="NowPlayingOpenLibraryMenuItem" Text="Open Library..." Click="OnOpenLibraryClicked" />
+                                        <MenuFlyoutItem x:Uid="NowPlayingRescanMenuItem" Text="Rescan Library" Click="OnRescanClicked" />
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem x:Uid="NowPlayingClassicModeMenuItem" Text="Classic Mode" Click="OnToggleModeClicked" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+            <Slider
+                x:Name="ModernSeek"
+                Grid.Row="1"
+                Height="20"
+                Margin="-10,-10,-10,0"
+                Minimum="0"
+                Maximum="1"
+                Padding="0"
+                Background="Transparent"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Canvas.ZIndex="20">
+                <Slider.Resources>
+                    <ControlTemplate x:Key="ModernSeekThumbTemplate" TargetType="Thumb">
+                        <Ellipse
+                            Width="20"
+                            Height="20"
+                            Fill="{TemplateBinding Background}" />
+                    </ControlTemplate>
+                    <x:Double x:Key="SliderTrackThemeHeight">2</x:Double>
+                    <x:Double x:Key="SliderHorizontalHeight">20</x:Double>
+                    <x:Double x:Key="SliderPreContentMargin">0</x:Double>
+                    <x:Double x:Key="SliderPostContentMargin">0</x:Double>
+                    <x:Double x:Key="SliderHorizontalThumbWidth">20</x:Double>
+                    <x:Double x:Key="SliderHorizontalThumbHeight">20</x:Double>
+                    <CornerRadius x:Key="SliderTrackCornerRadius">0</CornerRadius>
+                    <SolidColorBrush x:Key="SliderOuterThumbBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderThumbBorderBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderContainerBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderContainerBackgroundPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderContainerBackgroundPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderContainerBackgroundDisabled" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderTrackFillDisabled" Color="Transparent" />
+                </Slider.Resources>
+            </Slider>
+        </Grid>
+
+        <Grid x:Name="ClassicShell" Grid.RowSpan="2" Visibility="Collapsed" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="48" />
+                <RowDefinition Height="38" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="26" />
+            </Grid.RowDefinitions>
+            <MenuBar>
+                <MenuBarItem x:Uid="FileMenu" Title="File">
+                    <MenuFlyoutItem x:Uid="OpenLibraryMenuItem" Text="Open Library..." Click="OnOpenLibraryClicked" />
+                    <MenuFlyoutItem x:Uid="RescanMenuItem" Text="Rescan" Click="OnRescanClicked" />
+                </MenuBarItem>
+                <MenuBarItem x:Uid="ViewMenu" Title="View">
+                    <MenuFlyoutItem x:Uid="ClassicColumnsMenuItem" Text="Columns..." Click="OnColumnsClicked" />
+                    <MenuFlyoutItem x:Uid="ModernModeMenuItem" Text="Modern Mode" Click="OnToggleModeClicked" />
+                    <MenuFlyoutItem x:Uid="ReloadThemeMenuItem" Text="Reload Theme" Click="OnReloadThemeClicked" />
+                </MenuBarItem>
+                <MenuBarItem x:Uid="PlaybackMenu" Title="Playback">
+                    <MenuFlyoutItem x:Uid="PlayPauseMenuItem" Text="Play/Pause" Click="OnPlayPauseClicked" />
+                    <MenuFlyoutItem x:Uid="StopMenuItem" Text="Stop" Click="OnStopClicked" />
+                </MenuBarItem>
+            </MenuBar>
+
+            <Border x:Name="ClassicToolbar" Grid.Row="2" Padding="6,3" BorderThickness="0,1,0,1">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button x:Uid="ClassicOpenButton" Click="OnOpenLibraryClicked" Content="Open" />
+                    <Button x:Uid="ClassicRescanButton" Click="OnRescanClicked" Content="Rescan" />
+                    <Button x:Name="ClassicPreviousButton"><SymbolIcon Symbol="Previous" /></Button>
+                    <Button x:Name="ClassicNextButton"><SymbolIcon Symbol="Next" /></Button>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="ClassicNavigationColumn" Width="220" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="ClassicInspectorColumn" Width="280" />
+                </Grid.ColumnDefinitions>
+                <TreeView
+                    x:Name="ClassicLibraryTree"
+                    ItemTemplate="{StaticResource ClassicNavigationNodeTemplate}"
+                    SelectionChanged="OnClassicTreeSelectionChanged">
+                </TreeView>
+                <Thumb
+                    x:Name="ClassicNavigationSplitter"
+                    Grid.Column="0"
+                    Width="6"
+                    HorizontalAlignment="Right"
+                    Background="Transparent"
+                    Tag="navigation"
+                    Canvas.ZIndex="20"
+                    DragDelta="OnPaneResizeDelta"
+                    DragCompleted="OnPaneResizeCompleted" />
+                <ScrollViewer
+                    x:Name="ClassicTrackViewport"
+                    Grid.Column="1"
+                    HorizontalScrollBarVisibility="Auto"
+                    HorizontalScrollMode="Enabled"
+                    SizeChanged="OnTrackViewportSizeChanged"
+                    Tag="{ThemeResource ScrollBarSize}"
+                    VerticalScrollBarVisibility="Disabled"
+                    VerticalScrollMode="Disabled">
+                    <Grid x:Name="ClassicTrackSurface" Width="1200">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="32" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <ItemsControl
+                            x:Name="ClassicColumnHeaders"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                            BorderThickness="0,0,0,1"
+                            ItemTemplate="{StaticResource TrackHeaderCellTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <ListView
+                            x:Name="ClassicTrackList"
+                            Grid.Row="1"
+                            ItemContainerStyle="{StaticResource TrackListItemStyle}"
+                            ItemTemplate="{StaticResource TrackRowTemplate}"
+                            ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                            ScrollViewer.HorizontalScrollMode="Disabled"
+                            SelectionMode="Extended"
+                            SelectionChanged="OnTrackSelectionChanged"
+                            DoubleTapped="OnTrackDoubleTapped" />
+                    </Grid>
+                </ScrollViewer>
+                <Border x:Name="ClassicInspector" Grid.Column="2" Padding="0" BorderThickness="1,0,0,0">
+                    <ScrollViewer
+                        x:Name="ClassicDetailScroll"
+                        Padding="10"
+                        HorizontalScrollBarVisibility="Disabled"
+                        HorizontalScrollMode="Disabled"
+                        VerticalScrollBarVisibility="Auto"
+                        VerticalScrollMode="Enabled">
+                        <StackPanel x:Name="ClassicDetailContent" Spacing="10">
+                            <StackPanel x:Name="ClassicMetadataSection" Spacing="4">
+                                <Button
+                                    x:Name="ClassicMetadataHeaderButton"
+                                    Style="{StaticResource ChromeLessButtonStyle}"
+                                    MinHeight="24"
+                                    Padding="0"
+                                    HorizontalContentAlignment="Stretch">
+                                    <Grid>
+                                        <Rectangle
+                                            Height="1"
+                                            Fill="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            VerticalAlignment="Center" />
+                                        <Border
+                                            Padding="0,0,6,0"
+                                            HorizontalAlignment="Left"
+                                            Background="{Binding Background, ElementName=ClassicInspector}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon x:Name="ClassicMetadataChevron" Glyph="&#xE70D;" FontSize="9" />
+                                                <TextBlock
+                                                    x:Name="ClassicMetadataHeader"
+                                                    x:Uid="InspectorMetadataHeader"
+                                                    Text="Metadata"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    CharacterSpacing="80" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                                <StackPanel x:Name="ClassicMetadataRows" Spacing="2" />
+                                <Button
+                                    x:Name="ClassicShowEmpty"
+                                    x:Uid="InspectorShowEmpty"
+                                    Content="Show empty fields"
+                                    HorizontalAlignment="Left"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="4,2"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                            </StackPanel>
+                            <StackPanel x:Name="ClassicTechnicalSection" Spacing="4">
+                                <Button
+                                    x:Name="ClassicTechnicalHeaderButton"
+                                    Style="{StaticResource ChromeLessButtonStyle}"
+                                    MinHeight="24"
+                                    Padding="0"
+                                    HorizontalContentAlignment="Stretch">
+                                    <Grid>
+                                        <Rectangle
+                                            Height="1"
+                                            Fill="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                            VerticalAlignment="Center" />
+                                        <Border
+                                            Padding="0,0,6,0"
+                                            HorizontalAlignment="Left"
+                                            Background="{Binding Background, ElementName=ClassicInspector}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon x:Name="ClassicTechnicalChevron" Glyph="&#xE76C;" FontSize="9" />
+                                                <TextBlock
+                                                    x:Name="ClassicTechnicalHeader"
+                                                    x:Uid="InspectorTechnicalHeader"
+                                                    Text="Audio Properties"
+                                                    FontSize="11"
+                                                    FontWeight="SemiBold"
+                                                    CharacterSpacing="80" />
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Button>
+                                <StackPanel x:Name="ClassicTechnicalRows" Spacing="2" Visibility="Collapsed" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+                <Thumb
+                    x:Name="ClassicInspectorSplitter"
+                    Grid.Column="2"
+                    Width="6"
                     HorizontalAlignment="Left"
-                    Click="OnVerifyClicked"
-                    Content="Verify WinUI" />
-                <TextBlock
-                    x:Name="StatusText"
-                    Text="XAML resources loaded successfully." />
-            </StackPanel>
-        </Border>
+                    Background="Transparent"
+                    Tag="inspector"
+                    Canvas.ZIndex="20"
+                    DragDelta="OnPaneResizeDelta"
+                    DragCompleted="OnPaneResizeCompleted" />
+            </Grid>
+
+            <Border Grid.Row="1" Padding="6" BorderThickness="0,0,0,1">
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="32" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="150" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="ClassicSoulButton" x:Uid="ClassicSoulButton" Width="32" Height="32" Padding="0" Background="Transparent" BorderThickness="0" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch" Holding="OnClassicSoulHolding" RightTapped="OnClassicSoulRightTapped">
+                        <local:AobusSoulControl x:Name="ClassicSoul" />
+                    </Button>
+                    <Button x:Name="ClassicPlayPauseButton" x:Uid="ClassicPlayPauseButton" Grid.Column="1" ToolTipService.ToolTip="Play/Pause"><SymbolIcon Symbol="Play" /></Button>
+                    <Button x:Name="ClassicStopButton" x:Uid="ClassicStopButton" Grid.Column="2" ToolTipService.ToolTip="Stop"><SymbolIcon Symbol="Stop" /></Button>
+                    <Slider x:Name="ClassicSeek" Grid.Column="3" Minimum="0" Maximum="1">
+                        <Slider.Resources>
+                            <x:Double x:Key="SliderTrackThemeHeight">6</x:Double>
+                            <x:Double x:Key="SliderHorizontalThumbWidth">14</x:Double>
+                            <x:Double x:Key="SliderHorizontalThumbHeight">14</x:Double>
+                        </Slider.Resources>
+                    </Slider>
+                    <TextBlock x:Name="ClassicTime" Grid.Column="4" Text="0:00 / 0:00" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                        <SymbolIcon Symbol="Volume" />
+                        <Slider x:Name="ClassicVolume" Width="110" Minimum="0" Maximum="1" Value="1" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+            <Border x:Name="ClassicStatusBar" Grid.Row="4" Padding="6,2" BorderThickness="0,1,0,0">
+                <Grid>
+                    <TextBlock x:Name="StatusText" x:Uid="ReadyStatus" Text="Ready" />
+                    <TextBlock x:Name="ClassicTrackCount" HorizontalAlignment="Right" />
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

@@ -14,7 +14,7 @@
 
 namespace ao::uimodel
 {
-  inline constexpr std::uint32_t kTrackColumnLayoutVersion = 1;
+  inline constexpr std::uint32_t kTrackColumnLayoutVersion = 2;
 
   // Persistence DTOs isolate the versioned wire shape from live UIModel state.
   struct StoredTrackColumn final
@@ -22,6 +22,7 @@ namespace ao::uimodel
     std::string field{};
     std::int32_t width = -1;
     double weight = -1.0;
+    bool visible = true;
   };
 
   struct StoredTrackColumnLayout final

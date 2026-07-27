@@ -5,6 +5,7 @@
 #include "test/unit/TestUtils.h"
 #include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/utility/Path.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -45,6 +46,24 @@ namespace ao::library::test
     auto const tooLong = LibraryUri::parse(std::string(LibraryUri::kMaxLength + 1U, 'a'));
     REQUIRE_FALSE(tooLong);
     CHECK(tooLong.error().code == Error::Code::ValueTooLarge);
+  }
+
+  TEST_CASE("LibraryUri - UTF-8 names resolve through native filesystem paths", "[library][regression][uri]")
+  {
+    auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
+                                      "Dvo\xC5\x99\xC3\xA1k.flac"};
+    auto const uri = LibraryUri::parse(expected);
+    REQUIRE(uri);
+    CHECK(uri->value() == expected);
+
+    auto const temp = ao::test::TempDir{};
+    auto const root = temp.path() / "music";
+    std::filesystem::create_directories(root);
+
+    auto const resolved = uri->resolveUnder(root);
+
+    REQUIRE(resolved);
+    CHECK(utility::pathToGenericUtf8(resolved->lexically_relative(root)) == expected);
   }
 
   TEST_CASE("LibraryUri - parsing rejects paths outside the library namespace", "[library][unit][uri]")

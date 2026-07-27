@@ -3,6 +3,7 @@
 
 #include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
+#include <ao/utility/Path.h>
 
 #include <algorithm>
 #include <cctype>
@@ -55,8 +56,9 @@ namespace ao::library
 
         if (ec)
         {
-          return makeError(Error::Code::IoError,
-                           std::format("Failed to inspect library path '{}': {}", current.string(), ec.message()));
+          return makeError(
+            Error::Code::IoError,
+            std::format("Failed to inspect library path '{}': {}", utility::pathToUtf8(current), ec.message()));
         }
 
         if (status.type() == std::filesystem::file_type::not_found)
@@ -113,7 +115,7 @@ namespace ao::library
       return makeError(Error::Code::InvalidInput, std::format("Library URI '{}' must be root-relative", text));
     }
 
-    auto path = std::filesystem::path{portable};
+    auto path = utility::pathFromUtf8(portable);
 
     if (path.is_absolute() || path.has_root_name() || path.has_root_directory())
     {
@@ -140,7 +142,7 @@ namespace ao::library
       }
     }
 
-    auto value = path.generic_string();
+    auto value = utility::pathToGenericUtf8(path);
 
     if (value.empty() || value.starts_with('/'))
     {
@@ -157,17 +159,18 @@ namespace ao::library
 
     if (ec)
     {
-      return makeError(
-        Error::Code::IoError, std::format("Failed to resolve library root '{}': {}", root.string(), ec.message()));
+      return makeError(Error::Code::IoError,
+                       std::format("Failed to resolve library root '{}': {}", utility::pathToUtf8(root), ec.message()));
     }
 
-    if (auto const symlinkResult = rejectUnresolvedSymlinks(resolvedRoot, std::filesystem::path{_value}, _value);
-        !symlinkResult)
+    auto const relative = utility::pathFromUtf8(_value);
+
+    if (auto const symlinkResult = rejectUnresolvedSymlinks(resolvedRoot, relative, _value); !symlinkResult)
     {
       return std::unexpected{symlinkResult.error()};
     }
 
-    auto resolvedPath = std::filesystem::weakly_canonical(resolvedRoot / _value, ec);
+    auto resolvedPath = std::filesystem::weakly_canonical(resolvedRoot / relative, ec);
 
     if (ec)
     {
@@ -175,9 +178,9 @@ namespace ao::library
         Error::Code::IoError, std::format("Failed to resolve library path '{}': {}", _value, ec.message()));
     }
 
-    auto const relative = resolvedPath.lexically_relative(resolvedRoot);
+    auto const resolvedRelative = resolvedPath.lexically_relative(resolvedRoot);
 
-    if (escapesRoot(relative))
+    if (escapesRoot(resolvedRelative))
     {
       return makeError(
         Error::Code::InvalidInput, std::format("Library URI '{}' resolves outside the library root", _value));

@@ -28,5 +28,6 @@ Use the [user guide template](../template/user-guide.md) for a new task.
 
 ## Frontends
 
+- [Use the Windows desktop](use-windows-desktop.md) opens, browses, plays, switches shell modes, rescans, and reloads themes in WinUI.
 - [Use the CLI](use-cli.md) initializes, inspects, scans, queries, and mutates libraries from a shell.
 - [Use the TUI](use-tui.md) browses and plays an indexed library from a terminal.

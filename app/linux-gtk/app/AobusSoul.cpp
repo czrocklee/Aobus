@@ -39,10 +39,10 @@ namespace ao::gtk
       void operator()(::GskStroke* stroke) const noexcept { ::gsk_stroke_free(stroke); }
     };
 
-    constexpr float kRefHeight = 65.0F;
-    constexpr float kUnitRadius = 30.0F / kRefHeight;
-    constexpr float kLogoXOffset = 43.5F / kRefHeight;
-    constexpr float kStrokeWidthA = 10.0F;
+    constexpr float kRefHeight = static_cast<float>(uimodel::kAobusSoulGeometry.referenceHeight);
+    constexpr float kUnitRadius = static_cast<float>(uimodel::kAobusSoulGeometry.radius) / kRefHeight;
+    constexpr float kLogoXOffset = static_cast<float>(uimodel::kAobusSoulGeometry.logoCenterOffset) / kRefHeight;
+    constexpr float kStrokeWidthA = static_cast<float>(uimodel::kAobusSoulGeometry.anchorStrokeWidth);
     constexpr float kCos60 = 0.5F;
     constexpr float kSin60 = 0.866F;
     constexpr float kEpsilon = 0.001F;
@@ -54,6 +54,16 @@ namespace ao::gtk
               static_cast<float>(color.green) / kMaxChannel,
               static_cast<float>(color.blue) / kMaxChannel,
               alpha};
+    }
+
+    uimodel::AobusSoulRgb soulRgbFromRgba(Gdk::RGBA const& color) noexcept
+    {
+      constexpr float kMaxChannel = 255.0F;
+      return uimodel::AobusSoulRgb{
+        .red = static_cast<std::uint8_t>(std::lround(color.get_red() * kMaxChannel)),
+        .green = static_cast<std::uint8_t>(std::lround(color.get_green() * kMaxChannel)),
+        .blue = static_cast<std::uint8_t>(std::lround(color.get_blue() * kMaxChannel)),
+      };
     }
   } // namespace
 
@@ -67,7 +77,7 @@ namespace ao::gtk
     bool isStopped = true;
     bool shouldShowFullLogo = false;
 
-    float baseStrokeWidth = 9.0F;
+    float baseStrokeWidth = static_cast<float>(uimodel::kAobusSoulGeometry.baseStrokeWidth);
     float innerGlyphScale = 1.0F;
 
     std::optional<uimodel::FrameClock::TimePoint> optFirstFrameTime;
@@ -102,7 +112,7 @@ namespace ao::gtk
     ::gsk_stroke_set_line_cap(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_CAP_ROUND);
     ::gsk_stroke_set_line_join(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_JOIN_ROUND);
 
-    static constexpr float kRefRadius = 30.0F;
+    static constexpr float kRefRadius = static_cast<float>(uimodel::kAobusSoulGeometry.radius);
     static constexpr float kNormalizedRadius = kRefRadius / kRefHeight;
 
     auto* const oBuilder = ::gsk_path_builder_new();
@@ -122,7 +132,8 @@ namespace ao::gtk
     ::gsk_path_builder_line_to(aBuilder, kNormalizedRadius, kRefStemY2);
     _implPtr->unitPathAPtr.reset(::gsk_path_builder_free_to_path(aBuilder));
 
-    static constexpr float kInnerGlyphRadius = 14.0F / kRefHeight;
+    static constexpr float kInnerGlyphRadius =
+      static_cast<float>(uimodel::kAobusSoulGeometry.innerGlyphRadius) / kRefHeight;
 
     // Sigil (Kinetic Triangle)
     auto* const sigilBuilder = ::gsk_path_builder_new();
@@ -134,8 +145,8 @@ namespace ao::gtk
 
     // Seal (Balanced Bars)
     auto* const sealBuilder = ::gsk_path_builder_new();
-    float const barX = kInnerGlyphRadius * 0.4F;
-    float const barY = kInnerGlyphRadius * 0.7F;
+    float const barX = static_cast<float>(uimodel::kAobusSoulGeometry.innerGlyphBarOffset) / kRefHeight;
+    float const barY = static_cast<float>(uimodel::kAobusSoulGeometry.innerGlyphBarHalfHeight) / kRefHeight;
     ::gsk_path_builder_move_to(sealBuilder, -barX, -barY);
     ::gsk_path_builder_line_to(sealBuilder, -barX, barY);
     ::gsk_path_builder_move_to(sealBuilder, barX, -barY);
@@ -259,11 +270,9 @@ namespace ao::gtk
     }
 
     _implPtr->baseStrokeWidth = width;
-
     _implPtr->cachedStrokeGlyphPtr.reset(::gsk_stroke_new(_implPtr->baseStrokeWidth / kRefHeight));
     ::gsk_stroke_set_line_cap(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_CAP_ROUND);
     ::gsk_stroke_set_line_join(_implPtr->cachedStrokeGlyphPtr.get(), GSK_LINE_JOIN_ROUND);
-
     queue_draw();
   }
 
@@ -276,6 +285,16 @@ namespace ao::gtk
 
     _implPtr->innerGlyphScale = scale;
     queue_draw();
+  }
+
+  float AobusSoul::baseStrokeWidth() const
+  {
+    return _implPtr->baseStrokeWidth;
+  }
+
+  float AobusSoul::innerGlyphScale() const
+  {
+    return _implPtr->innerGlyphScale;
   }
 
   void AobusSoul::setAura(Gdk::RGBA const& aura)
@@ -320,17 +339,6 @@ namespace ao::gtk
     // The parent allocation controls the rendered glyph size.
     minimum = 0;
     natural = 0;
-  }
-
-  Gdk::RGBA AobusSoul::shiftColor(Gdk::RGBA const& color, float const shift) noexcept
-  {
-    constexpr float kMaxChannel = 255.0F;
-    auto const rgb =
-      uimodel::AobusSoulRgb{.red = static_cast<std::uint8_t>(std::lround(color.get_red() * kMaxChannel)),
-                            .green = static_cast<std::uint8_t>(std::lround(color.get_green() * kMaxChannel)),
-                            .blue = static_cast<std::uint8_t>(std::lround(color.get_blue() * kMaxChannel))};
-
-    return rgbaFromSoulRgb(uimodel::aobusSoulShiftRgb(rgb, shift), color.get_alpha());
   }
 
   void AobusSoul::snapshot_vfunc(Glib::RefPtr<Gtk::Snapshot> const& snapshotPtr)
@@ -416,8 +424,9 @@ namespace ao::gtk
 
     static constexpr std::size_t kStopCount = 3;
     auto stops = std::array<::GskColorStop, kStopCount>{};
-    auto const shiftedCyan = shiftColor(_implPtr->cyan, hueShift);
-    auto const shiftedAura = shiftColor(aura, -hueShift);
+    auto const gradientColors = uimodel::aobusSoulGradientColors(soulRgbFromRgba(aura), hueShift);
+    auto const shiftedCyan = rgbaFromSoulRgb(gradientColors.core, _implPtr->cyan.get_alpha());
+    auto const shiftedAura = rgbaFromSoulRgb(gradientColors.body, aura.get_alpha());
 
     // Player UI: Cyan as the core (38.2%), Indicator (Quality) as the dominant body (61.8%)
     static constexpr float kCoreOffset = static_cast<float>(uimodel::kAobusSoulCoreGradientStop);

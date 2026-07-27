@@ -26,19 +26,23 @@ namespace ao::uimodel
     Result<> writeColumn(ryml::NodeRef node, StoredTrackColumn const& column)
     {
       auto writer = yaml::MapWriter{node};
-      writer.scalar("field", column.field).scalar("width", column.width).scalar("weight", column.weight);
+      writer.scalar("field", column.field)
+        .scalar("width", column.width)
+        .scalar("weight", column.weight)
+        .scalar("visible", column.visible);
       return {};
     }
 
     Result<StoredTrackColumn> readColumn(ryml::ConstNodeRef node, std::string_view context)
     {
-      constexpr auto kKeys = std::to_array<std::string_view>({"field", "width", "weight"});
+      constexpr auto kKeys = std::to_array<std::string_view>({"field", "width", "weight", "visible"});
 
       auto column = StoredTrackColumn{};
       auto reader = yaml::MapReader{node, kKeys, context};
       reader.requiredScalar("field", column.field)
         .requiredScalar("width", column.width)
-        .requiredScalar("weight", column.weight);
+        .requiredScalar("weight", column.weight)
+        .requiredScalar("visible", column.visible);
       return std::move(reader).finish(std::move(column));
     }
 
@@ -152,6 +156,7 @@ namespace ao::uimodel
           .field = std::string{field},
           .width = column.width,
           .weight = column.weight,
+          .visible = column.visible,
         });
       }
 
@@ -207,6 +212,7 @@ namespace ao::uimodel
           .field = *optField,
           .width = column.width,
           .weight = column.weight,
+          .visible = column.visible,
         };
 
         if (auto const valid = validateColumn(columnState, Error::Code::FormatRejected); !valid)

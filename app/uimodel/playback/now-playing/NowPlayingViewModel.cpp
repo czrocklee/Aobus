@@ -129,6 +129,7 @@ namespace ao::uimodel
   void NowPlayingViewModel::render(rt::PlaybackTransportSnapshot const& state)
   {
     auto view = NowPlayingViewState{};
+    view.coverArtId = state.nowPlaying.coverArtId;
 
     if (state.nowPlaying.title.empty())
     {

@@ -168,8 +168,9 @@ namespace ao::tui
                               double const luminance,
                               double const hueShiftDegrees)
     {
-      auto const shiftedCyan = uimodel::aobusSoulShiftRgb(uimodel::kAobusSoulUiCyan, hueShiftDegrees);
-      auto const shiftedAura = uimodel::aobusSoulShiftRgb(aura, -hueShiftDegrees);
+      auto const gradientColors = uimodel::aobusSoulGradientColors(aura, hueShiftDegrees);
+      auto const shiftedCyan = gradientColors.core;
+      auto const shiftedAura = gradientColors.body;
 
       if (!optRotation)
       {

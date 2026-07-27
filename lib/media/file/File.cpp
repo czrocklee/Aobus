@@ -12,6 +12,7 @@
 #include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
 #include <ao/utility/MappedFile.h>
+#include <ao/utility/Path.h>
 
 #include <algorithm>
 #include <array>
@@ -94,7 +95,7 @@ namespace ao::media::file
     if (auto const mappedResult = implPtr->mappedFile.map(path); !mappedResult)
     {
       auto error = mappedResult.error();
-      error.message = std::format("Failed to open media file '{}': {}", path.string(), error.message);
+      error.message = std::format("Failed to open media file '{}': {}", utility::pathToUtf8(path), error.message);
       return std::unexpected{std::move(error)};
     }
 

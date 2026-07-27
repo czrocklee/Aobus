@@ -12,6 +12,7 @@
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
+#include <ao/utility/Path.h>
 
 #include <chrono>
 #include <cstddef>
@@ -95,7 +96,7 @@ namespace ao::rt
       // Only files we can actually decode belong in the plan. Everything else -
       // cover art, playlists, logs, or formats we have no reader for (.ogg,
       // a literal .alac) - is not music we support and is ignored here.
-      if (!media::file::File::isSupported(std::filesystem::path{uri}))
+      if (!media::file::File::isSupported(utility::pathFromUtf8(uri)))
       {
         return;
       }
@@ -328,11 +329,11 @@ namespace ao::rt
     {
       if (rootEc)
       {
-        return makeError(
-          Error::Code::IoError, "Failed to inspect library root path " + root.string() + ": " + rootEc.message());
+        return makeError(Error::Code::IoError,
+                         "Failed to inspect library root path " + utility::pathToUtf8(root) + ": " + rootEc.message());
       }
 
-      return makeError(Error::Code::NotFound, "Library root path does not exist: " + root.string());
+      return makeError(Error::Code::NotFound, "Library root path does not exist: " + utility::pathToUtf8(root));
     }
 
     auto rootEc = std::error_code{};
@@ -340,8 +341,8 @@ namespace ao::rt
 
     if (rootEc)
     {
-      return makeError(
-        Error::Code::IoError, "Failed to resolve library root path " + root.string() + ": " + rootEc.message());
+      return makeError(Error::Code::IoError,
+                       "Failed to resolve library root path " + utility::pathToUtf8(root) + ": " + rootEc.message());
     }
 
     auto transaction = _library.readTransaction();
@@ -369,7 +370,7 @@ namespace ao::rt
     if (ec)
     {
       return makeError(
-        Error::Code::IoError, "Failed to start filesystem walk of " + root.string() + ": " + ec.message());
+        Error::Code::IoError, "Failed to start filesystem walk of " + utility::pathToUtf8(root) + ": " + ec.message());
     }
 
     while (it != std::filesystem::recursive_directory_iterator{})
@@ -383,11 +384,11 @@ namespace ao::rt
         progress(entry.path());
       }
 
-      auto uri = library::LibraryUri::parse(entry.path().lexically_relative(root).generic_string());
+      auto uri = library::LibraryUri::parse(utility::pathToGenericUtf8(entry.path().lexically_relative(root)));
 
       if (!uri)
       {
-        auto item = ScanItem{.uri = entry.path().filename().generic_string(),
+        auto item = ScanItem{.uri = utility::pathToGenericUtf8(entry.path().filename()),
                              .fullPath = entry.path(),
                              .classification = ScanClassification::Error,
                              .errorMessage = uri.error().message};
@@ -414,7 +415,8 @@ namespace ao::rt
         continue;
       }
 
-      auto canonicalUri = library::LibraryUri::parse(resolvedPath->lexically_relative(resolvedRoot).generic_string());
+      auto canonicalUri =
+        library::LibraryUri::parse(utility::pathToGenericUtf8(resolvedPath->lexically_relative(resolvedRoot)));
 
       if (!canonicalUri)
       {

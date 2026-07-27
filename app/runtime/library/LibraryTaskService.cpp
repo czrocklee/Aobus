@@ -29,6 +29,7 @@
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/Path.h>
 #include <ao/utility/ThreadName.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -225,7 +226,7 @@ namespace ao::rt
         auto const itemBase = static_cast<double>(progress.itemIndex);
         auto const fraction =
           totalItems > 0 ? (itemBase + progress.itemFraction) / static_cast<double>(totalItems) : 0.0;
-        publish(scanApplyProgressKind(progress), fraction, progress.path.filename().string());
+        publish(scanApplyProgressKind(progress), fraction, utility::pathToUtf8(progress.path.filename()));
 
         if (callback)
         {
@@ -290,7 +291,8 @@ namespace ao::rt
         if (shouldPublishBackfillProgress(progress))
         {
           auto const fraction = backfillProgressFraction(progress);
-          publish(LibraryTaskProgressKind::IndexingAudioIdentity, fraction, progress.path.filename().string());
+          publish(
+            LibraryTaskProgressKind::IndexingAudioIdentity, fraction, utility::pathToUtf8(progress.path.filename()));
         }
 
         if (callback)
@@ -631,9 +633,9 @@ namespace ao::rt
     // keep the plan fresh anyway (the lock is released before apply).
     auto scanService = LibraryScan{_implPtr->library};
     auto publishProgress = _implPtr->makeProgressPublisher();
-    auto planResult =
-      scanService.buildPlan([publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
-                            { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, path.filename().string()); });
+    auto planResult = scanService.buildPlan(
+      [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
+      { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, utility::pathToUtf8(path.filename())); });
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 

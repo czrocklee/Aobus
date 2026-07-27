@@ -74,11 +74,14 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/document/LayoutNodeId.cpp
     uimodel/layout/document/LayoutPreparation.cpp
     uimodel/layout/document/LayoutValue.cpp
+    uimodel/layout/shell/DesktopShellPolicy.cpp
     uimodel/layout/shell/ShellLayoutSessionModel.cpp
+    uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.cpp
     uimodel/input/KeyChord.cpp
     uimodel/input/KeymapModel.cpp
     uimodel/input/KeymapStore.cpp
     uimodel/preference/PreferencesEditorModel.cpp
+    uimodel/preference/WindowsTheme.cpp
     uimodel/field/TrackFieldEditCodec.cpp
     uimodel/field/TrackFieldEditPolicy.cpp
     uimodel/field/TrackFieldFormatter.cpp
@@ -104,6 +107,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/property/TrackAuthoringSession.cpp
     uimodel/library/property/TrackPropertiesFormSpec.cpp
     uimodel/library/property/TrackPropertiesFormModel.cpp
+    uimodel/library/task/LibraryScanWorkflow.cpp
     uimodel/library/track/TrackCountFormatter.cpp
     uimodel/library/track/TrackSelectionSummary.cpp
     uimodel/library/track/TrackFilterPolicy.cpp
@@ -111,6 +115,9 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/track/TrackFilterResolver.cpp
     uimodel/library/track/TrackFilterViewModel.cpp
     uimodel/library/track/TrackPageRoute.cpp
+    uimodel/library/track/CoverArtRequestModel.cpp
+    uimodel/library/track/IndexedTrackRowCache.cpp
+    uimodel/library/track/TrackDisplayIndex.cpp
     uimodel/playback/command/PlaybackCommandSurface.cpp
     uimodel/playback/now-playing/NowPlayingViewModel.cpp
     uimodel/playback/output/OutputDeviceViewModel.cpp

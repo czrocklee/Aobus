@@ -1,5 +1,38 @@
 namespace Aobus
 {
+    runtimeclass TrackCellItem
+    {
+        TrackCellItem(String text, String fieldId, Double width, Boolean sortable);
+        String Text{ get; };
+        String FieldId{ get; };
+        Double Width{ get; };
+        Boolean Sortable{ get; };
+        Microsoft.UI.Xaml.TextAlignment Alignment{ get; };
+    }
+
+    runtimeclass TrackRowItem
+    {
+        TrackRowItem(UInt32 index, UInt32 trackId, UInt32 coverArtId, String title, String artist, String album, String duration);
+        UInt32 DisplayIndex{ get; };
+        UInt32 Index{ get; };
+        UInt32 TrackId{ get; };
+        UInt32 CoverArtId{ get; };
+        Boolean IsGroupHeader{ get; };
+        Double RowHeight{ get; };
+        Double GroupHeight{ get; };
+        UInt32 GroupCount{ get; };
+        String Title{ get; };
+        String Artist{ get; };
+        String Album{ get; };
+        Windows.Foundation.Collections.IVectorView<Object> Cells{ get; };
+    }
+
+    [default_interface]
+    runtimeclass AobusSoulControl : Microsoft.UI.Xaml.Controls.ContentControl
+    {
+        AobusSoulControl();
+    }
+
     [default_interface]
     runtimeclass MainWindow : Microsoft.UI.Xaml.Window
     {

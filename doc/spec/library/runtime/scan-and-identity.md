@@ -18,7 +18,8 @@ Manifest keys and fields belong to the [library database reference](../../../ref
 ## Code boundary
 
 This contract belongs to the **application runtime** layer in the [system architecture](../../../architecture/system-overview.md).
-The frontend-shared surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryTaskService.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
+The runtime surface is `app/include/ao/rt/library/LibraryScan.h`, `ScanPlan.h`, and `LibraryTaskService.h`; planning, reconciliation, and backfill live in `app/runtime/library/`, while encoded-payload extraction and manifest storage remain core-library facilities.
+`app/include/ao/uimodel/library/task/LibraryScanWorkflow.h` owns the frontend-shared build/classify/apply workflow, including the eager versus fast-bootstrap identity strategy.
 `LibraryScan` is read-only plan construction.
 Live committing application is a runtime-private coordinator operation.
 The runtime-private `ScanApplyOperation::run()` is the distinct offline composition used by focused storage workflows and tests.
@@ -139,6 +140,10 @@ Pairing the 128-bit signature with payload length is the complete equality key.
 
 Filesystem, mapping, tag parsing, media corruption, database, and resource-limit failures use `Result` or the per-item failure channel according to whether useful plan/application work can continue.
 Cancellation is cooperative during payload hashing and before commit.
+The shared UIModel workflow distinguishes an up-to-date plan, an errors-only
+plan, and an actionable plan before application. Frontends remain responsible
+only for presenting issues, publishing frontend-specific refreshes, and
+scheduling optional identity backfill after a fast-bootstrap scan.
 
 ## Implementation map
 
@@ -146,6 +151,7 @@ Cancellation is cooperative during payload hashing and before commit.
 - [`LibraryScan.cpp`](../../../../app/runtime/library/LibraryScan.cpp) owns planning and move matching.
 - [`ScanApplyOperation.cpp`](../../../../app/runtime/library/ScanApplyOperation.cpp) owns the shared state machine, the self-contained offline `run()` composition, and transaction-scoped apply.
 - [`LibraryTaskService.cpp`](../../../../app/runtime/library/LibraryTaskService.cpp) owns maintenance lifetime and prepare/apply worker composition.
+- [`LibraryScanWorkflow.cpp`](../../../../app/uimodel/library/task/LibraryScanWorkflow.cpp) owns frontend-shared plan disposition, issue collection, identity policy, and build/apply orchestration.
 - [`AudioIdentity.h`](../../../../include/ao/library/AudioIdentity.h) owns identity calculation.
 - [`AudioIdentityIndexer.cpp`](../../../../app/runtime/library/AudioIdentityIndexer.cpp) owns concurrent backfill.
 
@@ -153,6 +159,7 @@ Cancellation is cooperative during payload hashing and before commit.
 
 - [`ScanPlanTest.cpp`](../../../../test/unit/runtime/library/ScanPlanTest.cpp) proves opacity, classifications, URI normalization, move identity, constrained explicit relink derivation and consumption, ambiguity, and errors.
 - [`ScanApplyOperationTest.cpp`](../../../../test/unit/runtime/library/ScanApplyOperationTest.cpp) proves binding rejection, replay protection, prepared-file revalidation, atomic application, curated-metadata preservation, relinking, failures, progress, and cancellation.
+- [`LibraryScanWorkflowTest.cpp`](../../../../test/unit/uimodel/library/task/LibraryScanWorkflowTest.cpp) proves frontend-shared plan disposition and mutation reporting.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrency, revalidation, cancellation, skip, and failure behavior.
 - [`AudioIdentityTest.cpp`](../../../../test/unit/library/AudioIdentityTest.cpp) proves signature calculation and cancellation.
 

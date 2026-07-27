@@ -11,6 +11,7 @@
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/Path.h>
 #include <ao/yaml/Reflect.h>
 
 #include <CLI/App.hpp>
@@ -91,7 +92,7 @@ namespace ao::cli
         return item.uri;
       }
 
-      return item.fullPath.generic_string();
+      return utility::pathToGenericUtf8(item.fullPath);
     }
 
     ScanItemDto toScanItemDto(rt::ScanItem const& item)
@@ -221,7 +222,7 @@ namespace ao::cli
     if (verbose)
     {
       buildProgress = [&cli](std::filesystem::path const& path)
-      { std::println(cli.io().err, "scan: {}", path.generic_string()); };
+      { std::println(cli.io().err, "scan: {}", utility::pathToGenericUtf8(path)); };
     }
 
     auto planResult = scanService.buildPlan(std::move(buildProgress));
@@ -255,7 +256,8 @@ namespace ao::cli
       {
         if (!progress.path.empty())
         {
-          std::println(cli.io().err, "{}: {}", scanApplyProgressLabel(progress.stage), progress.path.generic_string());
+          std::println(
+            cli.io().err, "{}: {}", scanApplyProgressLabel(progress.stage), utility::pathToGenericUtf8(progress.path));
         }
       };
     }

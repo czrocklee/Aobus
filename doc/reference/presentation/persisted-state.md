@@ -3,27 +3,30 @@ id: presentation.persisted-state
 type: reference
 status: current
 domain: presentation
-summary: Enumerates versioned GTK presentation documents, stable token authorities, exact fields, validation, and compatibility behavior.
+summary: Enumerates versioned desktop presentation documents, stable token authorities, exact fields, validation, and compatibility behavior.
 ---
 # Persisted presentation state
 
 ## Scope and version
 
-This reference owns the exact version-1 payloads stored in the GTK per-library `trackView.columnLayouts` and `trackView.presentations` groups.
+This reference owns the exact version-2 `trackView.columnLayouts` payload and
+version-1 `trackView.presentations` payload stored by desktop frontends.
+GTK stores them per library in `gtk_layout.yaml`; WinUI stores them alongside its desktop group in `%LOCALAPPDATA%\Aobus\windows-settings.yaml`.
 It also routes the stable textual vocabulary shared with nested workspace presentation state.
 
 The [workspace session-state reference](../workspace/session-state.md) owns the exact workspace group.
 The [application managed-state surface](../persistence/application-config.md) owns group-to-document registration and writer identity, while presentation specifications own runtime behavior and fallback.
 
-Version 1 is the first supported format.
-There is no legacy numeric migration.
+Column-layout version 2 adds required per-field visibility to the canonical
+sizing and order state. List-presentation preferences remain at version 1.
+There is no migration from earlier or unversioned payloads.
 
 ## Code boundary
 
-This surface spans the application runtime, UIModel, and GTK persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
+This surface spans the application runtime, UIModel, and desktop persistence-adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation architecture](../../architecture/presentation.md) and [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md).
 Stable `TrackField`, `TrackSortField`, and `TrackGroupKey` ids belong to application runtime in `TrackField.h` and `TrackField.cpp`.
-The two GTK payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
-`GtkLayoutStateStore` owns the per-library file and literal group names but does not redefine either payload.
+The two payload models and semantic converters belong to UIModel in `TrackColumnLayoutYamlSchema` and `ListPresentationPreferenceYamlSchema`.
+`GtkLayoutStateStore` and the WinUI `LibrarySession` own their respective files and literal group names but do not redefine either payload.
 
 ## Stable vocabulary
 
@@ -40,30 +43,32 @@ Workspace sort directions use exactly:
 Presentation and preset ids are nonempty opaque strings.
 Built-in ids are enumerated by the [track-preset reference](track-preset.md); custom ids may be temporarily unavailable and are not a closed enum vocabulary.
 
-## GTK column-layout group
+## Column-layout group
 
 The literal top-level group is `trackView.columnLayouts`.
 Its exact shape is:
 
 ```yaml
 trackView.columnLayouts:
-  version: 1
+  version: 2
   layouts:
     - listId: 10
       columns:
         - field: artist
           width: -1
           weight: 1.75
+          visible: true
         - field: duration
           width: 200
           weight: -1
+          visible: false
 ```
 
 ### Root fields
 
 | Field | Type | Requirement |
 |---|---|---|
-| `version` | Unsigned 32-bit integer. | Required and exactly `1`. |
+| `version` | Unsigned 32-bit integer. | Required and exactly `2`. |
 | `layouts` | Sequence of layout mappings. | Required; may be empty. |
 
 ### Layout fields
@@ -80,13 +85,14 @@ trackView.columnLayouts:
 | `field` | Stable track-field id. | Required and known. |
 | `width` | Signed 32-bit integer. | Fixed state uses a positive value; flexible state uses `-1`. |
 | `weight` | Floating-point number. | Fixed state uses `-1`; flexible state uses a finite positive value. |
+| `visible` | Boolean. | Required. `true` exposes the field in that list; `false` retains its order and sizing while hiding it. |
 
 Exactly one canonical dimension form is accepted:
 
 - fixed: `width > 0` and `weight == -1`;
 - flexible: `width == -1` and finite `weight > 0`.
 
-## GTK list-presentation preference group
+## List-presentation preference group
 
 The literal top-level group is `trackView.presentations`.
 Its exact shape is:
@@ -126,25 +132,28 @@ It is not a complete workspace root schema version.
 
 ## Validation rules
 
-- Both GTK groups use explicit UIModel schemas that validate each mapping and sequence recursively.
+- Both groups use explicit UIModel schemas that validate each mapping and sequence recursively.
 - Every declared field is required; unknown fields, missing fields, wrong node kinds, malformed vector elements, and unsupported versions reject the complete containing group.
 - Semantic conversion occurs into a temporary candidate; no column or preference entry is installed before the whole group succeeds.
 - A missing or rejected group leaves the caller's seeded state unchanged.
 - The two groups are independent on load, so rejection of one does not reject a valid sibling group.
 - The GTK coordinator suppresses save callbacks while installing loaded candidates, so a valid sibling cannot overwrite a rejected group during restore.
+- WinUI loads each group into a temporary typed candidate during stable-session construction and retains the corresponding default when a candidate is missing or rejected.
 - Serialization rejects invalid live list ids, empty required ids, duplicate fields, and noncanonical column dimensions.
-- `GtkLayoutStateStore` submits both schemas through one `saveTogether()` candidate, so a serialization failure cannot persist only one new group.
+- Each desktop writer submits both schemas through one `saveTogether()` candidate, so a serialization failure cannot persist only one new group.
 
 ## Compatibility and versioning
 
-Writers emit only version 1 with stable text ids and canonical member names.
+Writers emit column-layout version 2 and list-presentation version 1 with stable
+text ids and canonical member names.
 Unversioned legacy state, numeric field values, unknown closed tokens, and future versions are rejected without an automatic rewrite.
 Future versions return `NotSupported` before version-specific sibling fields are interpreted.
 
 Changing a stable token's meaning or spelling requires an explicit compatibility decision.
-Adding a token does not change the meaning of existing version-1 documents, but older readers reject a document that uses the new unknown value.
+Adding a token does not change the meaning of existing documents, but older
+readers reject a document that uses the new unknown value.
 
-The surrounding `gtk_layout.yaml` file has no shared envelope version.
+The surrounding `gtk_layout.yaml` and `windows-settings.yaml` files have no shared envelope version.
 Each literal group carries and gates its own payload version.
 
 ## Implementation authority
@@ -153,6 +162,7 @@ Each literal group carries and gates its own payload version.
 - [`TrackColumnLayoutYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h) and [`TrackColumnLayoutYamlSchema.cpp`](../../../app/uimodel/library/presentation/TrackColumnLayoutYamlSchema.cpp) own the layout document and conversion.
 - [`ListPresentationPreferenceYamlSchema.h`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) and [`ListPresentationPreferenceYamlSchema.cpp`](../../../app/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp) own the preference document and conversion.
 - [`GtkLayoutStateStore.cpp`](../../../app/linux-gtk/app/GtkLayoutStateStore.cpp) owns group selection, load policy, and the file save boundary.
+- [`LibrarySession.cpp`](../../../app/windows-winui/app/LibrarySession.cpp) owns the WinUI group selection, load policy, and atomic file save boundary.
 
 ## Test authority
 

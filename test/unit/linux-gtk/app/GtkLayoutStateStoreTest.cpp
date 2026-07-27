@@ -47,18 +47,20 @@ namespace ao::gtk::test
 
         auto const serialized = ao::test::readFile(libraryPath / "gtk_layout.yaml");
         CHECK(serialized == "trackView.columnLayouts:\n"
-                            "  version: 1\n"
+                            "  version: 2\n"
                             "  layouts:\n"
                             "    - listId: 10\n"
                             "      columns:\n"
                             "        - field: \"artist\"\n"
                             "          width: -1\n"
                             "          weight: 1.75\n"
+                            "          visible: true\n"
                             "    - listId: 20\n"
                             "      columns:\n"
                             "        - field: \"duration\"\n"
                             "          width: 200\n"
                             "          weight: -1\n"
+                            "          visible: true\n"
                             "trackView.presentations:\n"
                             "  version: 1\n"
                             "  preferences:\n"
@@ -131,7 +133,7 @@ namespace ao::gtk::test
       std::filesystem::create_directories(libraryPath);
       auto output = std::ofstream{libraryPath / "gtk_layout.yaml"};
       output << "trackView.columnLayouts:\n"
-                "  version: 2\n"
+                "  version: 3\n"
                 "  layouts: []\n"
                 "trackView.presentations:\n"
                 "  version: 1\n"

@@ -8,7 +8,7 @@
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>

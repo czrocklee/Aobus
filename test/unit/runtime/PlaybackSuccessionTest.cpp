@@ -321,19 +321,23 @@ namespace ao::rt::test
       std::uint32_t nextPlayableFile = 0;
     };
 
+    struct PlaybackSuccessionTransportFixtureConfig final
+    {
+      std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr{};
+      std::filesystem::path blockedFileName{};
+      bool failBlockedPreparation = false;
+      bool blockEveryLookahead = false;
+    };
+
     struct PlaybackSuccessionTransportFixture final
     {
-      explicit PlaybackSuccessionTransportFixture(
-        std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr = {},
-        std::filesystem::path blockedFileName = {},
-        bool const failBlockedPreparation = false,
-        bool const blockEveryLookahead = false)
+      explicit PlaybackSuccessionTransportFixture(PlaybackSuccessionTransportFixtureConfig config = {})
         : decoderProbePtr{std::make_shared<DecoderActivationProbe>()}
         , transport{makeActivationProbedDecoderFactory(decoderProbePtr,
-                                                       std::move(blockingGatePtr),
-                                                       std::move(blockedFileName),
-                                                       failBlockedPreparation,
-                                                       blockEveryLookahead)}
+                                                       std::move(config.blockingGatePtr),
+                                                       std::move(config.blockedFileName),
+                                                       config.failBlockedPreparation,
+                                                       config.blockEveryLookahead)}
         , asyncRuntime{transport.executor, 1, {}, &sleeper}
         , changes{libraryChangesExecutor, 0}
         , writerFixture{transport.libraryFixture.library(), changes}
@@ -700,7 +704,10 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-1.flac"};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-1.flac",
+    }};
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.secondTrackId));
@@ -737,7 +744,10 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-1.flac"};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-1.flac",
+    }};
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     REQUIRE(succession.playFromView(fixture.viewId, fixture.secondTrackId));
@@ -760,7 +770,10 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-2.flac"};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-2.flac",
+    }};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     auto& succession = *fixture.successionPtr;
@@ -788,7 +801,10 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-2.flac"};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-2.flac",
+    }};
     fixture.buildThreeTrackManualView();
     fixture.transport.status.devices.push_back(audio::Device{.id = audio::DeviceId{"alternate-device"},
                                                              .displayName = "Alternate",
@@ -824,7 +840,11 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, {}, true, true};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .failBlockedPreparation = true,
+      .blockEveryLookahead = true,
+    }};
     fixture.buildThreeTrackManualView();
     auto& succession = *fixture.successionPtr;
     succession.setShuffleMode(ShuffleMode::On);
@@ -839,13 +859,13 @@ namespace ao::rt::test
     REQUIRE(fixture.transport.executor.drainUntil(
       [&]
       {
+        auto const& state = succession.state();
         return gatePtr->createdPtr->load(std::memory_order_relaxed) == 2 &&
                gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
-                 gatePtr->createdPtr->load(std::memory_order_relaxed);
+                 gatePtr->createdPtr->load(std::memory_order_relaxed) &&
+               state.optResolvedSuccessor && state.optResolvedSuccessor != optInitialSuccessor;
       },
       std::chrono::seconds{5}));
-    fixture.transport.executor.checkQueued(std::chrono::seconds{5});
-    fixture.transport.executor.drain();
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(succession.state().shuffle == ShuffleMode::On);
@@ -860,7 +880,10 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-2.flac"};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-2.flac",
+    }};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     fixture.transport.executor.drain();
@@ -886,7 +909,11 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-2.flac", true};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-2.flac",
+      .failBlockedPreparation = true,
+    }};
     fixture.buildThreeTrackManualView();
     fixture.writerFixture.releaseLibrary();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
@@ -1337,7 +1364,10 @@ namespace ao::rt::test
             "[runtime][regression][playback-succession][concurrency]")
   {
     auto gatePtr = std::make_shared<audio::test::BlockingPreparationGate>();
-    auto fixture = PlaybackSuccessionTransportFixture{gatePtr, "transport-playable-2.flac"};
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .blockingGatePtr = gatePtr,
+      .blockedFileName = "transport-playable-2.flac",
+    }};
     fixture.buildThreeTrackManualView();
     REQUIRE(fixture.playAndWait(fixture.firstTrackId));
     fixture.queueNaturalAdvance();

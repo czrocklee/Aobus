@@ -114,6 +114,31 @@ namespace ao::gtk::test
       CHECK(layoutStore.listLayouts().empty());
     }
 
+    SECTION("stored hidden columns remain hidden and survive a visible-column resize")
+    {
+      layoutStore.setListLayouts(
+        {{rt::kAllTracksListId,
+          {
+            uimodel::TrackColumnState{.field = rt::TrackField::Album, .weight = 1.0, .visible = false},
+          }}});
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      controller.syncLayout(std::vector{rt::TrackField::Title, rt::TrackField::Artist, rt::TrackField::Album});
+
+      auto const albumColumnPtr = columnForField(columnView, rt::TrackField::Album);
+      auto const titleColumnPtr = columnForField(columnView, rt::TrackField::Title);
+      REQUIRE(albumColumnPtr);
+      REQUIRE(titleColumnPtr);
+      CHECK_FALSE(albumColumnPtr->get_visible());
+
+      titleColumnPtr->set_fixed_width(333);
+      drainGtkEvents();
+
+      auto const& stored = layoutStore.layoutForList(rt::kAllTracksListId);
+      auto const* albumState = stateForField(stored, rt::TrackField::Album);
+      REQUIRE(albumState != nullptr);
+      CHECK_FALSE(albumState->visible);
+    }
+
     SECTION("column layout writes do not bounce between open views")
     {
       auto events = std::vector<ListId>{};

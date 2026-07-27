@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/AobusSoul.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -184,6 +185,25 @@ namespace ao::gtk::layout::test
       CHECK(soul->get_vexpand() == false);
       CHECK(soul->get_halign() == Gtk::Align::FILL);
       CHECK(soul->get_valign() == Gtk::Align::FILL);
+    }
+
+    SECTION("Soul components apply custom stroke and glyph scale properties")
+    {
+      for (auto const* const type : {"playback.soulButton", "playback.soulPlayPauseButton"})
+      {
+        auto node = LayoutNode{.type = type};
+        node.props["strokeWidth"] = LayoutValue{5.0};
+        node.props["glyphScale"] = LayoutValue{0.85};
+        auto const compPtr = fixture.create(node);
+
+        REQUIRE(compPtr != nullptr);
+        auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+        REQUIRE(button != nullptr);
+        auto* const soul = dynamic_cast<AobusSoul*>(button->get_child());
+        REQUIRE(soul != nullptr);
+        CHECK(soul->baseStrokeWidth() == 5.0F);
+        CHECK(soul->innerGlyphScale() == 0.85F);
+      }
     }
 
     SECTION("outputDeviceSelector creates Gtk::Button with Label")

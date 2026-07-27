@@ -6,13 +6,128 @@ add_executable(aobus-winui WIN32
   App.xaml
   App.xaml.cpp
   App.xaml.h
+  app/DispatcherQueueExecutor.cpp
+  app/DispatcherQueueExecutor.h
+  app/LibrarySession.cpp
+  app/LibrarySession.h
+  app/WindowsUiCoordinator.cpp
+  app/WindowsUiCoordinator.h
+  app/WinUiDependencies.h
+  image/CoverArtPresenter.cpp
+  image/CoverArtPresenter.h
+  platform/MemoryRandomAccessStream.cpp
+  platform/MemoryRandomAccessStream.h
+  platform/ScopedBooleanFlag.h
+  platform/SmtcBridge.cpp
+  platform/SmtcBridge.h
+  platform/WindowsStringResources.cpp
+  platform/WindowsStringResources.h
+  playback/AudioPipelineToolTip.cpp
+  playback/AudioPipelineToolTip.h
+  playback/AobusSoulControl.cpp
+  playback/AobusSoulControl.h
+  playback/MainWindowPlayback.cpp
+  playback/OutputDeviceControl.cpp
+  playback/OutputDeviceControl.h
+  playback/PlaybackControls.cpp
+  playback/PlaybackControls.h
+  playback/PlaybackTimeControl.cpp
+  playback/PlaybackTimeControl.h
+  playback/SeekControl.cpp
+  playback/SeekControl.h
+  playback/SoulTransportButton.cpp
+  playback/SoulTransportButton.h
+  playback/TransportButton.cpp
+  playback/TransportButton.h
+  playback/VolumeControl.cpp
+  playback/VolumeControl.h
+  status/ActivityStatusControl.cpp
+  status/ActivityStatusControl.h
+  Project.idl
+  Resources/en-US/Resources.resw
   MainWindow.xaml
   MainWindow.xaml.cpp
   MainWindow.xaml.h
-  Project.idl
+  shell/MainWindowShell.cpp
+  theme/WindowsThemeCoordinator.cpp
+  theme/WindowsThemeCoordinator.h
+  track/MainWindowTrack.cpp
+  track/TrackCellItem.cpp
+  track/TrackCellItem.h
+  track/TrackDetailControl.cpp
+  track/TrackDetailControl.h
+  track/TrackItemView.cpp
+  track/TrackItemView.h
+  track/TrackListController.cpp
+  track/TrackListController.h
+  track/TrackQuickFilterControl.cpp
+  track/TrackQuickFilterControl.h
+  track/TrackRowItem.cpp
+  track/TrackRowItem.h
   app.manifest
   pch.h
 )
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
+  App.xaml
+  App.xaml.cpp
+  App.xaml.h
+  app/DispatcherQueueExecutor.cpp
+  app/DispatcherQueueExecutor.h
+  app/LibrarySession.cpp
+  app/LibrarySession.h
+  app/WindowsUiCoordinator.cpp
+  app/WindowsUiCoordinator.h
+  app/WinUiDependencies.h
+  image/CoverArtPresenter.cpp
+  image/CoverArtPresenter.h
+  platform/MemoryRandomAccessStream.cpp
+  platform/MemoryRandomAccessStream.h
+  platform/ScopedBooleanFlag.h
+  platform/SmtcBridge.cpp
+  platform/SmtcBridge.h
+  platform/WindowsStringResources.cpp
+  platform/WindowsStringResources.h
+  playback/AudioPipelineToolTip.cpp
+  playback/AudioPipelineToolTip.h
+  playback/AobusSoulControl.cpp
+  playback/AobusSoulControl.h
+  playback/MainWindowPlayback.cpp
+  playback/OutputDeviceControl.cpp
+  playback/OutputDeviceControl.h
+  playback/PlaybackControls.cpp
+  playback/PlaybackControls.h
+  playback/PlaybackTimeControl.cpp
+  playback/PlaybackTimeControl.h
+  playback/SeekControl.cpp
+  playback/SeekControl.h
+  playback/SoulTransportButton.cpp
+  playback/SoulTransportButton.h
+  playback/TransportButton.cpp
+  playback/TransportButton.h
+  playback/VolumeControl.cpp
+  playback/VolumeControl.h
+  status/ActivityStatusControl.cpp
+  status/ActivityStatusControl.h
+  MainWindow.xaml
+  MainWindow.xaml.cpp
+  MainWindow.xaml.h
+  shell/MainWindowShell.cpp
+  theme/WindowsThemeCoordinator.cpp
+  theme/WindowsThemeCoordinator.h
+  track/MainWindowTrack.cpp
+  track/TrackCellItem.cpp
+  track/TrackCellItem.h
+  track/TrackDetailControl.cpp
+  track/TrackDetailControl.h
+  track/TrackItemView.cpp
+  track/TrackItemView.h
+  track/TrackListController.cpp
+  track/TrackListController.h
+  track/TrackQuickFilterControl.cpp
+  track/TrackQuickFilterControl.h
+  track/TrackRowItem.cpp
+  track/TrackRowItem.h)
 
 set_source_files_properties(App.xaml PROPERTIES
   VS_XAML_TYPE ApplicationDefinition)
@@ -21,6 +136,8 @@ set_source_files_properties(MainWindow.xaml PROPERTIES
 set_source_files_properties(Project.idl PROPERTIES
   VS_TOOL_OVERRIDE Midl
   VS_SETTINGS "SubType=Code;OutputDirectory=$(ProjectDir)")
+set_source_files_properties(Resources/en-US/Resources.resw PROPERTIES
+  VS_TOOL_OVERRIDE PRIResource)
 set_source_files_properties(app.manifest PROPERTIES
   VS_TOOL_OVERRIDE Manifest)
 set_source_files_properties(App.xaml.cpp PROPERTIES
@@ -31,6 +148,12 @@ set_source_files_properties(MainWindow.xaml.cpp PROPERTIES
   VS_SETTINGS "DependentUpon=MainWindow.xaml")
 set_source_files_properties(MainWindow.xaml.h PROPERTIES
   VS_SETTINGS "DependentUpon=MainWindow.xaml")
+set_source_files_properties(playback/AobusSoulControl.cpp PROPERTIES
+  VS_SETTINGS "DependentUpon=AobusSoulControl.h")
+set_source_files_properties(track/TrackRowItem.cpp PROPERTIES
+  VS_SETTINGS "DependentUpon=TrackRowItem.h")
+set_source_files_properties(track/TrackCellItem.cpp PROPERTIES
+  VS_SETTINGS "DependentUpon=TrackCellItem.h")
 
 target_precompile_headers(aobus-winui PRIVATE pch.h)
 target_compile_options(aobus-winui PRIVATE /bigobj)
@@ -39,7 +162,8 @@ target_include_directories(aobus-winui PRIVATE
 target_link_libraries(aobus-winui PRIVATE
   ao_app_runtime
   ao_app_uimodel
-  runtimeobject.lib)
+  runtimeobject.lib
+  shcore.lib)
 
 set_target_properties(aobus-winui PROPERTIES
   OUTPUT_NAME Aobus
