@@ -1157,11 +1157,11 @@ namespace ao::rt::test
         }
 
         auto const remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
+        auto const pollInterval = std::min(remaining, std::chrono::milliseconds{1});
 
-        if (!waitUntilQueued(remaining))
-        {
-          return predicate();
-        }
+        // The predicate may observe worker-owned state that does not notify
+        // this executor, so periodically recheck it while the queue is empty.
+        std::ignore = waitUntilQueued(pollInterval);
       }
 
       return true;
