@@ -48,7 +48,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     suite.add_argument("--tui", dest="suite", action="store_const", const="tui", help="shortcut for --suite tui")
     suite.add_argument("--gtk", dest="suite", action="store_const", const="gtk", help="shortcut for --suite gtk")
     suite.add_argument("--all", dest="suite", action="store_const", const="all", help="shortcut for --suite all")
-    parser.add_argument("-p", "--path", metavar="<dir>", help="build directory (default: /tmp/build/coverage)")
+    parser.add_argument("-p", "--path", metavar="<dir>", help=f"build directory (default: {builddir.COVERAGE_DIR})")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count(), help="parallel jobs (default: nproc)")
     parser.add_argument(
         "--scope",

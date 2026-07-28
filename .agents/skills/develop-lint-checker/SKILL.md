@@ -75,7 +75,8 @@ Every check that emits a `FixItHint` must satisfy these, each locked by a fixtur
     ```
 3. Add one clause at a time, re-run after each change:
     ```bash
-    nix-shell -p clang-tools --run "clang-query -p /tmp/build/debug-clang-tidy -f /tmp/query.txt /tmp/scratch.cpp"
+    TIDY_BUILD_DIR="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug-clang-tidy}"
+    nix-shell -p clang-tools --run "clang-query -p $TIDY_BUILD_DIR -f /tmp/query.txt /tmp/scratch.cpp"
     ```
 4. Also test against your fixture file to catch include path differences.
 5. Only write C++ once the full matcher hits in `clang-query`.

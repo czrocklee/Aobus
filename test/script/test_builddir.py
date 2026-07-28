@@ -26,21 +26,31 @@ class BuildDirTest(unittest.TestCase):
         with mock.patch.dict("os.environ", {}, clear=False):
             os.environ.pop("BUILD_DIR", None)
             os.environ.pop("AOBUS_BUILD_ROOT", None)
-            self.assertEqual(builddir.build_dir("debug", os_name="posix"), Path("/tmp/build/debug"))
-            self.assertEqual(builddir.build_dir("release", os_name="posix"), Path("/tmp/build/release"))
-            self.assertEqual(builddir.build_dir("profile", os_name="posix"), Path("/tmp/build/profile"))
+            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
+            self.assertEqual(builddir.build_dir("debug", os_name="posix"), root / "debug")
+            self.assertEqual(builddir.build_dir("release", os_name="posix"), root / "release")
+            self.assertEqual(builddir.build_dir("profile", os_name="posix"), root / "profile")
 
     def test_linux_build_root_honors_aobus_build_root(self):
-        self.assertEqual(builddir.linux_build_root(environ={}), Path("/tmp/build"))
+        project_root = Path("/home/alice/src/renamed-aobus")
         self.assertEqual(
-            builddir.linux_build_root(environ={"AOBUS_BUILD_ROOT": "/var/cache/aobus"}),
-            Path("/var/cache/aobus"),
+            builddir.linux_build_root(environ={}, project_root=project_root),
+            Path("/tmp/build/renamed-aobus"),
+        )
+        self.assertEqual(
+            builddir.linux_build_root(environ={"AOBUS_BUILD_ROOT": "/var/cache/aobus"}, project_root=project_root),
+            Path("/var/cache/aobus/renamed-aobus"),
+        )
+        self.assertEqual(
+            builddir.linux_build_root(environ={"AOBUS_BUILD_ROOT": ""}, project_root=project_root),
+            Path("/tmp/build/renamed-aobus"),
         )
         environment = {"AOBUS_BUILD_ROOT": "/var/cache/aobus"}
         with mock.patch.dict("os.environ", environment, clear=False):
             os.environ.pop("BUILD_DIR", None)
-            self.assertEqual(builddir.platform_profile("posix").build_root, Path("/var/cache/aobus"))
-            self.assertEqual(builddir.build_dir("debug", os_name="posix"), Path("/var/cache/aobus/debug"))
+            root = Path("/var/cache/aobus") / builddir.PROJECT_ROOT.name
+            self.assertEqual(builddir.platform_profile("posix").build_root, root)
+            self.assertEqual(builddir.build_dir("debug", os_name="posix"), root / "debug")
 
     def test_native_profile_rejects_unsupported_platforms(self):
         with (
@@ -97,7 +107,8 @@ class BuildDirTest(unittest.TestCase):
             os.environ.pop("BUILD_DIR", None)
             os.environ.pop("AOBUS_BUILD_ROOT", None)
             self.assertEqual(builddir.tidy_preset("posix"), "linux-debug")
-            self.assertEqual(builddir.tidy_dir("posix"), Path("/tmp/build/debug-clang-tidy"))
+            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
+            self.assertEqual(builddir.tidy_dir("posix"), root / "debug-clang-tidy")
         self.assertEqual(builddir.tidy_preset("nt"), "windows-tidy")
         self.assertEqual(builddir.tidy_dir("nt"), builddir.windows_build_root() / "windows-tidy")
 
@@ -170,19 +181,22 @@ class BuildDirTest(unittest.TestCase):
         with mock.patch.dict("os.environ", {}, clear=False):
             os.environ.pop("BUILD_DIR", None)
             os.environ.pop("AOBUS_BUILD_ROOT", None)
-            self.assertEqual(builddir.build_dir("debug", clang=True, os_name="posix"), Path("/tmp/build/debug-clang"))
-            self.assertEqual(builddir.build_dir("debug", asan=True, os_name="posix"), Path("/tmp/build/debug-asan"))
-            self.assertEqual(builddir.build_dir("debug", tsan=True, os_name="posix"), Path("/tmp/build/debug-tsan"))
+            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
+            self.assertEqual(builddir.build_dir("debug", clang=True, os_name="posix"), root / "debug-clang")
+            self.assertEqual(builddir.build_dir("debug", asan=True, os_name="posix"), root / "debug-asan")
+            self.assertEqual(builddir.build_dir("debug", tsan=True, os_name="posix"), root / "debug-tsan")
             self.assertEqual(
                 builddir.build_dir("debug", clang=True, asan=True, os_name="posix"),
-                Path("/tmp/build/debug-clang-asan"),
+                root / "debug-clang-asan",
             )
 
     def test_pgo_steps_share_one_tree(self):
         with mock.patch.dict("os.environ", {}, clear=False):
             os.environ.pop("BUILD_DIR", None)
+            os.environ.pop("AOBUS_BUILD_ROOT", None)
+            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
             self.assertEqual(builddir.build_dir("pgo1", os_name="posix"), builddir.build_dir("pgo2", os_name="posix"))
-            self.assertEqual(builddir.build_dir("pgo1", clang=True, os_name="posix"), Path("/tmp/build/pgo-clang"))
+            self.assertEqual(builddir.build_dir("pgo1", clang=True, os_name="posix"), root / "pgo-clang")
 
     def test_build_dir_env_always_wins(self):
         # External tooling can redirect builds via BUILD_DIR.

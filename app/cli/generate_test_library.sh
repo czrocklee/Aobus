@@ -4,7 +4,9 @@
 set -e
 
 OUTPUT_DIR="${1:-./test_music_lib}"
-RSC="${2:-/tmp/build/debug/app/rsc/rsc}"
+PROJECT_NAME="$(basename "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)")"
+BUILD_ROOT="${AOBUS_BUILD_ROOT:-/tmp/build}"
+RSC="${2:-${BUILD_DIR:-$BUILD_ROOT/$PROJECT_NAME/debug}/app/rsc/rsc}"
 
 mkdir -p "$OUTPUT_DIR"
 

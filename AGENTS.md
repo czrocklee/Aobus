@@ -68,6 +68,6 @@ Everything goes through the `./ao` portal (Python package in `script/ao/`; re-en
 ./ao format                   # clang-format + ruff format (gate fixes / explicit request only)
 ```
 
-Manual CMake, rarely needed: `nix-shell --run "cmake --preset linux-debug -B /tmp/build/debug && cmake --build /tmp/build/debug --parallel"`.
+Manual CMake, rarely needed: `TREE="/tmp/build/$(basename "$PWD")/debug"; nix-shell --run "cmake --preset linux-debug -B $TREE && cmake --build $TREE --parallel"`.
 
 Preserve `/tmp/build/...` trees when chasing failures; `./ao build`/`check` tee all output to `$BUILD_DIR/build.log`.

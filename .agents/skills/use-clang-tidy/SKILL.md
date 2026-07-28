@@ -75,13 +75,13 @@ Choose the smallest useful scope, then widen only when needed.
 ./ao tidy -o /tmp/tidy.log
 
 # Use an alternate build directory or job count
-./ao tidy -p /tmp/build/debug-clang-tidy -j 8 --folder lib
+./ao tidy -p /tmp/custom-tidy -j 8 --folder lib
 
 # Reuse an existing compile database and plugin; useful for lint integration and quick reruns.
 ./ao tidy --no-build --check aobus-include-convention path/to/file.cpp
 ```
 
-Scope behavior (STRICT vs RELAXED, fixture handling) is documented in `doc/development/linting.md`. For C++ files, the command prepares `/tmp/build/debug-clang-tidy`, builds `AobusLintPlugin` if needed, loads the plugin, and de-duplicates repeated diagnostics.
+Scope behavior (STRICT vs RELAXED, fixture handling) is documented in `doc/development/linting.md`. For C++ files, the command prepares the project-specific `debug-clang-tidy` build tree, builds `AobusLintPlugin` if needed, loads the plugin, and de-duplicates repeated diagnostics.
 
 ## Verification
 

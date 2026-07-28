@@ -35,7 +35,8 @@ Prefer the project wrapper commands from the repository root:
 ```bash
 ./ao check
 ./ao check --clang
-nix-shell --run "cmake --build /tmp/build/debug --parallel"
+DEBUG_BUILD_DIR="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug}"
+nix-shell --run "cmake --build $DEBUG_BUILD_DIR --parallel"
 ./ao test --core "test filter"
 ./ao test --gtk "test filter"
 ./ao test --integration "test filter"
@@ -45,8 +46,9 @@ nix-shell --run "cmake --build /tmp/build/debug --parallel"
 Inspect build logs instead of rerunning full builds when a previous run already captured the failure:
 
 ```bash
-tail -200 /tmp/build/debug/build.log
-rg -n "error:|undefined reference|AddressSanitizer|ThreadSanitizer|SUMMARY|FAILED|SIG" /tmp/build/debug/build.log
+DEBUG_BUILD_DIR="${BUILD_DIR:-${AOBUS_BUILD_ROOT:-/tmp/build}/$(basename "$PWD")/debug}"
+tail -200 "$DEBUG_BUILD_DIR/build.log"
+rg -n "error:|undefined reference|AddressSanitizer|ThreadSanitizer|SUMMARY|FAILED|SIG" "$DEBUG_BUILD_DIR/build.log"
 ```
 
 Use `rg` for code search. Search narrowly by symbol, error text, test name, or assertion text.

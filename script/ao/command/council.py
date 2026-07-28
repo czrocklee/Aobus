@@ -13,11 +13,11 @@ NAME = "council"
 REQUIRES_BUILD_ENV = False
 
 
-EPILOG = """\
+EPILOG = f"""\
 examples:
   ./ao council validate-config --registry config/agent-council.yaml
   ./ao council run --registry config/agent-council.yaml --repo "$PWD" --out /tmp/out /tmp/intent.yaml
-  ./ao council -n -p /tmp/build/debug validate-config --registry config/agent-council.yaml
+  ./ao council -n -p {builddir.DEFAULT_DEBUG_DIR} validate-config --registry config/agent-council.yaml
 """
 
 
@@ -25,7 +25,9 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
     parser = subparsers.add_parser(
         NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("-p", "--path", metavar="<dir>", help="build directory (default: /tmp/build/debug)")
+    parser.add_argument(
+        "-p", "--path", metavar="<dir>", help=f"build directory (default: {builddir.DEFAULT_DEBUG_DIR})"
+    )
     parser.add_argument("-n", "--no-build", action="store_true", help="skip the incremental executable build")
     parser.add_argument(
         "council_args", nargs=argparse.REMAINDER, metavar="arg", help="arguments passed to aobus-council"

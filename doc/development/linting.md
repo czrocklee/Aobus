@@ -314,9 +314,10 @@ Add the direct include where the symbol is used.
   root, `nix-shell --run "pkg-config --cflags <lib>"` is useful for libraries
   that publish pkg-config metadata.
 - For Clang/LLVM internals, inspect the compile database under
-  `/tmp/build/debug-clang-tidy/compile_commands.json` on Linux or the resolved
-  checkout-specific `windows-tidy` build tree on Windows. The Windows portal
-  prints that local path. On Linux, `llvm-config --cxxflags` is also useful.
+  `/tmp/build/<project-directory>/debug-clang-tidy/compile_commands.json` on
+  Linux or the resolved checkout-specific `windows-tidy` build tree on Windows.
+  The Windows portal prints that local path. On Linux,
+  `llvm-config --cxxflags` is also useful.
 
 Suppress `misc-include-cleaner` only when the tool genuinely cannot model the
 provider, such as required umbrella headers or C macros from framework headers.

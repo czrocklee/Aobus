@@ -17,7 +17,7 @@ Do not blindly guess which lines are uncovered, and do not manually run gcov or 
 
 This script will automatically:
 
-1. Ensure the coverage build tree (`/tmp/build/coverage`) is initialized.
+1. Ensure the coverage build tree (`/tmp/build/<project-directory>/coverage`) is initialized.
 2. Build the tests.
 3. Run the coverage test target with the provided filter.
 4. Process all `.gcda` files and print out any files that have missing coverage (`#####:`).

@@ -132,13 +132,13 @@ class CoverageSuiteStatusTest(unittest.TestCase):
         with mock.patch.object(coverage, "run_suite", side_effect=[0, 7, 5]) as run_suite:
             status = coverage.run_coverage_tests(
                 ("core", "tui", "gtk"),
-                Path("/tmp/build/coverage"),
+                Path("/tmp/coverage-test"),
                 "[concurrency]",
             )
 
         self.assertEqual(status, 7)
         self.assertEqual(run_suite.call_count, 3)
-        run_suite.assert_any_call("gtk", Path("/tmp/build/coverage"), test_filter="[concurrency]")
+        run_suite.assert_any_call("gtk", Path("/tmp/coverage-test"), test_filter="[concurrency]")
 
 
 if __name__ == "__main__":

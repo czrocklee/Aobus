@@ -14,12 +14,11 @@ from pathlib import Path
 from .paths import PROJECT_ROOT
 
 
-def linux_build_root(*, environ: Mapping[str, str] | None = None) -> Path:
-    """Return the Linux build root, host-overridable via AOBUS_BUILD_ROOT."""
+def linux_build_root(*, environ: Mapping[str, str] | None = None, project_root: Path = PROJECT_ROOT) -> Path:
+    """Return the project-specific Linux build root, host-overridable via AOBUS_BUILD_ROOT."""
     environment = os.environ if environ is None else environ
-    if override := environment.get("AOBUS_BUILD_ROOT"):
-        return Path(override)
-    return Path("/tmp/build")
+    base = Path(environment.get("AOBUS_BUILD_ROOT") or "/tmp/build")
+    return base / project_root.name
 
 
 BUILD_ROOT = linux_build_root()

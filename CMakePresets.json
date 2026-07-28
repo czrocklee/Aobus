@@ -4,7 +4,7 @@
     {
       "name": "linux-debug",
       "generator": "Ninja",
-      "binaryDir": "/tmp/build/debug",
+      "binaryDir": "/tmp/build/${sourceDirName}/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -13,7 +13,7 @@
     {
       "name": "linux-release",
       "generator": "Ninja",
-      "binaryDir": "/tmp/build/release",
+      "binaryDir": "/tmp/build/${sourceDirName}/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
@@ -22,7 +22,7 @@
     {
       "name": "linux-pgo-profile",
       "generator": "Ninja",
-      "binaryDir": "/tmp/build/pgo",
+      "binaryDir": "/tmp/build/${sourceDirName}/pgo",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -33,7 +33,7 @@
     {
       "name": "linux-pgo-optimize",
       "generator": "Ninja",
-      "binaryDir": "/tmp/build/pgo",
+      "binaryDir": "/tmp/build/${sourceDirName}/pgo",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
@@ -44,7 +44,7 @@
     {
       "name": "profile",
       "generator": "Ninja",
-      "binaryDir": "/tmp/build/profile",
+      "binaryDir": "/tmp/build/${sourceDirName}/profile",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_CXX_FLAGS": "-fno-omit-frame-pointer",
