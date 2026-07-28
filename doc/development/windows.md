@@ -122,6 +122,12 @@ reliably reject every remote override. Drive-letter mappings are also scoped to
 the Windows login session; make sure the source drive is visible in the shell
 or SSH session that invokes `ao.bat`.
 
+Portal commands that mutate one native build tree serialize through an
+exclusive lock file beside the tree and report when they wait for another
+writer. The persistent `.ao-build.lock` file remains outside the tree so
+`ao.bat build --clean` cannot remove it. This is writer serialization rather
+than a stable read snapshot for running applications, tests, or analysis tools.
+
 ## Portal commands
 
 Run all commands from the repository root, including when that root is mapped:

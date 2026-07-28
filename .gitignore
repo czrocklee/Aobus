@@ -44,6 +44,7 @@
 # Build systems
 build/
 build-*/
+*.ao-build.lock
 out/
 CMakeFiles/
 CMakeCache.txt

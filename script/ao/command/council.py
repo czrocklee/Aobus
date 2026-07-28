@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from ..core import builddir
+from ..core import builddir, buildlock
 from ..core.proc import die, run
 from . import build
 
@@ -53,8 +53,9 @@ def run_command(args: argparse.Namespace) -> int:
         print(f"Building aobus-council in {build_path}...")
         print("=====================================")
         command = ["cmake", "--build", str(build_path), *build.parallel_build_arguments(), "--target", "aobus-council"]
-        if run(command) != 0:
-            raise die("council build failed.")
+        with buildlock.build_tree_lock(build_path):
+            if run(command) != 0:
+                raise die("council build failed.")
 
     if not executable.is_file():
         raise die(f"aobus-council not found at {executable}. Build first, e.g. with ./ao build --target aobus-council.")

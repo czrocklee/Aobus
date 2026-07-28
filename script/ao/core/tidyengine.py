@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from . import builddir, gitfiles
+from . import builddir, buildlock, gitfiles
 from .dedup import DIAGNOSTIC_RE
 from .paths import PROJECT_ROOT, absolute_path
 from .proc import die
@@ -94,6 +94,22 @@ def ensure_compile_db(
     reconfigure_preset: bool = False,
 ) -> None:
     """Provision a compile DB, optionally refreshing a dedicated preset-owned tree."""
+    with buildlock.build_tree_lock(build_dir):
+        _ensure_compile_db(
+            build_dir,
+            configure_args,
+            preset=preset,
+            reconfigure_preset=reconfigure_preset,
+        )
+
+
+def _ensure_compile_db(
+    build_dir: Path,
+    configure_args: list[str] | None = None,
+    *,
+    preset: str | None = None,
+    reconfigure_preset: bool = False,
+) -> None:
     database = build_dir / "compile_commands.json"
     database_existed = database.is_file()
     if database_existed and not reconfigure_preset:

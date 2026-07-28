@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from ..core import builddir, linttest, tooltest
+from ..core import builddir, buildlock, linttest, tooltest
 from ..core.proc import die, run
 from . import build
 
@@ -394,8 +394,9 @@ def run_command(args: argparse.Namespace) -> int:
             build_cmd = ["cmake", "--build", str(build_dir)]
             build_cmd += build.parallel_build_arguments()
             build_cmd += ["--target", *targets]
-            if run(build_cmd) != 0:
-                raise die("test build failed.")
+            with buildlock.build_tree_lock(build_dir):
+                if run(build_cmd) != 0:
+                    raise die("test build failed.")
 
     options = {
         "test_filter": test_filter,

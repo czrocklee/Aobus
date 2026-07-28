@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, gitfiles, pythoncheck, tidyengine, winuitidy
+from ..core import builddir, buildlock, gitfiles, pythoncheck, tidyengine, winuitidy
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
@@ -387,19 +387,20 @@ def prepare_toolchain(
         if not (build_dir / "compile_commands.json").is_file():
             raise die(f"compile_commands.json not found in {build_dir}")
     else:
-        tidyengine.ensure_compile_db(
-            build_dir,
-            ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
-            preset=builddir.tidy_preset(),
-            reconfigure_preset=reconfigure_preset,
-        )
-        target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
-        print(f"Building {target} (incremental)...")
-        tool_build = subprocess.run(
-            ["cmake", "--build", str(build_dir), "--target", target, *build.parallel_build_arguments()],
-            cwd=PROJECT_ROOT,
-            stdout=subprocess.DEVNULL,
-        )
+        with buildlock.build_tree_lock(build_dir):
+            tidyengine.ensure_compile_db(
+                build_dir,
+                ["-DAOBUS_BUILD_LINT_PLUGIN=ON"],
+                preset=builddir.tidy_preset(),
+                reconfigure_preset=reconfigure_preset,
+            )
+            target = "AobusClangTidy" if profile.name == "windows" else "AobusLintPlugin"
+            print(f"Building {target} (incremental)...")
+            tool_build = subprocess.run(
+                ["cmake", "--build", str(build_dir), "--target", target, *build.parallel_build_arguments()],
+                cwd=PROJECT_ROOT,
+                stdout=subprocess.DEVNULL,
+            )
         if tool_build.returncode != 0:
             raise die(f"failed to build {target}.")
 
@@ -500,24 +501,25 @@ def prepare_winui_compile_commands(
         return []
 
     winui_dir = winui_build_directory(tidy_build_dir, path_was_explicit=args.path is not None)
-    if not args.no_build:
-        build.do_build(
-            argparse.Namespace(
-                flavor="release",
-                clean=False,
-                clang=False,
-                asan=False,
-                tsan=False,
-                verbose=False,
-                path=str(winui_dir),
-            ),
-            ["winui"],
-        )
     required = tuple(
         path for path in selected if is_winui_path(path) and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}
     )
     clang_cl = Path(tidyengine.clang_tool(tidy_build_dir, "clang-cl"))
-    return winuitidy.compile_commands(winui_dir, clang_cl, required_translation_units=required)
+    with buildlock.build_tree_lock(winui_dir):
+        if not args.no_build:
+            build.do_build(
+                argparse.Namespace(
+                    flavor="release",
+                    clean=False,
+                    clang=False,
+                    asan=False,
+                    tsan=False,
+                    verbose=False,
+                    path=str(winui_dir),
+                ),
+                ["winui"],
+            )
+        return winuitidy.compile_commands(winui_dir, clang_cl, required_translation_units=required)
 
 
 def write_windows_header_preamble(destination: Path) -> Path:

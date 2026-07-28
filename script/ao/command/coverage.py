@@ -11,7 +11,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ..core import builddir
+from ..core import builddir, buildlock
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import capture, die, run
 from .test import SUITE_TARGETS, run_suite
@@ -274,7 +274,11 @@ def run_command(args: argparse.Namespace) -> int:
         raise die("coverage is supported on Linux only because it requires GCC and gcov.")
 
     build_dir = Path(args.path) if args.path else builddir.COVERAGE_DIR
+    with buildlock.build_tree_lock(build_dir):
+        return _run_coverage(args, build_dir)
 
+
+def _run_coverage(args: argparse.Namespace, build_dir: Path) -> int:
     if not (build_dir / "CMakeCache.txt").is_file():
         print(f"Configuring coverage build in {build_dir}...")
         configure = [

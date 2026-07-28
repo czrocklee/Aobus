@@ -6,7 +6,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, winui
+from ..core import builddir, buildlock, winui
 from ..core.paths import PROJECT_ROOT
 from ..core.proc import die, run
 
@@ -167,51 +167,52 @@ def do_build(args: argparse.Namespace, targets: list[str]) -> BuildResult:
         )
     )
 
-    if args.clean and build_dir.exists():
-        print(f"Cleaning build directory ({build_dir})...")
-        _remove_build_directory(build_dir, profile)
+    with buildlock.build_tree_lock(build_dir):
+        if args.clean and build_dir.exists():
+            print(f"Cleaning build directory ({build_dir})...")
+            _remove_build_directory(build_dir, profile)
 
-    build_dir.mkdir(parents=True, exist_ok=True)
-    log = build_dir / "build.log"
+        build_dir.mkdir(parents=True, exist_ok=True)
+        log = build_dir / "build.log"
 
-    env = {"CC": "clang", "CXX": "clang++"} if args.clang else None
-    if args.clang:
-        print("clang enabled for this build.")
+        env = {"CC": "clang", "CXX": "clang++"} if args.clang else None
+        if args.clang:
+            print("clang enabled for this build.")
 
-    configure = ["cmake", "-S", str(PROJECT_ROOT), "--preset", preset, "-B", str(build_dir)]
-    configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
-    if args.asan:
-        sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
-        print(f"{sanitizer_name} enabled for this build.")
-        configure.append("-DAOBUS_ENABLE_ASAN=ON")
-    if args.tsan:
-        print("TSan enabled for this build.")
-        configure.append("-DAOBUS_ENABLE_TSAN=ON")
+        configure = ["cmake", "-S", str(PROJECT_ROOT), "--preset", preset, "-B", str(build_dir)]
+        configure.append(f"-DCMAKE_VERBOSE_MAKEFILE={'ON' if args.verbose else 'OFF'}")
+        if args.asan:
+            sanitizer_name = "ASan" if profile.name == "windows" else "ASan/UBSan"
+            print(f"{sanitizer_name} enabled for this build.")
+            configure.append("-DAOBUS_ENABLE_ASAN=ON")
+        if args.tsan:
+            print("TSan enabled for this build.")
+            configure.append("-DAOBUS_ENABLE_TSAN=ON")
 
-    print(f"Configuring Aobus with preset '{preset}' in '{build_dir}'...")
-    if run(configure, env=env, log=log) != 0:
-        raise die("configure failed.")
+        print(f"Configuring Aobus with preset '{preset}' in '{build_dir}'...")
+        if run(configure, env=env, log=log) != 0:
+            raise die("configure failed.")
 
-    build = ["cmake", "--build", str(build_dir)]
-    if requested_winui:
-        build += ["--config", "Debug" if args.flavor == "debug" else "Release"]
-    parallel_jobs = parallel_build_jobs()
-    build += ["--parallel", str(parallel_jobs)]
-    canonical_targets = ["aobus-winui"] if requested_winui else targets
-    for target in canonical_targets:
-        build += ["--target", target]
-    if args.verbose:
-        build.append("--verbose")
+        build = ["cmake", "--build", str(build_dir)]
+        if requested_winui:
+            build += ["--config", "Debug" if args.flavor == "debug" else "Release"]
+        parallel_jobs = parallel_build_jobs()
+        build += ["--parallel", str(parallel_jobs)]
+        canonical_targets = ["aobus-winui"] if requested_winui else targets
+        for target in canonical_targets:
+            build += ["--target", target]
+        if args.verbose:
+            build.append("--verbose")
 
-    print("Building Aobus...")
-    build_env = env
-    if requested_winui:
-        build_env = {**(env or {}), **_winui_build_environment(parallel_jobs)}
-    if run(build, env=build_env, log=log, append=True) != 0:
-        raise die("build failed.")
+        print("Building Aobus...")
+        build_env = env
+        if requested_winui:
+            build_env = {**(env or {}), **_winui_build_environment(parallel_jobs)}
+        if run(build, env=build_env, log=log, append=True) != 0:
+            raise die("build failed.")
 
-    compiler = "clang" if args.clang else profile.compiler
-    return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)
+        compiler = "clang" if args.clang else profile.compiler
+        return BuildResult(build_dir=build_dir, log=log, compiler=compiler, preset=preset)
 
 
 def print_summary(args: argparse.Namespace, result: BuildResult, tests: str) -> None:

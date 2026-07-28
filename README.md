@@ -51,6 +51,10 @@ The portal re-enters the pinned `nix-shell` automatically. Linux build trees
 default to `/tmp/build/<project-directory>` (for example, `/tmp/build/Aobus`),
 using only the source directory's final name. Set `AOBUS_BUILD_ROOT` to replace
 the `/tmp/build` base while retaining that project-directory component.
+Portal commands that mutate one build tree serialize through a persistent
+exclusive lock beside that tree and report when they wait for another writer.
+The adjacent `.ao-build.lock` file survives `--clean`; it does not reserve a
+stable read snapshot for running applications, tests, or analysis tools.
 Governed dependency versions and native resolver identities can be inspected
 with `./ao deps report`. Follow the [dependency upgrade workflow](doc/development/dependency-upgrade.md)
 when changing Nixpkgs, vcpkg, C++ dependency, Python, Ruff, or mypy pins.
