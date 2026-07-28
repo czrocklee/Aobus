@@ -7,6 +7,7 @@
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationPanel.h"
+#include "list/ListTreeItem.h"
 #include "list/SmartListDialog.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
@@ -29,6 +30,7 @@
 #include <gtkmm/listview.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/singleselection.h>
+#include <gtkmm/treelistrow.h>
 #include <gtkmm/window.h>
 
 #include <cstddef>
@@ -74,6 +76,21 @@ namespace ao::gtk::test
       }
 
       return nullptr;
+    }
+
+    ListId selectedNavigationListId(ListNavigationController& controller)
+    {
+      auto* const scrolledWindow = dynamic_cast<Gtk::ScrolledWindow*>(&controller.widget());
+      auto* const listView =
+        scrolledWindow != nullptr ? dynamic_cast<Gtk::ListView*>(scrolledWindow->get_child()) : nullptr;
+      auto const selectionPtr =
+        listView != nullptr ? std::dynamic_pointer_cast<Gtk::SingleSelection>(listView->get_model()) : nullptr;
+      auto const treeRowPtr = selectionPtr != nullptr
+                                ? std::dynamic_pointer_cast<Gtk::TreeListRow>(selectionPtr->get_selected_item())
+                                : nullptr;
+      auto const itemPtr =
+        treeRowPtr != nullptr ? std::dynamic_pointer_cast<ListTreeItem>(treeRowPtr->get_item()) : nullptr;
+      return itemPtr != nullptr ? itemPtr->listId() : kInvalidListId;
     }
   } // namespace
 
@@ -136,6 +153,34 @@ namespace ao::gtk::test
       drainGtkEvents();
 
       CHECK(selectedId == testListId);
+    }
+
+    SECTION("rebuildTree selects the active workspace list restored before the navigation model exists")
+    {
+      auto const restoredListId = createList(fixture.runtime().library(), "Restored Selection");
+      REQUIRE(fixture.runtime().workspace().navigate({.target = restoredListId}));
+      drainGtkEvents();
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedNavigationListId(controller) == restoredListId);
+    }
+
+    SECTION("rebuildTree refreshes actions when the restored workspace list is already selected")
+    {
+      auto groupPtr = Gio::SimpleActionGroup::create();
+      controller.addActionsTo(*groupPtr);
+      auto const newActionPtr = simpleAction(*groupPtr, "list-new-smart-list");
+      REQUIRE(newActionPtr);
+      REQUIRE(fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId}));
+      drainGtkEvents();
+
+      controller.rebuildTree(cache);
+      drainGtkEvents();
+
+      CHECK(selectedNavigationListId(controller) == rt::kAllTracksListId);
+      CHECK(newActionPtr->get_enabled());
     }
 
     SECTION("registered actions update from the currently selected list")

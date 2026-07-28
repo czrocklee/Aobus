@@ -9,9 +9,11 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/widget.h>
+#include <sigc++/functors/slot.h>
 
 #include <chrono>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk::layout
 {
@@ -21,7 +23,10 @@ namespace ao::gtk::layout
     constexpr auto kDefaultHoverDelay = std::chrono::milliseconds{500};
   } // namespace
 
-  ComponentTooltipController::ComponentTooltipController() = default;
+  ComponentTooltipController::ComponentTooltipController(TimeoutScheduler timeoutScheduler)
+    : _timeoutScheduler{std::move(timeoutScheduler)}
+  {
+  }
 
   ComponentTooltipController::~ComponentTooltipController()
   {
@@ -59,6 +64,8 @@ namespace ao::gtk::layout
     _motionPointerEnteredConn =
       _motionControllerPtr->signal_enter().connect([this](double, double) { handlePointerEntered(); });
     _motionPointerLeftConn = _motionControllerPtr->signal_leave().connect([this] { handlePointerLeft(); });
+    _tooltipVisibilityChangedConn = tooltipComponent.widget().property_visible().signal_changed().connect(
+      [this] { handleTooltipVisibilityChanged(); });
     target.add_controller(_motionControllerPtr);
   }
 
@@ -67,6 +74,7 @@ namespace ao::gtk::layout
     _hoverTimeout.disconnect();
     _motionPointerEnteredConn.disconnect();
     _motionPointerLeftConn.disconnect();
+    _tooltipVisibilityChangedConn.disconnect();
 
     if (_target != nullptr && _motionControllerPtr)
     {
@@ -88,22 +96,39 @@ namespace ao::gtk::layout
   {
     _hoverTimeout.disconnect();
 
-    _hoverTimeout = Glib::signal_timeout().connect(
-      [this] -> bool
-      {
-        if (_tooltipComponent != nullptr && _tooltipComponent->widget().get_visible())
-        {
-          _popover.popup();
-        }
+    if (_tooltipComponent == nullptr || !_tooltipComponent->widget().get_visible())
+    {
+      return;
+    }
 
-        return false; // run once
-      },
-      kDefaultHoverDelay.count());
+    auto callback = sigc::slot<bool()>{[this]
+                                       {
+                                         _hoverTimeout.disconnect();
+
+                                         if (_tooltipComponent != nullptr && _tooltipComponent->widget().get_visible())
+                                         {
+                                           _popover.popup();
+                                         }
+
+                                         return false; // run once
+                                       }};
+
+    _hoverTimeout = _timeoutScheduler ? _timeoutScheduler(kDefaultHoverDelay, std::move(callback))
+                                      : Glib::signal_timeout().connect(std::move(callback), kDefaultHoverDelay.count());
   }
 
   void ComponentTooltipController::handlePointerLeft()
   {
     _hoverTimeout.disconnect();
     _popover.popdown();
+  }
+
+  void ComponentTooltipController::handleTooltipVisibilityChanged()
+  {
+    if (_tooltipComponent != nullptr && !_tooltipComponent->widget().get_visible())
+    {
+      _hoverTimeout.disconnect();
+      _popover.popdown();
+    }
   }
 } // namespace ao::gtk::layout

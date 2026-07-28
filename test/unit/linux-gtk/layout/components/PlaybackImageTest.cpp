@@ -23,6 +23,7 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/utility/Base64.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -34,7 +35,10 @@
 #include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
+#include <sigc++/functors/slot.h>
+#include <sigc++/signal.h>
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -46,6 +50,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao::gtk::layout::test
 {
@@ -118,33 +123,44 @@ namespace ao::gtk::layout::test
     auto mutableCoverTrackId = kInvalidTrackId;
     auto coverTrackId = kInvalidTrackId;
     auto noCoverTrackId = kInvalidTrackId;
-    auto fixture =
-      LayoutRuntimeFixture{"io.github.aobus.playback_image_test",
-                           [&](library::MusicLibrary& musicLibrary)
-                           {
-                             auto const fixtureUri = audio::test::installAudioFixture(
-                               musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
-                             mutableCoverTrackId = library::test::addTrack(musicLibrary,
-                                                                           library::test::TrackSpec{
-                                                                             .title = "Mutable Cover Track",
-                                                                             .uri = fixtureUri,
-                                                                             .coverArtId = ResourceId{42},
-                                                                             .duration = std::chrono::seconds{1},
-                                                                           });
-                             coverTrackId = library::test::addTrack(musicLibrary,
-                                                                    library::test::TrackSpec{
-                                                                      .title = "Cover Track",
-                                                                      .uri = fixtureUri,
-                                                                      .coverArtId = ResourceId{42},
-                                                                      .duration = std::chrono::seconds{1},
-                                                                    });
-                             noCoverTrackId = library::test::addTrack(musicLibrary,
-                                                                      library::test::TrackSpec{
-                                                                        .title = "No Cover Track",
-                                                                        .uri = fixtureUri,
-                                                                        .duration = std::chrono::seconds{1},
-                                                                      });
-                           }};
+    auto corruptCoverTrackId = kInvalidTrackId;
+    auto corruptCoverResourceId = kInvalidResourceId;
+    auto fixture = LayoutRuntimeFixture{
+      "io.github.aobus.playback_image_test",
+      [&](library::MusicLibrary& musicLibrary)
+      {
+        auto const fixtureUri =
+          audio::test::installAudioFixture(musicLibrary.rootPath(), "basic_metadata.flac", "cover-track.flac");
+        mutableCoverTrackId = library::test::addTrack(musicLibrary,
+                                                      library::test::TrackSpec{
+                                                        .title = "Mutable Cover Track",
+                                                        .uri = fixtureUri,
+                                                        .coverArtId = ResourceId{42},
+                                                        .duration = std::chrono::seconds{1},
+                                                      });
+        coverTrackId = library::test::addTrack(musicLibrary,
+                                               library::test::TrackSpec{
+                                                 .title = "Cover Track",
+                                                 .uri = fixtureUri,
+                                                 .coverArtId = ResourceId{42},
+                                                 .duration = std::chrono::seconds{1},
+                                               });
+        noCoverTrackId = library::test::addTrack(musicLibrary,
+                                                 library::test::TrackSpec{
+                                                   .title = "No Cover Track",
+                                                   .uri = fixtureUri,
+                                                   .duration = std::chrono::seconds{1},
+                                                 });
+        auto const corruptBytes = std::array{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}, std::byte{0x04}};
+        corruptCoverResourceId = ao::gtk::test::writeRawResource(musicLibrary, corruptBytes);
+        corruptCoverTrackId = library::test::addTrack(musicLibrary,
+                                                      library::test::TrackSpec{
+                                                        .title = "Corrupt Cover Track",
+                                                        .uri = fixtureUri,
+                                                        .coverArtId = corruptCoverResourceId,
+                                                        .duration = std::chrono::seconds{1},
+                                                      });
+      }};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
     auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
     auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
@@ -302,6 +318,249 @@ namespace ao::gtk::layout::test
       emitClicked(*button);
 
       CHECK(revealedTrackId == noCoverTrackId);
+    }
+
+    SECTION("playback image tooltip opens for cover art and closes when no cover remains")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime());
+      ao::gtk::test::drainGtkEvents();
+      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      auto manualHoverTimeout = sigc::signal<bool()>{};
+      ctx.timeoutScheduler = [&](std::chrono::milliseconds const interval, sigc::slot<bool()> callback)
+      {
+        CHECK(interval == std::chrono::milliseconds{500});
+        return manualHoverTimeout.connect(std::move(callback));
+      };
+
+      auto node = LayoutNode{.type = "playback.image"};
+      node.props["action"] = LayoutValue{std::string{"jumpToAlbum"}};
+      node.optTooltip = BoxedLayoutNode{LayoutNode{.type = "playback.image"}};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const popover = findWidget<Gtk::Popover>(*button);
+      REQUIRE(popover != nullptr);
+      auto* const tooltipButton = dynamic_cast<Gtk::Button*>(popover->get_child());
+      REQUIRE(tooltipButton != nullptr);
+
+      fixture.window().set_child(*button);
+      auto const windowDetach = utility::ScopedRegistration{[&fixture] { fixture.window().unset_child(); }};
+      fixture.window().present();
+      ao::gtk::test::drainGtkEvents();
+
+      startPlayback(fixture.runtime(), coverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      REQUIRE(tooltipButton->get_visible());
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      REQUIRE(popover->get_visible());
+
+      fixture.runtime().playback().commands().stop();
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK_FALSE(popover->get_visible());
+      CHECK_FALSE(tooltipButton->get_visible());
+
+      startPlayback(fixture.runtime(), noCoverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(button->get_visible());
+      CHECK(button->get_sensitive());
+      CHECK_FALSE(tooltipButton->get_visible());
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      CHECK_FALSE(popover->get_visible());
+
+      fixture.runtime().playback().commands().stop();
+      startPlayback(fixture.runtime(), coverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(tooltipButton->get_visible());
+      CHECK_FALSE(popover->get_visible());
+      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      CHECK(popover->get_visible());
+
+      fixture.runtime().playback().commands().stop();
+      startPlayback(fixture.runtime(), corruptCoverTrackId);
+      bool corruptDecodeSettled = false;
+      [[maybe_unused]] auto const corruptDecodeProbe = imageLoaderPtr->requestFull(
+        corruptCoverResourceId, [&corruptDecodeSettled](auto const&) { corruptDecodeSettled = true; });
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&corruptDecodeSettled] { return corruptDecodeSettled; }));
+
+      CHECK_FALSE(tooltipButton->get_visible());
+      CHECK_FALSE(popover->get_visible());
+      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      CHECK_FALSE(popover->get_visible());
+    }
+
+    SECTION("playback image tooltip survives a track change that keeps cover art available")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime());
+      ao::gtk::test::drainGtkEvents();
+      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      auto manualHoverTimeout = sigc::signal<bool()>{};
+      ctx.timeoutScheduler = [&](std::chrono::milliseconds const /*interval*/, sigc::slot<bool()> callback)
+      { return manualHoverTimeout.connect(std::move(callback)); };
+
+      auto node = LayoutNode{.type = "playback.image"};
+      node.optTooltip = BoxedLayoutNode{LayoutNode{.type = "playback.image"}};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const popover = findWidget<Gtk::Popover>(*button);
+      REQUIRE(popover != nullptr);
+      auto* const tooltipButton = dynamic_cast<Gtk::Button*>(popover->get_child());
+      REQUIRE(tooltipButton != nullptr);
+
+      fixture.window().set_child(*button);
+      auto const windowDetach = utility::ScopedRegistration{[&fixture] { fixture.window().unset_child(); }};
+      fixture.window().present();
+      ao::gtk::test::drainGtkEvents();
+
+      startPlayback(fixture.runtime(), coverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      REQUIRE(tooltipButton->get_visible());
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      REQUIRE(popover->get_visible());
+
+      // Advancing straight to another track whose cover is already decoded never passes through
+      // an unavailable state, so nothing reports a transition; availability must still hold.
+      auto const view = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
+      REQUIRE(view);
+      REQUIRE(fixture.runtime().playback().commands().startFromView(*view, mutableCoverTrackId));
+      REQUIRE(ao::gtk::test::waitForPlaybackSettlement(fixture.runtime(), mutableCoverTrackId));
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(tooltipButton->get_visible());
+      CHECK(button->get_visible());
+      // The tooltip root never went hidden, so the open popover is left alone.
+      CHECK(popover->get_visible());
+    }
+
+    SECTION("hidden tooltip content does not arm hover until the pointer re-enters")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime());
+      ao::gtk::test::drainGtkEvents();
+      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+      auto manualHoverTimeout = sigc::signal<bool()>{};
+      std::size_t scheduledHoverCount = 0;
+      ctx.timeoutScheduler = [&](std::chrono::milliseconds const /*interval*/, sigc::slot<bool()> callback)
+      {
+        ++scheduledHoverCount;
+        return manualHoverTimeout.connect(std::move(callback));
+      };
+
+      auto node = LayoutNode{.type = "playback.image"};
+      node.optTooltip = BoxedLayoutNode{LayoutNode{.type = "playback.image"}};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const popover = findWidget<Gtk::Popover>(*button);
+      REQUIRE(popover != nullptr);
+      auto* const tooltipButton = dynamic_cast<Gtk::Button*>(popover->get_child());
+      REQUIRE(tooltipButton != nullptr);
+
+      fixture.window().set_child(*button);
+      auto const windowDetach = utility::ScopedRegistration{[&fixture] { fixture.window().unset_child(); }};
+      fixture.window().present();
+      ao::gtk::test::drainGtkEvents();
+
+      startPlayback(fixture.runtime(), noCoverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      REQUIRE_FALSE(tooltipButton->get_visible());
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      CHECK(scheduledHoverCount == 0);
+
+      fixture.runtime().playback().commands().stop();
+      startPlayback(fixture.runtime(), coverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      REQUIRE(tooltipButton->get_visible());
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      CHECK_FALSE(popover->get_visible());
+      CHECK(scheduledHoverCount == 0);
+
+      REQUIRE(ao::gtk::test::emitPointerLeave(*button));
+      REQUIRE(ao::gtk::test::emitPointerEnter(*button));
+      REQUIRE(scheduledHoverCount == 1);
+      manualHoverTimeout.emit();
+      ao::gtk::test::drainGtkEvents();
+      CHECK(popover->get_visible());
+    }
+
+    SECTION("authored visibility and cover art availability both gate the tooltip")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime());
+      ao::gtk::test::drainGtkEvents();
+      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+
+      auto tooltipNode = LayoutNode{.type = "playback.image"};
+      tooltipNode.layout["visible"] = LayoutValue{true};
+      auto node = LayoutNode{.type = "playback.image"};
+      node.optTooltip = BoxedLayoutNode{tooltipNode};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+      auto* const popover = findWidget<Gtk::Popover>(*button);
+      REQUIRE(popover != nullptr);
+      auto* const tooltipButton = dynamic_cast<Gtk::Button*>(popover->get_child());
+      REQUIRE(tooltipButton != nullptr);
+
+      // Authored visibility is applied after construction and must not defeat the availability gate.
+      CHECK_FALSE(tooltipButton->get_visible());
+
+      startPlayback(fixture.runtime(), noCoverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK_FALSE(tooltipButton->get_visible());
+
+      startPlayback(fixture.runtime(), coverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      CHECK(tooltipButton->get_visible());
+    }
+
+    SECTION("authored visibility can still hide an available cover")
+    {
+      rt::test::addReadyAudioProvider(fixture.runtime());
+      ao::gtk::test::drainGtkEvents();
+      imageCachePtr->put(ImageCacheKey::full(ResourceId{42}), ao::gtk::test::makePixbuf(80, 80));
+
+      auto node = LayoutNode{.type = "playback.image"};
+      node.layout["visible"] = LayoutValue{false};
+      auto const compPtr = fixture.components().create(ctx, node);
+
+      REQUIRE(compPtr != nullptr);
+      auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
+      REQUIRE(button != nullptr);
+
+      startPlayback(fixture.runtime(), coverTrackId);
+      ao::gtk::test::drainGtkEvents();
+
+      // The persistent surface would otherwise force itself visible on every snapshot.
+      CHECK_FALSE(button->get_visible());
     }
 
     SECTION("current track cover art follows library mutations")

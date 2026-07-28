@@ -18,6 +18,7 @@ namespace ao::gtk::layout
   public:
     DecoratedLayoutComponent(std::unique_ptr<LayoutComponent> contentPtr,
                              std::unique_ptr<LayoutComponent> tooltipPtr,
+                             ComponentTooltipController::TimeoutScheduler timeoutScheduler,
                              std::unique_ptr<ComponentInteractionController> interactionPtr = nullptr);
     ~DecoratedLayoutComponent() override;
 

@@ -74,6 +74,7 @@ namespace ao::gtk::layout
     }
 
     applyCommonProps(componentPtr->widget(), node);
+    componentPtr->onAuthoredPropsApplied();
 
     // Phase 2: Automatic interaction controller attachment
     auto interactionControllerPtr = std::unique_ptr<ComponentInteractionController>{};
@@ -150,15 +151,19 @@ namespace ao::gtk::layout
 
       if (tooltipComponentPtr)
       {
-        return std::make_unique<DecoratedLayoutComponent>(
-          std::move(componentPtr), std::move(tooltipComponentPtr), std::move(interactionControllerPtr));
+        return std::make_unique<DecoratedLayoutComponent>(std::move(componentPtr),
+                                                          std::move(tooltipComponentPtr),
+                                                          ctx.timeoutScheduler,
+                                                          std::move(interactionControllerPtr));
       }
     }
 
     if (interactionControllerPtr)
     {
-      return std::make_unique<DecoratedLayoutComponent>(
-        std::move(componentPtr), std::move(tooltipComponentPtr), std::move(interactionControllerPtr));
+      return std::make_unique<DecoratedLayoutComponent>(std::move(componentPtr),
+                                                        std::move(tooltipComponentPtr),
+                                                        ctx.timeoutScheduler,
+                                                        std::move(interactionControllerPtr));
     }
 
     return componentPtr;

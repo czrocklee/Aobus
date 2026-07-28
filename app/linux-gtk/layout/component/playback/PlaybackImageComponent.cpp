@@ -108,6 +108,8 @@ namespace ao::gtk::layout
 
       PlaybackImageComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _runtime{ctx.runtime}
+        , _tooltipSurface{ctx.surface == LayoutSurface::Tooltip}
+        , _authoredVisible{node.layoutOr<bool>("visible", true)}
       {
         if (ctx.dependencies.imageLoader == nullptr)
         {
@@ -117,8 +119,10 @@ namespace ao::gtk::layout
         }
 
         _imageWidgetPtr = std::make_unique<CoverArtView>();
-        _imageControllerPtr =
-          std::make_unique<ResourceImageController>(*_imageWidgetPtr, *ctx.dependencies.imageLoader);
+        _imageControllerPtr = std::make_unique<ResourceImageController>(*_imageWidgetPtr,
+                                                                        *ctx.dependencies.imageLoader,
+                                                                        [this](bool const imageAvailable)
+                                                                        { applyImageVisibility(imageAvailable); });
         auto const defaultStyle =
           uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying);
         auto const styleId = node.propertyOr<std::string>(
@@ -209,6 +213,14 @@ namespace ao::gtk::layout
         return (_error != nullptr) ? static_cast<Gtk::Widget&>(*_error) : static_cast<Gtk::Widget&>(_button);
       }
 
+      void onAuthoredPropsApplied() override
+      {
+        if (_imageControllerPtr != nullptr)
+        {
+          applyImageVisibility(_imageControllerPtr->imageAvailable());
+        }
+      }
+
     private:
       void handleImageClicked()
       {
@@ -288,19 +300,36 @@ namespace ao::gtk::layout
       void updateImage()
       {
         _imageControllerPtr->load(_currentCoverArtId);
-        _button.set_visible(true);
+        applyImageVisibility(_imageControllerPtr->imageAvailable());
+      }
+
+      /**
+       * @brief Sole writer of the button's visibility, so a synchronous load and a later
+       * asynchronous decode can never leave the two paths disagreeing.
+       *
+       * Authored visibility and image availability both have to allow the widget: the author can
+       * always hide it, the persistent surface otherwise stays visible and actionable behind its
+       * placeholder, and the tooltip surface is only worth revealing while a decoded image is present.
+       */
+      void applyImageVisibility(bool const imageAvailable)
+      {
+        _button.set_visible(_authoredVisible && (!_tooltipSurface || imageAvailable));
       }
 
       rt::AppRuntime& _runtime;
       Action _action = Action::None;
       std::unique_ptr<CoverArtView> _imageWidgetPtr;
-      std::unique_ptr<ResourceImageController> _imageControllerPtr;
       std::unique_ptr<PassiveImageSlot> _passiveSlotPtr;
       Gtk::Button _button;
+      // Declared after the button it writes through: its availability callback must stop
+      // being reachable before the button is destroyed.
+      std::unique_ptr<ResourceImageController> _imageControllerPtr;
       Gtk::Label* _error = nullptr;
       TrackId _currentTrackId = kInvalidTrackId;
       ResourceId _currentCoverArtId = kInvalidResourceId;
       bool _synced = false;
+      bool _tooltipSurface = false;
+      bool _authoredVisible = true;
       uimodel::CoverArtPlaceholderStyle _placeholderStyle{
         uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)};
       uimodel::CoverArtPlaceholderIdentity _currentIdentity{};

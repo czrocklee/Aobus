@@ -53,8 +53,10 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(builddir.build_dir("debug", os_name="posix"), root / "debug")
 
     def test_native_profile_rejects_unsupported_platforms(self):
+        host_os = mock.Mock(environ=os.environ)
+        host_os.name = "posix"
         with (
-            mock.patch("ao.core.builddir.os.name", "posix"),
+            mock.patch("ao.core.builddir.os", host_os),
             mock.patch("ao.core.builddir.sys.platform", "darwin"),
         ):
             with self.assertRaisesRegex(RuntimeError, "darwin"):

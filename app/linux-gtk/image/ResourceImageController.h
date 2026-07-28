@@ -8,6 +8,7 @@
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
 #include <cstdint>
+#include <functional>
 
 namespace ao::gtk
 {
@@ -16,7 +17,11 @@ namespace ao::gtk
   class ResourceImageController final
   {
   public:
-    ResourceImageController(CoverArtView& widget, ResourceImageLoader& loader);
+    using ImageAvailabilityChanged = std::function<void(bool)>;
+
+    ResourceImageController(CoverArtView& widget,
+                            ResourceImageLoader& loader,
+                            ImageAvailabilityChanged imageAvailabilityChanged = {});
     ~ResourceImageController() = default;
 
     ResourceImageController(ResourceImageController const&) = delete;
@@ -29,10 +34,15 @@ namespace ao::gtk
     void load(ResourceId resourceId);
     void clear();
 
+    /// Level-triggered availability. The change callback only reports transitions, so observers
+    /// that must stay in sync after every load have to read this instead of latching the callback.
+    bool imageAvailable() const noexcept { return _imageAvailable; }
+
   private:
     void loadFullSize(ResourceId resourceId);
     void loadThumbnail(ResourceId resourceId);
     std::int32_t thumbnailPhysicalSize() const;
+    void setImageAvailable(bool available);
 
     CoverArtView& _widget;
     ResourceImageLoader& _loader;
@@ -40,7 +50,9 @@ namespace ao::gtk
     uimodel::CoverArtPlaceholderPresentation _placeholderPresentation{};
     bool _thumbnailMode = false;
     bool _showingPlaceholder = false;
+    bool _imageAvailable = false;
     std::int32_t _thumbnailLogicalSize = 0;
+    ImageAvailabilityChanged _imageAvailabilityChanged;
     ResourceImageLoader::Request _request;
   };
 } // namespace ao::gtk

@@ -61,6 +61,7 @@ These properties are authored in the layout YAML and are shown by the Layout Edi
 
 The shipped Classic/default and Modern layouts declare their intended values explicitly.
 The 500-pixel cover inside the Modern playback tooltip uses `vinyl`, while its 58-pixel persistent Now Playing image uses `equalizer`.
+The persistent `playback.image` remains visible and actionable with its configured placeholder, but its tooltip-surface counterpart is visible only while decoded cover art is available.
 Unknown authored values fall back to the component default.
 
 ## Action descriptor surface

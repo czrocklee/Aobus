@@ -23,6 +23,7 @@
 #include <gtkmm/enums.h>
 #include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerfocus.h>
+#include <gtkmm/eventcontrollermotion.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listbox.h>
@@ -252,6 +253,38 @@ namespace ao::gtk::test
     }
 
     ::g_signal_emit_by_name(focusControllerPtr->gobj(), "leave");
+    return true;
+  }
+
+  /**
+   * emitPointerEnter - Emits the motion controller "enter" signal when present.
+   */
+  inline bool emitPointerEnter(Gtk::Widget& widget, double const x = 0.0, double const y = 0.0)
+  {
+    auto const motionControllerPtr = findController<Gtk::EventControllerMotion>(widget);
+
+    if (!motionControllerPtr)
+    {
+      return false;
+    }
+
+    ::g_signal_emit_by_name(motionControllerPtr->gobj(), "enter", x, y);
+    return true;
+  }
+
+  /**
+   * emitPointerLeave - Emits the motion controller "leave" signal when present.
+   */
+  inline bool emitPointerLeave(Gtk::Widget& widget)
+  {
+    auto const motionControllerPtr = findController<Gtk::EventControllerMotion>(widget);
+
+    if (!motionControllerPtr)
+    {
+      return false;
+    }
+
+    ::g_signal_emit_by_name(motionControllerPtr->gobj(), "leave");
     return true;
   }
 

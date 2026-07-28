@@ -26,5 +26,14 @@ namespace ao::gtk::layout
      * @brief Get the underlying GTK widget.
      */
     virtual Gtk::Widget& widget() = 0;
+
+    /**
+     * @brief Reconcile component-managed widget state with the authored layout properties.
+     *
+     * The registry applies authored common properties after construction, so a component that also
+     * drives one of those properties at runtime would otherwise be overwritten by the author's value.
+     * Components in that position combine both sources here; everyone else needs no reconciliation.
+     */
+    virtual void onAuthoredPropsApplied() {}
   };
 } // namespace ao::gtk::layout

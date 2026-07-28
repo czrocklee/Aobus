@@ -124,6 +124,9 @@ A full-size cache hit is applied directly.
 On a miss, the controller clears stale imagery and requests the shared loader.
 The loader requests shared `ResourceBytes`, checks source dimensions, decodes through Gdk on a worker, inserts a successful current result under the full-size key, and completes on the GTK callback executor.
 Absence, an over-budget source, or decode failure leaves the widget empty.
+The controller reports decoded-image availability after cache lookup and every current asynchronous completion.
+The persistent Now Playing cover remains visible with its placeholder when no decoded image is available, while the tooltip-surface `playback.image` remains hidden during invalid-id, pending, absent, over-budget, and decode-failure states.
+A successful current decode makes that tooltip content eligible for the shell's normal delayed reveal; losing the decoded image hides the tooltip root so the shell cancels a pending reveal or closes an open tooltip.
 
 `ImageWidget` fits and rerenders the source for logical allocation and display scale.
 During allocation churn it may show a cheaper interim resample and schedules a high-quality render after the settle interval.
@@ -218,6 +221,7 @@ Frontend cache-key and transform changes require no library migration because de
 GTK and WinUI display a cover slot for every grouped track section.
 Album groups may display their valid primary cover; other group types carry no representative resource and therefore display the group-heading placeholder.
 GTK displays the configured slot placeholder for an invalid id, keeps the Now Playing placeholder visible while playback is idle, clears it immediately when a valid-resource load starts, and updates only through the current callback interest.
+The GTK Now Playing cover tooltip appears only for a successfully decoded current image; under the [shell tooltip scheduling contract](../shell/layout-lifecycle.md#expand-and-build), an image that becomes available beneath a stationary pointer remains closed until the pointer leaves and re-enters.
 WinUI displays fixed `monogram`, `vinyl`, and `equalizer` placeholders in group heading, Inspector, and Now Playing respectively, derives the vinyl outer ring and center label from the current shared theme accent, keeps the Now Playing placeholder visible without an active track, and applies the same invalid-id/pending-valid distinction through generation-fenced presenters.
 TUI shows its no-cover placeholder while delivery is pending and when the resource is absent, over-budget, or undecodable.
 MPRIS omits `mpris:artUrl` while file materialization is pending and when no valid file URL can be produced.
@@ -245,7 +249,7 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [`ResourceByteCacheTest.cpp`](../../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded retention, real and adapter-source delivery, synchronous cache hits, failure retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
 - [`ResourceImageLoaderTest.cpp`](../../../test/unit/linux-gtk/image/ResourceImageLoaderTest.cpp), [`ImageCacheTest.cpp`](../../../test/unit/linux-gtk/image/ImageCacheTest.cpp), and [`ImageWidgetTest.cpp`](../../../test/unit/linux-gtk/image/ImageWidgetTest.cpp) protect GTK delivery, including responsive vinyl-accent geometry.
 - [`TrackViewPageTest.cpp`](../../../test/unit/linux-gtk/track/TrackViewPageTest.cpp) protects the grouped-section cover slot across album and non-album presentations.
-- [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation and action retention.
+- [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects GTK no-cover playback presentation, decoded-image tooltip gating, authored visibility, hover timing, and action retention.
 - [`CoverArtPlaceholderTest.cpp`](../../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects style ids, slot defaults, candidate priority, semantic group monograms, and deterministic foreground colors.
 - [`MemoryRandomAccessStreamTest.cpp`](../../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact prepared-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`CoverArtLoaderTest.cpp`](../../../test/unit/tui/CoverArtLoaderTest.cpp) and [`CoverArtTest.cpp`](../../../test/unit/tui/CoverArtTest.cpp) protect TUI lifetime, supported decode, limits, block preview, PNG, and Kitty escapes.
@@ -261,3 +265,4 @@ These degradation states do not remove or rewrite a track's cover reference.
 - [Media file reading](../media/file-reading.md)
 - [Library mutation](../library/runtime/mutation.md)
 - [GTK MPRIS specification](../linux-gtk/mpris.md) and [surface reference](../../reference/linux-gtk/mpris.md)
+- [Shell layout lifecycle](../shell/layout-lifecycle.md)

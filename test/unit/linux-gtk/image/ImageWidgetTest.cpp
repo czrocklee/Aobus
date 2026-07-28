@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -351,15 +352,37 @@ namespace ao::gtk::test
     {
       auto const resourceId = ResourceId{42};
       imageCache.put(ImageCacheKey::full(resourceId), makePixbuf(80, 80));
+      auto availability = std::vector<bool>{};
 
       auto widget = CoverArtView{};
-      auto controller = ResourceImageController{widget, loader};
+      auto controller = ResourceImageController{
+        widget, loader, [&availability](bool const available) { availability.push_back(available); }};
 
       widget.setTargetSize(56);
       controller.load(resourceId);
       drainGtkEvents();
 
       CHECK(widget.hasImage());
+      CHECK(controller.imageAvailable());
+      CHECK(availability == std::vector{true});
+
+      controller.load(kInvalidResourceId);
+
+      CHECK(widget.showingPlaceholder());
+      CHECK_FALSE(controller.imageAvailable());
+      CHECK(availability == std::vector{true, false});
+
+      controller.load(resourceId);
+
+      CHECK(controller.imageAvailable());
+      CHECK(availability == std::vector{true, false, true});
+
+      // Reloading an already available resource reports no transition, so observers that
+      // need the current state after every load must read it rather than latch the callback.
+      controller.load(resourceId);
+
+      CHECK(controller.imageAvailable());
+      CHECK(availability == std::vector{true, false, true});
     }
 
     SECTION("full-size cache miss clears the placeholder and completes asynchronously")

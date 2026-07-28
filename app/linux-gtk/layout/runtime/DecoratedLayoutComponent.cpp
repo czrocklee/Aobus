@@ -4,6 +4,7 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 
 #include "layout/runtime/ComponentInteractionController.h"
+#include "layout/runtime/ComponentTooltipController.h"
 #include "layout/runtime/LayoutComponent.h"
 
 #include <gtkmm/widget.h>
@@ -15,8 +16,12 @@ namespace ao::gtk::layout
 {
   DecoratedLayoutComponent::DecoratedLayoutComponent(std::unique_ptr<LayoutComponent> contentPtr,
                                                      std::unique_ptr<LayoutComponent> tooltipPtr,
+                                                     ComponentTooltipController::TimeoutScheduler timeoutScheduler,
                                                      std::unique_ptr<ComponentInteractionController> interactionPtr)
-    : _contentPtr{std::move(contentPtr)}, _tooltipPtr{std::move(tooltipPtr)}, _interactionPtr{std::move(interactionPtr)}
+    : _contentPtr{std::move(contentPtr)}
+    , _tooltipPtr{std::move(tooltipPtr)}
+    , _tooltipController{std::move(timeoutScheduler)}
+    , _interactionPtr{std::move(interactionPtr)}
   {
     if (_contentPtr && _tooltipPtr)
     {

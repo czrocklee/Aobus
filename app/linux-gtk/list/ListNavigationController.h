@@ -69,6 +69,8 @@ namespace ao::gtk
     void handleContextMenuRequested(ListId listId, Gdk::Rectangle const& rect);
     void handleSelectionChanged(ListId listId);
     bool notifyListSelected(ListId listId) const;
+    void syncSelectionFromWorkspace(rt::ViewId viewId);
+    void updateListActions(ListId listId);
 
     void openNewListDialog(ListId parentListId, std::string initialExpression = {});
     void openNewSmartListDialog();

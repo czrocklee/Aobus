@@ -79,16 +79,7 @@ namespace ao::gtk
         // or the referenced view has already retired. Replaying an earlier
         // failed selection would navigate back out of that state.
         _pendingSelectId = kInvalidListId;
-
-        if (viewId != rt::kInvalidViewId)
-        {
-          if (auto const found = _runtime.views().findTrackListState(viewId); found && found->listId != kInvalidListId)
-          {
-            _syncingWorkspaceSelection = true;
-            select(found->listId);
-            _syncingWorkspaceSelection = false;
-          }
-        }
+        syncSelectionFromWorkspace(viewId);
       });
   }
 
@@ -137,11 +128,20 @@ namespace ao::gtk
       _panelPtr->selectList(pendingSelectId);
       _syncingWorkspaceSelection = false;
 
+      if (_panelPtr->selectedListId() == pendingSelectId)
+      {
+        updateListActions(pendingSelectId);
+      }
+
       if (notifyListSelected(pendingSelectId))
       {
         _pendingSelectId = kInvalidListId;
       }
+
+      return;
     }
+
+    syncSelectionFromWorkspace(_runtime.workspace().snapshot().activeViewId);
   }
 
   void ListNavigationController::select(ListId listId)
@@ -151,11 +151,7 @@ namespace ao::gtk
 
   void ListNavigationController::handleSelectionChanged(ListId listId)
   {
-    auto const state = ao::uimodel::describeListActions(listId, _panelPtr->hasListChildren(listId));
-
-    _newListActionPtr->set_enabled(state.canCreate);
-    _deleteListActionPtr->set_enabled(state.canDelete);
-    _editListActionPtr->set_enabled(state.canEdit);
+    updateListActions(listId);
 
     if (!_syncingWorkspaceSelection && _callbacks.onListSelected)
     {
@@ -163,6 +159,39 @@ namespace ao::gtk
       // would otherwise be replayed by the next rebuildTree().
       _pendingSelectId = notifyListSelected(listId) ? kInvalidListId : listId;
     }
+  }
+
+  void ListNavigationController::syncSelectionFromWorkspace(rt::ViewId const viewId)
+  {
+    if (viewId == rt::kInvalidViewId)
+    {
+      return;
+    }
+
+    auto const found = _runtime.views().findTrackListState(viewId);
+
+    if (!found || found->listId == kInvalidListId)
+    {
+      return;
+    }
+
+    _syncingWorkspaceSelection = true;
+    _panelPtr->selectList(found->listId);
+    _syncingWorkspaceSelection = false;
+
+    if (_panelPtr->selectedListId() == found->listId)
+    {
+      updateListActions(found->listId);
+    }
+  }
+
+  void ListNavigationController::updateListActions(ListId const listId)
+  {
+    auto const state = ao::uimodel::describeListActions(listId, _panelPtr->hasListChildren(listId));
+
+    _newListActionPtr->set_enabled(state.canCreate);
+    _deleteListActionPtr->set_enabled(state.canDelete);
+    _editListActionPtr->set_enabled(state.canEdit);
   }
 
   bool ListNavigationController::notifyListSelected(ListId const listId) const

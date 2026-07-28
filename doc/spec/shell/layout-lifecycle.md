@@ -75,7 +75,13 @@ Authored and produced entries, owned string bytes, and depth are charged against
 `LayoutHost::commit()` advances that generation before retiring the old tree, then installs the prepared root.
 Unknown component types produce a visible layout error component.
 Common layout properties, declared interactions, and an optional tooltip are applied around the created component.
+Authored common properties are applied after construction, so a component that also drives one of those properties at runtime reconciles both sources once they are applied.
+Authored visibility and component-managed visibility both have to admit a widget before it is shown, which keeps an authored value from overriding a component's own visibility contract in either direction.
 Nested tooltips are not built while already on a tooltip surface.
+A pointer entering a component schedules a reveal only when its tooltip root is visible at that time, using the build context's timeout scheduler and the GTK main-context scheduler when no override is supplied.
+The delayed callback rechecks visibility before revealing the tooltip.
+Hiding the tooltip root cancels a pending reveal and closes an open tooltip immediately.
+Content that becomes visible under a stationary pointer schedules no new reveal; the pointer must leave and enter again.
 
 ### Action binding and export
 
@@ -151,7 +157,7 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - [`ShellLayoutController.cpp`](../../../app/linux-gtk/app/ShellLayoutController.cpp) owns orchestration.
 - [`ShellLayoutSessionModel.cpp`](../../../app/uimodel/layout/shell/ShellLayoutSessionModel.cpp) owns active-session policy.
 - [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) owns authored limits, bounded template expansion, and the prepared proof.
-- [`LayoutRuntime.cpp`](../../../app/linux-gtk/layout/runtime/LayoutRuntime.cpp), [`ComponentRegistry.cpp`](../../../app/linux-gtk/layout/runtime/ComponentRegistry.cpp), and [`LayoutHost.cpp`](../../../app/linux-gtk/layout/runtime/LayoutHost.cpp) own GTK construction.
+- [`LayoutRuntime.cpp`](../../../app/linux-gtk/layout/runtime/LayoutRuntime.cpp), [`ComponentRegistry.cpp`](../../../app/linux-gtk/layout/runtime/ComponentRegistry.cpp), and [`LayoutHost.cpp`](../../../app/linux-gtk/layout/runtime/LayoutHost.cpp) own GTK construction; [`ComponentTooltipController.cpp`](../../../app/linux-gtk/layout/runtime/ComponentTooltipController.cpp) owns tooltip scheduling and visible-content lifetime.
 - [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) and [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) own explicit document/state schemas; [`LayoutStatePromoter.cpp`](../../../app/uimodel/layout/component/LayoutStatePromoter.cpp) owns reusable promotion policy.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own files.
 
@@ -161,7 +167,7 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - [`LayoutRuntimeBuildTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime/) protect construction and activation.
 - Editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect preview, validation, save, cancel, and template editing.
 - [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention and persistable cancel restoration across the editor/controller boundary.
-- Component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components/) protect stateful and responsive behavior.
+- Component tests under [`test/unit/linux-gtk/layout/components/`](../../../test/unit/linux-gtk/layout/components/) protect stateful and responsive behavior; [`PlaybackImageTest.cpp`](../../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects tooltip visibility gating and delayed-reveal eligibility.
 
 ## Related documents
 
