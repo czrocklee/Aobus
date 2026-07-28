@@ -12,6 +12,7 @@
 namespace ao::rt
 {
   class AppRuntime;
+  class ResourceByteLoader;
 }
 
 namespace ao::uimodel
@@ -24,7 +25,6 @@ namespace ao::winui
   class CoverArtPresenter;
   class LibrarySession;
   class TrackListController;
-  class WindowsCoverArtLoader;
   class WindowsThemeCoordinator;
 
   struct WindowsUiViewDependencies final
@@ -50,7 +50,8 @@ namespace ao::winui
     rt::AppRuntime& playbackRuntime;
     uimodel::PlaybackCommandSurface& playbackCommands;
     TrackListController& trackList;
-    WindowsCoverArtLoader& coverArtLoader;
+    rt::ResourceByteLoader& resourceBytes;
+    rt::ResourceByteLoader& playbackResourceBytes;
     CoverArtPresenter& inspectorCoverArt;
     CoverArtPresenter& nowPlayingCoverArt;
     WindowsThemeCoordinator& theme;

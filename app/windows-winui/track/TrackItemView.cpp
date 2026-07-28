@@ -3,8 +3,6 @@
 
 #include "track/TrackItemView.h"
 
-#include "track/TrackRowItem.h"
-
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
 
@@ -69,8 +67,9 @@ namespace ao::winui
       {
         if (!HasCurrent())
         {
-          throw winrt::hresult_out_of_bounds{};
+          winrt::throw_hresult(E_BOUNDS);
         }
+
         return _view->GetAt(_index);
       }
 
@@ -82,6 +81,7 @@ namespace ao::winui
         {
           ++_index;
         }
+
         return HasCurrent();
       }
 
@@ -101,7 +101,7 @@ namespace ao::winui
     {
       if (index >= _size || !_provider)
       {
-        throw winrt::hresult_out_of_bounds{};
+        winrt::throw_hresult(E_BOUNDS);
       }
 
       if (auto const found = _entries.find(index); found != _entries.end())
@@ -111,25 +111,26 @@ namespace ao::winui
       }
 
       auto item = _provider(index);
+
       if (!item)
       {
-        throw winrt::hresult_out_of_bounds{};
+        winrt::throw_hresult(E_BOUNDS);
       }
 
       if (_entries.size() == _maximumEntries)
       {
         evictLeastRecentlyUsed();
       }
+
       auto const inserted = _entries.emplace(index, Entry{.item = item, .lastUse = ++_useSequence}).first;
       return inserted->second.item;
     }
 
     bool TrackItemView::IndexOf(Item const& value, std::uint32_t& index) const noexcept
     {
-      if (auto const row = value.try_as<winrt::Aobus::TrackRowItem>())
+      if (auto const row = value.try_as<winrt::Aobus::TrackRowItem>(); row)
       {
-        auto const candidate = row.DisplayIndex();
-        if (candidate < _size)
+        if (auto const candidate = row.DisplayIndex(); candidate < _size)
         {
           index = candidate;
           return true;
@@ -147,12 +148,14 @@ namespace ao::winui
         return 0;
       }
 
-      auto copied = std::uint32_t{0};
+      std::uint32_t copied = 0;
+
       while (copied < values.size() && startIndex + copied < _size)
       {
         values[copied] = GetAt(startIndex + copied);
         ++copied;
       }
+
       return copied;
     }
 
@@ -165,6 +168,7 @@ namespace ao::winui
     {
       auto oldest = _entries.end();
       auto oldestUse = std::numeric_limits<std::uint64_t>::max();
+
       for (auto it = _entries.begin(); it != _entries.end(); ++it)
       {
         if (it->second.lastUse < oldestUse)
@@ -173,6 +177,7 @@ namespace ao::winui
           oldestUse = it->second.lastUse;
         }
       }
+
       if (oldest != _entries.end())
       {
         _entries.erase(oldest);
@@ -184,8 +189,9 @@ namespace ao::winui
   {
     if (size > std::numeric_limits<std::uint32_t>::max())
     {
-      throw winrt::hresult_invalid_argument{};
+      winrt::throw_hresult(E_INVALIDARG);
     }
+
     return winrt::make<TrackItemView>(static_cast<std::uint32_t>(size), std::move(provider), maximumEntries);
   }
 } // namespace ao::winui

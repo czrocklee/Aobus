@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace ao::gtk::test
 {
@@ -41,7 +42,7 @@ namespace ao::gtk::test
     return id;
   }
 
-  inline ResourceId writeCoverResource(library::MusicLibrary& library, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+  inline std::vector<std::byte> encodePng(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
   {
     gchar* rawBuffer = nullptr;
     gsize bufferSize = 0;
@@ -50,7 +51,12 @@ namespace ao::gtk::test
 
     auto const bytes = std::span<std::byte const>{
       reinterpret_cast<std::byte const*>(bufferPtr.get()), static_cast<std::size_t>(bufferSize)};
-    return writeRawResource(library, bytes);
+    return {bytes.begin(), bytes.end()};
+  }
+
+  inline ResourceId writeCoverResource(library::MusicLibrary& library, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+  {
+    return writeRawResource(library, encodePng(pixbufPtr));
   }
 
   inline ResourceId writeCoverResource(library::MusicLibrary& library, std::int32_t side)

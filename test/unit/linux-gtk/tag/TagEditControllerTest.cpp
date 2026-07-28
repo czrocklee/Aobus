@@ -15,6 +15,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -122,7 +123,8 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
-    auto thumbnailLoader = ResourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
     auto modelPtr = TrackListModel::create(cache);
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};

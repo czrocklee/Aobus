@@ -9,12 +9,15 @@
 #include "platform/WindowsStringResources.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
+#include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/uimodel/library/detail/TrackCustomMetadata.h>
 #include <ao/uimodel/library/detail/TrackFieldGridPolicy.h>
+#include <ao/uimodel/library/detail/TrackFieldGridSchema.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 
@@ -51,6 +54,12 @@ namespace ao::winui
     constexpr double kFieldRowMinimumHeight = 28.0;
     constexpr double kCompactFieldLabelWidth = 80.0;
     constexpr double kCompactFieldRowMinimumHeight = 24.0;
+    constexpr double kCompactFieldColumnSpacing = 8.0;
+    constexpr double kFieldColumnSpacing = 12.0;
+    constexpr double kCompactWarningIconSize = 10.0;
+    constexpr double kWarningIconSize = 11.0;
+    constexpr double kWarningIconLeftMargin = 6.0;
+    constexpr double kWarningIconOpacity = 0.72;
 
     constexpr std::wstring_view kChevronDownGlyph = L"\uE70D";
     constexpr std::wstring_view kChevronRightGlyph = L"\uE76C";
@@ -136,7 +145,7 @@ namespace ao::winui
     {
       auto row = Grid{};
       row.MinHeight(compact ? kCompactFieldRowMinimumHeight : kFieldRowMinimumHeight);
-      row.ColumnSpacing(compact ? 8.0 : 12.0);
+      row.ColumnSpacing(compact ? kCompactFieldColumnSpacing : kFieldColumnSpacing);
 
       auto labelColumn = ColumnDefinition{};
       labelColumn.Width(pixels(compact ? kCompactFieldLabelWidth : kFieldLabelWidth));
@@ -159,6 +168,7 @@ namespace ao::winui
 
       row.Children().Append(labelBlock);
       row.Children().Append(valueBlock);
+
       if (partial)
       {
         auto warningColumn = ColumnDefinition{};
@@ -167,9 +177,14 @@ namespace ao::winui
 
         auto warning = FontIcon{};
         warning.Glyph(L"\uE7BA");
-        warning.FontSize(compact ? 10.0 : 11.0);
-        warning.Margin({6.0, 0.0, 0.0, 0.0});
-        warning.Opacity(0.72);
+        warning.FontSize(compact ? kCompactWarningIconSize : kWarningIconSize);
+        warning.Margin({
+          .Left = kWarningIconLeftMargin,
+          .Top = 0.0,
+          .Right = 0.0,
+          .Bottom = 0.0,
+        });
+        warning.Opacity(kWarningIconOpacity);
         warning.VerticalAlignment(VerticalAlignment::Center);
         ToolTipService::SetToolTip(
           warning,
@@ -177,6 +192,7 @@ namespace ao::winui
         Grid::SetColumn(warning, 2);
         row.Children().Append(warning);
       }
+
       return row;
     }
 
@@ -303,26 +319,32 @@ namespace ao::winui
   TrackDetailControl::~TrackDetailControl()
   {
     unbind();
+
     if (_classicTechnicalHeaderButton)
     {
       _classicTechnicalHeaderClickRevoker.revoke();
     }
+
     if (_classicShowEmptyButton)
     {
       _classicShowEmptyClickRevoker.revoke();
     }
+
     if (_classicMetadataHeaderButton)
     {
       _classicMetadataHeaderClickRevoker.revoke();
     }
+
     if (_technicalHeaderButton)
     {
       _technicalHeaderClickRevoker.revoke();
     }
+
     if (_showEmptyButton)
     {
       _showEmptyClickRevoker.revoke();
     }
+
     if (_metadataHeaderButton)
     {
       _metadataHeaderClickRevoker.revoke();
@@ -334,8 +356,8 @@ namespace ao::winui
     unbind();
 
     _runtimePtr = dependencies.session.libraryRuntimePtr();
-    _coverArtPtr = &dependencies.inspectorCoverArt;
-    _coverArtPtr->bind();
+    _coverArt = &dependencies.inspectorCoverArt;
+    _coverArt->bind(_runtimePtr->async());
 
     try
     {
@@ -357,10 +379,10 @@ namespace ao::winui
     _subscription.reset();
     _projectionPtr.reset();
 
-    if (_coverArtPtr != nullptr)
+    if (_coverArt != nullptr)
     {
-      _coverArtPtr->unbind();
-      _coverArtPtr = nullptr;
+      _coverArt->unbind();
+      _coverArt = nullptr;
     }
 
     _runtimePtr.reset();
@@ -390,14 +412,14 @@ namespace ao::winui
     updateSectionPresentation();
     updateSelectionPresentation();
 
-    if (_coverArtPtr != nullptr)
+    if (_coverArt != nullptr)
     {
       auto const album = uimodel::formatTrackFieldDisplayText(rt::TrackField::Album, _snapshot, "", false);
       auto const albumArtist = uimodel::formatTrackFieldDisplayText(rt::TrackField::AlbumArtist, _snapshot, "", false);
       auto const artist = uimodel::formatTrackFieldDisplayText(rt::TrackField::Artist, _snapshot, "", false);
       auto const title = uimodel::formatTrackFieldDisplayText(rt::TrackField::Title, _snapshot, "", false);
       auto const candidates = std::array<std::string_view, 4>{album, albumArtist, artist, title};
-      _coverArtPtr->select(
+      _coverArt->select(
         _snapshot.singleCoverArtId, uimodel::makeCoverArtPlaceholderIdentity(candidates), hasSelection(_snapshot));
     }
   }
@@ -413,6 +435,7 @@ namespace ao::winui
     }
 
     rows.Children().Clear();
+
     for (auto const field : _schema.metadataFields)
     {
       auto const text = uimodel::formatTrackFieldDisplayText(field, _snapshot, uimodel::kMultipleTrackValuesText, true);
@@ -478,6 +501,7 @@ namespace ao::winui
     }
 
     rows.Children().Clear();
+
     for (auto const field : _schema.technicalFields)
     {
       appendRow(rows,
@@ -499,16 +523,25 @@ namespace ao::winui
     };
     auto const renderMetadataSection = uimodel::shouldRenderMetadataSection(sectionAvailability);
     auto const renderTechnicalSection = uimodel::shouldRenderTechnicalSection(sectionAvailability);
+    updateModernSectionPresentation(renderMetadataSection, renderTechnicalSection);
+    updateClassicSectionPresentation(
+      renderMetadataSection, renderTechnicalSection, sectionAvailability.hasMetadataFields);
+  }
 
+  void TrackDetailControl::updateModernSectionPresentation(bool const renderMetadataSection,
+                                                           bool const renderTechnicalSection)
+  {
     if (_metadataHeaderButton)
     {
       _metadataHeaderButton.Visibility(renderMetadataSection ? Visibility::Visible : Visibility::Collapsed);
     }
+
     if (_metadataRows)
     {
       _metadataRows.Visibility(renderMetadataSection && _metadataExpanded ? Visibility::Visible
                                                                           : Visibility::Collapsed);
     }
+
     if (_showEmptyButton)
     {
       _showEmptyButton.Visibility(renderMetadataSection && _metadataExpanded ? Visibility::Visible
@@ -517,10 +550,12 @@ namespace ao::winui
         winrt::to_hstring(_showEmptyMetadata ? resourceStringOr("HideEmptyFields", "Hide empty fields")
                                              : resourceStringOr("InspectorShowEmpty.Content", "Show empty fields"))));
     }
+
     if (_metadataChevron)
     {
       _metadataChevron.Glyph(winrt::hstring{_metadataExpanded ? kChevronDownGlyph : kChevronRightGlyph});
     }
+
     if (_metadataHeader)
     {
       _metadataHeader.Text(winrt::to_hstring(metadataHeaderText(_metadataExpanded, _snapshot)));
@@ -530,56 +565,72 @@ namespace ao::winui
     {
       _technicalHeaderButton.Visibility(renderTechnicalSection ? Visibility::Visible : Visibility::Collapsed);
     }
+
     if (_technicalRows)
     {
       _technicalRows.Visibility(renderTechnicalSection && _technicalExpanded ? Visibility::Visible
                                                                              : Visibility::Collapsed);
     }
+
     if (_technicalChevron)
     {
       _technicalChevron.Glyph(winrt::hstring{_technicalExpanded ? kChevronDownGlyph : kChevronRightGlyph});
     }
+
     if (_technicalHeader)
     {
       _technicalHeader.Text(winrt::to_hstring(technicalHeaderText(_technicalExpanded, _snapshot)));
     }
+  }
 
+  void TrackDetailControl::updateClassicSectionPresentation(bool const renderMetadataSection,
+                                                            bool const renderTechnicalSection,
+                                                            bool const hasMetadataFields)
+  {
     if (_classicMetadataSection)
     {
       _classicMetadataSection.Visibility(renderMetadataSection ? Visibility::Visible : Visibility::Collapsed);
     }
+
     if (_classicMetadataRows)
     {
       _classicMetadataRows.Visibility(_metadataExpanded ? Visibility::Visible : Visibility::Collapsed);
     }
+
     if (_classicShowEmptyButton)
     {
-      _classicShowEmptyButton.Visibility(
-        _metadataExpanded && sectionAvailability.hasMetadataFields ? Visibility::Visible : Visibility::Collapsed);
+      _classicShowEmptyButton.Visibility(_metadataExpanded && hasMetadataFields ? Visibility::Visible
+                                                                                : Visibility::Collapsed);
       _classicShowEmptyButton.Content(winrt::box_value(
         winrt::to_hstring(_showEmptyMetadata ? resourceStringOr("HideEmptyFields", "Hide empty fields")
                                              : resourceStringOr("InspectorShowEmpty.Content", "Show empty fields"))));
     }
+
     if (_classicMetadataChevron)
     {
       _classicMetadataChevron.Glyph(winrt::hstring{_metadataExpanded ? kChevronDownGlyph : kChevronRightGlyph});
     }
+
     if (_classicMetadataHeader)
     {
       _classicMetadataHeader.Text(winrt::to_hstring(metadataHeaderText(_metadataExpanded, _snapshot)));
     }
+
     if (_classicTechnicalSection)
     {
       _classicTechnicalSection.Visibility(renderTechnicalSection ? Visibility::Visible : Visibility::Collapsed);
     }
+
     if (_classicTechnicalRows)
     {
       _classicTechnicalRows.Visibility(_technicalExpanded ? Visibility::Visible : Visibility::Collapsed);
     }
+
     if (_classicTechnicalChevron)
     {
       _classicTechnicalChevron.Glyph(winrt::hstring{_technicalExpanded ? kChevronDownGlyph : kChevronRightGlyph});
     }
+
     if (_classicTechnicalHeader)
     {
       _classicTechnicalHeader.Text(winrt::to_hstring(technicalHeaderText(_technicalExpanded, _snapshot)));
@@ -595,31 +646,38 @@ namespace ao::winui
       _detailContent.IsHitTestVisible(selected);
       _detailContent.Opacity(selected ? 1.0 : kDetailDisabledOpacity);
     }
+
     if (_classicDetailContent)
     {
       _classicDetailContent.IsHitTestVisible(selected);
       _classicDetailContent.Opacity(selected ? 1.0 : kDetailDisabledOpacity);
     }
+
     if (_metadataHeaderButton)
     {
       _metadataHeaderButton.IsEnabled(selected);
     }
+
     if (_showEmptyButton)
     {
       _showEmptyButton.IsEnabled(selected);
     }
+
     if (_technicalHeaderButton)
     {
       _technicalHeaderButton.IsEnabled(selected);
     }
+
     if (_classicMetadataHeaderButton)
     {
       _classicMetadataHeaderButton.IsEnabled(selected);
     }
+
     if (_classicShowEmptyButton)
     {
       _classicShowEmptyButton.IsEnabled(selected);
     }
+
     if (_classicTechnicalHeaderButton)
     {
       _classicTechnicalHeaderButton.IsEnabled(selected);
@@ -632,6 +690,7 @@ namespace ao::winui
     {
       _fieldScroll.ChangeView(nullptr, 0.0, nullptr, true);
     }
+
     if (_classicFieldScroll)
     {
       _classicFieldScroll.ChangeView(nullptr, 0.0, nullptr, true);

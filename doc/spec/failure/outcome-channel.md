@@ -81,8 +81,16 @@ Being off a real-time path does not change this classification.
 Public parsing or media boundaries may use a private error-carrying exception internally, but their public `Result` boundary catches only that private leaf.
 Unrelated exceptions, including allocation and logic faults, are not converted to domain errors by a broad catch.
 
-Cancellable coroutines propagate `ao::async::OperationCancelled` until the lifetime boundary that owns completion.
-A broad catch inside cancellable work must preserve cancellation before handling other exceptions, and expected cancellation does not produce a notification or generic error report by default.
+Cancellable coroutines propagate `ao::async::OperationCancelled` until the
+lifetime boundary that owns completion.
+A broad catch inside cancellable work must preserve cancellation before
+handling other exceptions.
+It either immediately rethrows cancellation or, at an operation-owned terminal
+boundary, exhaustively classifies cancellation, completes the operation's
+mandatory bookkeeping, and then follows the operation's documented
+cancellation channel.
+Expected cancellation does not produce a notification or generic error report
+by default.
 
 ### Terminal asynchronous diagnostics
 

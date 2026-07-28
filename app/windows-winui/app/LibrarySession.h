@@ -48,7 +48,7 @@ namespace ao::winui
     std::function<void(Error const&)> onFailure;
   };
 
-  class LibrarySession final
+  class [[nodiscard]] LibrarySession final
   {
   public:
     LibrarySession(std::filesystem::path stateRoot, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);
@@ -102,8 +102,21 @@ namespace ao::winui
     bool candidateRootInUse(std::filesystem::path const& root) const;
     void releaseCandidateRoot(std::filesystem::path const& root);
     void prepareAndSwap(std::filesystem::path root, LibraryPreparationMode mode);
-    static async::Task<void> prepareAndSwapWorkflow(LibrarySession* ownerPtr,
-                                                    std::weak_ptr<CallbackLifetime> lifetime,
+    static bool workflowRetired(LibrarySession const* owner,
+                                std::weak_ptr<CallbackLifetime> const& lifetimePtr,
+                                std::uint64_t operationGeneration) noexcept;
+    static void completeLibraryPreparation(LibrarySession* owner,
+                                           std::shared_ptr<rt::AppRuntime>& candidatePtr,
+                                           std::filesystem::path const& root,
+                                           bool replaceLibrary,
+                                           std::uint64_t operationGeneration);
+    static void completeFailedLibraryPreparation(LibrarySession* owner,
+                                                 winrt::Microsoft::UI::Dispatching::DispatcherQueue const& dispatcher,
+                                                 std::shared_ptr<rt::AppRuntime> candidatePtr,
+                                                 bool cancelled,
+                                                 std::optional<Error> const& optFailure);
+    static async::Task<void> prepareAndSwapWorkflow(LibrarySession* owner,
+                                                    std::weak_ptr<CallbackLifetime> lifetimePtr,
                                                     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                                                     std::shared_ptr<rt::AppRuntime> candidatePtr,
                                                     std::filesystem::path root,
@@ -125,7 +138,7 @@ namespace ao::winui
     async::Subscription _retainedPlaybackSub;
     async::TaskHandle _libraryTask;
     std::vector<std::filesystem::path> _candidateRoots;
-    std::optional<std::filesystem::path> _operationRoot;
+    std::optional<std::filesystem::path> _optOperationRoot;
     std::shared_ptr<CallbackLifetime> _callbackLifetimePtr = std::make_shared<CallbackLifetime>();
     std::uint64_t _operationGeneration = 0;
     bool _adoptScheduled = false;

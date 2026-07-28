@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
 #pragma once
 
+// The product PCH intentionally aggregates framework and generated-XAML dependencies.
+// NOLINTBEGIN(misc-include-cleaner)
 #include <systemmediatransportcontrolsinterop.h>
 #include <unknwn.h>
 #include <windows.h>
@@ -32,3 +37,4 @@
 #include "playback/AobusSoulControl.h"
 #include "track/TrackCellItem.h"
 #include "track/TrackRowItem.h"
+// NOLINTEND(misc-include-cleaner)

@@ -54,6 +54,7 @@ Core libraries do not own application workspace state, frontend lifecycle, user 
 `ao_app_runtime` owns application-level state and coordinates core mechanisms.
 Its public surface under `app/include/ao/rt/` includes the library facade, sources and projections, workspace and view services, playback services, completion, configuration, notifications, and frontend-neutral value types.
 It also owns canonical cross-frontend paths derived from a supplied music-library root, without discovering platform application directories.
+Frontend-scoped runtime components may own reusable application delivery behavior, such as coalesced and cached immutable resource-byte requests, without becoming process-wide `CoreRuntime` services.
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
 It owns storage, asynchronous execution, the library facade and change bus, source caching, completion, and notifications.
@@ -169,6 +170,7 @@ Subsystem-specific code families and translations belong to their focused specif
 - [`CoreRuntime`](../../app/include/ao/rt/CoreRuntime.h) is the non-interactive application composition.
 - [`AppRuntime`](../../app/include/ao/rt/AppRuntime.h) is the interactive application composition.
 - [`LibraryPaths`](../../app/include/ao/rt/library/LibraryPaths.h) derives the canonical per-library managed-data, database, and log locations from a selected music root.
+- [`ResourceByteLoader`](../../app/include/ao/rt/resource/ResourceByteLoader.h) and [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h) own frontend-neutral coalesced, cached, and independently owned encoded-byte delivery shared by GTK, TUI, WinUI, and MPRIS consumers.
 - [`app/linux-gtk/main.cpp`](../../app/linux-gtk/main.cpp), [`app/tui/App.cpp`](../../app/tui/App.cpp), [`app/windows-winui/App.xaml.cpp`](../../app/windows-winui/App.xaml.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) are the frontend composition roots or bootstrap roots.
 - [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) and [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) enforce application-layer boundaries.
 
@@ -176,6 +178,7 @@ Subsystem-specific code families and translations belong to their focused specif
 
 - [`AppRuntimeTest.cpp`](../../test/unit/runtime/AppRuntimeTest.cpp) protects interactive runtime composition and service wiring.
 - [`LibraryPathsTest.cpp`](../../test/unit/runtime/library/LibraryPathsTest.cpp) protects canonical per-library path derivation and existing-database detection.
+- [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protects resource-byte delivery, retry, callback affinity, cancellation, and rebinding.
 - [`AsyncRuntimeTest.cpp`](../../test/unit/runtime/AsyncRuntimeTest.cpp) protects the shared execution mechanism.
 - [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects shared signal ordering, reentrancy, exceptions, and deferred lifetime.
 - [`MainWindowTest.cpp`](../../test/unit/linux-gtk/app/MainWindowTest.cpp) and [`TuiRenderTestSupport.h`](../../test/unit/tui/TuiRenderTestSupport.h) support frontend-boundary tests.

@@ -6,6 +6,8 @@
 #include <winrt/Microsoft.Windows.ApplicationModel.Resources.h>
 
 #include <cctype>
+#include <string>
+#include <string_view>
 
 namespace ao::winui
 {
@@ -48,11 +50,13 @@ namespace ao::winui
   {
     auto key = std::string{prefix};
     key.reserve(prefix.size() + stableId.size());
+
     for (auto const character : stableId)
     {
       auto const byte = static_cast<unsigned char>(character);
       key.push_back(std::isalnum(byte) != 0 ? character : '_');
     }
+
     return resourceStringOr(key, fallback);
   }
 } // namespace ao::winui

@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include "common/RequestCoalescer.h"
 #include "image/ImageCache.h"
 #include <ao/CoreIds.h>
+#include <ao/async/RequestCoalescer.h>
 #include <ao/async/Task.h>
+#include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/pixbuf.h>
@@ -19,7 +20,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class ResourceByteLoader;
 }
 
 namespace ao::async
@@ -44,7 +45,7 @@ namespace ao::gtk
     using OnImageReady = std::function<void(Glib::RefPtr<Gdk::Pixbuf> const&)>;
     using Request = utility::ScopedRegistration;
 
-    ResourceImageLoader(rt::LibraryTaskService& tasks, ImageCache& cache, async::Runtime& runtime);
+    ResourceImageLoader(rt::ResourceByteLoader& byteLoader, ImageCache& cache, async::Runtime& runtime);
     ~ResourceImageLoader();
 
     ResourceImageLoader(ResourceImageLoader const&) = delete;
@@ -62,20 +63,24 @@ namespace ao::gtk
     void prefetchThumbnail(ResourceId resourceId, std::int32_t physicalPixelSize);
 
   private:
+    using Requests = async::RequestCoalescer<ImageCacheKey, Glib::RefPtr<Gdk::Pixbuf>, ImageCacheKeyHash>;
+
     Glib::RefPtr<Gdk::Pixbuf> get(ImageCacheKey key);
     Request request(ImageCacheKey key, OnImageReady onReady);
     void prefetch(ImageCacheKey key);
-    void spawnDecode(ImageCacheKey key);
+    void requestBytes(ImageCacheKey key, Requests::FlightToken token);
+    void spawnDecode(ImageCacheKey key, Requests::FlightToken token, rt::ResourceBytes bytes);
     static async::Task<void> decode(ResourceImageLoader* loader,
-                                    rt::LibraryTaskService* tasks,
                                     async::Runtime* runtime,
                                     ImageCacheKey key,
+                                    Requests::FlightToken token,
+                                    rt::ResourceBytes bytes,
                                     std::stop_token stopToken);
 
-    rt::LibraryTaskService& _tasks;
+    rt::ResourceByteLoader& _byteLoader;
     ImageCache& _cache;
     async::Runtime& _runtime;
     std::unique_ptr<async::LifetimeScope> _scopePtr;
-    RequestCoalescer<ImageCacheKey, Glib::RefPtr<Gdk::Pixbuf>, ImageCacheKeyHash> _requests;
+    Requests _requests;
   };
 } // namespace ao::gtk

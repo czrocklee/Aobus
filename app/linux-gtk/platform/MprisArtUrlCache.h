@@ -3,9 +3,10 @@
 
 #pragma once
 
-#include "common/RequestCoalescer.h"
 #include <ao/CoreIds.h>
+#include <ao/async/RequestCoalescer.h>
 #include <ao/async/Task.h>
+#include <ao/rt/resource/ResourceBytes.h>
 #include <ao/utility/ScopedRegistration.h>
 
 #include <cstddef>
@@ -22,7 +23,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class ResourceByteLoader;
 }
 
 namespace ao::async
@@ -41,8 +42,8 @@ namespace ao::gtk::platform
     using OnUrlReady = std::function<void(std::string)>;
     using Request = utility::ScopedRegistration;
 
-    MprisArtUrlCache(rt::LibraryTaskService& tasks, async::Runtime& runtime);
-    MprisArtUrlCache(rt::LibraryTaskService& tasks, async::Runtime& runtime, std::filesystem::path cacheDir);
+    MprisArtUrlCache(rt::ResourceByteLoader& byteLoader, async::Runtime& runtime);
+    MprisArtUrlCache(rt::ResourceByteLoader& byteLoader, async::Runtime& runtime, std::filesystem::path cacheDir);
     ~MprisArtUrlCache();
 
     MprisArtUrlCache(MprisArtUrlCache const&) = delete;
@@ -56,6 +57,8 @@ namespace ao::gtk::platform
     static std::string_view extensionForBytes(std::span<std::byte const> bytes) noexcept;
 
   private:
+    using Requests = async::RequestCoalescer<ResourceId, std::string>;
+
     struct CacheEntry final
     {
       std::filesystem::path path;
@@ -63,13 +66,23 @@ namespace ao::gtk::platform
       std::uintmax_t byteSize = 0;
     };
 
-    void spawnMaterialization(ResourceId resourceId, std::optional<CacheEntry> optCachedEntry);
-    static async::Task<void> materialize(MprisArtUrlCache* cache,
-                                         rt::LibraryTaskService* tasks,
+    void spawnMaterialization(ResourceId resourceId,
+                              std::optional<CacheEntry> optCachedEntry,
+                              Requests::FlightToken token);
+    void requestBytes(ResourceId resourceId, Requests::FlightToken token);
+    void spawnExport(ResourceId resourceId, Requests::FlightToken token, rt::ResourceBytes bytes);
+    static async::Task<void> validate(MprisArtUrlCache* cache,
+                                      async::Runtime* runtime,
+                                      ResourceId resourceId,
+                                      std::optional<CacheEntry> optCachedEntry,
+                                      Requests::FlightToken token,
+                                      std::stop_token stopToken);
+    static async::Task<void> exportBytes(MprisArtUrlCache* cache,
                                          async::Runtime* runtime,
                                          std::filesystem::path cacheDir,
                                          ResourceId resourceId,
-                                         std::optional<CacheEntry> optCachedEntry,
+                                         Requests::FlightToken token,
+                                         rt::ResourceBytes bytes,
                                          std::stop_token stopToken);
     static std::optional<CacheEntry> exportResource(std::filesystem::path const& cacheDir,
                                                     ResourceId resourceId,
@@ -80,11 +93,11 @@ namespace ao::gtk::platform
                                          std::filesystem::path const& keepPath);
     static std::string fileUriForPath(std::filesystem::path const& path);
 
-    rt::LibraryTaskService& _tasks;
+    rt::ResourceByteLoader& _byteLoader;
     async::Runtime& _runtime;
     std::filesystem::path _cacheDir;
     std::unique_ptr<async::LifetimeScope> _scopePtr;
     std::unordered_map<ResourceId, CacheEntry> _cache;
-    RequestCoalescer<ResourceId, std::string> _requests;
+    Requests _requests;
   };
 } // namespace ao::gtk::platform

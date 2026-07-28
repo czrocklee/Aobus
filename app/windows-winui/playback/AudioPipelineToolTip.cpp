@@ -83,6 +83,7 @@ namespace ao::winui
     {
       return;
     }
+
     presenter.toolTip.IsOpen(false);
     ToolTipService::SetToolTip(presenter.anchor, winrt::Windows::Foundation::IInspectable{nullptr});
     AutomationProperties::SetHelpText(presenter.anchor, winrt::hstring{});

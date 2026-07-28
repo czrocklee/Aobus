@@ -5,9 +5,11 @@
 
 #include "app/DispatcherQueueExecutor.h"
 #include "platform/WindowsStringResources.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/audio/BackendConfig.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
@@ -15,6 +17,7 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -34,16 +37,18 @@
 #endif
 
 #include <algorithm>
+#include <cstdint>
 #include <exception>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -53,13 +58,17 @@ namespace ao::winui
   {
     void quarantineRuntime(std::shared_ptr<rt::AppRuntime> runtimePtr) noexcept
     {
+      if (runtimePtr == nullptr)
+      {
+        return;
+      }
+
       // Dispatcher shutdown can reject the retirement hop while the runtime's
-      // own coroutine is still unwinding. Keep the last reference alive for
-      // process lifetime instead of risking self-destruction on that stack.
-      static auto* const mutexPtr = new std::mutex{};
-      static auto* const runtimesPtr = new std::vector<std::shared_ptr<rt::AppRuntime>>{};
-      auto const guard = std::lock_guard{*mutexPtr};
-      runtimesPtr->push_back(std::move(runtimePtr));
+      // own coroutine is still unwinding. Leak the last reference instead of
+      // risking self-destruction on that stack. Allocation failure has no safe
+      // recovery here, so this noexcept boundary intentionally terminates.
+      // NOLINTNEXTLINE(cppcoreguidelines-owning-memory,bugprone-unhandled-exception-at-new)
+      std::ignore = new std::shared_ptr<rt::AppRuntime>{std::move(runtimePtr)};
     }
 
     bool activeTransport(audio::Transport const transport) noexcept
@@ -78,14 +87,10 @@ namespace ao::winui
 
     struct RuntimeRetirement final
     {
-      RuntimeRetirement(std::shared_ptr<rt::AppRuntime> runtime, std::move_only_function<void()> afterRuntimeRelease)
-        : runtimePtr{std::move(runtime)}, afterRelease{std::move(afterRuntimeRelease)}
-      {
-      }
-
       void retire() noexcept
       {
         runtimePtr.reset();
+
         if (!afterRelease)
         {
           return;
@@ -119,28 +124,39 @@ namespace ao::winui
       // last owning reference so AppRuntime and Player always shut down on the
       // UI executor after the current coroutine publication has unwound.
       auto retirementPtr = std::shared_ptr<RuntimeRetirement>{};
+
       try
       {
-        retirementPtr = std::make_shared<RuntimeRetirement>(std::move(runtimePtr), std::move(afterRelease));
+        retirementPtr = std::make_shared<RuntimeRetirement>();
       }
       catch (...)
       {
+        // Without a retirement record the owner-affine callback cannot run
+        // safely; session teardown owns any remaining candidate bookkeeping.
         quarantineRuntime(std::move(runtimePtr));
         return;
       }
 
-      auto queued = false;
+      retirementPtr->runtimePtr = std::move(runtimePtr);
+      retirementPtr->afterRelease.swap(afterRelease);
+
+      bool queued = false;
+
       try
       {
         queued = dispatcher.TryEnqueue([retirementPtr] { retirementPtr->retire(); });
       }
       catch (...)
       {
+        queued = false;
       }
 
       if (!queued)
       {
         APP_LOG_CRITICAL("LibrarySession: UI dispatcher rejected candidate runtime retirement");
+        // The callback is owner-affine and cannot run after dispatcher
+        // shutdown. Keep the runtime alive and let session teardown discard
+        // any remaining candidate bookkeeping.
         quarantineRuntime(std::move(retirementPtr->runtimePtr));
       }
     }
@@ -150,25 +166,12 @@ namespace ao::winui
     public:
       DeferredRuntimeOwner(winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
                            std::shared_ptr<rt::AppRuntime> runtimePtr,
-                           std::weak_ptr<void> lifetime,
                            std::move_only_function<void()> afterRelease)
-        : _dispatcher{std::move(dispatcher)}
-        , _runtimePtr{std::move(runtimePtr)}
-        , _lifetime{std::move(lifetime)}
-        , _afterRelease{std::move(afterRelease)}
+        : _dispatcher{std::move(dispatcher)}, _runtimePtr{std::move(runtimePtr)}, _afterRelease{std::move(afterRelease)}
       {
       }
 
-      ~DeferredRuntimeOwner()
-      {
-        if (_lifetime.expired())
-        {
-          quarantineRuntime(std::move(_runtimePtr));
-          return;
-        }
-
-        deferRuntimeRelease(_dispatcher, std::move(_runtimePtr), std::move(_afterRelease));
-      }
+      ~DeferredRuntimeOwner() { deferRuntimeRelease(_dispatcher, std::move(_runtimePtr), std::move(_afterRelease)); }
 
       DeferredRuntimeOwner(DeferredRuntimeOwner const&) = delete;
       DeferredRuntimeOwner& operator=(DeferredRuntimeOwner const&) = delete;
@@ -180,7 +183,6 @@ namespace ao::winui
     private:
       winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
       std::shared_ptr<rt::AppRuntime> _runtimePtr;
-      std::weak_ptr<void> _lifetime;
       std::move_only_function<void()> _afterRelease;
     };
 
@@ -248,10 +250,12 @@ namespace ao::winui
     _libraryTask.reset();
     _retainedPlaybackSub.reset();
     _callbacks = {};
+
     if (_libraryRuntimePtr != nullptr)
     {
       checkpointWorkspace(*_libraryRuntimePtr, "session teardown");
     }
+
     _playbackCommandsPtr.reset();
     _playbackRuntimePtr.reset();
     _libraryRuntimePtr.reset();
@@ -303,12 +307,14 @@ namespace ao::winui
     runtimePtr->addAudioProvider(std::make_unique<audio::backend::WasapiProvider>());
 #endif
     runtimePtr->reloadAllTracks();
+
     if (auto const restored = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()); !restored)
     {
       APP_LOG_WARN("LibrarySession: failed to restore workspace for '{}': {}",
                    utility::pathToUtf8(root),
                    restored.error().message);
     }
+
     return runtimePtr;
   }
 
@@ -347,6 +353,7 @@ namespace ao::winui
       {
         _callbacks.onStatus(formatResource("LibraryReadyFormat", utility::pathToUtf8(root)));
       }
+
       return;
     }
 
@@ -356,6 +363,7 @@ namespace ao::winui
       {
         _callbacks.onStatus(resourceString("PreparingLibrary"));
       }
+
       return;
     }
 
@@ -367,12 +375,13 @@ namespace ao::winui
 
   void LibrarySession::rescan()
   {
-    if (_operationActive && _operationRoot && sameDirectory(*_operationRoot, _libraryRuntimePtr->musicRoot()))
+    if (_operationActive && _optOperationRoot && sameDirectory(*_optOperationRoot, _libraryRuntimePtr->musicRoot()))
     {
       if (_callbacks.onStatus)
       {
         _callbacks.onStatus(resourceString("RescanningLibrary"));
       }
+
       return;
     }
 
@@ -388,8 +397,9 @@ namespace ao::winui
     auto const operationWasActive = _operationActive;
     _libraryTask.reset();
     ++_operationGeneration;
-    _operationRoot.reset();
+    _optOperationRoot.reset();
     _operationActive = false;
+
     if (operationWasActive && _callbacks.onLibraryTaskRuntimeChanged)
     {
       _callbacks.onLibraryTaskRuntimeChanged(_libraryRuntimePtr);
@@ -413,7 +423,7 @@ namespace ao::winui
     auto const replaceLibrary = mode != LibraryPreparationMode::RescanActive;
     auto const operationGeneration = ++_operationGeneration;
     auto const registeredRoot = root;
-    _operationRoot = root;
+    _optOperationRoot = root;
     _operationActive = true;
 
     try
@@ -422,33 +432,35 @@ namespace ao::winui
       {
         _candidateRoots.push_back(root);
       }
+
       auto candidatePtr = replaceLibrary ? createRuntime(root) : _libraryRuntimePtr;
+
       if (_callbacks.onLibraryTaskRuntimeChanged)
       {
         _callbacks.onLibraryTaskRuntimeChanged(candidatePtr);
       }
-      auto const lifetime = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
+
+      auto const lifetimePtr = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
       auto const dispatcher = _dispatcher;
       _libraryTask = candidatePtr->async().spawnCancellable(
-        [ownerPtr = this,
-         lifetime,
+        [owner = this,
+         lifetimePtr,
          dispatcher,
          candidateOwner = DeferredRuntimeOwner{dispatcher,
                                                candidatePtr,
-                                               lifetime,
-                                               [ownerPtr = this, lifetime, registeredRoot, replaceLibrary]
+                                               [owner = this, lifetimePtr, registeredRoot, replaceLibrary]
                                                {
-                                                 if (replaceLibrary && !lifetime.expired())
+                                                 if (replaceLibrary && !lifetimePtr.expired())
                                                  {
-                                                   ownerPtr->releaseCandidateRoot(registeredRoot);
+                                                   owner->releaseCandidateRoot(registeredRoot);
                                                  }
                                                }},
          root = std::move(root),
          mode,
          operationGeneration](std::stop_token const stopToken) mutable
         {
-          return prepareAndSwapWorkflow(ownerPtr,
-                                        lifetime,
+          return prepareAndSwapWorkflow(owner,
+                                        lifetimePtr,
                                         dispatcher,
                                         candidateOwner.share(),
                                         std::move(root),
@@ -463,18 +475,22 @@ namespace ao::winui
       {
         releaseCandidateRoot(registeredRoot);
       }
+
       if (_operationGeneration == operationGeneration)
       {
-        _operationRoot.reset();
+        _optOperationRoot.reset();
         _operationActive = false;
       }
+
       if (_callbacks.onLibraryTaskRuntimeChanged)
       {
         _callbacks.onLibraryTaskRuntimeChanged(_libraryRuntimePtr);
       }
+
       _libraryRuntimePtr->notifications().post(rt::NotificationSeverity::Error,
                                                formatResource("ErrorFormat", error.what()),
                                                rt::NotificationLifetime::history());
+
       if (_callbacks.onFailure)
       {
         _callbacks.onFailure(Error{.code = Error::Code::Generic, .message = error.what()});
@@ -482,9 +498,108 @@ namespace ao::winui
     }
   }
 
+  bool LibrarySession::workflowRetired(LibrarySession const* const owner,
+                                       std::weak_ptr<CallbackLifetime> const& lifetimePtr,
+                                       std::uint64_t const operationGeneration) noexcept
+  {
+    return lifetimePtr.expired() || owner->_operationGeneration != operationGeneration;
+  }
+
+  void LibrarySession::completeLibraryPreparation(LibrarySession* const owner,
+                                                  std::shared_ptr<rt::AppRuntime>& candidatePtr,
+                                                  std::filesystem::path const& root,
+                                                  bool const replaceLibrary,
+                                                  std::uint64_t const operationGeneration)
+  {
+    if (replaceLibrary)
+    {
+      checkpointWorkspace(*owner->_libraryRuntimePtr, "library replacement");
+
+      if (owner->_callbacks.onLibraryChanging)
+      {
+        owner->_callbacks.onLibraryChanging();
+      }
+
+      owner->_libraryRuntimePtr = std::move(candidatePtr);
+      owner->_settings.lastLibraryPath = utility::pathToUtf8(root);
+
+      if (auto const saved = owner->saveSettings(); !saved)
+      {
+        APP_LOG_WARN("LibrarySession: failed to persist selected library: {}", saved.error().message);
+      }
+
+      if (owner->_callbacks.onLibraryChanged)
+      {
+        owner->_callbacks.onLibraryChanged();
+      }
+
+      owner->retainPlaybackUntilIdle();
+    }
+    else if (owner->_callbacks.onLibraryChanged)
+    {
+      owner->_callbacks.onLibraryChanged();
+    }
+
+    if (owner->_callbacks.onStatus)
+    {
+      owner->_callbacks.onStatus(ao::winui::formatResource("LibraryReadyFormat", utility::pathToUtf8(root)));
+    }
+
+    if (owner->_operationGeneration == operationGeneration)
+    {
+      owner->_optOperationRoot.reset();
+      owner->_operationActive = false;
+    }
+  }
+
+  void LibrarySession::completeFailedLibraryPreparation(
+    LibrarySession* const owner,
+    winrt::Microsoft::UI::Dispatching::DispatcherQueue const& dispatcher,
+    std::shared_ptr<rt::AppRuntime> candidatePtr,
+    bool const cancelled,
+    std::optional<Error> const& optFailure)
+  {
+    if (owner->_callbacks.onLibraryTaskRuntimeChanged)
+    {
+      owner->_callbacks.onLibraryTaskRuntimeChanged(owner->_libraryRuntimePtr);
+    }
+
+    deferRuntimeRelease(dispatcher, std::move(candidatePtr));
+    owner->_optOperationRoot.reset();
+    owner->_operationActive = false;
+
+    if (cancelled)
+    {
+      owner->_libraryRuntimePtr->notifications().post(rt::NotificationSeverity::Info,
+                                                      ao::winui::resourceString("LibraryOperationCancelled"),
+                                                      rt::NotificationLifetime::transient());
+
+      if (owner->_callbacks.onStatus)
+      {
+        owner->_callbacks.onStatus(ao::winui::resourceString("LibraryOperationCancelled"));
+      }
+
+      return;
+    }
+
+    if (!optFailure)
+    {
+      return;
+    }
+
+    owner->_libraryRuntimePtr->notifications().post(rt::NotificationSeverity::Error,
+                                                    ao::winui::formatResource("ErrorFormat", optFailure->message),
+                                                    rt::NotificationLifetime::history());
+
+    if (owner->_callbacks.onFailure)
+    {
+      owner->_callbacks.onFailure(*optFailure);
+    }
+  }
+
   async::Task<void> LibrarySession::prepareAndSwapWorkflow(
-    LibrarySession* const ownerPtr,
-    std::weak_ptr<CallbackLifetime> const lifetime,
+    LibrarySession* const owner,
+    std::weak_ptr<CallbackLifetime> const lifetimePtr,
     winrt::Microsoft::UI::Dispatching::DispatcherQueue const dispatcher,
     std::shared_ptr<rt::AppRuntime> candidatePtr,
     std::filesystem::path root,
@@ -495,27 +610,22 @@ namespace ao::winui
     auto const replaceLibrary = mode != LibraryPreparationMode::RescanActive;
     auto const scanLibrary = mode != LibraryPreparationMode::OpenExisting;
     auto* const callbackRuntime = candidatePtr.get();
-    auto failure = std::optional<Error>{};
-    auto cancelled = false;
+    auto optFailure = std::optional<Error>{};
+    bool cancelled = false;
 
     try
     {
       co_await callbackRuntime->async().resumeOnCallbackExecutor(stopToken);
 
-      if (lifetime.expired())
-      {
-        deferRuntimeRelease(dispatcher, std::move(candidatePtr));
-        co_return;
-      }
-      if (ownerPtr->_operationGeneration != operationGeneration)
+      if (workflowRetired(owner, lifetimePtr, operationGeneration))
       {
         deferRuntimeRelease(dispatcher, std::move(candidatePtr));
         co_return;
       }
 
-      if (ownerPtr->_callbacks.onStatus)
+      if (owner->_callbacks.onStatus)
       {
-        ownerPtr->_callbacks.onStatus(ao::winui::resourceString(
+        owner->_callbacks.onStatus(ao::winui::resourceString(
           mode == LibraryPreparationMode::RescanActive ? "RescanningLibrary" : "PreparingLibrary"));
       }
 
@@ -524,12 +634,8 @@ namespace ao::winui
         auto scan = co_await uimodel::runLibraryScanWorkflow(
           &candidatePtr->library().taskService(), uimodel::LibraryScanMode::Eager, stopToken);
         async::throwIfStopRequested(stopToken);
-        if (lifetime.expired())
-        {
-          deferRuntimeRelease(dispatcher, std::move(candidatePtr));
-          co_return;
-        }
-        if (ownerPtr->_operationGeneration != operationGeneration)
+
+        if (workflowRetired(owner, lifetimePtr, operationGeneration))
         {
           deferRuntimeRelease(dispatcher, std::move(candidatePtr));
           co_return;
@@ -537,11 +643,11 @@ namespace ao::winui
 
         if (!scan)
         {
-          failure = scan.error().error;
+          optFailure = scan.error().error;
         }
         else if (scan->disposition == uimodel::LibraryScanPlanDisposition::ErrorsOnly)
         {
-          failure = Error{
+          optFailure = Error{
             .code = Error::Code::FormatRejected,
             .message = ao::winui::formatResource(
               scan->summary.errorCount == 1 ? "LibraryScanUnreadableOneFormat" : "LibraryScanUnreadableManyFormat",
@@ -554,58 +660,24 @@ namespace ao::winui
         }
       }
 
-      if (!failure)
+      if (!optFailure)
       {
-        if (replaceLibrary)
-        {
-          checkpointWorkspace(*ownerPtr->_libraryRuntimePtr, "library replacement");
-
-          if (ownerPtr->_callbacks.onLibraryChanging)
-          {
-            ownerPtr->_callbacks.onLibraryChanging();
-          }
-
-          ownerPtr->_libraryRuntimePtr = std::move(candidatePtr);
-          ownerPtr->_settings.lastLibraryPath = utility::pathToUtf8(root);
-
-          if (auto const saved = ownerPtr->saveSettings(); !saved)
-          {
-            APP_LOG_WARN("LibrarySession: failed to persist selected library: {}", saved.error().message);
-          }
-
-          if (ownerPtr->_callbacks.onLibraryChanged)
-          {
-            ownerPtr->_callbacks.onLibraryChanged();
-          }
-
-          ownerPtr->retainPlaybackUntilIdle();
-        }
-        else if (ownerPtr->_callbacks.onLibraryChanged)
-        {
-          ownerPtr->_callbacks.onLibraryChanged();
-        }
-
-        if (ownerPtr->_callbacks.onStatus)
-        {
-          ownerPtr->_callbacks.onStatus(ao::winui::formatResource("LibraryReadyFormat", utility::pathToUtf8(root)));
-        }
-        if (ownerPtr->_operationGeneration == operationGeneration)
-        {
-          ownerPtr->_operationRoot.reset();
-          ownerPtr->_operationActive = false;
-        }
+        completeLibraryPreparation(owner, candidatePtr, root, replaceLibrary, operationGeneration);
       }
-    }
-    catch (async::OperationCancelled const&)
-    {
-      cancelled = true;
     }
     catch (std::exception const& error)
     {
-      failure = Error{.code = Error::Code::Generic, .message = error.what()};
+      if (async::isOperationCancelled(error))
+      {
+        cancelled = true;
+      }
+      else
+      {
+        optFailure = Error{.code = Error::Code::Generic, .message = error.what()};
+      }
     }
 
-    if (!cancelled && !failure)
+    if (!cancelled && !optFailure)
     {
       co_return;
     }
@@ -618,44 +690,19 @@ namespace ao::winui
     // candidate runtime. Owner teardown invalidates the lifetime token before
     // making that request; ordinary supersession leaves the owner available so
     // its candidate-root registration can be retired on the UI executor.
-    if (lifetime.expired())
+    if (lifetimePtr.expired())
     {
       deferRuntimeRelease(dispatcher, std::move(candidatePtr));
       co_return;
     }
-    if (stopToken.stop_requested() || ownerPtr->_operationGeneration != operationGeneration)
-    {
-      deferRuntimeRelease(dispatcher, std::move(candidatePtr));
-      co_return;
-    }
-    if (ownerPtr->_callbacks.onLibraryTaskRuntimeChanged)
-    {
-      ownerPtr->_callbacks.onLibraryTaskRuntimeChanged(ownerPtr->_libraryRuntimePtr);
-    }
-    deferRuntimeRelease(dispatcher, std::move(candidatePtr));
-    ownerPtr->_operationRoot.reset();
-    ownerPtr->_operationActive = false;
 
-    if (cancelled)
+    if (stopToken.stop_requested() || owner->_operationGeneration != operationGeneration)
     {
-      ownerPtr->_libraryRuntimePtr->notifications().post(rt::NotificationSeverity::Info,
-                                                         ao::winui::resourceString("LibraryOperationCancelled"),
-                                                         rt::NotificationLifetime::transient());
-      if (ownerPtr->_callbacks.onStatus)
-      {
-        ownerPtr->_callbacks.onStatus(ao::winui::resourceString("LibraryOperationCancelled"));
-      }
+      deferRuntimeRelease(dispatcher, std::move(candidatePtr));
+      co_return;
     }
-    else
-    {
-      ownerPtr->_libraryRuntimePtr->notifications().post(rt::NotificationSeverity::Error,
-                                                         ao::winui::formatResource("ErrorFormat", failure->message),
-                                                         rt::NotificationLifetime::history());
-      if (ownerPtr->_callbacks.onFailure)
-      {
-        ownerPtr->_callbacks.onFailure(*failure);
-      }
-    }
+
+    completeFailedLibraryPreparation(owner, dispatcher, std::move(candidatePtr), cancelled, optFailure);
   }
 
   void LibrarySession::retainPlaybackUntilIdle()
@@ -671,14 +718,15 @@ namespace ao::winui
       return;
     }
 
-    auto const lifetime = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
+    auto const lifetimePtr = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
     _retainedPlaybackSub = _playbackRuntimePtr->playback().events().onSnapshot(
-      [this, lifetime](rt::PlaybackSnapshot const& snapshot) noexcept
+      [this, lifetimePtr](rt::PlaybackSnapshot const& snapshot) noexcept
       {
-        if (lifetime.expired())
+        if (lifetimePtr.expired())
         {
           return;
         }
+
         if (!activeTransport(snapshot.transport.transport))
         {
           scheduleAdoptLibraryPlayback();
@@ -694,20 +742,23 @@ namespace ao::winui
     }
 
     _adoptScheduled = true;
-    auto const lifetime = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
+    auto const lifetimePtr = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
     auto const queued = _dispatcher.TryEnqueue(
-      [this, lifetime]
+      [this, lifetimePtr]
       {
-        if (lifetime.expired())
+        if (lifetimePtr.expired())
         {
           return;
         }
+
         if (_playbackRuntimePtr != _libraryRuntimePtr)
         {
           bindPlaybackRuntime(_libraryRuntimePtr);
         }
+
         _adoptScheduled = false;
       });
+
     if (!queued)
     {
       _adoptScheduled = false;
@@ -722,17 +773,19 @@ namespace ao::winui
       return;
     }
 
-    auto const lifetime = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
+    auto const lifetimePtr = std::weak_ptr<CallbackLifetime>{_callbackLifetimePtr};
     auto const queued = _dispatcher.TryEnqueue(
-      [this, lifetime]
+      [this, lifetimePtr]
       {
-        if (lifetime.expired())
+        if (lifetimePtr.expired())
         {
           return;
         }
+
         bindPlaybackRuntime(_libraryRuntimePtr);
         std::ignore = _libraryRuntimePtr->playSelectionInFocusedView();
       });
+
     if (!queued)
     {
       APP_LOG_WARN("LibrarySession: UI dispatcher rejected playback session adoption");

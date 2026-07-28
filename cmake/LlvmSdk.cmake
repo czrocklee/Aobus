@@ -13,6 +13,7 @@ set(AOBUS_LLVM_SDK_SHA256
 
 set(_AOBUS_LLVM_SDK_REQUIRED_FILES
   "bin/clang-apply-replacements.exe"
+  "bin/clang-cl.exe"
   "bin/clang-format.exe"
   "bin/clang-tidy.exe"
   "include/clang-tidy/tool/ClangTidyMain.h"

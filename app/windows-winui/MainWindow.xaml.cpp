@@ -4,9 +4,9 @@
 #include "MainWindow.xaml.h"
 
 #include "app/LibrarySession.h"
+#include "app/WinUiDependencies.h"
 #include "app/WindowsUiCoordinator.h"
 #include "image/CoverArtPresenter.h"
-#include "image/WindowsCoverArtLoader.h"
 #include "pch.h"
 #include "platform/SmtcBridge.h"
 #include "platform/WindowsStringResources.h"
@@ -15,31 +15,18 @@
 #include "playback/PlaybackControls.h"
 #include "theme/WindowsThemeCoordinator.h"
 #include "track/TrackListController.h"
-#include "track/TrackRowItem.h"
 
 #if __has_include("MainWindow.g.cpp")
 #include "MainWindow.g.cpp"
 #endif
 
-#include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/audio/BackendIds.h>
-#include <ao/audio/Device.h>
 #include <ao/rt/AppRuntime.h>
-#include <ao/rt/TrackPresentation.h>
-#include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/layout/shell/DesktopShellPolicy.h>
-#include <ao/uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.h>
-#include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
-#include <ao/uimodel/preference/WindowsTheme.h>
-#include <ao/uimodel/presentation/PresentationTextCatalog.h>
+// MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
 #include <ao/utility/Path.h>
 
-#include <microsoft.ui.xaml.window.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
@@ -53,17 +40,9 @@
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>
 
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cstdint>
-#include <filesystem>
-#include <map>
-#include <span>
+#include <memory>
 #include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 namespace winrt::Aobus::implementation
 {
@@ -79,15 +58,19 @@ namespace winrt::Aobus::implementation
     get_self<AobusSoulControl>(ModernSoul())->setBaseStrokeWidth(kModernSoulStrokeWidth);
     get_self<AobusSoulControl>(ModernSoul())->setInnerGlyphScale(kModernSoulGlyphScale);
     Title(ao::winui::resourceHstring(L"AppTitleValue"));
+
     try
     {
       SystemBackdrop(Microsoft::UI::Xaml::Media::MicaBackdrop{});
     }
+    // Mica is optional on remote or composition-disabled desktops.
+    // NOLINTNEXTLINE(bugprone-empty-catch)
     catch (hresult_error const&)
     {
       // Solid theme resources remain the supported fallback on remote or
       // composition-disabled desktops.
     }
+
     applyShellState(RootGrid().ActualWidth());
 
     _appWindowChangedToken = AppWindow().Changed(
@@ -108,11 +91,13 @@ namespace winrt::Aobus::implementation
           AppWindow().Changed(_appWindowChangedToken);
           _hasAppWindowChangedToken = false;
         }
+
         if (_hasClosedToken)
         {
           Closed(_closedToken);
           _hasClosedToken = false;
         }
+
         saveWindowState();
         shutdown();
       });
@@ -127,11 +112,13 @@ namespace winrt::Aobus::implementation
       AppWindow().Changed(_appWindowChangedToken);
       _hasAppWindowChangedToken = false;
     }
+
     if (_hasClosedToken)
     {
       Closed(_closedToken);
       _hasClosedToken = false;
     }
+
     shutdown();
   }
 
@@ -225,7 +212,8 @@ namespace winrt::Aobus::implementation
                                                                                                  [weak]
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self
                                                                                                      ->updateBrowserHeader();
@@ -235,7 +223,8 @@ namespace winrt::Aobus::implementation
                                                                                                  [weak]
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self
                                                                                                      ->clearGroupCoverPresenters();
@@ -245,7 +234,8 @@ namespace winrt::Aobus::implementation
                                                                                                  [weak]
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self
                                                                                                      ->reconcileLibrary();
@@ -255,7 +245,8 @@ namespace winrt::Aobus::implementation
                                                                                                  [weak]
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self
                                                                                                      ->unbindPlayback();
@@ -265,7 +256,8 @@ namespace winrt::Aobus::implementation
                                                                                                  [weak]
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self->bindPlayback();
                                                                                                  }
@@ -275,7 +267,8 @@ namespace winrt::Aobus::implementation
                                                                                                    std::string status)
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self->updateStatus(
                                                                                                      status);
@@ -286,7 +279,8 @@ namespace winrt::Aobus::implementation
                                                                                                           error)
                                                                                                {
                                                                                                  if (auto self =
-                                                                                                       weak.get())
+                                                                                                       weak.get();
+                                                                                                     self)
                                                                                                  {
                                                                                                    self->updateStatus(
                                                                                                      ao::winui::
@@ -298,14 +292,15 @@ namespace winrt::Aobus::implementation
                                                                                                }});
     auto const dependencies = _coordinatorPtr->uiDependencies();
     _trackListPtr = &dependencies.trackList;
-    _coverArtLoaderPtr = &dependencies.coverArtLoader;
+    _resourceBytes = &dependencies.resourceBytes;
     _nowPlayingCoverArtPtr = &dependencies.nowPlayingCoverArt;
     _themePtr = &dependencies.theme;
 
-    if (auto theme = _themePtr->reload())
+    if (auto theme = _themePtr->reload(); theme)
     {
       applyTheme(*theme);
     }
+
     reconcileLibrary();
     bindPlayback();
     restoreWindowPlacement();
@@ -320,21 +315,26 @@ namespace winrt::Aobus::implementation
     {
       return;
     }
+
     _shutdown = true;
 
     clearGroupCoverPresenters();
+
     if (_coordinatorPtr)
     {
       _coordinatorPtr->retire();
     }
+
     if (_smtcPtr)
     {
       _smtcPtr->unbind();
     }
+
     if (_fullscreenSoul)
     {
       get_self<AobusSoulControl>(_fullscreenSoul)->unbind();
     }
+
     if (_soulWindow)
     {
       if (_hasSoulWindowChangedToken)
@@ -342,16 +342,18 @@ namespace winrt::Aobus::implementation
         _soulWindow.AppWindow().Changed(_soulWindowChangedToken);
         _hasSoulWindowChangedToken = false;
       }
+
       _soulWindow.Close();
       _soulWindow = nullptr;
       _fullscreenSoul = nullptr;
     }
+
     unbindPlayback();
     _smtcPtr.reset();
     _audioPipelineToolTipPtr.reset();
     _playbackControlsPtr.reset();
     _trackListPtr = nullptr;
-    _coverArtLoaderPtr = nullptr;
+    _resourceBytes = nullptr;
     _nowPlayingCoverArtPtr = nullptr;
     _themePtr = nullptr;
     _coordinatorPtr.reset();

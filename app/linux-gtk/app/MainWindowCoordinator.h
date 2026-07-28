@@ -16,6 +16,10 @@ namespace ao::uimodel
   class PlaybackCommandSurface;
   class ListPresentationPreferenceStore;
 }
+namespace ao::rt
+{
+  class ResourceByteLoader;
+}
 namespace Gtk
 {
   class Window;
@@ -58,6 +62,7 @@ namespace ao::gtk
     ListNavigationController* listNavigationController();
     uimodel::ListPresentationPreferenceStore* trackPresentationPreferences();
     ThemeCoordinator* themeCoordinator();
+    rt::ResourceByteLoader* resourceByteLoader();
 
     portal::ImportExportCoordinator& importExport();
 

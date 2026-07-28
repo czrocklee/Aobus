@@ -60,7 +60,15 @@ Every task uses its stop token at worker/callback executor hops, but only operat
 
 Lifetime cancellation unwinds the coroutine and prevents post-cancellation access to destroyed borrowed owners.
 Business code does not reinterpret cancellation as a generic recoverable error.
-After progress has been published, task plumbing emits a `Cancelled` terminal event before propagating `OperationCancelled`.
+Once scan apply or identity backfill has entered maintenance, task plumbing
+arranges exactly one `Cancelled` terminal event on the callback executor and
+then propagates `OperationCancelled`, whether cancellation is observed as
+stop-token state or escapes from a worker adapter as an exception.
+Exceptional cancellation queues that terminal delivery before rethrowing;
+cooperative cancellation publishes it after returning to the callback
+executor.
+The terminal event and maintenance release still occur when exceptional
+cancellation interrupts scan apply or identity backfill.
 
 ## Failure behavior
 
@@ -78,7 +86,7 @@ Failure while admitting or enqueueing a committed revision leaves the coordinato
 
 ## Test map
 
-- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, maintenance admission, errors, progress, cancellation before import admission, and mandatory post-commit completion.
+- [`LibraryTaskServiceTest.cpp`](../../../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) proves worker/callback affinity, maintenance admission, errors, progress, stop-token and exceptional cancellation terminal ordering, maintenance release, and mandatory post-commit completion.
 - [`AudioIdentityIndexerTest.cpp`](../../../../test/unit/runtime/library/AudioIdentityIndexerTest.cpp) proves concurrent fingerprinting and bounded write-back behavior.
 
 ## Related documents

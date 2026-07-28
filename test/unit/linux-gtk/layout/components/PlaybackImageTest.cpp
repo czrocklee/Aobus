@@ -19,6 +19,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/utility/Base64.h>
@@ -145,8 +146,8 @@ namespace ao::gtk::layout::test
                                                                       });
                            }};
     auto imageCachePtr = std::make_unique<ImageCache>(10);
-    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
-      fixture.runtime().library().taskService(), *imageCachePtr, fixture.runtime().async());
+    auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
     auto& ctx = fixture.context();
     fixture.dependencies().imageLoader = imageLoaderPtr.get();
 

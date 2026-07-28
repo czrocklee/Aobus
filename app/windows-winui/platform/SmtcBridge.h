@@ -7,11 +7,14 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/async/Task.h>
+#include <ao/rt/resource/ResourceBytes.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Media.h>
 
 #include <memory>
+#include <stop_token>
 
 struct HWND__;
 using HWND = HWND__*;
@@ -19,18 +22,18 @@ using HWND = HWND__*;
 namespace ao::rt
 {
   class AppRuntime;
-  class LibraryTaskService;
+  class ResourceByteLoader;
   struct PlaybackSnapshot;
 }
 
 namespace ao::uimodel
 {
-  struct CoverArtRequestToken;
   class PlaybackCommandSurface;
 }
 
 namespace ao::winui
 {
+  class PreparedMemoryRandomAccessStream;
   class SmtcBridge final
   {
   public:
@@ -42,7 +45,9 @@ namespace ao::winui
     SmtcBridge(SmtcBridge&&) = delete;
     SmtcBridge& operator=(SmtcBridge&&) = delete;
 
-    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr, uimodel::PlaybackCommandSurface& commands);
+    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr,
+              uimodel::PlaybackCommandSurface& commands,
+              rt::ResourceByteLoader& resourceBytes);
     void unbind();
 
   private:
@@ -50,16 +55,18 @@ namespace ao::winui
 
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void updateArtwork(ResourceId resourceId);
-    static async::Task<void> updateArtworkWorkflow(std::weak_ptr<State> state,
-                                                   rt::LibraryTaskService* tasks,
-                                                   async::Runtime* runtime,
-                                                   uimodel::CoverArtRequestToken token,
-                                                   std::stop_token stopToken);
-    static void writeArtworkStream(State& state, uimodel::CoverArtRequestToken token);
+    static async::Task<void> prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
+                                                    std::shared_ptr<rt::AppRuntime> runtimePtr,
+                                                    ResourceId resourceId,
+                                                    rt::ResourceBytes bytes,
+                                                    std::stop_token stopToken);
+    static void writeArtworkStream(State& state, ResourceId resourceId, PreparedMemoryRandomAccessStream prepared);
 
     std::shared_ptr<State> _statePtr;
     std::shared_ptr<rt::AppRuntime> _runtimePtr;
+    rt::ResourceByteLoader* _resourceBytes = nullptr;
     async::Subscription _snapshotSub;
+    utility::ScopedRegistration _artworkRequest;
     async::TaskHandle _artworkTask;
   };
 } // namespace ao::winui

@@ -16,13 +16,17 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
-#include <numbers>
+#include <memory>
 
 namespace winrt::Aobus::implementation
 {
   namespace
   {
     constexpr double kGeometryEpsilon = 0.001;
+    constexpr float kGeometryMidpoint = 0.5F;
+    constexpr double kPauseBarCornerRadius = 1.5;
+    constexpr double kPauseGlyphWidthScale = 0.8;
+    constexpr double kPauseColumnSpacingScale = 0.22;
 
     Windows::UI::Color color(ao::uimodel::AobusSoulRgb const value, std::uint8_t const alpha = 0xFF) noexcept
     {
@@ -43,7 +47,7 @@ namespace winrt::Aobus::implementation
     _ring.VerticalAlignment(Microsoft::UI::Xaml::VerticalAlignment::Center);
     _ringRotation = Microsoft::UI::Xaml::Media::RotateTransform{};
     _ring.RenderTransform(_ringRotation);
-    _ring.RenderTransformOrigin({0.5F, 0.5F});
+    _ring.RenderTransformOrigin({kGeometryMidpoint, kGeometryMidpoint});
 
     _ringBrush = Microsoft::UI::Xaml::Media::LinearGradientBrush{};
     _ringBrush.ColorInterpolationMode(Microsoft::UI::Xaml::Media::ColorInterpolationMode::SRgbLinearInterpolation);
@@ -64,7 +68,7 @@ namespace winrt::Aobus::implementation
     _glyphBrush = Microsoft::UI::Xaml::Media::SolidColorBrush{color(ao::uimodel::kAobusSoulUiCyan)};
     _playGlyph = Microsoft::UI::Xaml::Shapes::Polygon{};
     _playGlyph.Points().Append({0.0F, 0.0F});
-    _playGlyph.Points().Append({1.0F, 0.5F});
+    _playGlyph.Points().Append({1.0F, kGeometryMidpoint});
     _playGlyph.Points().Append({0.0F, 1.0F});
     _playGlyph.Fill(_glyphBrush);
     _playGlyph.Stretch(Microsoft::UI::Xaml::Media::Stretch::Fill);
@@ -79,12 +83,12 @@ namespace winrt::Aobus::implementation
     _pauseGlyph.ColumnDefinitions().Append(Microsoft::UI::Xaml::Controls::ColumnDefinition{});
     auto leftBar = Microsoft::UI::Xaml::Shapes::Rectangle{};
     leftBar.Fill(_glyphBrush);
-    leftBar.RadiusX(1.5);
-    leftBar.RadiusY(1.5);
+    leftBar.RadiusX(kPauseBarCornerRadius);
+    leftBar.RadiusY(kPauseBarCornerRadius);
     auto rightBar = Microsoft::UI::Xaml::Shapes::Rectangle{};
     rightBar.Fill(_glyphBrush);
-    rightBar.RadiusX(1.5);
-    rightBar.RadiusY(1.5);
+    rightBar.RadiusX(kPauseBarCornerRadius);
+    rightBar.RadiusY(kPauseBarCornerRadius);
     Microsoft::UI::Xaml::Controls::Grid::SetColumn(rightBar, 1);
     _pauseGlyph.Children().Append(leftBar);
     _pauseGlyph.Children().Append(rightBar);
@@ -227,9 +231,9 @@ namespace winrt::Aobus::implementation
     _ring.Height(diameter);
     _playGlyph.Width(glyphDiameter);
     _playGlyph.Height(glyphDiameter);
-    _pauseGlyph.Width(glyphDiameter * 0.8);
+    _pauseGlyph.Width(glyphDiameter * kPauseGlyphWidthScale);
     _pauseGlyph.Height(glyphDiameter);
-    _pauseGlyph.ColumnSpacing(glyphDiameter * 0.22);
+    _pauseGlyph.ColumnSpacing(glyphDiameter * kPauseColumnSpacingScale);
     renderFrame();
   }
 

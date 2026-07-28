@@ -7,11 +7,15 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
+#include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
+#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Windows.Foundation.h>
 
 #include <chrono>
+#include <memory>
+#include <tuple>
 #include <utility>
 
 namespace ao::winui
@@ -20,9 +24,9 @@ namespace ao::winui
   {
     uimodel::FrameClock::TimePoint currentFrameTime() noexcept
     {
-      auto const micros =
+      auto const microsDuration =
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
-      return uimodel::FrameClock::fromMicros(micros.count());
+      return uimodel::FrameClock::fromMicros(microsDuration.count());
     }
   } // namespace
 
@@ -114,10 +118,12 @@ namespace ao::winui
       _dirty = true;
       _lastElapsed = std::chrono::seconds{0};
       _lastDuration = std::chrono::seconds{0};
+
       if (_presentationActive)
       {
         _text.Text(winrt::to_hstring(uimodel::describeTimeTemplate(_mode)));
       }
+
       updateRenderingRegistration();
       return;
     }
@@ -125,13 +131,14 @@ namespace ao::winui
     if (!state.isPreviewing)
     {
       _interpolator.updateState(state.elapsed, state.duration, state.isPlaying);
-      static_cast<void>(_interpolator.interpolateElapsed(currentFrameTime()));
+      std::ignore = _interpolator.interpolateElapsed(currentFrameTime());
     }
 
     if (_presentationActive)
     {
       updateText(state.elapsed, state.isPreviewing ? _interpolator.lastDuration() : state.duration);
     }
+
     updateRenderingRegistration();
   }
 
@@ -206,12 +213,14 @@ namespace ao::winui
         {
           return;
         }
+
         break;
       case uimodel::PlaybackTimeMode::Duration:
         if (!_dirty && coarseDuration == _lastDuration)
         {
           return;
         }
+
         break;
       case uimodel::PlaybackTimeMode::Default:
       default:
@@ -219,6 +228,7 @@ namespace ao::winui
         {
           return;
         }
+
         break;
     }
 

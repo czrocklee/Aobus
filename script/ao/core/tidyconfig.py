@@ -23,7 +23,7 @@ CONFIG_BASE = """
   {key: 'readability-identifier-naming.StaticConstantIgnoredRegexp', value: '^(rule|value|whitespace|op|name|atom)$'},
   {key: 'readability-identifier-naming.FunctionCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.MethodCase', value: 'camelBack'},
-  {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^property_.*|^signal_.*|^vfunc_.*|^on_.*'},
+  {key: 'readability-identifier-naming.MethodIgnoredRegexp', value: '^(property_.*|signal_.*|vfunc_.*|on_.*|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext)$'},
   {key: 'readability-identifier-naming.PublicMemberCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.ProtectedMemberCase', value: 'camelBack'},
   {key: 'readability-identifier-naming.ProtectedMemberPrefix', value: '_'},
@@ -40,5 +40,6 @@ CONFIG_BASE = """
   {key: 'readability-function-cognitive-complexity.IgnoreMacros', value: true},
   {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$'},
   {key: 'misc-use-internal-linkage.AnalyzeTypes', value: false},
-  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4[/\\\\].*;.*boost[/\\\\]asio[/\\\\].*;.*boost[/\\\\]interprocess[/\\\\].*;.*boost[/\\\\]system[/\\\\].*;.*boost[/\\\\]unordered[/\\\\].*;.*boost[/\\\\]pfr.*;.*[/\\\\]flat_(set|map);.*[/\\\\]errno.h;.*glib.*;.*Windows Kits.*;.*windows\\.h'}
+  {key: 'bugprone-suspicious-include.IgnoredRegex', value: '.*\\.g\\.cpp$'},
+  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4[/\\\\].*;.*boost[/\\\\]asio[/\\\\].*;.*boost[/\\\\]interprocess[/\\\\].*;.*boost[/\\\\]system[/\\\\].*;.*boost[/\\\\]unordered[/\\\\].*;.*boost[/\\\\]pfr.*;.*[/\\\\]flat_(set|map);.*[/\\\\]errno.h;.*glib.*;.*Windows Kits.*;.*windows\\.h;.*[/\\\\]pch\\.h;.*[/\\\\]winrt[/\\\\].*;.*\\.g\\.h'}
  ]}"""

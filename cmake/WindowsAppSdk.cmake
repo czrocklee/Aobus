@@ -43,6 +43,19 @@ function(aobus_nuget_locked_version requested_id output)
     "NuGet lock ${AOBUS_WINDOWS_APP_SDK_LOCK} is missing ${requested_id}.")
 endfunction()
 
+function(_aobus_locked_nuget_package requested_id output)
+  _aobus_read_nuget_lock(packages)
+  foreach(package IN LISTS packages)
+    _aobus_nuget_package_fields("${package}" package_id ignored_version)
+    if(package_id STREQUAL requested_id)
+      set(${output} "${package}" PARENT_SCOPE)
+      return()
+    endif()
+  endforeach()
+  message(FATAL_ERROR
+    "NuGet lock ${AOBUS_WINDOWS_APP_SDK_LOCK} is missing ${requested_id}.")
+endfunction()
+
 function(_aobus_nuget_restore_complete output packages_dir packages)
   foreach(package IN LISTS packages)
     _aobus_nuget_package_fields("${package}" package_id package_version)
@@ -184,6 +197,38 @@ function(_aobus_nuget_import package extension output)
   set(${output}
     "  <Import Project=\"${import_path}\" Condition=\"Exists('${import_path}')\" />\n"
     PARENT_SCOPE)
+endfunction()
+
+function(aobus_enable_cppwinrt target)
+  if(NOT TARGET "${target}")
+    message(FATAL_ERROR "C++/WinRT target does not exist: ${target}")
+  endif()
+  if(NOT AOBUS_NUGET_PACKAGES_DIR)
+    message(FATAL_ERROR "Call aobus_restore_windows_app_sdk before configuring ${target}.")
+  endif()
+
+  _aobus_locked_nuget_package(Microsoft.Windows.CppWinRT cppwinrt_package)
+  _aobus_nuget_import("${cppwinrt_package}" props props_import)
+  _aobus_nuget_import("${cppwinrt_package}" targets targets_import)
+  if(NOT props_import OR NOT targets_import)
+    message(FATAL_ERROR
+      "Microsoft.Windows.CppWinRT does not provide the required native MSBuild imports.")
+  endif()
+
+  set(props_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.CppWinRT.props")
+  set(targets_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.CppWinRT.targets")
+  file(WRITE "${props_file}"
+    "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
+    "${props_import}"
+    "</Project>\n")
+  file(WRITE "${targets_file}"
+    "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
+    "${targets_import}"
+    "</Project>\n")
+
+  set_target_properties("${target}" PROPERTIES
+    VS_GLOBAL_ForceImportAfterCppProps "${props_file}"
+    VS_GLOBAL_ForceImportAfterCppTargets "${targets_file}")
 endfunction()
 
 function(aobus_enable_windows_app_sdk target)

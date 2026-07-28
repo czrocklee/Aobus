@@ -17,9 +17,14 @@ namespace winrt::Aobus::implementation
   struct App : AppT<App>
   {
     App();
-    ~App();
+    ~App() override;
 
-    void OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const&);
+    App(App const&) = delete;
+    App& operator=(App const&) = delete;
+    App(App&&) = delete;
+    App& operator=(App&&) = delete;
+
+    void OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const& /*args*/);
 
   private:
     Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
@@ -28,4 +33,4 @@ namespace winrt::Aobus::implementation
     event_token _windowClosedToken{};
     bool _hasWindowClosedToken = false;
   };
-}
+} // namespace winrt::Aobus::implementation

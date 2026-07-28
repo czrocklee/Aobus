@@ -24,6 +24,7 @@ namespace Gtk
 
 namespace ao::rt
 {
+  class ResourceByteLoader;
   struct PlaybackRevealTrackRequest;
 }
 
@@ -55,7 +56,8 @@ namespace ao::gtk
                   rt::AppRuntime& runtime,
                   TagEditController& tagEditController,
                   ListNavigationController& listNavigation,
-                  uimodel::TrackColumnLayoutStore& layoutStore);
+                  uimodel::TrackColumnLayoutStore& layoutStore,
+                  rt::ResourceByteLoader& byteLoader);
     ~TrackPageHost();
 
     // Not copyable or movable

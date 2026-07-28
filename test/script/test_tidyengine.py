@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -241,6 +242,54 @@ class CompileDatabaseProvisioningTest(unittest.TestCase):
 
 
 class CompileCommandCoverageTest(unittest.TestCase):
+    def test_explicit_header_companion_must_have_an_exact_command(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            build_dir = Path(temp_dir) / "build"
+            header = root / "app" / "windows-winui" / "HeaderOnly.h"
+            companion = root / "app" / "windows-winui" / "App.cpp"
+            header.parent.mkdir(parents=True)
+            header.touch()
+            companion.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text("[]\n", encoding="utf-8")
+
+            with self.assertRaises(SystemExit):
+                tidyengine.compile_command_plan(
+                    build_dir,
+                    [header],
+                    project_root=root,
+                    explicit_header_companions={header: companion},
+                )
+
+    def test_explicit_header_companion_covers_header_only_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            build_dir = Path(temp_dir) / "build"
+            header = root / "app" / "windows-winui" / "HeaderOnly.h"
+            companion = root / "app" / "windows-winui" / "App.cpp"
+            header.parent.mkdir(parents=True)
+            header.touch()
+            companion.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps([{"directory": str(build_dir), "file": str(companion), "command": f"clang-cl {companion}"}]),
+                encoding="utf-8",
+            )
+
+            plan = tidyengine.compile_command_plan(
+                build_dir,
+                [header],
+                project_root=root,
+                explicit_header_companions={header: companion},
+            )
+
+            self.assertEqual(
+                [(target.selected, target.translation_unit) for target in plan.targets],
+                [(header, companion)],
+            )
+            self.assertEqual(list(plan.deferred), [])
+
     def test_sources_require_exact_commands_and_headers_require_safe_companions(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"
@@ -464,8 +513,105 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
             self.assertNotIn(" /Zc:preprocessor ", entries[1]["command"])
             self.assertIn("/Zc:preprocessor-", entries[1]["command"])
 
+    def test_merge_filters_and_rejects_conflicting_translation_units(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            destination = root / "merged"
+            first = root / "First.cpp"
+            second = root / "Second.cpp"
+            first.touch()
+            second.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps([{"directory": str(root), "file": str(first), "command": f"cl /c {first}"}]),
+                encoding="utf-8",
+            )
+            extra = [{"directory": str(root), "file": str(second), "command": f"clang-cl /c {second}"}]
+
+            tidyengine.write_merged_compile_database(build_dir, destination, ("/c",), extra)
+
+            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertEqual([Path(entry["file"]) for entry in entries], [first, second])
+            self.assertTrue(all(" /c " not in entry["command"] for entry in entries))
+
+            with self.assertRaises(SystemExit):
+                tidyengine.write_merged_compile_database(
+                    build_dir,
+                    destination,
+                    (),
+                    [{"directory": str(root), "file": str(first), "command": f"clang-cl {first}"}],
+                )
+
 
 class HeaderCompileDatabaseTest(unittest.TestCase):
+    def test_forced_cmake_pch_is_removed_by_pattern(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            source = root / "Player.cpp"
+            header = root / "Player.h"
+            source.touch()
+            header.touch()
+            build_dir.mkdir()
+            pch = root / "generated" / "cmake_pch.hxx"
+            preamble = root / "tidy files" / "tidy-preamble.h"
+            command = f'clang-cl /FI"{pch}" /FIrequired.h "{source}"'
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps([{"directory": str(root), "file": str(source), "command": command}]),
+                encoding="utf-8",
+            )
+
+            tidyengine.write_header_compile_database(
+                build_dir,
+                [tidyengine.CompileCommandTarget(header, source)],
+                root / "synthetic",
+                excluded_argument_patterns=(r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)',),
+                additional_arguments=(f"/FI{preamble}",),
+                command_line_style="windows",
+            )
+
+            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertNotIn("cmake_pch.hxx", entries[0]["command"])
+            self.assertIn("/FIrequired.h", entries[0]["command"])
+            self.assertIn(subprocess.list2cmdline((f"/FI{preamble}",)), entries[0]["command"])
+
+    def test_additional_argument_list_keeps_space_containing_token_unquoted(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            source = root / "Player.cpp"
+            header = root / "Player.h"
+            preamble = root / "tidy files" / "tidy-preamble.h"
+            source.touch()
+            header.touch()
+            build_dir.mkdir()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "directory": str(root),
+                            "file": str(source),
+                            "arguments": ["clang-cl", "/c", str(source)],
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            forced_include = f"/FI{preamble}"
+
+            tidyengine.write_header_compile_database(
+                build_dir,
+                [tidyengine.CompileCommandTarget(header, source)],
+                root / "synthetic",
+                additional_arguments=(forced_include,),
+                command_line_style="windows",
+            )
+
+            entries = json.loads((root / "synthetic" / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertEqual(entries[0]["arguments"][-1], forced_include)
+            self.assertNotIn('"', entries[0]["arguments"][-1])
+
     def test_arguments_command_is_copied_with_header_as_exact_input(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

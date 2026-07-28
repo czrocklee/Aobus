@@ -20,6 +20,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/track/TrackPageRoute.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -43,13 +44,14 @@ namespace ao::gtk
                                rt::AppRuntime& runtime,
                                TagEditController& tagEditController,
                                ListNavigationController& listNavigation,
-                               uimodel::TrackColumnLayoutStore& layoutStore)
+                               uimodel::TrackColumnLayoutStore& layoutStore,
+                               rt::ResourceByteLoader& byteLoader)
     : _stack{stack}
     , _runtime{runtime}
     , _tagEditController{tagEditController}
     , _listNavigation{listNavigation}
     , _layoutStore{layoutStore}
-    , _thumbnailLoader{_runtime.library().taskService(), _thumbnailCache, _runtime.async()}
+    , _thumbnailLoader{byteLoader, _thumbnailCache, _runtime.async()}
   {
     _revealSub =
       _runtime.playback().events().onRevealTrackRequested(std::bind_front(&TrackPageHost::handleRevealTrack, this));

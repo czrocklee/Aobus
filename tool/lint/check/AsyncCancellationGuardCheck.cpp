@@ -136,7 +136,42 @@ namespace clang::tidy::readability
              hasValidGuardArguments(call, catchStmt);
     }
 
-    bool startsWithCancellationGuard(CXXCatchStmt const* catchStmt)
+    bool isNonEmptyCompound(Stmt const* stmt)
+    {
+      auto const* compound = llvm::dyn_cast_or_null<CompoundStmt>(stmt);
+      return compound != nullptr && !compound->body_empty();
+    }
+
+    bool isCancellationClassifier(CXXCatchStmt const* catchStmt, Stmt const* stmt)
+    {
+      if (!isStdExceptionCatch(catchStmt))
+      {
+        return false;
+      }
+
+      auto const* ifStmt = llvm::dyn_cast_or_null<IfStmt>(stmt);
+
+      if (ifStmt == nullptr || ifStmt->getInit() != nullptr || ifStmt->getConditionVariable() != nullptr ||
+          !isNonEmptyCompound(ifStmt->getThen()) || !isNonEmptyCompound(ifStmt->getElse()))
+      {
+        return false;
+      }
+
+      auto const* call = unwrapSingleExpression(ifStmt->getCond());
+
+      if (call == nullptr)
+      {
+        return false;
+      }
+
+      auto const* callee = call->getDirectCallee();
+      auto const* exceptionDecl = catchStmt->getExceptionDecl();
+      return callee != nullptr && exceptionDecl != nullptr &&
+             callee->getQualifiedNameAsString() == "ao::async::isOperationCancelled" && call->getNumArgs() == 1 &&
+             referencesCatchVariable(call->getArg(0), exceptionDecl);
+    }
+
+    bool startsWithCancellationHandling(CXXCatchStmt const* catchStmt)
     {
       auto const* body = llvm::dyn_cast_or_null<CompoundStmt>(catchStmt->getHandlerBlock());
 
@@ -145,7 +180,8 @@ namespace clang::tidy::readability
         return false;
       }
 
-      return isCancellationGuardCall(*body->body_begin(), catchStmt);
+      auto const* firstStmt = *body->body_begin();
+      return isCancellationGuardCall(firstStmt, catchStmt) || isCancellationClassifier(catchStmt, firstStmt);
     }
 
     FunctionDecl const* nearestEnclosingFunction(ASTContext& context, CXXCatchStmt const* catchStmt)
@@ -207,13 +243,13 @@ namespace clang::tidy::readability
       return;
     }
 
-    if (startsWithCancellationGuard(catchStmt))
+    if (startsWithCancellationHandling(catchStmt))
     {
       return;
     }
 
     diag(loc,
-         "broad catch handler in a coroutine must first call "
-         "ao::async::rethrowIfOperationCancelled to let lifetime cancellation escape");
+         "broad catch handler in a coroutine must first rethrow cancellation or "
+         "exhaustively classify it before handling other exceptions");
   }
 } // namespace clang::tidy::readability

@@ -30,6 +30,7 @@ namespace ao::async
 
   Awaitable resumeOnWorker();
 
+  bool isOperationCancelled(std::exception const& e) noexcept;
   void rethrowIfOperationCancelled(std::exception const& e);
   void rethrowIfOperationCancelled();
 }
@@ -78,6 +79,110 @@ namespace
     {
       ao::async::rethrowIfOperationCancelled(otherException());
       report(e);
+    }
+  }
+
+  ao::async::Task hasExhaustiveCancellationClassifier()
+  {
+    auto cancelled = false;
+
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // NEGATIVE
+    catch (std::exception const& e)
+    {
+      if (ao::async::isOperationCancelled(e))
+      {
+        cancelled = true;
+      }
+      else
+      {
+        report(e);
+      }
+    }
+
+    if (cancelled)
+    {
+      reportUnknown();
+    }
+  }
+
+  ao::async::Task classifierMustUseCatchVariable()
+  {
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (std::exception const& e)
+    {
+      if (ao::async::isOperationCancelled(otherException()))
+      {
+        reportUnknown();
+      }
+      else
+      {
+        report(e);
+      }
+    }
+  }
+
+  ao::async::Task classifierRequiresElseBranch()
+  {
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (std::exception const& e)
+    {
+      if (ao::async::isOperationCancelled(e))
+      {
+        reportUnknown();
+      }
+
+      report(e);
+    }
+  }
+
+  ao::async::Task classifierRequiresNonEmptyBranches()
+  {
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (std::exception const& e)
+    {
+      if (ao::async::isOperationCancelled(e))
+      {
+      }
+      else
+      {
+        report(e);
+      }
+    }
+  }
+
+  ao::async::Task catchAllCannotUseClassifier()
+  {
+    try
+    {
+      co_await ao::async::resumeOnWorker();
+    }
+    // POSITIVE
+    catch (...)
+    {
+      if (ao::async::isOperationCancelled(otherException()))
+      {
+        reportUnknown();
+      }
+      else
+      {
+        reportUnknown();
+      }
     }
   }
 

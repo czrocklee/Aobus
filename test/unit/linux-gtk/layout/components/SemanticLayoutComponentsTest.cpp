@@ -34,6 +34,7 @@
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
@@ -162,8 +163,8 @@ namespace ao::gtk::layout::test
 
     int const cacheSize = 10;
     auto imageCachePtr = std::make_unique<ImageCache>(cacheSize);
-    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(
-      fixture.runtime().library().taskService(), *imageCachePtr, fixture.runtime().async());
+    auto byteLoader = rt::ResourceByteLoader{fixture.runtime()};
+    auto imageLoaderPtr = std::make_unique<ResourceImageLoader>(byteLoader, *imageCachePtr, fixture.runtime().async());
     auto menuModelPtr = Gio::Menu::create();
     menuModelPtr->append_submenu("Test Menu", Gio::Menu::create());
     fixture.dependencies().imageLoader = imageLoaderPtr.get();
@@ -881,7 +882,8 @@ namespace ao::gtk::layout::test
     auto navCallbacks = ListNavigationController::Callbacks{};
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeCoordinator};
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
-    auto pageHost = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto pageHost = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore, byteLoader};
 
     REQUIRE(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
     drainGtkEvents();

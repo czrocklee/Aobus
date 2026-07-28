@@ -7,10 +7,12 @@
 #include "platform/ScopedBooleanFlag.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/uimodel/playback/output/VolumeViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
+#include <memory>
 #include <utility>
 
 namespace ao::winui

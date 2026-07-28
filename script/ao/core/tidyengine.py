@@ -10,12 +10,14 @@ import concurrent.futures
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from . import builddir, gitfiles
 from .dedup import DIAGNOSTIC_RE
@@ -27,6 +29,7 @@ PINNED_LLVM_SHA256 = "d96c2cc1736f4eb7fa43cb9bbdf56d93551a9ae0a9aadb9c99c3c3b2b7
 LLVM_SDK_COMPLETION_MARKER = ".aobus-llvm-sdk-complete"
 LLVM_SDK_REQUIRED_FILES = (
     "bin/clang-apply-replacements.exe",
+    "bin/clang-cl.exe",
     "bin/clang-format.exe",
     "bin/clang-tidy.exe",
     "include/clang-tidy/tool/ClangTidyMain.h",
@@ -421,6 +424,7 @@ def compile_command_plan(
     files: list[Path],
     *,
     project_root: Path = PROJECT_ROOT,
+    explicit_header_companions: dict[Path, Path] | None = None,
 ) -> CompileCommandPlan:
     """Map every covered selection to an exact native translation unit."""
     compiled = _compile_database_entries(build_dir)
@@ -433,6 +437,10 @@ def compile_command_plan(
     targets: list[CompileCommandTarget] = []
     deferred: list[Path] = []
     seen: set[str] = set()
+    companions = {
+        _path_key(header): absolute_path(translation_unit)
+        for header, translation_unit in (explicit_header_companions or {}).items()
+    }
     for path in files:
         path = absolute_path(path)
         if (key := _path_key(path)) in seen:
@@ -442,7 +450,15 @@ def compile_command_plan(
         if suffix in _TRANSLATION_UNIT_SUFFIXES:
             translation_unit = compiled_by_key.get(key)
         elif suffix in _HEADER_SUFFIXES:
-            translation_unit = _header_translation_unit(path, compiled, project_root)
+            if explicit_companion := companions.get(key):
+                translation_unit = compiled_by_key.get(_path_key(explicit_companion))
+                if translation_unit is None:
+                    raise die(
+                        f"explicit header companion {explicit_companion} has no compile command "
+                        f"for selected header {path}."
+                    )
+            else:
+                translation_unit = _header_translation_unit(path, compiled, project_root)
         else:
             translation_unit = None
         if translation_unit is None:
@@ -566,8 +582,14 @@ def write_header_compile_database(
     targets: list[CompileCommandTarget],
     destination: Path,
     excluded_arguments: tuple[str, ...] = (),
+    excluded_argument_patterns: tuple[str, ...] = (),
+    additional_arguments: tuple[str, ...] = (),
+    command_line_style: Literal["posix", "windows"] = "posix",
 ) -> Path:
     """Write exact synthetic commands that make selected headers the main files."""
+    if command_line_style not in {"posix", "windows"}:
+        raise die(f"unsupported compile command line style: {command_line_style}.")
+
     entries = {_path_key(entry.path): entry for entry in _compile_database_entries(build_dir)}
     synthetic: list[dict[str, object]] = []
     for target in targets:
@@ -577,7 +599,20 @@ def write_header_compile_database(
         if entry is None:
             raise die(f"compile command disappeared for mapped translation unit {target.translation_unit}.")
         data = _replace_compile_input(entry, target.selected)
-        synthetic.append(_without_compile_arguments(data, excluded_arguments))
+        data = _without_compile_arguments(data, excluded_arguments, excluded_argument_patterns)
+        arguments = data.get("arguments")
+        if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
+            data["arguments"] = [*arguments, *additional_arguments]
+        elif isinstance(command := data.get("command"), str):
+            serialized_arguments = (
+                subprocess.list2cmdline(additional_arguments)
+                if command_line_style == "windows"
+                else shlex.join(additional_arguments)
+            )
+            data["command"] = f"{command} {serialized_arguments}" if serialized_arguments else command
+        else:
+            raise die("compile command has neither string command nor argument list.")
+        synthetic.append(data)
 
     destination.mkdir(parents=True, exist_ok=True)
     database = destination / "compile_commands.json"
@@ -585,17 +620,28 @@ def write_header_compile_database(
     return destination
 
 
-def _without_compile_arguments(data: dict[str, object], excluded_arguments: tuple[str, ...]) -> dict[str, object]:
+def _without_compile_arguments(
+    data: dict[str, object],
+    excluded_arguments: tuple[str, ...],
+    excluded_argument_patterns: tuple[str, ...] = (),
+) -> dict[str, object]:
     """Return one compile command with exact driver arguments removed."""
     filtered = dict(data)
     excluded = {argument.casefold() for argument in excluded_arguments}
+    patterns = tuple(re.compile(pattern, re.IGNORECASE) for pattern in excluded_argument_patterns)
     arguments = filtered.get("arguments")
     if isinstance(arguments, list) and all(isinstance(argument, str) for argument in arguments):
-        filtered["arguments"] = [argument for argument in arguments if argument.casefold() not in excluded]
+        filtered["arguments"] = [
+            argument
+            for argument in arguments
+            if argument.casefold() not in excluded and not any(pattern.fullmatch(argument) for pattern in patterns)
+        ]
     elif isinstance(command := filtered.get("command"), str):
         for argument in excluded_arguments:
             pattern = rf"(?<!\S){re.escape(argument)}(?=\s|$)"
             command = re.sub(pattern, "", command, flags=re.IGNORECASE)
+        for pattern in excluded_argument_patterns:
+            command = re.sub(rf"(?<!\S)(?:{pattern})(?=\s|$)", "", command, flags=re.IGNORECASE)
         filtered["command"] = command
     else:
         raise die("compile command has neither string command nor argument list.")
@@ -616,6 +662,40 @@ def write_filtered_compile_database(
     destination.mkdir(parents=True, exist_ok=True)
     database = destination / "compile_commands.json"
     database.write_text(json.dumps(filtered, indent=2) + "\n", encoding="utf-8")
+    return destination
+
+
+def write_merged_compile_database(
+    build_dir: Path,
+    destination: Path,
+    excluded_arguments: tuple[str, ...],
+    extra_entries: list[dict[str, object]],
+) -> Path:
+    """Merge native compile commands with validated platform-provider entries."""
+    merged: list[dict[str, object]] = []
+    by_path: dict[str, dict[str, object]] = {}
+
+    for entry in [*(item.data for item in _compile_database_entries(build_dir)), *extra_entries]:
+        filtered = _without_compile_arguments(entry, excluded_arguments)
+        raw_file = filtered.get("file")
+        if not isinstance(raw_file, str):
+            raise die("compile command merge entry has no string file path.")
+        path = Path(raw_file)
+        if not path.is_absolute():
+            directory = filtered.get("directory")
+            base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
+            path = base / path
+        key = _path_key(path)
+        if existing := by_path.get(key):
+            if existing != filtered:
+                raise die(f"conflicting compile commands for {absolute_path(path)}.")
+            continue
+        by_path[key] = filtered
+        merged.append(filtered)
+
+    destination.mkdir(parents=True, exist_ok=True)
+    database = destination / "compile_commands.json"
+    database.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     return destination
 
 

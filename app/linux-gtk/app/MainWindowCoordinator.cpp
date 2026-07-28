@@ -34,6 +34,7 @@
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -62,7 +63,8 @@ namespace ao::gtk
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library()}
       , imageCache{100}
-      , resourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()}
+      , resourceByteLoader{runtime}
+      , resourceImageLoader{resourceByteLoader, imageCache, runtime.async()}
       , playbackCommandSurface{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
       , trackPresentationPreferences{trackPresentationCatalog}
@@ -86,7 +88,12 @@ namespace ao::gtk
                                      return std::nullopt;
                                    }},
                                  themeCoordinator}
-      , trackPageHost{stack, runtime, tagEditController, listNavigationController, trackColumnLayouts}
+      , trackPageHost{stack,
+                      runtime,
+                      tagEditController,
+                      listNavigationController,
+                      trackColumnLayouts,
+                      resourceByteLoader}
       , importExportCoordinator{window,
                                 runtime,
                                 portal::ImportExportCallbacks{
@@ -171,6 +178,7 @@ namespace ao::gtk
     ThemeCoordinator themeCoordinator;
     TrackRowCache trackRowCache;
     ImageCache imageCache;
+    rt::ResourceByteLoader resourceByteLoader;
     ResourceImageLoader resourceImageLoader;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ao::uimodel::TrackPresentationCatalog trackPresentationCatalog;
@@ -423,6 +431,11 @@ namespace ao::gtk
   ThemeCoordinator* MainWindowCoordinator::themeCoordinator()
   {
     return &_implPtr->themeCoordinator;
+  }
+
+  rt::ResourceByteLoader* MainWindowCoordinator::resourceByteLoader()
+  {
+    return &_implPtr->resourceByteLoader;
   }
   portal::ImportExportCoordinator& MainWindowCoordinator::importExport()
   {

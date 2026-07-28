@@ -16,9 +16,15 @@
 
 namespace ao::uimodel
 {
+  struct DesktopShellViewState;
   class NowPlayingViewModel;
   struct NowPlayingViewState;
   struct WindowsTheme;
+}
+
+namespace ao::rt
+{
+  class ResourceByteLoader;
 }
 
 namespace ao::winui
@@ -31,7 +37,6 @@ namespace ao::winui
   class TrackListController;
   class WindowsUiCoordinator;
   class WindowsThemeCoordinator;
-  class WindowsCoverArtLoader;
 }
 
 namespace winrt::Aobus::implementation
@@ -99,6 +104,12 @@ namespace winrt::Aobus::implementation
       std::string label{};
     };
 
+    struct GroupCoverPresenterEntry final
+    {
+      winrt::weak_ref<Microsoft::UI::Xaml::Controls::Grid> tile;
+      std::unique_ptr<ao::winui::CoverArtPresenter> presenterPtr;
+    };
+
     void shutdown();
     void reconcileLibrary();
     void rebuildNavigation();
@@ -110,6 +121,19 @@ namespace winrt::Aobus::implementation
     void unbindPlayback();
     void bindPlayback();
     void applyShellState(double width);
+    void applyShellModePresentation(ao::uimodel::DesktopShellViewState const& state,
+                                    bool modern,
+                                    bool presentationChanged,
+                                    std::vector<Windows::Foundation::IInspectable> const& selectedItems);
+    void applyNavigationPresentation(ao::uimodel::DesktopShellViewState const& state,
+                                     bool modern,
+                                     double navigationWidth);
+    void applyInspectorPresentation(ao::uimodel::DesktopShellViewState const& state,
+                                    bool modern,
+                                    double inspectorWidth);
+    void applyResponsiveLayout(ao::uimodel::DesktopShellViewState const& state,
+                               double navigationWidth,
+                               double inspectorWidth);
     void restoreWindowPlacement();
     void saveWindowState();
     void applyTheme(ao::uimodel::WindowsTheme const& theme);
@@ -121,13 +145,13 @@ namespace winrt::Aobus::implementation
     void showFullscreenSoul();
     void showSystemMenu();
     void executeSort(std::string const& columnId);
-    void moveColumn(Windows::Foundation::IInspectable const& sender, int offset);
+    void moveColumn(Windows::Foundation::IInspectable const& sender, std::int32_t offset);
     winrt::fire_and_forget pickLibrary();
 
     ao::winui::LibrarySession* _session = nullptr;
     std::unique_ptr<ao::winui::WindowsUiCoordinator> _coordinatorPtr;
     ao::winui::TrackListController* _trackListPtr = nullptr;
-    ao::winui::WindowsCoverArtLoader* _coverArtLoaderPtr = nullptr;
+    ao::rt::ResourceByteLoader* _resourceBytes = nullptr;
     ao::winui::CoverArtPresenter* _nowPlayingCoverArtPtr = nullptr;
     std::unique_ptr<ao::winui::SmtcBridge> _smtcPtr;
     ao::winui::WindowsThemeCoordinator* _themePtr = nullptr;
@@ -143,7 +167,7 @@ namespace winrt::Aobus::implementation
     bool _applyingNavigation = false;
     bool _applyingTrackSelection = false;
     std::map<ao::ListId, NavigationEntry> _navigationEntriesById;
-    std::unordered_map<std::uintptr_t, std::unique_ptr<ao::winui::CoverArtPresenter>> _groupCoverPresenters;
+    std::unordered_map<void const*, GroupCoverPresenterEntry> _groupCoverPresenters;
     bool _hasAppWindowChangedToken = false;
     bool _hasClosedToken = false;
     bool _hasSoulWindowChangedToken = false;

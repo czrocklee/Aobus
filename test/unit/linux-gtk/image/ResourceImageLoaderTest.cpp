@@ -4,10 +4,19 @@
 #include "image/ResourceImageLoader.h"
 
 #include "image/ImageCache.h"
+#include "platform/MprisArtUrlCache.h"
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/pixbuf.h>
@@ -15,13 +24,68 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <span>
+#include <stop_token>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    class InjectedResourceLoadFailure final : public Exception
+    {
+    public:
+      using Exception::Exception;
+    };
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> loadEmptyAfterOneFailure(
+      std::shared_ptr<std::atomic_bool> failNextPtr,
+      rt::test::AsyncTestState<std::size_t> loadCount,
+      ResourceId /*resourceId*/,
+      std::stop_token /*stopToken*/)
+    {
+      loadCount.increment();
+
+      if (failNextPtr->exchange(false))
+      {
+        throwException<InjectedResourceLoadFailure>("injected resource load failure");
+      }
+
+      co_return std::optional<std::vector<std::byte>>{};
+    }
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelResourceLoad(
+      rt::test::AsyncTestState<std::size_t> loadCount,
+      ResourceId /*resourceId*/,
+      std::stop_token /*stopToken*/)
+    {
+      loadCount.increment();
+      async::throwOperationCancelled();
+      co_return std::optional<std::vector<std::byte>>{};
+    }
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceAfterRelease(
+      rt::test::AsyncTestState<std::size_t> loadCount,
+      rt::test::AsyncBarrier* release,
+      std::vector<std::byte> bytes,
+      ResourceId /*resourceId*/,
+      std::stop_token const stopToken)
+    {
+      loadCount.increment();
+      release->wait();
+      async::throwIfStopRequested(stopToken);
+      co_return std::optional{std::move(bytes)};
+    }
+  } // namespace
+
   TEST_CASE("ResourceImageLoader - resolves image sources into pixbuf results",
             "[gtk][unit][resource-image][concurrency]")
   {
@@ -39,7 +103,8 @@ namespace ao::gtk::test
       }};
     auto& runtime = fixture.runtime();
     auto cache = ImageCache{200};
-    auto loader = ResourceImageLoader{runtime.library().taskService(), cache, runtime.async()};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto loader = ResourceImageLoader{byteLoader, cache, runtime.async()};
 
     constexpr std::int32_t kPixelSize = 48;
 
@@ -314,7 +379,7 @@ namespace ao::gtk::test
       auto request = ResourceImageLoader::Request{};
 
       {
-        auto scopedLoader = ResourceImageLoader{runtime.library().taskService(), cache, runtime.async()};
+        auto scopedLoader = ResourceImageLoader{byteLoader, cache, runtime.async()};
         request = scopedLoader.requestThumbnail(
           resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++callbackCount; });
         REQUIRE(request);
@@ -323,7 +388,7 @@ namespace ao::gtk::test
       CHECK(callbackCount == 0);
       request.reset();
 
-      auto replacementLoader = ResourceImageLoader{runtime.library().taskService(), cache, runtime.async()};
+      auto replacementLoader = ResourceImageLoader{byteLoader, cache, runtime.async()};
       std::int32_t replacementCallbackCount = 0;
       auto replacementRequest = replacementLoader.requestThumbnail(
         resourceId, kPixelSize, [&](Glib::RefPtr<Gdk::Pixbuf> const&) { ++replacementCallbackCount; });
@@ -331,5 +396,146 @@ namespace ao::gtk::test
       REQUIRE(pumpGtkEventsUntil([&] { return replacementCallbackCount == 1; }));
       CHECK(callbackCount == 0);
     }
+  }
+
+  TEST_CASE("ResourceImageLoader - exceptional resource loads terminate their request flight",
+            "[gtk][unit][resource-image][concurrency]")
+  {
+    auto executor = rt::test::InlineExecutor{};
+    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
+    auto cache = ImageCache{200};
+    constexpr auto kMissingResourceId = ResourceId{987655};
+    constexpr std::int32_t kPixelSize = 48;
+
+    SECTION("a non-cancellation fault reports once, completes empty, and permits retry")
+    {
+      auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto receivedImage = rt::test::AsyncTestState<bool>::create(true);
+      auto failNextPtr = std::make_shared<std::atomic_bool>(true);
+      auto byteLoader =
+        rt::ResourceByteLoader{runtime, std::bind_front(loadEmptyAfterOneFailure, failNextPtr, loadCount)};
+      auto loader = ResourceImageLoader{byteLoader, cache, runtime};
+
+      auto request = loader.requestThumbnail(kMissingResourceId,
+                                             kPixelSize,
+                                             [callbackCount, receivedImage](Glib::RefPtr<Gdk::Pixbuf> const& imagePtr)
+                                             {
+                                               receivedImage.set(static_cast<bool>(imagePtr));
+                                               callbackCount.increment();
+                                             });
+      REQUIRE(request);
+      REQUIRE(callbackCount.waitUntil(1));
+      CHECK_FALSE(receivedImage.load());
+      REQUIRE(exceptionRecorder.waitForCount(1));
+      rt::test::requireSingleRecordedException<InjectedResourceLoadFailure>(
+        exceptionRecorder, "resource byte delivery");
+
+      auto retryReceivedImage = rt::test::AsyncTestState<bool>::create(true);
+      auto retry =
+        loader.requestThumbnail(kMissingResourceId,
+                                kPixelSize,
+                                [callbackCount, retryReceivedImage](Glib::RefPtr<Gdk::Pixbuf> const& imagePtr)
+                                {
+                                  retryReceivedImage.set(static_cast<bool>(imagePtr));
+                                  callbackCount.increment();
+                                });
+      REQUIRE(retry);
+      REQUIRE(callbackCount.waitUntil(2));
+      CHECK(loadCount.load() == 2);
+      CHECK_FALSE(retryReceivedImage.load());
+      CHECK(exceptionRecorder.snapshot().size() == 1);
+
+      runtime.requestStop();
+      runtime.join();
+    }
+
+    SECTION("cancellation escapes without invoking the waiter")
+    {
+      auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto byteLoader = rt::ResourceByteLoader{runtime, std::bind_front(cancelResourceLoad, loadCount)};
+      auto loader = ResourceImageLoader{byteLoader, cache, runtime};
+
+      auto request =
+        loader.requestThumbnail(kMissingResourceId,
+                                kPixelSize,
+                                [callbackCount](Glib::RefPtr<Gdk::Pixbuf> const&) { callbackCount.increment(); });
+      REQUIRE(request);
+      REQUIRE(loadCount.waitUntil(1));
+
+      runtime.requestStop();
+      runtime.join();
+      CHECK(callbackCount.load() == 0);
+      CHECK(exceptionRecorder.snapshot().empty());
+    }
+  }
+
+  TEST_CASE("ResourceByteLoader - GTK derivatives share one raw resource read",
+            "[gtk][unit][resource-byte][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto executor = rt::test::InlineExecutor{};
+    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, 4, exceptionRecorder.handler()};
+    auto release = rt::test::AsyncBarrier{};
+    auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto const pngBytes = encodePng(makePixbuf(256));
+    auto byteLoader =
+      rt::ResourceByteLoader{runtime, std::bind_front(loadResourceAfterRelease, loadCount, &release, pngBytes)};
+    auto imageCache = ImageCache{200};
+    auto imageLoader = ResourceImageLoader{byteLoader, imageCache, runtime};
+    auto tempDir = ao::test::TempDir{};
+    auto artUrlCache = platform::MprisArtUrlCache{byteLoader, runtime, tempDir.path() / "shared-resource-bytes"};
+    constexpr auto kResourceId = ResourceId{8181};
+    auto urlCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto nonEmptyUrlCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto urlRequest = artUrlCache.requestUrl(kResourceId,
+                                             [urlCallbackCount, nonEmptyUrlCount](std::string url)
+                                             {
+                                               if (!url.empty())
+                                               {
+                                                 nonEmptyUrlCount.increment();
+                                               }
+
+                                               urlCallbackCount.increment();
+                                             });
+    REQUIRE(urlRequest);
+    REQUIRE(loadCount.waitUntil(1));
+
+    auto imageCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto nonEmptyImageCount = rt::test::AsyncTestState<std::size_t>::create(0);
+    auto const requestImage = [&](std::int32_t const physicalPixelSize)
+    {
+      return imageLoader.requestThumbnail(
+        kResourceId,
+        physicalPixelSize,
+        [imageCallbackCount, nonEmptyImageCount](Glib::RefPtr<Gdk::Pixbuf> const& imagePtr)
+        {
+          if (imagePtr)
+          {
+            nonEmptyImageCount.increment();
+          }
+
+          imageCallbackCount.increment();
+        });
+    };
+    auto smallRequest = requestImage(48);
+    auto largeRequest = requestImage(96);
+    REQUIRE(smallRequest);
+    REQUIRE(largeRequest);
+    CHECK(loadCount.load() == 1);
+
+    release.release();
+    REQUIRE(urlCallbackCount.waitUntil(1));
+    REQUIRE(imageCallbackCount.waitUntil(2));
+    CHECK(nonEmptyUrlCount.load() == 1);
+    CHECK(nonEmptyImageCount.load() == 2);
+    CHECK(loadCount.load() == 1);
+    CHECK(exceptionRecorder.snapshot().empty());
+
+    runtime.requestStop();
+    runtime.join();
   }
 } // namespace ao::gtk::test

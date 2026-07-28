@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <utility>
 
 namespace ao::winui
@@ -41,10 +42,12 @@ namespace ao::winui
   TrackQuickFilterControl::~TrackQuickFilterControl()
   {
     _commitPending = false;
+
     if (_debounceTimer)
     {
       _debounceTimer.Stop();
     }
+
     _viewModelPtr.reset();
     _runtimePtr.reset();
   }
@@ -53,6 +56,7 @@ namespace ao::winui
   {
     unbind();
     _runtimePtr = std::move(runtimePtr);
+
     try
     {
       _viewModelPtr = std::make_unique<uimodel::TrackFilterViewModel>(_runtimePtr->views(),
@@ -70,10 +74,12 @@ namespace ao::winui
   void TrackQuickFilterControl::unbind()
   {
     _commitPending = false;
+
     if (_debounceTimer)
     {
       _debounceTimer.Stop();
     }
+
     _viewModelPtr.reset();
     _runtimePtr.reset();
 
@@ -109,8 +115,7 @@ namespace ao::winui
       return;
     }
 
-    auto const now = std::chrono::steady_clock::now();
-    if (now < _commitDeadline)
+    if (auto const now = std::chrono::steady_clock::now(); now < _commitDeadline)
     {
       auto const remaining =
         std::max(std::chrono::milliseconds{1}, std::chrono::ceil<std::chrono::milliseconds>(_commitDeadline - now));
@@ -121,6 +126,7 @@ namespace ao::winui
     }
 
     _commitPending = false;
+
     if (_viewModelPtr)
     {
       _viewModelPtr->updateFilter(winrt::to_string(_input.Text()));
@@ -134,6 +140,7 @@ namespace ao::winui
     {
       [[maybe_unused]] auto const applyingState = ScopedBooleanFlag{_applyingState};
       _input.IsEnabled(state.enabled);
+
       if (winrt::to_string(_input.Text()) != state.entryText)
       {
         _input.Text(winrt::to_hstring(state.entryText));
@@ -141,10 +148,12 @@ namespace ao::winui
     }
 
     auto tooltip = winrt::Windows::Foundation::IInspectable{nullptr};
+
     if (!state.tooltip.empty())
     {
       tooltip = winrt::box_value(winrt::to_hstring(state.tooltip));
     }
+
     winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_input, tooltip);
 
     if (state.hasError && _onError)

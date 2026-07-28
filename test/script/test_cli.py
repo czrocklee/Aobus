@@ -921,6 +921,25 @@ class CliParseTest(unittest.TestCase):
             build_dir / "tool" / "lint" / "libAobusLintPlugin.so",
         )
 
+    def test_winui_compile_commands_require_the_windows_tidy_toolchain(self):
+        args = mock.Mock(path=None, no_build=False)
+        toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)
+        selected = [tidy_command.WINUI_ROOT / "App.xaml.cpp"]
+
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            with mock.patch.object(tidy_command.build, "do_build") as do_build:
+                with mock.patch.object(tidy_command.winuitidy, "compile_commands") as compile_commands:
+                    commands = tidy_command.prepare_winui_compile_commands(
+                        args,
+                        Path("/tmp/build/tidy"),
+                        toolchain,
+                        selected,
+                    )
+
+        self.assertEqual(commands, [])
+        do_build.assert_not_called()
+        compile_commands.assert_not_called()
+
     def test_tidy_toolchain_validation_requires_registered_aobus_checks(self):
         toolchain = tidy_command.TidyToolchain("clang-tidy", Path("plugin.so"), None)
         completed = mock.Mock(

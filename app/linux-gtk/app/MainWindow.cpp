@@ -23,7 +23,6 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -81,7 +80,7 @@ namespace ao::gtk
     _shellLayout.attachToWindow();
 
     auto mprisArtUrlCachePtr =
-      std::make_shared<platform::MprisArtUrlCache>(_runtime.library().taskService(), _runtime.async());
+      std::make_shared<platform::MprisArtUrlCache>(*_mainWindowCoordinatorPtr->resourceByteLoader(), _runtime.async());
     _mprisBridgePtr = std::make_unique<platform::MprisBridge>(
       _runtime.playback(),
       *_mainWindowCoordinatorPtr->playbackCommandSurface(),

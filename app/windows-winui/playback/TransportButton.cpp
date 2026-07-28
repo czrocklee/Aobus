@@ -7,10 +7,11 @@
 #include "platform/WindowsStringResources.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
+#include <memory>
 #include <string_view>
 #include <utility>
 

@@ -9,19 +9,19 @@ namespace ao::winui
   {
   public:
     explicit ScopedBooleanFlag(bool& value, bool const enabled = true) noexcept
-      : _valuePtr{enabled ? &value : nullptr}, _previous{value}
+      : _value{enabled ? &value : nullptr}, _previous{value}
     {
-      if (_valuePtr != nullptr)
+      if (_value != nullptr)
       {
-        *_valuePtr = true;
+        *_value = true;
       }
     }
 
     ~ScopedBooleanFlag() noexcept
     {
-      if (_valuePtr != nullptr)
+      if (_value != nullptr)
       {
-        *_valuePtr = _previous;
+        *_value = _previous;
       }
     }
 
@@ -31,7 +31,7 @@ namespace ao::winui
     ScopedBooleanFlag& operator=(ScopedBooleanFlag&&) = delete;
 
   private:
-    bool* _valuePtr = nullptr;
+    bool* _value = nullptr;
     bool _previous = false;
   };
 } // namespace ao::winui

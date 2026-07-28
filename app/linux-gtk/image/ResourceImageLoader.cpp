@@ -5,13 +5,12 @@
 
 #include "image/ImageCache.h"
 #include <ao/CoreIds.h>
-#include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
-#include <ao/rt/Log.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceBytes.h>
 
 #include <gdkmm/pixbuf.h>
 #include <gdkmm/pixbufloader.h>
@@ -22,12 +21,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <functional>
 #include <memory>
 #include <span>
 #include <stop_token>
 #include <utility>
-#include <vector>
 
 namespace ao::gtk
 {
@@ -112,14 +109,17 @@ namespace ao::gtk
     }
   } // namespace
 
-  ResourceImageLoader::ResourceImageLoader(rt::LibraryTaskService& tasks, ImageCache& cache, async::Runtime& runtime)
-    : _tasks{tasks}, _cache{cache}, _runtime{runtime}, _scopePtr{std::make_unique<async::LifetimeScope>()}
+  ResourceImageLoader::ResourceImageLoader(rt::ResourceByteLoader& byteLoader,
+                                           ImageCache& cache,
+                                           async::Runtime& runtime)
+    : _byteLoader{byteLoader}, _cache{cache}, _runtime{runtime}, _scopePtr{std::make_unique<async::LifetimeScope>()}
   {
   }
 
   ResourceImageLoader::~ResourceImageLoader()
   {
     _scopePtr->cancelAll();
+    _requests.clear();
   }
 
   Glib::RefPtr<Gdk::Pixbuf> ResourceImageLoader::getFull(ResourceId const resourceId)
@@ -200,7 +200,8 @@ namespace ao::gtk
       callback = [onReady = std::move(onReady)](Glib::RefPtr<Gdk::Pixbuf> const& imagePtr) { onReady(imagePtr); };
     }
 
-    return _requests.request(key, std::move(callback), [this, key] { spawnDecode(key); });
+    return _requests.request(
+      key, std::move(callback), [this, key](Requests::FlightToken token) { requestBytes(key, std::move(token)); });
   }
 
   void ResourceImageLoader::prefetch(ImageCacheKey const key)
@@ -217,56 +218,57 @@ namespace ao::gtk
       return;
     }
 
-    _requests.prefetch(key, [this, key] { spawnDecode(key); });
+    _requests.prefetch(key, [this, key](Requests::FlightToken token) { requestBytes(key, std::move(token)); });
   }
 
-  void ResourceImageLoader::spawnDecode(ImageCacheKey const key)
+  void ResourceImageLoader::requestBytes(ImageCacheKey const key, Requests::FlightToken token)
+  {
+    auto dependency = _byteLoader.request(key.resourceId,
+                                          [this, key, token](rt::ResourceBytes bytes) mutable
+                                          { spawnDecode(key, std::move(token), std::move(bytes)); });
+    _requests.retainDependency(token, std::move(dependency));
+  }
+
+  void ResourceImageLoader::spawnDecode(ImageCacheKey const key, Requests::FlightToken token, rt::ResourceBytes bytes)
   {
     // Runtime and its task service outlive this loader. Loader-owned state is
     // touched only after the cancellation-checked callback-executor hop.
     _runtime.spawnWithLifetime(
       _scopePtr.get(),
-      [loader = this, tasks = &_tasks, runtime = &_runtime, key](std::stop_token const stopToken)
-      { return decode(loader, tasks, runtime, key, stopToken); });
+      [loader = this, runtime = &_runtime, key, token = std::move(token), bytes = std::move(bytes)](
+        std::stop_token const stopToken) mutable
+      { return decode(loader, runtime, key, std::move(token), std::move(bytes), stopToken); });
   }
 
   async::Task<void> ResourceImageLoader::decode(ResourceImageLoader* const loader,
-                                                rt::LibraryTaskService* const tasks,
                                                 async::Runtime* const runtime,
                                                 ImageCacheKey const key,
+                                                Requests::FlightToken token,
+                                                rt::ResourceBytes bytes,
                                                 std::stop_token const stopToken)
   {
     auto decodedPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-    auto bytesResult = co_await tasks->loadResourceAsync(key.resourceId, stopToken);
 
-    if (!bytesResult)
+    try
     {
-      if (bytesResult.error().code == Error::Code::ValueTooLarge)
-      {
-        APP_LOG_WARN("GTK cover resource {} exceeds the interactive byte limit", key.resourceId.raw());
-      }
-    }
-    else if (*bytesResult)
-    {
-      try
-      {
-        auto bytes = std::move(**bytesResult);
-        co_await runtime->resumeOnWorker(stopToken);
+      co_await runtime->resumeOnWorker(stopToken);
 
+      if (!bytes.empty())
+      {
         try
         {
-          decodedPtr = decodePixbuf(bytes, key);
+          decodedPtr = decodePixbuf(bytes.view(), key);
         }
         catch (Glib::Error const&)
         {
           decodedPtr.reset();
         }
       }
-      catch (...)
-      {
-        async::rethrowIfOperationCancelled();
-        runtime->reportUnhandledException(std::current_exception(), "GTK resource image decode workflow");
-      }
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      runtime->reportUnhandledException(std::current_exception(), "GTK resource image decode workflow");
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
@@ -276,6 +278,6 @@ namespace ao::gtk
       loader->_cache.put(key, decodedPtr);
     }
 
-    loader->_requests.complete(key, decodedPtr);
+    loader->_requests.complete(token, decodedPtr);
   }
 } // namespace ao::gtk

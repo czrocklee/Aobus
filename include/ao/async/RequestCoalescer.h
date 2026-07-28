@@ -13,19 +13,27 @@
 #include <utility>
 #include <vector>
 
-namespace ao::gtk
+namespace ao::async
 {
   /**
    * Coalesces equal owner-affine requests while keeping callback interests
    * independently cancellable.
    *
-   * request(), prefetch(), and complete() must run on the owning executor.
-   * Request cancellation may run on any thread and may outlive the coalescer.
-   * request() with an empty callback is intentionally equivalent to prefetch()
-   * and returns an empty Request.
+   * request(), prefetch(), complete(), and clear() must run on the owning
+   * executor. Request cancellation may run on any thread and may outlive the
+   * coalescer. request() with an empty callback is intentionally equivalent to
+   * prefetch() and returns an empty Request.
+   *
    * Completion removes its flight before callback fanout, so callbacks may
-   * reenter request() for the same key. Synchronously destroying the coalescer
-   * from a completion callback is not supported by the GTK ownership model.
+   * reenter request() for the same key. A FlightToken identifies the exact
+   * flight that started the work, so completion after clear() cannot retire a
+   * replacement flight for the same key. clear() forgets flights but does not
+   * cancel their external work; the owner must cancel that work before
+   * releasing any state it may access.
+   *
+   * retainDependency() transfers a cancellable dependency to an exact flight.
+   * Completion, clear(), or starter rollback releases that dependency. A stale
+   * token rejects and immediately releases the supplied dependency.
    */
   template<typename Key, typename Value, typename Hash = std::hash<Key>, typename Equal = std::equal_to<Key>>
   class RequestCoalescer final
@@ -33,6 +41,27 @@ namespace ao::gtk
   public:
     using Callback = std::move_only_function<void(Value const&)>;
     using Request = utility::ScopedRegistration;
+
+    class FlightToken final
+    {
+    public:
+      FlightToken(FlightToken const&) = default;
+      FlightToken& operator=(FlightToken const&) = default;
+      FlightToken(FlightToken&&) noexcept = default;
+      FlightToken& operator=(FlightToken&&) noexcept = default;
+      ~FlightToken() = default;
+
+    private:
+      FlightToken(Key key, std::weak_ptr<void> flightPtr)
+        : _key{std::move(key)}, _flightPtr{std::move(flightPtr)}
+      {
+      }
+
+      Key _key;
+      std::weak_ptr<void> _flightPtr;
+
+      friend class RequestCoalescer;
+    };
 
     template<typename Start>
     Request request(Key const& key, Callback callback, Start&& start)
@@ -73,17 +102,25 @@ namespace ao::gtk
       startFlight(key, flightPtr, std::forward<Start>(start));
     }
 
-    void complete(Key const& key, Value const& value)
+    void complete(FlightToken const& token, Value const& value)
     {
-      auto const it = _flights.find(key);
+      auto const tokenFlightPtr = token._flightPtr.lock();
 
-      if (it == _flights.end())
+      if (!tokenFlightPtr)
+      {
+        return;
+      }
+
+      auto const it = _flights.find(token._key);
+
+      if (it == _flights.end() || it->second != tokenFlightPtr)
       {
         return;
       }
 
       auto flightPtr = std::move(it->second);
       _flights.erase(it);
+      flightPtr->dependencies.clear();
       auto firstException = std::exception_ptr{};
 
       for (auto& waiter : flightPtr->waiters)
@@ -112,6 +149,28 @@ namespace ao::gtk
       }
     }
 
+    bool retainDependency(FlightToken const& token, utility::ScopedRegistration dependency)
+    {
+      auto const tokenFlightPtr = token._flightPtr.lock();
+
+      if (!tokenFlightPtr)
+      {
+        return false;
+      }
+
+      auto const it = _flights.find(token._key);
+
+      if (it == _flights.end() || it->second != tokenFlightPtr)
+      {
+        return false;
+      }
+
+      it->second->dependencies.push_back(std::move(dependency));
+      return true;
+    }
+
+    void clear() noexcept { _flights.clear(); }
+
   private:
     struct Interest final
     {
@@ -127,6 +186,7 @@ namespace ao::gtk
     struct Flight final
     {
       std::vector<Waiter> waiters;
+      std::vector<utility::ScopedRegistration> dependencies;
     };
 
     template<typename Start>
@@ -134,7 +194,7 @@ namespace ao::gtk
     {
       try
       {
-        std::invoke(std::forward<Start>(start));
+        std::invoke(std::forward<Start>(start), FlightToken{key, std::weak_ptr<void>{flightPtr}});
       }
       catch (...)
       {
@@ -149,4 +209,4 @@ namespace ao::gtk
 
     std::unordered_map<Key, std::shared_ptr<Flight>, Hash, Equal> _flights;
   };
-} // namespace ao::gtk
+} // namespace ao::async

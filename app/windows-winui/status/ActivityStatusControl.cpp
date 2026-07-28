@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <memory>
 #include <string_view>
 #include <utility>
 
@@ -49,6 +50,15 @@ namespace ao::winui
     constexpr std::size_t kMaxNotificationDetailRows = 4;
     constexpr double kDetailWidth = 320.0;
     constexpr double kDetailMaxHeight = 360.0;
+    constexpr double kDetailDismissButtonSide = 28.0;
+    constexpr double kDetailDismissHorizontalPadding = 6.0;
+    constexpr double kDetailDismissVerticalPadding = 4.0;
+    constexpr double kDetailDismissIconSize = 10.0;
+    constexpr double kDetailRowSpacing = 10.0;
+    constexpr double kTaskRowSpacing = 6.0;
+    constexpr double kNotificationColumnSpacing = 8.0;
+    constexpr double kNotificationIconSize = 12.0;
+    constexpr double kNotificationIconTopMargin = 4.0;
     constexpr std::wstring_view kSuccessGlyph = L"\uE73E";
     constexpr std::wstring_view kInfoGlyph = L"\uE946";
     constexpr std::wstring_view kWarningGlyph = L"\uE7BA";
@@ -105,23 +115,30 @@ namespace ao::winui
       auto block = TextBlock{};
       block.Text(winrt::to_hstring(text));
       block.TextWrapping(TextWrapping::Wrap);
+
       if (title)
       {
         block.FontWeight(winrt::Windows::UI::Text::FontWeights::SemiBold());
       }
+
       return block;
     }
 
     Button detailDismissButton()
     {
       auto button = Button{};
-      button.MinWidth(28.0);
-      button.MinHeight(28.0);
-      button.Padding({6.0, 4.0, 6.0, 4.0});
+      button.MinWidth(kDetailDismissButtonSide);
+      button.MinHeight(kDetailDismissButtonSide);
+      button.Padding({
+        .Left = kDetailDismissHorizontalPadding,
+        .Top = kDetailDismissVerticalPadding,
+        .Right = kDetailDismissHorizontalPadding,
+        .Bottom = kDetailDismissVerticalPadding,
+      });
       button.HorizontalAlignment(HorizontalAlignment::Right);
       auto icon = FontIcon{};
       icon.Glyph(winrt::hstring{kDismissGlyph});
-      icon.FontSize(10.0);
+      icon.FontSize(kDetailDismissIconSize);
       button.Content(icon);
       ToolTipService::SetToolTip(button,
                                  winrt::box_value(winrt::to_hstring(resourceStringOr(
@@ -143,7 +160,7 @@ namespace ao::winui
     , _autoDismissTimer{_root.DispatcherQueue().CreateTimer()}
     , _reserveIdle{config.reserveIdle}
   {
-    _detailRows.Spacing(10.0);
+    _detailRows.Spacing(kDetailRowSpacing);
 
     auto detailScroll = ScrollViewer{};
     detailScroll.Width(kDetailWidth);
@@ -209,10 +226,12 @@ namespace ao::winui
   void ActivityStatusControl::unbind()
   {
     cancelAutoDismissTimer();
+
     if (_detailFlyout)
     {
       _detailFlyout.Hide();
     }
+
     clearDetailRows();
     _viewModelPtr.reset();
     _runtimePtr.reset();
@@ -250,12 +269,19 @@ namespace ao::winui
     bool const openable = uimodel::hasDetailContent(state.detail) && !idle;
     _detailButton.IsHitTestVisible(openable || reserveIdle);
     _detailButton.IsTabStop(openable);
-    ToolTipService::SetToolTip(
-      _detailButton,
-      openable ? winrt::Windows::Foundation::IInspectable{winrt::box_value(
-                   winrt::to_hstring(resourceStringOr("ActivityStatusDetailsTooltip", "View activity details")))}
-               : (reserveIdle ? winrt::Windows::Foundation::IInspectable{winrt::box_value(winrt::to_hstring(idleLabel))}
-                              : nullptr));
+    auto detailToolTip = winrt::Windows::Foundation::IInspectable{nullptr};
+
+    if (openable)
+    {
+      detailToolTip =
+        winrt::box_value(winrt::to_hstring(resourceStringOr("ActivityStatusDetailsTooltip", "View activity details")));
+    }
+    else if (reserveIdle)
+    {
+      detailToolTip = winrt::box_value(winrt::to_hstring(idleLabel));
+    }
+
+    ToolTipService::SetToolTip(_detailButton, detailToolTip);
 
     renderDetail(state);
 
@@ -263,6 +289,7 @@ namespace ao::winui
     {
       _detailFlyout.Hide();
     }
+
     syncAutoDismissTimer(compact);
   }
 
@@ -270,6 +297,7 @@ namespace ao::winui
   {
     clearDetailRows();
     auto const& detail = state.detail;
+
     if (!uimodel::hasDetailContent(detail))
     {
       return;
@@ -280,13 +308,15 @@ namespace ao::winui
       appendTaskDetail(*detail.optLibraryTask);
     }
 
-    auto appendedRows = std::size_t{};
+    std::size_t appendedRows = 0;
+
     for (auto const& item : detail.items)
     {
       if (appendedRows >= kMaxNotificationDetailRows)
       {
         break;
       }
+
       appendNotificationDetail(item);
       ++appendedRows;
     }
@@ -295,7 +325,7 @@ namespace ao::winui
   void ActivityStatusControl::appendTaskDetail(uimodel::ActivityTaskDetail const& task)
   {
     auto row = StackPanel{};
-    row.Spacing(6.0);
+    row.Spacing(kTaskRowSpacing);
     row.Children().Append(detailText(resourceStringOr("ActivityStatusLibraryTask", "Library task"), true));
     row.Children().Append(detailText(task.message));
 
@@ -310,7 +340,7 @@ namespace ao::winui
   void ActivityStatusControl::appendNotificationDetail(uimodel::ActivityDetailItem const& item)
   {
     auto row = Grid{};
-    row.ColumnSpacing(8.0);
+    row.ColumnSpacing(kNotificationColumnSpacing);
 
     auto iconColumn = ColumnDefinition{};
     iconColumn.Width(automatic());
@@ -324,9 +354,14 @@ namespace ao::winui
 
     auto icon = FontIcon{};
     icon.Glyph(winrt::hstring{severityGlyph(item.severity)});
-    icon.FontSize(12.0);
+    icon.FontSize(kNotificationIconSize);
     icon.VerticalAlignment(VerticalAlignment::Top);
-    icon.Margin({0.0, 4.0, 0.0, 0.0});
+    icon.Margin({
+      .Left = 0.0,
+      .Top = kNotificationIconTopMargin,
+      .Right = 0.0,
+      .Bottom = 0.0,
+    });
     row.Children().Append(icon);
 
     auto message = detailText(item.message, true);
@@ -362,7 +397,9 @@ namespace ao::winui
         registration.button.Click(registration.token);
       }
     }
+
     _detailDismissRegistrations.clear();
+
     if (_detailRows)
     {
       _detailRows.Children().Clear();
@@ -376,12 +413,13 @@ namespace ao::winui
       cancelAutoDismissTimer();
       return;
     }
-    if (_scheduledCompact && sameCompactPresentation(*_scheduledCompact, compact))
+
+    if (_optScheduledCompact && sameCompactPresentation(*_optScheduledCompact, compact))
     {
       return;
     }
 
-    _scheduledCompact = compact;
+    _optScheduledCompact = compact;
     _autoDismissTimer.Stop();
     _autoDismissTickRevoker.revoke();
     auto const generation = ++_autoDismissGeneration;
@@ -394,10 +432,12 @@ namespace ao::winui
                                {
                                  return;
                                }
-                               _scheduledCompact.reset();
+
+                               _optScheduledCompact.reset();
+
                                if (!_viewModelPtr->autoDismissCompactIfDue())
                                {
-                                 _scheduledCompact = _viewModelPtr->viewState().compact;
+                                 _optScheduledCompact = _viewModelPtr->viewState().compact;
                                  _autoDismissTimer.Interval(std::chrono::milliseconds{1});
                                  _autoDismissTimer.Start();
                                }
@@ -412,8 +452,9 @@ namespace ao::winui
     {
       _autoDismissTimer.Stop();
     }
+
     ++_autoDismissGeneration;
     _autoDismissTickRevoker.revoke();
-    _scheduledCompact.reset();
+    _optScheduledCompact.reset();
   }
 } // namespace ao::winui

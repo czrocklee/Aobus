@@ -12,6 +12,7 @@
 #endif
 
 #include <ao/rt/TrackField.h>
+#include <ao/rt/TrackRow.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 #include <ao/utility/Path.h>
 
@@ -26,7 +27,11 @@ namespace winrt::Aobus::implementation
 {
   namespace
   {
-    using TrackCellsProjection = decltype(std::declval<winrt::Aobus::TrackRowItem const&>().Cells());
+    constexpr double kDefaultTitleWidth = 320.0;
+    constexpr double kDefaultMetadataWidth = 220.0;
+    constexpr double kDefaultDurationWidth = 80.0;
+
+    using TrackCellsProjection = decltype(std::declval<TrackRowItem const&>().Cells());
 
     static_assert(std::same_as<TrackCellsProjection,
                                Windows::Foundation::Collections::IVectorView<Windows::Foundation::IInspectable>>,
@@ -38,10 +43,12 @@ namespace winrt::Aobus::implementation
       {
         return row.title;
       }
+
       if (row.optUriPath)
       {
         return ao::utility::pathToUtf8(row.optUriPath->filename());
       }
+
       return ao::winui::formatResource("TrackFallbackFormat", row.id.raw());
     }
 
@@ -113,10 +120,10 @@ namespace winrt::Aobus::implementation
     , _artist{std::move(artist)}
     , _album{std::move(album)}
   {
-    appendCell(_cells, _title, "title", 320.0, true);
-    appendCell(_cells, _artist, "artist", 220.0, true);
-    appendCell(_cells, _album, "album", 220.0, true);
-    appendCell(_cells, std::move(duration), "duration", 80.0, true);
+    appendCell(_cells, _title, "title", kDefaultTitleWidth, true);
+    appendCell(_cells, _artist, "artist", kDefaultMetadataWidth, true);
+    appendCell(_cells, _album, "album", kDefaultMetadataWidth, true);
+    appendCell(_cells, std::move(duration), "duration", kDefaultDurationWidth, true);
   }
 
   TrackRowItem::TrackRowItem(std::uint32_t const displayIndex,
@@ -138,7 +145,7 @@ namespace winrt::Aobus::implementation
                  to_hstring(cellText(row, column.field)),
                  ao::rt::trackFieldId(column.field),
                  column.width,
-                 definition != nullptr && definition->optSortField.has_value());
+                 definition != nullptr && definition->optSortField);
     }
   }
 

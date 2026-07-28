@@ -41,6 +41,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
@@ -589,8 +590,8 @@ namespace ao::tui
 
     auto& playback = runtime.playback();
     auto requestRefresh = [&screen] { screen.PostEvent(ftxui::Event::Custom); };
-    auto coverArt =
-      CoverArtLoader{runtime.library().taskService(), runtime.async(), coverArtDeliveryMode, requestRefresh};
+    auto resourceByteLoader = rt::ResourceByteLoader{runtime};
+    auto coverArt = CoverArtLoader{resourceByteLoader, runtime.async(), coverArtDeliveryMode, requestRefresh};
     auto clockTickActive = std::atomic_bool{shouldTickTransportClock(playback.snapshot().transport.transport)};
     auto activityAutoDismissActive = std::atomic_bool{false};
     auto playbackClock = uimodel::PlaybackPositionInterpolator{};

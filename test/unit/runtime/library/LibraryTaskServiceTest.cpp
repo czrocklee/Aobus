@@ -35,6 +35,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <exception>
 #include <filesystem>
@@ -62,6 +63,12 @@ namespace ao::rt::test
       using Exception::Exception;
     };
 
+    enum class InjectedExecutorFault : std::uint8_t
+    {
+      Failure,
+      Cancellation
+    };
+
     class FaultOrderingExecutor final : public async::Executor
     {
     public:
@@ -71,8 +78,9 @@ namespace ao::rt::test
       // progress observers are noexcept, so a test cannot inject the fault
       // through one; it is injected at the executor boundary the progress
       // notification crosses instead.
-      explicit FaultOrderingExecutor(std::size_t faultingInlineDispatchIndex)
-        : _optFaultingDispatchIndex{faultingInlineDispatchIndex}
+      explicit FaultOrderingExecutor(std::size_t faultingInlineDispatchIndex,
+                                     InjectedExecutorFault const fault = InjectedExecutorFault::Failure)
+        : _optFaultingDispatchIndex{faultingInlineDispatchIndex}, _fault{fault}
       {
       }
 
@@ -88,6 +96,11 @@ namespace ao::rt::test
 
           if (_optFaultingDispatchIndex == index)
           {
+            if (_fault == InjectedExecutorFault::Cancellation)
+            {
+              async::throwOperationCancelled();
+            }
+
             throwException<InjectedLibraryTaskFailure>("injected library task failure");
           }
 
@@ -129,6 +142,7 @@ namespace ao::rt::test
 
     private:
       std::optional<std::size_t> _optFaultingDispatchIndex;
+      InjectedExecutorFault _fault = InjectedExecutorFault::Failure;
       std::thread::id _ownerThreadId = std::this_thread::get_id();
       std::atomic_size_t _dispatchCount{0};
       mutable std::mutex _mutex;
@@ -180,6 +194,42 @@ namespace ao::rt::test
       REQUIRE(executor.runOne());
 
       CHECK(completionStatuses == std::vector{LibraryTaskCompletionStatus::Failed});
+      REQUIRE(executor.runOne());
+      CHECK(executor.queuedCount() == 0);
+    }
+
+    template<typename Future>
+    void requireCancellationCleanupOrdering(Future& future,
+                                            async::Runtime& runtime,
+                                            std::stop_source& stopSource,
+                                            FaultOrderingExecutor& executor,
+                                            std::vector<LibraryTaskCompletionStatus>& completionStatuses)
+    {
+      auto const exceptionPtr = captureTaskFutureException(future);
+      REQUIRE(exceptionPtr);
+
+      runtime.requestStop();
+      runtime.join();
+
+      bool sawCancellation = false;
+
+      try
+      {
+        std::rethrow_exception(exceptionPtr);
+      }
+      catch (async::OperationCancelled const&)
+      {
+        sawCancellation = true;
+      }
+
+      REQUIRE(sawCancellation);
+      CHECK(completionStatuses.empty());
+      CHECK(executor.dispatchCount() == 5);
+      REQUIRE(executor.queuedCount() == 2);
+
+      CHECK(stopSource.request_stop());
+      REQUIRE(executor.runOne());
+      CHECK(completionStatuses == std::vector{LibraryTaskCompletionStatus::Cancelled});
       REQUIRE(executor.runOne());
       CHECK(executor.queuedCount() == 0);
     }
@@ -941,5 +991,63 @@ namespace ao::rt::test
     auto future = runtime.spawn(service.backfillAudioIdentityAsync(stopSource.get_token()));
 
     requireFaultCleanupOrdering(future, runtime, stopSource, executor, completionStatuses);
+  }
+
+  TEST_CASE("LibraryTaskService - apply cancellation exception publishes cancellation before cleanup",
+            "[runtime][regression][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = FaultOrderingExecutor{2, InjectedExecutorFault::Cancellation};
+    auto runtime = async::Runtime{executor};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto completionStatuses = std::vector<LibraryTaskCompletionStatus>{};
+    auto completionSubscription = service.onCompleted([&](LibraryTaskCompleted const& event) noexcept
+                                                      { completionStatuses.push_back(event.status); });
+    auto stopSource = std::stop_source{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const targetFile = libraryFixture.root() / "missing.flac";
+    std::filesystem::copy_file(sourceFile, targetFile);
+    auto plan = LibraryScan{libraryFixture.library()}.buildPlan().value();
+    std::filesystem::remove(targetFile);
+
+    auto future = runtime.spawn(service.applyScanPlanAsync(std::move(plan), {}, stopSource.get_token()));
+
+    requireCancellationCleanupOrdering(future, runtime, stopSource, executor, completionStatuses);
+    CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
+  }
+
+  TEST_CASE("LibraryTaskService - backfill cancellation exception publishes cancellation before cleanup",
+            "[runtime][regression][library-task][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    std::filesystem::copy_file(sourceFile, libraryFixture.root() / "song.flac");
+    auto planResult = LibraryScan{libraryFixture.library()}.buildPlan();
+    REQUIRE(planResult);
+    auto applyResult = ScanApplyOperation{libraryFixture.library(),
+                                          std::move(*planResult),
+                                          {},
+                                          {},
+                                          ScanApplyOptions{.audioIdentityPolicy = AudioIdentityPolicy::DeferNew}}
+                         .run();
+    REQUIRE(applyResult);
+    REQUIRE(applyResult->insertedIds.size() == 1);
+
+    auto executor = FaultOrderingExecutor{2, InjectedExecutorFault::Cancellation};
+    auto runtime = async::Runtime{executor};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto runtimeLibrary = Library{runtime, libraryFixture.library(), changes};
+    auto& service = runtimeLibrary.taskService();
+    auto completionStatuses = std::vector<LibraryTaskCompletionStatus>{};
+    auto completionSubscription = service.onCompleted([&](LibraryTaskCompleted const& event) noexcept
+                                                      { completionStatuses.push_back(event.status); });
+    auto stopSource = std::stop_source{};
+
+    auto future = runtime.spawn(service.backfillAudioIdentityAsync(stopSource.get_token()));
+
+    requireCancellationCleanupOrdering(future, runtime, stopSource, executor, completionStatuses);
+    CHECK(runtimeLibrary.authoringAvailability().state == LibraryAuthoringState::Available);
   }
 } // namespace ao::rt::test

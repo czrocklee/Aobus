@@ -50,12 +50,12 @@ namespace ao::tui
    * TUI
    * decoder contract.
    */
-  std::optional<CoverArtRows> decodeCoverArtPreview(std::vector<std::byte> const& bytes,
+  std::optional<CoverArtRows> decodeCoverArtPreview(std::span<std::byte const> bytes,
                                                     std::size_t columns,
                                                     std::size_t rows,
                                                     CoverArtDecodeLimits limits = {});
   /** Converts the same portable raster formats to a square-cropped PNG. */
-  std::optional<std::vector<std::byte>> decodeCoverArtPng(std::vector<std::byte> const& bytes,
+  std::optional<std::vector<std::byte>> decodeCoverArtPng(std::span<std::byte const> bytes,
                                                           std::int32_t pixelWidth,
                                                           std::int32_t pixelHeight,
                                                           CoverArtDecodeLimits limits = {});

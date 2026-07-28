@@ -7,6 +7,8 @@
 #include <ao/CoreIds.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceBytes.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -17,7 +19,7 @@
 
 namespace ao::rt
 {
-  class LibraryTaskService;
+  class ResourceByteLoader;
 }
 
 namespace ao::tui
@@ -41,7 +43,7 @@ namespace ao::tui
   public:
     using RefreshCallback = std::function<void()>;
 
-    CoverArtLoader(rt::LibraryTaskService& tasks,
+    CoverArtLoader(rt::ResourceByteLoader& byteLoader,
                    async::Runtime& runtime,
                    CoverArtDeliveryMode mode,
                    RefreshCallback refresh);
@@ -62,19 +64,19 @@ namespace ao::tui
 
   private:
     static async::Task<void> load(CoverArtLoader* loader,
-                                  rt::LibraryTaskService* tasks,
                                   async::Runtime* runtime,
                                   CoverArtDeliveryMode mode,
-                                  ResourceId resourceId,
+                                  rt::ResourceBytes bytes,
                                   std::stop_token stopToken);
 
-    rt::LibraryTaskService& _tasks;
+    rt::ResourceByteLoader& _byteLoader;
     async::Runtime& _runtime;
     CoverArtDeliveryMode _mode;
     RefreshCallback _refresh;
     ResourceId _resourceId = kInvalidResourceId;
     std::optional<CoverArtRows> _optPreview;
     std::optional<std::vector<std::byte>> _optKittyPng;
+    rt::ResourceByteLoader::Request _byteRequest;
     async::TaskHandle _task;
   };
 } // namespace ao::tui

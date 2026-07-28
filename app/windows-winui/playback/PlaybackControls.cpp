@@ -10,6 +10,7 @@
 #include "playback/TransportButton.h"
 #include "playback/VolumeControl.h"
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
+#include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
 
 #include <memory>
 #include <utility>
@@ -51,12 +52,12 @@ namespace ao::winui
       stopButton = stopButtonPtr.get();
       transportButtons.push_back(std::move(stopButtonPtr));
 
-      soulTransport = std::make_unique<SoulTransportButton>(SoulTransportButtonConfig{
+      soulTransportPtr = std::make_unique<SoulTransportButton>(SoulTransportButtonConfig{
         .button = std::move(config.modern.soulButton),
         .soul = std::move(config.modern.soul),
         .hasComplexTooltip = true,
       });
-      outputDevice = std::make_unique<OutputDeviceControl>(OutputDeviceControlConfig{
+      outputDevicePtr = std::make_unique<OutputDeviceControl>(OutputDeviceControlConfig{
         .modernButton = std::move(config.modern.outputButton),
         .classicButton = std::move(config.classic.soulButton),
       });
@@ -97,20 +98,25 @@ namespace ao::winui
     void bind(WinUiDependencies const& dependencies)
     {
       unbind();
+
       for (auto const& buttonPtr : transportButtons)
       {
         buttonPtr->bind(dependencies);
       }
-      soulTransport->bind(dependencies);
-      outputDevice->bind(dependencies);
+
+      soulTransportPtr->bind(dependencies);
+      outputDevicePtr->bind(dependencies);
+
       for (auto const& controlPtr : seekControls)
       {
         controlPtr->bind(dependencies);
       }
+
       for (auto const& controlPtr : timeControls)
       {
         controlPtr->bind(dependencies);
       }
+
       for (auto const& controlPtr : volumeControls)
       {
         controlPtr->bind(dependencies);
@@ -123,16 +129,20 @@ namespace ao::winui
       {
         buttonPtr->unbind();
       }
-      soulTransport->unbind();
-      outputDevice->unbind();
+
+      soulTransportPtr->unbind();
+      outputDevicePtr->unbind();
+
       for (auto const& controlPtr : seekControls)
       {
         controlPtr->unbind();
       }
+
       for (auto const& controlPtr : timeControls)
       {
         controlPtr->unbind();
       }
+
       for (auto const& controlPtr : volumeControls)
       {
         controlPtr->unbind();
@@ -150,8 +160,8 @@ namespace ao::winui
 
     std::vector<std::unique_ptr<TransportButton>> transportButtons;
     TransportButton* stopButton = nullptr;
-    std::unique_ptr<SoulTransportButton> soulTransport;
-    std::unique_ptr<OutputDeviceControl> outputDevice;
+    std::unique_ptr<SoulTransportButton> soulTransportPtr;
+    std::unique_ptr<OutputDeviceControl> outputDevicePtr;
     std::vector<std::unique_ptr<SeekControl>> seekControls;
     std::vector<std::unique_ptr<PlaybackTimeControl>> timeControls;
     std::vector<std::unique_ptr<VolumeControl>> volumeControls;
@@ -184,7 +194,7 @@ namespace ao::winui
 
   void PlaybackControls::activatePlayPause()
   {
-    _implPtr->soulTransport->activate();
+    _implPtr->soulTransportPtr->activate();
   }
 
   void PlaybackControls::activateStop()

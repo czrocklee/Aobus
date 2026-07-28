@@ -86,7 +86,7 @@ namespace ao::winui
     std::vector<DetailDismissRegistration> _detailDismissRegistrations;
     std::shared_ptr<rt::AppRuntime> _runtimePtr;
     std::unique_ptr<uimodel::ActivityStatusViewModel> _viewModelPtr;
-    std::optional<uimodel::ActivityCompactState> _scheduledCompact;
+    std::optional<uimodel::ActivityCompactState> _optScheduledCompact;
     std::uint64_t _autoDismissGeneration = 0;
     bool _reserveIdle = false;
   };

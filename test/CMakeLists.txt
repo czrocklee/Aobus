@@ -14,6 +14,7 @@ endif()
 # ao_core_test: portable unit + integration tests
 add_executable(ao_core_test
     # async tests
+    unit/async/RequestCoalescerTest.cpp
     unit/async/SignalTest.cpp
 
     # utility tests
@@ -204,7 +205,6 @@ add_executable(ao_core_test
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
-    unit/uimodel/library/track/CoverArtRequestModelTest.cpp
     unit/uimodel/library/track/IndexedTrackRowCacheTest.cpp
     unit/uimodel/library/track/TrackDisplayIndexTest.cpp
     unit/uimodel/library/track/TrackCountFormatterTest.cpp
@@ -316,6 +316,8 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryExportImportListTest.cpp
     unit/runtime/library/LibraryYamlSchemaTest.cpp
     unit/runtime/library/LibraryExportImportTest.cpp
+    unit/runtime/resource/ResourceByteCacheTest.cpp
+    unit/runtime/resource/ResourceByteLoaderTest.cpp
 )
 
 target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
@@ -336,8 +338,9 @@ if(WIN32)
     unit/audio/backend/WasapiSharedBackendTest.cpp
     unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
     unit/audio/backend/detail/WasapiStringsTest.cpp
+    unit/windows/platform/MemoryRandomAccessStreamTest.cpp
   )
-  target_link_libraries(ao_core_test PRIVATE advapi32)
+  target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform)
 endif()
 add_test(NAME ao_core_test COMMAND ao_core_test)
 
@@ -451,7 +454,6 @@ add_executable(ao_gtk_test
     unit/linux-gtk/common/DismissControllerTest.cpp
     unit/linux-gtk/common/MainContextCallbackScopeTest.cpp
     unit/linux-gtk/common/PopoverAttachmentTest.cpp
-    unit/linux-gtk/common/RequestCoalescerTest.cpp
     unit/linux-gtk/common/UiWorkflowTest.cpp
     unit/linux-gtk/completion/EntryCompletionControllerTest.cpp
     unit/linux-gtk/list/ListModelTest.cpp

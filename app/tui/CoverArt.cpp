@@ -102,7 +102,7 @@ namespace ao::tui
       return pixelCount <= limits.maximumPixels;
     }
 
-    std::optional<DecodedImage> decodeImage(std::vector<std::byte> const& bytes, CoverArtDecodeLimits const& limits)
+    std::optional<DecodedImage> decodeImage(std::span<std::byte const> const bytes, CoverArtDecodeLimits const& limits)
     {
       if (bytes.empty() || bytes.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
       {
@@ -165,7 +165,7 @@ namespace ao::tui
     }
   } // namespace
 
-  std::optional<CoverArtRows> decodeCoverArtPreview(std::vector<std::byte> const& bytes,
+  std::optional<CoverArtRows> decodeCoverArtPreview(std::span<std::byte const> const bytes,
                                                     std::size_t const columns,
                                                     std::size_t const rows,
                                                     CoverArtDecodeLimits const limits)
@@ -247,7 +247,7 @@ namespace ao::tui
     return preview;
   }
 
-  std::optional<std::vector<std::byte>> decodeCoverArtPng(std::vector<std::byte> const& bytes,
+  std::optional<std::vector<std::byte>> decodeCoverArtPng(std::span<std::byte const> const bytes,
                                                           std::int32_t const pixelWidth,
                                                           std::int32_t const pixelHeight,
                                                           CoverArtDecodeLimits const limits)

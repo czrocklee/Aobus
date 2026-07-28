@@ -13,8 +13,12 @@
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/async/OperationCancelled.h>
+#include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
+#include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
@@ -29,6 +33,7 @@
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
@@ -37,6 +42,7 @@
 #include <giomm/file.h>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -45,8 +51,10 @@
 #include <functional>
 #include <ios>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -56,6 +64,38 @@ namespace ao::gtk::platform::test
 {
   namespace
   {
+    class InjectedMprisResourceLoadFailure final : public Exception
+    {
+    public:
+      using Exception::Exception;
+    };
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> loadEmptyMprisResourceAfterOneFailure(
+      std::shared_ptr<std::atomic_bool> failNextPtr,
+      rt::test::AsyncTestState<std::size_t> loadCount,
+      ResourceId /*resourceId*/,
+      std::stop_token /*stopToken*/)
+    {
+      loadCount.increment();
+
+      if (failNextPtr->exchange(false))
+      {
+        throwException<InjectedMprisResourceLoadFailure>("injected MPRIS resource load failure");
+      }
+
+      co_return std::optional<std::vector<std::byte>>{};
+    }
+
+    async::Task<Result<std::optional<std::vector<std::byte>>>> cancelMprisResourceLoad(
+      rt::test::AsyncTestState<std::size_t> loadCount,
+      ResourceId /*resourceId*/,
+      std::stop_token /*stopToken*/)
+    {
+      loadCount.increment();
+      async::throwOperationCancelled();
+      co_return std::optional<std::vector<std::byte>>{};
+    }
+
     ResourceId addResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
     {
       auto transaction = library::test::writeTransaction(library);
@@ -331,7 +371,8 @@ namespace ao::gtk::platform::test
       output.put('\0');
     }
 
-    auto cache = MprisArtUrlCache{runtime.library().taskService(), runtime.async(), cacheDir};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto cache = MprisArtUrlCache{byteLoader, runtime.async(), cacheDir};
     bool callbackOnExecutor = false;
     auto const requestUrl = [&](ResourceId const requestedResourceId)
     {
@@ -395,6 +436,73 @@ namespace ao::gtk::platform::test
     cancelledRequest.reset();
     REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return activeWaiterCompleted; }));
     CHECK(cancelledCallbackCount == 0);
+  }
+
+  TEST_CASE("MprisArtUrlCache - exceptional resource loads terminate their request flight",
+            "[gtk][unit][mpris][concurrency]")
+  {
+    auto executor = rt::test::InlineExecutor{};
+    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
+    auto tempDir = ao::test::TempDir{};
+    constexpr auto kMissingResourceId = ResourceId{999997};
+
+    SECTION("a non-cancellation fault reports once, completes empty, and permits retry")
+    {
+      auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto receivedNonEmptyUrl = rt::test::AsyncTestState<bool>::create(true);
+      auto failNextPtr = std::make_shared<std::atomic_bool>(true);
+      auto byteLoader =
+        rt::ResourceByteLoader{runtime, std::bind_front(loadEmptyMprisResourceAfterOneFailure, failNextPtr, loadCount)};
+      auto cache = MprisArtUrlCache{byteLoader, runtime, tempDir.path() / "mpris-exceptional-load"};
+
+      auto request = cache.requestUrl(kMissingResourceId,
+                                      [callbackCount, receivedNonEmptyUrl](std::string url)
+                                      {
+                                        receivedNonEmptyUrl.set(!url.empty());
+                                        callbackCount.increment();
+                                      });
+      REQUIRE(request);
+      REQUIRE(callbackCount.waitUntil(1));
+      CHECK_FALSE(receivedNonEmptyUrl.load());
+      REQUIRE(exceptionRecorder.waitForCount(1));
+      rt::test::requireSingleRecordedException<InjectedMprisResourceLoadFailure>(
+        exceptionRecorder, "resource byte delivery");
+
+      auto retryReceivedNonEmptyUrl = rt::test::AsyncTestState<bool>::create(true);
+      auto retry = cache.requestUrl(kMissingResourceId,
+                                    [callbackCount, retryReceivedNonEmptyUrl](std::string url)
+                                    {
+                                      retryReceivedNonEmptyUrl.set(!url.empty());
+                                      callbackCount.increment();
+                                    });
+      REQUIRE(retry);
+      REQUIRE(callbackCount.waitUntil(2));
+      CHECK(loadCount.load() == 2);
+      CHECK_FALSE(retryReceivedNonEmptyUrl.load());
+      CHECK(exceptionRecorder.snapshot().size() == 1);
+
+      runtime.requestStop();
+      runtime.join();
+    }
+
+    SECTION("cancellation escapes without invoking the waiter")
+    {
+      auto callbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
+      auto byteLoader = rt::ResourceByteLoader{runtime, std::bind_front(cancelMprisResourceLoad, loadCount)};
+      auto cache = MprisArtUrlCache{byteLoader, runtime, tempDir.path() / "mpris-cancelled-load"};
+
+      auto request = cache.requestUrl(kMissingResourceId, [callbackCount](std::string) { callbackCount.increment(); });
+      REQUIRE(request);
+      REQUIRE(loadCount.waitUntil(1));
+
+      runtime.requestStop();
+      runtime.join();
+      CHECK(callbackCount.load() == 0);
+      CHECK(exceptionRecorder.snapshot().empty());
+    }
   }
 
   TEST_CASE("MprisBridge - elapsed helpers convert and clamp MPRIS time", "[gtk][unit][mpris]")

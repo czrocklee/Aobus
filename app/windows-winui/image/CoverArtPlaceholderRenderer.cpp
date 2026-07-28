@@ -26,10 +26,40 @@ namespace ao::winui
   {
     constexpr auto kRegularMonogramScale = 0.58;
     constexpr auto kCompactMonogramScale = 0.46;
+    constexpr std::uint8_t kOpaqueAlpha = 255;
+    constexpr std::uint8_t kVinylLabelAlpha = 245;
+    constexpr std::uint8_t kFallbackAccentRed = 0x06;
+    constexpr std::uint8_t kFallbackAccentGreen = 0xB6;
+    constexpr std::uint8_t kFallbackAccentBlue = 0xD4;
+    constexpr std::uint8_t kVinylLabelRed = 42;
+    constexpr std::uint8_t kVinylLabelGreen = 49;
+    constexpr std::uint8_t kVinylLabelBlue = 60;
+    constexpr std::uint16_t kNeutralMixWeight = 7;
+    constexpr std::uint16_t kAccentMixWeight = 3;
+    constexpr std::uint16_t kTotalMixWeight = 10;
+    constexpr std::size_t kRgbHexLength = 7;
+    constexpr std::size_t kRedHexOffset = 1;
+    constexpr std::size_t kGreenHexOffset = 3;
+    constexpr std::size_t kBlueHexOffset = 5;
+    constexpr std::uint8_t kHexadecimalLetterOffset = 10;
+    constexpr double kDefaultCoverSide = 48.0;
+    constexpr double kMinimumMonogramFontSize = 10.0;
+    constexpr double kNoteMargin = 4.0;
+    constexpr double kSoulOpacity = 0.22;
+    constexpr double kVinylViewBoxSide = 256.0;
+    constexpr double kVinylAccentDiameter = 228.0;
+    constexpr double kMinimumVinylAccentDiameter = 12.0;
+    constexpr double kVinylAccentStroke = 1.5;
+    constexpr double kMinimumVinylAccentStroke = 1.0;
+    constexpr double kVinylAccentOpacity = 0.36;
+    constexpr double kMinimumVinylLabelDiameter = 8.0;
+    constexpr double kVinylLabelDiameterDivisor = 3.0;
+    constexpr double kMinimumSpindleRadius = 0.75;
+    constexpr double kSpindleRadius = 3.0;
 
     winrt::Windows::UI::Color color(uimodel::CoverArtPlaceholderRgb const value) noexcept
     {
-      return {.A = 255, .R = value.red, .G = value.green, .B = value.blue};
+      return {.A = kOpaqueAlpha, .R = value.red, .G = value.green, .B = value.blue};
     }
 
     std::uint8_t hexChannel(std::string_view const value, std::size_t const offset) noexcept
@@ -40,14 +70,17 @@ namespace ao::winui
         {
           return static_cast<std::uint8_t>(character - '0');
         }
+
         if (character >= 'A' && character <= 'F')
         {
-          return static_cast<std::uint8_t>(character - 'A' + 10);
+          return static_cast<std::uint8_t>(character - 'A' + kHexadecimalLetterOffset);
         }
+
         if (character >= 'a' && character <= 'f')
         {
-          return static_cast<std::uint8_t>(character - 'a' + 10);
+          return static_cast<std::uint8_t>(character - 'a' + kHexadecimalLetterOffset);
         }
+
         return 0;
       };
       return static_cast<std::uint8_t>((nibble(value[offset]) << 4U) | nibble(value[offset + 1]));
@@ -55,25 +88,37 @@ namespace ao::winui
 
     winrt::Windows::UI::Color themeColor(std::string_view const value) noexcept
     {
-      if (value.size() != 7 || value.front() != '#')
+      if (value.size() != kRgbHexLength || value.front() != '#')
       {
-        return {.A = 255, .R = 0x06, .G = 0xB6, .B = 0xD4};
+        return {
+          .A = kOpaqueAlpha,
+          .R = kFallbackAccentRed,
+          .G = kFallbackAccentGreen,
+          .B = kFallbackAccentBlue,
+        };
       }
-      return {.A = 255, .R = hexChannel(value, 1), .G = hexChannel(value, 3), .B = hexChannel(value, 5)};
+
+      return {
+        .A = kOpaqueAlpha,
+        .R = hexChannel(value, kRedHexOffset),
+        .G = hexChannel(value, kGreenHexOffset),
+        .B = hexChannel(value, kBlueHexOffset),
+      };
     }
 
     winrt::Windows::UI::Color mutedLabelColor(winrt::Windows::UI::Color const accent) noexcept
     {
-      constexpr auto mixChannel = [](std::uint8_t const neutral, std::uint8_t const value) noexcept
+      constexpr auto kMixChannel = [](std::uint8_t const neutral, std::uint8_t const value) noexcept
       {
-        return static_cast<std::uint8_t>(
-          (static_cast<std::uint16_t>(neutral) * 7U + static_cast<std::uint16_t>(value) * 3U) / 10U);
+        return static_cast<std::uint8_t>(((static_cast<std::uint16_t>(neutral) * kNeutralMixWeight) +
+                                          (static_cast<std::uint16_t>(value) * kAccentMixWeight)) /
+                                         kTotalMixWeight);
       };
       return {
-        .A = 245,
-        .R = mixChannel(42, accent.R),
-        .G = mixChannel(49, accent.G),
-        .B = mixChannel(60, accent.B),
+        .A = kVinylLabelAlpha,
+        .R = kMixChannel(kVinylLabelRed, accent.R),
+        .G = kMixChannel(kVinylLabelGreen, accent.G),
+        .B = kMixChannel(kVinylLabelBlue, accent.B),
       };
     }
 
@@ -86,25 +131,30 @@ namespace ao::winui
       };
 
       auto current = element;
+
       while (current)
       {
         if (auto const actual = sideFrom(current.ActualWidth(), current.ActualHeight()); actual > 0.0)
         {
           return actual;
         }
+
         if (auto const declared = sideFrom(current.Width(), current.Height()); declared > 0.0)
         {
           return declared;
         }
+
         current = winrt::Microsoft::UI::Xaml::Media::VisualTreeHelper::GetParent(current)
                     .try_as<winrt::Microsoft::UI::Xaml::FrameworkElement>();
       }
-      return 48.0;
+
+      return kDefaultCoverSide;
     }
 
     std::wstring_view assetPath(uimodel::CoverArtPlaceholderStyle const style) noexcept
     {
       using Style = uimodel::CoverArtPlaceholderStyle;
+
       switch (style)
       {
         case Style::Note: return L"ms-appx:///Assets/NoCover/note.svg";
@@ -113,6 +163,7 @@ namespace ao::winui
         case Style::Soul: return L"ms-appx:///Assets/Brand/SoulMark.svg";
         case Style::Monogram: return {};
       }
+
       return L"ms-appx:///Assets/NoCover/note.svg";
     }
   } // namespace
@@ -137,7 +188,7 @@ namespace ao::winui
       auto const scale = presentation.monogramSize == uimodel::CoverArtPlaceholderMonogramSize::Compact
                            ? kCompactMonogramScale
                            : kRegularMonogramScale;
-      text.FontSize(std::max(10.0, logicalSize * scale));
+      text.FontSize(std::max(kMinimumMonogramFontSize, logicalSize * scale));
       text.FontWeight(Windows::UI::Text::FontWeights::SemiBold());
       text.Foreground(SolidColorBrush{color(presentation.monogramColor)});
       text.HorizontalAlignment(HorizontalAlignment::Center);
@@ -150,9 +201,15 @@ namespace ao::winui
     image.Source(Microsoft::UI::Xaml::Media::Imaging::BitmapImage{
       winrt::Windows::Foundation::Uri{hstring{assetPath(presentation.style)}}});
     image.Stretch(Stretch::Uniform);
-    image.Margin(presentation.style == uimodel::CoverArtPlaceholderStyle::Note ? Thickness{4.0, 4.0, 4.0, 4.0}
-                                                                               : Thickness{});
-    image.Opacity(presentation.style == uimodel::CoverArtPlaceholderStyle::Soul ? 0.22 : 1.0);
+    image.Margin(presentation.style == uimodel::CoverArtPlaceholderStyle::Note
+                   ? Thickness{
+                       .Left = kNoteMargin,
+                       .Top = kNoteMargin,
+                       .Right = kNoteMargin,
+                       .Bottom = kNoteMargin,
+                     }
+                   : Thickness{});
+    image.Opacity(presentation.style == uimodel::CoverArtPlaceholderStyle::Soul ? kSoulOpacity : 1.0);
     root.Children().Append(image);
 
     if (presentation.style != uimodel::CoverArtPlaceholderStyle::Vinyl)
@@ -160,20 +217,21 @@ namespace ao::winui
       return;
     }
 
-    auto const accentSize = std::max(12.0, logicalSize * 228.0 / 256.0);
+    auto const accentSize =
+      std::max(kMinimumVinylAccentDiameter, logicalSize * kVinylAccentDiameter / kVinylViewBoxSide);
     auto accent = Shapes::Ellipse{};
     accent.Width(accentSize);
     accent.Height(accentSize);
     accent.Stroke(SolidColorBrush{themeColor(themeAccent)});
-    accent.StrokeThickness(std::max(1.0, logicalSize * 1.5 / 256.0));
-    accent.Opacity(0.36);
+    accent.StrokeThickness(std::max(kMinimumVinylAccentStroke, logicalSize * kVinylAccentStroke / kVinylViewBoxSide));
+    accent.Opacity(kVinylAccentOpacity);
     accent.HorizontalAlignment(HorizontalAlignment::Center);
     accent.VerticalAlignment(VerticalAlignment::Center);
     root.Children().Append(accent);
 
-    auto const labelSize = std::max(8.0, logicalSize / 3.0);
+    auto const labelSize = std::max(kMinimumVinylLabelDiameter, logicalSize / kVinylLabelDiameterDivisor);
     auto const labelRadius = labelSize / 2.0;
-    auto const spindleRadius = std::max(0.75, logicalSize * 3.0 / 256.0);
+    auto const spindleRadius = std::max(kMinimumSpindleRadius, logicalSize * kSpindleRadius / kVinylViewBoxSide);
     auto labelGeometry = GeometryGroup{};
     labelGeometry.FillRule(FillRule::EvenOdd);
     auto outerLabel = EllipseGeometry{};

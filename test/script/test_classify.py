@@ -72,6 +72,14 @@ class TidyChecksTest(unittest.TestCase):
             tidyconfig.CONFIG_BASE,
         )
 
+    def test_winrt_framework_shapes_are_narrowly_allowlisted(self):
+        self.assertIn("|GetAt|Size|IndexOf|GetMany|First|Current|HasCurrent|MoveNext)", tidyconfig.CONFIG_BASE)
+        self.assertIn(
+            r"{key: 'bugprone-suspicious-include.IgnoredRegex', value: '.*\.g\.cpp$'}",
+            tidyconfig.CONFIG_BASE,
+        )
+        self.assertIn(r".*[/\\]winrt[/\\].*", tidyconfig.CONFIG_BASE)
+
 
 class StaleNolintAuditTest(unittest.TestCase):
     def test_reports_only_checks_disabled_for_the_file_mode(self):

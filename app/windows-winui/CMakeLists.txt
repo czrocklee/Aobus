@@ -30,10 +30,6 @@ add_executable(aobus-winui WIN32
   image/CoverArtPresenter.h
   image/CoverArtPlaceholderRenderer.cpp
   image/CoverArtPlaceholderRenderer.h
-  image/WindowsCoverArtLoader.cpp
-  image/WindowsCoverArtLoader.h
-  platform/MemoryRandomAccessStream.cpp
-  platform/MemoryRandomAccessStream.h
   platform/ScopedBooleanFlag.h
   platform/SmtcBridge.cpp
   platform/SmtcBridge.h
@@ -100,10 +96,6 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
   image/CoverArtPresenter.h
   image/CoverArtPlaceholderRenderer.cpp
   image/CoverArtPlaceholderRenderer.h
-  image/WindowsCoverArtLoader.cpp
-  image/WindowsCoverArtLoader.h
-  platform/MemoryRandomAccessStream.cpp
-  platform/MemoryRandomAccessStream.h
   platform/ScopedBooleanFlag.h
   platform/SmtcBridge.cpp
   platform/SmtcBridge.h
@@ -204,8 +196,9 @@ target_include_directories(aobus-winui PRIVATE
 target_link_libraries(aobus-winui PRIVATE
   ao_app_runtime
   ao_app_uimodel
+  ao_windows_platform
   runtimeobject.lib
-  shcore.lib)
+)
 
 set_target_properties(aobus-winui PROPERTIES
   OUTPUT_NAME Aobus

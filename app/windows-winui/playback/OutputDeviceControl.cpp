@@ -6,10 +6,12 @@
 #include "app/WinUiDependencies.h"
 #include "platform/WindowsStringResources.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <format>
+#include <memory>
 #include <utility>
 
 namespace ao::winui
@@ -33,6 +35,7 @@ namespace ao::winui
     {
       _modernButton.Click(_modernClickToken);
     }
+
     if (_classicButton)
     {
       _classicButton.Click(_classicClickToken);
@@ -53,6 +56,7 @@ namespace ao::winui
     closeFlyout();
     _viewModelPtr.reset();
     _state = {};
+
     if (_modernButton)
     {
       _modernButton.Content(winrt::box_value(L"--"));
@@ -66,10 +70,12 @@ namespace ao::winui
     _state = state;
     _modernButton.Content(winrt::box_value(winrt::to_hstring(state.outputBackendSummary)));
     auto tooltip = winrt::Windows::Foundation::IInspectable{winrt::box_value(resourceHstring(L"OutputDeviceTooltip"))};
+
     if (!state.outputDeviceStatus.empty())
     {
       tooltip = winrt::box_value(winrt::to_hstring(state.outputDeviceStatus));
     }
+
     winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_modernButton, tooltip);
   }
 
@@ -88,6 +94,7 @@ namespace ao::winui
     {
       auto item = winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
       item.Text(winrt::to_hstring(row.isActive ? std::format("✓ {}", row.title) : row.title));
+
       if (row.kind == uimodel::OutputDeviceRow::Kind::BackendHeader)
       {
         item.IsEnabled(false);
@@ -105,6 +112,7 @@ namespace ao::winui
           });
         _itemClickRegistrations.push_back(ItemClickRegistration{.item = item, .token = token});
       }
+
       _flyout.Items().Append(item);
     }
 
@@ -115,6 +123,7 @@ namespace ao::winui
       item.IsEnabled(false);
       _flyout.Items().Append(item);
     }
+
     _flyout.ShowAt(anchor);
   }
 
@@ -127,6 +136,7 @@ namespace ao::winui
         registration.item.Click(registration.token);
       }
     }
+
     _itemClickRegistrations.clear();
 
     if (_flyout)

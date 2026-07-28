@@ -10,6 +10,7 @@
 #include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <cstddef>
 #include <exception>
 #include <expected>
 #include <filesystem>
@@ -17,6 +18,11 @@
 
 namespace ao::winui
 {
+  namespace
+  {
+    constexpr std::size_t kMaximumThemeBytes = 1'048'576;
+  }
+
   WindowsThemeCoordinator::WindowsThemeCoordinator(std::filesystem::path themePath)
     : _themePath{std::move(themePath)}
   {
@@ -30,7 +36,7 @@ namespace ao::winui
         Error::Code::NotFound, formatResource("ThemeFileNotFoundFormat", utility::pathToUtf8(_themePath)));
     }
 
-    auto buffer = yaml::readFileResult(_themePath, 1024U * 1024U);
+    auto buffer = yaml::readFileResult(_themePath, kMaximumThemeBytes);
 
     if (!buffer)
     {

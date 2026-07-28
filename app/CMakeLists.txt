@@ -36,6 +36,8 @@ add_library(ao_app_runtime STATIC
     runtime/library/ScanPlan.cpp
     runtime/library/ScanApplyOperation.cpp
     runtime/library/LibraryTaskService.cpp
+    runtime/resource/ResourceByteCache.cpp
+    runtime/resource/ResourceByteLoader.cpp
     runtime/source/TrackSourceCache.cpp
     runtime/source/ManualListSource.cpp
     runtime/NavigationHistory.cpp
@@ -60,6 +62,19 @@ target_include_directories(ao_app_runtime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/in
 target_include_directories(ao_app_runtime PRIVATE "${CMAKE_SOURCE_DIR}/app")
 target_link_libraries(ao_app_runtime PUBLIC ao ao_async PkgRapidYaml spdlog::spdlog)
 target_link_libraries(ao_app_runtime PRIVATE Boost::headers)
+
+if(WIN32)
+  add_library(ao_windows_platform STATIC
+    windows/MemoryRandomAccessStream.cpp
+    windows/include/ao/winui/MemoryRandomAccessStream.h
+  )
+  target_include_directories(ao_windows_platform PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/windows/include")
+  target_link_libraries(ao_windows_platform PUBLIC ole32 runtimeobject shcore)
+  if(AOBUS_BUILD_WINUI)
+    aobus_enable_cppwinrt(ao_windows_platform)
+  endif()
+endif()
 
 # ao_app_uimodel: platform-neutral UI models (reusable by linux-gtk, WinUI 3, tests)
 add_library(ao_app_uimodel STATIC
@@ -116,7 +131,6 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/track/TrackFilterResolver.cpp
     uimodel/library/track/TrackFilterViewModel.cpp
     uimodel/library/track/TrackPageRoute.cpp
-    uimodel/library/track/CoverArtRequestModel.cpp
     uimodel/library/track/IndexedTrackRowCache.cpp
     uimodel/library/track/TrackDisplayIndex.cpp
     uimodel/playback/command/PlaybackCommandSurface.cpp

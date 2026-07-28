@@ -90,6 +90,10 @@ The [outcome channel specification](../spec/failure/outcome-channel.md) owns the
 The worker pool is not a second application-state owner.
 Worker tasks operate on thread-safe/core facilities or isolated values and publish results back through the callback boundary.
 
+`ao::async::RequestCoalescer` is an owner-executor mechanism for sharing equal-key work among independently cancellable callback interests.
+It owns flight bookkeeping and exact-flight completion tokens, not the external work, cache, error policy, or executor transition.
+An owner therefore cancels its external lifetime scope before clearing the coalescer; a late completion token cannot match a replacement flight for the same key.
+
 Interactive playback uses the same rule for view-based starts and gapless lookahead.
 Player captures an isolated move-only preparation value containing copied route, decoder-factory, input, and generation evidence; a worker may open, negotiate, seek, and preroll through that value without accessing Player, Engine, runtime services, or frontend state.
 After resuming on the callback executor, upper request/source identity and Engine playback/route context are revalidated before adoption can allocate a source generation or publish any state.
@@ -237,6 +241,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 
 - [`ao::async::Executor`](../../include/ao/async/Executor.h) defines callback dispatch and deferred-turn semantics.
 - [`ao::async::Signal`](../../include/ao/async/Signal.h) and [`ao::async::Subscription`](../../include/ao/async/Subscription.h) define owner-affine observer delivery and scoped connection lifetime.
+- [`RequestCoalescer`](../../include/ao/async/RequestCoalescer.h) defines owner-affine equal-key flight sharing, per-interest cancellation, and exact-flight completion fencing.
 - [`QueuedExecutorBase`](../../include/ao/async/QueuedExecutorBase.h) implements the multi-producer, owner-drained FIFO and wake-coalescing turn boundary used by GTK, TUI, and explicit loops.
 - [`LoopExecutor`](../../include/ao/async/LoopExecutor.h) adds the binary wake signal and owner-driven blocking/non-blocking turn operations.
 - [`ao::async::Runtime`](../../include/ao/async/Runtime.h) owns the worker pool and coroutine switching operations.
@@ -256,6 +261,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`LifetimeScopeTest.cpp`](../../test/unit/runtime/LifetimeScopeTest.cpp) tests lifetime bookkeeping and injected exception delivery.
 - [`LoopExecutorTest.cpp`](../../test/unit/runtime/LoopExecutorTest.cpp) protects owner affinity, burst wake coalescing, multi-producer admission, non-reentrant turns, and later-turn delivery.
 - [`SignalTest.cpp`](../../test/unit/async/SignalTest.cpp) protects connection order, reentrant mutation, nested emission, the noexcept handler contract, deferred turns, and weak owner lifetime independently of application runtime composition.
+- [`RequestCoalescerTest.cpp`](../../test/unit/async/RequestCoalescerTest.cpp) protects flight sharing, cross-thread interest cancellation, reentrant completion, clear generation fencing, and callback fanout.
 - [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.

@@ -18,7 +18,7 @@ namespace ao::winui
   std::string stableResourceString(std::string_view prefix, std::string_view stableId, std::string_view fallback);
 
   template<typename... Args>
-  std::string formatResource(std::string_view const resourceId, Args&&... args)
+  std::string formatResource(std::string_view const resourceId, Args const&... args)
   {
     auto const pattern = resourceString(resourceId);
     return std::vformat(pattern, std::make_format_args(args...));

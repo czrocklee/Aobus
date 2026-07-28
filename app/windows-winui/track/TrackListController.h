@@ -59,7 +59,7 @@ namespace ao::winui
     Result<> toggleSort(rt::TrackSortField field);
     Result<> navigateTo(ListId listId);
     Result<> resizeColumn(std::string_view fieldId, double horizontalChange);
-    Result<> moveColumn(std::string_view fieldId, int offset);
+    Result<> moveColumn(std::string_view fieldId, std::int32_t offset);
     Result<> setColumnVisible(std::string_view fieldId, bool visible);
     std::vector<TrackColumnChoice> columnChoices() const;
     ListId activeListId() const;
@@ -80,6 +80,9 @@ namespace ao::winui
     double contentWidth() const noexcept { return _contentWidth; }
 
   private:
+    static constexpr std::int32_t kDefaultViewportWidth = 1200;
+    static constexpr double kDefaultContentWidth = 1200.0;
+
     void handleProjectionBatch(rt::TrackListProjectionDeltaBatch const& batch);
     void refreshRows();
     void refreshColumns();
@@ -96,10 +99,10 @@ namespace ao::winui
     async::Subscription _projectionSub;
     async::Subscription _viewProjectionSub;
     std::vector<TrackColumnCellSpec> _columns;
-    std::int32_t _viewportWidth = 1200;
-    std::int32_t _surfaceViewportWidth = 1200;
+    std::int32_t _viewportWidth = kDefaultViewportWidth;
+    std::int32_t _surfaceViewportWidth = kDefaultViewportWidth;
     std::int32_t _trailingChromeWidth = 0;
-    double _contentWidth = 1200.0;
+    double _contentWidth = kDefaultContentWidth;
     std::function<void()> _onChanged;
   };
 } // namespace ao::winui

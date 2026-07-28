@@ -9,8 +9,9 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
+#include <memory>
 #include <utility>
 
 namespace ao::winui
@@ -55,6 +56,7 @@ namespace ao::winui
       auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
       winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->unbind();
     }
+
     if (_button)
     {
       _button.IsEnabled(false);
@@ -72,6 +74,7 @@ namespace ao::winui
   void SoulTransportButton::applyState(uimodel::TransportViewState const& state)
   {
     _button.IsEnabled(state.enabled);
+
     if (!_hasComplexTooltip)
     {
       winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
@@ -79,6 +82,7 @@ namespace ao::winui
         winrt::box_value(
           resourceHstring(state.icon == uimodel::TransportIcon::Pause ? L"PauseTooltip" : L"PlayTooltip")));
     }
+
     auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
     winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->setTransportIcon(state.icon);
   }

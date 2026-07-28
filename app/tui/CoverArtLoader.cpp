@@ -5,11 +5,10 @@
 
 #include "CoverArt.h"
 #include <ao/CoreIds.h>
-#include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Task.h>
-#include <ao/rt/Log.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceBytes.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -29,11 +28,11 @@ namespace ao::tui
     constexpr std::int32_t kKittyCoverArtHeight = 384;
   } // namespace
 
-  CoverArtLoader::CoverArtLoader(rt::LibraryTaskService& tasks,
+  CoverArtLoader::CoverArtLoader(rt::ResourceByteLoader& byteLoader,
                                  async::Runtime& runtime,
                                  CoverArtDeliveryMode const mode,
                                  RefreshCallback refresh)
-    : _tasks{tasks}, _runtime{runtime}, _mode{mode}, _refresh{std::move(refresh)}
+    : _byteLoader{byteLoader}, _runtime{runtime}, _mode{mode}, _refresh{std::move(refresh)}
   {
   }
 
@@ -50,6 +49,7 @@ namespace ao::tui
     }
 
     _task.reset();
+    _byteRequest.reset();
     _resourceId = resourceId;
     _optPreview.reset();
     _optKittyPng.reset();
@@ -64,9 +64,14 @@ namespace ao::tui
       return;
     }
 
-    _task = _runtime.spawnCancellable(
-      [loader = this, tasks = &_tasks, runtime = &_runtime, mode = _mode, resourceId](std::stop_token const stopToken)
-      { return load(loader, tasks, runtime, mode, resourceId, stopToken); });
+    _byteRequest = _byteLoader.request(
+      resourceId,
+      [this, mode = _mode](rt::ResourceBytes bytes)
+      {
+        _task = _runtime.spawnCancellable(
+          [loader = this, runtime = &_runtime, mode, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
+          { return load(loader, runtime, mode, std::move(bytes), stopToken); });
+      });
   }
 
   void CoverArtLoader::clear()
@@ -77,6 +82,7 @@ namespace ao::tui
     }
 
     _task.reset();
+    _byteRequest.reset();
     _resourceId = kInvalidResourceId;
     _optPreview.reset();
     _optKittyPng.reset();
@@ -90,53 +96,42 @@ namespace ao::tui
   void CoverArtLoader::cancel() noexcept
   {
     _task.reset();
+    _byteRequest.reset();
   }
 
   async::Task<void> CoverArtLoader::load(CoverArtLoader* const loader,
-                                         rt::LibraryTaskService* const tasks,
                                          async::Runtime* const runtime,
                                          CoverArtDeliveryMode const mode,
-                                         ResourceId const resourceId,
+                                         rt::ResourceBytes bytes,
                                          std::stop_token const stopToken)
   {
     auto optPreview = std::optional<CoverArtRows>{};
     auto optKittyPng = std::optional<std::vector<std::byte>>{};
-    auto bytesResult = co_await tasks->loadResourceAsync(resourceId, stopToken);
 
-    if (!bytesResult)
+    try
     {
-      if (bytesResult.error().code == Error::Code::ValueTooLarge)
+      co_await runtime->resumeOnWorker(stopToken);
+
+      if (mode == CoverArtDeliveryMode::Blocks)
       {
-        APP_LOG_WARN("TUI cover resource {} exceeds the interactive byte limit", resourceId.raw());
+        optPreview = decodeCoverArtPreview(bytes.view(), kBlockCoverArtColumns, kBlockCoverArtRows);
+      }
+      else if (mode == CoverArtDeliveryMode::Kitty)
+      {
+        optKittyPng = decodeCoverArtPng(bytes.view(), kKittyCoverArtWidth, kKittyCoverArtHeight);
       }
     }
-    else if (*bytesResult)
+    catch (...)
     {
-      try
-      {
-        auto bytes = std::move(**bytesResult);
-        co_await runtime->resumeOnWorker(stopToken);
-
-        if (mode == CoverArtDeliveryMode::Blocks)
-        {
-          optPreview = decodeCoverArtPreview(bytes, kBlockCoverArtColumns, kBlockCoverArtRows);
-        }
-        else if (mode == CoverArtDeliveryMode::Kitty)
-        {
-          optKittyPng = decodeCoverArtPng(bytes, kKittyCoverArtWidth, kKittyCoverArtHeight);
-        }
-      }
-      catch (...)
-      {
-        async::rethrowIfOperationCancelled();
-        runtime->reportUnhandledException(std::current_exception(), "TUI cover-art decode workflow");
-      }
+      async::rethrowIfOperationCancelled();
+      runtime->reportUnhandledException(std::current_exception(), "TUI cover-art decode workflow");
     }
 
     co_await runtime->resumeOnCallbackExecutor(stopToken);
 
     loader->_optPreview = std::move(optPreview);
     loader->_optKittyPng = std::move(optKittyPng);
+    loader->_byteRequest.reset();
     loader->_task.reset();
 
     if (loader->_refresh)

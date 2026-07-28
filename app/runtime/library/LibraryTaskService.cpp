@@ -367,19 +367,30 @@ namespace ao::rt
       };
     }
 
-    [[noreturn]] void dispatchFailureCompletionAndRethrow(std::exception_ptr const& exceptionPtr)
+    void dispatchCompletion(LibraryTaskCompletionStatus const status)
     {
       auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
       asyncRuntime.callbackExecutor().dispatch(
-        [weakSignalsPtr]
+        [weakSignalsPtr, status]
         {
           if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
           {
-            auto const event = LibraryTaskCompleted{.status = LibraryTaskCompletionStatus::Failed};
+            auto const event = LibraryTaskCompleted{.status = status};
             signalsPtr->completed.emit(event);
           }
         });
+    }
+
+    [[noreturn]] void dispatchFailureCompletionAndRethrow(std::exception_ptr const& exceptionPtr)
+    {
+      dispatchCompletion(LibraryTaskCompletionStatus::Failed);
       std::rethrow_exception(exceptionPtr);
+    }
+
+    [[noreturn]] void dispatchCancellationCompletionAndRethrow()
+    {
+      dispatchCompletion(LibraryTaskCompletionStatus::Cancelled);
+      async::throwOperationCancelled();
     }
 
     void notifyCompleted(LibraryTaskCompletionStatus const status, std::size_t const affectedCount = 0) const
@@ -685,6 +696,7 @@ namespace ao::rt
     auto coordinatedScan = Result<CoordinatedScanResult>{};
     auto const totalItems = plan.size();
     auto exceptionPtr = std::exception_ptr{};
+    bool cancelledByException = false;
 
     try
     {
@@ -701,10 +713,28 @@ namespace ao::rt
                                              std::move(failure),
                                              stopToken);
     }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
+      {
+        cancelledByException = true;
+      }
+      else
+      {
+        exceptionPtr = std::current_exception();
+      }
+    }
     catch (...)
     {
+      // Known cancellation exceptions derive from std::exception and are
+      // classified above; keep the broad-catch guard for non-standard throws.
       async::rethrowIfOperationCancelled();
       exceptionPtr = std::current_exception();
+    }
+
+    if (cancelledByException)
+    {
+      _implPtr->dispatchCancellationCompletionAndRethrow();
     }
 
     if (exceptionPtr)
@@ -755,6 +785,7 @@ namespace ao::rt
 
     auto backfillResult = Result<AudioIdentityIndexResult>{};
     auto exceptionPtr = std::exception_ptr{};
+    bool cancelledByException = false;
 
     {
       auto commitBatch = makeAudioIdentityCommitBatch(_implPtr->mutationService, maintenance, _implPtr->library);
@@ -770,11 +801,29 @@ namespace ao::rt
         backfillResult =
           co_await indexer.indexPending(std::move(commitBatch), {}, std::move(progress), std::move(failure), stopToken);
       }
+      catch (std::exception const& error)
+      {
+        if (async::isOperationCancelled(error))
+        {
+          cancelledByException = true;
+        }
+        else
+        {
+          exceptionPtr = std::current_exception();
+        }
+      }
       catch (...)
       {
+        // Known cancellation exceptions derive from std::exception and are
+        // classified above; keep the broad-catch guard for non-standard throws.
         async::rethrowIfOperationCancelled();
         exceptionPtr = std::current_exception();
       }
+    }
+
+    if (cancelledByException)
+    {
+      _implPtr->dispatchCancellationCompletionAndRethrow();
     }
 
     if (exceptionPtr)

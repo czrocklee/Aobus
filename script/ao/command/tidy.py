@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import fnmatch
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -15,7 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..core import builddir, gitfiles, pythoncheck, tidyengine
+from ..core import builddir, gitfiles, pythoncheck, tidyengine, winuitidy
 from ..core.dedup import deduplicate
 from ..core.paths import PROJECT_ROOT, absolute_path
 from ..core.proc import die
@@ -42,6 +43,14 @@ examples:
 """
 
 ALL_FOLDERS = ["lib", "app", "include", "script", "test", "tool"]
+WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
+WINUI_HEADER_COMPANIONS = {
+    WINUI_ROOT / "pch.h": WINUI_ROOT / "App.xaml.cpp",
+    WINUI_ROOT / "app" / "WinUiDependencies.h": WINUI_ROOT / "playback" / "SeekControl.cpp",
+    WINUI_ROOT / "platform" / "ScopedBooleanFlag.h": WINUI_ROOT / "playback" / "SeekControl.cpp",
+}
+WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib")
+WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
 # Check groups: start from nothing, enable curated groups, then disable known false
 # positives or project-preference conflicts.
@@ -464,6 +473,64 @@ def missing_explicit_files(files: list[str]) -> list[str]:
     return missing
 
 
+def is_winui_path(path: Path) -> bool:
+    """Return whether a selected file belongs to the WinUI frontend."""
+    try:
+        absolute_path(path).relative_to(absolute_path(WINUI_ROOT))
+    except ValueError:
+        return False
+    return True
+
+
+def winui_build_directory(tidy_build_dir: Path, *, path_was_explicit: bool) -> Path:
+    """Keep VS-generated WinUI state separate from the Ninja tidy tree."""
+    if path_was_explicit or os.environ.get("BUILD_DIR"):
+        return tidy_build_dir.with_name(f"{tidy_build_dir.name}-winui")
+    return builddir.winui_build_dir()
+
+
+def prepare_winui_compile_commands(
+    args: argparse.Namespace,
+    tidy_build_dir: Path,
+    toolchain: TidyToolchain,
+    selected: list[Path],
+) -> list[dict[str, object]]:
+    """Build/query the native WinUI project only when the selected scope needs it."""
+    if toolchain.resource_dir is None or not any(is_winui_path(path) for path in selected):
+        return []
+
+    winui_dir = winui_build_directory(tidy_build_dir, path_was_explicit=args.path is not None)
+    if not args.no_build:
+        build.do_build(
+            argparse.Namespace(
+                flavor="release",
+                clean=False,
+                clang=False,
+                asan=False,
+                tsan=False,
+                verbose=False,
+                path=str(winui_dir),
+            ),
+            ["winui"],
+        )
+    required = tuple(
+        path for path in selected if is_winui_path(path) and path.suffix.lower() in {".c", ".cc", ".cpp", ".cxx"}
+    )
+    clang_cl = Path(tidyengine.clang_tool(tidy_build_dir, "clang-cl"))
+    return winuitidy.compile_commands(winui_dir, clang_cl, required_translation_units=required)
+
+
+def write_windows_header_preamble(destination: Path) -> Path:
+    """Create the minimal Windows macro cleanup normally supplied by the product PCH."""
+    destination.mkdir(parents=True, exist_ok=True)
+    preamble = destination / "aobus-tidy-windows-header-preamble.h"
+    preamble.write_text(
+        "#pragma once\n\n#include <windows.h>\n\n#undef GetCurrentTime\n",
+        encoding="utf-8",
+    )
+    return preamble
+
+
 def filter_fixes_yaml(text: str) -> str:
     """Drop identifier-naming diagnostics from exported fixes; renames are never auto-applied."""
     output: list[str] = []
@@ -683,7 +750,23 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
 
         selected = [*buckets["STRICT"], *buckets["RELAXED"]]
-        coverage_plan = tidyengine.compile_command_plan(build_dir, selected)
+        winui_commands = prepare_winui_compile_commands(args, build_dir, toolchain, selected)
+        native_database_dir = build_dir
+        if toolchain.resource_dir is not None:
+            native_database_dir = tidyengine.make_tmpdir("tidy-windows-db-")
+            stack.callback(shutil.rmtree, native_database_dir, ignore_errors=True)
+            tidyengine.write_merged_compile_database(
+                build_dir,
+                native_database_dir,
+                WINDOWS_EXCLUDED_COMPILE_ARGUMENTS,
+                winui_commands,
+            )
+
+        coverage_plan = tidyengine.compile_command_plan(
+            native_database_dir,
+            selected,
+            explicit_header_companions=WINUI_HEADER_COMPANIONS if toolchain.resource_dir is not None else None,
+        )
         if coverage_plan.deferred:
             label = "ERROR: explicitly selected files" if explicit else "Deferred files"
             print(f"{label} without a compile command on this platform:", file=sys.stderr)
@@ -710,15 +793,6 @@ def run_command(args: argparse.Namespace) -> int:
             return 1
 
         mapped_headers = [target for target in coverage_plan.targets if target.is_header]
-        native_database_dir = build_dir
-        if toolchain.resource_dir is not None:
-            native_database_dir = tidyengine.make_tmpdir("tidy-windows-db-")
-            stack.callback(shutil.rmtree, native_database_dir, ignore_errors=True)
-            tidyengine.write_filtered_compile_database(
-                build_dir,
-                native_database_dir,
-                ("/Zc:preprocessor",),
-            )
         header_database_dir: Path | None = None
         if mapped_headers:
             translation_units = {absolute_path(target.translation_unit) for target in mapped_headers}
@@ -733,11 +807,19 @@ def run_command(args: argparse.Namespace) -> int:
             )
             header_database_dir = tidyengine.make_tmpdir("tidy-header-db-")
             stack.callback(shutil.rmtree, header_database_dir, ignore_errors=True)
+            windows_preamble = (
+                write_windows_header_preamble(header_database_dir) if toolchain.resource_dir is not None else None
+            )
             tidyengine.write_header_compile_database(
                 native_database_dir,
                 mapped_headers,
                 header_database_dir,
                 excluded_arguments=("/TP",) if toolchain.resource_dir is not None else (),
+                excluded_argument_patterns=(
+                    (WINDOWS_FORCED_CMAKE_PCH_PATTERN,) if toolchain.resource_dir is not None else ()
+                ),
+                additional_arguments=(f"/FI{windows_preamble}",) if windows_preamble is not None else (),
+                command_line_style="windows" if toolchain.resource_dir is not None else "posix",
             )
 
         clang_tidy = toolchain.clang_tidy
@@ -763,6 +845,10 @@ def run_command(args: argparse.Namespace) -> int:
                 # elements. clang-tidy does not link or execute the TU, so disabling
                 # that optional STL implementation path preserves the analyzed API.
                 extra.append("--extra-arg-before=-D_USE_STD_VECTOR_ALGORITHMS=0")
+                if is_winui_path(invocation.compile_command_source):
+                    # Generated C++/WinRT headers preserve schema spelling while
+                    # Windows resolves include paths case-insensitively.
+                    extra.append("--extra-arg-before=-Wno-nonportable-include-path")
             if invocation.is_header:
                 extra.append(f"-line-filter={path_line_filter([invocation.selected])}")
                 extra.append("--extra-arg-before=-x")

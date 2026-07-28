@@ -29,10 +29,11 @@ media file reading or YAML import
        |-> ordered Track cover references
        |    -> primary ResourceId in runtime rows/detail/playback state
        |         `-> LibraryTaskService owned-byte read
-       |              |-> GTK ImageCache / ResourceImageLoader / CoverArtView
-       |              |-> WinUI WindowsCoverArtLoader / CoverArtPresenter
-       |              |-> TUI CoverArtLoader -> block preview or Kitty PNG
-       |              `-> MPRIS cache file -> file:// URL
+       |              `-> ResourceByteLoader / ResourceBytes
+       |                   |-> GTK ImageCache / ResourceImageLoader / CoverArtView
+       |                   |-> WinUI CoverArtPresenter and SMTC
+       |                   |-> TUI CoverArtLoader -> block preview or Kitty PNG
+       |                   `-> MPRIS cache file -> file:// URL
        |-> YAML library export through a scoped read
        `-> CLI resource list/export through a scoped read
 ```
@@ -59,13 +60,20 @@ Administrative export is not routed through it: YAML export and CLI resource exp
 Runtime track rows, list/detail projections, and playback state carry only `ResourceId`, not decoded images or URLs.
 
 The task service does not cache, decode, publish maintenance progress, or introduce a resource-state owner.
-Each frontend retains its own request lifetime, transform, cache, and stale-result policy.
+Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a bounded per-binding byte cache, and delivers immutable copyable `ResourceBytes` values through the bound runtime's callback executor.
+`ResourceBytes` shares owned storage across callbacks and remains valid after loader unbinding or cache eviction.
+The loader has one asynchronous byte-source port regardless of whether its default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
+WinUI's shared-runtime binding captures ownership in that source, while GTK and TUI use a borrowed-runtime binding whose `CoreRuntime` must outlive the loader and its cancelled work.
+Each spawned read retains the selected source independently of later unbinding.
+It is instantiated by a composition root rather than owned globally by `CoreRuntime`.
+GTK, TUI, WinUI, and MPRIS retain their transform-specific request and cache paths, while every frontend retains its own decode and stale-result policy.
 
 ### GTK image delivery
 
 GTK `ImageCache` owns an in-process LRU of decoded pixbufs keyed by resource id plus full-size or requested physical thumbnail size.
-`ResourceImageLoader` serves both key kinds, coalesces equal in-flight keys, reads through `LibraryTaskService`, checks decoded dimensions before accepting allocation, decodes on the shared worker pool, and returns completion on the GTK callback executor.
-The GTK request coalescer keeps one flight per key and ordered, independently cancellable callback interests.
+`ResourceImageLoader` serves both key kinds, coalesces equal in-flight keys, requests shared `ResourceBytes`, checks decoded dimensions before accepting allocation, decodes on the shared worker pool, and returns completion on the GTK callback executor.
+The shared async request coalescer keeps one flight per key and ordered, independently cancellable callback interests.
+Each transform flight retains its exact upstream byte-request registration until completion or clear, so cancelled UI interests do not discard cache-salvage work and a stale token cannot attach to a replacement flight.
 Successful shared work may populate the cache after one or every callback interest is cancelled.
 
 `ResourceImageController` binds a resource or detail projection to one `CoverArtView`, clears an uncached replacement immediately, and cancels its previous callback interest before replacement.
@@ -75,9 +83,11 @@ Group-heading, Inspector, and Now Playing layout components expose style enums i
 
 ### WinUI image delivery
 
-WinUI `WindowsCoverArtLoader` owns coalesced valid-resource reads and a bounded encoded-byte cache shared by presenters on the same runtime.
+WinUI composition owns two runtime `ResourceByteLoader` instances.
+Each loader uses the shared request coalescer for valid-resource reads and owns a bounded encoded-byte cache shared by presenters on the same bound runtime.
 `CoverArtPresenter` owns one generation-fenced selection, renders the fixed slot placeholder through XAML for an invalid identity, supplies the current Windows theme accent to vinyl rendering, and decodes valid bytes through the native image source.
-The library loader serves realized group headings and Inspector; a playback-runtime loader serves Now Playing so retained playback can outlive library replacement.
+It copies encoded bytes into native owning memory on a worker; the callback executor only wraps that prepared memory as a Windows random-access stream and updates XAML.
+The library-bound loader serves realized group headings and Inspector; a playback-runtime loader serves both Now Playing and SMTC artwork so retained playback can outlive library replacement.
 No-entity state hides group-heading and Inspector cover surfaces, while the Now Playing surface retains its configured placeholder.
 Valid-resource loading or failure leaves the corresponding surface empty.
 
@@ -92,8 +102,8 @@ The repository owns the `note`, `vinyl`, and `equalizer` SVG geometry in `asset/
 
 ### TUI delivery
 
-`CoverArtLoader` clears its current transform when selected cover identity changes, reads bytes asynchronously, and performs stb decode plus block or Kitty conversion on a worker.
-It owns one cancellable task; replacement retires that task, and publication follows a cancellation-checked callback-executor hop.
+`CoverArtLoader` clears its current transform when selected cover identity changes, retains one shared byte-request interest, and performs stb decode plus block or Kitty conversion directly from `ResourceBytes::view()` on a worker.
+It owns one cancellable transform task; replacement retires both the byte interest and task, and publication follows a cancellation-checked callback-executor hop.
 The decoder checks source dimensions and pixels before full decode and bounds generated PNG retention.
 Kitty paint state separately tracks the fixed image id and terminal cell box.
 
@@ -109,9 +119,10 @@ CLI resource commands expose raw ids and bytes for inspection and export without
 
 - `ResourceStore` depends on LMDB and hashing utilities, never runtime, UIModel, or platform image libraries.
 - Track and library mutation code may create/reuse resource blobs and attach ids; resource storage does not depend on track presentation or consumers.
-- Runtime exposes owned bytes and stable ids without `Gdk::Pixbuf`, FTXUI cells, Kitty escapes, file URLs, MIME strings, or cache paths.
+- Runtime exposes stable ids and owned bytes without `Gdk::Pixbuf`, FTXUI cells, Kitty escapes, file URLs, MIME strings, or cache paths; its frontend-scoped byte loader may retain immutable encoded bytes but never decodes them.
 - Projections and playback state carry identity only; they do not read or decode bytes on behalf of frontends.
-- GTK, WinUI, and TUI own decoding, scaling, display caches, placeholder rendering, and stale-view suppression.
+- GTK, WinUI, and TUI own decoding, scaling, placeholder rendering, and stale-view suppression.
+- GTK and TUI own transform caches, runtime owns the shared frontend encoded-byte cache, and the platform-neutral async layer owns equal-key request coalescing, callback-interest lifetime, and exact-flight dependency retention.
 - UIModel owns placeholder semantics and values, while frontend assets and toolkit code own geometry and decoding.
 - MPRIS file export is a GTK platform adapter and cannot become the canonical resource store.
 - The same resource id always names the same bytes within one library database; ids are not portable identities across unrelated libraries.
@@ -144,9 +155,9 @@ ResourceId + logical allocation + display scale
 ### Other paths
 
 ```text
-WinUI ResourceId -> shared coalesced byte load/cache -> generation-fenced presenter -> native image source or empty result
-TUI ResourceId -> cancellable async owned bytes -> worker stb crop/scale -> current-task blocks or Kitty PNG
-MPRIS ResourceId -> async owned bytes -> worker cache validation/write -> current-resource file URI
+WinUI ResourceId -> ResourceByteLoader coalesced read/cache -> worker native-memory preparation -> generation-fenced native image source or empty result
+TUI ResourceId -> ResourceByteLoader / ResourceBytes -> worker stb crop/scale -> current-task blocks or Kitty PNG
+MPRIS ResourceId -> ResourceByteLoader / ResourceBytes -> worker cache validation/write -> current-resource file URI
 CLI ResourceId -> scoped read -> raw output file
 ```
 
@@ -155,9 +166,11 @@ CLI ResourceId -> scoped read -> raw output file
 - `kInvalidResourceId` is zero and never names stored bytes.
 - Resource bytes are immutable for the lifetime of their id.
 - Resource-store spans cannot outlive their LMDB transaction; runtime consumers receive an owned copy.
+- A cached runtime byte request completes synchronously inside `ResourceByteLoader::request()`, so consumers establish replacement and generation state before requesting.
 - Track cover ordering and `PictureType` remain track-domain facts even when several entries deduplicate to one resource id.
 - Cache keys include transform-relevant dimensions; a pixbuf too small for a requested physical size is not a hit.
 - A cancelled widget/request interest cannot suppress a successful shared decode needed by another waiter.
+- Clearing an owner-bound request set cannot let a late completion retire or notify a replacement flight for the same key.
 - A destroyed or recycled widget cannot accept an older resource completion.
 - An invalid resource identity may select a frontend placeholder without creating or reading a library resource; a valid identity never falls back to that placeholder.
 - External cache files are derived, replaceable artifacts and never database truth.
@@ -169,7 +182,10 @@ Core resource creation returns typed storage or id-exhaustion errors.
 Missing reads are ordinary absence; LMDB operational faults follow the storage failure boundary.
 The runtime reader copies bytes before releasing its transaction.
 
-GTK, WinUI, and MPRIS shared requests have per-interest cancellation plus a loader lifetime scope; each WinUI presenter additionally owns a generation fence; TUI owns one cancellable selected-resource task.
+Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest and cancellable transform task.
+Resource-byte unbinding destroys its lifetime scope before clearing its shared request coalescer, cache, source, and callback-runtime binding; a later binding creates a fresh scope.
+Each delivery owner cancels external work before clearing its shared request coalescer.
+The coalescer's flight token identifies one exact start generation, so a late completion after clear cannot match a same-key replacement.
 Worker cancellation prevents a frontend owner from being touched after destruction.
 Resource replacement invalidates the old callback interest, callback scope, or task before new output is published.
 Absence, an over-budget payload, decode failure, or file-export failure yields no decoded resource image/URL and does not mutate stored bytes or poison unrelated cache keys.
@@ -183,10 +199,12 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 
 - [`ResourceStore`](../../include/ao/library/ResourceStore.h), [`ResourceStore.cpp`](../../lib/library/ResourceStore.cpp), and [`CoverArt.h`](../../include/ao/library/CoverArt.h) own Core identities and references.
 - [`LibraryTaskService::loadResourceAsync`](../../app/runtime/library/LibraryTaskService.cpp) owns interactive materialization; [`LibraryYamlExporter.cpp`](../../app/runtime/library/LibraryYamlExporter.cpp) and CLI export read `ResourceStore` directly under their own transaction.
+- [`ResourceByteLoader`](../../app/include/ao/rt/resource/ResourceByteLoader.h), [`ResourceBytes`](../../app/include/ao/rt/resource/ResourceBytes.h), and [`ResourceByteCache`](../../app/include/ao/rt/resource/ResourceByteCache.h) own frontend-scoped encoded-byte coalescing, immutable ownership, caching, cancellation, and callback-executor delivery.
+- [`RequestCoalescer`](../../include/ao/async/RequestCoalescer.h) owns platform-neutral equal-key flight sharing, callback-interest cancellation, exact-flight dependency retention, and completion generation fencing.
 - [`TrackRow.h`](../../app/include/ao/rt/TrackRow.h), [`TrackListProjection.h`](../../app/include/ao/rt/projection/TrackListProjection.h), [`TrackDetailProjection.h`](../../app/include/ao/rt/projection/TrackDetailProjection.h), and [`PlaybackState.h`](../../app/include/ao/rt/PlaybackState.h) carry identities.
 - [`CoverArtPlaceholder`](../../app/include/ao/uimodel/presentation/CoverArtPlaceholder.h) owns shared presentation policy.
 - [`ImageCache`](../../app/linux-gtk/image/ImageCache.h), [`ResourceImageLoader`](../../app/linux-gtk/image/ResourceImageLoader.h), [`ResourceImageController`](../../app/linux-gtk/image/ResourceImageController.h), [`CoverArtView`](../../app/linux-gtk/image/CoverArtView.h), and [`ImageWidget`](../../app/linux-gtk/image/ImageWidget.h) own GTK delivery.
-- [`asset/ui/no-cover/`](../../asset/ui/no-cover/) and [`SoulMark.svg`](../../asset/brand/SoulMark.svg) own shared source geometry; [`WindowsCoverArtLoader`](../../app/windows-winui/image/WindowsCoverArtLoader.h) and [`CoverArtPresenter`](../../app/windows-winui/image/CoverArtPresenter.h) own WinUI delivery.
+- [`asset/ui/no-cover/`](../../asset/ui/no-cover/) and [`SoulMark.svg`](../../asset/brand/SoulMark.svg) own shared source geometry; [`CoverArtPresenter`](../../app/windows-winui/image/CoverArtPresenter.h) owns WinUI worker preparation and presentation, while the shared [`MemoryRandomAccessStream`](../../app/windows/include/ao/winui/MemoryRandomAccessStream.h) adapter owns Windows Runtime stream wrapping.
 - [`CoverArtLoader`](../../app/tui/CoverArtLoader.h), [`CoverArt.cpp`](../../app/tui/CoverArt.cpp), and [`app/tui/App.cpp`](../../app/tui/App.cpp) own TUI delivery, transforms, and paint state.
 - [`MprisArtUrlCache`](../../app/linux-gtk/platform/MprisArtUrlCache.h) owns file-URL export.
 - [`LibCommand.cpp`](../../app/cli/LibCommand.cpp) owns CLI inspection/export adaptation.
@@ -195,11 +213,12 @@ These delivery limits do not constrain CLI raw export or change stored bytes.
 
 - [`ResourceStoreTest.cpp`](../../test/unit/library/ResourceStoreTest.cpp) protects identity, deduplication, collisions, reads, removal, and exhaustion behavior.
 - [`TrackBuilderCoverArtTest.cpp`](../../test/unit/library/TrackBuilderCoverArtTest.cpp) protects ordered references and primary selection.
-- [`RequestCoalescerTest.cpp`](../../test/unit/linux-gtk/common/RequestCoalescerTest.cpp) protects shared-flight ordering, interest cancellation, reentrancy, failure rollback, and owner-independent request handles.
+- [`RequestCoalescerTest.cpp`](../../test/unit/async/RequestCoalescerTest.cpp) protects shared-flight ordering, interest cancellation, exact-flight dependency retention/release, reentrancy, failure rollback, clear generation fencing, and owner-independent request handles.
+- [`ResourceByteCacheTest.cpp`](../../test/unit/runtime/resource/ResourceByteCacheTest.cpp) and [`ResourceByteLoaderTest.cpp`](../../test/unit/runtime/resource/ResourceByteLoaderTest.cpp) protect bounded encoded-byte retention, shared storage lifetime, real and adapter-source reads, borrowed/shared binding, synchronous cache-hit delivery, retry, callback affinity, cancellation, fanout teardown, idempotent unbinding, and rebinding.
 - GTK image tests under [`test/unit/linux-gtk/image/`](../../test/unit/linux-gtk/image/) protect cache, coalescing, scaling, cancellation, current-request publication, and render targets.
 - [`PlaybackImageTest.cpp`](../../test/unit/linux-gtk/layout/components/PlaybackImageTest.cpp) protects the runtime identity-to-widget consumer.
 - [`CoverArtPlaceholderTest.cpp`](../../test/unit/uimodel/presentation/CoverArtPlaceholderTest.cpp) protects the shared presentation policy.
-- Native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
+- [`MemoryRandomAccessStreamTest.cpp`](../../test/unit/windows/platform/MemoryRandomAccessStreamTest.cpp) protects exact native-memory stream wrapping; native Debug and Release WinUI builds protect XAML SVG loading and presenter integration.
 - [`CoverArtTest.cpp`](../../test/unit/tui/CoverArtTest.cpp) protects TUI decode and Kitty protocol transforms.
 - [`MprisBridgeTest.cpp`](../../test/unit/linux-gtk/platform/MprisBridgeTest.cpp) protects cache-file export and URL publication.
 - [`CliSmokeTest.cpp`](../../test/unit/cli/CliSmokeTest.cpp) protects raw resource list/export behavior.

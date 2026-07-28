@@ -3,28 +3,26 @@
 
 #include "platform/SmtcBridge.h"
 
-#include "platform/MemoryRandomAccessStream.h"
 #include <ao/CoreIds.h>
 #include <ao/async/OperationCancelled.h>
-#include <ao/async/Runtime.h>
+#include <ao/async/Task.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/library/track/CoverArtRequestModel.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
+#include <ao/rt/resource/ResourceBytes.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/winui/MemoryRandomAccessStream.h>
 
 #include <systemmediatransportcontrolsinterop.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
 
-#include <algorithm>
 #include <exception>
 #include <memory>
 #include <stop_token>
@@ -74,14 +72,13 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher{nullptr};
     winrt::Windows::Media::SystemMediaTransportControls controls{nullptr};
     uimodel::PlaybackCommandSurface* commands = nullptr;
-    uimodel::CoverArtRequestModel artwork{};
     ResourceId displayedArtworkId{kInvalidResourceId};
     winrt::event_token buttonToken{};
     bool hasButtonToken = false;
     bool active = false;
   };
 
-  SmtcBridge::SmtcBridge(HWND const window, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher)
+  SmtcBridge::SmtcBridge(HWND window, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher)
     : _statePtr{std::make_shared<State>()}
   {
     _statePtr->dispatcher = std::move(dispatcher);
@@ -91,18 +88,19 @@ namespace ao::winui
                                                winrt::guid_of<winrt::Windows::Media::SystemMediaTransportControls>(),
                                                winrt::put_abi(_statePtr->controls)));
 
-    auto const state = std::weak_ptr<State>{_statePtr};
+    auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
     _statePtr->buttonToken = _statePtr->controls.ButtonPressed(
-      [state](winrt::Windows::Media::SystemMediaTransportControls const&,
-              winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
+      [weakStatePtr](winrt::Windows::Media::SystemMediaTransportControls const&,
+                     winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
       {
         auto const command = commandForButton(args.Button());
-        if (auto statePtr = state.lock())
+
+        if (auto statePtr = weakStatePtr.lock(); statePtr)
         {
           statePtr->dispatcher.TryEnqueue(
-            [state, command]
+            [weakStatePtr, command]
             {
-              if (auto statePtr = state.lock(); statePtr && statePtr->active && statePtr->commands != nullptr)
+              if (auto statePtr = weakStatePtr.lock(); statePtr && statePtr->active && statePtr->commands != nullptr)
               {
                 statePtr->commands->execute(command);
               }
@@ -123,10 +121,13 @@ namespace ao::winui
     }
   }
 
-  void SmtcBridge::bind(std::shared_ptr<rt::AppRuntime> runtimePtr, uimodel::PlaybackCommandSurface& commands)
+  void SmtcBridge::bind(std::shared_ptr<rt::AppRuntime> runtimePtr,
+                        uimodel::PlaybackCommandSurface& commands,
+                        rt::ResourceByteLoader& resourceBytes)
   {
     unbind();
     _runtimePtr = std::move(runtimePtr);
+    _resourceBytes = &resourceBytes;
     _statePtr->active = true;
     _statePtr->commands = &commands;
     _statePtr->controls.IsEnabled(true);
@@ -142,16 +143,17 @@ namespace ao::winui
 
   void SmtcBridge::unbind()
   {
+    _artworkRequest.reset();
     _artworkTask.reset();
     _snapshotSub.reset();
     _statePtr->active = false;
     _statePtr->commands = nullptr;
     _statePtr->displayedArtworkId = kInvalidResourceId;
-    _statePtr->artwork.reset();
     auto updater = _statePtr->controls.DisplayUpdater();
     updater.Thumbnail(nullptr);
     updater.Update();
     _statePtr->controls.IsEnabled(false);
+    _resourceBytes = nullptr;
     _runtimePtr.reset();
   }
 
@@ -178,7 +180,7 @@ namespace ao::winui
 
     if (transport.nowPlaying.coverArtId == kInvalidResourceId)
     {
-      _statePtr->artwork.clearSelection();
+      _artworkRequest.reset();
     }
     else
     {
@@ -188,64 +190,70 @@ namespace ao::winui
 
   void SmtcBridge::updateArtwork(ResourceId const resourceId)
   {
+    _artworkRequest.reset();
     _artworkTask.reset();
-    auto const token = _statePtr->artwork.select(resourceId);
-    auto const state = std::weak_ptr<State>{_statePtr};
-    auto* const tasks = &_runtimePtr->library().taskService();
-    auto* const runtime = &_runtimePtr->async();
-    // The runtime and task service outlive the bridge task. Bridge-owned UI
-    // state is touched only after the cancellation-checked callback hop.
-    _artworkTask =
-      runtime->spawnCancellable([state, tasks, runtime, token](std::stop_token const stopToken) mutable
-                                { return updateArtworkWorkflow(state, tasks, runtime, token, stopToken); });
+    auto const statePtr = std::weak_ptr<State>{_statePtr};
+    _artworkRequest = _resourceBytes->request(
+      resourceId,
+      [this, statePtr, resourceId](rt::ResourceBytes bytes)
+      {
+        if (auto lockedStatePtr = statePtr.lock(); lockedStatePtr && lockedStatePtr->active &&
+                                                   lockedStatePtr->displayedArtworkId == resourceId && !bytes.empty())
+        {
+          auto runtimePtr = _runtimePtr;
+          _artworkTask = runtimePtr->async().spawnCancellable(
+            [statePtr, runtimePtr = std::move(runtimePtr), resourceId, bytes = std::move(bytes)](
+              std::stop_token const stopToken) mutable
+            {
+              return prepareAndWriteArtwork(statePtr, std::move(runtimePtr), resourceId, std::move(bytes), stopToken);
+            });
+        }
+      });
   }
 
-  async::Task<void> SmtcBridge::updateArtworkWorkflow(std::weak_ptr<State> const state,
-                                                      rt::LibraryTaskService* const tasks,
-                                                      async::Runtime* const runtime,
-                                                      uimodel::CoverArtRequestToken const token,
-                                                      std::stop_token const stopToken)
+  async::Task<void> SmtcBridge::prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
+                                                       std::shared_ptr<rt::AppRuntime> runtimePtr,
+                                                       ResourceId const resourceId,
+                                                       rt::ResourceBytes bytes,
+                                                       std::stop_token const stopToken)
   {
+    auto prepared = PreparedMemoryRandomAccessStream{};
+
     try
     {
-      auto bytes = co_await tasks->loadResourceAsync(token.resourceId, stopToken);
-
-      if (!bytes || !*bytes)
-      {
-        co_return;
-      }
-
-      auto payload = std::move(**bytes);
-      co_await runtime->resumeOnCallbackExecutor(stopToken);
-      auto statePtr = state.lock();
-      if (!statePtr || !statePtr->active)
-      {
-        co_return;
-      }
-      if (!statePtr->artwork.store(token, std::move(payload)))
-      {
-        co_return;
-      }
-
-      writeArtworkStream(*statePtr, token);
-      statePtr.reset();
-    }
-    catch (async::OperationCancelled const&)
-    {
+      co_await runtimePtr->async().resumeOnWorker(stopToken);
+      prepared = prepareMemoryRandomAccessStream(bytes.view());
     }
     catch (...)
     {
-      runtime->reportUnhandledException(std::current_exception(), "Windows SMTC cover-art workflow");
+      async::rethrowIfOperationCancelled();
+      runtimePtr->async().reportUnhandledException(
+        std::current_exception(), "Windows SMTC cover-art stream preparation");
+    }
+
+    co_await runtimePtr->async().resumeOnCallbackExecutor(stopToken);
+
+    if (auto lockedStatePtr = statePtr.lock();
+        lockedStatePtr && lockedStatePtr->active && lockedStatePtr->displayedArtworkId == resourceId)
+    {
+      writeArtworkStream(*lockedStatePtr, resourceId, std::move(prepared));
     }
   }
 
-  void SmtcBridge::writeArtworkStream(State& state, uimodel::CoverArtRequestToken const token)
+  void SmtcBridge::writeArtworkStream(State& state,
+                                      ResourceId const resourceId,
+                                      PreparedMemoryRandomAccessStream prepared)
   {
+    if (!prepared)
+    {
+      return;
+    }
+
     try
     {
-      auto const cached = state.artwork.cached(token.resourceId);
-      auto stream = makeMemoryRandomAccessStream(cached);
-      if (!state.active || !state.artwork.accepts(token))
+      auto stream = makeMemoryRandomAccessStream(std::move(prepared));
+
+      if (!state.active || state.displayedArtworkId != resourceId)
       {
         return;
       }

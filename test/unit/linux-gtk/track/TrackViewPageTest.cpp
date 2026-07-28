@@ -24,6 +24,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceLease.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
@@ -98,7 +99,8 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
     auto cache = TrackRowCache{runtime.library()};
     auto imageCache = ImageCache{200};
-    auto thumbnailLoader = ResourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
     auto window = Gtk::Window{};
 
     auto modelPtr = TrackListModel::create(cache);
@@ -212,7 +214,8 @@ namespace ao::gtk::test
     auto modelPtr = TrackListModel::create(rowCache);
     modelPtr->bindProjection(projectionPtr);
     auto imageCache = ImageCache{200};
-    auto thumbnailLoader = ResourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
 
     auto materializedRowsForPage = [&]
     {
@@ -262,7 +265,8 @@ namespace ao::gtk::test
     modelPtr->bindProjection(projectionPtr);
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
     auto imageCache = ImageCache{200};
-    auto thumbnailLoader = ResourceImageLoader{runtime.library().taskService(), imageCache, runtime.async()};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
     auto page = TrackViewPage{rt::kAllTracksListId, modelPtr, layoutStore, runtime, thumbnailLoader};
     auto window = Gtk::Window{};
     window.set_child(page);

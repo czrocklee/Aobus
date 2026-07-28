@@ -14,6 +14,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <microsoft.ui.xaml.window.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -25,26 +26,28 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <memory>
-#include <utility>
 
 namespace winrt::Aobus::implementation
 {
   namespace
   {
+    constexpr double kFullscreenSoulPadding = 48.0;
+
     HWND nativeWindow(Microsoft::UI::Xaml::Window const& window)
     {
       auto windowNative = window.as<::IWindowNative>();
-      auto handle = HWND{};
+      HWND handle = nullptr;
       check_hresult(windowNative->get_WindowHandle(&handle));
       return handle;
     }
 
     bool isMinimized(Microsoft::UI::Windowing::AppWindow const& window)
     {
-      if (auto presenter = window.Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>())
+      if (auto presenter = window.Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>(); presenter)
       {
         return presenter.State() == Microsoft::UI::Windowing::OverlappedPresenterState::Minimized;
       }
+
       return false;
     }
   } // namespace
@@ -53,11 +56,14 @@ namespace winrt::Aobus::implementation
   {
     _smtcPtr.reset();
     _nowPlayingPtr.reset();
+
     if (_playbackControlsPtr)
     {
       _playbackControlsPtr->unbind();
     }
+
     get_self<AobusSoulControl>(ClassicSoul())->unbind();
+
     if (_fullscreenSoul)
     {
       get_self<AobusSoulControl>(_fullscreenSoul)->unbind();
@@ -81,6 +87,7 @@ namespace winrt::Aobus::implementation
 
     get_self<AobusSoulControl>(ClassicSoul())->bind(playback);
     get_self<AobusSoulControl>(ClassicSoul())->setTransportIcon(ao::uimodel::TransportIcon::None);
+
     if (_fullscreenSoul)
     {
       get_self<AobusSoulControl>(_fullscreenSoul)->bind(playback);
@@ -90,7 +97,7 @@ namespace winrt::Aobus::implementation
     {
       _smtcPtr = std::make_unique<ao::winui::SmtcBridge>(
         nativeWindow(*this), Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread());
-      _smtcPtr->bind(_session->playbackRuntimePtr(), commands);
+      _smtcPtr->bind(_session->playbackRuntimePtr(), commands, dependencies.playbackResourceBytes);
     }
     catch (hresult_error const& error)
     {
@@ -118,8 +125,8 @@ namespace winrt::Aobus::implementation
     get_self<AobusSoulControl>(_fullscreenSoul)->setWindowActivity(window.IsVisible(), isMinimized(window));
   }
 
-  void MainWindow::OnPlayPauseClicked(Windows::Foundation::IInspectable const&,
-                                      Microsoft::UI::Xaml::RoutedEventArgs const&)
+  void MainWindow::OnPlayPauseClicked(Windows::Foundation::IInspectable const& /*sender*/,
+                                      Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     if (_playbackControlsPtr)
     {
@@ -127,7 +134,8 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnStopClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&)
+  void MainWindow::OnStopClicked(Windows::Foundation::IInspectable const& /*sender*/,
+                                 Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     if (_playbackControlsPtr)
     {
@@ -140,17 +148,19 @@ namespace winrt::Aobus::implementation
     ModernNowPlayingTitle().Text(state.isActive ? to_hstring(state.title) : ao::winui::resourceHstring(L"NotPlaying"));
     ModernNowPlayingArtist().Text(state.artist == "Unknown Artist" ? ao::winui::resourceHstring(L"UnknownArtist")
                                                                    : to_hstring(state.artist));
-    if (_nowPlayingCoverArtPtr)
+
+    if (_nowPlayingCoverArtPtr != nullptr)
     {
       _nowPlayingCoverArtPtr->select(state.coverArtId, state.coverArtPlaceholderIdentity, true);
     }
+
     if (_audioPipelineToolTipPtr)
     {
       _audioPipelineToolTipPtr->apply(state.audioPipeline);
     }
   }
 
-  void MainWindow::OnClassicSoulHolding(Windows::Foundation::IInspectable const&,
+  void MainWindow::OnClassicSoulHolding(Windows::Foundation::IInspectable const& /*sender*/,
                                         Microsoft::UI::Xaml::Input::HoldingRoutedEventArgs const& args)
   {
     if (args.HoldingState() == Microsoft::UI::Input::HoldingState::Completed)
@@ -167,16 +177,24 @@ namespace winrt::Aobus::implementation
       _soulWindow.Activate();
       return;
     }
+
     _soulWindow = Microsoft::UI::Xaml::Window{};
     _soulWindow.Title(ao::winui::resourceHstring(L"SoulWindowTitle"));
     _fullscreenSoul = Aobus::AobusSoulControl{};
     get_self<AobusSoulControl>(_fullscreenSoul)->setTransportIcon(ao::uimodel::TransportIcon::None);
+
     if (_session != nullptr)
     {
       get_self<AobusSoulControl>(_fullscreenSoul)->bind(_session->playbackRuntime().playback());
     }
+
     auto root = Microsoft::UI::Xaml::Controls::Grid{};
-    root.Padding({48.0, 48.0, 48.0, 48.0});
+    root.Padding({
+      .Left = kFullscreenSoulPadding,
+      .Top = kFullscreenSoulPadding,
+      .Right = kFullscreenSoulPadding,
+      .Bottom = kFullscreenSoulPadding,
+    });
     root.Children().Append(_fullscreenSoul);
     _soulWindow.Content(root);
     auto weak = get_weak();
@@ -186,7 +204,7 @@ namespace winrt::Aobus::implementation
       {
         if ((args.DidVisibilityChange() || args.DidPresenterChange()))
         {
-          if (auto self = weak.get())
+          if (auto self = weak.get(); self)
           {
             self->updateFullscreenSoulWindowActivity();
           }
@@ -196,46 +214,51 @@ namespace winrt::Aobus::implementation
     _soulWindow.Closed(
       [weak](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::WindowEventArgs const&)
       {
-        if (auto self = weak.get())
+        if (auto self = weak.get(); self)
         {
           if (self->_hasSoulWindowChangedToken && self->_soulWindow)
           {
             self->_soulWindow.AppWindow().Changed(self->_soulWindowChangedToken);
             self->_hasSoulWindowChangedToken = false;
           }
+
           if (self->_fullscreenSoul)
           {
             get_self<AobusSoulControl>(self->_fullscreenSoul)->unbind();
           }
+
           self->_fullscreenSoul = nullptr;
           self->_soulWindow = nullptr;
         }
       });
-    if (auto presenter = _soulWindow.AppWindow().Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>())
+
+    if (auto presenter = _soulWindow.AppWindow().Presenter().try_as<Microsoft::UI::Windowing::OverlappedPresenter>();
+        presenter)
     {
       presenter.Maximize();
     }
+
     _soulWindow.Activate();
     updateFullscreenSoulWindowActivity();
   }
 
-  void MainWindow::OnClassicSoulRightTapped(Windows::Foundation::IInspectable const&,
+  void MainWindow::OnClassicSoulRightTapped(Windows::Foundation::IInspectable const& /*sender*/,
                                             Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs const& args)
   {
     showSystemMenu();
     args.Handled(true);
   }
 
-  void MainWindow::OnSystemMenuClicked(Windows::Foundation::IInspectable const&,
-                                       Microsoft::UI::Xaml::RoutedEventArgs const&)
+  void MainWindow::OnSystemMenuClicked(Windows::Foundation::IInspectable const& /*sender*/,
+                                       Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
     showSystemMenu();
   }
 
   void MainWindow::showSystemMenu()
   {
-    auto const handle = nativeWindow(*this);
-    SetForegroundWindow(handle);
-    PostMessageW(handle, WM_SYSCOMMAND, SC_KEYMENU, static_cast<LPARAM>(L' '));
+    auto* const handle = nativeWindow(*this);
+    ::SetForegroundWindow(handle);
+    ::PostMessageW(handle, WM_SYSCOMMAND, SC_KEYMENU, static_cast<LPARAM>(L' '));
   }
 } // namespace winrt::Aobus::implementation

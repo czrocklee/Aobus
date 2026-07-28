@@ -84,6 +84,10 @@ namespace ao::winui
                             bool compact);
     void renderTechnicalRows(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows, bool compact);
     void updateSectionPresentation();
+    void updateModernSectionPresentation(bool renderMetadataSection, bool renderTechnicalSection);
+    void updateClassicSectionPresentation(bool renderMetadataSection,
+                                          bool renderTechnicalSection,
+                                          bool hasMetadataFields);
     void updateSelectionPresentation();
     void resetFieldScroll();
 
@@ -127,7 +131,7 @@ namespace ao::winui
     std::shared_ptr<rt::AppRuntime> _runtimePtr;
     std::unique_ptr<rt::TrackDetailProjection> _projectionPtr;
     async::Subscription _subscription;
-    CoverArtPresenter* _coverArtPtr = nullptr;
+    CoverArtPresenter* _coverArt = nullptr;
 
     bool _metadataExpanded = true;
     bool _technicalExpanded = false;

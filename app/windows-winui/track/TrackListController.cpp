@@ -7,17 +7,23 @@
 #include "track/TrackCellItem.h"
 #include "track/TrackItemView.h"
 #include "track/TrackRowItem.h"
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/TrackRow.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutPolicy.h>
+#include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
@@ -29,15 +35,14 @@
 #include <winrt/Windows.Foundation.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <iterator>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <tuple>
@@ -58,44 +63,46 @@ namespace ao::winui
     class TrackItemMaterializer final
     {
     public:
-      TrackItemMaterializer(std::shared_ptr<rt::AppRuntime> runtimePtr,
-                            std::shared_ptr<rt::TrackListProjection> projectionPtr,
+      TrackItemMaterializer(std::shared_ptr<rt::AppRuntime> inputRuntimePtr,
+                            std::shared_ptr<rt::TrackListProjection> inputProjectionPtr,
                             uimodel::TrackDisplayIndex displayIndex,
                             std::vector<TrackColumnCellSpec> columns)
-        : _runtimePtr{std::move(runtimePtr)}
-        , _projectionPtr{std::move(projectionPtr)}
+        : _runtimePtr{std::move(inputRuntimePtr)}
+        , _projectionPtr{std::move(inputProjectionPtr)}
         , _displayIndex{std::move(displayIndex)}
         , _columns{std::move(columns)}
       {
-        auto const projection = _projectionPtr;
-        auto const runtime = _runtimePtr;
-        _rows.reset(projection->size(),
-                    [projection, runtime](std::size_t const index) -> std::optional<rt::TrackRow>
+        auto const projectionPtr = _projectionPtr;
+        auto const runtimePtr = _runtimePtr;
+        _rows.reset(projectionPtr->size(),
+                    [projectionPtr, runtimePtr](std::size_t const index) -> std::optional<rt::TrackRow>
                     {
-                      if (index >= projection->size())
+                      if (index >= projectionPtr->size())
                       {
                         return std::nullopt;
                       }
-                      return runtime->library().reader().trackRow(projection->trackIdAt(index));
+
+                      return runtimePtr->library().reader().trackRow(projectionPtr->trackIdAt(index));
                     });
       }
 
       winrt::Windows::Foundation::IInspectable itemAt(std::size_t const displayIndex)
       {
-        auto const item = _displayIndex.itemAt(displayIndex);
-        if (!item)
+        auto const optItem = _displayIndex.itemAt(displayIndex);
+
+        if (!optItem)
         {
           return nullptr;
         }
 
-        if (item->kind == uimodel::TrackDisplayItemKind::GroupHeader)
+        if (optItem->kind == uimodel::TrackDisplayItemKind::GroupHeader)
         {
-          auto const group = _projectionPtr->groupAt(item->groupIndex);
+          auto const group = _projectionPtr->groupAt(optItem->groupIndex);
           auto heading = uimodel::formatTrackGroupHeading(kHeadingText, group.heading);
           auto optMonogram = uimodel::trackGroupCoverArtMonogram(group.heading);
           return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
             static_cast<std::uint32_t>(displayIndex),
-            static_cast<std::uint32_t>(item->sourceIndex),
+            static_cast<std::uint32_t>(optItem->sourceIndex),
             group.imageId.raw(),
             static_cast<std::uint32_t>(group.rows.count),
             std::move(heading.primaryText),
@@ -104,7 +111,8 @@ namespace ao::winui
             optMonogram ? std::move(*optMonogram) : std::string{});
         }
 
-        auto const* row = _rows.rowAt(item->sourceIndex);
+        auto const* row = _rows.rowAt(optItem->sourceIndex);
+
         if (row == nullptr)
         {
           return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
@@ -112,7 +120,7 @@ namespace ao::winui
         }
 
         return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
-          static_cast<std::uint32_t>(displayIndex), static_cast<std::uint32_t>(item->sourceIndex), *row, _columns);
+          static_cast<std::uint32_t>(displayIndex), static_cast<std::uint32_t>(optItem->sourceIndex), *row, _columns);
       }
 
     private:
@@ -122,6 +130,53 @@ namespace ao::winui
       std::vector<TrackColumnCellSpec> _columns;
       uimodel::IndexedTrackRowCache _rows;
     };
+
+    bool materializeStoredColumns(std::vector<uimodel::TrackColumnState>& stored,
+                                  std::span<rt::TrackField const> const presentationFields)
+    {
+      auto order = std::vector<rt::TrackField>{};
+      order.reserve(stored.size());
+
+      for (auto const& column : stored)
+      {
+        order.push_back(column.field);
+      }
+
+      auto const presentationOrder = uimodel::visibleTrackFieldsInStoredOrder(presentationFields, order);
+      auto const specs = uimodel::pixelTrackColumnSpecs(presentationOrder, stored);
+
+      if (specs.empty())
+      {
+        return false;
+      }
+
+      auto complete = std::vector<uimodel::TrackColumnState>{};
+      complete.reserve(stored.size() + specs.size());
+
+      for (auto const& spec : specs)
+      {
+        auto column = uimodel::canonicalTrackColumnState(spec);
+
+        if (auto const prior = std::ranges::find(stored, spec.field, &uimodel::TrackColumnState::field);
+            prior != stored.end())
+        {
+          column.visible = prior->visible;
+        }
+
+        complete.push_back(column);
+      }
+
+      for (auto const& column : stored)
+      {
+        if (!std::ranges::contains(complete, column.field, &uimodel::TrackColumnState::field))
+        {
+          complete.push_back(column);
+        }
+      }
+
+      stored = std::move(complete);
+      return true;
+    }
   } // namespace
 
   TrackListController::TrackListController()
@@ -166,6 +221,7 @@ namespace ao::winui
     _columnLayouts = nullptr;
     _runtime = nullptr;
     _runtimePtr.reset();
+
     if (_onChanged)
     {
       _onChanged();
@@ -181,6 +237,7 @@ namespace ao::winui
 
     _runtime->reloadAllTracks();
     auto const restoredView = _runtime->workspace().snapshot().activeViewId;
+
     if (restoredView != rt::kInvalidViewId)
     {
       _viewId = restoredView;
@@ -194,10 +251,12 @@ namespace ao::winui
     if (!view)
     {
       _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
+
       if (_onChanged)
       {
         _onChanged();
       }
+
       return;
     }
 
@@ -218,6 +277,7 @@ namespace ao::winui
     auto const normalizedChrome =
       std::clamp(static_cast<std::int32_t>(std::lround(trailingChromeWidth)), 0, normalizedSurface - 1);
     auto const normalizedViewport = normalizedSurface - normalizedChrome;
+
     if (std::abs(normalizedSurface - _surfaceViewportWidth) < kViewportResizeThreshold &&
         normalizedChrome == _trailingChromeWidth)
     {
@@ -241,10 +301,12 @@ namespace ao::winui
     {
       _columns.clear();
       _headers.Clear();
+
       if (_onChanged)
       {
         _onChanged();
       }
+
       return;
     }
 
@@ -266,10 +328,12 @@ namespace ao::winui
       // destroy the projection while one of its member functions is still active.
       _projectionInvalidated = true;
       _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
+
       if (_onChanged)
       {
         _onChanged();
       }
+
       return;
     }
 
@@ -287,23 +351,29 @@ namespace ao::winui
     auto const rowCount = _projectionPtr->size();
     auto sections = std::vector<uimodel::TrackDisplaySection>{};
     sections.reserve(_projectionPtr->groupCount());
-    for (auto groupIndex = std::size_t{0}; groupIndex < _projectionPtr->groupCount(); ++groupIndex)
+
+    for (std::size_t groupIndex = 0; groupIndex < _projectionPtr->groupCount(); ++groupIndex)
     {
       auto const group = _projectionPtr->groupAt(groupIndex);
       sections.push_back({.start = group.rows.start, .count = group.rows.count});
     }
+
     auto displayIndex = uimodel::TrackDisplayIndex{};
+
     if (!displayIndex.reset(rowCount, sections))
     {
       std::ignore = displayIndex.reset(rowCount, {});
     }
+
     auto const displayCount = displayIndex.displayCount();
-    auto materializer =
+    auto materializerPtr =
       std::make_shared<TrackItemMaterializer>(_runtimePtr, _projectionPtr, std::move(displayIndex), _columns);
     _items = makeTrackItemView(
       displayCount,
-      [materializer = std::move(materializer)](std::size_t const index) { return materializer->itemAt(index); },
+      [materializerPtr = std::move(materializerPtr)](std::size_t const index)
+      { return materializerPtr->itemAt(index); },
       uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
+
     if (_onChanged)
     {
       _onChanged();
@@ -324,6 +394,7 @@ namespace ao::winui
     auto const state = _runtime->views().trackListState(_viewId);
     auto const listId = state.listId;
     auto const* stored = static_cast<std::vector<uimodel::TrackColumnState> const*>(nullptr);
+
     if (_columnLayouts != nullptr)
     {
       if (auto const it = _columnLayouts->listLayouts.find(listId); it != _columnLayouts->listLayouts.end())
@@ -340,6 +411,7 @@ namespace ao::winui
     auto const text = uimodel::PresentationTextCatalog{};
 
     _columns.reserve(fields.size());
+
     for (std::size_t index = 0; index < fields.size(); ++index)
     {
       auto const field = fields[index];
@@ -350,23 +422,28 @@ namespace ao::winui
       auto const* definition = rt::trackFieldDefinition(field);
       auto const fieldId = rt::trackFieldId(field);
       auto label = stableResourceString("TrackField_", fieldId, text.trackFieldLabel(field));
+
       if (definition != nullptr && definition->optSortField && !state.presentation.sortBy.empty() &&
           state.presentation.sortBy.front().field == *definition->optSortField)
       {
         label +=
           resourceString(state.presentation.sortBy.front().ascending ? "SortAscendingSuffix" : "SortDescendingSuffix");
       }
-      _headers.Append(winrt::make<winrt::Aobus::implementation::TrackCellItem>(
-        winrt::to_hstring(label),
-        winrt::to_hstring(std::string{fieldId}),
-        width,
-        definition != nullptr && definition->optSortField.has_value()));
+
+      _headers.Append(
+        winrt::make<winrt::Aobus::implementation::TrackCellItem>(winrt::to_hstring(label),
+                                                                 winrt::to_hstring(std::string{fieldId}),
+                                                                 width,
+                                                                 definition != nullptr && definition->optSortField));
     }
+
     _contentWidth = 0.0;
+
     for (auto const& column : _columns)
     {
       _contentWidth += column.width;
     }
+
     _contentWidth =
       std::max(_contentWidth + static_cast<double>(_trailingChromeWidth), static_cast<double>(_surfaceViewportWidth));
   }
@@ -379,6 +456,7 @@ namespace ao::winui
     }
 
     auto const listId = activeListId();
+
     if (listId == kInvalidListId)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
@@ -387,16 +465,20 @@ namespace ao::winui
     auto& stored = _columnLayouts->listLayouts[listId];
     auto visibleLayout = std::vector<uimodel::TrackColumnState>{};
     visibleLayout.reserve(specs.size());
+
     for (auto const& spec : specs)
     {
       auto state = uimodel::canonicalTrackColumnState(spec);
+
       if (auto const prior = std::ranges::find(stored, spec.field, &uimodel::TrackColumnState::field);
           prior != stored.end())
       {
         state.visible = prior->visible;
       }
+
       visibleLayout.push_back(state);
     }
+
     stored = uimodel::mergeVisibleTrackColumnLayout(stored, visibleLayout);
     refreshRows();
     return {};
@@ -404,68 +486,84 @@ namespace ao::winui
 
   Result<> TrackListController::resizeColumn(std::string_view const fieldId, double const horizontalChange)
   {
-    auto const field = rt::trackFieldFromId(fieldId);
-    if (!field || _runtime == nullptr || _columnLayouts == nullptr)
+    auto const optField = rt::trackFieldFromId(fieldId);
+
+    if (!optField || _runtime == nullptr || _columnLayouts == nullptr)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoResizableColumn"));
     }
 
     auto fields = std::vector<rt::TrackField>{};
     fields.reserve(_columns.size());
+
     for (auto const& column : _columns)
     {
       fields.push_back(column.field);
     }
+
     auto const listId = activeListId();
+
     if (listId == kInvalidListId)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
+
     auto const& stored = _columnLayouts->listLayouts[listId];
     auto const specs = uimodel::pixelTrackColumnSpecs(fields, stored);
     auto const widths = uimodel::solveTrackColumnWidths(specs, _viewportWidth);
-    auto const it = std::ranges::find(fields, *field);
+    auto const it = std::ranges::find(fields, *optField);
+
     if (it == fields.end())
     {
       return makeError(Error::Code::NotFound, resourceString("ColumnHidden"));
     }
+
     auto const index = static_cast<std::size_t>(std::distance(fields.begin(), it));
     auto const target = static_cast<std::int32_t>(std::lround(static_cast<double>(widths[index]) + horizontalChange));
-    return storeColumnSpecs(uimodel::resizeTrackColumnSpecs(specs, *field, target, _viewportWidth));
+    return storeColumnSpecs(uimodel::resizeTrackColumnSpecs(specs, *optField, target, _viewportWidth));
   }
 
-  Result<> TrackListController::moveColumn(std::string_view const fieldId, int const offset)
+  Result<> TrackListController::moveColumn(std::string_view const fieldId, std::int32_t const offset)
   {
-    auto const field = rt::trackFieldFromId(fieldId);
-    if (!field || _runtime == nullptr || _columnLayouts == nullptr || offset == 0)
+    auto const optField = rt::trackFieldFromId(fieldId);
+
+    if (!optField || _runtime == nullptr || _columnLayouts == nullptr || offset == 0)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoMovableColumn"));
     }
 
     auto fields = std::vector<rt::TrackField>{};
     fields.reserve(_columns.size());
+
     for (auto const& column : _columns)
     {
       fields.push_back(column.field);
     }
-    auto const it = std::ranges::find(fields, *field);
+
+    auto const it = std::ranges::find(fields, *optField);
+
     if (it == fields.end())
     {
       return makeError(Error::Code::NotFound, resourceString("ColumnHidden"));
     }
+
     auto const index = static_cast<std::ptrdiff_t>(std::distance(fields.begin(), it));
     auto const target = index + static_cast<std::ptrdiff_t>(offset);
-    if (target < 0 || target >= static_cast<std::ptrdiff_t>(fields.size()))
+
+    if (target < 0 || std::cmp_greater_equal(target, fields.size()))
     {
       return {};
     }
+
     std::iter_swap(fields.begin() + index, fields.begin() + target);
 
     auto const listId = activeListId();
+
     if (listId == kInvalidListId)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoListActive"));
     }
+
     auto const& stored = _columnLayouts->listLayouts[listId];
     return storeColumnSpecs(uimodel::pixelTrackColumnSpecs(fields, stored));
   }
@@ -473,6 +571,7 @@ namespace ao::winui
   std::vector<TrackColumnChoice> TrackListController::columnChoices() const
   {
     auto choices = std::vector<TrackColumnChoice>{};
+
     if (_runtime == nullptr || _viewId == rt::kInvalidViewId)
     {
       return choices;
@@ -480,6 +579,7 @@ namespace ao::winui
 
     auto const state = _runtime->views().trackListState(_viewId);
     auto const* stored = static_cast<std::vector<uimodel::TrackColumnState> const*>(nullptr);
+
     if (_columnLayouts != nullptr)
     {
       if (auto const it = _columnLayouts->listLayouts.find(state.listId); it != _columnLayouts->listLayouts.end())
@@ -489,9 +589,11 @@ namespace ao::winui
     }
 
     choices.reserve(state.presentation.visibleFields.size());
+
     for (auto const field : state.presentation.visibleFields)
     {
-      auto visible = true;
+      bool visible = true;
+
       if (stored != nullptr)
       {
         if (auto const it = std::ranges::find(*stored, field, &uimodel::TrackColumnState::field); it != stored->end())
@@ -499,28 +601,33 @@ namespace ao::winui
           visible = it->visible;
         }
       }
+
       choices.push_back({.field = field, .visible = visible});
     }
+
     return choices;
   }
 
   Result<> TrackListController::setColumnVisible(std::string_view const fieldId, bool const visible)
   {
-    auto const field = rt::trackFieldFromId(fieldId);
-    if (!field || _runtime == nullptr || _columnLayouts == nullptr || _viewId == rt::kInvalidViewId)
+    auto const optField = rt::trackFieldFromId(fieldId);
+
+    if (!optField || _runtime == nullptr || _columnLayouts == nullptr || _viewId == rt::kInvalidViewId)
     {
       return makeError(Error::Code::InvalidState, resourceString("NoConfigurableColumn"));
     }
 
     auto const state = _runtime->views().trackListState(_viewId);
-    if (!std::ranges::contains(state.presentation.visibleFields, *field))
+
+    if (!std::ranges::contains(state.presentation.visibleFields, *optField))
     {
       return makeError(Error::Code::NotFound, resourceString("ColumnOutsidePresentation"));
     }
 
     auto& stored = _columnLayouts->listLayouts[state.listId];
-    auto existing = std::ranges::find(stored, *field, &uimodel::TrackColumnState::field);
+    auto existing = std::ranges::find(stored, *optField, &uimodel::TrackColumnState::field);
     auto const currentlyVisible = existing == stored.end() || existing->visible;
+
     if (currentlyVisible == visible)
     {
       return {};
@@ -528,11 +635,13 @@ namespace ao::winui
 
     if (!visible)
     {
-      auto visibleCount = std::size_t{0};
+      std::size_t visibleCount = 0;
+
       for (auto const choice : columnChoices())
       {
         visibleCount += choice.visible ? 1U : 0U;
       }
+
       if (visibleCount <= 1)
       {
         return makeError(Error::Code::InvalidState, resourceString("OneVisibleColumnRequired"));
@@ -541,51 +650,20 @@ namespace ao::winui
 
     if (existing == stored.end())
     {
-      auto order = std::vector<rt::TrackField>{};
-      order.reserve(stored.size());
-      for (auto const& column : stored)
-      {
-        order.push_back(column.field);
-      }
-      auto const presentationOrder = uimodel::visibleTrackFieldsInStoredOrder(state.presentation.visibleFields, order);
-      auto const specs = uimodel::pixelTrackColumnSpecs(presentationOrder, stored);
-      if (specs.empty())
+      if (!materializeStoredColumns(stored, state.presentation.visibleFields))
       {
         return makeError(Error::Code::InvalidState, resourceString("ColumnLayoutPolicyMissing"));
       }
 
-      auto complete = std::vector<uimodel::TrackColumnState>{};
-      complete.reserve(stored.size() + specs.size());
-      for (auto const& spec : specs)
-      {
-        auto column = uimodel::canonicalTrackColumnState(spec);
-        if (auto const prior = std::ranges::find(stored, spec.field, &uimodel::TrackColumnState::field);
-            prior != stored.end())
-        {
-          column.visible = prior->visible;
-        }
-        complete.push_back(column);
-      }
-      for (auto const& column : stored)
-      {
-        if (!std::ranges::contains(complete, column.field, &uimodel::TrackColumnState::field))
-        {
-          complete.push_back(column);
-        }
-      }
-      stored = std::move(complete);
-      existing = std::ranges::find(stored, *field, &uimodel::TrackColumnState::field);
+      existing = std::ranges::find(stored, *optField, &uimodel::TrackColumnState::field);
+
       if (existing == stored.end())
       {
         return makeError(Error::Code::InvalidState, resourceString("ColumnLayoutPolicyMissing"));
       }
-      existing->visible = visible;
-    }
-    else
-    {
-      existing->visible = visible;
     }
 
+    existing->visible = visible;
     refreshRows();
     return {};
   }
@@ -641,6 +719,7 @@ namespace ao::winui
     }
 
     auto const* preset = rt::builtinTrackPresentationPreset(presentationId);
+
     if (preset == nullptr)
     {
       return makeError(Error::Code::NotFound, formatResource("UnknownPresentationFormat", presentationId));
@@ -660,6 +739,7 @@ namespace ao::winui
     request.target = listId == rt::kAllTracksListId ? rt::NavigationTarget{rt::GlobalViewKind::AllTracks}
                                                     : rt::NavigationTarget{listId};
     auto view = _runtime->workspace().navigate(request);
+
     if (!view)
     {
       return std::unexpected{view.error()};

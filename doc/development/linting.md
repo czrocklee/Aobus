@@ -83,11 +83,42 @@ symbols required by an out-of-tree DLL, so it cannot load the Linux-style
 plugin. Do not substitute `clang-tidy.exe` from Visual Studio or `PATH`; it
 would omit every `aobus-*` check.
 
-The portal also removes the exact `/Zc:preprocessor` token from a temporary copy
-of the Windows compilation database before Clang replay. The flag enables the
-standards-conforming MSVC preprocessor in real product builds, where it remains
-required, but it has no Clang equivalent and Clang rejects it as an unused
-driver argument. No other `/Zc:preprocessor*` spelling is removed.
+The Windows portal composes its temporary Clang compilation database from two
+native build trees.
+The `windows-tidy` Ninja tree owns shared code, the TUI, and the CLI, while the
+`windows-winui` Visual Studio tree owns WinUI and its generated C++/WinRT
+headers.
+WinUI deliberately remains disabled in the Ninja tree because CMake's WinUI
+integration requires the Visual Studio generator.
+When the selected tidy scope contains a WinUI file, the portal incrementally
+builds the Release WinUI target, asks MSBuild's `GetCompileCommands` target for
+the exact compiler state, validates that every selected WinUI translation unit
+is present, and merges those commands with the Ninja database.
+Generated translation units outside the repository source tree are excluded.
+`--no-build` skips the incremental WinUI build and requires an already
+configured, generated Visual Studio tree.
+With `-p` or `BUILD_DIR`, the companion Visual Studio tree is the sibling whose
+name appends `-winui`; the default paths remain the checkout-specific
+`windows-tidy` and `windows-winui` trees.
+
+Before Clang replay, the portal removes only the exact `/Zc:preprocessor`, `/c`,
+and `/ZW:nostdlib` driver tokens from the temporary merged database.
+The first flag enables the standards-conforming MSVC preprocessor in real
+product builds, where it remains required, while the latter two describe MSVC
+compile behavior that the clang-tidy driver already establishes.
+Clang rejects all three as unused driver arguments.
+Related spellings such as `/Zc:preprocessor-` are not removed.
+
+Header checks reuse the exact native implementation command but remove the
+CMake-generated forced PCH before replacing the input with the header.
+This avoids redeclaring headers that the PCH itself aggregates.
+The portal keeps other forced includes, supplies `-x c++-header`, and suppresses
+only the nonportable-include-path compiler diagnostic for WinUI because
+generated C++/WinRT headers preserve schema casing while Windows resolves paths
+case-insensitively.
+Three intentional WinUI header-only support files have audited implementation
+companions in the portal so the complete WinUI source folder has no deferred
+headers.
 
 The Windows analysis command also defines `_USE_STD_VECTOR_ALGORITHMS=0` for
 clang-tidy only. This works around
@@ -132,6 +163,29 @@ suppressions.
 - If the tool is consistently wrong for a project pattern, consider narrowing
   the check configuration or custom rule. Do not scatter many identical
 suppressions across the tree.
+
+### Cancellation handling in coroutine catches
+
+The `aobus-async-cancellation-guard` check protects broad handlers in
+coroutines from turning cancellation into failure. A `catch
+(std::exception const& error)` must begin with one of two forms:
+
+1. Call `ao::async::rethrowIfOperationCancelled(error)` before handling the
+   remaining exception.
+2. At a boundary that owns mandatory terminal bookkeeping, use an exhaustive
+   `if (ao::async::isOperationCancelled(error)) { ... } else { ... }` as the
+   first statement. Both branches must be non-empty, and the predicate must
+   inspect that handler's catch variable.
+
+The second form is for workflows that must retain cancellation as local state
+long enough to publish a terminal event, retire an in-flight request, or reset
+owner state before cancellation propagates. It is not permission to swallow
+cancellation or continue normal work.
+
+A `catch (...)` has no typed catch variable to classify and must still begin
+with `ao::async::rethrowIfOperationCancelled()`. A sibling catch cannot receive
+an exception rethrown from another handler; use local classification when the
+same workflow owns cleanup that cannot be skipped.
 
 `bugprone-throwing-static-initialization` and `bugprone-exception-escape` are
 disabled for all source modes. On MSVC they are dominated by standard-library

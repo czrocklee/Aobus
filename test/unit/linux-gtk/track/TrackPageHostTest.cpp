@@ -16,6 +16,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -45,7 +46,8 @@ namespace ao::gtk::test
     auto listNavigation = ListNavigationController{window, runtime, std::move(navCallbacks), themeCoordinator};
 
     auto layoutStore = uimodel::TrackColumnLayoutStore{};
-    auto host = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto host = TrackPageHost{stack, runtime, tagEditController, listNavigation, layoutStore, byteLoader};
 
     SECTION("initial state")
     {
