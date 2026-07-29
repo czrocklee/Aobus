@@ -29,6 +29,7 @@ add_library(ao_media STATIC
     file/mpeg/File.cpp
     file/mpeg/Frame.cpp
     file/mpeg/id3v2/Frame.cpp
+    file/mpeg/id3v2/Layout.cpp
     file/mpeg/id3v2/Reader.cpp
     file/wav/File.cpp
     mp4/Demuxer.cpp

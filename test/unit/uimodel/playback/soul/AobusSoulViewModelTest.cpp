@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
 #include "test/unit/runtime/PlaybackUiTestSupport.h"
@@ -8,7 +10,6 @@
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>

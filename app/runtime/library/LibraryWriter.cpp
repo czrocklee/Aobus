@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryWriter.h>
+
 #include "LibraryMutationService.h"
 #include "MediaTrack.h"
 #include <ao/CoreIds.h>
@@ -16,6 +18,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
+#include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompiler.h>
@@ -25,7 +28,6 @@
 #include <ao/rt/WritableTagList.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/utility/Path.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
@@ -792,16 +794,17 @@ namespace ao::rt
       std::vector<TrackId> taggedTrackIds{};
     };
 
-    std::optional<DeleteListTagImpactWork> analyzeDeleteListTagImpact(library::MusicLibrary& library,
-                                                                      library::WriteTransaction& transaction,
-                                                                      library::ListView const& targetView,
-                                                                      std::span<ListId const> const deletedListIds)
+    Result<std::optional<DeleteListTagImpactWork>> analyzeDeleteListTagImpact(
+      library::MusicLibrary& library,
+      library::WriteTransaction& transaction,
+      library::ListView const& targetView,
+      std::span<ListId const> const deletedListIds)
     {
       auto const optTag = writableTagForListExpression(targetView.filter());
 
       if (!optTag)
       {
-        return std::nullopt;
+        return std::optional<DeleteListTagImpactWork>{};
       }
 
       auto work = DeleteListTagImpactWork{};
@@ -819,8 +822,14 @@ namespace ao::rt
 
       auto const& dictionary = library.dictionary();
 
-      for (auto const& [trackId, view] : library.tracks().reader(transaction))
+      for (auto const& [trackId, view] : library.tracks().reader(transaction).hot())
       {
+        if (!view.isHotValid())
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("track {} contains an invalid hot record", trackId.raw()));
+        }
+
         bool hasTag = false;
 
         for (auto const tagId : view.tags())
@@ -839,7 +848,7 @@ namespace ao::rt
       }
 
       work.impact.taggedTrackCount = work.taggedTrackIds.size();
-      return work;
+      return std::optional<DeleteListTagImpactWork>{std::move(work)};
     }
 
     Result<std::vector<DeleteListReply>> collectDeleteListSubtree(library::MusicLibrary& library,
@@ -1047,6 +1056,13 @@ namespace ao::rt
 
         for (std::size_t index = 0; index < plans.size(); ++index)
         {
+          if (!query::hasRequiredTrackData(plans[index].plan.accessProfile, *optTrack))
+          {
+            return makeError(
+              Error::Code::CorruptData,
+              std::format("Track {} contains invalid data required by parent List {}", trackId, plans[index].listId));
+          }
+
           if (!evaluator.matches(bindings[index], *optTrack))
           {
             return makeError(
@@ -2100,7 +2116,14 @@ namespace ao::rt
       .orderTrackIdCount = optView->orderTrackIds().size(),
     };
     auto const deletedListIds = std::array{listId};
-    auto optTagImpactWork = analyzeDeleteListTagImpact(library, transaction, *optView, deletedListIds);
+    auto tagImpactWorkResult = analyzeDeleteListTagImpact(library, transaction, *optView, deletedListIds);
+
+    if (!tagImpactWorkResult)
+    {
+      return std::unexpected{tagImpactWorkResult.error()};
+    }
+
+    auto optTagImpactWork = std::move(*tagImpactWorkResult);
 
     if (!listWriter.remove(listId))
     {
@@ -2181,7 +2204,14 @@ namespace ao::rt
       return makeError(Error::Code::NotFound, std::format("list not found: {}", listId));
     }
 
-    auto optTagImpactWork = analyzeDeleteListTagImpact(library, transaction, *optRootView, deletedIds);
+    auto tagImpactWorkResult = analyzeDeleteListTagImpact(library, transaction, *optRootView, deletedIds);
+
+    if (!tagImpactWorkResult)
+    {
+      return std::unexpected{tagImpactWorkResult.error()};
+    }
+
+    auto optTagImpactWork = std::move(*tagImpactWorkResult);
 
     auto listWriter = library.lists().writer(transaction);
 
@@ -2256,6 +2286,11 @@ namespace ao::rt
     if (!optView)
     {
       return makeError(Error::Code::NotFound, std::format("track not found: {}", trackId));
+    }
+
+    if (!optView->isHotValid() || !optView->isColdValid())
+    {
+      return makeError(Error::Code::CorruptData, std::format("track {} contains an invalid record", trackId.raw()));
     }
 
     auto const uri = std::string{optView->property().uri()};

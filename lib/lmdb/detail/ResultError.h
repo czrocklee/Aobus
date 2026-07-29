@@ -14,20 +14,7 @@
 
 namespace ao::lmdb
 {
-  inline Error::Code errorCodeFor(std::int32_t code)
-  {
-    if (code == MDB_NOTFOUND)
-    {
-      return Error::Code::NotFound;
-    }
-
-    if (code == MDB_KEYEXIST)
-    {
-      return Error::Code::Conflict;
-    }
-
-    return Error::Code::IoError;
-  }
+  Error::Code errorCodeFor(std::int32_t code);
 
   inline std::unexpected<Error> lmdbError(char const* origin,
                                           std::int32_t code,
@@ -36,15 +23,7 @@ namespace ao::lmdb
     return makeError(errorCodeFor(code), std::format("{}: {}", origin, ::mdb_strerror(code)), location);
   }
 
-  inline Result<> resultFromCode(char const* origin,
-                                 std::int32_t code,
-                                 std::source_location location = std::source_location::current())
-  {
-    if (code == MDB_SUCCESS)
-    {
-      return {};
-    }
-
-    return lmdbError(origin, code, location);
-  }
+  Result<> resultFromCode(char const* origin,
+                          std::int32_t code,
+                          std::source_location location = std::source_location::current());
 } // namespace ao::lmdb

@@ -333,6 +333,12 @@ namespace ao::rt
     }
 
     auto const& view = *optView;
+
+    if (!view.isHotValid() || !view.isColdValid())
+    {
+      return makeError(Error::Code::CorruptData, std::format("track {} contains an invalid record", trackId.raw()));
+    }
+
     auto const metadata = view.metadata();
     auto const property = view.property();
     auto optFilePath = std::optional<std::filesystem::path>{};

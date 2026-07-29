@@ -50,20 +50,7 @@ namespace ao::gtk
       };
     }
 
-    void close()
-    {
-      if (!_statePtr)
-      {
-        return;
-      }
-
-      _statePtr.reset();
-
-      if (auto closeCallback = std::move(_closeCallback); closeCallback)
-      {
-        closeCallback();
-      }
-    }
+    void close();
 
   private:
     struct State final

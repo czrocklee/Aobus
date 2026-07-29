@@ -16,15 +16,5 @@ namespace ao::gtk::portal
     return code == Gtk::DialogError::CANCELLED || code == Gtk::DialogError::DISMISSED;
   }
 
-  inline rt::ExportMode exportModeForSelection(std::uint32_t selectedIndex)
-  {
-    switch (selectedIndex)
-    {
-      case 0U: return rt::ExportMode::Delta;
-      case 1U: return rt::ExportMode::Metadata;
-      case 2U: return rt::ExportMode::Full;
-      case 3U: return rt::ExportMode::ListOnly;
-      default: return rt::ExportMode::Metadata;
-    }
-  }
+  rt::ExportMode exportModeForSelection(std::uint32_t selectedIndex);
 } // namespace ao::gtk::portal

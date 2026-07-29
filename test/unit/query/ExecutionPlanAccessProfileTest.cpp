@@ -1,15 +1,45 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/library/TrackViewTestSupport.h"
 #include "test/unit/query/ExecutionPlanTestSupport.h"
+#include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <cstddef>
+#include <span>
 #include <string>
 
 namespace ao::query::test
 {
+  TEST_CASE("ExecutionPlan - access profiles validate independent TrackView tiers", "[query][unit][execution-plan]")
+  {
+    auto const hotData = library::test::makeMinimalHotTrackViewData();
+    auto const coldData = library::test::makeColdTrackViewData();
+    auto const hotView = library::TrackView{hotData, std::span<std::byte const>{}};
+    auto const coldView = library::TrackView{std::span<std::byte const>{}, coldData};
+    auto const bothView = library::TrackView{hotData, coldData};
+    auto const malformedData = std::array<std::byte, 1>{};
+    auto const malformedView = library::TrackView{malformedData, malformedData};
+
+    CHECK(hasRequiredTrackData(AccessProfile::NoTrackData, hotView));
+    CHECK(hasRequiredTrackData(AccessProfile::HotOnly, hotView));
+    CHECK_FALSE(hasRequiredTrackData(AccessProfile::ColdOnly, hotView));
+    CHECK_FALSE(hasRequiredTrackData(AccessProfile::HotAndCold, hotView));
+
+    CHECK_FALSE(hasRequiredTrackData(AccessProfile::HotOnly, coldView));
+    CHECK(hasRequiredTrackData(AccessProfile::ColdOnly, coldView));
+    CHECK_FALSE(hasRequiredTrackData(AccessProfile::HotAndCold, coldView));
+
+    CHECK(hasRequiredTrackData(AccessProfile::HotAndCold, bothView));
+    CHECK(hasRequiredTrackData(AccessProfile::NoTrackData, malformedView));
+    CHECK_FALSE(hasRequiredTrackData(AccessProfile::HotOnly, malformedView));
+    CHECK_FALSE(hasRequiredTrackData(AccessProfile::ColdOnly, malformedView));
+  }
+
   TEST_CASE("ExecutionPlan - reports HotOnly access for hot metadata", "[query][unit][execution-plan]")
   {
     // Metadata variable -> HotOnly

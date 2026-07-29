@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryReader.h>
+
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
@@ -18,7 +20,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackFieldValue.h>
 #include <ao/rt/TrackRow.h>
-#include <ao/rt/library/LibraryReader.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -201,7 +202,7 @@ namespace ao::rt
     auto const reader = library.tracks().reader(transaction);
     auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
-    if (!optView)
+    if (!optView || !optView->isHotValid() || !optView->isColdValid())
     {
       return std::nullopt;
     }
@@ -218,9 +219,9 @@ namespace ao::rt
   ResourceId LibraryReader::trackCoverArtId(TrackId id) const
   {
     auto const reader = _implPtr->library.tracks().reader(_implPtr->transaction);
-    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
+    auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Cold);
 
-    if (!optView)
+    if (!optView || !optView->isColdValid())
     {
       return kInvalidResourceId;
     }
@@ -238,7 +239,7 @@ namespace ao::rt
     auto const reader = library.tracks().reader(transaction);
     auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Both);
 
-    if (!optView)
+    if (!optView || !optView->isHotValid() || !optView->isColdValid())
     {
       return std::monostate{};
     }
@@ -320,7 +321,7 @@ namespace ao::rt
     {
       auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
 
-      if (!optView)
+      if (!optView || !optView->isHotValid())
       {
         continue;
       }
@@ -364,6 +365,11 @@ namespace ao::rt
 
     for (auto const& [_, view] : reader.hot())
     {
+      if (!view.isHotValid())
+      {
+        continue;
+      }
+
       for (auto const tagId : view.tags())
       {
         if (auto tag = std::string{dictionary.getOrDefault(tagId)}; !tag.empty())

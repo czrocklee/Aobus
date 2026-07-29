@@ -3,9 +3,7 @@
 
 #pragma once
 
-#include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/ListBuilder.h>
 #include <ao/library/ListView.h>
 
 #include <cstddef>
@@ -25,17 +23,7 @@ namespace ao::rt::test
     library::ListView const& view() const { return _view; }
 
   private:
-    static std::vector<std::byte> buildPayload(std::vector<TrackId> const& ids)
-    {
-      auto builder = library::ListBuilder::makeEmpty();
-
-      for (auto id : ids)
-      {
-        builder.orderTrackIds().add(id);
-      }
-
-      return ao::test::requireValue(builder.serialize());
-    }
+    static std::vector<std::byte> buildPayload(std::vector<TrackId> const& ids);
 
     std::vector<std::byte> _payload;
     library::ListView _view;

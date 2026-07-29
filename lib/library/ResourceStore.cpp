@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/ResourceStore.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ReadTransaction.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/utility/Xxh3.h>
 
@@ -33,6 +34,24 @@ namespace ao::library
   Writer ResourceStore::writer(WriteTransaction& transaction) const
   {
     return Writer{_database.writer(transaction.native(*_identity))};
+  }
+
+  ResourceStore::Reader::Iterator::reference ResourceStore::Reader::Iterator::operator*() const
+  {
+    refresh();
+    return _value;
+  }
+
+  ResourceStore::Reader::Iterator::pointer ResourceStore::Reader::Iterator::operator->() const
+  {
+    refresh();
+    return &_value;
+  }
+
+  ResourceStore::Reader::Iterator& ResourceStore::Reader::Iterator::operator++()
+  {
+    ++_iterator;
+    return *this;
   }
 
   Result<ResourceId> Writer::create(std::span<std::byte const> data)

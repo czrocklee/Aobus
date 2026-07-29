@@ -97,8 +97,9 @@ namespace ao::library
      * Get a track by ID.
      * @return TrackView, or std::nullopt if the track is missing. Storage
      *         faults throw (see lmdb). A structurally corrupt record is
-     *         still returned; it reads as an invalid view side
-     *         (isHotValid()/isColdValid() false, accessors yield defaults).
+     *         still returned with the corresponding validity query false.
+     *         Callers must check the loaded side before invoking its decoded
+     *         accessors; doing otherwise violates the TrackView contract.
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
 

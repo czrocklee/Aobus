@@ -16,12 +16,5 @@ namespace ao::gtk
     std::int32_t natural = 0;
   };
 
-  inline WidgetMeasure measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize)
-  {
-    auto result = WidgetMeasure{};
-    std::int32_t minimumBaseline = -1;
-    std::int32_t naturalBaseline = -1;
-    widget.measure(orientation, forSize, result.minimum, result.natural, minimumBaseline, naturalBaseline);
-    return result;
-  }
+  WidgetMeasure measureWidget(Gtk::Widget const& widget, Gtk::Orientation orientation, std::int32_t forSize);
 } // namespace ao::gtk

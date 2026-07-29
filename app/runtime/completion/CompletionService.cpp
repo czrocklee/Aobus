@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/completion/CompletionService.h>
+
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -8,7 +10,6 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Field.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -256,6 +257,11 @@ namespace ao::rt
 
     for (auto const& [_, view] : reader.both())
     {
+      if (!view.isHotValid() || !view.isColdValid())
+      {
+        continue;
+      }
+
       addValue(titleCounts, view.metadata().title());
 
       for (auto const source : fieldSources)

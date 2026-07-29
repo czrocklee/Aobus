@@ -66,6 +66,13 @@ namespace ao::gtk::layout::editor
     constexpr int kPropertiesMaxContentHeight = 560;
   }
 
+  LayoutEditorDialog::ModelColumns::ModelColumns()
+  {
+    add(displayName);
+    add(type);
+    add(nodePtr);
+  }
+
   LayoutEditorDialog::LayoutEditorDialog(Gtk::Window& parent,
                                          ComponentRegistry const& registry,
                                          ActionRegistry const& actionRegistry,

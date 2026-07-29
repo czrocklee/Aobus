@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
+#include <ao/rt/projection/TrackDetailProjection.h>
+
 #include "runtime/TrackFieldReaderInternal.h"
 #include <ao/CoreIds.h>
 #include <ao/async/Signal.h>
@@ -16,7 +18,6 @@
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 
 #include <algorithm>
@@ -301,7 +302,7 @@ namespace ao::rt
     {
       auto const optView = trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
 
-      if (!optView)
+      if (!optView || !optView->isHotValid() || !optView->isColdValid())
       {
         continue;
       }

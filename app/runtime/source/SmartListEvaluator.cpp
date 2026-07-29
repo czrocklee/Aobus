@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/source/SmartListEvaluator.h>
+
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
@@ -10,7 +12,6 @@
 #include <ao/query/detail/Bytecode.h>
 #include <ao/rt/ScopedTimer.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -281,7 +282,11 @@ namespace ao::rt
           {
             auto const& binding = bindings[index];
             gsl_Expects(binding);
-            matches[index] = work.list->_planEvaluator.matches(*binding, *optView);
+
+            if (query::hasRequiredTrackData(work.list->_current.planPtr->accessProfile, *optView))
+            {
+              matches[index] = work.list->_planEvaluator.matches(*binding, *optView);
+            }
           }
         }
       }
@@ -454,9 +459,11 @@ namespace ao::rt
       {
         for (std::size_t index = 0; index < lists.size(); ++index)
         {
-          if (auto* const list = lists[index]; list->state() == TrackSourceState::Live && !list->_current.optError &&
-                                               list->_current.planPtr != nullptr &&
-                                               list->_planEvaluator.matches(*bindings[index], view))
+          if (auto* const list = lists[index];
+              list->state() == TrackSourceState::Live && !list->_current.optError &&
+              list->_current.planPtr != nullptr &&
+              query::hasRequiredTrackData(list->_current.planPtr->accessProfile, view) &&
+              list->_planEvaluator.matches(*bindings[index], view))
           {
             nextMembers[index].push_back(trackId);
           }

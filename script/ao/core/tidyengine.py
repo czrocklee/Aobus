@@ -9,12 +9,13 @@ import argparse
 import concurrent.futures
 import json
 import os
+import posixpath
 import re
 import shlex
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -357,6 +358,39 @@ def _translation_unit_tier(path: Path, root: Path) -> int:
     return {"lib": 0, "app": 0, "tool": 1, "test": 2}.get(top, 3)
 
 
+def _is_platform_incompatible(path: Path, root: Path) -> bool:
+    """Identify project files that the current native product graph cannot compile."""
+    try:
+        parts = tuple(part.casefold() for part in absolute_path(path).relative_to(absolute_path(root)).parts)
+    except ValueError:
+        return False
+    joined = "/".join(parts)
+    stem = path.stem.casefold()
+    profile = builddir.platform_profile().name
+
+    if profile == "linux":
+        return (
+            parts[:2] in {("app", "windows"), ("app", "windows-winui")}
+            or parts[:3] == ("test", "unit", "windows")
+            or "wasapi" in joined
+            or "win32" in joined
+            or stem.endswith("windows")
+            or joined == "tool/lint/aobusclangtidymain.cpp"
+        )
+    if profile == "windows":
+        return (
+            parts[:2] == ("app", "linux-gtk")
+            or parts[:2] in {("tool", "council"), ("test", "council")}
+            or parts[:3] == ("test", "unit", "linux-gtk")
+            or parts[:3] in {("test", "unit", "council"), ("test", "integration", "council")}
+            or "alsa" in joined
+            or "pipewire" in joined
+            or stem.endswith("linux")
+            or stem.endswith("posix")
+        )
+    return False
+
+
 def _component_directory(path: Path, root: Path) -> tuple[str, ...] | None:
     """Return a normalized component directory for safe header/TU pairing.
 
@@ -410,6 +444,180 @@ def _header_translation_unit(
 
 
 @dataclass(frozen=True)
+class _NinjaDependencyIndex:
+    consumers: dict[str, Path]
+    indexed_translation_units: frozenset[str]
+    compiled_translation_units: frozenset[str]
+
+    def missing_consumer_reason(self) -> str:
+        if not self.indexed_translation_units:
+            return "Ninja dependency data is unavailable for the compiled translation units"
+        if self.indexed_translation_units != self.compiled_translation_units:
+            return "Ninja dependency data is incomplete and contains no recorded consumer"
+        return "no compiled translation unit consumes the header"
+
+
+def _ninja_build_directories(
+    database_dir: Path,
+    compiled: list[_CompileDatabaseEntry],
+    additional_build_dirs: tuple[Path, ...],
+) -> list[Path]:
+    """Return every requested real Ninja tree without building or configuring it."""
+    candidates = {absolute_path(database_dir), *(absolute_path(path) for path in additional_build_dirs)}
+    for entry in compiled:
+        directory = entry.data.get("directory")
+        if not isinstance(directory, str):
+            continue
+        path = Path(directory)
+        if not path.is_absolute():
+            path = database_dir / path
+        candidates.add(absolute_path(path))
+    return sorted((path for path in candidates if (path / "build.ninja").is_file()), key=_path_key)
+
+
+_WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"^[A-Za-z]:[/\\]")
+
+
+def _ninja_record_path(value: str, base: Path) -> Path:
+    """Resolve Ninja/compile-DB paths while accepting Windows separators on any test host."""
+    normalized = value.replace("\\", "/")
+    if _WINDOWS_ABSOLUTE_PATH_RE.match(normalized):
+        return Path(posixpath.normpath(normalized))
+    path = Path(normalized)
+    if path.is_absolute():
+        return absolute_path(path)
+
+    normalized_base = str(base).replace("\\", "/")
+    if _WINDOWS_ABSOLUTE_PATH_RE.match(normalized_base):
+        return Path(posixpath.normpath(f"{normalized_base}/{normalized}"))
+    return absolute_path(base / path)
+
+
+def _ninja_path_key(path: Path) -> str:
+    """Return a slash- and case-insensitive key for cross-platform Ninja metadata."""
+    return posixpath.normpath(str(path).replace("\\", "/")).casefold()
+
+
+def _compile_database_output(entry: _CompileDatabaseEntry, database_dir: Path) -> Path | None:
+    output = entry.data.get("output")
+    if not isinstance(output, str):
+        return None
+    directory = entry.data.get("directory")
+    base = _ninja_record_path(directory, database_dir) if isinstance(directory, str) else database_dir
+    return _ninja_record_path(output, base)
+
+
+def _parse_ninja_dependency_records(
+    output: str,
+    build_dir: Path,
+) -> Iterator[tuple[Path, tuple[Path, ...]]]:
+    """Parse dependency paths from ``ninja -t deps`` records."""
+    dependencies: list[Path] = []
+    record_output: Path | None = None
+
+    for line in output.splitlines():
+        if not line:
+            if record_output is not None:
+                yield record_output, tuple(dependencies)
+            dependencies = []
+            record_output = None
+        elif line[0].isspace():
+            if record_output is not None and (dependency := line.strip()):
+                dependencies.append(_ninja_record_path(dependency, build_dir))
+        else:
+            if record_output is not None:
+                yield record_output, tuple(dependencies)
+            dependencies = []
+            target, marker, _ = line.partition(": #deps ")
+            if marker and line.rstrip().endswith("(VALID)"):
+                record_output = _ninja_record_path(target, build_dir)
+            else:
+                record_output = None
+    if record_output is not None:
+        yield record_output, tuple(dependencies)
+
+
+def _ninja_dependency_index(
+    database_dir: Path,
+    compiled: list[_CompileDatabaseEntry],
+    selected_header_keys: frozenset[str],
+    additional_build_dirs: tuple[Path, ...],
+) -> _NinjaDependencyIndex:
+    """Index headers by real consumers while retaining primary-DB compile commands."""
+    compiled_by_key = {
+        _path_key(entry.path): entry.path
+        for entry in compiled
+        if entry.path.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES
+    }
+    primary_by_dependency_key = {_ninja_path_key(path): path for path in compiled_by_key.values()}
+    consumers_by_dependency: dict[str, set[Path]] = {}
+    indexed_translation_units: set[str] = set()
+
+    for ninja_dir in _ninja_build_directories(database_dir, compiled, additional_build_dirs):
+        if _path_key(ninja_dir) == _path_key(database_dir):
+            dependency_compiled = compiled
+        elif (ninja_dir / "compile_commands.json").is_file():
+            dependency_compiled = _compile_database_entries(ninja_dir)
+        else:
+            dependency_compiled = []
+
+        compiled_by_output: dict[str, set[Path]] = {}
+        compiled_by_dependency_key: dict[str, set[Path]] = {}
+        for entry in dependency_compiled:
+            if entry.path.suffix.lower() not in _TRANSLATION_UNIT_SUFFIXES:
+                continue
+            primary_consumer = compiled_by_key.get(_path_key(entry.path))
+            if primary_consumer is None:
+                continue
+            compiled_by_dependency_key.setdefault(_ninja_path_key(entry.path), set()).add(primary_consumer)
+            if output := _compile_database_output(entry, ninja_dir):
+                compiled_by_output.setdefault(_ninja_path_key(output), set()).add(primary_consumer)
+
+        try:
+            result = subprocess.run(
+                ["ninja", "-t", "deps"],
+                cwd=ninja_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+        except FileNotFoundError as error:
+            raise die("ninja is required to resolve header compile-command consumers.") from error
+        if result.returncode != 0:
+            raise die(
+                f"cannot read Ninja dependency data from {ninja_dir}; "
+                f"`ninja -t deps` exited {result.returncode}:\n{result.stdout}"
+            )
+
+        for output, dependencies in _parse_ninja_dependency_records(result.stdout, ninja_dir):
+            block_consumers = set(compiled_by_output.get(_ninja_path_key(output), ()))
+            if not block_consumers:
+                for dependency in dependencies:
+                    dependency_key = _ninja_path_key(dependency)
+                    block_consumers.update(compiled_by_dependency_key.get(dependency_key, ()))
+                    if primary_consumer := primary_by_dependency_key.get(dependency_key):
+                        block_consumers.add(primary_consumer)
+            if not block_consumers:
+                continue
+            indexed_translation_units.update(_path_key(consumer) for consumer in block_consumers)
+            for dependency in dependencies:
+                dependency_key = _ninja_path_key(dependency)
+                if dependency_key in selected_header_keys:
+                    consumers_by_dependency.setdefault(dependency_key, set()).update(block_consumers)
+
+    consumers = {
+        dependency: min(candidates, key=_path_key) for dependency, candidates in consumers_by_dependency.items()
+    }
+    return _NinjaDependencyIndex(
+        consumers,
+        frozenset(indexed_translation_units),
+        frozenset(compiled_by_key),
+    )
+
+
+@dataclass(frozen=True)
 class CompileCommandTarget:
     """A selected file and the exact native translation unit used to check it."""
 
@@ -422,17 +630,29 @@ class CompileCommandTarget:
 
 
 @dataclass(frozen=True)
+class CompileCommandDeferral:
+    """Why a selected file cannot be checked with this native compilation database."""
+
+    selected: Path
+    reason: str
+    kind: Literal["native-coverage", "platform-incompatible"] = "native-coverage"
+
+    @property
+    def is_platform_incompatible(self) -> bool:
+        return self.kind == "platform-incompatible"
+
+
+@dataclass(frozen=True)
 class CompileCommandPlan:
     """Native clang-tidy targets plus files deferred to another platform.
 
-    Header targets require a same-component implementation and are checked as main
-    files using a synthetic compile command copied from that implementation. Textual
-    include reachability is intentionally insufficient because conditional includes
-    can name a header that the native preprocessor never enters.
+    Header targets prefer a same-component implementation, then a real consumer
+    recorded by Ninja, and are checked as main files using that exact compile command.
     """
 
     targets: tuple[CompileCommandTarget, ...]
     deferred: tuple[Path, ...]
+    deferral_details: tuple[CompileCommandDeferral, ...] = ()
 
 
 def compile_command_plan(
@@ -441,8 +661,9 @@ def compile_command_plan(
     *,
     project_root: Path = PROJECT_ROOT,
     explicit_header_companions: dict[Path, Path] | None = None,
+    additional_dependency_build_dirs: tuple[Path, ...] = (),
 ) -> CompileCommandPlan:
-    """Map every covered selection to an exact native translation unit."""
+    """Map every covered selection to an exact translation unit from the primary database."""
     compiled = _compile_database_entries(build_dir)
     compiled_by_key = {
         _path_key(entry.path): entry.path
@@ -452,7 +673,12 @@ def compile_command_plan(
 
     targets: list[CompileCommandTarget] = []
     deferred: list[Path] = []
+    deferral_details: list[CompileCommandDeferral] = []
     seen: set[str] = set()
+    dependency_index: _NinjaDependencyIndex | None = None
+    selected_header_keys = frozenset(
+        _ninja_path_key(absolute_path(path)) for path in files if path.suffix.lower() in _HEADER_SUFFIXES
+    )
     companions = {
         _path_key(header): absolute_path(translation_unit)
         for header, translation_unit in (explicit_header_companions or {}).items()
@@ -475,6 +701,15 @@ def compile_command_plan(
                     )
             else:
                 translation_unit = _header_translation_unit(path, compiled, project_root)
+                if translation_unit is None:
+                    if dependency_index is None:
+                        dependency_index = _ninja_dependency_index(
+                            build_dir,
+                            compiled,
+                            selected_header_keys,
+                            additional_dependency_build_dirs,
+                        )
+                    translation_unit = dependency_index.consumers.get(_ninja_path_key(path))
         else:
             translation_unit = None
         if translation_unit is None:
@@ -490,15 +725,7 @@ def compile_command_plan(
                 is_under_root = False
                 is_lint_fixture = False
 
-            # Do not use fallback for files that are platform-specific and incompatible with this platform
-            is_incompatible = False
-            path_lower = path.as_posix().lower()
-            if builddir.platform_profile().name == "linux":
-                if "wasapi" in path_lower or "win32" in path_lower:
-                    is_incompatible = True
-            elif builddir.platform_profile().name == "windows":
-                if any(x in path_lower for x in ("alsa", "pipewire", "linux", "gtk")):
-                    is_incompatible = True
+            is_incompatible = _is_platform_incompatible(path, project_root)
 
             if (not is_under_root or is_lint_fixture) and not is_incompatible and compiled:
                 # Find the best matching translation unit based on common parent directory prefix
@@ -516,10 +743,22 @@ def compile_command_plan(
 
         if translation_unit is None:
             deferred.append(path)
+            if is_incompatible:
+                reason = "the file is incompatible with the current platform"
+            elif suffix in _HEADER_SUFFIXES and dependency_index is not None:
+                reason = dependency_index.missing_consumer_reason()
+            elif suffix in _TRANSLATION_UNIT_SUFFIXES:
+                reason = "the source file has no exact compile command"
+            else:
+                reason = "the file has no usable compile command"
+            kind: Literal["native-coverage", "platform-incompatible"] = (
+                "platform-incompatible" if is_incompatible else "native-coverage"
+            )
+            deferral_details.append(CompileCommandDeferral(path, reason, kind))
         else:
             targets.append(CompileCommandTarget(path, absolute_path(translation_unit)))
 
-    return CompileCommandPlan(tuple(targets), tuple(deferred))
+    return CompileCommandPlan(tuple(targets), tuple(deferred), tuple(deferral_details))
 
 
 def _replace_compile_input(entry: _CompileDatabaseEntry, selected: Path) -> dict[str, object]:

@@ -5,8 +5,6 @@
 
 #include <ao/CoreIds.h>
 
-#include <gsl-lite/gsl-lite.hpp>
-
 #include <cstddef>
 #include <cstdint>
 #include <ranges>
@@ -48,11 +46,7 @@ namespace ao::library
       {
       }
 
-      TrackId at(std::size_t index) const noexcept
-      {
-        gsl_Expects(index < _trackIds.size());
-        return _trackIds[index];
-      }
+      TrackId at(std::size_t index) const noexcept;
 
       TrackId operator[](std::size_t index) const noexcept { return at(index); }
 

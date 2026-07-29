@@ -97,7 +97,7 @@ namespace ao::rt::test
         auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optView);
 
-        if (library::test::trackSpecFromView(library, *optView).year >= minimumYear)
+        if (optView->metadata().year() >= minimumYear)
         {
           result.push_back(trackId);
         }
@@ -115,9 +115,9 @@ namespace ao::rt::test
 
       for (auto const trackId : trackIds)
       {
-        auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Both);
+        auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optView);
-        titles.emplace_back(trackId, library::test::trackSpecFromView(library, *optView).title);
+        titles.emplace_back(trackId, optView->metadata().title());
       }
 
       std::ranges::stable_sort(titles, {}, &std::pair<TrackId, std::string>::second);

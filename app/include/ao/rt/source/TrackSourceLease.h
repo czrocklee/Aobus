@@ -4,24 +4,15 @@
 #pragma once
 
 #include "TrackSource.h"
-#include <ao/Exception.h>
 
 #include <memory>
-#include <utility>
 
 namespace ao::rt
 {
   class TrackSourceLease final
   {
   public:
-    explicit TrackSourceLease(std::shared_ptr<TrackSource> sourcePtr)
-      : _sourcePtr{std::move(sourcePtr)}
-    {
-      if (_sourcePtr == nullptr)
-      {
-        throwException<Exception>("Track source lease requires a source");
-      }
-    }
+    explicit TrackSourceLease(std::shared_ptr<TrackSource> sourcePtr);
 
     TrackSourceLease(TrackSourceLease const&) = default;
     TrackSourceLease& operator=(TrackSourceLease const&) = default;

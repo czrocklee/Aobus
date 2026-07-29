@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
+#include <ao/yaml/RymlAdapter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <concepts>
@@ -15,7 +15,6 @@
 #include <filesystem>
 #include <format>
 #include <optional>
-#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -119,14 +118,7 @@ namespace ao::rt
     }
 
   private:
-    static Error withGroupContext(Error error, std::string_view operation, std::string_view group)
-    {
-      error.message = std::format("Failed to {} config group '{}': {}",
-                                  operation,
-                                  yaml::boundedErrorContext(group),
-                                  yaml::boundedErrorContext(error.message));
-      return error;
-    }
+    static Error withGroupContext(Error error, std::string_view operation, std::string_view group);
 
     template<typename T, ConfigSchema<T> Schema>
     static Result<> serializeGroup(ryml::Tree& candidate, std::string_view group, T const& value, Schema const& schema)

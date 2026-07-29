@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -25,18 +25,7 @@ namespace ao::media::file::mpeg::id3v2
   static_assert(alignof(EncodedSize) == 1);
   static_assert(utility::layout::kIsBinaryLayoutType<EncodedSize>);
 
-  inline std::size_t decodeSize(EncodedSize size)
-  {
-    static constexpr std::uint8_t kSyncSafeMask = 0x7F;
-    static constexpr std::size_t kByteShift3 = 21;
-    static constexpr std::size_t kByteShift2 = 14;
-    static constexpr std::size_t kByteShift1 = 7;
-
-    return (static_cast<std::size_t>(size.data[0] & kSyncSafeMask) << kByteShift3) |
-           (static_cast<std::size_t>(size.data[1] & kSyncSafeMask) << kByteShift2) |
-           (static_cast<std::size_t>(size.data[2] & kSyncSafeMask) << kByteShift1) |
-           (static_cast<std::size_t>(size.data.back() & kSyncSafeMask));
-  }
+  std::size_t decodeSize(EncodedSize size);
 
   struct HeaderLayout
   {

@@ -191,10 +191,15 @@ Builders are the only record producers and own overflow and structural validatio
 An invalid payload returns `CorruptData`, and update leaves the prior value unchanged.
 
 Read views perform one constant-time structural gate that proves the fixed header and all derived slices remain inside the record.
-A failed gate invalidates the complete record side: validity reports false and accessors return zero or empty values without reading out of bounds.
+`TrackView` gates its hot and cold sides independently because callers may deliberately load only one side.
+`isHotValid()` and `isColdValid()` are always legal and report whether the corresponding loaded side passed its gate.
+A decoded hot or cold accessor requires that side to be valid; calling it for an absent or structurally invalid side is a programmer error that fails fast through `gsl_Expects`.
+Raw diagnostic access remains available for the exact bytes supplied to the view.
+An absent optional block inside a valid cold side is not an invalid tier: classical, cover-art, and custom-metadata proxies remain legal and empty, with their documented optional-block defaults.
 Semantic in-bounds corruption is reserved for diagnostic deep verification and does not add a per-row scan.
 
-That raw `ListView` safety behavior is not the `ListStore` absence contract.
+A directly constructed invalid `ListView` retains its raw-view safety behavior: `isValid()` is false and decoded fields are empty or invalid.
+That `ListView` behavior is not the `ListStore` absence contract.
 For `ListStore::Reader::get()` and `ListStore::Writer::get()`, `nullopt` means only that the key is absent.
 A structurally invalid stored value throws `library::detail::LibraryException` carrying `CorruptData`; dereferencing a List iterator does the same.
 Callers therefore cannot mistake storage corruption for a missing List or silently omit a corrupt row from a full scan.

@@ -93,15 +93,17 @@ namespace ao::query
 
   /**
    * Reads the dictionary ID stored in a dictionary-backed metadata field.
-   * Returns kInvalidDictionaryId for non-dictionary fields.
+   * Returns kInvalidDictionaryId for non-dictionary fields. The TrackView tier
+   * that owns @p field must be valid.
    */
   DictionaryId dictionaryFieldId(library::TrackView const& track, Field field);
 
   /**
    * Resolves a dictionary-backed metadata field (ArtistId, AlbumId, ...) to its
    * interned string. Returns an empty view for non-dictionary fields or an
-   * invalid/unset id. The returned view borrows from @p dictionary and is valid for as
-   * long as the dictionary entry lives.
+   * invalid/unset id. The TrackView tier that owns @p field must be valid. The
+   * returned view borrows from @p dictionary and is valid for as long as the
+   * dictionary entry lives.
    */
   std::string_view dictionaryFieldValue(library::TrackView const& track,
                                         Field field,

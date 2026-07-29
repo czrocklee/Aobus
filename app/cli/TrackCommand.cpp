@@ -19,6 +19,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/library/detail/TrackColdReader.h>
 #include <ao/library/detail/TrackViewRawAccess.h>
+#include <ao/query/Field.h>
 #include <ao/query/FormatExpression.h>
 #include <ao/query/Parser.h>
 #include <ao/rt/CoreRuntime.h>
@@ -572,6 +573,7 @@ namespace ao::cli
         dto.optGenre = dictionaryNameWhenPresent(dictionary, view.metadata().genreId());
         dto.optComposer = dictionaryNameWhenPresent(dictionary, view.metadata().composerId());
         dto.optYear = nonZeroNumber(view.metadata().year());
+        dto.optSampleRate = nonZeroSampleRate(view.property().sampleRate());
         dto.optTags = tagNames(view, dictionary);
       }
 
@@ -589,7 +591,6 @@ namespace ao::cli
         dto.optMovementNumber = nonZeroNumber(view.classical().movementNumber());
         dto.optMovementTotal = nonZeroNumber(view.classical().movementTotal());
         dto.optDuration = positiveDurationMillis(view.property().duration());
-        dto.optSampleRate = nonZeroSampleRate(view.property().sampleRate());
         dto.optUri = nonEmptyString(view.property().uri());
         dto.optCustom = customMetadataByName(view, dictionary);
       }
@@ -678,7 +679,7 @@ namespace ao::cli
         auto const id = trackIds[i];
         auto const optView = reader.get(id, library::TrackStore::Reader::LoadMode::Hot);
 
-        if (optView)
+        if (optView && optView->isHotValid())
         {
           std::println(os, "{:>5} {}", id, optView->metadata().title());
         }
@@ -742,6 +743,11 @@ namespace ao::cli
 
           if (optView)
           {
+            if (!query::hasRequiredTrackData(plan->accessProfile, *optView))
+            {
+              throwCommandError(Error::Code::CorruptData, "track {} contains invalid data required by the format", id);
+            }
+
             evaluator.evaluate(binding, *optView, formattedTrack);
             std::println(os, "{}", formattedTrack);
           }
@@ -860,6 +866,7 @@ namespace ao::cli
                    view.metadata().artistId());
       std::println(
         os, "  Album: {} (ID: {})", dictionaryText(dictionary, view.metadata().albumId()), view.metadata().albumId());
+      std::println(os, "  Sample Rate: {}Hz", view.property().sampleRate());
       std::println(os, "  Tag Bloom: 0x{:08x}", view.tags().bloom());
       std::print(os, "  Tags: ");
 
@@ -879,7 +886,6 @@ namespace ao::cli
       }
 
       std::println(os, "  Duration: {}ms", view.property().duration().count());
-      std::println(os, "  Sample Rate: {}Hz", view.property().sampleRate());
       std::println(os, "  URI: {}", view.property().uri());
 
       for (auto const& [customId, val] : view.customMetadata())

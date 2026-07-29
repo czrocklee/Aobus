@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/FileManifestStore.h>
+
 #include <ao/Error.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/library/FileManifestStore.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ReadTransaction.h>
@@ -110,6 +111,12 @@ namespace ao::library
     }
 
     return FileManifestView{*optData};
+  }
+
+  FileManifestStore::Reader::Iterator& FileManifestStore::Reader::Iterator::operator++()
+  {
+    ++_it;
+    return *this;
   }
 
   std::pair<std::string_view, FileManifestView> FileManifestStore::Reader::Iterator::operator*() const

@@ -1,19 +1,11 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
-#include <ao/ExceptionFormat.h>
-
-#include <lmdb.h>
+#include <cstdint>
 
 namespace ao::lmdb
 {
-  inline void throwOnError(char const* origin, int code)
-  {
-    if (code != MDB_SUCCESS)
-    {
-      throwException<Exception>("{}: {}", origin, ::mdb_strerror(code));
-    }
-  }
+  void throwOnError(char const* origin, std::int32_t code);
 }

@@ -9,6 +9,7 @@
 #include "check/ControlBlockSpacingCheck.h"
 #include "check/ForbidRawThrowCheck.h"
 #include "check/ForbidTrailingReturnCheck.h"
+#include "check/HeaderFunctionDefinitionCheck.h"
 #include "check/IdentifierNamingExtensionsCheck.h"
 #include "check/ImplicitBoolConversionInInitCheck.h"
 #include "check/IncludeConventionCheck.h"
@@ -59,6 +60,7 @@ namespace clang::tidy::readability
         checkFactories.registerCheck<modernize::NodiscardUsageCheck>("aobus-modernize-nodiscard-usage");
         checkFactories.registerCheck<ForbidTrailingReturnCheck>("aobus-modernize-forbid-trailing-return");
         checkFactories.registerCheck<ForbidRawThrowCheck>("aobus-readability-forbid-raw-throw");
+        checkFactories.registerCheck<HeaderFunctionDefinitionCheck>("aobus-readability-header-function-definition");
         checkFactories.registerCheck<IdentifierNamingExtensionsCheck>("aobus-readability-identifier-naming-extensions");
         checkFactories.registerCheck<aobus::ImplicitBoolConversionInInitCheck>(
           "aobus-implicit-bool-conversion-in-init");

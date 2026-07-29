@@ -10,7 +10,6 @@ extern "C"
 #include <spa/utils/hook.h>
 }
 
-#include <cstring>
 #include <memory>
 
 namespace ao::audio::backend::detail
@@ -81,15 +80,7 @@ namespace ao::audio::backend::detail
     SpaHookGuard(SpaHookGuard&&) = delete;
     SpaHookGuard& operator=(SpaHookGuard&&) = delete;
 
-    void reset() noexcept
-    {
-      if (_hook.link.next != nullptr)
-      {
-        ::spa_hook_remove(&_hook);
-      }
-
-      std::memset(&_hook, 0, sizeof(_hook));
-    }
+    void reset() noexcept;
 
     ::spa_hook* get() noexcept { return &_hook; }
 
@@ -100,22 +91,9 @@ namespace ao::audio::backend::detail
   class [[nodiscard]] PwThreadLoopGuard final
   {
   public:
-    explicit PwThreadLoopGuard(::pw_thread_loop* loop) noexcept
-      : _loop{loop}
-    {
-      if (_loop != nullptr)
-      {
-        ::pw_thread_loop_lock(_loop);
-      }
-    }
+    explicit PwThreadLoopGuard(::pw_thread_loop* loop) noexcept;
 
-    ~PwThreadLoopGuard() noexcept
-    {
-      if (_loop != nullptr)
-      {
-        ::pw_thread_loop_unlock(_loop);
-      }
-    }
+    ~PwThreadLoopGuard() noexcept;
 
     PwThreadLoopGuard(PwThreadLoopGuard const&) = delete;
     PwThreadLoopGuard& operator=(PwThreadLoopGuard const&) = delete;

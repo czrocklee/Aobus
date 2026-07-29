@@ -145,8 +145,6 @@ WINDOWS_BUILD_ROOT = windows_build_root(create_id=False)
 PRESETS = {
     "debug": "linux-debug",
     "release": "linux-release",
-    "pgo1": "linux-pgo-profile",
-    "pgo2": "linux-pgo-optimize",
     "profile": "profile",
 }
 
@@ -253,6 +251,18 @@ def winui_build_dir(os_name: str | None = None) -> Path:
     return profile.build_root / WINDOWS_WINUI_PRESET
 
 
+def winui_companion_build_dir(
+    primary_build_dir: Path,
+    *,
+    primary_path_was_explicit: bool,
+    os_name: str | None = None,
+) -> Path:
+    """Return the separate WinUI tree used beside a composite command's primary tree."""
+    if primary_path_was_explicit or os.environ.get("BUILD_DIR"):
+        return primary_build_dir.with_name(f"{primary_build_dir.name}-winui")
+    return winui_build_dir(os_name)
+
+
 def preset(flavor: str, *, os_name: str | None = None) -> str:
     return platform_profile(os_name).presets[flavor]
 
@@ -272,8 +282,7 @@ def build_dir(
     """Resolve the native build tree for a flavor.
 
     The BUILD_DIR environment variable always wins, which lets callers redirect builds into
-    dedicated host-persistent trees. Linux PGO steps share one tree so step 2 can consume the
-    profile data of step 1. Each Windows flavor has one tree shared by builds and tests.
+    dedicated host-persistent trees. Each Windows flavor has one tree shared by builds and tests.
     """
     if override := os.environ.get("BUILD_DIR"):
         return Path(override)
@@ -283,8 +292,6 @@ def build_dir(
         name = preset(flavor, os_name="nt")
         return profile.build_root / f"{name}{suffix(clang=clang, asan=asan, tsan=tsan)}"
 
-    if flavor in ("pgo1", "pgo2"):
-        return profile.build_root / f"pgo{suffix(clang=clang)}"
     return profile.build_root / f"{flavor}{suffix(clang=clang, asan=asan, tsan=tsan)}"
 
 

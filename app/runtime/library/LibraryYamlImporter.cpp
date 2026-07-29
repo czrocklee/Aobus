@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/rt/library/LibraryYamlImporter.h>
+
 #include "LibraryYamlImportOperation.h"
 #include "MediaTrack.h"
 #include "TrackBuilderSnapshot.h"
@@ -26,7 +28,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
-#include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/utility/Base64.h>
 #include <ao/yaml/RymlAdapter.h>
 
@@ -1089,10 +1090,7 @@ namespace ao::rt
 
     if (val.payloadMode != ExportMode::ListOnly)
     {
-      for ([[maybe_unused]] auto const& row : ml.tracks().reader(readTransaction))
-      {
-        ++rep.tracksDeleted;
-      }
+      rep.tracksDeleted = ml.tracks().reader(readTransaction).entryCount(library::TrackStore::Reader::LoadMode::Hot);
     }
 
     for ([[maybe_unused]] auto const& row : ml.lists().reader(readTransaction))

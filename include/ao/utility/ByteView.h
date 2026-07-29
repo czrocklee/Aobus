@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -89,16 +89,7 @@ namespace ao::utility
       return view(str.data(), str.size());
     }
 
-    inline std::string_view stringView(std::span<std::byte const> span) noexcept
-    {
-      if (span.empty())
-      {
-        return {};
-      }
-
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-      return {reinterpret_cast<char const*>(span.data()), span.size()};
-    }
+    std::string_view stringView(std::span<std::byte const> span) noexcept;
 
     inline unsigned char const* unsignedCharData(std::span<std::byte const> span) noexcept
     {

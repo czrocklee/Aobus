@@ -6,9 +6,11 @@
 extern "C"
 {
 #include <pipewire/pipewire.h>
+#include <spa/utils/hook.h>
 }
 
 #include <cstdint>
+#include <cstring>
 #include <mutex>
 
 namespace ao::audio::backend::detail
@@ -27,6 +29,33 @@ namespace ao::audio::backend::detail
       return state;
     }
   } // namespace
+
+  void SpaHookGuard::reset() noexcept
+  {
+    if (_hook.link.next != nullptr)
+    {
+      ::spa_hook_remove(&_hook);
+    }
+
+    std::memset(&_hook, 0, sizeof(_hook));
+  }
+
+  PwThreadLoopGuard::PwThreadLoopGuard(::pw_thread_loop* loop) noexcept
+    : _loop{loop}
+  {
+    if (_loop != nullptr)
+    {
+      ::pw_thread_loop_lock(_loop);
+    }
+  }
+
+  PwThreadLoopGuard::~PwThreadLoopGuard() noexcept
+  {
+    if (_loop != nullptr)
+    {
+      ::pw_thread_loop_unlock(_loop);
+    }
+  }
 
   PipeWireEnvironmentGuard::PipeWireEnvironmentGuard()
   {

@@ -75,11 +75,7 @@ namespace ao::library
       bool operator==(EndSentinel /*unused*/) const { return _it == lmdb::Database::Reader::Iterator{}; }
       bool operator!=(Iterator const& other) const { return _it != other._it; }
 
-      Iterator& operator++()
-      {
-        ++_it;
-        return *this;
-      }
+      Iterator& operator++();
       void operator++(std::int32_t) { ++*this; }
 
       std::pair<std::string_view, FileManifestView> operator*() const;

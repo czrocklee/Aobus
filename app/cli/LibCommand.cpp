@@ -358,11 +358,7 @@ namespace ao::cli
       auto stats = LibraryStats{};
       {
         auto const transaction = ml.readTransaction();
-
-        for ([[maybe_unused]] auto const& entry : ml.tracks().reader(transaction))
-        {
-          ++stats.tracks;
-        }
+        stats.tracks = ml.tracks().reader(transaction).entryCount(library::TrackStore::Reader::LoadMode::Hot);
 
         for ([[maybe_unused]] auto const& entry : ml.lists().reader(transaction))
         {
@@ -385,6 +381,11 @@ namespace ao::cli
 
         for (auto const& [_, view] : trackReader.hot())
         {
+          if (!view.isHotValid())
+          {
+            continue;
+          }
+
           for (auto const tagId : view.tags())
           {
             if (tagId != kInvalidDictionaryId)

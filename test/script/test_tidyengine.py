@@ -356,10 +356,34 @@ class CompileCommandCoverageTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
+            with mock.patch.object(
+                tidyengine.builddir,
+                "platform_profile",
+                return_value=tidyengine.builddir.LINUX_PROFILE,
+            ):
+                plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
 
             self.assertEqual(list(plan.deferred), [header])
             self.assertEqual(list(plan.targets), [])
+            self.assertFalse(plan.deferral_details[0].is_platform_incompatible)
+
+    def test_council_sources_are_incompatible_with_the_windows_native_graph(self):
+        root = Path("C:/repo")
+        paths = (
+            root / "tool" / "council" / "Engine.cpp",
+            root / "test" / "council" / "TestSupport.cpp",
+            root / "test" / "unit" / "council" / "EngineTest.cpp",
+            root / "test" / "integration" / "council" / "RunnerTest.cpp",
+        )
+
+        with mock.patch.object(
+            tidyengine.builddir,
+            "platform_profile",
+            return_value=tidyengine.builddir.WINDOWS_PROFILE,
+        ):
+            for path in paths:
+                with self.subTest(path=path):
+                    self.assertTrue(tidyengine._is_platform_incompatible(path, root))
 
     def test_explicit_lint_fixture_can_borrow_native_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -403,10 +427,16 @@ class CompileCommandCoverageTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
+            with mock.patch.object(
+                tidyengine.builddir,
+                "platform_profile",
+                return_value=tidyengine.builddir.LINUX_PROFILE,
+            ):
+                plan = tidyengine.compile_command_plan(build_dir, [header], project_root=root)
 
             self.assertEqual(list(plan.deferred), [header])
             self.assertEqual(list(plan.targets), [])
+            self.assertTrue(plan.deferral_details[0].is_platform_incompatible)
 
     def test_platform_suffix_implementation_covers_header_in_same_component(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -489,12 +519,12 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
                         {
                             "directory": str(root),
                             "file": str(first),
-                            "arguments": ["cl.exe", "/ZC:PREPROCESSOR", "/c", str(first)],
+                            "arguments": ["cl.exe", "/ZC:PREPROCESSOR", "/GL", "/c", str(first)],
                         },
                         {
                             "directory": str(root),
                             "file": str(second),
-                            "command": f"cl.exe /Zc:preprocessor /Zc:preprocessor- /c {second}",
+                            "command": f"cl.exe /Zc:preprocessor /Zc:preprocessor- /GL /GL- /c {second}",
                         },
                     ]
                 ),
@@ -504,7 +534,7 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
             database_dir = tidyengine.write_filtered_compile_database(
                 build_dir,
                 destination,
-                ("/Zc:preprocessor",),
+                ("/Zc:preprocessor", "/GL"),
             )
 
             self.assertEqual(database_dir, destination)
@@ -512,6 +542,8 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
             self.assertEqual(entries[0]["arguments"], ["cl.exe", "/c", str(first)])
             self.assertNotIn(" /Zc:preprocessor ", entries[1]["command"])
             self.assertIn("/Zc:preprocessor-", entries[1]["command"])
+            self.assertNotIn(" /GL ", entries[1]["command"])
+            self.assertIn("/GL-", entries[1]["command"])
 
     def test_merge_filters_and_rejects_conflicting_translation_units(self):
         with tempfile.TemporaryDirectory() as temp_dir:

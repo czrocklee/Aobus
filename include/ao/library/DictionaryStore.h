@@ -99,11 +99,7 @@ namespace ao::library
      * Get the total number of dictionary entries.
      * @return The number of entries
      */
-    std::size_t size() const
-    {
-      auto const lock = std::shared_lock{_mutex};
-      return _idToStringStorage.size();
-    }
+    std::size_t size() const;
 
   private:
     DictionaryStore(lmdb::Database db,

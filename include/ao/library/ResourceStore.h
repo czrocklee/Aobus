@@ -82,23 +82,11 @@ namespace ao::library
     using pointer = value_type const*;
     using reference = value_type const&;
 
-    reference operator*() const
-    {
-      refresh();
-      return _value;
-    }
+    reference operator*() const;
 
-    pointer operator->() const
-    {
-      refresh();
-      return &_value;
-    }
+    pointer operator->() const;
 
-    Iterator& operator++()
-    {
-      ++_iterator;
-      return *this;
-    }
+    Iterator& operator++();
 
     void operator++(std::int32_t) { ++*this; }
     bool operator==(EndSentinel /*unused*/) const { return _iterator == lmdb::Database::Reader::EndSentinel{}; }

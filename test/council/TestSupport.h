@@ -3,20 +3,12 @@
 
 #pragma once
 
-#include "council/CouncilSchema.h"
 #include "council/ProcessRunner.h"
 #include "test/unit/TestFixtureSupport.h"
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <chrono>
 #include <filesystem>
-#include <format>
-#include <fstream>
-#include <ios>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::council::test
@@ -29,50 +21,13 @@ namespace ao::council::test
     return temp.path();
   }
 
-  inline std::filesystem::path writeFile(ao::test::TempDir const& temp,
-                                         std::string const& name,
-                                         std::string_view content)
-  {
-    auto const result = tempPath(temp) / name;
-    std::filesystem::create_directories(result.parent_path());
-    auto output = std::ofstream{result, std::ios::binary | std::ios::trunc};
-    output << content;
-    return result;
-  }
+  std::filesystem::path writeFile(ao::test::TempDir const& temp, std::string const& name, std::string_view content);
 
-  inline std::string intentYaml(std::string_view id = "phase-a",
-                                std::string_view dependency = "",
-                                std::string_view path = "lib/audio/Player.cpp")
-  {
-    auto depends = dependency.empty() ? "[]" : std::format("[{}]", dependency);
-    return std::format(R"(schema: aobus-council-intent/v1
-id: {}
-task-kind: council-review
-invariant: Preserve behavior.
-focus:
-  - path: {}
-depends-on: {}
-overrides: {{}}
-body: |
-  Review the approved change.
-)",
-                       id,
-                       path,
-                       depends);
-  }
+  std::string intentYaml(std::string_view id = "phase-a",
+                         std::string_view dependency = "",
+                         std::string_view path = "lib/audio/Player.cpp");
 
-  inline void runCommand(ProcessRunner& process, std::filesystem::path const& cwd, std::vector<std::string> argv)
-  {
-    auto result = process.run(ProcessRequest{
-      .argv = std::move(argv),
-      .cwd = cwd,
-      .environmentWhitelist = {"PATH"},
-      .timeout = std::chrono::seconds{10},
-      .terminationGracePeriod = std::chrono::seconds{1},
-    });
-    REQUIRE(result.status == ProcessStatus::Exited);
-    REQUIRE(result.exitCode == 0);
-  }
+  void runCommand(ProcessRunner& process, std::filesystem::path const& cwd, std::vector<std::string> argv);
 
   inline void setupGitRepo(ProcessRunner& process, std::filesystem::path const& repo, std::filesystem::path const& cwd)
   {

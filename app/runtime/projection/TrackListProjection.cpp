@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/projection/TrackListProjection.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Exception.h>
 #include <ao/async/Signal.h>
@@ -15,7 +17,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/projection/TrackProjectionEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
@@ -223,6 +224,18 @@ namespace ao::rt
       }
 
       return library::TrackStore::Reader::LoadMode::Hot;
+    }
+
+    bool hasRequiredTrackData(library::TrackView const& view, library::TrackStore::Reader::LoadMode loadMode)
+    {
+      switch (loadMode)
+      {
+        case library::TrackStore::Reader::LoadMode::Hot: return view.isHotValid();
+        case library::TrackStore::Reader::LoadMode::Cold: return view.isColdValid();
+        case library::TrackStore::Reader::LoadMode::Both: return view.isHotValid() && view.isColdValid();
+      }
+
+      return false;
     }
 
     std::int32_t compareNumeric(auto lhsVal, auto rhsVal)
@@ -750,8 +763,14 @@ namespace ao::rt
         sourceOrder.push_back(source.trackIdAt(index));
       }
 
+      auto const entriesDependOnTrackData = comparator || groupBy != TrackGroupKey::None;
       auto visitTrack = [&](TrackId trackId, library::TrackView const& view)
-      { orderIndex.push_back(buildOrderEntry(trackId, view, dictionary)); };
+      {
+        if (!entriesDependOnTrackData || hasRequiredTrackData(view, loadMode))
+        {
+          orderIndex.push_back(buildOrderEntry(trackId, view, dictionary));
+        }
+      };
       reader.visitTracks(sourceOrder, loadMode, visitTrack);
 
       if (comparator)
@@ -973,7 +992,7 @@ namespace ao::rt
 
         auto const optView = reader.get(trackId, loadMode);
 
-        if (!optView)
+        if (!optView || (entriesDependOnTrackData && !hasRequiredTrackData(*optView, loadMode)))
         {
           return std::nullopt;
         }

@@ -5,10 +5,9 @@
 
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/LibraryTaskService.h>
+#include <ao/rt/library/LibraryTaskEvents.h>
 
 #include <cstddef>
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,25 +32,9 @@ namespace ao::uimodel::test
     return rt::NotificationFeedState{.entries = std::move(entries)};
   }
 
-  inline rt::NotificationFeedUpdate postedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
-  {
-    auto feedPtr = std::make_shared<rt::NotificationFeedState const>(std::move(snapshot));
-    return rt::NotificationFeedUpdate{
-      .mutationKind = rt::NotificationFeedMutationKind::Posted,
-      .id = id,
-      .feedPtr = std::move(feedPtr),
-    };
-  }
+  rt::NotificationFeedUpdate postedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId id);
 
-  inline rt::NotificationFeedUpdate expiredUpdate(rt::NotificationFeedState snapshot, rt::NotificationId const id)
-  {
-    auto feedPtr = std::make_shared<rt::NotificationFeedState const>(std::move(snapshot));
-    return rt::NotificationFeedUpdate{
-      .mutationKind = rt::NotificationFeedMutationKind::Expired,
-      .id = id,
-      .feedPtr = std::move(feedPtr),
-    };
-  }
+  rt::NotificationFeedUpdate expiredUpdate(rt::NotificationFeedState snapshot, rt::NotificationId id);
 
   inline rt::LibraryTaskCompleted libraryTaskCompletion(
     std::size_t affectedCount,

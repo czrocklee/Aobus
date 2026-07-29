@@ -78,17 +78,16 @@ The managed base interpreter is
 `%LOCALAPPDATA%\Aobus\tools\python\<version>\python.exe` with the default state
 root, where `<version>` is the pinned release from `script/ao/toolchain.json`.
 
-The checkout key is stable for one checkout and keeps two clones or linked
-worktrees from sharing CMake and vcpkg state. LLVM downloads and verified SDKs
-are intentionally shared. The tool fingerprint changes when the managed Python
-or locked requirements change, allowing a new virtual environment to be built
-before the portal switches to it. Build, run, test, and check commands share the
-`windows-debug` or `windows-release` flavor directory. MSVC AddressSanitizer
-uses the separate `windows-debug-asan` directory. Tests and their vcpkg
-dependencies are part of the normal development graph; selecting a CMake target
-limits what is compiled without changing presets. `tidy` uses the separate
-`windows-tidy` directory. WinUI uses a dedicated multi-config Visual Studio
-generator tree named `windows-winui`; it cannot share the Ninja flavor trees.
+The checkout key is stable for one checkout and keeps two clones or linked worktrees from sharing CMake and vcpkg state.
+LLVM downloads and verified SDKs are intentionally shared.
+The tool fingerprint changes when the managed Python or locked requirements change, allowing a new virtual environment to be built before the portal switches to it.
+Build, run, test, and check commands share the `windows-debug` or `windows-release` flavor directory.
+MSVC AddressSanitizer uses the separate `windows-debug-asan` directory.
+Tests and their vcpkg dependencies are part of the normal development graph; selecting a CMake target limits what is compiled without changing presets.
+The complete `windows-release` graph uses IPO/LTCG as defined by [Optimized builds](optimized-builds.md).
+`tidy` uses the separate `windows-tidy` directory.
+WinUI uses a dedicated multi-config Visual Studio generator tree named `windows-winui`; it cannot share a Ninja flavor tree.
+Its Release configuration uses IPO/LTCG, while its Debug configuration does not.
 Its short `n\<lock-id>\p` NuGet cache avoids deep package paths even when the
 host has not enabled Windows long-path support.
 
@@ -103,13 +102,14 @@ The following overrides have distinct scopes:
 |---|---|
 | `AOBUS_STATE_ROOT` | Replaces `%LOCALAPPDATA%\Aobus` for managed Windows state, including default builds, tools, and caches. |
 | `AOBUS_BUILD_ROOT` | Replaces only the `build` base; checkout and preset directories are still appended. |
-| `BUILD_DIR` | Selects one exact build tree. This is useful for a one-off command but should not be reused across incompatible presets. |
+| `BUILD_DIR` | Selects one exact primary build tree. This is useful for a one-off command but should not be reused across incompatible presets. |
 | `AOBUS_LLVM_SDK_CACHE_ROOT` | Relocates the automatically managed LLVM cache containing `toolchains`, `downloads`, and its lock. It is available as both an environment setting and a CMake cache option. |
 | `AOBUS_LLVM_SDK_ROOT` | CMake cache option naming one complete, pre-extracted LLVM SDK. It is validated and never modified; it is not the automatic cache root. |
 
-An explicit command-line `-p <dir>` selects that command's exact build tree.
+An explicit command-line `-p <dir>` selects that command's exact primary build tree.
 Otherwise `BUILD_DIR`, `AOBUS_BUILD_ROOT`, and `AOBUS_STATE_ROOT` are applied in
 that order before the `%LOCALAPPDATA%` default.
+The composite `ao.bat check` command uses an exact override for its Ninja tree and derives a sibling named `<dir>-winui` for the required Visual Studio build.
 
 Those build overrides are portal settings. A direct `cmake --preset` invocation
 uses a local, name-based fallback under `%LOCALAPPDATA%`; it does not have the
@@ -134,14 +134,16 @@ Run all commands from the repository root, including when that root is mapped:
 
 ```bat
 ao.bat build                 rem debug build of all enabled targets
-ao.bat build release         rem release build of all enabled targets
+ao.bat build release         rem Release build of the full graph with IPO/LTCG
 ao.bat build --target aobus-tui  rem build only the TUI target
 ao.bat doctor winui          rem inspect WinUI build/runtime prerequisites
 ao.bat setup winui-runtime   rem install the governed runtime when missing
 ao.bat build --target winui  rem build WinUI with CMake-generated MSBuild
+ao.bat build release --target winui  rem build the WinUI Release configuration with IPO/LTCG
 ao.bat run cli               rem incrementally build and run the CLI
 ao.bat run tui               rem incrementally build and run the TUI
 ao.bat run winui             rem build and launch WinUI in an interactive session
+ao.bat run winui release     rem build and launch the WinUI Release configuration
 ao.bat test                  rem core and TUI tests
 ao.bat test --all            rem all Windows suites, including tooling
 ao.bat check                 rem full Windows gate
@@ -181,9 +183,10 @@ doctor commands never modify the host.
 
 `ao.bat build --target winui` configures `windows-winui` with the Visual Studio
 generator and builds `aobus-winui` through `cmake --build`; direct `msbuild`
-invocations and Visual Studio are unnecessary. `ao.bat check` includes this
-Debug/Release WinUI build after the normal Windows graph, except in the MSVC
-AddressSanitizer profile.
+invocations and Visual Studio are unnecessary.
+`ao.bat build release --target winui` selects the Release configuration in the same tree and enables IPO/LTCG.
+`ao.bat check` builds the Debug WinUI configuration after the normal Windows Debug graph, except in the MSVC AddressSanitizer profile.
+`ao.bat check release` builds the IPO/LTCG-enabled WinUI Release configuration after validating the complete native Release graph.
 
 The portal uses one concurrency limit for both CMake's project scheduling and
 MSBuild's cross-project C++ compiler scheduling. By default it leaves one

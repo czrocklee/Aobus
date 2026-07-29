@@ -65,20 +65,7 @@ namespace ao::rt
     std::size_t size() const noexcept { return _items.size(); }
     bool empty() const noexcept { return _items.empty(); }
 
-    std::size_t count(ScanClassification classification) const noexcept
-    {
-      std::size_t count = 0;
-
-      for (auto const& item : _items)
-      {
-        if (item.classification == classification)
-        {
-          ++count;
-        }
-      }
-
-      return count;
-    }
+    std::size_t count(ScanClassification classification) const noexcept;
 
     /**
      * Builds a single-item explicit relink plan from two unresolved items.

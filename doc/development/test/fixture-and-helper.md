@@ -37,7 +37,8 @@ Over repeated low-level setup in every test.
 Fixture defaults should be non-trivial enough to prove data flow. Avoid using only empty strings, `0`, or `false` unless the test is about empty/default behavior.
 
 Shared support must keep its compile surface narrow.
-Templates, necessary compile-time definitions, and genuinely trivial accessors may remain in a support header.
+Header definitions follow the pure-AST exceptions in the [C++ coding style](../coding-style.md); test support does not receive a broader exception.
+Templates, dependent definitions, permitted compile-time definitions, empty bodies, and ordinary bodies containing one permitted direct AST statement may remain in a support header.
 Concrete fixture construction, lifecycle, I/O, event driving, and stateful helper methods belong in a paired `.cpp` file compiled by the owning test-support target.
 Split support by the behavior or layer that consumes it instead of creating an include-all compatibility header.
 

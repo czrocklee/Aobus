@@ -34,7 +34,7 @@ examples:
   ./ao run tui              # build and run the terminal client built in debug mode
   ./ao run gtk              # build and run the GTK desktop client built in debug mode
   ./ao run cli -n           # run the CLI client without rebuilding
-  ./ao run cli release      # build and run the CLI client built in release mode
+  ./ao run cli release      # build and run the CLI client with IPO/LTO
   ./ao run gtk --clang      # build and run the GTK client built using clang compiler
   ./ao run tui -- --library ~/Music   # forward option flags to the application after --
 """
@@ -45,7 +45,7 @@ examples:
   ao.bat run tui                         # build and run the TUI in debug mode
   ao.bat run winui                       # build and run WinUI from an interactive desktop
   ao.bat run tui -n                      # run without rebuilding
-  ao.bat run tui release                 # build and run the release TUI
+  ao.bat run tui release                 # build and run the release TUI with IPO/LTCG
   ao.bat run tui -- --library C:\\Music  # forward application options after --
 """
 

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/DictionaryStore.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
@@ -114,6 +115,12 @@ namespace ao::library
   {
     auto const lock = std::shared_lock{_mutex};
     return _generation;
+  }
+
+  std::size_t DictionaryStore::size() const
+  {
+    auto const lock = std::shared_lock{_mutex};
+    return _idToStringStorage.size();
   }
 
   std::uint64_t DictionaryStore::bindSymbols(std::span<std::string const> symbols, std::span<DictionaryId> ids) const

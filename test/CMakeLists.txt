@@ -73,6 +73,8 @@ add_library(ao_test_support_runtime STATIC
     unit/runtime/ViewServiceTestSupport.cpp
     unit/runtime/WorkspaceTestSupport.cpp
     unit/runtime/projection/TrackListProjectionTestSupport.cpp
+    unit/runtime/source/ListOrderSourceTestSupport.cpp
+    unit/runtime/source/SmartListEvaluatorTestSupport.cpp
     unit/runtime/source/TrackSourceTestSupport.cpp
 )
 target_link_libraries(ao_test_support_runtime
@@ -337,6 +339,7 @@ add_executable(ao_core_test
     unit/uimodel/playback/seek/SeekSliderInteractionModelTest.cpp
     unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp
     unit/uimodel/playback/transport/TransportViewModelTest.cpp
+    unit/uimodel/status/activity/ActivityStatusFeedProjectionTestSupport.cpp
     unit/uimodel/status/activity/ActivityStatusFeedProjectionCompactTest.cpp
     unit/uimodel/status/activity/ActivityStatusFeedProjectionDetailTest.cpp
     unit/uimodel/status/activity/ActivityStatusFeedProjectionNotificationTest.cpp
@@ -470,6 +473,7 @@ add_test(NAME ao_core_test COMMAND ao_core_test)
 if(AOBUS_BUILD_TUI)
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
+    unit/tui/CoverArtTestSupport.cpp
     unit/tui/TuiRenderTestSupport.cpp
     unit/tui/AnchoredOverlayTest.cpp
     unit/tui/CommandCompletionTest.cpp
@@ -526,6 +530,7 @@ endif()
 if(AOBUS_BUILD_CLI)
 # ao_cli_test: command-line frontend tests
 add_executable(ao_cli_test
+    unit/cli/CliTestSupport.cpp
     unit/cli/CommandErrorTest.cpp
     unit/cli/CliRuntimeTest.cpp
     unit/cli/CliSmokeTest.cpp
@@ -545,6 +550,7 @@ endif()
 if(AOBUS_BUILD_TOOLS)
 # ao_council_test: council tool unit and integration tests
 add_executable(ao_council_test
+    council/TestSupport.cpp
     unit/council/CouncilSchemaTest.cpp
     unit/council/IntentSerializationTest.cpp
     unit/council/RegistrySerializationTest.cpp

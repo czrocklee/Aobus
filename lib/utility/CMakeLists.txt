@@ -2,8 +2,12 @@
 add_library(ao_utility STATIC
     AudioCodecText.cpp
     Base64.cpp
+    ByteView.cpp
     Exception.cpp
+    Hash128.cpp
     MappedFile.cpp
+    Path.cpp
+    Reflect.cpp
     RymlAdapter.cpp
     ScopedRegistration.cpp
     Serialization.cpp

@@ -61,23 +61,11 @@ namespace ao::library
     utility::Hash128 audioSignature() const noexcept { return {.bytes = audioSignatureBytes}; }
 
     // Set 64-bit values
-    void fileSize(std::uint64_t val) noexcept
-    {
-      fileSizeLo = static_cast<std::uint32_t>(val);
-      fileSizeHi = static_cast<std::uint32_t>(val >> 32);
-    }
+    void fileSize(std::uint64_t val) noexcept;
 
-    void mtime(std::uint64_t val) noexcept
-    {
-      mtimeLo = static_cast<std::uint32_t>(val);
-      mtimeHi = static_cast<std::uint32_t>(val >> 32);
-    }
+    void mtime(std::uint64_t val) noexcept;
 
-    void audioPayloadLength(std::uint64_t val) noexcept
-    {
-      audioPayloadLengthLo = static_cast<std::uint32_t>(val);
-      audioPayloadLengthHi = static_cast<std::uint32_t>(val >> 32);
-    }
+    void audioPayloadLength(std::uint64_t val) noexcept;
 
     void audioSignature(utility::Hash128 val) noexcept { audioSignatureBytes = val.bytes; }
   };

@@ -49,7 +49,7 @@ WINUI_HEADER_COMPANIONS = {
     WINUI_ROOT / "app" / "WinUiDependencies.h": WINUI_ROOT / "playback" / "SeekControl.cpp",
     WINUI_ROOT / "platform" / "ScopedBooleanFlag.h": WINUI_ROOT / "playback" / "SeekControl.cpp",
 }
-WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib")
+WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib", "/GL")
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
 # Check groups: start from nothing, enable curated groups, then disable known false
@@ -139,6 +139,7 @@ EXPECTED_AOBUS_CHECKS = frozenset(
         "aobus-readability-chrono-naming-convention",
         "aobus-readability-control-block-spacing",
         "aobus-readability-forbid-raw-throw",
+        "aobus-readability-header-function-definition",
         "aobus-readability-identifier-naming-extensions",
         "aobus-readability-member-order",
         "aobus-readability-optional-naming-and-usage",
@@ -485,9 +486,29 @@ def is_winui_path(path: Path) -> bool:
 
 def winui_build_directory(tidy_build_dir: Path, *, path_was_explicit: bool) -> Path:
     """Keep VS-generated WinUI state separate from the Ninja tidy tree."""
+    return builddir.winui_companion_build_dir(
+        tidy_build_dir,
+        primary_path_was_explicit=path_was_explicit,
+    )
+
+
+def additional_dependency_build_directories(
+    tidy_build_dir: Path,
+    *,
+    path_was_explicit: bool,
+) -> tuple[Path, ...]:
+    """Return existing normal build trees whose Ninja dependencies may prove header coverage."""
     if path_was_explicit or os.environ.get("BUILD_DIR"):
-        return tidy_build_dir.with_name(f"{tidy_build_dir.name}-winui")
-    return builddir.winui_build_dir()
+        return ()
+
+    normal_debug_dir = builddir.build_dir("debug")
+    if absolute_path(normal_debug_dir) == absolute_path(tidy_build_dir):
+        return ()
+    if not (normal_debug_dir / "build.ninja").is_file():
+        return ()
+    if not (normal_debug_dir / "compile_commands.json").is_file():
+        return ()
+    return (normal_debug_dir,)
 
 
 def prepare_winui_compile_commands(
@@ -768,16 +789,63 @@ def run_command(args: argparse.Namespace) -> int:
             native_database_dir,
             selected,
             explicit_header_companions=WINUI_HEADER_COMPANIONS if toolchain.resource_dir is not None else None,
+            additional_dependency_build_dirs=additional_dependency_build_directories(
+                build_dir,
+                path_was_explicit=args.path is not None,
+            ),
         )
         if coverage_plan.deferred:
-            label = "ERROR: explicitly selected files" if explicit else "Deferred files"
-            print(f"{label} without a compile command on this platform:", file=sys.stderr)
-            for path in coverage_plan.deferred:
-                print(f"  {path}", file=sys.stderr)
+            deferral_details = {absolute_path(detail.selected): detail for detail in coverage_plan.deferral_details}
+            platform_deferred = [
+                path
+                for path in coverage_plan.deferred
+                if (detail := deferral_details.get(absolute_path(path))) is not None and detail.is_platform_incompatible
+            ]
+            native_deferred = [path for path in coverage_plan.deferred if path not in platform_deferred]
+
             if explicit:
+                print("ERROR: explicitly selected files without a compile command on this platform:", file=sys.stderr)
+                reported = list(coverage_plan.deferred)
+            elif native_deferred:
+                print(
+                    "ERROR: native clang-tidy coverage is incomplete; files lack compile context:",
+                    file=sys.stderr,
+                )
+                reported = native_deferred
+            else:
+                print("Deferred files that are incompatible with this platform:", file=sys.stderr)
+                reported = platform_deferred
+
+            for path in reported:
+                detail = deferral_details.get(absolute_path(path))
+                reason = detail.reason if detail is not None else None
+                suffix = f" ({reason})" if reason else ""
+                print(f"  {path}{suffix}", file=sys.stderr)
+
+            if explicit and not native_deferred:
                 print(
                     "Run those files on the platform that builds them, or use a build directory "
                     "whose compile_commands.json contains them.",
+                    file=sys.stderr,
+                )
+                return 1
+            if native_deferred:
+                portal = "ao.bat" if builddir.platform_profile().name == "windows" else "./ao"
+                if args.path is not None or os.environ.get("BUILD_DIR"):
+                    print(
+                        "Refresh the explicitly selected build tree and its Ninja dependency data, "
+                        f"or rerun without the exact build override after `{portal} build` or "
+                        f"`{portal} check`.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        f"Run `{portal} build` or `{portal} check` to refresh the normal debug "
+                        "build and its Ninja dependency data, then rerun tidy.",
+                        file=sys.stderr,
+                    )
+                print(
+                    "The tidy portal does not build the full product graph automatically.",
                     file=sys.stderr,
                 )
                 return 1

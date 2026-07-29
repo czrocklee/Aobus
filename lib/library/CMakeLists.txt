@@ -11,9 +11,11 @@ add_library(ao_library STATIC
     LibraryUri.cpp
     FileManifestView.cpp
     FileManifestBuilder.cpp
+    FileManifestLayout.cpp
     TrackStore.cpp
     TrackBuilder.cpp
     TrackView.cpp
+    TrackWrite.cpp
     TrackColdReader.cpp
     ListView.cpp
     ListStore.cpp

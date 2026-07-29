@@ -8,6 +8,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
+#include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompiler.h>
@@ -29,7 +30,7 @@ namespace ao::cli
 
     if (filter.empty())
     {
-      for (auto const& [id, view] : reader)
+      for (auto const& [id, view] : reader.hot())
       {
         std::ignore = view;
         ids.push_back(id);
@@ -61,6 +62,11 @@ namespace ao::cli
 
     for (auto const& [id, view] : reader)
     {
+      if (!query::hasRequiredTrackData(plan->accessProfile, view))
+      {
+        throwCommandError(Error::Code::CorruptData, "track {} contains invalid data required by the filter", id);
+      }
+
       if (evaluator.matches(binding, view))
       {
         ids.push_back(id);
@@ -79,7 +85,7 @@ namespace ao::cli
     {
       auto const id = TrackId{rawId};
 
-      if (!reader.trackRow(id))
+      if (!reader.containsTrack(id))
       {
         throwCommandError(Error::Code::NotFound, "track not found: {}", id);
       }

@@ -5,7 +5,6 @@
 
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 
-#include <algorithm>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,17 +22,7 @@ namespace ao::uimodel
 
     constexpr bool isSlotAllowed(LayoutActionSlot const slot) const noexcept { return (slotMask & slotBit(slot)) != 0; }
 
-    std::string_view defaultAction(LayoutActionSlot const slot) const
-    {
-      if (auto const it =
-            std::ranges::find_if(defaultActionIds, [slot](auto const& entry) { return entry.first == slot; });
-          it != defaultActionIds.end())
-      {
-        return it->second;
-      }
-
-      return {};
-    }
+    std::string_view defaultAction(LayoutActionSlot slot) const;
   };
 
   inline LayoutComponentActionPolicy const kNoExternalActions{.slotMask = 0};

@@ -49,7 +49,9 @@ add_library(aobus-gtk-lib STATIC
     preference/PreferencesWindow.cpp
 
     common/DismissController.cpp
+    common/MainContextCallbackScope.cpp
     common/PopoverAttachment.cpp
+    common/WidgetMeasure.cpp
 
     completion/EntryCompletionController.cpp
 
@@ -97,6 +99,7 @@ add_library(aobus-gtk-lib STATIC
     image/ResourceImageController.cpp
     image/ResourceImageLoader.cpp
     image/ImageWidget.cpp
+    image/ImageWidgetLayout.cpp
 
     tag/TagEditController.cpp
     tag/TagPopover.cpp
@@ -104,9 +107,11 @@ add_library(aobus-gtk-lib STATIC
     tag/TrackPropertiesDialog.cpp
 
     portal/ImportExportCoordinator.cpp
+    portal/ImportExportCoordinatorPolicy.cpp
     portal/LibraryImportExportWorkflow.cpp
 
     layout/document/LayoutPresets.cpp
+    layout/runtime/LayoutBuildContext.cpp
     layout/runtime/LayoutRuntime.cpp
     layout/runtime/StatefulComponentState.cpp
     layout/runtime/ComponentRegistry.cpp

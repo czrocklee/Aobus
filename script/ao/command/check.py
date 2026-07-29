@@ -2,7 +2,6 @@
 
 import argparse
 import copy
-from pathlib import Path
 
 from ..core import builddir, dependency_policy
 from ..core.proc import die
@@ -29,7 +28,7 @@ def register(subparsers: "argparse._SubParsersAction[argparse.ArgumentParser]") 
         NAME, help=HELP, description=HELP, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     build.add_build_arguments(parser)
-    parser.set_defaults(func=run_command)
+    parser.set_defaults(func=run_command, target=[])
 
 
 def run_command(args: argparse.Namespace) -> int:
@@ -50,9 +49,12 @@ def run_command(args: argparse.Namespace) -> int:
     profile = builddir.platform_profile()
     if profile.name == "windows" and not args.asan:
         winui_args = copy.copy(args)
-        if args.path:
-            normal_path = Path(args.path)
-            winui_args.path = str(normal_path.with_name(f"{normal_path.name}-winui"))
+        winui_args.path = str(
+            builddir.winui_companion_build_dir(
+                result.build_dir,
+                primary_path_was_explicit=args.path is not None,
+            )
+        )
         winui_result = build.do_build(winui_args, targets=["winui"])
         print("Verifying WinUI dependency resolution...")
         try:

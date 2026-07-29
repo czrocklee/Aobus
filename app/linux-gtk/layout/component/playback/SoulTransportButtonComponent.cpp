@@ -3,6 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
+#include "app/GtkUiDependencies.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"

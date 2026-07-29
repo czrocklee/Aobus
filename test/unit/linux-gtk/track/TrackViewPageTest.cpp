@@ -356,9 +356,9 @@ namespace ao::gtk::test
     CHECK(rowPtr->fieldText(rt::TrackField::Title) == "Before");
     auto const transaction = runtime.musicLibrary().readTransaction();
     auto const optView =
-      runtime.musicLibrary().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Both);
+      runtime.musicLibrary().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optView);
-    CHECK(library::test::trackSpecFromView(runtime.musicLibrary(), *optView).title == "Before");
+    CHECK(optView->metadata().title() == "Before");
 
     window.close();
     drainGtkEvents();

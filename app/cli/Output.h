@@ -20,15 +20,7 @@ namespace ao::cli
 
   namespace detail
   {
-    inline void emitGeneratedDocument(std::ostream& os, std::string const& text)
-    {
-      os << text;
-
-      if (text.empty() || text.back() != '\n')
-      {
-        os << '\n';
-      }
-    }
+    void emitGeneratedDocument(std::ostream& os, std::string const& text);
   } // namespace detail
 
   // Boost.PFR member-name reflection requires DTO types with external linkage

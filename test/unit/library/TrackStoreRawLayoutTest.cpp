@@ -142,7 +142,9 @@ namespace ao::library::test
     REQUIRE(wtxn.commit());
 
     auto rtxn = fixture.library.readTransaction();
-    CHECK_FALSE(fixture.store.reader(rtxn).get(id).has_value());
+    auto reader = fixture.store.reader(rtxn);
+    CHECK_FALSE(reader.get(id, TrackStore::Reader::LoadMode::Hot).has_value());
+    CHECK_FALSE(reader.get(id, TrackStore::Reader::LoadMode::Cold).has_value());
   }
 
   TEST_CASE("TrackStore - writer get supports load modes", "[library][unit][track-store][raw-layout]")
@@ -180,7 +182,7 @@ namespace ao::library::test
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
     auto it = reader.begin(TrackStore::Reader::LoadMode::Hot);
-    REQUIRE(it != reader.end());
+    REQUIRE(it != reader.end(TrackStore::Reader::LoadMode::Hot));
     auto&& [trackId, trackView] = *it;
     CHECK(trackId == id);
     CHECK(trackView.isHotValid());
@@ -199,7 +201,7 @@ namespace ao::library::test
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
     auto it = reader.begin(TrackStore::Reader::LoadMode::Cold);
-    REQUIRE(it != reader.end());
+    REQUIRE(it != reader.end(TrackStore::Reader::LoadMode::Cold));
     auto&& [trackId, trackView] = *it;
     CHECK(trackId == id);
     CHECK_FALSE(trackView.isHotValid());

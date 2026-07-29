@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/rt/library/LibraryYamlExporter.h>
+
 #include "MediaTrack.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
@@ -20,7 +22,6 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/utility/Base64.h>
 #include <ao/utility/Uuid.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -487,11 +488,17 @@ namespace ao::rt
           continue;
         }
 
-        auto const optTrackView = trackReader.get(trackId);
+        auto const optTrackView = trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Cold);
 
         if (!optTrackView)
         {
           continue;
+        }
+
+        if (!optTrackView->isColdValid())
+        {
+          return makeError(
+            Error::Code::CorruptData, std::format("Track {} contains an invalid cold record", trackId.raw()));
         }
 
         auto uri = library::LibraryUri::parse(optTrackView->property().uri());
@@ -636,6 +643,11 @@ namespace ao::rt
                                                   library::DictionaryStore const& dictionary,
                                                   library::FileManifestStore::Reader const& manifestReader) const
   {
+    if (!view.isHotValid() || !view.isColdValid())
+    {
+      return makeError(Error::Code::CorruptData, std::format("Track {} contains an invalid record", id.raw()));
+    }
+
     auto trackNode = node.append_child();
     trackNode |= ryml::MAP;
 

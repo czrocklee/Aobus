@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -16,6 +17,11 @@ from ao.command import hygiene, tidy
 
 
 class FormatCommandTest(unittest.TestCase):
+    def test_clang_format_recognizes_angled_project_headers_as_main_include(self):
+        configuration = (format_command.PROJECT_ROOT / ".clang-format").read_text(encoding="utf-8")
+
+        self.assertRegex(configuration, r"(?m)^MainIncludeChar:\s+Any\s*$")
+
     def test_dispatches_cpp_and_python_files_to_their_formatters(self):
         args = Namespace(files=["lib/Foo.cpp", "script/foo.py"], all=False, commit=None, check=True)
 
@@ -75,6 +81,66 @@ class TidyCommandTest(unittest.TestCase):
 
         self.assertRegex(native, tidy.STRICT_HEADER_FILTER)
         self.assertRegex(posix, tidy.STRICT_HEADER_FILTER)
+
+    def test_default_tidy_uses_only_an_existing_normal_debug_dependency_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            tidy_build_dir = root / "debug-clang-tidy"
+            normal_debug_dir = root / "debug"
+            tidy_build_dir.mkdir()
+            normal_debug_dir.mkdir()
+            (normal_debug_dir / "build.ninja").touch()
+            (normal_debug_dir / "compile_commands.json").write_text("[]\n", encoding="utf-8")
+
+            with mock.patch.dict(tidy.os.environ, {}, clear=False):
+                tidy.os.environ.pop("BUILD_DIR", None)
+                with mock.patch.object(tidy.builddir, "build_dir", return_value=normal_debug_dir):
+                    self.assertEqual(
+                        tidy.additional_dependency_build_directories(
+                            tidy_build_dir,
+                            path_was_explicit=False,
+                        ),
+                        (normal_debug_dir,),
+                    )
+                    self.assertEqual(
+                        tidy.additional_dependency_build_directories(
+                            tidy_build_dir,
+                            path_was_explicit=True,
+                        ),
+                        (),
+                    )
+
+    def test_windows_compile_filter_consumes_production_exclusion_policy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build_dir = root / "build"
+            destination = root / "filtered"
+            source = root / "Player.cpp"
+            build_dir.mkdir()
+            source.touch()
+            (build_dir / "compile_commands.json").write_text(
+                json.dumps(
+                    [
+                        {
+                            "directory": str(root),
+                            "file": str(source),
+                            "command": (f"cl.exe /Zc:preprocessor /c /ZW:nostdlib /GL /GL- {source}"),
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            tidy.tidyengine.write_filtered_compile_database(
+                build_dir,
+                destination,
+                tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS,
+            )
+
+            command = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))[0]["command"]
+            for argument in tidy.WINDOWS_EXCLUDED_COMPILE_ARGUMENTS:
+                self.assertNotIn(f" {argument} ", command)
+            self.assertIn(" /GL- ", command)
 
     def test_python_only_scope_runs_pythoncheck_without_preparing_clang_tidy(self):
         args = Namespace(
@@ -172,7 +238,16 @@ class TidyCommandTest(unittest.TestCase):
                 mock.patch.object(
                     tidy.tidyengine,
                     "compile_command_plan",
-                    return_value=tidy.tidyengine.CompileCommandPlan((), (foreign,)),
+                    return_value=tidy.tidyengine.CompileCommandPlan(
+                        (),
+                        (foreign,),
+                        (
+                            tidy.tidyengine.CompileCommandDeferral(
+                                foreign,
+                                "the source file has no exact compile command",
+                            ),
+                        ),
+                    ),
                 )
             )
             run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
@@ -181,6 +256,7 @@ class TidyCommandTest(unittest.TestCase):
 
         run_parallel.assert_not_called()
         self.assertIn("explicitly selected files", stderr.getvalue())
+        self.assertIn("the source file has no exact compile command", stderr.getvalue())
 
     def test_non_explicit_scope_visibly_defers_foreign_platform_files(self):
         args = Namespace(
@@ -235,6 +311,13 @@ class TidyCommandTest(unittest.TestCase):
                     return_value=tidy.tidyengine.CompileCommandPlan(
                         (tidy.tidyengine.CompileCommandTarget(native, native),),
                         (foreign,),
+                        (
+                            tidy.tidyengine.CompileCommandDeferral(
+                                foreign,
+                                "the file is incompatible with the current platform",
+                                "platform-incompatible",
+                            ),
+                        ),
                     ),
                 )
             )
@@ -251,7 +334,80 @@ class TidyCommandTest(unittest.TestCase):
         self.assertEqual(invocations[0].compile_command_source, tidy.absolute_path(native))
         self.assertFalse(invocations[0].is_header)
         self.assertIn("Deferred files", stderr.getvalue())
+        self.assertIn("the file is incompatible with the current platform", stderr.getvalue())
         self.assertIn("not checked here", stderr.getvalue())
+
+    def test_non_explicit_native_deferral_fails_before_partial_tidy_run(self):
+        args = Namespace(
+            files=[],
+            all=True,
+            folder=[],
+            commit=None,
+            check=None,
+            debug=False,
+            output=None,
+            jobs=1,
+            path=None,
+            fix=False,
+            no_build=False,
+            tidy_arg=[],
+            header_filter=None,
+        )
+        native = Path("lib/Native.cpp")
+        header = Path("include/ao/HeaderOnly.h")
+        stderr = io.StringIO()
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(
+                    tidy.tidyengine,
+                    "resolve_scope",
+                    return_value=([str(native), str(header)], False),
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(tidy, "split_existing", return_value=([str(native), str(header)], []))
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    tidy,
+                    "prepare_toolchain",
+                    return_value=tidy.TidyToolchain("clang-tidy", Path("plugin"), None),
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    tidy,
+                    "classify_existing",
+                    return_value={"STRICT": [native, header], "RELAXED": []},
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(
+                    tidy.tidyengine,
+                    "compile_command_plan",
+                    return_value=tidy.tidyengine.CompileCommandPlan(
+                        (tidy.tidyengine.CompileCommandTarget(native, native),),
+                        (header,),
+                        (
+                            tidy.tidyengine.CompileCommandDeferral(
+                                header,
+                                "Ninja dependency data is unavailable for the compiled translation units",
+                            ),
+                        ),
+                    ),
+                )
+            )
+            run_parallel = stack.enter_context(mock.patch.object(tidy.tidyengine, "run_parallel"))
+            stack.enter_context(contextlib.redirect_stderr(stderr))
+
+            self.assertEqual(tidy.run_command(args), 1)
+
+        run_parallel.assert_not_called()
+        self.assertIn("native clang-tidy coverage is incomplete", stderr.getvalue())
+        portal = "ao.bat" if os.name == "nt" else "./ao"
+        self.assertIn(f"`{portal} build` or `{portal} check`", stderr.getvalue())
+        self.assertIn("does not build the full product graph automatically", stderr.getvalue())
 
     def test_non_explicit_all_deferred_scope_fails_as_incomplete(self):
         args = Namespace(

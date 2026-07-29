@@ -3,6 +3,8 @@ add_library(ao_lmdb STATIC
     Environment.cpp
     Transaction.cpp
     Database.cpp
+    detail/ResultError.cpp
+    detail/ThrowError.cpp
 )
 target_include_directories(ao_lmdb PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
 target_link_libraries(ao_lmdb PUBLIC ao_utility PkgLMDB)

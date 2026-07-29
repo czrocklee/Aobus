@@ -7,8 +7,6 @@
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/TrackField.h>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -48,13 +46,5 @@ namespace ao::rt
     bool muted = false;
   };
 
-  inline float normalizePlaybackVolume(float volume) noexcept
-  {
-    if (!std::isfinite(volume))
-    {
-      return 1.0F;
-    }
-
-    return std::clamp(volume, 0.0F, 1.0F);
-  }
+  float normalizePlaybackVolume(float volume) noexcept;
 } // namespace ao::rt

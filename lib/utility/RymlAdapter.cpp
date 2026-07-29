@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/yaml/RymlAdapter.h>
+
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/ExceptionFormat.h>
-#include <ao/yaml/RymlAdapter.h>
 
 #include <c4/substr.hpp>
 #include <ryml.hpp>
@@ -145,8 +146,10 @@ namespace ao::yaml
     }
 
     constexpr auto kSuffix = std::string_view{"..."};
-    auto result = std::string{context.substr(0, kMaximumErrorContextBytes - kSuffix.size())};
-    result += kSuffix;
+    auto result = std::string{};
+    result.reserve(kMaximumErrorContextBytes);
+    result.append(context.substr(0, kMaximumErrorContextBytes - kSuffix.size()));
+    result.append(kSuffix);
     return result;
   }
 

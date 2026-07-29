@@ -19,19 +19,19 @@ REQUIRES_BUILD_ENV = True
 EPILOG = """\
 examples:
   ./ao build                     # incremental debug build
-  ./ao build release --clean     # clean release build
+  ./ao build release --clean     # clean Release build with IPO/LTO
   ./ao build --target aobus-gtk  # build a single target
   ./ao build debug --clang       # clang build in its own build tree
-  ./ao build pgo1                # PGO step 1: instrumented build
 """
 
 WINDOWS_EPILOG = """\
 examples:
   ao.bat build                       # incremental debug build
-  ao.bat build release --clean       # clean release build
+  ao.bat build release --clean       # clean Release build with IPO/LTCG
   ao.bat build --target aobus-tui    # build only the TUI target
   ao.bat build --target aobus        # build only the CLI target
   ao.bat build --target winui        # build WinUI through the dedicated MSBuild tree
+  ao.bat build release --target winui  # build Release WinUI with IPO/LTCG
 """
 
 WINUI_TARGETS = frozenset({"winui", "aobus-winui"})
@@ -95,6 +95,8 @@ def _remove_build_directory(path: Path, profile: builddir.PlatformProfile) -> No
 def validate_build_options(args: argparse.Namespace) -> builddir.PlatformProfile:
     """Reject build modes that the native platform cannot provide."""
     profile = builddir.platform_profile()
+    if getattr(args, "flavor", "debug") != "debug" and (args.asan or args.tsan):
+        raise die("Sanitizers are available only for debug builds.")
     if args.clang and profile.name == "windows":
         raise die(
             "Clang application builds are unavailable on Windows; the managed LLVM SDK is reserved for format and tidy."
@@ -227,32 +229,7 @@ def print_summary(args: argparse.Namespace, result: BuildResult, tests: str) -> 
     print(f"  tests: {tests}")
 
 
-def print_pgo_instructions(args: argparse.Namespace, result: BuildResult) -> None:
-    if args.flavor == "pgo1":
-        next_command = "./ao build pgo2" + (" --clang" if args.clang else "")
-        print()
-        print("============================================")
-        print("PGO Step 1 complete.")
-        print()
-        print("Next: Run the app to generate profile data:")
-        print(f"  cd {result.build_dir} && ./app/linux-gtk/aobus-gtk")
-        print("  # Use the app normally, then close it")
-        print()
-        print("Then run:")
-        print(f"  {next_command}")
-        print("============================================")
-    elif args.flavor == "pgo2":
-        print()
-        print("============================================")
-        print("PGO Step 2 complete.")
-        print()
-        print(f"Optimized binary: {result.build_dir}/app/linux-gtk/aobus-gtk")
-        print(f"Run: cd {result.build_dir} && perf record -g -- ./app/linux-gtk/aobus-gtk")
-        print("============================================")
-
-
 def run_command(args: argparse.Namespace) -> int:
     result = do_build(args, args.target)
-    print_pgo_instructions(args, result)
     print_summary(args, result, tests="skipped (use ./ao check or ./ao test)")
     return 0

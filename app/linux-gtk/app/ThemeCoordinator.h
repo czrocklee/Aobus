@@ -33,16 +33,7 @@ namespace ao::gtk
     {
     }
 
-    ThemeRegistrationToken& operator=(ThemeRegistrationToken&& other) noexcept
-    {
-      if (this != &other)
-      {
-        reset();
-        _registrationPtr = std::move(other._registrationPtr);
-      }
-
-      return *this;
-    }
+    ThemeRegistrationToken& operator=(ThemeRegistrationToken&& other) noexcept;
 
     void reset();
 

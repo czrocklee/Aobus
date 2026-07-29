@@ -76,7 +76,13 @@ class WindowsBatchPortalTest(unittest.TestCase):
 
         self.assertEqual(
             set(windows_presets),
-            {"windows-base", "windows-debug", "windows-release", "windows-tidy", "windows-winui"},
+            {
+                "windows-base",
+                "windows-debug",
+                "windows-release",
+                "windows-tidy",
+                "windows-winui",
+            },
         )
         self.assertEqual(windows_presets["windows-debug"]["inherits"], "windows-base")
         self.assertEqual(windows_presets["windows-release"]["inherits"], "windows-base")
@@ -107,6 +113,14 @@ class WindowsBatchPortalTest(unittest.TestCase):
 
         self.assertTrue(linux_presets)
         self.assertTrue(all(preset["generator"] == "Ninja" for preset in linux_presets))
+
+    def test_linux_release_does_not_have_a_separate_ipo_preset(self):
+        presets_file = Path(__file__).resolve().parents[2] / "CMakePresets.json"
+        presets = json.loads(presets_file.read_text(encoding="utf-8"))["configurePresets"]
+        preset_names = {item["name"] for item in presets}
+
+        self.assertIn("linux-release", preset_names)
+        self.assertNotIn("linux-release-ipo", preset_names)
 
 
 class CliParseTest(unittest.TestCase):
@@ -144,6 +158,20 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(args.flavor, "release")
         self.assertTrue(args.clang)
         self.assertEqual(args.target, ["aobus-gtk"])
+
+    def test_removed_optimization_flavors_are_rejected(self):
+        commands = (
+            ["build", "release-ipo"],
+            ["run", "gtk", "release-ipo"],
+            ["build", "pgo1"],
+            ["check", "pgo2"],
+            ["run", "gtk", "pgo1"],
+        )
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            for command in commands:
+                with self.subTest(command=command):
+                    with self.assertRaises(SystemExit):
+                        self.parse(command)
 
     def test_build_rejects_unknown_flavor(self):
         with self.assertRaises(SystemExit):
@@ -242,6 +270,30 @@ class CliParseTest(unittest.TestCase):
         self.assertEqual(build_env["CL_MPCount"], "8")
         self.assertEqual(result.preset, "windows-winui")
 
+    def test_windows_release_selects_the_normal_release_preset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "release", "-p", temp_dir])
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(build_command, "run", return_value=0) as run:
+                    result = build_command.do_build(args, [])
+
+        self.assertIn("windows-release", run.call_args_list[0].args[0])
+        self.assertEqual(result.preset, "windows-release")
+
+    def test_windows_winui_release_uses_the_normal_visual_studio_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            args = self.parse(["build", "release", "-p", temp_dir, "--target", "winui"])
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                with mock.patch.object(build_command.winui, "require_build_host"):
+                    with mock.patch.object(build_command, "run", return_value=0) as run:
+                        result = build_command.do_build(args, ["winui"])
+
+        configure = run.call_args_list[0].args[0]
+        build = run.call_args_list[1].args[0]
+        self.assertIn("windows-winui", configure)
+        self.assertIn("Release", build)
+        self.assertEqual(result.preset, "windows-winui")
+
     def test_windows_clean_uses_extended_length_path(self):
         build_path = mock.MagicMock(spec=Path)
         build_path.resolve.return_value = Path(r"C:\local\aobus-build")
@@ -265,6 +317,18 @@ class CliParseTest(unittest.TestCase):
                     build_command.do_build(args, [])
 
         self.assertIn("-DAOBUS_ENABLE_ASAN=ON", run.call_args_list[0].args[0])
+
+    def test_non_debug_flavors_reject_sanitizers_before_configure(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            for flavor in ("release", "profile"):
+                for flag in ("--asan", "--tsan"):
+                    with self.subTest(flavor=flavor, flag=flag):
+                        args = self.parse(["build", flavor, flag])
+                        with mock.patch.object(build_command, "run") as run:
+                            with self.assertRaisesRegex(SystemExit, "1"):
+                                build_command.do_build(args, [])
+
+                        run.assert_not_called()
 
     def test_windows_tsan_build_is_rejected_before_configure(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -463,12 +527,13 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_not_called()
 
-    def test_check_runs_the_same_all_suite_group(self):
-        args = self.parse(["check"])
+    def test_release_check_runs_the_same_all_suite_group(self):
+        args = self.parse(["check", "release"])
         result = BuildResult(
-            build_dir=Path("/tmp/aobus-test-build"),
-            log=Path("/tmp/aobus-test-build/build.log"),
+            build_dir=Path("/tmp/aobus-release-build"),
+            log=Path("/tmp/aobus-release-build/build.log"),
             compiler="gcc",
+            preset="linux-release",
         )
 
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
@@ -486,6 +551,15 @@ class CliParseTest(unittest.TestCase):
             tsan=False,
             log=result.log,
         )
+
+    def test_profile_check_delegates_to_build_with_an_explicit_empty_target_list(self):
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
+            args = self.parse(["check", "profile"])
+            with mock.patch.object(check_command.build, "run_command", return_value=0) as run_build:
+                self.assertEqual(check_command.run_command(args), 0)
+
+        self.assertEqual(args.target, [])
+        run_build.assert_called_once_with(args)
 
     def test_tsan_check_builds_and_runs_only_baselined_suites(self):
         args = self.parse(["check", "--tsan"])
@@ -573,6 +647,58 @@ class CliParseTest(unittest.TestCase):
             tsan=False,
             log=result.log,
         )
+
+    def test_windows_check_derives_winui_sibling_from_build_dir_override(self):
+        primary_dir = Path("C:/local/aobus-native")
+        result = BuildResult(
+            build_dir=primary_dir,
+            log=primary_dir / "build.log",
+            compiler="msvc",
+            preset="windows-debug",
+        )
+        winui_result = BuildResult(
+            build_dir=Path("C:/local/aobus-native-winui"),
+            log=Path("C:/local/aobus-native-winui/build.log"),
+            compiler="msvc",
+            preset="windows-winui",
+        )
+
+        with mock.patch.dict("os.environ", {"BUILD_DIR": str(primary_dir)}, clear=False):
+            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+                args = self.parse(["check"])
+                with mock.patch.object(check_command.build, "do_build", side_effect=(result, winui_result)) as do_build:
+                    with mock.patch.object(check_command.dependency_policy, "verified_report"):
+                        with mock.patch.object(check_command.test, "run_suites", return_value=0):
+                            with mock.patch.object(check_command.build, "print_summary"):
+                                self.assertEqual(check_command.run_command(args), 0)
+
+        winui_args = do_build.call_args_list[1].args[0]
+        self.assertEqual(Path(winui_args.path), Path("C:/local/aobus-native-winui"))
+
+    def test_windows_check_derives_winui_sibling_from_explicit_path(self):
+        primary_dir = Path("C:/local/explicit-native")
+        with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
+            args = self.parse(["check", "-p", str(primary_dir)])
+            result = BuildResult(
+                build_dir=primary_dir,
+                log=primary_dir / "build.log",
+                compiler="msvc",
+                preset="windows-debug",
+            )
+            winui_result = BuildResult(
+                build_dir=Path("C:/local/explicit-native-winui"),
+                log=Path("C:/local/explicit-native-winui/build.log"),
+                compiler="msvc",
+                preset="windows-winui",
+            )
+            with mock.patch.object(check_command.build, "do_build", side_effect=(result, winui_result)) as do_build:
+                with mock.patch.object(check_command.dependency_policy, "verified_report"):
+                    with mock.patch.object(check_command.test, "run_suites", return_value=0):
+                        with mock.patch.object(check_command.build, "print_summary"):
+                            self.assertEqual(check_command.run_command(args), 0)
+
+        winui_args = do_build.call_args_list[1].args[0]
+        self.assertEqual(Path(winui_args.path), Path("C:/local/explicit-native-winui"))
 
     def test_tsan_defaults_to_the_baselined_suite_group(self):
         args = self.parse(["test", "--tsan", "-n", "-p", "/tmp/aobus-test-build"])

@@ -10,6 +10,13 @@
 
 namespace ao::library::detail
 {
+  /**
+   * Diagnostic access to the exact bytes supplied to TrackView.
+   *
+   * Raw access deliberately bypasses the decoded-accessor validity contract:
+   * absent and structurally invalid sides remain inspectable by diagnostic
+   * commands and validators.
+   */
   struct TrackViewRawAccess final
   {
     static std::span<std::byte const> hotData(TrackView const& view) noexcept { return view.hotData(); }

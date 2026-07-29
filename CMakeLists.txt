@@ -30,6 +30,24 @@ option(AOBUS_BUILD_TUI "Build the terminal frontend" ON)
 option(AOBUS_BUILD_WINUI "Build the Windows WinUI 3 frontend" OFF)
 
 include(cmake/CompilerOptions.cmake)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR "Release" IN_LIST CMAKE_CONFIGURATION_TYPES)
+  if(AOBUS_ENABLE_ASAN OR AOBUS_ENABLE_TSAN)
+    message(FATAL_ERROR
+      "Release configurations always use IPO and cannot be combined with sanitizers")
+  endif()
+
+  include(CheckIPOSupported)
+  check_ipo_supported(
+    RESULT AOBUS_IPO_SUPPORTED
+    OUTPUT AOBUS_IPO_ERROR
+    LANGUAGES CXX)
+  if(NOT AOBUS_IPO_SUPPORTED)
+    message(FATAL_ERROR "IPO is not supported by this toolchain: ${AOBUS_IPO_ERROR}")
+  endif()
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+endif()
+
 include(cmake/Dependencies.cmake)
 include(cmake/Gperf.cmake)
 

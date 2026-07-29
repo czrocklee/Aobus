@@ -19,19 +19,7 @@ namespace ao::uimodel::detail
     {
     }
 
-    bool update(rt::PlaybackTransportSnapshot const& transport) noexcept
-    {
-      if (transport.transport == _transport && transport.positionRevision == _positionRevision &&
-          transport.duration == _duration)
-      {
-        return false;
-      }
-
-      _transport = transport.transport;
-      _positionRevision = transport.positionRevision;
-      _duration = transport.duration;
-      return true;
-    }
+    bool update(rt::PlaybackTransportSnapshot const& transport) noexcept;
 
   private:
     audio::Transport _transport = audio::Transport::Idle;

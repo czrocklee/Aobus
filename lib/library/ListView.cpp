@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/ListView.h>
+
 #include <ao/CoreIds.h>
 #include <ao/library/ListLayout.h>
-#include <ao/library/ListView.h>
 #include <ao/utility/ByteView.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -28,6 +31,12 @@ namespace ao::library
       return true;
     }
   } // namespace
+
+  TrackId ListView::OrderTrackIdProxy::at(std::size_t index) const noexcept
+  {
+    gsl_Expects(index < _trackIds.size());
+    return _trackIds[index];
+  }
 
   ListView::ListView(std::span<std::byte const> data) noexcept
     : _payload{data}

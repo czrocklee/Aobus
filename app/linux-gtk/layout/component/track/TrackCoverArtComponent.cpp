@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
+#include "app/GtkUiDependencies.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"

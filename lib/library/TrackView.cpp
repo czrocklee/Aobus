@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/TrackView.h>
+
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
-#include <ao/library/TrackView.h>
 #include <ao/utility/ByteView.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -21,6 +25,186 @@ namespace ao::library
   {
     constexpr std::size_t kSerializedAlignmentBytes = 4;
   } // namespace
+
+  CoverArt CoverArtProxy::at(std::uint16_t index) const noexcept
+  {
+    gsl_Expects(index < count());
+    auto const& entry = _entries[index];
+    return {.resourceId = entry.id, .type = static_cast<PictureType>(entry.type)};
+  }
+
+  std::optional<CoverArt> CoverArtProxy::primary() const noexcept
+  {
+    if (empty())
+    {
+      return std::nullopt;
+    }
+
+    if (auto it = std::ranges::find(*this, PictureType::FrontCover, &CoverArt::type); it != end())
+    {
+      return *it;
+    }
+
+    return *begin();
+  }
+
+  CoverArtProxy::Iterator CoverArtProxy::begin() const
+  {
+    return Iterator{_entries.data()};
+  }
+
+  CoverArtProxy::Iterator CoverArtProxy::end() const
+  {
+    auto const* end = _entries.data();
+
+    if (end != nullptr)
+    {
+      end += _entries.size();
+    }
+
+    return Iterator{end};
+  }
+
+  CustomMetadataProxy::Iterator CustomMetadataProxy::begin() const
+  {
+    return {entries().data(), _payload};
+  }
+
+  CustomMetadataProxy::Iterator CustomMetadataProxy::end() const
+  {
+    auto customEntries = entries();
+    auto const* end = customEntries.data();
+
+    if (end != nullptr)
+    {
+      end += customEntries.size();
+    }
+
+    return {end, _payload};
+  }
+
+  std::optional<std::string_view> CustomMetadataProxy::get(DictionaryId dictionaryId) const noexcept
+  {
+    constexpr std::size_t kSearchThreshold = 64;
+    auto customEntries = entries();
+
+    if (customEntries.size() < kSearchThreshold)
+    {
+      if (auto it = std::ranges::find(customEntries, dictionaryId, &Entry::keyId); it != customEntries.end())
+      {
+        return value(_payload, *it);
+      }
+
+      return std::nullopt;
+    }
+
+    if (auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
+        it != customEntries.end() && it->keyId == dictionaryId)
+    {
+      return value(_payload, *it);
+    }
+
+    return std::nullopt;
+  }
+
+  bool CustomMetadataProxy::contains(DictionaryId dictionaryId) const noexcept
+  {
+    constexpr std::size_t kSearchThreshold = 64;
+    auto customEntries = entries();
+
+    if (customEntries.size() < kSearchThreshold)
+    {
+      return std::ranges::find(customEntries, dictionaryId, &Entry::keyId) != customEntries.end();
+    }
+
+    auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
+    return it != customEntries.end() && it->keyId == dictionaryId;
+  }
+
+  std::span<CustomMetadataProxy::Entry const> CustomMetadataProxy::entries() const noexcept
+  {
+    if (_payload.empty())
+    {
+      return {};
+    }
+
+    auto const entryBytes = static_cast<std::size_t>(count()) * sizeof(Entry);
+    return utility::layout::viewArray<Entry>(_payload.subspan(sizeof(CustomMetadataBlockHeader), entryBytes));
+  }
+
+  std::string_view CustomMetadataProxy::value(std::span<std::byte const> payload, Entry const& entry) noexcept
+  {
+    auto const valueOffset = static_cast<std::size_t>(entry.valueOffset);
+    auto const valueLength = static_cast<std::size_t>(entry.valueLength);
+
+    // Per-entry clamp: entry ranges are data, not gated structure, so one
+    // bounds check per access keeps garbage entries memory-safe.
+    if (valueOffset > payload.size() || valueLength > payload.size() - valueOffset)
+    {
+      return {};
+    }
+
+    return utility::bytes::stringView(payload.subspan(valueOffset, valueLength));
+  }
+
+  std::string_view TrackView::MetadataProxy::title() const noexcept
+  {
+    auto const& header = _track.hotHeader();
+
+    return utility::bytes::stringView(
+      _track._hotData.subspan(sizeof(TrackHotHeader) + header.tagLength, header.titleLength));
+  }
+
+  DictionaryId TrackView::TagProxy::id(std::uint16_t index) const noexcept
+  {
+    gsl_Expects(index < count());
+    return _tagIds[index];
+  }
+
+  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
+  {
+    return std::ranges::contains(*this, tagIdToCheck);
+  }
+
+  TrackView::TagProxy TrackView::tags() const noexcept
+  {
+    auto const& header = hotHeader();
+
+    return TagProxy{
+      header.tagBloom,
+      utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), header.tagLength))};
+  }
+
+  TrackHotHeader const* TrackView::gateHot(std::span<std::byte const> hotData) noexcept
+  {
+    auto const* header = utility::bytes::tryLayout<TrackHotHeader>(hotData);
+
+    if (header == nullptr || sizeof(TrackHotHeader) + header->tagLength + header->titleLength > hotData.size() ||
+        header->tagLength % sizeof(DictionaryId) != 0)
+    {
+      return nullptr;
+    }
+
+    return header;
+  }
+
+  TrackHotHeader const& TrackView::hotHeader() const noexcept
+  {
+    gsl_Expects(_hotHeader != nullptr);
+    return *_hotHeader;
+  }
+
+  TrackColdHeader const& TrackView::coldHeader() const noexcept
+  {
+    return *requiredColdIndex().header;
+  }
+
+  TrackView::ColdIndex const& TrackView::requiredColdIndex() const noexcept
+  {
+    auto const& index = coldIndex();
+    gsl_Expects(index.header != nullptr);
+    return index;
+  }
 
   /**
    * O(1) cold gate: header fits and is aligned, the URI range stays inside
@@ -133,111 +317,29 @@ namespace ao::library
     return index;
   }
 
-  std::optional<CoverArt> CoverArtProxy::primary() const noexcept
+  CustomMetadataProxy::Iterator& CustomMetadataProxy::Iterator::operator++() noexcept
   {
-    if (empty())
-    {
-      return std::nullopt;
-    }
-
-    if (auto it = std::ranges::find(*this, PictureType::FrontCover, &CoverArt::type); it != end())
-    {
-      return *it;
-    }
-
-    return *begin();
+    ++_entry;
+    return *this;
   }
 
-  CoverArtProxy::Iterator CoverArtProxy::begin() const
+  CustomMetadataProxy::Iterator CustomMetadataProxy::Iterator::operator++(std::int32_t) noexcept
   {
-    return Iterator{_entries.data()};
+    auto result = *this;
+    ++_entry;
+    return result;
   }
 
-  CoverArtProxy::Iterator CoverArtProxy::end() const
+  CoverArtProxy::Iterator& CoverArtProxy::Iterator::operator++()
   {
-    auto const* end = _entries.data();
-
-    if (end != nullptr)
-    {
-      end += _entries.size();
-    }
-
-    return Iterator{end};
+    ++_entry;
+    return *this;
   }
 
-  std::string_view CustomMetadataProxy::value(std::span<std::byte const> payload, Entry const& entry) noexcept
+  CoverArtProxy::Iterator CoverArtProxy::Iterator::operator++(std::int32_t)
   {
-    auto const valueOffset = static_cast<std::size_t>(entry.valueOffset);
-    auto const valueLength = static_cast<std::size_t>(entry.valueLength);
-
-    // Per-entry clamp: entry ranges are data, not gated structure, so one
-    // bounds check per access keeps garbage entries memory-safe.
-    if (valueOffset > payload.size() || valueLength > payload.size() - valueOffset)
-    {
-      return {};
-    }
-
-    return utility::bytes::stringView(payload.subspan(valueOffset, valueLength));
-  }
-
-  std::optional<std::string_view> CustomMetadataProxy::get(DictionaryId dictionaryId) const noexcept
-  {
-    constexpr std::size_t kSearchThreshold = 64;
-    auto customEntries = entries();
-
-    if (customEntries.size() < kSearchThreshold)
-    {
-      if (auto it = std::ranges::find(customEntries, dictionaryId, &Entry::keyId); it != customEntries.end())
-      {
-        return value(_payload, *it);
-      }
-
-      return std::nullopt;
-    }
-
-    if (auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
-        it != customEntries.end() && it->keyId == dictionaryId)
-    {
-      return value(_payload, *it);
-    }
-
-    return std::nullopt;
-  }
-
-  bool CustomMetadataProxy::contains(DictionaryId dictionaryId) const noexcept
-  {
-    constexpr std::size_t kSearchThreshold = 64;
-    auto customEntries = entries();
-
-    if (customEntries.size() < kSearchThreshold)
-    {
-      return std::ranges::find(customEntries, dictionaryId, &Entry::keyId) != customEntries.end();
-    }
-
-    auto it = std::ranges::lower_bound(customEntries, dictionaryId, {}, &Entry::keyId);
-    return it != customEntries.end() && it->keyId == dictionaryId;
-  }
-
-  CustomMetadataProxy::Iterator CustomMetadataProxy::begin() const
-  {
-    return {entries().data(), _payload};
-  }
-
-  CustomMetadataProxy::Iterator CustomMetadataProxy::end() const
-  {
-    auto customEntries = entries();
-    auto const* end = customEntries.data();
-
-    if (end != nullptr)
-    {
-      end += customEntries.size();
-    }
-
-    return {end, _payload};
-  }
-
-  bool TrackView::TagProxy::has(DictionaryId tagIdToCheck) const noexcept
-  {
-    return std::ranges::contains(*this, tagIdToCheck);
+    auto result = *this;
+    ++_entry;
+    return result;
   }
 } // namespace ao::library

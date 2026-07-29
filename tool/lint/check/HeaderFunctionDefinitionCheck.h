@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#pragma once
+
+#include <clang-tidy/ClangTidyCheck.h>
+#include <clang-tidy/ClangTidyDiagnosticConsumer.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/Basic/LLVM.h>
+
+namespace clang::tidy::readability
+{
+  /// Keeps ordinary header-defined functions to an empty body or one simple
+  /// AST statement. Language-required template and compile-time definitions
+  /// remain visible at their use sites.
+  class HeaderFunctionDefinitionCheck final : public ClangTidyCheck
+  {
+  public:
+    HeaderFunctionDefinitionCheck(StringRef name, ClangTidyContext* context)
+      : ClangTidyCheck{name, context}
+    {
+    }
+
+    void registerMatchers(ast_matchers::MatchFinder* finder) override;
+    void check(ast_matchers::MatchFinder::MatchResult const& result) override;
+  };
+} // namespace clang::tidy::readability

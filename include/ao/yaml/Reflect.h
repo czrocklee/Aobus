@@ -95,19 +95,9 @@ namespace ao::yaml
     concept ReflectStruct = std::is_aggregate_v<Bare<T>> && (!ReflectScalar<T>) && (!ReflectEnum<T>) &&
                             (!ReflectOptional<T>) && (!ReflectSequence<T>) && (!ReflectMap<T>);
 
-    inline void writeQuotedString(ryml::NodeRef node, std::string_view value)
-    {
-      node |= ryml::VAL;
-      node |= ryml::VAL_DQUO;
-      setValue(node, value);
-    }
+    void writeQuotedString(ryml::NodeRef node, std::string_view value);
 
-    inline void writePlainScalar(ryml::NodeRef node, std::string_view value)
-    {
-      node |= ryml::VAL;
-      node |= ryml::VAL_PLAIN;
-      setValue(node, value);
-    }
+    void writePlainScalar(ryml::NodeRef node, std::string_view value);
 
     template<typename T>
     void writeValue(ryml::NodeRef node, T const& value);

@@ -7,11 +7,9 @@
 #include <ao/audio/Format.h>
 #include <ao/audio/RenderTarget.h>
 
-#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <span>
 
 namespace ao::audio::detail
@@ -22,38 +20,11 @@ namespace ao::audio::detail
     std::size_t positionStartBytes = 0;
     std::size_t positionBytes = 0;
 
-    void advance(std::size_t bytes) noexcept
-    {
-      bytesWritten += bytes;
-      positionBytes += bytes;
-    }
+    void advance(std::size_t bytes) noexcept;
 
-    void startNewPositionSegment() noexcept
-    {
-      positionStartBytes = bytesWritten;
-      positionBytes = 0;
-    }
+    void startNewPositionSegment() noexcept;
 
-    RenderPcmResult result(std::atomic<std::uint32_t> const& engineFrameBytes, bool drained = false) const noexcept
-    {
-      auto frameCount = [&engineFrameBytes](std::size_t bytes) noexcept
-      {
-        auto const bytesPerFrame = engineFrameBytes.load(std::memory_order_relaxed);
-
-        if (bytesPerFrame == 0U)
-        {
-          return std::uint32_t{0};
-        }
-
-        auto const frames = bytes / bytesPerFrame;
-        return static_cast<std::uint32_t>(std::min<std::size_t>(frames, std::numeric_limits<std::uint32_t>::max()));
-      };
-
-      return {.bytesWritten = bytesWritten,
-              .positionFrameOffset = frameCount(positionStartBytes),
-              .positionFrames = frameCount(positionBytes),
-              .drained = drained};
-    }
+    RenderPcmResult result(std::atomic<std::uint32_t> const& engineFrameBytes, bool drained = false) const noexcept;
   };
 
   template<typename IsActive, typename EnqueueSpliced>

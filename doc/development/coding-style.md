@@ -34,11 +34,17 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
       `doc/development/test/naming-and-assertion.md`.
   - 2.3. Headers
     - 2.3.1. Use `#pragma once`
-    - 2.3.2. Keep ordinary non-template function and method definitions in a
-      `.cpp` file. Definitions belong in headers only when the language requires
-      visibility at the use site, such as templates, selected `constexpr` or
-      `consteval` code, deduced return types, or deliberately tiny accessors on a
-      measured hot path.
+    - 2.3.2. Keep ordinary function and method definitions in a `.cpp` file.
+      The `aobus-readability-header-function-definition` check enforces the exceptions below from the AST, without classifying functions by name, accessor intent, token count, physical line count, or formatting.
+      - Function templates, definitions in a dependent template context, `constexpr`, `consteval`, deduced-return definitions, and defaulted or deleted functions may remain visible in a header.
+        A fully specialized definition that is no longer dependent follows the ordinary-function rules.
+      - An ordinary definition may remain in a header when its compound body is empty, including a constructor whose work is entirely in its member initializer list.
+      - An ordinary non-empty body may contain exactly one direct AST statement: a return statement, coroutine return statement, expression, or declaration statement.
+      - A single direct statement does not qualify when it contains a nested lambda, statement expression, or another locally defined executable body.
+        Control-flow statements and nested compound statements do not qualify.
+      - Explicit `inline` does not create an exception.
+        An out-of-class definition written in a header follows the same rules.
+      - Two statements remain two statements when written on one physical line, while one expression remains one statement when formatting spans several lines.
     - 2.3.3. Do not use an umbrella header to make unrelated fixtures, adapters,
       formatting support, or subsystem implementations transitively available.
       Include the narrow owning header at each use site.
@@ -145,7 +151,8 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
     - 3.4.7. Lambdas: Omit the empty parameter list `()` in lambdas that take no arguments (e.g., `[] { ... }` instead of `[]() { ... }`).
 - 4\. Best Practices
   - 4.1. Getters and Accessors
-    - 4.1.1. Keep trivial one-line getters and setters inline in headers
+    - 4.1.1. Keep a getter, setter, or other small function in a header only when its AST satisfies rule 2.3.2.
+      Function names and accessor intent do not create additional exceptions.
   - 4.2. Class Design
     - 4.2.1. Prefer `final` on concrete classes that are not designed for inheritance
       - This applies especially to POD structs such as `TrackHeader` and `ListHeader`

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -10,8 +10,6 @@
 #include <ao/library/CoverArt.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/utility/ByteView.h>
-
-#include <gsl-lite/gsl-lite.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -31,9 +29,6 @@ namespace ao::library
   {
     struct TrackViewRawAccess;
     class TrackColdReader;
-
-    inline constexpr TrackHotHeader kZeroTrackHotHeader{};
-    inline constexpr TrackColdHeader kZeroTrackColdHeader{};
   } // namespace detail
 
   /**
@@ -86,12 +81,7 @@ namespace ao::library
 
     std::uint16_t count() const noexcept { return static_cast<std::uint16_t>(_entries.size()); }
 
-    CoverArt at(std::uint16_t index) const noexcept
-    {
-      gsl_Expects(index < count());
-      auto const& entry = _entries[index];
-      return {.resourceId = entry.id, .type = static_cast<PictureType>(entry.type)};
-    }
+    CoverArt at(std::uint16_t index) const noexcept;
 
     /** Returns the front-cover entry, or the first entry, or nullopt if empty. */
     std::optional<CoverArt> primary() const noexcept;
@@ -142,16 +132,7 @@ namespace ao::library
     {
     }
 
-    std::span<Entry const> entries() const noexcept
-    {
-      if (_payload.empty())
-      {
-        return {};
-      }
-
-      auto const entryBytes = static_cast<std::size_t>(count()) * sizeof(Entry);
-      return utility::layout::viewArray<Entry>(_payload.subspan(sizeof(CustomMetadataBlockHeader), entryBytes));
-    }
+    std::span<Entry const> entries() const noexcept;
 
     static std::string_view value(std::span<std::byte const> payload, Entry const& entry) noexcept;
 
@@ -166,12 +147,15 @@ namespace ao::library
    * time; LMDB returns committed bytes unchanged, so the read path performs
    * only an O(1) structural gate per record side. The gate runs once per view
    * (hot eagerly, cold lazily) and establishes that every derived slice stays
-   * inside the record span. Accessors never throw and never read out of
-   * bounds: when a side is absent or fails its gate, that whole side reads as
-   * zero/empty values and isHotValid()/isColdValid() report false. Semantic
-   * corruption within the established bounds (for example unsorted custom
-   * metadata keys) is not detected here; deep structural verification lives
-   * in detail::TrackColdReader for diagnostics and tests.
+   * inside the record span. Hot and cold are independent, so partial views are
+   * valid; isHotValid()/isColdValid() may always be used to inspect which
+   * loaded side passed its gate. Calling a decoded accessor for an absent or
+   * structurally invalid side violates that accessor's precondition and fails
+   * fast through gsl_Expects. Optional blocks absent from an otherwise valid
+   * cold side still produce empty proxies and their documented default values.
+   * Semantic corruption within the established bounds (for example unsorted
+   * custom metadata keys) is not detected here; deep structural verification
+   * lives in detail::TrackColdReader for diagnostics and tests.
    *
    * The cold index is a lazy per-view mutable cache; views are intended for
    * single-threaded row access.
@@ -192,7 +176,7 @@ namespace ao::library
       }
 
       // From hot
-      std::string_view title() const noexcept { return _track.hotTitle(); }
+      std::string_view title() const noexcept;
       DictionaryId artistId() const noexcept { return _track.hotHeader().artistId; }
       DictionaryId albumId() const noexcept { return _track.hotHeader().albumId; }
       DictionaryId genreId() const noexcept { return _track.hotHeader().genreId; }
@@ -232,7 +216,7 @@ namespace ao::library
       std::chrono::milliseconds duration() const noexcept { return _track.coldHeader().duration; }
       Bitrate bitrate() const noexcept { return _track.coldHeader().bitrate; }
       Channels channels() const noexcept { return _track.coldHeader().channels; }
-      std::string_view uri() const noexcept { return utility::bytes::stringView(_track.coldIndex().uri); }
+      std::string_view uri() const noexcept { return utility::bytes::stringView(_track.requiredColdIndex().uri); }
 
     private:
       TrackView const& _track;
@@ -256,11 +240,7 @@ namespace ao::library
       std::uint16_t count() const noexcept { return static_cast<std::uint16_t>(_tagIds.size()); }
       std::uint32_t bloom() const noexcept { return _bloom; }
 
-      DictionaryId id(std::uint16_t index) const noexcept
-      {
-        gsl_Expects(index < count());
-        return _tagIds[index];
-      }
+      DictionaryId id(std::uint16_t index) const noexcept;
 
       DictionaryId const* begin() const noexcept { return _tagIds.data(); }
       DictionaryId const* end() const noexcept { return _tagIds.data() + _tagIds.size(); }
@@ -299,26 +279,16 @@ namespace ao::library
     MetadataProxy metadata() const noexcept { return MetadataProxy{*this}; }
     PropertyProxy property() const noexcept { return PropertyProxy{*this}; }
 
-    TagProxy tags() const noexcept
-    {
-      if (_hotHeader == nullptr)
-      {
-        return TagProxy{};
-      }
+    TagProxy tags() const noexcept;
 
-      return TagProxy{
-        _hotHeader->tagBloom,
-        utility::layout::viewArray<DictionaryId>(_hotData.subspan(sizeof(TrackHotHeader), _hotHeader->tagLength))};
-    }
-
-    ClassicalProxy classical() const noexcept { return ClassicalProxy{coldIndex().classical}; }
+    ClassicalProxy classical() const noexcept { return ClassicalProxy{requiredColdIndex().classical}; }
 
     CoverArtProxy coverArt() const noexcept
     {
-      return CoverArtProxy{utility::layout::viewArray<CoverArtEntry>(coldIndex().cover)};
+      return CoverArtProxy{utility::layout::viewArray<CoverArtEntry>(requiredColdIndex().cover)};
     }
 
-    CustomMetadataProxy customMetadata() const noexcept { return CustomMetadataProxy{coldIndex().custom}; }
+    CustomMetadataProxy customMetadata() const noexcept { return CustomMetadataProxy{requiredColdIndex().custom}; }
 
   private:
     /**
@@ -340,42 +310,13 @@ namespace ao::library
      * O(1) hot gate: header fits and is aligned, tag and title extents stay
      * inside the record, and the tag region is a whole number of IDs.
      */
-    static TrackHotHeader const* gateHot(std::span<std::byte const> hotData) noexcept
-    {
-      auto const* header = utility::bytes::tryLayout<TrackHotHeader>(hotData);
+    static TrackHotHeader const* gateHot(std::span<std::byte const> hotData) noexcept;
 
-      if (header == nullptr || sizeof(TrackHotHeader) + header->tagLength + header->titleLength > hotData.size() ||
-          header->tagLength % sizeof(DictionaryId) != 0)
-      {
-        return nullptr;
-      }
-
-      return header;
-    }
-
-    TrackHotHeader const& hotHeader() const noexcept
-    {
-      return _hotHeader != nullptr ? *_hotHeader : detail::kZeroTrackHotHeader;
-    }
-
-    TrackColdHeader const& coldHeader() const noexcept
-    {
-      auto const* header = coldIndex().header;
-      return header != nullptr ? *header : detail::kZeroTrackColdHeader;
-    }
-
-    std::string_view hotTitle() const noexcept
-    {
-      if (_hotHeader == nullptr)
-      {
-        return {};
-      }
-
-      return utility::bytes::stringView(
-        _hotData.subspan(sizeof(TrackHotHeader) + _hotHeader->tagLength, _hotHeader->titleLength));
-    }
+    TrackHotHeader const& hotHeader() const noexcept;
+    TrackColdHeader const& coldHeader() const noexcept;
 
     ColdIndex const& coldIndex() const noexcept { return _coldIndex.scanned ? _coldIndex : scanColdIndex(); }
+    ColdIndex const& requiredColdIndex() const noexcept;
     ColdIndex const& scanColdIndex() const noexcept;
 
     std::span<std::byte const> hotData() const noexcept { return _hotData; }
@@ -416,18 +357,9 @@ namespace ao::library
 
     ArrowProxy operator->() const { return ArrowProxy{**this}; }
 
-    Iterator& operator++() noexcept
-    {
-      ++_entry;
-      return *this;
-    }
+    Iterator& operator++() noexcept;
 
-    Iterator operator++(std::int32_t) noexcept
-    {
-      auto result = *this;
-      ++_entry;
-      return result;
-    }
+    Iterator operator++(std::int32_t) noexcept;
 
     bool operator==(Iterator const& other) const noexcept { return _entry == other._entry; }
 
@@ -453,18 +385,9 @@ namespace ao::library
 
     value_type operator*() const { return {.resourceId = _entry->id, .type = static_cast<PictureType>(_entry->type)}; }
 
-    Iterator& operator++()
-    {
-      ++_entry;
-      return *this;
-    }
+    Iterator& operator++();
 
-    Iterator operator++(std::int32_t)
-    {
-      auto result = *this;
-      ++_entry;
-      return result;
-    }
+    Iterator operator++(std::int32_t);
 
     bool operator==(Iterator const& other) const { return _entry == other._entry; }
 

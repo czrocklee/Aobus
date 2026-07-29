@@ -12,6 +12,9 @@ add_library(ao_audio STATIC
     detail/MappedFileCursor.cpp
     detail/Mp4PacketSource.cpp
     detail/OutputFormatValidation.cpp
+    detail/RenderPath.cpp
+    detail/RenderTimeline.cpp
+    detail/StreamingBufferPolicy.cpp
     Player.cpp
     QualityAnalyzer.cpp
     detail/Mpg123Runtime.cpp

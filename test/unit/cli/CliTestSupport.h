@@ -3,18 +3,11 @@
 
 #pragma once
 
-#include <ao/yaml/RymlAdapter.h>
+#include <ryml.hpp>
 
 #include <string_view>
 
 namespace ao::cli::test
 {
-  inline ryml::Tree parseYaml(std::string_view text)
-  {
-    auto state = yaml::ErrorCallbackState{};
-    auto tree = ryml::Tree{yaml::callbacks(state)};
-    yaml::parseInArena(tree, text, state);
-    tree.callbacks(yaml::callbacks());
-    return tree;
-  }
+  ryml::Tree parseYaml(std::string_view text);
 } // namespace ao::cli::test

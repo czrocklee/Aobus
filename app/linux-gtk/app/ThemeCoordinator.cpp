@@ -66,6 +66,17 @@ namespace ao::gtk
     reset();
   }
 
+  ThemeRegistrationToken& ThemeRegistrationToken::operator=(ThemeRegistrationToken&& other) noexcept
+  {
+    if (this != &other)
+    {
+      reset();
+      _registrationPtr = std::move(other._registrationPtr);
+    }
+
+    return *this;
+  }
+
   void ThemeRegistrationToken::reset()
   {
     if (_registrationPtr == nullptr)

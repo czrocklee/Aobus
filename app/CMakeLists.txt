@@ -12,6 +12,7 @@ add_library(ao_app_runtime STATIC
     runtime/library/LibraryYamlImporter.cpp
     runtime/library/LibraryYamlExporter.cpp
     runtime/completion/CompletionService.cpp
+    runtime/completion/CompletionText.cpp
     runtime/completion/QueryExpressionCompleter.cpp
     runtime/completion/MetadataValueCompleter.cpp
   runtime/source/AllTracksSource.cpp
@@ -22,6 +23,7 @@ add_library(ao_app_runtime STATIC
     runtime/playback/PlaybackSuccession.cpp
     runtime/PlaybackSessionYamlSchema.cpp
     runtime/PlaybackSessionPersistence.cpp
+    runtime/PlaybackSessionState.cpp
     runtime/playback/PlaybackService.cpp
     runtime/playback/PlaybackCursor.cpp
     runtime/playback/PlaybackCursorSession.cpp
@@ -55,7 +57,10 @@ add_library(ao_app_runtime STATIC
     runtime/projection/TrackProjectionEditScript.cpp
     runtime/projection/TrackDetailProjection.cpp
     runtime/source/TrackSource.cpp
+    runtime/source/TrackSourceDelta.cpp
     runtime/source/TrackSourceDeltaBuilder.cpp
+    runtime/source/TrackSourceLease.cpp
+    runtime/ScopedTimer.cpp
     runtime/ViewService.cpp
     runtime/Log.cpp
 )
@@ -84,6 +89,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/action/LayoutActionCatalog.cpp
     uimodel/layout/action/LayoutActionValidator.cpp
     uimodel/layout/component/AbsoluteCanvasGeometry.cpp
+    uimodel/layout/component/LayoutComponentActionPolicy.cpp
     uimodel/layout/component/LayoutComponentCatalog.cpp
     uimodel/layout/component/LayoutComponentState.cpp
     uimodel/layout/component/LayoutStatePromoter.cpp
@@ -144,6 +150,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/playback/output/OutputDeviceViewModel.cpp
     uimodel/playback/output/VolumeViewModel.cpp
     uimodel/playback/quality/AudioQualityFormatter.cpp
+    uimodel/playback/seek/PlaybackClockChangeFilter.cpp
     uimodel/playback/seek/PlaybackPositionInterpolator.cpp
     uimodel/playback/seek/PlaybackPositionViewModel.cpp
     uimodel/playback/seek/PlaybackTimeFormatter.cpp

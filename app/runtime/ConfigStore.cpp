@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/ConfigStore.h>
+
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
 #include <ao/utility/AtomicFile.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -63,6 +64,15 @@ namespace ao::rt
 
     root.remove_child(groupName);
     return commitCandidate(std::move(candidate));
+  }
+
+  Error ConfigStore::withGroupContext(Error error, std::string_view operation, std::string_view group)
+  {
+    error.message = std::format("Failed to {} config group '{}': {}",
+                                operation,
+                                yaml::boundedErrorContext(group),
+                                yaml::boundedErrorContext(error.message));
+    return error;
   }
 
   Result<> ConfigStore::ensureLoaded()

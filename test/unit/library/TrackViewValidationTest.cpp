@@ -128,18 +128,13 @@ namespace ao::library::test
       CHECK_FALSE(reader.isValid());
     }
 
-    /** The read gate must poison the whole cold side, record-granular. */
+    /** The read gate must reject the whole cold side, record-granular. */
     void checkColdGateRejects(std::vector<std::byte> const& data)
     {
       checkVerifierRejects(data);
 
       auto const view = TrackView{std::span<std::byte const>{}, data};
       CHECK_FALSE(view.isColdValid());
-      CHECK(view.metadata().trackNumber() == 0);
-      CHECK(view.property().uri().empty());
-      CHECK(view.classical().empty());
-      CHECK(view.coverArt().count() == 0);
-      CHECK(view.customMetadata().count() == 0);
     }
 
     /** The deep verifier rejects, but the read gate tolerates the record. */
@@ -186,10 +181,6 @@ namespace ao::library::test
 
       auto const view = TrackView{data, std::span<std::byte const>{}};
       CHECK_FALSE(view.isHotValid());
-      CHECK(view.metadata().title().empty());
-      CHECK(view.metadata().artistId() == kInvalidDictionaryId);
-      CHECK(view.tags().count() == 0);
-      CHECK(view.tags().bloom() == 0);
     }
 
     SECTION("tag length overruns the record")
@@ -201,7 +192,6 @@ namespace ao::library::test
 
       auto const view = TrackView{data, std::span<std::byte const>{}};
       CHECK_FALSE(view.isHotValid());
-      CHECK(view.tags().count() == 0);
     }
 
     SECTION("tag region is not a whole number of tag IDs")
@@ -214,7 +204,6 @@ namespace ao::library::test
 
       auto const view = TrackView{data, std::span<std::byte const>{}};
       CHECK_FALSE(view.isHotValid());
-      CHECK(view.tags().count() == 0);
     }
   }
 
@@ -223,6 +212,25 @@ namespace ao::library::test
     auto const data = makeColdTrackViewData();
     auto const view = TrackView{std::span<std::byte const>{}, data};
     CHECK(view.isColdValid() == true);
+  }
+
+  TEST_CASE("TrackView - loaded tiers are independent accessor contracts", "[library][unit][track][validation]")
+  {
+    auto const hotData = makeHotTrackViewData("Hot only");
+    auto const hotView = TrackView{hotData, std::span<std::byte const>{}};
+    REQUIRE(hotView.isHotValid());
+    CHECK_FALSE(hotView.isColdValid());
+    CHECK(hotView.metadata().title() == "Hot only");
+    CHECK(hotView.tags().count() == 0);
+
+    auto const coldData = makeColdTrackViewData({}, {}, "cold-only.flac");
+    auto const coldView = TrackView{std::span<std::byte const>{}, coldData};
+    CHECK_FALSE(coldView.isHotValid());
+    REQUIRE(coldView.isColdValid());
+    CHECK(coldView.property().uri() == "cold-only.flac");
+    CHECK(coldView.classical().empty());
+    CHECK(coldView.coverArt().count() == 0);
+    CHECK(coldView.customMetadata().count() == 0);
   }
 
   TEST_CASE("TrackView - rejects null cold data", "[library][unit][track][validation]")
@@ -373,7 +381,7 @@ namespace ao::library::test
       checkColdGateRejects(data);
     }
 
-    SECTION("malformed cold structure poisons fixed cold fields too")
+    SECTION("malformed cold structure invalidates the complete cold side")
     {
       auto data = makeColdRecord({RawColdBlock{.payload = makeClassicalPayload()}});
       auto* header = utility::layout::viewMutable<TrackColdHeader>(data);
@@ -382,9 +390,6 @@ namespace ao::library::test
 
       auto const view = TrackView{std::span<std::byte const>{}, data};
       CHECK_FALSE(view.isColdValid());
-      CHECK(view.metadata().trackNumber() == 0);
-      CHECK(view.property().uri().empty());
-      CHECK(view.classical().empty());
     }
   }
 

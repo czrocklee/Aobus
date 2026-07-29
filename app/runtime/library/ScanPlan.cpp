@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/ScanPlan.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/rt/library/ScanPlan.h>
 
 #include <algorithm>
 #include <array>
@@ -59,6 +60,21 @@ namespace ao::rt
     }
 
     return *this;
+  }
+
+  std::size_t ScanPlan::count(ScanClassification classification) const noexcept
+  {
+    std::size_t count = 0;
+
+    for (auto const& item : _items)
+    {
+      if (item.classification == classification)
+      {
+        ++count;
+      }
+    }
+
+    return count;
   }
 
   Result<ScanPlan> ScanPlan::makeRelinkPlan(std::string_view oldUri, std::string_view newUri) &&

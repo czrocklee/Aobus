@@ -91,12 +91,7 @@ namespace ao::gtk::layout::editor
     // Tree Model columns
     struct ModelColumns : Gtk::TreeModel::ColumnRecord
     {
-      ModelColumns()
-      {
-        add(displayName);
-        add(type);
-        add(nodePtr);
-      }
+      ModelColumns();
 
       Gtk::TreeModelColumn<Glib::ustring> displayName;
       Gtk::TreeModelColumn<Glib::ustring> type;

@@ -16,8 +16,6 @@ class BuildDirTest(unittest.TestCase):
             {
                 "debug": "linux-debug",
                 "release": "linux-release",
-                "pgo1": "linux-pgo-profile",
-                "pgo2": "linux-pgo-optimize",
                 "profile": "profile",
             },
         )
@@ -97,6 +95,42 @@ class BuildDirTest(unittest.TestCase):
             self.assertEqual(
                 builddir.winui_build_dir("nt"),
                 builddir.windows_build_root() / "windows-winui",
+            )
+
+    def test_winui_companion_uses_default_tree_without_an_exact_primary_override(self):
+        environment = {
+            "AOBUS_STATE_ROOT": "C:/Users/Alice/AppData/Local/Aobus",
+            "AOBUS_CHECKOUT_ID": "checkout-a",
+        }
+        with mock.patch.dict("os.environ", environment, clear=True):
+            self.assertEqual(
+                builddir.winui_companion_build_dir(
+                    builddir.build_dir("debug", os_name="nt"),
+                    primary_path_was_explicit=False,
+                    os_name="nt",
+                ),
+                builddir.windows_build_root() / "windows-winui",
+            )
+
+    def test_winui_companion_is_a_sibling_of_an_exact_primary_tree(self):
+        primary = Path("C:/build/aobus-native")
+
+        with mock.patch.dict("os.environ", {"BUILD_DIR": "C:/ignored-environment-tree"}, clear=True):
+            self.assertEqual(
+                builddir.winui_companion_build_dir(
+                    primary,
+                    primary_path_was_explicit=True,
+                    os_name="nt",
+                ),
+                Path("C:/build/aobus-native-winui"),
+            )
+            self.assertEqual(
+                builddir.winui_companion_build_dir(
+                    Path("C:/ignored-environment-tree"),
+                    primary_path_was_explicit=False,
+                    os_name="nt",
+                ),
+                Path("C:/ignored-environment-tree-winui"),
             )
 
     def test_linux_profile_exposes_only_baselined_tsan_suites(self):
@@ -191,14 +225,6 @@ class BuildDirTest(unittest.TestCase):
                 builddir.build_dir("debug", clang=True, asan=True, os_name="posix"),
                 root / "debug-clang-asan",
             )
-
-    def test_pgo_steps_share_one_tree(self):
-        with mock.patch.dict("os.environ", {}, clear=False):
-            os.environ.pop("BUILD_DIR", None)
-            os.environ.pop("AOBUS_BUILD_ROOT", None)
-            root = Path("/tmp/build") / builddir.PROJECT_ROOT.name
-            self.assertEqual(builddir.build_dir("pgo1", os_name="posix"), builddir.build_dir("pgo2", os_name="posix"))
-            self.assertEqual(builddir.build_dir("pgo1", clang=True, os_name="posix"), root / "pgo-clang")
 
     def test_build_dir_env_always_wins(self):
         # External tooling can redirect builds via BUILD_DIR.

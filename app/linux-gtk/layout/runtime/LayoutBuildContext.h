@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "app/GtkUiDependencies.h"
 #include "layout/runtime/LayoutRuntimeState.h"
+#include <ao/uimodel/layout/component/LayoutComponentState.h>
 
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
@@ -19,6 +19,11 @@
 namespace ao::rt
 {
   class AppRuntime;
+}
+
+namespace ao::gtk
+{
+  struct GtkUiDependencies;
 }
 
 namespace ao::gtk::layout
@@ -67,15 +72,7 @@ namespace ao::gtk::layout
       return _runtimeState == nullptr ? *_document : _runtimeState->componentState;
     }
 
-    std::uint64_t generation() const noexcept
-    {
-      if (_hasGenerationOverride)
-      {
-        return _generation;
-      }
-
-      return _runtimeState->componentStateGeneration;
-    }
+    std::uint64_t generation() const noexcept;
 
     bool isEditMode() const noexcept { return _runtimeState == nullptr ? _editMode : _runtimeState->editMode; }
 
@@ -84,11 +81,7 @@ namespace ao::gtk::layout
       return _runtimeState == nullptr ? _onNodeMoved : _runtimeState->onNodeMoved;
     }
 
-    void overrideGeneration(std::uint64_t generation) noexcept
-    {
-      _generation = generation;
-      _hasGenerationOverride = true;
-    }
+    void overrideGeneration(std::uint64_t generation) noexcept;
 
   private:
     LayoutRuntimeState const* _runtimeState = nullptr;

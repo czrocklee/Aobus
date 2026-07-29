@@ -58,18 +58,28 @@ is therefore the combination of Linux and Windows runs:
 - Windows owns WASAPI and other Windows-only translation units.
 - Shared translation units are intentionally checked on both hosts.
 
-Changed-file, folder, and `--all` scopes print a deferred-files summary for
-translation units absent from the current host's `compile_commands.json`, then
-continue with the files that are natively covered. Explicitly requesting an
-uncovered translation unit fails. A header uses a same-component implementation
-with the same stem (including a recognized platform suffix such as `Windows`,
-`Linux`, or `Posix`). The portal copies that implementation's native compiler
-flags into a temporary compilation database and checks the header itself as the
-main file. On Windows, it removes the translation unit's `/TP` after replacing
-the input because the header invocation supplies `-x c++-header` explicitly. A
-header without a safe companion is deferred. These rules cover main-file-only
-checks and prevent clang-tidy's fallback to a nearby but unrelated compile
-command from producing a false green result.
+Changed-file, folder, and `--all` scopes may defer only files that are incompatible with the current host, such as WinUI or WASAPI code on Linux and GTK, ALSA, or PipeWire code on Windows.
+The portal prints those platform deferrals and continues with the native files.
+An explicitly selected uncovered file always fails.
+If any project file is compatible with the current host but lacks an exact translation-unit command or proven header consumer, every scope fails before running a partial tidy pass.
+Run the normal `./ao build` or `./ao check` workflow (`ao.bat` on Windows) to refresh the debug compilation database and Ninja dependencies, then rerun tidy.
+
+A header first uses a same-component implementation with the same stem, including a recognized platform suffix such as `Windows`, `Linux`, or `Posix`.
+When no paired implementation exists, the portal reads the native Ninja dependency graph and selects the lexicographically first repository translation unit that actually consumed the header.
+With the default build selection, this read-only lookup consults the dedicated tidy Ninja tree and an existing normal debug tree: `debug` on Linux or `windows-debug` on Windows.
+Each dependency tree uses its own `compile_commands.json` output-to-translation-unit mapping, including when an MSVC dependency record names only an object output and omits the source.
+The selected consumer must also exist in the primary tidy compilation database, and the header always borrows the exact command from that primary database rather than flags from the dependency-only tree.
+The portal never builds the full product graph merely to populate dependency records.
+
+`-p` and `BUILD_DIR` keep dependency lookup scoped to the selected build state instead of silently consulting the default debug tree.
+The audited Visual Studio WinUI companion tree remains the existing exception: an explicit Windows tidy tree uses its `-winui` sibling.
+Visual Studio-only WinUI headers use a small audited companion map because that generator does not provide the Ninja dependency graph.
+
+The portal copies the selected native compiler flags into a temporary compilation database and checks the header itself as the main file.
+On Windows, it removes the translation unit's `/TP` after replacing the input because the header invocation supplies `-x c++-header` explicitly.
+A platform-incompatible header without a safe paired implementation, real Ninja consumer, or audited WinUI companion is deferred in a batch scan.
+A compatible header without that evidence fails closed and reports that the normal build or check must refresh dependency data.
+These rules cover main-file-only checks and prevent clang-tidy's fallback to a nearby but unrelated compile command from producing a false green result.
 
 Windows tidy uses the checkout-specific `windows-tidy` tree below the local
 Windows build root and the pinned official LLVM development archive. By
@@ -101,12 +111,11 @@ With `-p` or `BUILD_DIR`, the companion Visual Studio tree is the sibling whose
 name appends `-winui`; the default paths remain the checkout-specific
 `windows-tidy` and `windows-winui` trees.
 
-Before Clang replay, the portal removes only the exact `/Zc:preprocessor`, `/c`,
-and `/ZW:nostdlib` driver tokens from the temporary merged database.
-The first flag enables the standards-conforming MSVC preprocessor in real
-product builds, where it remains required, while the latter two describe MSVC
-compile behavior that the clang-tidy driver already establishes.
-Clang rejects all three as unused driver arguments.
+Before Clang replay, the portal removes only the exact `/Zc:preprocessor`, `/c`, `/ZW:nostdlib`, and `/GL` driver tokens from the temporary merged database.
+The first flag enables the standards-conforming MSVC preprocessor in real product builds, where it remains required.
+The next two describe MSVC compile behavior that the clang-tidy driver already establishes.
+The Windows tidy host tree is a Release/IPO build, but clang-cl replays one translation unit for analysis and cannot consume the `/GL` link-time code-generation request from the real compile command.
+Clang rejects or reports these exact tokens as unused driver arguments during analysis.
 Related spellings such as `/Zc:preprocessor-` are not removed.
 
 Header checks reuse the exact native implementation command but remove the
@@ -116,7 +125,7 @@ The portal keeps other forced includes, supplies `-x c++-header`, and suppresses
 only the nonportable-include-path compiler diagnostic for WinUI because
 generated C++/WinRT headers preserve schema casing while Windows resolves paths
 case-insensitively.
-Three intentional WinUI header-only support files have audited implementation
+Intentional WinUI header-only support files have audited implementation
 companions in the portal so the complete WinUI source folder has no deferred
 headers.
 
@@ -135,6 +144,22 @@ time to use one already extracted copy of the exact archive, for example on an
 offline machine. A pre-extracted root must contain the LLVM and Clang CMake
 packages, static libraries, tools, and resource headers; configuration fails
 closed when any required SDK file is missing.
+
+## Header function definitions
+
+`aobus-readability-header-function-definition` keeps concrete implementation out of headers so ordinary builds, tests, and lint runs do not repeatedly parse and instantiate the same implementation.
+The [C++ coding style](coding-style.md) owns the exact pure-AST contract.
+The checker does not infer getters or setters, count source lines or tokens, or treat explicit `inline` as permission.
+
+The checker diagnoses definitions in the selected project header while ignoring system and generated headers, implicit compiler declarations, and lambda call operators.
+Included headers are not diagnosed as though they were the selected main file.
+Moving a definition also requires choosing an owning implementation target, so the checker is diagnostic-only and does not offer an automatic fix.
+
+Keep the repository at zero findings rather than adding a baseline allowlist.
+A function does not receive an exception merely because it appears small or is assumed to be performance-sensitive.
+Move it to the owning implementation file and validate optimized behavior with the `release` workflow in [Optimized builds](optimized-builds.md).
+Suppress this checker only after a stable benchmark demonstrates a material regression that IPO does not recover.
+Such a suppression must name the benchmark and summarize the measured result in an adjacent English comment; file-level suppression and project allowlists are not acceptable.
 
 ## Triage
 

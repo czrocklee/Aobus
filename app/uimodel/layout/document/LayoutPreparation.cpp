@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
+
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -214,9 +215,11 @@ namespace ao::uimodel
       }
 
       constexpr auto kSuffix = std::string_view{"..."};
-      text.resize(kMaximumTemplateDiagnosticBytes - kSuffix.size());
-      text += kSuffix;
-      return text;
+      auto result = std::string{};
+      result.reserve(kMaximumTemplateDiagnosticBytes);
+      result.append(text.data(), kMaximumTemplateDiagnosticBytes - kSuffix.size());
+      result.append(kSuffix);
+      return result;
     }
 
     Result<LayoutNode> makeTemplateDiagnostic(std::string message, TreeBudgetMeter& meter, std::string_view id = {})

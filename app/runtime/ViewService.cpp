@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/rt/ViewService.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Signal.h>
@@ -14,7 +16,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -414,7 +415,8 @@ namespace ao::rt
 
     for (auto const trackId : it->second.state.selection)
     {
-      if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold); optView)
+      if (auto const optView = reader.get(trackId, library::TrackStore::Reader::LoadMode::Cold);
+          optView && optView->isColdValid())
       {
         totalDuration += optView->property().duration();
       }

@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
+
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <algorithm>
 #include <chrono>
