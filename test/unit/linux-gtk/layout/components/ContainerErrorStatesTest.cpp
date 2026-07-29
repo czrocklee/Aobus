@@ -2,9 +2,11 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>

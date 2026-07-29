@@ -5,6 +5,7 @@
 #include <ao/Error.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
+#include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <array>

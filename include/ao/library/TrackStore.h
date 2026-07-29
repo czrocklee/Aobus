@@ -7,7 +7,6 @@
 #include <ao/Error.h>
 #include <ao/library/TrackView.h>
 #include <ao/lmdb/Database.h>
-#include <ao/utility/ByteView.h>
 
 #include <concepts>
 #include <cstddef>
@@ -18,7 +17,6 @@
 #include <optional>
 #include <ranges>
 #include <span>
-#include <string>
 #include <string_view>
 #include <utility>
 
@@ -32,40 +30,15 @@ namespace ao::library
   {
     class LibraryIdentity;
 
-    inline bool isFourByteAligned(std::span<std::byte const> bytes) noexcept
-    {
-      return utility::bytes::isAligned(bytes.data(), 4U);
-    }
+    bool isFourByteAligned(std::span<std::byte const> bytes) noexcept;
 
     // Write-side gate only. The size%4 invariant is load-bearing: together
     // with the 4-byte integer keys and LMDB's node layout it keeps every
     // value in the track databases 4-byte aligned, so read paths can map
     // records with typed views. Read paths do not re-check it; a record that
     // fails TrackView's structural gate reads as an invalid view instead.
-    inline Result<> validateSerializedTrackSize(std::size_t size, std::string_view label)
-    {
-      if ((size % 4U) != 0)
-      {
-        return makeError(Error::Code::CorruptData, std::string{label} + " track record size is not 4-byte aligned");
-      }
-
-      return {};
-    }
-
-    inline Result<> validateSerializedTrackBytes(std::span<std::byte const> bytes, std::string_view label)
-    {
-      if (auto sizeResult = validateSerializedTrackSize(bytes.size(), label); !sizeResult)
-      {
-        return sizeResult;
-      }
-
-      if (!isFourByteAligned(bytes))
-      {
-        return makeError(Error::Code::CorruptData, std::string{label} + " track record pointer is not 4-byte aligned");
-      }
-
-      return {};
-    }
+    Result<> validateSerializedTrackSize(std::size_t size, std::string_view label);
+    Result<> validateSerializedTrackBytes(std::span<std::byte const> bytes, std::string_view label);
   } // namespace detail
 
   /**

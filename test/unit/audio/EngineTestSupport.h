@@ -5,11 +5,12 @@
 
 #include "ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/BackendIds.h>
+#include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/Format.h>
+#include <ao/audio/PcmBlock.h>
 #include <ao/audio/PlaybackInput.h>
 
 #include <atomic>
@@ -17,64 +18,22 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <semaphore>
-#include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::audio::test
 {
-  inline Device makeEngineTestDevice(std::string_view id = "test-device")
-  {
-    return {.id = DeviceId{std::string{id}},
-            .displayName = "Test",
-            .description = "Test",
-            .isDefault = false,
-            .backendId = kBackendNone};
-  }
-
-  inline Format makeEngineTestFormat()
-  {
-    return {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-  }
-
-  inline Engine::PlaybackItem makePlaybackItem(std::filesystem::path path)
-  {
-    static auto nextId = std::atomic<std::uint64_t>{1};
-    return Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = nextId.fetch_add(1, std::memory_order_relaxed)},
-      .input = PlaybackInput{.filePath = std::move(path)},
-    };
-  }
-
-  inline Engine::PlaybackItem makePlaybackItem(PlaybackInput input)
-  {
-    static auto nextId = std::atomic<std::uint64_t>{100000};
-    return Engine::PlaybackItem{
-      .id = Engine::PlaybackItemId{.value = nextId.fetch_add(1, std::memory_order_relaxed)},
-      .input = std::move(input),
-    };
-  }
-
-  inline auto makeScriptedEngineDecoderFactory(Format fmt = makeEngineTestFormat())
-  {
-    return [fmt](auto const&, auto const&)
-    {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
-      auto data = std::vector(100, std::byte{0});
-
-      decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
-      return decPtr;
-    };
-  }
+  Device makeEngineTestDevice(std::string_view id = "test-device");
+  Format makeEngineTestFormat();
+  Engine::PlaybackItem makePlaybackItem(std::filesystem::path path);
+  Engine::PlaybackItem makePlaybackItem(PlaybackInput input);
+  DecoderFactoryFn makeScriptedEngineDecoderFactory(Format fmt = makeEngineTestFormat());
 
   struct ScriptedTrack final
   {
@@ -83,34 +42,8 @@ namespace ao::audio::test
     std::vector<std::byte> data;
   };
 
-  inline DecodedStreamInfo makeScriptedStreamInfo(Format format,
-                                                  AudioCodec codec = AudioCodec::Flac,
-                                                  bool isLossy = false)
-  {
-    return {.sourceFormat = format,
-            .outputFormat = format,
-            .duration = std::chrono::milliseconds{10},
-            .isLossy = isLossy,
-            .codec = codec};
-  }
-
-  inline auto makePathScriptedDecoderFactory(std::vector<ScriptedTrack> tracks)
-  {
-    return [tracks = std::move(tracks)](std::filesystem::path const& path, Format const&)
-    {
-      for (auto const& track : tracks)
-      {
-        if (track.path == path)
-        {
-          auto decPtr = std::make_unique<ScriptedDecoderSession>(track.info);
-          decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.endOfStream = true}});
-          return decPtr;
-        }
-      }
-
-      return std::unique_ptr<ScriptedDecoderSession>{};
-    };
-  }
+  DecodedStreamInfo makeScriptedStreamInfo(Format format, AudioCodec codec = AudioCodec::Flac, bool isLossy = false);
+  DecoderFactoryFn makePathScriptedDecoderFactory(std::vector<ScriptedTrack> tracks);
 
   // Tracks how many decoder sessions are live. Track preparation opens a
   // short-lived probe decoder and then the streaming decoder per track, so
@@ -121,29 +54,13 @@ namespace ao::audio::test
     std::atomic<std::size_t> created{0};
     std::atomic<std::size_t> destroyed{0};
 
-    std::size_t live() const
-    {
-      return created.load(std::memory_order_relaxed) - destroyed.load(std::memory_order_relaxed);
-    }
+    std::size_t live() const;
   };
 
   struct BlockingPreparationGate final
   {
-    void enterAndWait()
-    {
-      if (blocked.exchange(true, std::memory_order_relaxed))
-      {
-        return;
-      }
-
-      entered.release();
-      release.acquire();
-    }
-
-    bool waitForEntry(std::chrono::milliseconds timeout = std::chrono::seconds{5})
-    {
-      return entered.try_acquire_for(timeout);
-    }
+    void enterAndWait();
+    bool waitForEntry(std::chrono::milliseconds timeout = std::chrono::seconds{5});
 
     std::binary_semaphore entered{0};
     std::binary_semaphore release{0};
@@ -152,71 +69,14 @@ namespace ao::audio::test
     std::shared_ptr<std::atomic<std::size_t>> destroyedPtr = std::make_shared<std::atomic<std::size_t>>(0);
   };
 
-  inline auto makeBlockingPreparationDecoderFactory(std::shared_ptr<BlockingPreparationGate> gatePtr,
-                                                    std::filesystem::path blockedPath)
-  {
-    return [gatePtr = std::move(gatePtr), blockedPath = std::move(blockedPath)](
-             std::filesystem::path const& path, Format const&)
-    {
-      auto const isBlockedPath =
-        path == blockedPath || (!blockedPath.has_parent_path() && path.filename() == blockedPath);
-
-      if (isBlockedPath)
-      {
-        gatePtr->enterAndWait();
-      }
-
-      auto const format = Format{
-        .sampleRate = 44100,
-        .channels = 2,
-        .bitDepth = 16,
-        .isInterleaved = true,
-      };
-      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = format,
-        .outputFormat = format,
-        .duration = std::chrono::seconds{2},
-        .isLossy = false,
-        .codec = AudioCodec::Flac,
-      });
-      decoderPtr->setReadScript(
-        {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
-
-      if (isBlockedPath)
-      {
-        gatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
-        decoderPtr->setDestroyCounter(gatePtr->destroyedPtr);
-      }
-
-      return decoderPtr;
-    };
-  }
+  DecoderFactoryFn makeBlockingPreparationDecoderFactory(std::shared_ptr<BlockingPreparationGate> gatePtr,
+                                                         std::filesystem::path blockedPath);
 
   // Like makePathScriptedDecoderFactory, but every decoder it creates bumps the
   // shared life counters, so a test can observe that retired gapless sources
   // are reclaimed rather than accumulated across a continuous splice run.
-  inline auto makeCountingDecoderFactory(std::vector<ScriptedTrack> tracks,
-                                         std::shared_ptr<DecoderLifeCounters> countersPtr)
-  {
-    return [tracks = std::move(tracks), countersPtr = std::move(countersPtr)](
-             std::filesystem::path const& path, Format const&)
-    {
-      for (auto const& track : tracks)
-      {
-        if (track.path == path)
-        {
-          countersPtr->created.fetch_add(1, std::memory_order_relaxed);
-          auto destroyCounterPtr = std::shared_ptr<std::atomic<std::size_t>>{countersPtr, &countersPtr->destroyed};
-          auto decPtr = std::make_unique<ScriptedDecoderSession>(track.info);
-          decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.endOfStream = true}});
-          decPtr->setDestroyCounter(std::move(destroyCounterPtr));
-          return decPtr;
-        }
-      }
-
-      return std::unique_ptr<ScriptedDecoderSession>{};
-    };
-  }
+  DecoderFactoryFn makeCountingDecoderFactory(std::vector<ScriptedTrack> tracks,
+                                              std::shared_ptr<DecoderLifeCounters> countersPtr);
 
   // A ScriptedTrack plus an optional post-seek read script (see
   // ScriptedDecoderSession::setSeekReadScript).
@@ -232,47 +92,17 @@ namespace ao::audio::test
   // playback actually reads. Observation only: the engine owns the decoders,
   // so a recorded pointer may only be dereferenced while its track's source is
   // provably still alive.
-  inline auto makeRegisteringDecoderFactory(
+  DecoderFactoryFn makeRegisteringDecoderFactory(
     std::vector<RegisteredTrack> tracks,
-    std::shared_ptr<std::map<std::filesystem::path, ScriptedDecoderSession*>> registryPtr)
-  {
-    return [tracks = std::move(tracks), registryPtr = std::move(registryPtr)](
-             std::filesystem::path const& path, Format const&)
-    {
-      for (auto const& entry : tracks)
-      {
-        if (entry.track.path == path)
-        {
-          auto decPtr = std::make_unique<ScriptedDecoderSession>(entry.track.info);
-          decPtr->setReadScript({{.data = entry.track.data, .endOfStream = false}, {.endOfStream = true}});
-
-          if (entry.optSeekScript)
-          {
-            decPtr->setSeekReadScript(*entry.optSeekScript);
-          }
-
-          (*registryPtr)[path] = decPtr.get();
-          return decPtr;
-        }
-      }
-
-      return std::unique_ptr<ScriptedDecoderSession>{};
-    };
-  }
+    std::shared_ptr<std::map<std::filesystem::path, ScriptedDecoderSession*>> registryPtr);
 
   class StagedFailureGate final
   {
   public:
-    void notifyReadEntered() { _readEntered.release(); }
-
-    bool waitForRead(std::chrono::milliseconds timeout = std::chrono::seconds{5})
-    {
-      return _readEntered.try_acquire_for(timeout);
-    }
-
-    void waitForRelease() { _failureRelease.acquire(); }
-
-    void release() { _failureRelease.release(); }
+    void notifyReadEntered();
+    bool waitForRead(std::chrono::milliseconds timeout = std::chrono::seconds{5});
+    void waitForRelease();
+    void release();
 
   private:
     std::binary_semaphore _readEntered{0};
@@ -282,24 +112,10 @@ namespace ao::audio::test
   class [[nodiscard]] StagedFailureReleaseGuard final
   {
   public:
-    explicit StagedFailureReleaseGuard(StagedFailureGate& gate)
-      : _gate{gate}
-    {
-    }
+    explicit StagedFailureReleaseGuard(StagedFailureGate& gate);
+    ~StagedFailureReleaseGuard();
 
-    ~StagedFailureReleaseGuard()
-    {
-      if (_armed)
-      {
-        _gate.release();
-      }
-    }
-
-    void release()
-    {
-      _gate.release();
-      _armed = false;
-    }
+    void release();
 
     StagedFailureReleaseGuard(StagedFailureReleaseGuard const&) = delete;
     StagedFailureReleaseGuard& operator=(StagedFailureReleaseGuard const&) = delete;
@@ -314,63 +130,20 @@ namespace ao::audio::test
   class [[nodiscard]] StagedFailureDecoderSession final : public DecoderSession
   {
   public:
-    explicit StagedFailureDecoderSession(StagedFailureGate* failureGate)
-      : _failureGate{failureGate}
-    {
-    }
+    explicit StagedFailureDecoderSession(StagedFailureGate* failureGate);
 
-    Result<> open(std::filesystem::path const& /*path*/) noexcept override { return {}; }
-    void close() noexcept override {}
-    void flush() noexcept override {}
-    Result<> seek(std::chrono::milliseconds /*offset*/) noexcept override { return {}; }
-
-    Result<PcmBlock> readNextBlock() noexcept override
-    {
-      if (!_prerollReturned)
-      {
-        _prerollReturned = true;
-        return PcmBlock{
-          .bytes = _prerollBytes,
-          .bitDepth = 16,
-          .frames = kPrerollFrames,
-          .firstFrameIndex = 0,
-          .endOfStream = false,
-        };
-      }
-
-      if (_failureGate != nullptr && !_failureReturned)
-      {
-        _failureGate->notifyReadEntered();
-        _failureGate->waitForRelease();
-        _failureReturned = true;
-        return std::unexpected{Error{.code = Error::Code::IoError, .message = "gated staged decode failure"}};
-      }
-
-      return PcmBlock{.bitDepth = 16, .endOfStream = true};
-    }
-
-    DecodedStreamInfo streamInfo() const noexcept override
-    {
-      auto const format = Format{
-        .sampleRate = 44100,
-        .channels = 2,
-        .bitDepth = 16,
-        .isInterleaved = true,
-      };
-      return DecodedStreamInfo{
-        .sourceFormat = format,
-        .outputFormat = format,
-        .duration = std::chrono::seconds{3},
-        .isLossy = false,
-        .codec = AudioCodec::Flac,
-      };
-    }
+    Result<> open(std::filesystem::path const& path) noexcept override;
+    void close() noexcept override;
+    void flush() noexcept override;
+    Result<> seek(std::chrono::milliseconds offset) noexcept override;
+    Result<PcmBlock> readNextBlock() noexcept override;
+    DecodedStreamInfo streamInfo() const noexcept override;
 
     StagedFailureDecoderSession(StagedFailureDecoderSession const&) = delete;
     StagedFailureDecoderSession& operator=(StagedFailureDecoderSession const&) = delete;
     StagedFailureDecoderSession(StagedFailureDecoderSession&&) = delete;
     StagedFailureDecoderSession& operator=(StagedFailureDecoderSession&&) = delete;
-    ~StagedFailureDecoderSession() override = default;
+    ~StagedFailureDecoderSession() override;
 
   private:
     static constexpr std::uint32_t kPrerollFrames = 25000;
@@ -382,33 +155,14 @@ namespace ao::audio::test
     bool _failureReturned = false;
   };
 
-  inline auto makeStagedFailureDecoderFactory(std::filesystem::path failingPath, StagedFailureGate& failureGate)
-  {
-    return [failingPath = std::move(failingPath), &failureGate](std::filesystem::path const& path, Format const&)
-    { return std::make_unique<StagedFailureDecoderSession>(path == failingPath ? &failureGate : nullptr); };
-  }
+  DecoderFactoryFn makeStagedFailureDecoderFactory(std::filesystem::path failingPath, StagedFailureGate& failureGate);
 
   class CallbackLatch final
   {
   public:
-    void notify()
-    {
-      auto const lock = std::scoped_lock{_mutex};
-      ++_count;
-      _cv.notify_all();
-    }
-
-    bool waitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1})
-    {
-      auto lock = std::unique_lock{_mutex};
-      return _cv.wait_for(lock, timeout, [this, expected] { return _count >= expected; });
-    }
-
-    std::size_t count() const
-    {
-      auto const lock = std::scoped_lock{_mutex};
-      return _count;
-    }
+    void notify();
+    bool waitForCount(std::size_t expected, std::chrono::milliseconds timeout = std::chrono::seconds{1});
+    std::size_t count() const;
 
   private:
     mutable std::mutex _mutex;

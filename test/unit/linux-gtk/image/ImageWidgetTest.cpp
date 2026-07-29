@@ -7,7 +7,10 @@
 #include "image/ImageCache.h"
 #include "image/ResourceImageController.h"
 #include "image/ResourceImageLoader.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
@@ -148,7 +151,8 @@ namespace ao::gtk::test
 
       // ...then, once the settle window elapses, it is replaced by a fresh
       // full-quality re-render: a different texture object at the same size.
-      REQUIRE(pumpUntil([&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }));
+      REQUIRE(pumpGtkEventsUntil(
+        [&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }, std::chrono::seconds{5}));
 
       auto const settledPaintablePtr = widget.get_paintable();
       REQUIRE(settledPaintablePtr);
@@ -174,7 +178,8 @@ namespace ao::gtk::test
       REQUIRE(interimPaintablePtr);
       CHECK(interimPaintablePtr->get_intrinsic_width() == 64 * scaleFactor);
 
-      REQUIRE(pumpUntil([&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }));
+      REQUIRE(pumpGtkEventsUntil(
+        [&] { return widget.get_paintable().get() != interimPaintablePtr.get(); }, std::chrono::seconds{5}));
 
       auto const settledPaintablePtr = widget.get_paintable();
       REQUIRE(settledPaintablePtr);
@@ -399,7 +404,7 @@ namespace ao::gtk::test
 
       CHECK_FALSE(widget.showingPlaceholder());
       CHECK_FALSE(widget.hasImage());
-      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
+      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
       CHECK(loader.getFull(fullResourceId));
     }
 
@@ -420,7 +425,7 @@ namespace ao::gtk::test
         loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
 
       CHECK_FALSE(widget.hasImage());
-      REQUIRE(pumpUntil([&] { return missingSettled; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return missingSettled; }, std::chrono::seconds{5}));
       CHECK_FALSE(widget.hasImage());
     }
 
@@ -439,8 +444,8 @@ namespace ao::gtk::test
         loader.requestFull(missingId, [&](auto const&) { missingSettled = true; });
       controller.load(cachedId);
 
-      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
-      REQUIRE(pumpUntil([&] { return missingSettled; }));
+      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
+      REQUIRE(pumpGtkEventsUntil([&] { return missingSettled; }, std::chrono::seconds{5}));
       drainGtkEvents();
       CHECK(widget.hasImage());
     }
@@ -475,7 +480,8 @@ namespace ao::gtk::test
 
       auto const physicalSize =
         std::max(1, static_cast<std::int32_t>(std::ceil(static_cast<double>(kLogicalSize) * widget.displayScale())));
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, physicalSize)); }));
+      REQUIRE(pumpGtkEventsUntil(
+        [&] { return static_cast<bool>(loader.getThumbnail(resourceId, physicalSize)); }, std::chrono::seconds{5}));
 
       auto const cachedPtr = loader.getThumbnail(resourceId, physicalSize);
       REQUIRE(cachedPtr);
@@ -485,7 +491,7 @@ namespace ao::gtk::test
       CHECK(cachedPtr->get_height() <= expectedSide);
       CHECK(cachedPtr->get_width() < 256);
 
-      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
+      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
       CHECK(widget.hasImage());
     }
 
@@ -535,14 +541,15 @@ namespace ao::gtk::test
 
       // The shared loader still salvages the decode into the cache, while the
       // controller's destroyed request handle prevents the callback from touching it.
-      REQUIRE(pumpUntil([&] { return static_cast<bool>(loader.getThumbnail(resourceId, kLogicalSize)); }));
+      REQUIRE(pumpGtkEventsUntil(
+        [&] { return static_cast<bool>(loader.getThumbnail(resourceId, kLogicalSize)); }, std::chrono::seconds{5}));
 
       // The runtime remains usable afterwards.
       auto widget = CoverArtView{};
       auto controller = ResourceImageController{widget, loader};
       controller.enableThumbnailMode(kLogicalSize);
       controller.load(resourceId);
-      REQUIRE(pumpUntil([&] { return widget.hasImage(); }));
+      REQUIRE(pumpGtkEventsUntil([&] { return widget.hasImage(); }, std::chrono::seconds{5}));
       CHECK(widget.hasImage());
     }
   }

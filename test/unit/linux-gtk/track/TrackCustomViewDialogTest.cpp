@@ -3,7 +3,8 @@
 
 #include "track/TrackCustomViewDialog.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 

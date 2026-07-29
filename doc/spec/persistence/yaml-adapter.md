@@ -22,7 +22,8 @@ It provides reusable parsing and tree helpers to managed configuration, library 
 The [system architecture](../../architecture/system-overview.md) places reusable parsing mechanisms in Core libraries.
 The [persistence and managed-state architecture](../../architecture/persistence-and-managed-state.md) places `ao::yaml` below application runtime, UIModel, frontend stores, paths, and application schemas.
 
-The public implementation is split between the header-only low-level [`include/ao/yaml/RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) and the explicit serialization helpers in [`include/ao/yaml/Serialization.h`](../../../include/ao/yaml/Serialization.h), exposed through the `ao_utility` public include and RapidYAML dependency configured by [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt).
+The public implementation is split between declarations and type-dependent templates in [`include/ao/yaml/RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) and [`include/ao/yaml/Serialization.h`](../../../include/ao/yaml/Serialization.h), plus concrete definitions in [`lib/utility/RymlAdapter.cpp`](../../../lib/utility/RymlAdapter.cpp) and [`lib/utility/Serialization.cpp`](../../../lib/utility/Serialization.cpp).
+These surfaces are exposed through the `ao_utility` public include and RapidYAML dependency configured by [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt).
 It cannot depend on application runtime, UIModel, a frontend, logging policy, or an application payload type.
 
 Managed-state schemas are owner-local application code layered above the adapter.
@@ -233,8 +234,10 @@ A frontend file adapter may log or fall back only according to the specification
 
 ## Implementation map
 
-- [`RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) implements callback state, parsing, file reading, arena and borrowed-view helpers, strict scalar reads, and lenient accessors.
-- [`Serialization.h`](../../../include/ao/yaml/Serialization.h) implements node and key validation, explicit map/sequence composition, bounded field context, required fields, and arena-owning scalar writes.
+- [`RymlAdapter.h`](../../../include/ao/yaml/RymlAdapter.h) declares callback state, parsing, file reading, arena and borrowed-view helpers, strict scalar reads, and lenient accessors; type-dependent scalar conversions remain templates there.
+- [`RymlAdapter.cpp`](../../../lib/utility/RymlAdapter.cpp) defines the concrete low-level operations once in `ao_utility`.
+- [`Serialization.h`](../../../include/ao/yaml/Serialization.h) declares concrete serialization helpers and provides the type-dependent map and sequence templates.
+- [`Serialization.cpp`](../../../lib/utility/Serialization.cpp) defines concrete node and key validation, bounded field context, required-field lookup, and arena-owning scalar writes once in `ao_utility`.
 - [`lib/utility/CMakeLists.txt`](../../../lib/utility/CMakeLists.txt) exposes the Core include path and RapidYAML dependency through `ao_utility`.
 - [`ConfigStore.cpp`](../../../app/runtime/ConfigStore.cpp), [`LibraryYamlImporter.cpp`](../../../app/runtime/library/LibraryYamlImporter.cpp), [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp), and [`LayoutPresets.cpp`](../../../app/linux-gtk/layout/document/LayoutPresets.cpp) are representative parsing boundaries.
 - Owner-local runtime, UIModel, and frontend schemas reuse these primitives; [`Reflect.h`](../../../include/ao/yaml/Reflect.h) remains a separate one-way output helper.

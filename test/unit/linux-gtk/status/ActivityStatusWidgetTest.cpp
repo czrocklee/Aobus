@@ -3,7 +3,9 @@
 
 #include "status/ActivityStatusWidget.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>

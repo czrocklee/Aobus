@@ -3,7 +3,8 @@
 
 #include "playback/AudioPipelinePanel.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/audio/Format.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>

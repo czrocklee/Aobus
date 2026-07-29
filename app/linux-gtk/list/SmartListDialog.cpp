@@ -30,6 +30,7 @@
 #include <ao/uimodel/library/list/SmartListEditorModel.h>
 #include <ao/uimodel/library/list/SmartListTrackPresentationResolver.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>

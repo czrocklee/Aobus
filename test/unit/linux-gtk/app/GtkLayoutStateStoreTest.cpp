@@ -3,7 +3,7 @@
 
 #include "app/GtkLayoutStateStore.h"
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>

@@ -15,7 +15,7 @@ When creating a new test file:
 2. Add it to the correct target in `test/CMakeLists.txt`.
 3. Match namespace and include style of neighboring tests.
 4. Include only headers that are used.
-5. Check existing `*TestSupport.h` files and layer utilities such as `test/unit/RuntimeTestSupport.h` before creating a new shared helper.
+5. Check the focused `*TestSupport.h` files in the owning layer before creating a new shared helper; do not add an include-all umbrella.
 6. Keep file-scope helpers local unless multiple files need them.
 7. Do not create duplicate helper types and hide the conflict in a nested namespace; reuse or extend the existing helper instead.
 
@@ -48,6 +48,8 @@ variants of one contract that share an arrange (see *SECTION vs TEST_CASE* in
 `naming-and-assertions.md`). Splitting duplicates the arrange, so route genuinely shared
 setup into an existing `*TestSupport.h` rather than copying it — and do not hide a
 duplicate helper behind a nested namespace to dodge a collision.
+Keep its concrete implementation in the paired `.cpp` unless it must remain
+visible for template or compile-time semantics.
 
 Good split boundaries include:
 

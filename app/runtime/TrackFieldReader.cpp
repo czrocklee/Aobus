@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/TrackFieldReaderInternal.h"
-#include <ao/AudioCodec.h>
+#include <ao/AudioCodecText.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>

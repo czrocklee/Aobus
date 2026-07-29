@@ -3,9 +3,12 @@
 
 #include "playback/NowPlayingFieldLabel.h"
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/AppRuntime.h>
@@ -34,7 +37,8 @@ namespace ao::gtk::test
     TrackId addPlayableTrack(rt::AppRuntime& runtime, std::string title, std::string artist = {})
     {
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      return addRuntimeTrack(runtime, {.title = std::move(title), .artist = std::move(artist), .uri = fixturePath});
+      return addRuntimeTrack(
+        runtime, library::test::TrackSpec{.title = std::move(title), .artist = std::move(artist), .uri = fixturePath});
     }
 
     void startPlayback(rt::AppRuntime& runtime, TrackId const trackId)

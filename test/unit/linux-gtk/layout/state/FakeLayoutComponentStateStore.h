@@ -3,17 +3,16 @@
 
 #pragma once
 
-#include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string_view>
-#include <utility>
 
 namespace ao::uimodel
 {
-  struct LayoutDocument;
+  class PreparedLayout;
 }
 
 namespace ao::gtk::layout::test
@@ -21,43 +20,25 @@ namespace ao::gtk::layout::test
   class FakeLayoutComponentStateStore final : public uimodel::LayoutComponentStateStore
   {
   public:
-    std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override
-    {
-      if (_document.preset == presetId)
-      {
-        return _document;
-      }
+    FakeLayoutComponentStateStore();
+    ~FakeLayoutComponentStateStore() override;
 
-      return std::nullopt;
-    }
+    FakeLayoutComponentStateStore(FakeLayoutComponentStateStore const&) = delete;
+    FakeLayoutComponentStateStore& operator=(FakeLayoutComponentStateStore const&) = delete;
+    FakeLayoutComponentStateStore(FakeLayoutComponentStateStore&&) = delete;
+    FakeLayoutComponentStateStore& operator=(FakeLayoutComponentStateStore&&) = delete;
 
-    void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override
-    {
-      _document = doc;
-      _document.preset = presetId;
-      ++_saveCount;
-    }
+    std::optional<uimodel::LayoutComponentStateDocument> load(std::string_view presetId) const override;
+    void save(std::string_view presetId, uimodel::LayoutComponentStateDocument const& doc) override;
+    bool prune(std::string_view presetId, uimodel::PreparedLayout const& layout) override;
+    bool removePreset(std::string_view presetId) override;
 
-    bool prune(std::string_view /*presetId*/, uimodel::PreparedLayout const& /*layout*/) override { return false; }
-
-    bool removePreset(std::string_view presetId) override
-    {
-      if (_document.preset == presetId)
-      {
-        _document.components.clear();
-        return true;
-      }
-
-      return false;
-    }
-
-    uimodel::LayoutComponentStateDocument const& document() const noexcept { return _document; }
-    void setDocument(uimodel::LayoutComponentStateDocument doc) { _document = std::move(doc); }
-
-    std::int32_t saveCount() const noexcept { return _saveCount; }
+    uimodel::LayoutComponentStateDocument const& document() const noexcept;
+    void setDocument(uimodel::LayoutComponentStateDocument doc);
+    std::int32_t saveCount() const noexcept;
 
   private:
-    uimodel::LayoutComponentStateDocument _document{};
-    std::int32_t _saveCount = 0;
+    struct State;
+    std::unique_ptr<State> _statePtr;
   };
 } // namespace ao::gtk::layout::test

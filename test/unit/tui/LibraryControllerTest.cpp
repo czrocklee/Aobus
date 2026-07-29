@@ -3,9 +3,10 @@
 
 #include "tui/LibraryController.h"
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>

@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "DecoderTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/AudioCodec.h>

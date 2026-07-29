@@ -4,14 +4,15 @@
 #include "council/Substrate.h"
 
 #include "council/CouncilSchema.h"
-#include "council/Hash.h"
 #include "council/ProcessRunner.h"
 #include "council/Serialization.h"
 #include <ao/Error.h>
+#include <ao/utility/Xxh3.h>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -75,6 +76,45 @@ namespace ao::council
       "sh",
       "nix-shell",
     });
+
+    // Incremental 64-bit XXH3 used by tree canaries.
+    class TreeHash64 final
+    {
+    public:
+      void mix(std::string_view bytes) noexcept { _accumulator.mix(bytes); }
+
+      Result<> mixFile(std::filesystem::path const& path)
+      {
+        constexpr std::size_t kChunkSize = 8192;
+
+        auto input = std::ifstream{path, std::ios::binary};
+
+        if (!input.is_open())
+        {
+          return makeError(Error::Code::IoError, "cannot read " + path.string());
+        }
+
+        auto buffer = std::array<char, kChunkSize>{};
+
+        while (input)
+        {
+          input.read(buffer.data(), buffer.size());
+          mix(std::string_view{buffer.data(), static_cast<std::size_t>(input.gcount())});
+        }
+
+        if (input.bad())
+        {
+          return makeError(Error::Code::IoError, "cannot read " + path.string());
+        }
+
+        return {};
+      }
+
+      std::string hex() const { return _accumulator.hex(); }
+
+    private:
+      utility::Xxh3Accumulator64 _accumulator;
+    };
 
     void printWarningNoexcept(std::string_view message) noexcept
     {

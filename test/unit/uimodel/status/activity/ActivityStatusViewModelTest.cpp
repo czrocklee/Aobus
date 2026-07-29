@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>

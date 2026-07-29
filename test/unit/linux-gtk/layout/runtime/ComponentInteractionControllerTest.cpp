@@ -8,7 +8,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutRuntimeState.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionSlot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>

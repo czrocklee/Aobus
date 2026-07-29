@@ -3,47 +3,28 @@
 
 #pragma once
 
-#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
-#include <ao/Error.h>
-#include <ao/library/CoverArt.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/TrackBuilder.h>
-#include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
 
-#include <catch2/catch_test_macros.hpp>
-
-#include <algorithm>
 #include <chrono>
-#include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+namespace ao::library
+{
+  class MusicLibrary;
+  class TrackBuilder;
+  class TrackView;
+  class WriteTransaction;
+}
+
 namespace ao::library::test
 {
-  inline constexpr std::size_t kTestMusicLibraryMapSize = std::size_t{64} * 1024 * 1024;
-
-  inline MusicLibrary makeTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
-  {
-    return MusicLibrary{
-      std::move(musicRoot), std::move(databasePath), MusicLibrary::Options{.mapSize = kTestMusicLibraryMapSize}};
-  }
-
-  inline Result<MusicLibrary> openTestMusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
-  {
-    return MusicLibrary::open(
-      std::move(musicRoot), std::move(databasePath), MusicLibrary::Options{.mapSize = kTestMusicLibraryMapSize});
-  }
-
   struct TrackSpec final
   {
     std::string title = "Track";
@@ -76,181 +57,12 @@ namespace ao::library::test
     AudioCodec codec = AudioCodec::Unknown;
   };
 
-  inline TrackSpec makeTrackSpec(std::string_view title, std::uint16_t year = 2020)
-  {
-    return TrackSpec{.title = std::string{title}, .year = year};
-  }
-
-  inline TrackSpec makeEmptyTrackSpec(std::string_view uri)
-  {
-    return TrackSpec{.title = "",
-                     .artist = "",
-                     .album = "",
-                     .uri = std::string{uri},
-                     .year = 0,
-                     .discNumber = 0,
-                     .trackNumber = 0,
-                     .duration = std::chrono::milliseconds{0},
-                     .bitrate = Bitrate{},
-                     .sampleRate = SampleRate{},
-                     .channels = Channels{},
-                     .bitDepth = BitDepth{}};
-  }
-
-  inline void applyTrackSpec(TrackBuilder& builder, TrackSpec const& spec)
-  {
-    builder.metadata()
-      .title(spec.title)
-      .artist(spec.artist)
-      .album(spec.album)
-      .albumArtist(spec.albumArtist)
-      .genre(spec.genre)
-      .composer(spec.composer)
-      .conductor(spec.conductor)
-      .ensemble(spec.ensemble)
-      .work(spec.work)
-      .movement(spec.movement)
-      .soloist(spec.soloist)
-      .year(spec.year)
-      .discNumber(spec.discNumber)
-      .discTotal(spec.discTotal)
-      .trackNumber(spec.trackNumber)
-      .trackTotal(spec.trackTotal)
-      .movementNumber(spec.movementNumber)
-      .movementTotal(spec.movementTotal);
-    builder.property()
-      .uri(spec.uri)
-      .duration(spec.duration)
-      .bitrate(spec.bitrate)
-      .sampleRate(spec.sampleRate)
-      .codec(spec.codec)
-      .channels(spec.channels)
-      .bitDepth(spec.bitDepth);
-
-    builder.tags().clear();
-
-    for (auto const& tag : spec.tags)
-    {
-      builder.tags().add(tag);
-    }
-
-    builder.customMetadata().clear();
-
-    for (auto const& [key, value] : spec.customMetadata)
-    {
-      builder.customMetadata().add(key, value);
-    }
-
-    builder.coverArt().clear();
-
-    if (spec.coverArtId != kInvalidResourceId)
-    {
-      builder.coverArt().add(PictureType::FrontCover, spec.coverArtId);
-    }
-  }
-
-  inline TrackSpec trackSpecFromView(MusicLibrary const& library, TrackView const& view)
-  {
-    auto spec =
-      TrackSpec{.title = std::string{view.metadata().title()},
-                .artist = std::string{library.dictionary().getOrDefault(view.metadata().artistId())},
-                .album = std::string{library.dictionary().getOrDefault(view.metadata().albumId())},
-                .albumArtist = std::string{library.dictionary().getOrDefault(view.metadata().albumArtistId())},
-                .genre = std::string{library.dictionary().getOrDefault(view.metadata().genreId())},
-                .composer = std::string{library.dictionary().getOrDefault(view.metadata().composerId())},
-                .conductor = std::string{library.dictionary().getOrDefault(view.classical().conductorId())},
-                .ensemble = std::string{library.dictionary().getOrDefault(view.classical().ensembleId())},
-                .work = std::string{library.dictionary().getOrDefault(view.classical().workId())},
-                .movement = std::string{library.dictionary().getOrDefault(view.classical().movementId())},
-                .soloist = std::string{library.dictionary().getOrDefault(view.classical().soloistId())},
-                .uri = std::string{view.property().uri()},
-                .year = view.metadata().year(),
-                .discNumber = view.metadata().discNumber(),
-                .discTotal = view.metadata().discTotal(),
-                .trackNumber = view.metadata().trackNumber(),
-                .trackTotal = view.metadata().trackTotal(),
-                .movementNumber = view.classical().movementNumber(),
-                .movementTotal = view.classical().movementTotal(),
-                .duration = view.property().duration(),
-                .bitrate = view.property().bitrate(),
-                .sampleRate = view.property().sampleRate(),
-                .channels = view.property().channels(),
-                .bitDepth = view.property().bitDepth(),
-                .codec = view.property().codec()};
-
-    for (auto const tagId : view.tags())
-    {
-      spec.tags.emplace_back(library.dictionary().getOrDefault(tagId));
-    }
-
-    for (auto const [keyId, value] : view.customMetadata())
-    {
-      spec.customMetadata.emplace_back(std::string{library.dictionary().getOrDefault(keyId)}, std::string{value});
-    }
-
-    if (auto const optCover = view.coverArt().primary(); optCover)
-    {
-      spec.coverArtId = optCover->resourceId;
-    }
-
-    return spec;
-  }
-
-  inline TrackId addTrack(MusicLibrary& library, WriteTransaction& transaction, TrackSpec const& spec)
-  {
-    auto writer = library.tracks().writer(transaction);
-    auto builder = TrackBuilder::makeEmpty();
-    applyTrackSpec(builder, spec);
-
-    auto data = builder.serialize(transaction, library.resources());
-    REQUIRE(data);
-    auto createResult = writer.createHotCold(data->first, data->second);
-    REQUIRE(createResult);
-    auto const [id, _] = *createResult;
-    return id;
-  }
-
-  inline TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
-  {
-    auto transaction = writeTransaction(library);
-    auto const id = addTrack(library, transaction, spec);
-    REQUIRE(transaction.commit());
-    return id;
-  }
-
-  inline void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate)
-  {
-    auto transaction = writeTransaction(library);
-    auto reader = library.tracks().reader(transaction);
-    auto writer = library.tracks().writer(transaction);
-    auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
-    REQUIRE(optView);
-
-    auto builder = TrackBuilder::fromView(*optView, library.dictionary());
-    mutate(builder);
-
-    auto hotData = builder.serializeHot(transaction);
-    REQUIRE(hotData);
-    auto coldData = builder.serializeCold(transaction, library.resources());
-    REQUIRE(coldData);
-    REQUIRE(writer.updateHot(id, *hotData));
-    REQUIRE(writer.updateCold(
-      id, coldData->size(), [&](std::span<std::byte> buf) { std::ranges::copy(*coldData, buf.begin()); }));
-    REQUIRE(transaction.commit());
-  }
-
-  inline void updateTrackSpec(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackSpec&)> updater)
-  {
-    auto spec = TrackSpec{};
-    {
-      auto transaction = library.readTransaction();
-      auto reader = library.tracks().reader(transaction);
-      auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
-      REQUIRE(optView);
-      spec = trackSpecFromView(library, *optView);
-    }
-
-    updater(spec);
-    mutateTrack(library, id, [&](TrackBuilder& builder) { applyTrackSpec(builder, spec); });
-  }
+  TrackSpec makeTrackSpec(std::string_view title, std::uint16_t year = 2020);
+  TrackSpec makeEmptyTrackSpec(std::string_view uri);
+  void applyTrackSpec(TrackBuilder& builder, TrackSpec const& spec);
+  TrackSpec trackSpecFromView(MusicLibrary const& library, TrackView const& view);
+  TrackId addTrack(MusicLibrary& library, WriteTransaction& transaction, TrackSpec const& spec);
+  TrackId addTrack(MusicLibrary& library, TrackSpec const& spec);
+  void mutateTrack(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackBuilder&)> mutate);
+  void updateTrackSpec(MusicLibrary& library, TrackId id, std::move_only_function<void(TrackSpec&)> updater);
 } // namespace ao::library::test

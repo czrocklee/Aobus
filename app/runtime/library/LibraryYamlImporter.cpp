@@ -4,7 +4,7 @@
 #include "LibraryYamlImportOperation.h"
 #include "MediaTrack.h"
 #include "TrackBuilderSnapshot.h"
-#include <ao/AudioCodec.h>
+#include <ao/AudioCodecText.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>

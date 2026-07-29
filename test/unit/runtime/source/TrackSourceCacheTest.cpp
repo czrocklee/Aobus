@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -14,6 +14,7 @@
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/SmartListEvaluator.h>

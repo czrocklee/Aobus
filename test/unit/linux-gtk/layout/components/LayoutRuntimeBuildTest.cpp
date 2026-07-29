@@ -4,12 +4,15 @@
 #include "ContainerTestHelpers.h"
 #include "app/linux-gtk/app/GtkStyleRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutHost.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -25,6 +28,8 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+  using ao::gtk::test::AllocationHost;
+  using ao::gtk::test::measureWidget;
 
   TEST_CASE("LayoutRuntime - builds documents into GTK widget trees", "[gtk][unit][layout][container]")
   {
@@ -198,5 +203,18 @@ namespace ao::gtk::layout::test
       window.unset_child();
       window.remove_css_class("ao-theme-modern");
     }
+  }
+
+  TEST_CASE("LayoutRuntimeFixture - detaches its window child before fixture teardown", "[gtk][unit][layout][lifetime]")
+  {
+    auto child = Gtk::Box{};
+
+    {
+      auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_fixture_teardown_test"};
+      fixture.window().set_child(child);
+      REQUIRE(child.get_parent() == &fixture.window());
+    }
+
+    CHECK(child.get_parent() == nullptr);
   }
 } // namespace ao::gtk::layout::test

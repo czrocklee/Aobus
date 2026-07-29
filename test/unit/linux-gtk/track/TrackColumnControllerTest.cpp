@@ -3,7 +3,7 @@
 
 #include "track/TrackColumnController.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
@@ -13,6 +13,7 @@
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
 #include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/window.h>
 
 #include <algorithm>
 #include <cmath>

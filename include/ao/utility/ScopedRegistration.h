@@ -4,7 +4,6 @@
 #pragma once
 
 #include <functional>
-#include <utility>
 
 namespace ao::utility
 {
@@ -12,43 +11,16 @@ namespace ao::utility
   {
   public:
     ScopedRegistration() = default;
-
-    explicit ScopedRegistration(std::move_only_function<void()> unregister)
-      : _unregister{std::move(unregister)}
-    {
-    }
-
-    ~ScopedRegistration()
-    {
-      if (_unregister)
-      {
-        _unregister();
-      }
-    }
+    explicit ScopedRegistration(std::move_only_function<void()> unregister);
+    ~ScopedRegistration();
 
     ScopedRegistration(ScopedRegistration const&) = delete;
     ScopedRegistration& operator=(ScopedRegistration const&) = delete;
 
-    ScopedRegistration(ScopedRegistration&&) noexcept = default;
-    ScopedRegistration& operator=(ScopedRegistration&& other) noexcept
-    {
-      if (this != &other)
-      {
-        reset();
-        _unregister = std::move(other._unregister);
-      }
+    ScopedRegistration(ScopedRegistration&&) noexcept;
+    ScopedRegistration& operator=(ScopedRegistration&& other) noexcept;
 
-      return *this;
-    }
-
-    void reset()
-    {
-      if (_unregister)
-      {
-        auto unregister = std::move(_unregister);
-        unregister();
-      }
-    }
+    void reset();
 
     explicit operator bool() const noexcept { return static_cast<bool>(_unregister); }
 

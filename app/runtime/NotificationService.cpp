@@ -10,6 +10,7 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

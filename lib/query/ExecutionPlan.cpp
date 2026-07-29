@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/AudioCodec.h>
+#include <ao/AudioCodecText.h>
 #include <ao/Error.h>
 #include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>

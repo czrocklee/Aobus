@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../../GtkTestSupport.h"
 #include "../components/ContainerTestHelpers.h"
 #include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
@@ -9,7 +8,10 @@
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
@@ -34,7 +36,7 @@ namespace ao::gtk::layout::editor::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
     auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    rt::AppRuntime runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -99,7 +101,7 @@ namespace ao::gtk::layout::editor::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 
     auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    rt::AppRuntime runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -134,15 +136,15 @@ namespace ao::gtk::layout::editor::test
     REQUIRE(compPtr != nullptr);
 
     auto& canvas = compPtr->widget();
-    auto const horizontal = ao::gtk::layout::test::measureWidget(canvas, Gtk::Orientation::HORIZONTAL);
-    auto const vertical = ao::gtk::layout::test::measureWidget(canvas, Gtk::Orientation::VERTICAL);
+    auto const horizontal = ao::gtk::test::measureWidget(canvas, Gtk::Orientation::HORIZONTAL);
+    auto const vertical = ao::gtk::test::measureWidget(canvas, Gtk::Orientation::VERTICAL);
 
     CHECK(horizontal.minimum == 250);
     CHECK(horizontal.natural == 250);
     CHECK(vertical.minimum == 150);
     CHECK(vertical.natural == 150);
 
-    auto allocationHost = ao::gtk::layout::test::AllocationHost{canvas};
+    auto allocationHost = ao::gtk::test::AllocationHost{canvas};
     allocationHost.allocateChild(400, 300);
 
     auto* const allocatedChild = canvas.get_first_child();

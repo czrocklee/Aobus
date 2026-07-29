@@ -4,8 +4,9 @@
 #include "CliTestSupport.h"
 #include "ListCommand.h"
 #include "Run.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AppVersion.h>

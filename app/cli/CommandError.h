@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <format>
 #include <source_location>

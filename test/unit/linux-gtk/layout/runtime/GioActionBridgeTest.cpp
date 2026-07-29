@@ -4,8 +4,8 @@
 #include "layout/runtime/GioActionBridge.h"
 
 #include "layout/runtime/ActionRegistry.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>

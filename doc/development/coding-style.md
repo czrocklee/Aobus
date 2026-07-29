@@ -34,6 +34,17 @@ Detailed naming policy lives in `doc/development/naming-convention.md`.
       `doc/development/test/naming-and-assertion.md`.
   - 2.3. Headers
     - 2.3.1. Use `#pragma once`
+    - 2.3.2. Keep ordinary non-template function and method definitions in a
+      `.cpp` file. Definitions belong in headers only when the language requires
+      visibility at the use site, such as templates, selected `constexpr` or
+      `consteval` code, deduced return types, or deliberately tiny accessors on a
+      measured hot path.
+    - 2.3.3. Do not use an umbrella header to make unrelated fixtures, adapters,
+      formatting support, or subsystem implementations transitively available.
+      Include the narrow owning header at each use site.
+    - 2.3.4. Keep optional adapters such as formatters and stream integration out
+      of ubiquitous value-type headers when callers can opt in through a focused
+      adapter header.
   - 2.4. Includes
     - 2.4.1. Group includes with blank lines in this order:
       - the paired header for this file

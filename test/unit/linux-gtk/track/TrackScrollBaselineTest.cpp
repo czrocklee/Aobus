@@ -10,9 +10,10 @@
 // layout is version-dependent and flaky headless — so the numbers isolate the
 // app-owned bind cost we can actually optimize, not the toolkit's.
 
-#include "../../TestUtils.h"
+#include "../../TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/AudioScalars.h>
@@ -20,6 +21,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackField.h>
 

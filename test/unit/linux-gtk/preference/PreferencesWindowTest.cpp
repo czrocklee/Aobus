@@ -3,8 +3,10 @@
 
 #include "preference/PreferencesWindow.h"
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/input/KeymapModel.h>

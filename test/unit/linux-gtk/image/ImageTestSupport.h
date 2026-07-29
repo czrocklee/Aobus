@@ -3,70 +3,36 @@
 
 #pragma once
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
 
-#include <catch2/catch_test_macros.hpp>
-#include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
 
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <memory>
 #include <span>
 #include <vector>
 
+namespace Gdk
+{
+  class Pixbuf;
+}
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
 namespace ao::gtk::test
 {
-  inline Glib::RefPtr<Gdk::Pixbuf> makePixbuf(std::int32_t width, std::int32_t height)
-  {
-    return Gdk::Pixbuf::create(Gdk::Colorspace::RGB, false, 8, width, height);
-  }
+  Glib::RefPtr<Gdk::Pixbuf> makePixbuf(std::int32_t width, std::int32_t height);
 
-  inline Glib::RefPtr<Gdk::Pixbuf> makePixbuf(std::int32_t side)
-  {
-    return makePixbuf(side, side);
-  }
+  Glib::RefPtr<Gdk::Pixbuf> makePixbuf(std::int32_t side);
 
-  inline ResourceId writeRawResource(library::MusicLibrary& library, std::span<std::byte const> bytes)
-  {
-    auto transaction = library::test::writeTransaction(library);
-    auto idResult = library.resources().writer(transaction).create(bytes);
-    REQUIRE(idResult);
-    auto const id = *idResult;
-    REQUIRE(transaction.commit());
-    return id;
-  }
+  ResourceId writeRawResource(library::MusicLibrary& library, std::span<std::byte const> bytes);
 
-  inline std::vector<std::byte> encodePng(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
-  {
-    gchar* rawBuffer = nullptr;
-    gsize bufferSize = 0;
-    pixbufPtr->save_to_buffer(rawBuffer, bufferSize, "png");
-    auto bufferPtr = std::unique_ptr<gchar, decltype(&::g_free)>{rawBuffer, &::g_free};
+  std::vector<std::byte> encodePng(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);
 
-    auto const bytes = std::span<std::byte const>{
-      reinterpret_cast<std::byte const*>(bufferPtr.get()), static_cast<std::size_t>(bufferSize)};
-    return {bytes.begin(), bytes.end()};
-  }
+  ResourceId writeCoverResource(library::MusicLibrary& library, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);
 
-  inline ResourceId writeCoverResource(library::MusicLibrary& library, Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
-  {
-    return writeRawResource(library, encodePng(pixbufPtr));
-  }
-
-  inline ResourceId writeCoverResource(library::MusicLibrary& library, std::int32_t side)
-  {
-    return writeCoverResource(library, makePixbuf(side));
-  }
-
-  inline bool pumpUntil(std::function<bool()> const& predicate,
-                        std::chrono::milliseconds timeout = std::chrono::seconds{5})
-  {
-    return pumpGtkEventsUntil(predicate, timeout);
-  }
+  ResourceId writeCoverResource(library::MusicLibrary& library, std::int32_t side);
 } // namespace ao::gtk::test

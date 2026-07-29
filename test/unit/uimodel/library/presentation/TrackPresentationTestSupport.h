@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>

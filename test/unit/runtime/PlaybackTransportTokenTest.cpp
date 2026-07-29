@@ -2,10 +2,12 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/audio/EngineTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>

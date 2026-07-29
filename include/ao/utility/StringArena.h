@@ -6,7 +6,6 @@
 #include <boost/unordered/unordered_flat_set.hpp>
 
 #include <cstddef>
-#include <cstring>
 #include <memory_resource>
 #include <string_view>
 
@@ -43,32 +42,10 @@ namespace ao::utility
      * @return Stable view of the stored copy; equal inputs return the same view. Empty input
      *         returns an empty view without storing anything.
      */
-    std::string_view intern(std::string_view str)
-    {
-      if (str.empty())
-      {
-        return {};
-      }
-
-      if (auto const it = _index.find(str); it != _index.end())
-      {
-        return *it;
-      }
-
-      auto* const mem = static_cast<char*>(_resource.allocate(str.size(), alignof(char)));
-      std::memcpy(mem, str.data(), str.size());
-
-      auto const view = std::string_view{mem, str.size()};
-      _index.insert(view);
-      return view;
-    }
+    std::string_view intern(std::string_view str);
 
     /** Drop all interned strings. Invalidates every previously returned view. */
-    void clear()
-    {
-      _index.clear();
-      _resource.release();
-    }
+    void clear();
 
     std::size_t size() const noexcept { return _index.size(); }
     std::size_t allocatedBytes() const noexcept { return _upstream.allocatedBytes(); }
@@ -81,20 +58,9 @@ namespace ao::utility
       std::size_t allocatedBytes() const noexcept { return _allocatedBytes; }
 
     private:
-      void* do_allocate(std::size_t bytes, std::size_t alignment) override
-      {
-        auto* const result = _resource->allocate(bytes, alignment);
-        _allocatedBytes += bytes;
-        return result;
-      }
-
-      void do_deallocate(void* ptr, std::size_t bytes, std::size_t alignment) override
-      {
-        _resource->deallocate(ptr, bytes, alignment);
-        _allocatedBytes -= bytes;
-      }
-
-      bool do_is_equal(std::pmr::memory_resource const& other) const noexcept override { return this == &other; }
+      void* do_allocate(std::size_t bytes, std::size_t alignment) override;
+      void do_deallocate(void* ptr, std::size_t bytes, std::size_t alignment) override;
+      bool do_is_equal(std::pmr::memory_resource const& other) const noexcept override;
 
       std::pmr::memory_resource* _resource = std::pmr::get_default_resource();
       std::size_t _allocatedBytes = 0;

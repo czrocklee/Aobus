@@ -3,15 +3,10 @@
 
 #pragma once
 
-#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
-
-#include <glibmm/main.h>
-#include <gtkmm/box.h>
-#include <gtkmm/button.h>
-#include <gtkmm/paned.h>
-#include <gtkmm/revealer.h>
-#include <gtkmm/widget.h>
+namespace ao::gtk::layout
+{
+  class LayoutComponent;
+}
 
 namespace Gtk
 {
@@ -23,70 +18,8 @@ namespace Gtk
 
 namespace ao::gtk::layout::test
 {
-  using ao::gtk::test::AllocationHost;
-  using ao::gtk::test::drainGtkEventsFor;
-  using ao::gtk::test::measureWidget;
-  using ao::gtk::test::WidgetMeasure;
-
-  inline Gtk::Box* collapsibleSplitBox(LayoutComponent& component)
-  {
-    auto& root = component.widget();
-
-    if (auto* const box = dynamic_cast<Gtk::Box*>(&root); box != nullptr)
-    {
-      return box;
-    }
-
-    return dynamic_cast<Gtk::Box*>(root.get_first_child());
-  }
-
-  inline Gtk::Paned* splitPaned(LayoutComponent& component)
-  {
-    auto& root = component.widget();
-
-    if (auto* const paned = dynamic_cast<Gtk::Paned*>(&root); paned != nullptr)
-    {
-      return paned;
-    }
-
-    return dynamic_cast<Gtk::Paned*>(root.get_first_child());
-  }
-
-  inline Gtk::Revealer* endSideCollapsibleRevealer(Gtk::Box& box)
-  {
-    auto* const workspace = box.get_first_child();
-
-    if (workspace == nullptr)
-    {
-      return nullptr;
-    }
-
-    auto* const gutterBox = workspace->get_next_sibling();
-
-    if (gutterBox == nullptr)
-    {
-      return nullptr;
-    }
-
-    return dynamic_cast<Gtk::Revealer*>(gutterBox->get_next_sibling());
-  }
-
-  inline Gtk::Button* endSideCollapsibleToggle(Gtk::Box& box)
-  {
-    auto* const workspace = box.get_first_child();
-
-    if (workspace == nullptr)
-    {
-      return nullptr;
-    }
-
-    auto* const gutterBox = workspace->get_next_sibling();
-
-    if (gutterBox == nullptr)
-    {
-      return nullptr;
-    }
-
-    return dynamic_cast<Gtk::Button*>(gutterBox->get_first_child());
-  }
+  Gtk::Box* collapsibleSplitBox(LayoutComponent& component);
+  Gtk::Paned* splitPaned(LayoutComponent& component);
+  Gtk::Revealer* endSideCollapsibleRevealer(Gtk::Box& box);
+  Gtk::Button* endSideCollapsibleToggle(Gtk::Box& box);
 } // namespace ao::gtk::layout::test

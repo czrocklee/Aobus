@@ -3,8 +3,9 @@
 
 #include "app/ThemeCoordinator.h"
 
-#include "../GtkTestSupport.h"
 #include "app/AppConfigStore.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include <ao/rt/AppPrefsState.h>
 #include <ao/uimodel/preference/ThemePreset.h>
 

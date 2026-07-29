@@ -3,14 +3,16 @@
 
 #include "track/TrackViewPage.h"
 
-#include "../../TestUtils.h"
+#include "../../TestFixtureSupport.h"
 #include "image/CoverArtView.h"
 #include "image/ImageCache.h"
 #include "image/ResourceImageLoader.h"
 #include "layout/LayoutConstants.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
@@ -18,12 +20,14 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteLoader.h>

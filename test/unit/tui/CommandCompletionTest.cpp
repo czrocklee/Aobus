@@ -3,8 +3,8 @@
 
 #include "tui/CommandCompletion.h"
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>

@@ -14,6 +14,7 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/StreamingSource.h>
 #include <ao/audio/detail/DecoderError.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <chrono>
 #include <cstdint>

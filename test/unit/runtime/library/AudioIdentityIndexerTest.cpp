@@ -4,10 +4,13 @@
 #include "runtime/library/AudioIdentityBatchWriter.h"
 #include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/FilesystemTestSupport.h"
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>

@@ -7,7 +7,9 @@
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/ImportExportCoordinatorPolicy.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/library/LibraryYamlExporter.h>
 
 #include <catch2/catch_test_macros.hpp>

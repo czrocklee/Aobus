@@ -4,11 +4,14 @@
 #include "tag/TrackPropertiesDialog.h"
 
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/library/Library.h>
 #include <ao/uimodel/field/TrackFieldFormatter.h>
 

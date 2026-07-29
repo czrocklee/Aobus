@@ -5,7 +5,7 @@
 
 #include "app/WindowActionRegistry.h"
 #include "portal/ImportExportActions.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/actiongroup.h>

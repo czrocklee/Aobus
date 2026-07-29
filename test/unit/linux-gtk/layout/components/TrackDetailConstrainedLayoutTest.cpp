@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../../GtkTestSupport.h"
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "layout/component/track/TrackDetailSizing.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>

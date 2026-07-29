@@ -16,7 +16,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 namespace ao::media::file::detail
@@ -57,30 +56,30 @@ namespace ao::media::file::detail
   class ContentBuilder final
   {
   public:
-    static ContentBuilder makeEmpty() { return {}; }
+    static ContentBuilder makeEmpty();
 
     class MetadataBuilder final
     {
     public:
-      MetadataBuilder& title(std::string_view value) { return text(TextField::Title, value); }
-      MetadataBuilder& artist(std::string_view value) { return text(TextField::Artist, value); }
-      MetadataBuilder& album(std::string_view value) { return text(TextField::Album, value); }
-      MetadataBuilder& albumArtist(std::string_view value) { return text(TextField::AlbumArtist, value); }
-      MetadataBuilder& composer(std::string_view value) { return text(TextField::Composer, value); }
-      MetadataBuilder& conductor(std::string_view value) { return text(TextField::Conductor, value); }
-      MetadataBuilder& ensemble(std::string_view value) { return text(TextField::Ensemble, value); }
-      MetadataBuilder& genre(std::string_view value) { return text(TextField::Genre, value); }
-      MetadataBuilder& work(std::string_view value) { return text(TextField::Work, value); }
-      MetadataBuilder& movement(std::string_view value) { return text(TextField::Movement, value); }
-      MetadataBuilder& soloist(std::string_view value) { return text(TextField::Soloist, value); }
+      MetadataBuilder& title(std::string_view value);
+      MetadataBuilder& artist(std::string_view value);
+      MetadataBuilder& album(std::string_view value);
+      MetadataBuilder& albumArtist(std::string_view value);
+      MetadataBuilder& composer(std::string_view value);
+      MetadataBuilder& conductor(std::string_view value);
+      MetadataBuilder& ensemble(std::string_view value);
+      MetadataBuilder& genre(std::string_view value);
+      MetadataBuilder& work(std::string_view value);
+      MetadataBuilder& movement(std::string_view value);
+      MetadataBuilder& soloist(std::string_view value);
 
-      MetadataBuilder& year(std::uint16_t value) { return number(NumberField::Year, value); }
-      MetadataBuilder& trackNumber(std::uint16_t value) { return number(NumberField::TrackNumber, value); }
-      MetadataBuilder& trackTotal(std::uint16_t value) { return number(NumberField::TrackTotal, value); }
-      MetadataBuilder& discNumber(std::uint16_t value) { return number(NumberField::DiscNumber, value); }
-      MetadataBuilder& discTotal(std::uint16_t value) { return number(NumberField::DiscTotal, value); }
-      MetadataBuilder& movementNumber(std::uint16_t value) { return number(NumberField::MovementNumber, value); }
-      MetadataBuilder& movementTotal(std::uint16_t value) { return number(NumberField::MovementTotal, value); }
+      MetadataBuilder& year(std::uint16_t value);
+      MetadataBuilder& trackNumber(std::uint16_t value);
+      MetadataBuilder& trackTotal(std::uint16_t value);
+      MetadataBuilder& discNumber(std::uint16_t value);
+      MetadataBuilder& discTotal(std::uint16_t value);
+      MetadataBuilder& movementNumber(std::uint16_t value);
+      MetadataBuilder& movementTotal(std::uint16_t value);
 
       std::string_view title() const { return get(TextField::Title); }
       std::string_view artist() const { return get(TextField::Artist); }
@@ -105,22 +104,10 @@ namespace ao::media::file::detail
     private:
       friend class ContentBuilder;
 
-      explicit MetadataBuilder(Content& content)
-        : _content{content}
-      {
-      }
+      explicit MetadataBuilder(Content& content);
 
-      MetadataBuilder& text(TextField field, std::string_view value)
-      {
-        _content.texts[static_cast<std::size_t>(field)] = value;
-        return *this;
-      }
-
-      MetadataBuilder& number(NumberField field, std::uint16_t value)
-      {
-        _content.numbers[static_cast<std::size_t>(field)] = value;
-        return *this;
-      }
+      MetadataBuilder& text(TextField field, std::string_view value);
+      MetadataBuilder& number(NumberField field, std::uint16_t value);
 
       std::string_view get(TextField field) const { return _content.texts[static_cast<std::size_t>(field)]; }
       std::uint16_t get(NumberField field) const { return _content.numbers[static_cast<std::size_t>(field)]; }
@@ -131,41 +118,12 @@ namespace ao::media::file::detail
     class PropertyBuilder final
     {
     public:
-      PropertyBuilder& duration(std::chrono::milliseconds duration)
-      {
-        _content.duration = duration;
-        return *this;
-      }
-
-      PropertyBuilder& bitrate(Bitrate value)
-      {
-        _content.bitrate = value;
-        return *this;
-      }
-
-      PropertyBuilder& sampleRate(SampleRate value)
-      {
-        _content.sampleRate = value;
-        return *this;
-      }
-
-      PropertyBuilder& codec(AudioCodec value)
-      {
-        _content.codec = value;
-        return *this;
-      }
-
-      PropertyBuilder& channels(Channels value)
-      {
-        _content.channels = value;
-        return *this;
-      }
-
-      PropertyBuilder& bitDepth(BitDepth value)
-      {
-        _content.bitDepth = value;
-        return *this;
-      }
+      PropertyBuilder& duration(std::chrono::milliseconds duration);
+      PropertyBuilder& bitrate(Bitrate value);
+      PropertyBuilder& sampleRate(SampleRate value);
+      PropertyBuilder& codec(AudioCodec value);
+      PropertyBuilder& channels(Channels value);
+      PropertyBuilder& bitDepth(BitDepth value);
 
       std::chrono::milliseconds duration() const { return _content.duration; }
       Bitrate bitrate() const { return _content.bitrate; }
@@ -177,10 +135,7 @@ namespace ao::media::file::detail
     private:
       friend class ContentBuilder;
 
-      explicit PropertyBuilder(Content& content)
-        : _content{content}
-      {
-      }
+      explicit PropertyBuilder(Content& content);
 
       Content& _content;
     };
@@ -188,46 +143,24 @@ namespace ao::media::file::detail
     class CoverArtBuilder final
     {
     public:
-      CoverArtBuilder& add(PictureType type, std::span<std::byte const> bytes)
-      {
-        if (!bytes.empty())
-        {
-          _content.pictures.push_back(PictureView{.type = type, .bytes = bytes});
-        }
-
-        return *this;
-      }
+      CoverArtBuilder& add(PictureType type, std::span<std::byte const> bytes);
 
       std::vector<PictureView> const& entries() const { return _content.pictures; }
 
     private:
       friend class ContentBuilder;
 
-      explicit CoverArtBuilder(Content& content)
-        : _content{content}
-      {
-      }
+      explicit CoverArtBuilder(Content& content);
 
       Content& _content;
     };
 
-    ContentBuilder()
-      : _metadata{_content}, _property{_content}, _coverArt{_content}
-    {
-    }
+    ContentBuilder();
 
     ~ContentBuilder() = default;
 
-    ContentBuilder(ContentBuilder&& other) noexcept
-      : _content{std::move(other._content)}, _metadata{_content}, _property{_content}, _coverArt{_content}
-    {
-    }
-
-    ContentBuilder& operator=(ContentBuilder&& other) noexcept
-    {
-      _content = std::move(other._content);
-      return *this;
-    }
+    ContentBuilder(ContentBuilder&& other) noexcept;
+    ContentBuilder& operator=(ContentBuilder&& other) noexcept;
 
     ContentBuilder(ContentBuilder const&) = delete;
     ContentBuilder& operator=(ContentBuilder const&) = delete;
@@ -239,13 +172,9 @@ namespace ao::media::file::detail
     CoverArtBuilder& coverArt() { return _coverArt; }
     CoverArtBuilder const& coverArt() const { return _coverArt; }
 
-    std::string_view own(std::string value)
-    {
-      _content.ownedStrings.push_back(std::move(value));
-      return _content.ownedStrings.back();
-    }
+    std::string_view own(std::string value);
 
-    Content finish() && { return std::move(_content); }
+    Content finish() &&;
 
   private:
     Content _content;

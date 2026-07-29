@@ -4,7 +4,7 @@
 #include "council/ProcessRunner.h"
 
 #include "council/CouncilSchema.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -9,6 +9,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceSessionState.h>
+#include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>

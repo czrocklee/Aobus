@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace ao::library::test
@@ -27,9 +28,5 @@ namespace ao::library::test
   /**
    * Append a null-terminated string to the payload.
    */
-  inline void appendString(std::vector<std::byte>& payload, std::string_view str)
-  {
-    payload.insert_range(payload.end(), utility::bytes::view(str));
-    payload.push_back(std::byte{'\0'});
-  }
+  void appendString(std::vector<std::byte>& payload, std::string_view str);
 } // namespace ao::library::test

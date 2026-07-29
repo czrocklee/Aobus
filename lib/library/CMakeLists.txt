@@ -26,7 +26,7 @@ else()
     target_sources(ao_library PRIVATE WriterSessionLeasePosix.cpp)
 endif()
 target_include_directories(ao_library PUBLIC ${AO_PUBLIC_INCLUDE_DIR})
-target_link_libraries(ao_library PUBLIC ao_lmdb)
+target_link_libraries(ao_library PUBLIC ao_lmdb ao_utility)
 
 set(AO_LIBRARY_FORBIDDEN_MEDIA_FILE_INCLUDE_REGEX
     "#[ \t]*include[ \t]*[<\"]ao/media/file/"

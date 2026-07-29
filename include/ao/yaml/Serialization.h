@@ -6,10 +6,8 @@
 #include <ao/Error.h>
 #include <ao/yaml/RymlAdapter.h>
 
-#include <c4/format.hpp>
 #include <ryml.hpp>
 
-#include <algorithm>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -29,141 +27,18 @@ namespace ao::yaml
     Allow,
   };
 
-  inline std::string fieldContext(std::string_view context, std::string_view field)
-  {
-    auto result = std::string{};
-    result.reserve(kMaximumErrorContextBytes);
-    bool truncated = false;
-
-    auto const append = [&result, &truncated](std::string_view part)
-    {
-      auto const remaining = kMaximumErrorContextBytes - result.size();
-      auto const count = std::min(remaining, part.size());
-      result.append(part.substr(0, count));
-      truncated = truncated || count != part.size();
-    };
-
-    append(context);
-
-    if (!context.empty())
-    {
-      if (result.size() < kMaximumErrorContextBytes)
-      {
-        result.push_back('.');
-      }
-      else
-      {
-        truncated = true;
-      }
-    }
-
-    append(field);
-
-    if (truncated)
-    {
-      constexpr auto kSuffix = std::string_view{"..."};
-      result.resize(kMaximumErrorContextBytes - kSuffix.size());
-      result.append(kSuffix);
-    }
-
-    return result;
-  }
-
-  inline Result<> requireMap(ryml::ConstNodeRef node, std::string_view context)
-  {
-    if (!node.is_map())
-    {
-      return makeError(Error::Code::FormatRejected, boundedErrorContext(context) + " must be a mapping");
-    }
-
-    return {};
-  }
-
-  inline Result<> requireSequence(ryml::ConstNodeRef node, std::string_view context)
-  {
-    if (!node.is_seq())
-    {
-      return makeError(Error::Code::FormatRejected, boundedErrorContext(context) + " must be a sequence");
-    }
-
-    return {};
-  }
-
-  inline Result<> validateMapKeys(ryml::ConstNodeRef node,
-                                  std::span<std::string_view const> allowedKeys,
-                                  std::string_view context,
-                                  UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject)
-  {
-    if (auto const result = requireMap(node, context); !result)
-    {
-      return result;
-    }
-
-    auto seenKeys = std::vector<std::string_view>{};
-    seenKeys.reserve(node.num_children());
-
-    for (auto const& child : node.children())
-    {
-      if (!child.has_key())
-      {
-        return makeError(
-          Error::Code::FormatRejected, boundedErrorContext(context) + " contains an entry without a key");
-      }
-
-      auto const key = keyView(child);
-
-      if (std::ranges::contains(seenKeys, key))
-      {
-        return makeError(Error::Code::FormatRejected, fieldContext(context, key) + " appears more than once");
-      }
-
-      seenKeys.push_back(key);
-
-      if (unknownKeyPolicy == UnknownKeyPolicy::Reject && !std::ranges::contains(allowedKeys, key))
-      {
-        return makeError(Error::Code::FormatRejected, fieldContext(context, key) + " is not supported");
-      }
-    }
-
-    return {};
-  }
-
-  inline Result<ryml::ConstNodeRef> requireChild(ryml::ConstNodeRef node,
-                                                 std::string_view key,
-                                                 std::string_view context)
-  {
-    auto const child = findChild(node, key);
-
-    if (!child.readable())
-    {
-      return makeError(Error::Code::FormatRejected, fieldContext(context, key) + " is required");
-    }
-
-    return child;
-  }
-
-  inline ryml::NodeRef appendChild(ryml::NodeRef node, std::string_view key)
-  {
-    auto child = node.append_child();
-    setKey(child, key);
-    return child;
-  }
-
-  inline void writeScalar(ryml::NodeRef node, std::string_view value)
-  {
-    setValue(node, value);
-    node.set_val_style(ryml::VAL_DQUO);
-  }
-
-  inline void writeScalar(ryml::NodeRef node, std::string const& value)
-  {
-    writeScalar(node, std::string_view{value});
-  }
-
-  inline void writeScalar(ryml::NodeRef node, bool value)
-  {
-    node << c4::fmt::boolalpha(value);
-  }
+  std::string fieldContext(std::string_view context, std::string_view field);
+  Result<> requireMap(ryml::ConstNodeRef node, std::string_view context);
+  Result<> requireSequence(ryml::ConstNodeRef node, std::string_view context);
+  Result<> validateMapKeys(ryml::ConstNodeRef node,
+                           std::span<std::string_view const> allowedKeys,
+                           std::string_view context,
+                           UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject);
+  Result<ryml::ConstNodeRef> requireChild(ryml::ConstNodeRef node, std::string_view key, std::string_view context);
+  ryml::NodeRef appendChild(ryml::NodeRef node, std::string_view key);
+  void writeScalar(ryml::NodeRef node, std::string_view value);
+  void writeScalar(ryml::NodeRef node, std::string const& value);
+  void writeScalar(ryml::NodeRef node, bool value);
 
   template<typename T>
     requires(std::is_arithmetic_v<T> && !std::same_as<T, bool>)
@@ -189,11 +64,7 @@ namespace ao::yaml
   class MapWriter final
   {
   public:
-    explicit MapWriter(ryml::NodeRef node)
-      : _node{node}
-    {
-      _node |= ryml::MAP;
-    }
+    explicit MapWriter(ryml::NodeRef node);
 
     template<typename T>
     MapWriter& scalar(std::string_view key, T const& value)
@@ -235,7 +106,7 @@ namespace ao::yaml
                    { return writeScalarSequence(child, sequenceValues); });
     }
 
-    Result<> finish() && { return std::move(_result); }
+    Result<> finish() &&;
 
   private:
     ryml::NodeRef _node;
@@ -261,12 +132,7 @@ namespace ao::yaml
     MapReader(ryml::ConstNodeRef node,
               std::span<std::string_view const> allowedKeys,
               std::string_view context,
-              UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject)
-      : _node{node}
-      , _context{boundedErrorContext(context)}
-      , _result{validateMapKeys(node, allowedKeys, _context, unknownKeyPolicy)}
-    {
-    }
+              UnknownKeyPolicy unknownKeyPolicy = UnknownKeyPolicy::Reject);
 
     template<typename T>
     MapReader& requiredScalar(std::string_view key, T& destination)

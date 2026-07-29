@@ -5,7 +5,8 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/EngineTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/runtime/PlaybackSuccessionTestSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionBaseTestSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>

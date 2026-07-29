@@ -2,12 +2,15 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "ContainerTestHelpers.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -21,7 +24,9 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+  using ao::gtk::test::AllocationHost;
   using ao::gtk::test::emitClicked;
+  using ao::gtk::test::measureWidget;
 
   TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
   {

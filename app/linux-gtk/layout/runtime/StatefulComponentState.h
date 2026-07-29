@@ -3,9 +3,7 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutBuildContext.h"
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
-#include <ao/uimodel/layout/component/LayoutComponentStateStore.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <cstdint>
@@ -14,10 +12,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <utility>
 
 namespace ao::gtk::layout
 {
+  struct LayoutBuildContext;
+  struct LayoutRuntimeState;
+
   /**
    * @brief Per-component view over the shared LayoutRuntimeState state document.
    *
@@ -31,18 +31,7 @@ namespace ao::gtk::layout
   class StatefulComponentState final
   {
   public:
-    StatefulComponentState(LayoutBuildContext& ctx, uimodel::LayoutNode const& node, std::string_view type)
-      : _state{&ctx.runtimeState}
-      , _componentId{node.id}
-      , _type{type}
-      , _presetId{ctx.buildState.presetId()}
-      , _baselineHash{uimodel::componentBaselineHash(node)}
-      , _capturedGeneration{ctx.buildState.generation()}
-      , _persistable{!ctx.buildState.isEditMode() && ctx.surface == LayoutSurface::Main && !node.id.empty() &&
-                     !ctx.buildState.presetId().empty() && ctx.runtimeState.componentStateStore != nullptr}
-      , _optRestored{uimodel::resolveComponentState(ctx.buildState.document(), node)}
-    {
-    }
+    StatefulComponentState(LayoutBuildContext& ctx, uimodel::LayoutNode const& node, std::string_view type);
 
     /// Runtime state that matched this node's id, type and baseline hash, if any.
     std::optional<uimodel::LayoutComponentStateEntry> const& restored() const noexcept { return _optRestored; }
@@ -54,29 +43,10 @@ namespace ao::gtk::layout
      * context has swapped in a newer state document (reset/load/save-defaults),
      * so a stale component destructing afterwards cannot pollute it.
      */
-    bool canWrite() const noexcept
-    {
-      return _persistable && _state != nullptr && _state->componentStateStore != nullptr &&
-             _state->componentStateGeneration == _capturedGeneration;
-    }
+    bool canWrite() const noexcept;
 
     /// Stamp @p state into the active document under this component's id and persist it.
-    void write(std::map<std::string, uimodel::LayoutValue, std::less<>> state)
-    {
-      if (!canWrite())
-      {
-        return;
-      }
-
-      _state->componentState.preset = _presetId;
-      _state->componentState.components[_componentId] = uimodel::LayoutComponentStateEntry{
-        .type = _type,
-        .stateVersion = uimodel::kStateEntryVersion,
-        .baselineHash = _baselineHash,
-        .state = std::move(state),
-      };
-      _state->componentStateStore->save(_presetId, _state->componentState);
-    }
+    void write(std::map<std::string, uimodel::LayoutValue, std::less<>> state);
 
   private:
     LayoutRuntimeState* _state = nullptr;

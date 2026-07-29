@@ -9,11 +9,7 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/CoverArt.h>
-#include <ao/library/DictionaryStore.h>
-#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackLayout.h>
-#include <ao/library/TrackView.h>
-#include <ao/library/WriteTransaction.h>
 
 #include <array>
 #include <chrono>
@@ -28,6 +24,11 @@
 
 namespace ao::library
 {
+  class DictionaryStore;
+  class ResourceStore;
+  class TrackView;
+  class WriteTransaction;
+
   /**
    * TrackBuilder - Fluent builder for constructing track binary data.
    *

@@ -4,8 +4,9 @@
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/EngineTestSupport.h"
-#include "test/unit/runtime/PlaybackSuccessionTestSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/RenderTarget.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>

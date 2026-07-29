@@ -5,6 +5,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
@@ -17,6 +18,7 @@
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/container_hash/hash.hpp>
 

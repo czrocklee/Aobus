@@ -321,6 +321,9 @@ Add the direct include where the symbol is used.
 
 Suppress `misc-include-cleaner` only when the tool genuinely cannot model the
 provider, such as required umbrella headers or C macros from framework headers.
+When a required header is consumed only through a specialization or registration
+side effect that include-cleaner cannot observe, keep the include and add the
+narrowest project-level `IgnoreHeaders` entry instead of repeated local suppressions.
 
 ## Python hygiene
 

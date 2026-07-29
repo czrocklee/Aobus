@@ -27,6 +27,7 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/utility/Path.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <algorithm>
 #include <array>

@@ -4,13 +4,17 @@
 #include "tui/OutputDeviceController.h"
 
 #include "runtime/playback/PlaybackBootstrap.h"
+#include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/playback/PlaybackService.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>

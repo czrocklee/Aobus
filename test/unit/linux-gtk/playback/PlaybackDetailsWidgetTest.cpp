@@ -3,7 +3,10 @@
 
 #include "playback/PlaybackDetailsWidget.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>

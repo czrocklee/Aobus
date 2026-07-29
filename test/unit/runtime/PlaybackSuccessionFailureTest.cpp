@@ -4,7 +4,9 @@
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/EngineTestSupport.h"
-#include "test/unit/runtime/PlaybackSuccessionTestSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionBaseTestSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionSeekTestSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionTransportTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>

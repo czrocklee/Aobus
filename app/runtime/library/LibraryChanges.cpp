@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>

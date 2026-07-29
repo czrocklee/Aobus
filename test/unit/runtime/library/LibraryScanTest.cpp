@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/library/ScanApplyOperation.h"
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>

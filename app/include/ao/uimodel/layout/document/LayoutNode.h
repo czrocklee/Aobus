@@ -3,41 +3,19 @@
 
 #pragma once
 
-#include <charconv>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <type_traits>
 #include <variant>
 #include <vector>
 
 namespace ao::uimodel
 {
-  namespace detail
-  {
-    template<typename T>
-    std::optional<T> parseLayoutNumber(std::string_view value)
-    {
-      T parsed = {};
-      auto const* const begin = value.data();
-      auto const* const end = value.data() + value.size();
-      auto const [ptr, ec] = std::from_chars(begin, end, parsed);
-
-      if (ec == std::errc{} && ptr == end)
-      {
-        return parsed;
-      }
-
-      return std::nullopt;
-    }
-  } // namespace detail
-
   struct LayoutValue final
   {
     using Value = std::variant<std::monostate, bool, std::int64_t, double, std::string, std::vector<std::string>>;
@@ -68,99 +46,10 @@ namespace ao::uimodel
       return defaultValue;
     }
 
-    std::string asString(std::string const& defaultValue = "") const
-    {
-      return std::visit(
-        [&defaultValue](auto const& val) -> std::string
-        {
-          using T = std::decay_t<decltype(val)>;
-
-          if constexpr (std::is_same_v<T, std::string>)
-          {
-            return val;
-          }
-          else if constexpr (std::is_same_v<T, bool>)
-          {
-            return val ? "true" : "false";
-          }
-          else if constexpr (std::is_arithmetic_v<T>)
-          {
-            return std::format("{}", val);
-          }
-          else
-          {
-            return defaultValue;
-          }
-        },
-        data);
-    }
-
-    std::int64_t asInt(std::int64_t defaultValue = 0) const
-    {
-      return std::visit(
-        [defaultValue](auto const& val) -> std::int64_t
-        {
-          using T = std::decay_t<decltype(val)>;
-
-          if constexpr (std::is_arithmetic_v<T>)
-          {
-            return static_cast<std::int64_t>(val);
-          }
-          else if constexpr (std::is_same_v<T, std::string>)
-          {
-            if (auto optParsed = detail::parseLayoutNumber<std::int64_t>(val); optParsed)
-            {
-              return *optParsed;
-            }
-
-            return defaultValue;
-          }
-          else
-          {
-            return defaultValue;
-          }
-        },
-        data);
-    }
-
-    bool asBool(bool defaultValue = false) const
-    {
-      return std::visit(
-        [defaultValue](auto const& val) -> bool
-        {
-          using T = std::decay_t<decltype(val)>;
-
-          if constexpr (std::is_same_v<T, bool>)
-          {
-            return val;
-          }
-          else if constexpr (std::is_same_v<T, std::string>)
-          {
-            if (val == "true")
-            {
-              return true;
-            }
-
-            if (val == "false")
-            {
-              return false;
-            }
-
-            return defaultValue;
-          }
-          else if constexpr (std::is_arithmetic_v<T>)
-          {
-            return static_cast<bool>(val);
-          }
-          else
-          {
-            return defaultValue;
-          }
-        },
-        data);
-    }
-
-    bool isNumber() const { return std::holds_alternative<std::int64_t>(data) || std::holds_alternative<double>(data); }
+    std::string asString(std::string const& defaultValue = "") const;
+    std::int64_t asInt(std::int64_t defaultValue = 0) const;
+    bool asBool(bool defaultValue = false) const;
+    bool isNumber() const;
 
     double asDouble(double defaultValue = 0.0) const;
 

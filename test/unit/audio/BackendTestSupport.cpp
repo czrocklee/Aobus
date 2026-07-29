@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include "BackendTestSupport.h"
+
+#include <ao/Error.h>
+#include <ao/audio/Backend.h>
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/BackendProvider.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/Property.h>
+#include <ao/audio/Subscription.h>
+
+#include <memory>
+#include <string_view>
+
+namespace ao::audio::test
+{
+  MockBackendProxy::MockBackendProxy(Backend& real)
+    : _real{real}
+  {
+  }
+
+  Result<> MockBackendProxy::open(Format const& format, RenderTarget* target)
+  {
+    return _real.open(format, target);
+  }
+
+  void MockBackendProxy::start()
+  {
+    _real.start();
+  }
+
+  void MockBackendProxy::pause()
+  {
+    _real.pause();
+  }
+
+  void MockBackendProxy::resume()
+  {
+    _real.resume();
+  }
+
+  void MockBackendProxy::flush()
+  {
+    _real.flush();
+  }
+
+  void MockBackendProxy::stop()
+  {
+    _real.stop();
+  }
+
+  void MockBackendProxy::close()
+  {
+    _real.close();
+  }
+
+  BackendId MockBackendProxy::backendId() const
+  {
+    return _real.backendId();
+  }
+
+  ProfileId MockBackendProxy::profileId() const
+  {
+    return _real.profileId();
+  }
+
+  Result<> MockBackendProxy::setProperty(PropertyId id, PropertyValue const& value)
+  {
+    return _real.setProperty(id, value);
+  }
+
+  Result<PropertyValue> MockBackendProxy::property(PropertyId id) const
+  {
+    return _real.property(id);
+  }
+
+  PropertyInfo MockBackendProxy::queryProperty(PropertyId id) const noexcept
+  {
+    return _real.queryProperty(id);
+  }
+
+  MockProviderProxy::MockProviderProxy(BackendProvider& real)
+    : _real{real}
+  {
+  }
+
+  void MockProviderProxy::shutdown() noexcept
+  {
+  }
+
+  Subscription MockProviderProxy::subscribeDevices(OnDevicesChangedCallback callback)
+  {
+    return _real.subscribeDevices(callback);
+  }
+
+  std::unique_ptr<Backend> MockProviderProxy::createBackend(Device const& device, ProfileId const& profile)
+  {
+    return _real.createBackend(device, profile);
+  }
+
+  BackendProvider::Status MockProviderProxy::status() const
+  {
+    return _real.status();
+  }
+
+  Subscription MockProviderProxy::subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback)
+  {
+    return _real.subscribeGraph(routeAnchor, callback);
+  }
+} // namespace ao::audio::test

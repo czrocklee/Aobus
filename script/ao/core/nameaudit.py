@@ -26,7 +26,7 @@ ROLE_ALLOWED_PREFIXES: dict[str, tuple[str, ...]] = {
 
 ROLE_SUFFIXES = tuple(sorted(ROLE_ALLOWED_PREFIXES, key=len, reverse=True))
 GENERIC_SUFFIXES = ("Utils", "Util", "Utility", "Types")
-LEGACY_GENERIC_FILES = frozenset({"test/unit/TestUtils.h"})
+LEGACY_GENERIC_FILES: frozenset[str] = frozenset()
 
 RECORD_DEFINITION_RE = re.compile(r"\b(?:class|struct)\s+([A-Z][A-Za-z0-9_]*)\b[^;{}]*\{", re.DOTALL)
 TEST_DOUBLE_RE = re.compile(r"^(?:Fake|Mock|Spy|Stub)[A-Z]")

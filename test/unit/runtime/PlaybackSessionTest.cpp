@@ -4,10 +4,14 @@
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
 #include "runtime/playback/PlaybackCursorSession.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/PlaybackTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Sleeper.h>
@@ -33,6 +37,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/yaml/RymlAdapter.h>

@@ -3,10 +3,15 @@
 
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/PlaybackTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
@@ -28,6 +33,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 

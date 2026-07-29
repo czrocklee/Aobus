@@ -3,8 +3,8 @@
 
 #include "CliRuntime.h"
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include <ao/Exception.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>

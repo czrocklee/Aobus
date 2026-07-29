@@ -5,6 +5,7 @@
 #include "detail/ThrowError.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>

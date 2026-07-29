@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -7,8 +7,6 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Property.h>
-
-#include <expected>
 
 namespace ao::audio
 {
@@ -23,66 +21,28 @@ namespace ao::audio
   class NullBackend : public Backend
   {
   public:
-    NullBackend() = default;
-    ~NullBackend() override = default;
+    NullBackend() noexcept;
+    ~NullBackend() override;
 
     NullBackend(NullBackend const&) = delete;
     NullBackend& operator=(NullBackend const&) = delete;
     NullBackend(NullBackend&&) = delete;
     NullBackend& operator=(NullBackend&&) = delete;
 
-    Result<> open(Format const& /*format*/, RenderTarget* /*target*/) override { return {}; }
-    void start() override {}
-    void pause() override {}
-    void resume() override {}
-    void flush() override {}
-    void stop() override {}
-    void close() override {}
+    Result<> open(Format const& format, RenderTarget* target) override;
+    void start() override;
+    void pause() override;
+    void resume() override;
+    void flush() override;
+    void stop() override;
+    void close() override;
 
-    Result<> setProperty(PropertyId id, PropertyValue const& value) override
-    {
-      if (id == PropertyId::Volume)
-      {
-        _volume = std::get<float>(value);
-        return {};
-      }
+    Result<> setProperty(PropertyId id, PropertyValue const& value) override;
+    Result<PropertyValue> property(PropertyId id) const override;
+    PropertyInfo queryProperty(PropertyId id) const noexcept override;
 
-      if (id == PropertyId::Muted)
-      {
-        _muted = std::get<bool>(value);
-        return {};
-      }
-
-      return std::unexpected(Error{.code = Error::Code::NotSupported});
-    }
-
-    Result<PropertyValue> property(PropertyId id) const override
-    {
-      if (id == PropertyId::Volume)
-      {
-        return _volume;
-      }
-
-      if (id == PropertyId::Muted)
-      {
-        return _muted;
-      }
-
-      return std::unexpected(Error{.code = Error::Code::NotSupported});
-    }
-
-    PropertyInfo queryProperty(PropertyId id) const noexcept override
-    {
-      if (id == PropertyId::Volume || id == PropertyId::Muted)
-      {
-        return {.canRead = true, .canWrite = true, .isAvailable = true, .emitsChangeNotifications = false};
-      }
-
-      return {};
-    }
-
-    BackendId backendId() const override { return BackendId{kBackendNone}; }
-    ProfileId profileId() const override { return ProfileId{kProfileShared}; }
+    BackendId backendId() const override;
+    ProfileId profileId() const override;
 
   private:
     float _volume = 1.0F;

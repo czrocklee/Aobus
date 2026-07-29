@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/ThemeCoordinator.h"
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/image/CoverArtView.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/image/ResourceImageLoader.h"
@@ -15,14 +16,19 @@
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
 #include "tag/TagEditor.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include "track/TrackPageHost.h"
 #include "track/TrackQuickFilter.h"
 #include <ao/CoreIds.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/TrackStore.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackMutation.h>

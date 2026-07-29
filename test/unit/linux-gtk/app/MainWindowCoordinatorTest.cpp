@@ -3,14 +3,15 @@
 
 #include "app/MainWindowCoordinator.h"
 
-#include "../GtkTestSupport.h"
 #include "app/AppConfigStore.h"
 #include "app/ThemeCoordinator.h"
 #include "portal/ImportExportCoordinator.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>

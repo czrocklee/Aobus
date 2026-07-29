@@ -3,7 +3,7 @@
 
 #include "lib/audio/detail/Mp4PacketSource.h"
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 
 #include <catch2/catch_test_macros.hpp>

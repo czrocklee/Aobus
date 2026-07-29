@@ -20,6 +20,7 @@
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <algorithm>
 #include <array>

@@ -4,6 +4,7 @@
 #include "layout/document/LayoutPresets.h"
 
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>

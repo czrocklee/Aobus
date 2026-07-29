@@ -3,7 +3,7 @@
 
 #include "lib/audio/detail/MappedFileCursor.h"
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -3,130 +3,105 @@
 
 #pragma once
 
-#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/layout/component/track/TrackDetailScope.h"
-#include "app/linux-gtk/layout/runtime/ActionRegistry.h"
-#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
-#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
-#include "runtime/playback/PlaybackSuccession.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/playback/PlaybackService.h>
-#include <ao/rt/projection/TrackDetailProjection.h>
-#include <ao/uimodel/layout/document/LayoutNode.h>
-#include <ao/uimodel/layout/document/LayoutPreparation.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+#include <ao/rt/projection/TrackDetailSnapshot.h>
 
-#include <gtkmm/application.h>
-#include <gtkmm/window.h>
 #include <sigc++/signal.h>
 
 #include <functional>
 #include <memory>
-#include <string>
 #include <string_view>
-#include <tuple>
-#include <utility>
+
+namespace Gtk
+{
+  class Window;
+}
+
+namespace ao::library
+{
+  class MusicLibrary;
+}
+
+namespace ao::rt
+{
+  class AppRuntime;
+}
+
+namespace ao::uimodel
+{
+  struct LayoutDocument;
+  struct LayoutNode;
+  class PreparedLayout;
+}
+
+namespace ao::gtk
+{
+  struct GtkUiDependencies;
+}
+
+namespace ao::gtk::layout
+{
+  class ActionRegistry;
+  class ComponentRegistry;
+  struct LayoutBuildContext;
+  class LayoutComponent;
+  class LayoutRuntime;
+}
 
 namespace ao::gtk::layout::test
 {
-  inline uimodel::PreparedLayout preparedLayout(uimodel::LayoutDocument const& document)
-  {
-    return ao::test::requireValue(uimodel::prepareLayout(document));
-  }
+  uimodel::PreparedLayout preparedLayout(uimodel::LayoutDocument const& document);
 
   class [[nodiscard]] FakeTrackDetailScope final : public TrackDetailScope
   {
   public:
-    explicit FakeTrackDetailScope(rt::TrackDetailSnapshot snap = {})
-      : _snap{std::move(snap)}
-    {
-    }
+    explicit FakeTrackDetailScope(rt::TrackDetailSnapshot snap = {});
+    ~FakeTrackDetailScope() override;
 
-    rt::TrackDetailSnapshot const& snapshot() const override { return _snap; }
+    FakeTrackDetailScope(FakeTrackDetailScope const&) = delete;
+    FakeTrackDetailScope& operator=(FakeTrackDetailScope const&) = delete;
+    FakeTrackDetailScope(FakeTrackDetailScope&&) = delete;
+    FakeTrackDetailScope& operator=(FakeTrackDetailScope&&) = delete;
 
-    sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override
-    {
-      return _signalSnapshotChanged;
-    }
+    rt::TrackDetailSnapshot const& snapshot() const override;
 
-    void setSnapshot(rt::TrackDetailSnapshot snap)
-    {
-      _snap = std::move(snap);
-      _signalSnapshotChanged.emit(_snap);
-    }
+    sigc::signal<void(rt::TrackDetailSnapshot const&)>& signalSnapshotChanged() override;
+
+    void setSnapshot(rt::TrackDetailSnapshot snap);
 
   private:
-    rt::TrackDetailSnapshot _snap;
-    sigc::signal<void(rt::TrackDetailSnapshot const&)> _signalSnapshotChanged;
+    struct State;
+    std::unique_ptr<State> _statePtr;
   };
 
   class LayoutRuntimeFixture final
   {
   public:
     explicit LayoutRuntimeFixture(std::string_view applicationId = "io.github.aobus.layout_test",
-                                  std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {})
-      : _appPtr{Gtk::Application::create(std::string{applicationId})}
-      , _runtime{gtk::test::makeRuntime(_tempDir, std::move(initializeLibrary))}
-      , _playbackCommandSurface{_runtime.playback(), [this] { std::ignore = _runtime.playSelectionInFocusedView(); }}
-      , _ctx{.registry = _components,
-             .actionRegistry = _actions,
-             .runtime = _runtime,
-             .parentWindow = _window,
-             .runtimeState = _runtimeState,
-             .buildState = LayoutBuildStateView{_runtimeState},
-             .dependencies = _dependencies}
-      , _layoutRuntime{_components}
-    {
-      LayoutRuntime::registerStandardComponents(_components);
-      _dependencies.playbackCommandSurface = &_playbackCommandSurface;
-    }
+                                  std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {});
+    ~LayoutRuntimeFixture() noexcept;
 
-    rt::AppRuntime& runtime() { return _runtime; }
-    Gtk::Window& window() { return _window; }
-    ComponentRegistry& components() { return _components; }
-    ActionRegistry const& actions() const { return _actions; }
-    LayoutBuildContext& context() { return _ctx; }
-    GtkUiDependencies& dependencies() { return _dependencies; }
-    LayoutRuntime& layoutRuntime() { return _layoutRuntime; }
+    LayoutRuntimeFixture(LayoutRuntimeFixture const&) = delete;
+    LayoutRuntimeFixture& operator=(LayoutRuntimeFixture const&) = delete;
+    LayoutRuntimeFixture(LayoutRuntimeFixture&&) = delete;
+    LayoutRuntimeFixture& operator=(LayoutRuntimeFixture&&) = delete;
 
-    FakeTrackDetailScope& attachTrackDetailScope(rt::TrackDetailSnapshot snap = {})
-    {
-      _trackDetailScopePtr = std::make_unique<FakeTrackDetailScope>(std::move(snap));
-      _ctx.detailScope = _trackDetailScopePtr.get();
-      return *_trackDetailScopePtr;
-    }
+    rt::AppRuntime& runtime();
+    Gtk::Window& window();
+    ComponentRegistry& components();
+    ActionRegistry const& actions() const;
+    LayoutBuildContext& context();
+    GtkUiDependencies& dependencies();
+    LayoutRuntime& layoutRuntime();
 
-    std::unique_ptr<LayoutComponent> create(uimodel::LayoutNode const& node) { return _components.create(_ctx, node); }
+    FakeTrackDetailScope& attachTrackDetailScope(rt::TrackDetailSnapshot snap = {});
 
-    std::unique_ptr<LayoutComponent> createWithTransientContext(uimodel::LayoutNode const& node)
-    {
-      auto ctx = LayoutBuildContext{.registry = _components,
-                                    .actionRegistry = _actions,
-                                    .runtime = _runtime,
-                                    .parentWindow = _window,
-                                    .runtimeState = _runtimeState,
-                                    .buildState = LayoutBuildStateView{_runtimeState},
-                                    .dependencies = _dependencies,
-                                    .detailScope = _trackDetailScopePtr.get()};
-      return _components.create(ctx, node);
-    }
+    std::unique_ptr<LayoutComponent> create(uimodel::LayoutNode const& node);
+
+    std::unique_ptr<LayoutComponent> createWithTransientContext(uimodel::LayoutNode const& node);
 
   private:
-    Glib::RefPtr<Gtk::Application> _appPtr;
-    ao::test::TempDir _tempDir;
-    rt::AppRuntime _runtime;
-    uimodel::PlaybackCommandSurface _playbackCommandSurface;
-    ComponentRegistry _components;
-    ActionRegistry _actions;
-    Gtk::Window _window;
-    LayoutRuntimeState _runtimeState;
-    GtkUiDependencies _dependencies;
-    LayoutBuildContext _ctx;
-    LayoutRuntime _layoutRuntime;
-    std::unique_ptr<FakeTrackDetailScope> _trackDetailScopePtr;
+    struct State;
+    std::unique_ptr<State> _statePtr;
   };
 } // namespace ao::gtk::layout::test

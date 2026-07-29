@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "test/unit/FilesystemTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/utility/Path.h>

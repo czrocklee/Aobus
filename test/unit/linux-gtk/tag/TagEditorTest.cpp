@@ -3,7 +3,11 @@
 
 #include "tag/TagEditor.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include <ao/rt/AppRuntime.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>
@@ -86,9 +90,10 @@ namespace ao::gtk::test
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
 
-    auto const trackId = addRuntimeTrack(runtime, {.tags = {"Rock", "90s", std::string{kLongTag}}});
-    addRuntimeTrack(runtime, {.tags = {"Jazz"}});
-    auto const emptyTrackId = addRuntimeTrack(runtime, {});
+    auto const trackId =
+      addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Rock", "90s", std::string{kLongTag}}});
+    addRuntimeTrack(runtime, library::test::TrackSpec{.tags = {"Jazz"}});
+    auto const emptyTrackId = addRuntimeTrack(runtime, library::test::TrackSpec{});
 
     auto editor = TagEditor{};
     auto window = Gtk::Window{};

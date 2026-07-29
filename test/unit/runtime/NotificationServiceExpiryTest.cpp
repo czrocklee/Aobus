@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationService.h>

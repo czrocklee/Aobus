@@ -3,10 +3,13 @@
 
 #include "tui/EventController.h"
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/PlaybackTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "tui/LibraryController.h"
 #include "tui/NotificationCenterPanel.h"
 #include "tui/OutputDeviceController.h"

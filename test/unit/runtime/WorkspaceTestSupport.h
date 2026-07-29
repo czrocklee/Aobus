@@ -3,35 +3,22 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryWriter.h>
 
 #include <string>
-#include <utility>
 
 namespace ao::rt::test
 {
   struct WorkspaceRuntimeFixture final
   {
-    WorkspaceRuntimeFixture()
-      : runtime{makeRuntime(tempDir)}
-      , firstListId{createList("First")}
-      , secondListId{createList("Second")}
-      , thirdListId{createList("Third")}
-      , fourthListId{createList("Fourth")}
-    {
-    }
+    WorkspaceRuntimeFixture();
 
-    ListId createList(std::string name)
-    {
-      return ao::test::requireValue(
-        runtime.library().writer().createList(LibraryWriter::ListDraft{.name = std::move(name)}));
-    }
+    ListId createList(std::string name);
 
     // These fixture values are intentionally public as the tests' assertion surface.
     ao::test::TempDir tempDir;
@@ -42,29 +29,11 @@ namespace ao::rt::test
     ListId fourthListId;
   };
 
-  inline ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)
-  {
-    auto result = runtime.workspace().navigate(request);
-    REQUIRE(result);
-    return *result;
-  }
+  ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request);
 
-  inline ViewId requireNavigation(AppRuntime& runtime, NavigationTarget const& target)
-  {
-    return requireNavigation(runtime, NavigationRequest{.target = target});
-  }
+  ViewId requireNavigation(AppRuntime& runtime, NavigationTarget const& target);
 
-  inline ViewId requireBackNavigation(AppRuntime& runtime)
-  {
-    auto result = runtime.workspace().goBack();
-    REQUIRE(result);
-    return runtime.workspace().snapshot().activeViewId;
-  }
+  ViewId requireBackNavigation(AppRuntime& runtime);
 
-  inline ViewId requireForwardNavigation(AppRuntime& runtime)
-  {
-    auto result = runtime.workspace().goForward();
-    REQUIRE(result);
-    return runtime.workspace().snapshot().activeViewId;
-  }
+  ViewId requireForwardNavigation(AppRuntime& runtime);
 } // namespace ao::rt::test

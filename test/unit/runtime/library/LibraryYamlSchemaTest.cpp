@@ -2,8 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/FilesystemTestSupport.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/rt/library/LibraryYamlImporter.h>

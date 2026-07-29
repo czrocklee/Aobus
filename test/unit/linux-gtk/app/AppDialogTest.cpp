@@ -3,7 +3,8 @@
 
 #include "app/AppDialog.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <glib-object.h>

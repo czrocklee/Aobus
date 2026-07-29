@@ -3,16 +3,19 @@
 
 #pragma once
 
+#include <ao/AudioCodec.h>
+#include <ao/AudioScalars.h>
 #include <ao/Error.h>
+#include <ao/PictureType.h>
 #include <ao/media/file/File.h>
 #include <ao/media/file/Visitor.h>
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -37,7 +40,7 @@ namespace ao::media::file::test
 
     struct CallbackEvent final
     {
-      CallbackKind kind;
+      CallbackKind kind = CallbackKind::Text;
       std::uint8_t field = 0;
 
       bool operator==(CallbackEvent const&) const = default;
@@ -49,17 +52,8 @@ namespace ao::media::file::test
       std::span<std::byte const> bytes;
     };
 
-    std::string_view text(TextField field) const
-    {
-      auto const iter = _texts.find(field);
-      return iter == _texts.end() ? std::string_view{} : iter->second;
-    }
-
-    std::uint16_t number(NumberField field) const
-    {
-      auto const iter = _numbers.find(field);
-      return iter == _numbers.end() ? 0 : iter->second;
-    }
+    std::string_view text(TextField field) const;
+    std::uint16_t number(NumberField field) const;
 
     AudioCodec codec() const noexcept { return _codec; }
     std::chrono::milliseconds duration() const noexcept { return _duration; }
@@ -89,67 +83,17 @@ namespace ao::media::file::test
   class VisitorSpy final : public Visitor
   {
   public:
-    explicit VisitorSpy(RecordedContent& content)
-      : _content{content}
-    {
-    }
+    explicit VisitorSpy(RecordedContent& content);
 
-    void text(TextField field, std::string_view value) override
-    {
-      _content._texts.insert_or_assign(field, value);
-      _content._events.push_back(
-        {.kind = RecordedContent::CallbackKind::Text, .field = static_cast<std::uint8_t>(field)});
-    }
-
-    void number(NumberField field, std::uint16_t value) override
-    {
-      _content._numbers.insert_or_assign(field, value);
-      _content._events.push_back(
-        {.kind = RecordedContent::CallbackKind::Number, .field = static_cast<std::uint8_t>(field)});
-    }
-
-    void codec(AudioCodec value) override
-    {
-      _content._codec = value;
-      _content._events.push_back({.kind = RecordedContent::CallbackKind::Codec});
-    }
-
-    void duration(std::chrono::milliseconds duration) override
-    {
-      _content._duration = duration;
-      _content._events.push_back({.kind = RecordedContent::CallbackKind::Duration});
-    }
-
-    void bitrate(Bitrate value) override
-    {
-      _content._bitrate = value;
-      _content._events.push_back({.kind = RecordedContent::CallbackKind::Bitrate});
-    }
-
-    void sampleRate(SampleRate value) override
-    {
-      _content._sampleRate = value;
-      _content._events.push_back({.kind = RecordedContent::CallbackKind::SampleRate});
-    }
-
-    void channels(Channels value) override
-    {
-      _content._channels = value;
-      _content._events.push_back({.kind = RecordedContent::CallbackKind::Channels});
-    }
-
-    void bitDepth(BitDepth value) override
-    {
-      _content._bitDepth = value;
-      _content._events.push_back({.kind = RecordedContent::CallbackKind::BitDepth});
-    }
-
-    void picture(PictureType type, std::span<std::byte const> bytes) override
-    {
-      _content._pictures.push_back(RecordedContent::Picture{.type = type, .bytes = bytes});
-      _content._events.push_back(
-        {.kind = RecordedContent::CallbackKind::Picture, .field = static_cast<std::uint8_t>(type)});
-    }
+    void text(TextField field, std::string_view value) override;
+    void number(NumberField field, std::uint16_t value) override;
+    void codec(AudioCodec value) override;
+    void duration(std::chrono::milliseconds duration) override;
+    void bitrate(Bitrate value) override;
+    void sampleRate(SampleRate value) override;
+    void channels(Channels value) override;
+    void bitDepth(BitDepth value) override;
+    void picture(PictureType type, std::span<std::byte const> bytes) override;
 
   private:
     RecordedContent& _content;
@@ -159,40 +103,19 @@ namespace ao::media::file::test
   class TestFile final
   {
   public:
-    explicit TestFile(std::filesystem::path const& path)
-      : _fileResult{File::open(path)}
-    {
-    }
+    explicit TestFile(std::filesystem::path const& path);
+    ~TestFile();
 
-    Result<RecordedContent> readContent() const
-    {
-      if (!_fileResult)
-      {
-        return std::unexpected{_fileResult.error()};
-      }
+    TestFile(TestFile const&) = delete;
+    TestFile& operator=(TestFile const&) = delete;
+    TestFile(TestFile&&) noexcept;
+    TestFile& operator=(TestFile&&) = delete;
 
-      auto content = RecordedContent{};
-      auto visitor = VisitorSpy{content};
-
-      if (auto const visitResult = _fileResult->visit(visitor); !visitResult)
-      {
-        return std::unexpected{visitResult.error()};
-      }
-
-      return content;
-    }
-
-    Result<PayloadView> audioPayload() const
-    {
-      if (!_fileResult)
-      {
-        return std::unexpected{_fileResult.error()};
-      }
-
-      return _fileResult->audioPayload();
-    }
+    Result<RecordedContent> readContent() const;
+    Result<PayloadView> audioPayload() const;
 
   private:
-    Result<File> _fileResult;
+    struct Impl;
+    std::unique_ptr<Impl> _implPtr;
   };
 } // namespace ao::media::file::test

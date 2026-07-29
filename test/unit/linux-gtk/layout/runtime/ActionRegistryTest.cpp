@@ -3,8 +3,9 @@
 
 #include "layout/runtime/ActionRegistry.h"
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -32,7 +33,7 @@ namespace ao::gtk::layout::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    rt::AppRuntime runtime = makeRuntime(tempDir);
 
     auto window = Gtk::Window{};
     auto widget = Gtk::Box{};

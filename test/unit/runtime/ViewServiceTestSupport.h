@@ -3,12 +3,17 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestSupport.h"
-#include <ao/async/Runtime.h>
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
+#include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 
 #include <memory>
@@ -25,62 +30,14 @@ namespace ao::rt::test
     ViewService service;
     WorkspaceService workspace;
 
-    ViewServiceFixture()
-      : changes{executor, 0}
-      , writerFixture{libraryFixture.library(), changes}
-      , cachePtr{std::make_unique<TrackSourceCache>(libraryFixture.library(), changes)}
-      , service{executor, libraryFixture.library(), *cachePtr}
-      , workspace{executor, service, changes}
-    {
-    }
+    ViewServiceFixture();
 
-    LibraryWriter& writer() { return writerFixture.writer(); }
+    LibraryWriter& writer();
 
-    TrackId addTrack(library::test::TrackSpec const& spec)
-    {
-      return addTrackAndPublish(libraryFixture.library(), changes, spec);
-    }
+    TrackId addTrack(library::test::TrackSpec const& spec);
 
-    ViewId requireView(TrackListViewConfig const& config = {})
-    {
-      auto request = NavigationRequest{
-        .target = FilteredListTarget{.listId = config.listId, .filterExpression = config.filterExpression},
-      };
+    ViewId requireView(TrackListViewConfig const& config = {});
 
-      if (config.optPresentation)
-      {
-        request.optPresentation = NavigationPresentation{.spec = *config.optPresentation};
-      }
-      else if (config.groupBy != TrackGroupKey::None || !config.sortBy.empty())
-      {
-        auto presentation = defaultTrackPresentationSpec();
-
-        if (config.groupBy != TrackGroupKey::None)
-        {
-          for (auto const& preset : builtinTrackPresentationPresets())
-          {
-            if (preset.spec.groupBy == config.groupBy)
-            {
-              presentation = preset.spec;
-              break;
-            }
-          }
-        }
-
-        if (!config.sortBy.empty())
-        {
-          presentation.sortBy = config.sortBy;
-        }
-
-        request.optPresentation = NavigationPresentation{.spec = std::move(presentation)};
-      }
-
-      return ao::test::requireValue(workspace.navigate(request));
-    }
-
-    std::shared_ptr<TrackListProjection> requireProjection(ViewId const viewId)
-    {
-      return ao::test::requireValue(service.findTrackListProjection(viewId));
-    }
+    std::shared_ptr<TrackListProjection> requireProjection(ViewId viewId);
   };
 } // namespace ao::rt::test

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/TrackPresentation.h>
@@ -21,6 +21,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <ios>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -38,7 +39,7 @@ namespace
     file << "  presentationVersion: " << presentationVersion << "\n";
     file << "  openViews:";
 
-    if (listIds.size() == 0)
+    if (std::empty(listIds))
     {
       file << " []\n";
     }

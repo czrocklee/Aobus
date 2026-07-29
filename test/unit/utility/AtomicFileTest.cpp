@@ -3,7 +3,7 @@
 
 #include "lib/utility/AtomicFileTransaction.h"
 #include "test/unit/FilesystemTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/utility/AtomicFile.h>
 

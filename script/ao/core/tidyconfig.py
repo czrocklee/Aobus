@@ -41,5 +41,5 @@ CONFIG_BASE = """
   {key: 'cppcoreguidelines-macro-usage.AllowedRegexp', value: '^DEBUG_*|^[A-Z_]+_LOG_[A-Z_]+$'},
   {key: 'misc-use-internal-linkage.AnalyzeTypes', value: false},
   {key: 'bugprone-suspicious-include.IgnoredRegex', value: '.*\\.g\\.cpp$'},
-  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4[/\\\\].*;.*boost[/\\\\]asio[/\\\\].*;.*boost[/\\\\]interprocess[/\\\\].*;.*boost[/\\\\]system[/\\\\].*;.*boost[/\\\\]unordered[/\\\\].*;.*boost[/\\\\]pfr.*;.*[/\\\\]flat_(set|map);.*[/\\\\]errno.h;.*glib.*;.*Windows Kits.*;.*windows\\.h;.*[/\\\\]pch\\.h;.*[/\\\\]winrt[/\\\\].*;.*\\.g\\.h'}
+  {key: 'misc-include-cleaner.IgnoreHeaders', value: '.*yaml-cpp.*;.*ryml.*;.*c4[/\\\\].*;.*boost[/\\\\]asio[/\\\\].*;.*boost[/\\\\]interprocess[/\\\\].*;.*boost[/\\\\]system[/\\\\].*;.*boost[/\\\\]unordered[/\\\\].*;.*boost[/\\\\]pfr.*;.*[/\\\\]flat_(set|map);.*[/\\\\]errno.h;.*glib.*;.*Windows Kits.*;.*windows\\.h;.*[/\\\\]pch\\.h;.*[/\\\\]winrt[/\\\\].*;.*ao[/\\\\]utility[/\\\\]StrongTypeFormatter\\.h$;.*\\.g\\.h'}
  ]}"""

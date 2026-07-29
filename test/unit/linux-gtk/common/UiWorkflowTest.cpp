@@ -3,7 +3,8 @@
 
 #include "common/UiWorkflow.h"
 
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Exception.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Runtime.h>

@@ -43,6 +43,7 @@ add_library(aobus-gtk-lib STATIC
     platform/MprisArtUrlCache.cpp
     platform/MprisArtUrlSession.cpp
     platform/MprisBridge.cpp
+    platform/MprisPlaybackEndpoint.cpp
 
     preference/ShortcutEditorWidget.cpp
     preference/PreferencesWindow.cpp
@@ -107,6 +108,7 @@ add_library(aobus-gtk-lib STATIC
 
     layout/document/LayoutPresets.cpp
     layout/runtime/LayoutRuntime.cpp
+    layout/runtime/StatefulComponentState.cpp
     layout/runtime/ComponentRegistry.cpp
     layout/runtime/ComponentInteractionController.cpp
     layout/runtime/ComponentTooltipController.cpp
@@ -153,6 +155,7 @@ add_library(aobus-gtk-lib STATIC
     layout/component/semantic/TracksTableComponent.cpp
     layout/component/semantic/WorkspaceWithDetailPaneComponent.cpp
     layout/component/container/AbsoluteCanvasComponent.cpp
+    layout/component/container/AllocationObserver.cpp
     layout/component/container/BoxComponent.cpp
     layout/component/container/CenterBoxComponent.cpp
     layout/component/container/CollapsibleSplitComponent.cpp

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
 #include "test/unit/library/TrackViewTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"

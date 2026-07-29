@@ -5,10 +5,11 @@
 #include "BackendTestSupport.h"
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/async/LoopExecutor.h>
+#include <ao/async/Runtime.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/DecodedStreamInfo.h>

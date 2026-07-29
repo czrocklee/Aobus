@@ -3,8 +3,10 @@
 
 #include "playback/VolumeControlWidget.h"
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include <ao/rt/playback/PlaybackService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/button.h>

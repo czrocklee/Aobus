@@ -30,6 +30,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/PreparedPlayback.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

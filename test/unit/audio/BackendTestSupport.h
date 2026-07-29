@@ -32,24 +32,21 @@ namespace ao::audio::test
   class MockBackendProxy final : public Backend
   {
   public:
-    explicit MockBackendProxy(Backend& real)
-      : _real{real}
-    {
-    }
+    explicit MockBackendProxy(Backend& real);
 
-    Result<> open(Format const& f, RenderTarget* t) override { return _real.open(f, t); }
-    void start() override { _real.start(); }
-    void pause() override { _real.pause(); }
-    void resume() override { _real.resume(); }
-    void flush() override { _real.flush(); }
-    void stop() override { _real.stop(); }
-    void close() override { _real.close(); }
-    BackendId backendId() const override { return _real.backendId(); }
-    ProfileId profileId() const override { return _real.profileId(); }
-    Result<> setProperty(PropertyId id, PropertyValue const& value) override { return _real.setProperty(id, value); }
+    Result<> open(Format const& f, RenderTarget* t) override;
+    void start() override;
+    void pause() override;
+    void resume() override;
+    void flush() override;
+    void stop() override;
+    void close() override;
+    BackendId backendId() const override;
+    ProfileId profileId() const override;
+    Result<> setProperty(PropertyId id, PropertyValue const& value) override;
 
-    Result<PropertyValue> property(PropertyId id) const override { return _real.property(id); }
-    PropertyInfo queryProperty(PropertyId id) const noexcept override { return _real.queryProperty(id); }
+    Result<PropertyValue> property(PropertyId id) const override;
+    PropertyInfo queryProperty(PropertyId id) const noexcept override;
 
   private:
     Backend& _real;
@@ -61,29 +58,17 @@ namespace ao::audio::test
   class MockProviderProxy final : public BackendProvider
   {
   public:
-    explicit MockProviderProxy(BackendProvider& real)
-      : _real{real}
-    {
-    }
+    explicit MockProviderProxy(BackendProvider& real);
 
-    void shutdown() noexcept override {}
+    void shutdown() noexcept override;
 
-    Subscription subscribeDevices(OnDevicesChangedCallback callback) override
-    {
-      return _real.subscribeDevices(callback);
-    }
+    Subscription subscribeDevices(OnDevicesChangedCallback callback) override;
 
-    std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override
-    {
-      return _real.createBackend(device, profile);
-    }
+    std::unique_ptr<Backend> createBackend(Device const& device, ProfileId const& profile) override;
 
-    Status status() const override { return _real.status(); }
+    Status status() const override;
 
-    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override
-    {
-      return _real.subscribeGraph(routeAnchor, callback);
-    }
+    Subscription subscribeGraph(std::string_view routeAnchor, OnGraphChangedCallback callback) override;
 
   private:
     BackendProvider& _real;

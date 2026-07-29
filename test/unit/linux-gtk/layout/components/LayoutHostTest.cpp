@@ -11,10 +11,13 @@
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "layout/document/LayoutPresets.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/components/ContainerTestHelpers.h"
 #include "test/unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
@@ -22,6 +25,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
 #include <gtkmm/label.h>
+#include <gtkmm/paned.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
@@ -31,6 +35,7 @@
 namespace ao::gtk::layout::test
 {
   using namespace uimodel;
+  using ao::gtk::test::AllocationHost;
   using ao::gtk::test::makeRuntime;
 
   namespace
@@ -46,7 +51,7 @@ namespace ao::gtk::layout::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    rt::AppRuntime runtime = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry);
@@ -174,7 +179,7 @@ namespace ao::gtk::layout::test
 
       auto window2 = Gtk::Window{};
       auto const tempDir2 = ao::test::TempDir{};
-      auto runtime2 = makeRuntime(tempDir2);
+      rt::AppRuntime runtime2 = makeRuntime(tempDir2);
       auto const actionRegistry2 = ActionRegistry{};
       auto runtimeState2 = LayoutRuntimeState{};
       auto dependencies2 = GtkUiDependencies{};

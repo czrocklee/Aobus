@@ -2,9 +2,11 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/library/LibraryMutationService.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/Exception.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/MusicLibrary.h>

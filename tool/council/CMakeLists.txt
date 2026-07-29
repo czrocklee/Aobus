@@ -4,6 +4,7 @@ add_library(ao_council STATIC
     ProcessRunner.cpp
     Serialization.cpp
     Substrate.cpp
+    YamlEmit.cpp
 )
 
 target_include_directories(ao_council PUBLIC

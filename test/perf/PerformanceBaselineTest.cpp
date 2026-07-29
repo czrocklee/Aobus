@@ -3,10 +3,10 @@
 //
 // Phase 0 baseline measurement — synthetic data, no fixed pass/fail thresholds.
 
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
@@ -21,6 +21,7 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/SmartListEvaluator.h>

@@ -1,7 +1,14 @@
 # ao_utility
 add_library(ao_utility STATIC
+    AudioCodecText.cpp
     Base64.cpp
+    Exception.cpp
     MappedFile.cpp
+    RymlAdapter.cpp
+    ScopedRegistration.cpp
+    Serialization.cpp
+    String.cpp
+    StringArena.cpp
     ThreadName.cpp
     Uuid.cpp
     Xxh3.cpp

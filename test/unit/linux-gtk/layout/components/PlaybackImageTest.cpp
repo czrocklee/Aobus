@@ -1,21 +1,28 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/linux-gtk/app/GtkUiDependencies.h"
 #include "app/linux-gtk/image/CoverArtView.h"
 #include "app/linux-gtk/image/ImageCache.h"
 #include "app/linux-gtk/image/ResourceImageLoader.h"
+#include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentTooltipController.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "portal/ImportExportCallbacks.h"
 #include "portal/LibraryImportExportWorkflow.h"
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/library/MusicLibrary.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>

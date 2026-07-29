@@ -2,7 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "detail/TrackPreparation.h"
-#include <ao/AudioCodec.h>
+#include <ao/AudioCodecText.h>
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Runtime.h>

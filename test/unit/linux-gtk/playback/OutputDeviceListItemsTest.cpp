@@ -3,7 +3,7 @@
 
 #include "playback/OutputDeviceListItems.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include <ao/audio/Device.h>
 
 #include <catch2/catch_test_macros.hpp>

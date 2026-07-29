@@ -36,6 +36,11 @@ Over repeated low-level setup in every test.
 
 Fixture defaults should be non-trivial enough to prove data flow. Avoid using only empty strings, `0`, or `false` unless the test is about empty/default behavior.
 
+Shared support must keep its compile surface narrow.
+Templates, necessary compile-time definitions, and genuinely trivial accessors may remain in a support header.
+Concrete fixture construction, lifecycle, I/O, event driving, and stateful helper methods belong in a paired `.cpp` file compiled by the owning test-support target.
+Split support by the behavior or layer that consumes it instead of creating an include-all compatibility header.
+
 ## Testability seams
 
 Tests should observe public behavior, not bypass production privacy. Do not add
@@ -99,4 +104,10 @@ Consider adding or improving a helper when:
 
 Do not add a fixture that hides the action or assertion. The behavior under test should still be visible in the test body.
 
-Before adding another local helper, search for an existing one in nearby test support headers such as `test/unit/TestUtils.h`, `test/unit/RuntimeTestSupport.h`, or `test/unit/linux-gtk/GtkTestSupport.h`. Prefer converging repeated queued executors, runtime setup, LMDB setup, and GTK window/present/drain/unset lifecycles into one shared helper when the behavior is genuinely common.
+Before adding another local helper, search for the narrow support header in the
+owning test layer, such as `test/unit/TestFixtureSupport.h`, the focused runtime
+support headers under `test/unit/runtime/`, or the focused GTK support headers
+under `test/unit/linux-gtk/`.
+Prefer converging repeated queued executors, runtime setup, LMDB setup, and GTK
+window/present/drain/unset lifecycles into one shared helper when the behavior
+is genuinely common, while keeping unrelated support in separate headers.

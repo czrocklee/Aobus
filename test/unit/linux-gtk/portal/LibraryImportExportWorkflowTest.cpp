@@ -4,12 +4,16 @@
 #include "portal/LibraryImportExportWorkflow.h"
 
 #include "portal/ImportExportCallbacks.h"
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>

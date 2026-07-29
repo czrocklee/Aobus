@@ -3,49 +3,27 @@
 
 #pragma once
 
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
-#include <ao/rt/source/TrackSourceLease.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <span>
-#include <string>
 #include <string_view>
-#include <variant>
 
 namespace ao::rt::test
 {
-  inline std::string_view trackGroupHeadingText(TrackGroupHeadingValue const& value)
-  {
-    auto const* text = std::get_if<std::string>(&value);
-    return text != nullptr ? std::string_view{*text} : std::string_view{};
-  }
+  std::string_view trackGroupHeadingText(TrackGroupHeadingValue const& value);
 
-  inline std::optional<std::uint16_t> trackGroupHeadingYear(TrackGroupHeadingValue const& value)
-  {
-    if (auto const* year = std::get_if<std::uint16_t>(&value); year != nullptr)
-    {
-      return *year;
-    }
+  std::optional<std::uint16_t> trackGroupHeadingYear(TrackGroupHeadingValue const& value);
 
-    return std::nullopt;
-  }
-
-  inline std::optional<MissingTrackValueKind> trackGroupHeadingMissingKind(TrackGroupHeadingValue const& value)
-  {
-    if (auto const* kind = std::get_if<MissingTrackValueKind>(&value); kind != nullptr)
-    {
-      return *kind;
-    }
-
-    return std::nullopt;
-  }
+  std::optional<MissingTrackValueKind> trackGroupHeadingMissingKind(TrackGroupHeadingValue const& value);
 
   struct TrackListProjectionFixture final
   {
@@ -55,26 +33,12 @@ namespace ao::rt::test
     SmartListEvaluator engine;
     std::shared_ptr<SmartListSource> filteredPtr;
 
-    TrackListProjectionFixture()
-      : sourcePtr{std::make_shared<MutableTrackSource>()}, source{*sourcePtr}, engine{libraryFixture.library()}
-    {
-    }
+    TrackListProjectionFixture();
 
-    TrackListProjection createProjection(ViewId viewId)
-    {
-      return TrackListProjection{viewId, TrackSourceLease{filteredPtr}, libraryFixture.library()};
-    }
+    TrackListProjection createProjection(ViewId viewId);
 
-    TrackListProjection createUnfilteredProjection(ViewId viewId)
-    {
-      return TrackListProjection{viewId, TrackSourceLease{sourcePtr}, libraryFixture.library()};
-    }
+    TrackListProjection createUnfilteredProjection(ViewId viewId);
 
-    void setupFiltered(std::span<TrackId const> ids)
-    {
-      source.setInitial(ids);
-      filteredPtr = std::make_shared<SmartListSource>(TrackSourceLease{sourcePtr}, engine);
-      filteredPtr->reload();
-    }
+    void setupFiltered(std::span<TrackId const> ids);
   };
 } // namespace ao::rt::test

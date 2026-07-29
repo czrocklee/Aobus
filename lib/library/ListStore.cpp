@@ -9,6 +9,7 @@
 #include <ao/library/WriteTransaction.h>
 #include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <cstddef>
 #include <expected>

@@ -8,6 +8,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
+#include <ao/utility/ByteView.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -16,10 +17,45 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::library
 {
+  namespace detail
+  {
+    bool isFourByteAligned(std::span<std::byte const> bytes) noexcept
+    {
+      return utility::bytes::isAligned(bytes.data(), 4U);
+    }
+
+    Result<> validateSerializedTrackSize(std::size_t size, std::string_view label)
+    {
+      if ((size % 4U) != 0)
+      {
+        return makeError(Error::Code::CorruptData, std::string{label} + " track record size is not 4-byte aligned");
+      }
+
+      return {};
+    }
+
+    Result<> validateSerializedTrackBytes(std::span<std::byte const> bytes, std::string_view label)
+    {
+      if (auto sizeResult = validateSerializedTrackSize(bytes.size(), label); !sizeResult)
+      {
+        return sizeResult;
+      }
+
+      if (!isFourByteAligned(bytes))
+      {
+        return makeError(Error::Code::CorruptData, std::string{label} + " track record pointer is not 4-byte aligned");
+      }
+
+      return {};
+    }
+  } // namespace detail
+
   // TrackStore implementation
   TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity)
     : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}, _identity{&identity}

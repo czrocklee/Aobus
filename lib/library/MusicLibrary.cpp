@@ -4,6 +4,7 @@
 #include "LibraryIdentity.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>

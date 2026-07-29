@@ -405,8 +405,8 @@ Nuance beyond the table:
   collections tied to a clear owner or domain. Do not use it as a domain or
   test junk drawer.
 - Do not add domain test helper files named `*Utils`, `*Util`, or `*Utility`.
-- The root `test/unit/TestUtils.h` header is reserved for low-level shared test
-  utilities.
+- The root `test/unit/TestFixtureSupport.h` header is reserved for low-level
+  shared test utilities.
 
 ### File names
 

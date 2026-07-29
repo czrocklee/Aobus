@@ -3,7 +3,10 @@
 
 #include "track/TrackQuickFilter.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
@@ -96,7 +99,7 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
     auto& runtime = fixture.runtime();
-    addRuntimeTrack(runtime, {.title = "Completion Track", .artist = "Aimer"});
+    addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Completion Track", .artist = "Aimer"});
 
     auto window = Gtk::Window{};
     auto filter = TrackQuickFilter{runtime};

@@ -36,8 +36,10 @@ endif()
 add_definitions(${LLVM_DEFINITIONS})
 
 set(AOBUS_LINT_PLUGIN_SOURCES
+  check/AstHelpers.cpp
   check/AsyncCancellationGuardCheck.cpp
   check/CApiGlobalQualificationCheck.cpp
+  check/CalleeQualificationHelpers.cpp
   check/ConcreteFinalCheck.cpp
   check/ControlBlockSpacingCheck.cpp
   check/IncludeConventionCheck.cpp
@@ -58,6 +60,7 @@ set(AOBUS_LINT_PLUGIN_SOURCES
   check/UseIfInitStatementCheck.cpp
   check/LambdaParamsCheck.cpp
   check/PointerNamingConventionCheck.cpp
+  check/RaiiHeuristics.cpp
   check/ChronoNamingConventionCheck.cpp
   check/MemberOrderCheck.cpp
   check/UseEraseIfCheck.cpp

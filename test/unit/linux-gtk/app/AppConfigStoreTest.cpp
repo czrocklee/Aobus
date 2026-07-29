@@ -4,7 +4,7 @@
 #include "app/AppConfigStore.h"
 
 #include "app/WindowState.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/rt/AppPrefsState.h>
 
 #include <catch2/catch_test_macros.hpp>

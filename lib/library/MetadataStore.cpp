@@ -3,6 +3,7 @@
 
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/ReadTransaction.h>

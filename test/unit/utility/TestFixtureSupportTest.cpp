@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 
 #include "test/unit/FilesystemTestSupport.h"
 
@@ -16,7 +16,7 @@
 
 namespace ao::test
 {
-  TEST_CASE("TestUtils - temporary files use isolated directories", "[utility][unit][test-utils]")
+  TEST_CASE("TestFixtureSupport - temporary files use isolated directories", "[utility][unit][test-fixture-support]")
   {
     constexpr auto kFirstData = std::to_array<std::uint8_t>({'a'});
     constexpr auto kSecondData = std::to_array<std::uint8_t>({'b'});
@@ -39,7 +39,8 @@ namespace ao::test
     CHECK_FALSE(std::filesystem::exists(secondDirectory));
   }
 
-  TEST_CASE("TestUtils - moving temporary directories preserves cleanup ownership", "[utility][unit][test-utils]")
+  TEST_CASE("TestFixtureSupport - moving temporary directories preserves cleanup ownership",
+            "[utility][unit][test-fixture-support]")
   {
     auto firstPath = std::filesystem::path{};
     auto secondPath = std::filesystem::path{};

@@ -5,8 +5,9 @@
 #include "app/linux-gtk/layout/document/LayoutPresets.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
+#include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
@@ -14,6 +15,7 @@
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
 #include <ao/yaml/RymlAdapter.h>
 

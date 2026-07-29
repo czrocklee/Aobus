@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "../../GtkTestSupport.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
@@ -13,6 +15,7 @@
 #include <gtkmm/grid.h>
 #include <gtkmm/popover.h>
 #include <gtkmm/widget.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
 #include <string>

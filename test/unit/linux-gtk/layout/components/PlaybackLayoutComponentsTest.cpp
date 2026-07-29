@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "app/AobusSoul.h"
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutNode.h>
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include "../../GtkTestSupport.h"
 #include "app/linux-gtk/layout/editor/LayoutEditorDialog.h"
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
 #include "layout/document/LayoutPresets.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 

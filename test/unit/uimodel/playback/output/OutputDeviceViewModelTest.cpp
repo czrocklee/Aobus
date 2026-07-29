@@ -2,8 +2,9 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "runtime/playback/PlaybackTransport.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
+#include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>

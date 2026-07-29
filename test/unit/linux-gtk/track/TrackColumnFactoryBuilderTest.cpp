@@ -4,14 +4,18 @@
 #include "track/TrackColumnFactoryBuilder.h"
 
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceLease.h>

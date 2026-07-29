@@ -3,11 +3,7 @@
 
 #pragma once
 
-#include <array>
-#include <cstddef>
 #include <cstdint>
-#include <optional>
-#include <string_view>
 
 namespace ao
 {
@@ -20,46 +16,6 @@ namespace ao
     Aac = 128,
     Mp3 = 129,
   };
-
-  namespace detail
-  {
-    struct AudioCodecNameEntry final
-    {
-      AudioCodec codec;
-      std::string_view name;
-    };
-
-    inline constexpr auto kAudioCodecNames = std::to_array<AudioCodecNameEntry>({
-      {.codec = AudioCodec::Flac, .name = "FLAC"},
-      {.codec = AudioCodec::Alac, .name = "ALAC"},
-      {.codec = AudioCodec::Wav, .name = "WAV"},
-      {.codec = AudioCodec::Aac, .name = "AAC"},
-      {.codec = AudioCodec::Mp3, .name = "MP3"},
-    });
-
-    constexpr char toUpperAscii(char ch) noexcept
-    {
-      return ch >= 'a' && ch <= 'z' ? static_cast<char>(ch - 'a' + 'A') : ch;
-    }
-
-    constexpr bool equalsIgnoreAsciiCase(std::string_view lhs, std::string_view rhs) noexcept
-    {
-      if (lhs.size() != rhs.size())
-      {
-        return false;
-      }
-
-      for (std::size_t index = 0; index < lhs.size(); ++index)
-      {
-        if (toUpperAscii(lhs[index]) != toUpperAscii(rhs[index]))
-        {
-          return false;
-        }
-      }
-
-      return true;
-    }
-  } // namespace detail
 
   constexpr AudioCodec audioCodecFromStorage(std::uint8_t value) noexcept
   {
@@ -79,36 +35,5 @@ namespace ao
   constexpr std::uint8_t audioCodecStorageValue(AudioCodec codec) noexcept
   {
     return static_cast<std::uint8_t>(audioCodecFromStorage(static_cast<std::uint8_t>(codec)));
-  }
-
-  constexpr std::string_view audioCodecName(AudioCodec codec) noexcept
-  {
-    for (auto const& entry : detail::kAudioCodecNames)
-    {
-      if (entry.codec == codec)
-      {
-        return entry.name;
-      }
-    }
-
-    return {};
-  }
-
-  constexpr std::optional<AudioCodec> parseAudioCodecName(std::string_view name) noexcept
-  {
-    if (detail::equalsIgnoreAsciiCase(name, "UNKNOWN"))
-    {
-      return AudioCodec::Unknown;
-    }
-
-    for (auto const& entry : detail::kAudioCodecNames)
-    {
-      if (detail::equalsIgnoreAsciiCase(name, entry.name))
-      {
-        return entry.codec;
-      }
-    }
-
-    return std::nullopt;
   }
 } // namespace ao

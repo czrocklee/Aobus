@@ -3,7 +3,7 @@
 
 #include "list/ListRowObject.h"
 #include "list/ListTreeItem.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include <ao/CoreIds.h>
 
 #include <catch2/catch_test_macros.hpp>

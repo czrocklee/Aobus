@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include "../GtkTestSupport.h"
 #include "app/AppConfigStore.h"
 #include "app/GtkLayoutStateStore.h"
 #include "app/MainWindow.h"
 #include "app/MainWindowCoordinator.h"
 #include "list/ListNavigationController.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/TrackPresentation.h>
@@ -71,7 +73,7 @@ namespace ao::gtk::test
     TrackId addPlayableTrack(rt::AppRuntime& runtime, std::string_view const title)
     {
       auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-      return addRuntimeTrack(runtime, {.title = std::string{title}, .uri = fixturePath});
+      return addRuntimeTrack(runtime, library::test::TrackSpec{.title = std::string{title}, .uri = fixturePath});
     }
 
     std::vector<rt::ViewId> viewsForList(rt::AppRuntime& runtime, ListId const listId)

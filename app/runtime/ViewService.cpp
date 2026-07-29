@@ -22,6 +22,7 @@
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceLease.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 

@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -42,7 +44,7 @@ namespace ao::gtk::layout::test
       for (auto const type : types)
       {
         auto const node = LayoutNode{.type = std::string{type}};
-        auto const compPtr = fixture.create(node);
+        std::unique_ptr<LayoutComponent> const compPtr = fixture.create(node);
         CHECK(compPtr != nullptr);
       }
     }

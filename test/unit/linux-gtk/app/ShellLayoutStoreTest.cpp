@@ -3,7 +3,7 @@
 
 #include "app/ShellLayoutStore.h"
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>

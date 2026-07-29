@@ -4,7 +4,8 @@
 #include "layout/runtime/ActionBinder.h"
 
 #include "layout/runtime/ActionRegistry.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>

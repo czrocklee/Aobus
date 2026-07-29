@@ -23,10 +23,12 @@ add_gperf_header(
 add_library(ao_media STATIC
     file/File.cpp
     file/detail/Content.cpp
+    file/detail/Decoder.cpp
     file/flac/File.cpp
     file/mp4/File.cpp
     file/mpeg/File.cpp
     file/mpeg/Frame.cpp
+    file/mpeg/id3v2/Frame.cpp
     file/mpeg/id3v2/Reader.cpp
     file/wav/File.cpp
     mp4/Demuxer.cpp

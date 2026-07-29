@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
 #include <ao/library/MusicLibrary.h>
 
 namespace ao::library::test
@@ -14,9 +13,6 @@ namespace ao::library::test
     ao::test::TempDir temp;
     MusicLibrary library;
 
-    LibraryStoreFixture()
-      : temp{}, library{temp.path(), temp.path() / "db"}
-    {
-    }
+    LibraryStoreFixture();
   };
 } // namespace ao::library::test

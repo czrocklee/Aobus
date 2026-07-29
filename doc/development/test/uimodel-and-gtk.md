@@ -117,17 +117,16 @@ Reflection and reaching into controller lists are last resorts. Use them only
 when there is no public entry point, and assert the final observable effect, not
 merely that the controller exists.
 
-Use GTK test support helpers from `test/unit/linux-gtk/GtkTestSupport.h`:
+Use the narrow GTK test support header that owns the required behavior:
 
-- `ensureGtkApplication()` before creating GTK widgets.
-- `GtkWindowFixture` when a widget must be mounted or presented.
-- `GtkRuntimeFixture` or `makeRuntime()` for runtime-backed widgets.
-- `drainGtkEvents()` after posting runtime events or emitting GTK signals.
-- `emitClicked`, `emitActivate`, `emitClosed`, `emitFocusEnter`,
-  `emitFocusLeave`, `emitGesturePressed`, and `emitGestureReleased` for user
-  events.
-- `collectAll`, `findLabelByText`, `findButtonByLabel`, `hasCssClass`,
-  `findWidget`, and `findWidgetByClass` for assertions.
+- `GtkApplicationTestSupport.h` owns application initialization, event draining,
+  pumping, and `GtkWindowFixture`.
+- `GtkWidgetTestSupport.h` owns widget traversal, controller lookup, CSS
+  assertions, and signal emission.
+- `GtkLayoutTestSupport.h` owns allocation hosts and explicit widget
+  measurement support.
+- `GtkRuntimeTestSupport.h` owns `GtkRuntimeFixture`, runtime-backed track
+  mutation, and runtime settlement.
 
 Prefer normal public accessors for important widgets when that observability is
 part of the component contract:
@@ -196,20 +195,20 @@ helper tests and leave a thin GTK regression.
 
 ## Shared GTK test infrastructure
 
-New GTK tests must reuse `test/unit/linux-gtk/GtkTestSupport.h` before
-hand-rolling helpers. It already provides application/window fixtures,
-runtime-backed fixtures, event-loop draining, widget search helpers, CSS
-assertion helpers, signal emitters, `RenderLog<T>`, `FakePlaybackEvents`, and
-`ManualTrackDetailMock`.
+New GTK tests must reuse the focused support header for their layer before
+hand-rolling helpers.
+When the same new helper appears in two or more test files, promote it into the
+narrow application, widget, layout, or runtime support owner instead of copying
+it or expanding an umbrella.
+Shared output/backend fakes should follow the shared fake precedent in
+`test/unit/audio/BackendTestSupport.h` rather than being duplicated between
+uimodel and GTK audio tests.
 
-When the same new helper appears in two or more test files, promote it into
-`GtkTestSupport.h` instead of copying it. Before adding another widget-tree
-search, CSS, signal, focus, gesture, runtime, or window helper, check
-`GtkTestSupport.h` first. Shared output/backend fakes should follow the shared
-fake precedent in `test/unit/audio/BackendTestSupport.h` rather than being
-duplicated between uimodel and GTK audio tests.
-
-Keep helpers header-only, narrow, and stateless. Do not grow a test framework.
+Keep interfaces narrow and stateless where possible.
+Only templates and necessary compile-time definitions remain header-only;
+concrete event, lifecycle, allocation, and runtime fixture implementations are
+compiled once in the GTK test-support target.
+Do not grow a test framework.
 
 ## Heavy coordinator tests
 
@@ -248,7 +247,7 @@ guidelines depend on keeping logic out of widgets:
 - Geometry assertions, if any, are tagged `[geometry]` and test a component
   contract.
 - Reflection/gesture-poking, if used, asserts the final effect.
-- Reused helpers come from `GtkTestSupport.h`; new shared helpers are promoted
-  there.
+- Reused helpers come from the focused application, widget, layout, or runtime
+  support header; new shared helpers are promoted to that owner.
 - Testability seams follow [fixtures and helpers](fixture-and-helper.md).
 - Full-window coverage is a single smoke section, not a coverage farm.

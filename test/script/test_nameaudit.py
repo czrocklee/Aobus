@@ -83,7 +83,7 @@ class NameAuditTest(unittest.TestCase):
             files = {
                 "include/ao/PlaybackTransport.h": "struct PlaybackTransportTestAccess;",
                 "app/runtime/TestAccess.cpp": "class TestAccess final {};",
-                "test/unit/RuntimeTestSupport.h": "class RuntimeTestAccess final {};",
+                "test/unit/runtime/AppRuntimeTestSupport.h": "class RuntimeTestAccess final {};",
             }
             for name, source in files.items():
                 path = root / name
@@ -102,7 +102,7 @@ class NameAuditTest(unittest.TestCase):
                     "through a production composition seam",
                 ),
                 (
-                    "test/unit/RuntimeTestSupport.h",
+                    "test/unit/runtime/AppRuntimeTestSupport.h",
                     "test-access",
                     "*TestAccess types are banned; use public behavior or inject collaborators "
                     "through a production composition seam",

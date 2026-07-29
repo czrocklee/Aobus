@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Aobus Contributors
 
 #include "runtime/playback/PlaybackSuccession.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/runtime/PlaybackSuccessionTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/PlaybackSuccessionBaseTestSupport.h"
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackMode.h>

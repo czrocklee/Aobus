@@ -11,6 +11,105 @@ if(LINUX)
   target_link_libraries(ao_test_options INTERFACE PkgPipeWire PkgALSA PkgUDEV)
 endif()
 
+# Concrete test support is compiled once per layer. Keep these libraries
+# dependency-directed: a narrow test must not inherit runtime or frontend
+# headers merely to use a temporary directory or a Track fixture.
+add_library(ao_test_support_common STATIC
+    unit/TestFixtureSupport.cpp
+)
+target_link_libraries(ao_test_support_common
+    PUBLIC
+      ao_test_options
+      ao_utility
+      Catch2::Catch2
+)
+
+add_library(ao_test_support_library STATIC
+    unit/library/LibraryBinaryTestSupport.cpp
+    unit/library/LibraryStoreTestSupport.cpp
+    unit/library/MusicLibraryTestSupport.cpp
+    unit/library/TrackBuilderTestSupport.cpp
+    unit/library/TrackStoreTestSupport.cpp
+    unit/library/TrackTestSupport.cpp
+    unit/library/TrackViewTestSupport.cpp
+    unit/library/WritableLibraryTestSupport.cpp
+)
+target_link_libraries(ao_test_support_library
+    PUBLIC
+      ao_test_support_common
+      ao_library
+      Catch2::Catch2
+)
+
+add_library(ao_test_support_audio STATIC
+    unit/audio/AudioFixtureSupport.cpp
+    unit/audio/BackendTestSupport.cpp
+    unit/audio/DecoderTestSupport.cpp
+    unit/audio/EngineTestSupport.cpp
+    unit/audio/FakeCapturingBackend.cpp
+    unit/audio/ScriptedDecoderSession.cpp
+)
+target_link_libraries(ao_test_support_audio
+    PUBLIC
+      ao_test_options
+      ao_audio
+      FakeIt::FakeIt-catch
+    PRIVATE
+      ao_test_support_common
+      Catch2::Catch2
+)
+
+add_library(ao_test_support_runtime STATIC
+    unit/runtime/AppRuntimeTestSupport.cpp
+    unit/runtime/AsyncTestSupport.cpp
+    unit/runtime/ExecutorTestSupport.cpp
+    unit/runtime/PlaybackSuccessionBaseTestSupport.cpp
+    unit/runtime/PlaybackSuccessionSeekTestSupport.cpp
+    unit/runtime/PlaybackSuccessionTransportTestSupport.cpp
+    unit/runtime/PlaybackTestSupport.cpp
+    unit/runtime/PlaybackTransportTestSupport.cpp
+    unit/runtime/PlaybackUiTestSupport.cpp
+    unit/runtime/RuntimeLibraryTestSupport.cpp
+    unit/runtime/ViewServiceTestSupport.cpp
+    unit/runtime/WorkspaceTestSupport.cpp
+    unit/runtime/projection/TrackListProjectionTestSupport.cpp
+    unit/runtime/source/TrackSourceTestSupport.cpp
+)
+target_link_libraries(ao_test_support_runtime
+    PUBLIC
+      ao_test_options
+      ao_test_support_audio
+      ao_test_support_library
+      ao_test_support_common
+      ao_app_runtime
+      Catch2::Catch2
+      FakeIt::FakeIt-catch
+)
+
+if(AOBUS_BUILD_GTK)
+  add_library(ao_test_support_gtk STATIC
+      unit/linux-gtk/GtkApplicationTestSupport.cpp
+      unit/linux-gtk/GtkLayoutTestSupport.cpp
+      unit/linux-gtk/GtkRuntimeTestSupport.cpp
+      unit/linux-gtk/GtkWidgetTestSupport.cpp
+      unit/linux-gtk/image/ImageTestSupport.cpp
+      unit/linux-gtk/layout/LayoutTestSupport.cpp
+      unit/linux-gtk/layout/components/ContainerTestHelpers.cpp
+      unit/linux-gtk/layout/state/FakeLayoutComponentStateStore.cpp
+  )
+  target_link_libraries(ao_test_support_gtk
+      PUBLIC
+        ao_test_options
+        aobus-gtk-lib
+        PkgGTKMM
+      PRIVATE
+        ao_test_support_runtime
+        ao_test_support_library
+        ao_test_support_common
+        Catch2::Catch2
+  )
+endif()
+
 # ao_core_test: portable unit + integration tests
 add_executable(ao_core_test
     # async tests
@@ -29,8 +128,9 @@ add_executable(ao_core_test
     unit/utility/UuidTest.cpp
     unit/utility/YamlReflectTest.cpp
     unit/utility/RymlAdapterTest.cpp
+    unit/utility/ScopedRegistrationTest.cpp
     unit/utility/YamlSerializationTest.cpp
-    unit/utility/TestUtilsTest.cpp
+    unit/utility/TestFixtureSupportTest.cpp
     unit/core/AudioCodecTest.cpp
     unit/core/ExceptionTest.cpp
     unit/core/ErrorTest.cpp
@@ -49,11 +149,13 @@ add_executable(ao_core_test
     unit/query/ExecutionPlanContractTest.cpp
     unit/query/ExecutionPlanDictionaryTest.cpp
     unit/query/ExecutionPlanFieldCatalogTest.cpp
+    unit/query/ExecutionPlanTestSupport.cpp
     unit/query/ExecutionPlanMembershipTest.cpp
     unit/query/ExecutionPlanStringExpressionTest.cpp
     unit/query/ExecutionPlanTagBloomTest.cpp
     unit/query/ExecutionPlanUnitLiteralTest.cpp
     unit/query/FormatExpressionTest.cpp
+    unit/query/PlanEvaluatorTestSupport.cpp
     unit/query/PlanEvaluatorCollectionTest.cpp
     unit/query/PlanEvaluatorComparisonTest.cpp
     unit/query/PlanEvaluatorDictionaryTest.cpp
@@ -67,6 +169,7 @@ add_executable(ao_core_test
     unit/query/QueryErrorTest.cpp
 
     # media file tests
+    unit/media/file/TestFile.cpp
     unit/media/file/MpegFrameTest.cpp
     unit/media/file/MpegFileTest.cpp
     unit/media/file/Mp4FileTest.cpp
@@ -77,9 +180,11 @@ add_executable(ao_core_test
     unit/media/file/DecoderTest.cpp
 
     # media tests
+    unit/media/mp4/TestAtoms.cpp
     unit/media/mp4/AtomTest.cpp
     unit/media/mp4/DemuxerTest.cpp
     unit/media/mp4/SampleDescriptionTest.cpp
+    unit/media/wav/TestWav.cpp
     unit/media/wav/RiffTest.cpp
 
     # library tests
@@ -113,6 +218,7 @@ add_executable(ao_core_test
     unit/library/MusicLibraryTest.cpp
 
     # lmdb tests
+    unit/lmdb/LmdbTestSupport.cpp
     unit/lmdb/EnvironmentTest.cpp
     unit/lmdb/TransactionTest.cpp
     unit/lmdb/DatabaseTest.cpp
@@ -124,6 +230,7 @@ add_executable(ao_core_test
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
+    unit/audio/NullBackendTest.cpp
     unit/audio/detail/AacConfigParserTest.cpp
     unit/audio/detail/MappedFileCursorTest.cpp
     unit/audio/detail/Mp4PacketSourceTest.cpp
@@ -206,6 +313,7 @@ add_executable(ao_core_test
     unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp
     unit/uimodel/library/property/TagEditTest.cpp
     unit/uimodel/library/property/TrackAuthoringSessionTest.cpp
+    unit/uimodel/library/property/TrackAuthoringTestSupport.cpp
     unit/uimodel/library/property/TrackPropertiesFormSpecTest.cpp
     unit/uimodel/library/property/TrackPropertiesFormModelTest.cpp
     unit/uimodel/library/task/LibraryScanWorkflowTest.cpp
@@ -329,7 +437,13 @@ add_executable(ao_core_test
     unit/runtime/resource/ResourceByteLoaderTest.cpp
 )
 
-target_link_libraries(ao_core_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+target_link_libraries(ao_core_test PRIVATE
+    ao_app_uimodel
+    ao_test_support_runtime
+    ao_test_options
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
 if(LINUX)
   target_sources(ao_core_test PRIVATE
     unit/FilesystemTestSupportPosix.cpp
@@ -356,6 +470,7 @@ add_test(NAME ao_core_test COMMAND ao_core_test)
 if(AOBUS_BUILD_TUI)
 # ao_tui_test: terminal frontend unit tests
 add_executable(ao_tui_test
+    unit/tui/TuiRenderTestSupport.cpp
     unit/tui/AnchoredOverlayTest.cpp
     unit/tui/CommandCompletionTest.cpp
     unit/tui/CommandCompletionStateTest.cpp
@@ -386,7 +501,15 @@ add_executable(ao_tui_test
     unit/tui/TuiHitRegionsTest.cpp
 )
 
-target_link_libraries(ao_tui_test PRIVATE aobus-tui-lib ao_app_uimodel ao_app_runtime ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+target_link_libraries(ao_tui_test PRIVATE
+    aobus-tui-lib
+    ao_app_uimodel
+    ao_app_runtime
+    ao_test_support_runtime
+    ao_test_options
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
 add_test(NAME ao_tui_test COMMAND ao_tui_test)
 
 # ao_tui_bench: allocation-bound TUI render micro-benchmarks. EXCLUDE_FROM_ALL so
@@ -409,7 +532,13 @@ add_executable(ao_cli_test
     unit/cli/OutputTest.cpp
 )
 
-target_link_libraries(ao_cli_test PRIVATE aobus-cli-lib ao_test_options Catch2::Catch2WithMain)
+target_link_libraries(ao_cli_test PRIVATE
+    aobus-cli-lib
+    ao_test_support_audio
+    ao_test_support_library
+    ao_test_options
+    Catch2::Catch2WithMain
+)
 add_test(NAME ao_cli_test COMMAND ao_cli_test)
 endif()
 
@@ -428,7 +557,7 @@ add_executable(ao_council_test
     integration/council/SubstrateTest.cpp
 )
 target_include_directories(ao_council_test PRIVATE "${CMAKE_SOURCE_DIR}")
-target_link_libraries(ao_council_test PRIVATE ao_council Catch2::Catch2WithMain)
+target_link_libraries(ao_council_test PRIVATE ao_council ao_test_support_common Catch2::Catch2WithMain)
 target_compile_definitions(ao_council_test PRIVATE
   AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
   AOBUS_COUNCIL_EXE="$<TARGET_FILE:aobus-council>"
@@ -444,7 +573,13 @@ add_executable(ao_integration_test
     integration/media/file/FileTest.cpp
 )
 
-target_link_libraries(ao_integration_test PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+target_link_libraries(ao_integration_test PRIVATE
+    ao_app_uimodel
+    ao_test_support_library
+    ao_test_options
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
 if(LINUX)
   target_sources(ao_integration_test PRIVATE integration/audio/backend/PipeWireProviderTest.cpp)
 endif()
@@ -560,7 +695,15 @@ add_executable(ao_gtk_test
     unit/linux-gtk/playback/VolumeControlWidgetTest.cpp
 )
 
-target_link_libraries(ao_gtk_test PRIVATE aobus-gtk-lib PkgGTKMM ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+target_link_libraries(ao_gtk_test PRIVATE
+    aobus-gtk-lib
+    ao_test_support_gtk
+    ao_test_support_runtime
+    PkgGTKMM
+    ao_test_options
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     target_link_libraries(ao_gtk_test PRIVATE -Wl,-u,aobus_get_resource)
 endif()
@@ -573,7 +716,13 @@ add_executable(ao_perf_baseline
     perf/PerformanceBaselineTest.cpp
 )
 
-target_link_libraries(ao_perf_baseline PRIVATE ao_app_uimodel ao_test_options Catch2::Catch2WithMain FakeIt::FakeIt-catch)
+target_link_libraries(ao_perf_baseline PRIVATE
+    ao_app_uimodel
+    ao_test_support_runtime
+    ao_test_options
+    Catch2::Catch2WithMain
+    FakeIt::FakeIt-catch
+)
 
 # Compilation database support for custom linter integration fixture
 file(GLOB_RECURSE LINT_FIXTURE_SOURCES "integration/lint/fixture/*.cpp")

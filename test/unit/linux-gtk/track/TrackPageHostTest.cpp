@@ -6,9 +6,11 @@
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationController.h"
 #include "tag/TagEditController.h"
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
@@ -86,7 +88,9 @@ namespace ao::gtk::test
     {
       rt::test::addReadyAudioProvider(runtime);
       auto const trackId = addRuntimeTrack(
-        runtime, {.title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
+        runtime,
+        library::test::TrackSpec{
+          .title = "Activated", .uri = audio::test::requireAudioFixture("basic_metadata.flac").string()});
       runtime.reloadAllTracks();
       REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));
       auto const viewId = runtime.workspace().snapshot().activeViewId;
@@ -108,7 +112,7 @@ namespace ao::gtk::test
 
     SECTION("reveal synchronizes a missing workspace page before selecting the track")
     {
-      auto const trackId = addRuntimeTrack(runtime, {.title = "Reveal Target"});
+      auto const trackId = addRuntimeTrack(runtime, library::test::TrackSpec{.title = "Reveal Target"});
       runtime.reloadAllTracks();
       host.rebuild(cache);
       REQUIRE(host.currentVisible() == nullptr);

@@ -15,6 +15,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <boost/unordered/unordered_flat_set.hpp>
 #include <gsl-lite/gsl-lite.hpp>

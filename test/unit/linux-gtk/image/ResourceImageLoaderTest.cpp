@@ -5,10 +5,12 @@
 
 #include "image/ImageCache.h"
 #include "platform/MprisArtUrlCache.h"
-#include "test/unit/RuntimeTestSupport.h"
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/image/ImageTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
@@ -16,6 +18,7 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 
 #include <catch2/catch_test_macros.hpp>

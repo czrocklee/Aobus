@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/query/ExecutionPlanTestSupport.h"
 #include "test/unit/query/PlanEvaluatorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/CoreIds.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/WriteTransaction.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/QueryCompiler.h>

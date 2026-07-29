@@ -3,9 +3,12 @@
 
 #include "list/ListTreeModelBuilder.h"
 
-#include "../../TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "../../TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>

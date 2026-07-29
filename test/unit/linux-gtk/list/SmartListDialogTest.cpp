@@ -3,11 +3,14 @@
 
 #include "list/SmartListDialog.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Serializer.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/VirtualListIds.h>
 
 #include <catch2/catch_test_macros.hpp>

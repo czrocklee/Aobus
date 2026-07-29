@@ -3,6 +3,7 @@
 
 #include "MediaTrack.h"
 #include <ao/AudioCodec.h>
+#include <ao/AudioCodecText.h>
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/CoverArt.h>

@@ -2,7 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/FilesystemTestSupport.h"
-#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/FileManifestStore.h>

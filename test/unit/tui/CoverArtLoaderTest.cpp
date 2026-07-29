@@ -4,8 +4,9 @@
 #include "tui/CoverArtLoader.h"
 
 #include "CoverArtTestSupport.h"
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/ExecutorTestSupport.h"
+#include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>

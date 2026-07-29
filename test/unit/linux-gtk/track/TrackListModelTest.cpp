@@ -4,11 +4,13 @@
 #include "track/TrackListModel.h"
 
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackRowCache.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
@@ -18,7 +20,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <giomm/listmodel.h>
 #include <glibmm/refptr.h>
-#include <gtk/gtksectionmodel.h>
+#include <gtk/gtk.h>
 #include <gtkmm/application.h>
 #include <gtkmm/multiselection.h>
 #include <sigc++/functors/mem_fun.h>

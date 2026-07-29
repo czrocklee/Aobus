@@ -7,6 +7,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
+#include <ao/utility/StrongTypeFormatter.h>
 #include <ao/yaml/Serialization.h>
 
 #include <algorithm>

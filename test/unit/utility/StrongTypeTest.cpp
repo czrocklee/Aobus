@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/utility/StrongType.h>
+#include <ao/utility/StrongTypeFormatter.h>
+#include <ao/utility/StrongTypeStream.h>
 
 #include <catch2/catch_test_macros.hpp>
 

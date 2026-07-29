@@ -3,14 +3,16 @@
 
 #include "list/ListNavigationController.h"
 
-#include "../../TestUtils.h"
+#include "../../TestFixtureSupport.h"
 #include "app/AppDialog.h"
 #include "app/ThemeCoordinator.h"
 #include "list/ListNavigationPanel.h"
 #include "list/ListTreeItem.h"
 #include "list/SmartListDialog.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListStore.h>
@@ -18,6 +20,7 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>

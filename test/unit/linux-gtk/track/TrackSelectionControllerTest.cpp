@@ -4,11 +4,14 @@
 #include "track/TrackSelectionController.h"
 
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include "track/TrackListModel.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/projection/TrackListProjection.h>
@@ -25,6 +28,7 @@
 #include <gtkmm/object.h>
 #include <gtkmm/selectionmodel.h>
 #include <gtkmm/signallistitemfactory.h>
+#include <gtkmm/window.h>
 
 #include <chrono>
 #include <cstddef>

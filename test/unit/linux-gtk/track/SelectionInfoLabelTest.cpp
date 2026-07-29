@@ -3,11 +3,13 @@
 
 #include "track/SelectionInfoLabel.h"
 
-#include "test/unit/TestUtils.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/TestFixtureSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/label.h>

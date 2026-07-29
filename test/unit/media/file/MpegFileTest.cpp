@@ -3,7 +3,7 @@
 
 #include "lib/media/file/mpeg/FrameLayout.h"
 #include "lib/media/file/mpeg/id3v2/Layout.h"
-#include "test/unit/TestUtils.h"
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/file/TestFile.h"
 #include <ao/AudioCodec.h>

@@ -3,10 +3,14 @@
 
 #include "playback/NowPlayingStatusLabel.h"
 
-#include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
+#include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackEvents.h>
 #include <ao/rt/playback/PlaybackService.h>
 
@@ -35,7 +39,8 @@ namespace ao::gtk::test
     CHECK(gtkLabel->get_tooltip_text() == "Click to show playing list");
 
     auto const fixturePath = audio::test::requireAudioFixture("basic_metadata.flac").string();
-    auto const trackId = addRuntimeTrack(fixture.runtime(), {.title = "Song", .artist = "Artist", .uri = fixturePath});
+    auto const trackId = addRuntimeTrack(
+      fixture.runtime(), library::test::TrackSpec{.title = "Song", .artist = "Artist", .uri = fixturePath});
     fixture.runtime().reloadAllTracks();
     auto const view = fixture.runtime().workspace().navigate({.target = rt::kAllTracksListId});
     REQUIRE(view);

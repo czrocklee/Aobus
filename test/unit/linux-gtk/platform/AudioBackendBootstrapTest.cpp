@@ -3,7 +3,8 @@
 
 #include "platform/AudioBackendBootstrap.h"
 
-#include "test/unit/linux-gtk/GtkTestSupport.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/audio/BackendConfig.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/rt/AppRuntime.h>

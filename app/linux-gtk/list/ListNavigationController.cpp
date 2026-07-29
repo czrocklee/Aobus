@@ -24,6 +24,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListActionPolicy.h>
+#include <ao/utility/StrongTypeFormatter.h>
 
 #include <gdkmm/rectangle.h>
 #include <giomm/actionmap.h>

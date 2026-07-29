@@ -2,11 +2,20 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/AudioCodec.h>
+#include <ao/AudioCodecText.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace ao::test
 {
+  static_assert(audioCodecStorageValue(AudioCodec::Unknown) == 0);
+  static_assert(audioCodecStorageValue(AudioCodec::Flac) == 1);
+  static_assert(audioCodecStorageValue(AudioCodec::Alac) == 2);
+  static_assert(audioCodecStorageValue(AudioCodec::Wav) == 3);
+  static_assert(audioCodecStorageValue(AudioCodec::Aac) == 128);
+  static_assert(audioCodecStorageValue(AudioCodec::Mp3) == 129);
+  static_assert(audioCodecFromStorage(255) == AudioCodec::Unknown);
+
   TEST_CASE("AudioCodec - names map to stable display strings", "[core][unit][codec]")
   {
     CHECK(audioCodecName(AudioCodec::Unknown).empty());

@@ -3,6 +3,7 @@
 
 #include "test/unit/uimodel/library/property/TrackAuthoringTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/property/TagEdit.h>

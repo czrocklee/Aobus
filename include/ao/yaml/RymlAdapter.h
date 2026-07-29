@@ -4,7 +4,6 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/Exception.h>
 
 #include <c4/std/string_view.hpp>
 #include <ryml.hpp>
@@ -15,15 +14,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
-#include <utility>
 #include <vector>
 
 namespace ao::yaml
@@ -33,237 +29,57 @@ namespace ao::yaml
   class ErrorCallbackState final
   {
   public:
-    explicit ErrorCallbackState(std::string filename = "<buffer>")
-      : _filename{std::move(filename)}
-    {
-    }
+    explicit ErrorCallbackState(std::string filename = "<buffer>");
 
-    std::string const& filename() const noexcept { return _filename; }
+    std::string const& filename() const noexcept;
 
   private:
     std::string _filename;
   };
 
-  inline void throwOnErrorWithContext(c4::basic_substring<char const> msg,
-                                      c4::yml::ErrorDataBasic const& dat,
-                                      void* userData)
-  {
-    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
-    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
-    throwException<Exception>("YAML error at {}:{}:{}: {}",
-                              filename,
-                              dat.location.line,
-                              dat.location.col,
-                              std::string_view{msg.data(), msg.size()});
-  }
+  void throwOnErrorWithContext(c4::basic_substring<char const> msg, c4::yml::ErrorDataBasic const& dat, void* userData);
+  void throwOnParseErrorWithContext(c4::basic_substring<char const> msg,
+                                    c4::yml::ErrorDataParse const& dat,
+                                    void* userData);
+  void throwOnVisitErrorWithContext(c4::basic_substring<char const> msg,
+                                    c4::yml::ErrorDataVisit const& dat,
+                                    void* userData);
 
-  inline void throwOnParseErrorWithContext(c4::basic_substring<char const> msg,
-                                           c4::yml::ErrorDataParse const& dat,
-                                           void* userData)
-  {
-    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
-    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
-    throwException<Exception>("YAML parse error at {}:{}:{}: {}",
-                              filename,
-                              dat.ymlloc.line,
-                              dat.ymlloc.col,
-                              std::string_view{msg.data(), msg.size()});
-  }
+  ryml::Callbacks callbacks();
+  ryml::Callbacks callbacks(ErrorCallbackState& state);
 
-  inline void throwOnVisitErrorWithContext(c4::basic_substring<char const> msg,
-                                           c4::yml::ErrorDataVisit const& dat,
-                                           void* userData)
-  {
-    auto const* const state = userData != nullptr ? static_cast<ErrorCallbackState const*>(userData) : nullptr;
-    auto const filename = state != nullptr ? state->filename() : std::string{"<buffer>"};
-    throwException<Exception>("YAML visit error at {}:{}:{}: {}",
-                              filename,
-                              dat.cpploc.line,
-                              dat.cpploc.col,
-                              std::string_view{msg.data(), msg.size()});
-  }
-
-  inline ryml::Callbacks callbacks()
-  {
-    auto callbacks = ryml::Callbacks{};
-    callbacks.set_error_basic(throwOnErrorWithContext);
-    callbacks.set_error_parse(throwOnParseErrorWithContext);
-    callbacks.set_error_visit(throwOnVisitErrorWithContext);
-    return callbacks;
-  }
-
-  inline ryml::Callbacks callbacks(ErrorCallbackState& state)
-  {
-    auto callbacks = ryml::Callbacks{};
-    callbacks.set_user_data(&state);
-    callbacks.set_error_basic(throwOnErrorWithContext);
-    callbacks.set_error_parse(throwOnParseErrorWithContext);
-    callbacks.set_error_visit(throwOnVisitErrorWithContext);
-    return callbacks;
-  }
-
-  inline ryml::csubstr toCsubstr(std::string_view value) noexcept
-  {
-    return ryml::csubstr{value.data(), value.size()};
-  }
-
-  inline ryml::substr toSubstr(std::vector<char>& buffer) noexcept
-  {
-    return ryml::substr{buffer.data(), buffer.size()};
-  }
-
-  inline void parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state)
-  {
-    tree.callbacks(callbacks(state));
-    ryml::parse_in_place(toCsubstr(state.filename()), toSubstr(buffer), &tree);
-  }
-
-  inline void parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state)
-  {
-    tree.callbacks(callbacks(state));
-    ryml::parse_in_arena(toCsubstr(state.filename()), toCsubstr(source), &tree);
-  }
-
-  inline ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value)
-  {
-    return tree.to_arena(toCsubstr(value));
-  }
-
-  inline ryml::csubstr copyToArena(ryml::NodeRef node, std::string_view value)
-  {
-    return node.tree()->to_arena(toCsubstr(value));
-  }
-
-  inline ryml::ConstNodeRef findChild(ryml::ConstNodeRef node, std::string_view key) noexcept
-  {
-    return node.find_child(toCsubstr(key));
-  }
-
-  inline ryml::NodeRef findChild(ryml::NodeRef node, std::string_view key) noexcept
-  {
-    return node.find_child(toCsubstr(key));
-  }
-
-  inline void setKey(ryml::NodeRef node, std::string_view key)
-  {
-    node.set_key(copyToArena(node, key));
-  }
-
-  inline void setValue(ryml::NodeRef node, std::string_view value)
-  {
-    node.set_val(copyToArena(node, value));
-  }
-
-  inline std::string boundedErrorContext(std::string_view context)
-  {
-    if (context.size() <= kMaximumErrorContextBytes)
-    {
-      return std::string{context};
-    }
-
-    constexpr auto kSuffix = std::string_view{"..."};
-    auto result = std::string{context.substr(0, kMaximumErrorContextBytes - kSuffix.size())};
-    result += kSuffix;
-    return result;
-  }
+  ryml::csubstr toCsubstr(std::string_view value) noexcept;
+  ryml::substr toSubstr(std::vector<char>& buffer) noexcept;
+  void parseInPlace(ryml::Tree& tree, std::vector<char>& buffer, ErrorCallbackState& state);
+  void parseInArena(ryml::Tree& tree, std::string_view source, ErrorCallbackState& state);
+  ryml::csubstr copyToArena(ryml::Tree& tree, std::string_view value);
+  ryml::csubstr copyToArena(ryml::NodeRef node, std::string_view value);
+  ryml::ConstNodeRef findChild(ryml::ConstNodeRef node, std::string_view key) noexcept;
+  ryml::NodeRef findChild(ryml::NodeRef node, std::string_view key) noexcept;
+  void setKey(ryml::NodeRef node, std::string_view key);
+  void setValue(ryml::NodeRef node, std::string_view value);
+  std::string boundedErrorContext(std::string_view context);
 
   /**
    * @brief Reads a file into a buffer suitable for ryml::parse_in_place.
    */
-  inline Result<std::vector<char>> readFileResult(std::filesystem::path const& path,
-                                                  std::optional<std::size_t> optMaxBytes = std::nullopt)
-  {
-    auto ifs = std::ifstream{path, std::ios::binary | std::ios::ate};
-
-    if (!ifs)
-    {
-      return makeError(Error::Code::IoError, "Failed to open file: " + path.string());
-    }
-
-    auto const end = ifs.tellg();
-
-    auto const endOffset = static_cast<std::streamoff>(end);
-
-    if (endOffset < 0)
-    {
-      return makeError(Error::Code::IoError, "Failed to inspect file size: " + path.string());
-    }
-
-    auto const unsignedSize = static_cast<std::uintmax_t>(endOffset);
-
-    if (!std::in_range<std::size_t>(unsignedSize) || !std::in_range<std::streamsize>(unsignedSize))
-    {
-      return makeError(Error::Code::ValueTooLarge, "File is too large to read: " + path.string());
-    }
-
-    auto const size = static_cast<std::size_t>(unsignedSize);
-
-    ifs.seekg(0, std::ios::beg);
-
-    if (!ifs)
-    {
-      return makeError(Error::Code::IoError, "Failed to seek file: " + path.string());
-    }
-
-    if (optMaxBytes && size > *optMaxBytes)
-    {
-      return makeError(Error::Code::ValueTooLarge,
-                       "File '" + path.string() + "' is " + std::to_string(size) + " bytes; maximum allowed is " +
-                         std::to_string(*optMaxBytes));
-    }
-
-    auto buffer = std::vector<char>(size);
-
-    if (!ifs.read(buffer.data(), static_cast<std::streamsize>(size)))
-    {
-      return makeError(Error::Code::IoError, "Failed to read file: " + path.string());
-    }
-
-    return buffer;
-  }
+  Result<std::vector<char>> readFileResult(std::filesystem::path const& path,
+                                           std::optional<std::size_t> optMaxBytes = std::nullopt);
 
   /**
    * @brief Throwing compatibility wrapper around readFileResult().
    */
-  inline std::vector<char> readFile(std::filesystem::path const& path)
-  {
-    auto result = readFileResult(path);
-
-    if (!result)
-    {
-      throwException<Exception>(std::string_view{result.error().message}, result.error().location);
-    }
-
-    return std::move(*result);
-  }
+  std::vector<char> readFile(std::filesystem::path const& path);
 
   /**
    * @brief Returns a std::string_view for a ryml node's scalar value.
    */
-  inline std::string_view scalarView(ryml::ConstNodeRef const& node)
-  {
-    if (!node.has_val())
-    {
-      return {};
-    }
-
-    auto const val = node.val();
-    return {val.data(), val.size()};
-  }
+  std::string_view scalarView(ryml::ConstNodeRef const& node);
 
   /**
    * @brief Returns a std::string_view for a ryml node's key.
    */
-  inline std::string_view keyView(ryml::ConstNodeRef const& node)
-  {
-    if (!node.has_key())
-    {
-      return {};
-    }
-
-    auto const keyStr = node.key();
-    return {keyStr.data(), keyStr.size()};
-  }
+  std::string_view keyView(ryml::ConstNodeRef const& node);
 
   template<std::integral T>
     requires(!std::same_as<T, bool>)
@@ -325,46 +141,9 @@ namespace ao::yaml
     return true;
   }
 
-  inline bool tryParseScalar(std::string_view text, bool& value) noexcept
-  {
-    if (text == "true")
-    {
-      value = true;
-      return true;
-    }
-
-    if (text == "false")
-    {
-      value = false;
-      return true;
-    }
-
-    return false;
-  }
-
-  inline bool tryReadScalar(ryml::ConstNodeRef const& node, std::string_view& value) noexcept
-  {
-    if (!node.has_val() || node.val_is_null())
-    {
-      return false;
-    }
-
-    value = scalarView(node);
-    return true;
-  }
-
-  inline bool tryReadScalar(ryml::ConstNodeRef const& node, std::string& value)
-  {
-    auto view = std::string_view{};
-
-    if (!tryReadScalar(node, view))
-    {
-      return false;
-    }
-
-    value = view;
-    return true;
-  }
+  bool tryParseScalar(std::string_view text, bool& value) noexcept;
+  bool tryReadScalar(ryml::ConstNodeRef const& node, std::string_view& value) noexcept;
+  bool tryReadScalar(ryml::ConstNodeRef const& node, std::string& value);
 
   template<typename T>
     requires(std::is_arithmetic_v<T>)
@@ -402,16 +181,7 @@ namespace ao::yaml
   /**
    * @brief Parses a boolean from a ryml node.
    */
-  inline bool asBool(ryml::ConstNodeRef const& node, bool defaultValue = false)
-  {
-    if (!node.has_val())
-    {
-      return defaultValue;
-    }
-
-    bool val = false;
-    return tryReadScalar(node, val) ? val : defaultValue;
-  }
+  bool asBool(ryml::ConstNodeRef const& node, bool defaultValue = false);
 
   /**
    * @brief Parses an integer from a ryml node.
