@@ -2,7 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/ListMutation.h>
+#include <ao/rt/WritableTagList.h>
 #include <ao/uimodel/library/list/SmartListEditorModel.h>
 #include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -22,6 +25,19 @@ namespace ao::uimodel
     state.localExpression = std::string{input.localExpression};
     state.matchCount = input.matchCount;
     state.isAllTracks = input.isAllTracks;
+    auto const optWritableTag = rt::writableTagForListExpression(input.localExpression);
+    state.hasDirectMembershipEditing = optWritableTag.has_value();
+
+    if (optWritableTag)
+    {
+      auto const expression =
+        query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = *optWritableTag});
+      state.membershipEditingText = std::format("Direct membership editing via {}", expression);
+    }
+    else
+    {
+      state.membershipEditingText = "Computed membership — edit tags or the expression";
+    }
 
     if (!input.hasPreviewSource)
     {
@@ -145,7 +161,6 @@ namespace ao::uimodel
                                           std::string expression)
   {
     auto draft = rt::LibraryListDraft{};
-    draft.kind = rt::LibraryListKind::Smart;
     draft.parentId = parentListId;
     draft.listId = editListId;
     draft.name = std::move(name);

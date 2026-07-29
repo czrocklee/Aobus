@@ -124,6 +124,7 @@ namespace ao::gtk
     void registerWorkspaceActions(RegisterActionFn const& registerAction,
                                   layout::ActionStateProvider const& hasActiveSequence);
     void registerTrackActions(RegisterActionFn const& registerAction);
+    void registerTrackOrderActions(RegisterActionFn const& registerAction);
 
     void applyPromotedPanelSizes(uimodel::LayoutDocument promotedLayout,
                                  uimodel::LayoutComponentStateDocument promotedState);
@@ -162,7 +163,7 @@ namespace ao::gtk
     PopoverAttachment _outputDevicePopover;
     PopoverAttachment _menuPopover;
     std::unique_ptr<layout::GioActionBridgeSession> _gioBridgeSessionPtr;
-    std::vector<async::Subscription> _playbackSubs;
+    std::vector<async::Subscription> _actionStateSubscriptions;
     uimodel::ShellLayoutSessionModel _session;
     std::shared_ptr<AppConfigStore> _configStorePtr;
     std::shared_ptr<ShellLayoutStore> _layoutStorePtr;

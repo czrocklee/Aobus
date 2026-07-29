@@ -22,17 +22,17 @@ namespace ao::async
 
 namespace ao::rt
 {
-  struct ManualTracksReset final
+  struct ListOrderReset final
   {
-    bool operator==(ManualTracksReset const&) const = default;
+    bool operator==(ListOrderReset const&) const = default;
   };
 
-  struct ManualListContentChange final
+  struct ListOrderChange final
   {
     ListId listId = kInvalidListId;
-    std::variant<delta::RegularTrackEditScript, ManualTracksReset> operation{};
+    std::variant<delta::RegularTrackEditScript, ListOrderReset> operation{};
 
-    bool operator==(ManualListContentChange const&) const = default;
+    bool operator==(ListOrderChange const&) const = default;
   };
 
   struct LibraryChangeSet final
@@ -44,7 +44,7 @@ namespace ao::rt
     std::vector<TrackId> tracksMutated{};
     std::vector<ListId> listsUpserted{};
     std::vector<ListId> listsDeleted{};
-    std::vector<ManualListContentChange> manualContentChanges{};
+    std::vector<ListOrderChange> listOrderChanges{};
 
     bool operator==(LibraryChangeSet const&) const = default;
   };

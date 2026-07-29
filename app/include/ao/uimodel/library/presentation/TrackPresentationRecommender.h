@@ -15,25 +15,23 @@ namespace ao::uimodel
   enum class ListPresentationSourceKind : std::uint8_t
   {
     AllTracks,
-    Smart,
-    Manual,
+    SavedList,
   };
 
   struct ListPresentationContext final
   {
     ListId listId = kInvalidListId;
     ListPresentationSourceKind sourceKind = ListPresentationSourceKind::AllTracks;
-    std::string_view smartListFilter{};
+    std::string_view listExpression{};
   };
 
   /**
    * @brief Recommends a track presentation for a list source.
    *
-   * Manual lists preserve their stored order by default. Smart lists use their
-   * filter expression to select a useful presentation, while All Tracks uses
-   * the normal library fallback.
+   * Saved Lists use their local expression to select a useful presentation,
+   * while All Tracks uses the normal library fallback.
    *
-   * @param context The list kind and smart-list filter, when applicable.
+   * @param context The source kind and saved-List expression, when applicable.
    * @param builtinPresets Available builtin presentation presets.
    * @param customPresets Available custom presentation presets.
    * @return A presentation spec derived from the available presets.

@@ -79,7 +79,7 @@ library:
     SECTION("Missing library section")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 )",
                 Error::Code::FormatRejected,
@@ -89,7 +89,7 @@ export_mode: full
     SECTION("Track missing URI")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -104,7 +104,7 @@ library:
     SECTION("Track empty URI")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -119,7 +119,7 @@ library:
     SECTION("Duplicate track ID")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -136,7 +136,7 @@ library:
     SECTION("List missing ID")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: []
@@ -150,7 +150,7 @@ library:
     SECTION("List ID 0 (Reserved)")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: []
@@ -165,7 +165,7 @@ library:
     SECTION("Duplicate list ID")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: []
@@ -182,7 +182,7 @@ library:
     SECTION("List missing name")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: []
@@ -196,7 +196,7 @@ library:
     SECTION("Malformed Base64 cover art rejects the import")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -213,7 +213,7 @@ library:
     SECTION("Unknown export mode is rejected")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: mystery
 library:
   tracks: []
@@ -226,7 +226,7 @@ library:
     SECTION("Malformed numeric version is rejected")
     {
       testError(R"(
-version: 2x
+version: 3x
 library:
   tracks: []
   lists: []
@@ -238,7 +238,7 @@ library:
     SECTION("Malformed track ID is rejected")
     {
       testError(R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -263,7 +263,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: "not-a-sequence"
@@ -281,7 +281,7 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: []
@@ -300,14 +300,14 @@ library:
       {
         auto yaml = std::ofstream{yamlPath};
         yaml << R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks: []
   lists:
     - id: 1
       name: "Ghost List"
-      tracks:
+      order:
         - 999
 )";
       }
@@ -318,7 +318,7 @@ library:
       auto transaction = ml.readTransaction();
       auto const optList = ml.lists().reader(transaction).get(ListId{1});
       REQUIRE(optList);
-      CHECK(optList->tracks().empty());
+      CHECK(optList->orderTrackIds().empty());
     }
   }
 
@@ -344,7 +344,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 library:
   tracks:

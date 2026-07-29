@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "CliTestSupport.h"
+#include "ListCommand.h"
 #include "Run.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -13,6 +14,7 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
@@ -297,6 +299,22 @@ namespace ao::cli::test
       return library::hasAudioIdentity(manifestResult->audioPayloadLength(), manifestResult->audioSignature());
     }
   } // namespace
+
+  TEST_CASE("CLI - List order authoring statuses preserve command failure semantics", "[cli][unit][list][list-order]")
+  {
+    CHECK(validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Applied));
+    CHECK(validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::NoOp));
+
+    auto const stale = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Stale);
+    REQUIRE_FALSE(stale);
+    CHECK(stale.error().code == Error::Code::Conflict);
+    CHECK(stale.error().message == "List order target became stale");
+
+    auto const unavailable = validateListOrderCommandStatus(rt::ListOrderAuthoringStatus::Unavailable);
+    REQUIRE_FALSE(unavailable);
+    CHECK(unavailable.error().code == Error::Code::InvalidState);
+    CHECK(unavailable.error().message == "Library is busy");
+  }
 
   TEST_CASE("CLI - init and dump commands run against fixture library", "[cli][workflow][smoke]")
   {
@@ -679,14 +697,14 @@ namespace ao::cli::test
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "import");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "2");
+    CHECK(yaml::scalarView(tree.rootref()["payloadVersion"]) == "3");
     CHECK(yaml::scalarView(tree.rootref()["payloadMode"]) == "full");
     CHECK(yaml::scalarView(tree.rootref()["targetScope"]) == "library");
     CHECK(yaml::scalarView(tree.rootref()["tracksCreated"]) == "1");
 
     result = target.run({"lib", "import", "--dry-run", "--mode", "restore", exportPath.string()});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Payload: YAML v2, mode 'full', target scope 'library'."));
+    CHECK(contains(result.out, "Payload: YAML v3, mode 'full', target scope 'library'."));
     CHECK(contains(result.out, "Changes: tracks +1/~0/-0, lists +0/-0, dangling references ignored 0."));
 
     result = target.run({"track", "show"});
@@ -1043,7 +1061,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(deleteTree.rootref()["trackId"]) == "1");
   }
 
-  TEST_CASE("CLI - list update and manual membership round-trip", "[cli][workflow][list]")
+  TEST_CASE("CLI - writable-tag membership and saved order round-trip", "[cli][workflow][list]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -1052,35 +1070,39 @@ namespace ao::cli::test
     auto result = fixture.run({"init"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"list", "create", "--name", "Manual"});
+    result = fixture.run({"list", "create", "--name", "Playlist", "--filter", "#playlist"});
     REQUIRE(result.status == 0);
     auto const listId = parseCreatedListId(result.out);
 
     result = fixture.run({"list", "add", std::to_string(listId), "2"});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "added tracks to list:"));
+    CHECK(contains(result.out, "Added #playlist to 1 track"));
 
     result = fixture.run({"-O", "json", "list", "add", std::to_string(listId), "1", "2", "1"});
     REQUIRE(result.status == 0);
     auto tree = parseYaml(result.out);
-    CHECK(yaml::scalarView(tree.rootref()["insertionIndex"]) == "1");
-    REQUIRE(tree.rootref()["insertedTrackIds"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["insertedTrackIds"][0]) == "1");
-    REQUIRE(tree.rootref()["alreadyPresent"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["alreadyPresent"][0]) == "2");
-    REQUIRE(tree.rootref()["duplicateRequest"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["duplicateRequest"][0]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["tag"]) == "playlist");
+    CHECK(yaml::scalarView(tree.rootref()["changed"]) == "true");
+    REQUIRE(tree.rootref()["targetTrackIds"].num_children() == 2);
+    CHECK(yaml::scalarView(tree.rootref()["targetTrackIds"][0]) == "1");
+    CHECK(yaml::scalarView(tree.rootref()["targetTrackIds"][1]) == "2");
+    REQUIRE(tree.rootref()["changes"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["trackId"]) == "1");
+
+    result = fixture.run({"list", "order", "move", std::to_string(listId), "2", "--before", "1"});
+    REQUIRE(result.status == 0);
+    CHECK(contains(result.out, "moved tracks in list:"));
 
     result = fixture.run({"-O", "json", "list", "dump"});
     REQUIRE(result.status == 0);
     tree = parseYaml(result.out);
     REQUIRE(tree.rootref()["lists"].is_seq());
     REQUIRE(tree.rootref()["lists"].num_children() == 1);
-    auto const tracks = tree.rootref()["lists"][0]["tracks"];
-    REQUIRE(tracks.is_seq());
-    REQUIRE(tracks.num_children() == 2);
-    CHECK(yaml::scalarView(tracks[0]) == "2");
-    CHECK(yaml::scalarView(tracks[1]) == "1");
+    auto const order = tree.rootref()["lists"][0]["order"];
+    REQUIRE(order.is_seq());
+    REQUIRE(order.num_children() == 2);
+    CHECK(yaml::scalarView(order[0]) == "2");
+    CHECK(yaml::scalarView(order[1]) == "1");
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
@@ -1090,7 +1112,8 @@ namespace ao::cli::test
 
     result = fixture.run({"list", "remove", std::to_string(listId), "2"});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "removed tracks from list:"));
+    CHECK(contains(result.out, "Removed #playlist from 1 track"));
+    CHECK(contains(result.out, "forgot 1 saved position"));
 
     result = fixture.run({"-O", "json", "list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
@@ -1109,7 +1132,7 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Pinned songs"));
   }
 
-  TEST_CASE("CLI - list show resolves smart list tracks", "[cli][workflow][list]")
+  TEST_CASE("CLI - list show resolves filtered List tracks", "[cli][workflow][list]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -1124,7 +1147,7 @@ namespace ao::cli::test
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Type: smart"));
+    CHECK(contains(result.out, "Filter: $title ~ \"Test\""));
     CHECK(contains(result.out, "Tracks: 1"));
     CHECK(contains(result.out, "Test Title"));
     CHECK_FALSE(contains(result.out, "HiRes Title"));
@@ -1138,10 +1161,10 @@ namespace ao::cli::test
     CHECK(contains(result.out, "Test Title"));
     CHECK(contains(result.out, "HiRes Title"));
 
-    checkDomainFailure(fixture.run({"list", "add", std::to_string(listId), "1"}), "list is not manual");
+    checkDomainFailure(fixture.run({"list", "add", std::to_string(listId), "1"}), "membership is computed");
   }
 
-  TEST_CASE("CLI - smart list detail honors parent membership", "[cli][workflow][list]")
+  TEST_CASE("CLI - child List detail honors parent membership", "[cli][workflow][list]")
   {
     auto fixture = CliFixture{};
     fixture.copyAudio("basic_metadata.flac", "basic_metadata.flac");
@@ -1154,21 +1177,15 @@ namespace ao::cli::test
     REQUIRE(result.status == 0);
     auto const testTrackId = parseFirstTrackId(result.out);
 
-    result = fixture.run({"list", "create", "--name", "Manual"});
+    result = fixture.run({"list", "create", "--name", "Parent", "--filter", "#parent"});
     REQUIRE(result.status == 0);
-    auto const manualId = parseCreatedListId(result.out);
+    auto const parentId = parseCreatedListId(result.out);
 
-    result = fixture.run({"list", "add", std::to_string(manualId), std::to_string(testTrackId)});
+    result = fixture.run({"list", "add", std::to_string(parentId), std::to_string(testTrackId)});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"list",
-                          "create",
-                          "--name",
-                          "Child Smart",
-                          "--parent",
-                          std::to_string(manualId),
-                          "--filter",
-                          "$title ~ \"Title\""});
+    result = fixture.run(
+      {"list", "create", "--name", "Child", "--parent", std::to_string(parentId), "--filter", "$title ~ \"Title\""});
     REQUIRE(result.status == 0);
     auto const smartId = parseCreatedListId(result.out);
 
@@ -1606,18 +1623,18 @@ namespace ao::cli::test
     auto result = fixture.run({"init"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"-O", "json", "list", "create", "--dry-run", "--name", "Manual"});
+    result = fixture.run({"-O", "json", "list", "create", "--dry-run", "--name", "Playlist", "--filter", "#pinned"});
     REQUIRE(result.status == 0);
     auto tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
     CHECK_FALSE(tree.rootref()["listId"].readable());
-    CHECK(yaml::scalarView(tree.rootref()["name"]) == "Manual");
+    CHECK(yaml::scalarView(tree.rootref()["name"]) == "Playlist");
 
     result = fixture.run({"list", "show"});
     REQUIRE(result.status == 0);
-    CHECK_FALSE(contains(result.out, "Manual"));
+    CHECK_FALSE(contains(result.out, "Playlist"));
 
-    result = fixture.run({"-O", "json", "list", "create", "--name", "Manual"});
+    result = fixture.run({"-O", "json", "list", "create", "--name", "Playlist", "--filter", "#pinned"});
     REQUIRE(result.status == 0);
     auto const listId = parseJsonUintField(result.out, "listId");
     tree = parseYaml(result.out);
@@ -1632,51 +1649,52 @@ namespace ao::cli::test
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
-    CHECK(contains(result.out, "Manual"));
+    CHECK(contains(result.out, "Playlist"));
     CHECK_FALSE(contains(result.out, "Pinned"));
 
     result = fixture.run({"list", "update", std::to_string(listId), "--name", "Pinned"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"-O", "json", "list", "add", "--dry-run", std::to_string(listId), "1", "1", "9999"});
+    result = fixture.run({"-O", "json", "list", "add", "--dry-run", std::to_string(listId), "1", "1"});
     REQUIRE(result.status == 0);
     tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "add");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
     CHECK(yaml::scalarView(tree.rootref()["changed"]) == "true");
-    CHECK(yaml::scalarView(tree.rootref()["insertionIndex"]) == "0");
-    REQUIRE(tree.rootref()["insertedTrackIds"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["insertedTrackIds"][0]) == "1");
-    REQUIRE(tree.rootref()["duplicateRequest"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["duplicateRequest"][0]) == "1");
-    REQUIRE(tree.rootref()["missingTrack"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["missingTrack"][0]) == "9999");
+    CHECK(yaml::scalarView(tree.rootref()["tag"]) == "pinned");
+    REQUIRE(tree.rootref()["targetTrackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["targetTrackIds"][0]) == "1");
+    REQUIRE(tree.rootref()["changes"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["trackId"]) == "1");
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Tracks: 0"));
 
-    result = fixture.run({"list", "add", std::to_string(listId), "1", "1", "9999"});
+    checkDomainFailure(
+      fixture.run({"list", "add", "--dry-run", std::to_string(listId), "1", "9999"}), "track not found: 9999");
+
+    result = fixture.run({"list", "add", std::to_string(listId), "1", "1"});
     REQUIRE(result.status == 0);
 
-    result = fixture.run({"-O", "json", "list", "remove", "--dry-run", std::to_string(listId), "1", "1", "9999"});
+    result = fixture.run({"-O", "json", "list", "remove", "--dry-run", std::to_string(listId), "1", "1"});
     REQUIRE(result.status == 0);
     tree = parseYaml(result.out);
     CHECK(yaml::scalarView(tree.rootref()["action"]) == "remove");
     CHECK(yaml::scalarView(tree.rootref()["dryRun"]) == "true");
     CHECK(yaml::scalarView(tree.rootref()["changed"]) == "true");
-    REQUIRE(tree.rootref()["removedTrackIds"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["removedTrackIds"][0]) == "1");
-    REQUIRE(tree.rootref()["duplicateRequest"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["duplicateRequest"][0]) == "1");
-    REQUIRE(tree.rootref()["notPresent"].num_children() == 1);
-    CHECK(yaml::scalarView(tree.rootref()["notPresent"][0]) == "9999");
+    CHECK(yaml::scalarView(tree.rootref()["tag"]) == "pinned");
+    REQUIRE(tree.rootref()["targetTrackIds"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["targetTrackIds"][0]) == "1");
+    REQUIRE(tree.rootref()["changes"].num_children() == 1);
+    CHECK(yaml::scalarView(tree.rootref()["changes"][0]["trackId"]) == "1");
+    CHECK(tree.rootref()["forgottenPositionTrackIds"].num_children() == 0);
 
     result = fixture.run({"list", "show", std::to_string(listId)});
     REQUIRE(result.status == 0);
     CHECK(contains(result.out, "Tracks: 1"));
 
-    result = fixture.run({"list", "remove", std::to_string(listId), "1", "1", "9999"});
+    result = fixture.run({"list", "remove", std::to_string(listId), "1", "1"});
     REQUIRE(result.status == 0);
 
     result = fixture.run({"-O", "json", "list", "delete", "--dry-run", std::to_string(listId)});

@@ -94,7 +94,7 @@ They do not publish application events or construct frontend projections.
 `TrackStore` owns both point reads and ordered batch reads of track records.
 Its batch boundary preserves the caller's requested ID order, skips missing
 rows, and retains duplicate requests. It chooses between point lookup and
-coordinated cursor traversal internally, so smart-list evaluators and
+coordinated cursor traversal internally, so predicate evaluators and
 projections do not duplicate LMDB access policy. Combined hot/cold traversal is
 an ID merge join: only IDs present in both stores produce a combined view.
 
@@ -129,7 +129,19 @@ Metadata and tag authoring additionally requires runtime-created `BoundTrackTarg
 ### Sources
 
 `TrackSource` is the runtime boundary for an ordered, observable set of track identities.
-`TrackSourceCache` owns the all-tracks source, cached list sources, smart-list evaluation, dependency links between lists, and reusable ad-hoc filtered sources.
+`TrackSourceCache` owns the All Tracks source, cached saved-List sources, predicate evaluation, saved-rank overlays, dependency links between Lists, and reusable ad-hoc filtered sources.
+Every saved List has the same composition:
+
+```text
+parent TrackSource
+  -> SmartListSource(local expression; empty means true)
+  -> ListOrderSource(raw saved rank)
+  -> cached List source
+```
+
+The predicate owns membership and `ListOrderSource` owns only effective order.
+Ranked current members appear first in raw-rank order, unranked current members follow in parent order, and raw ranks for current nonmembers remain hidden until membership returns or an explicit command forgets them.
+All Tracks is the permanent upstream source and has no writable rank overlay.
 
 One `SmartListEvaluator` bucket rebuild creates one batch-local dictionary read cache/context, binds each immutable plan once, and shares those bindings across the tracks evaluated in that batch.
 Binding resolves all plan symbols under one shared dictionary lock; later id-to-text cache misses take bounded point-read locks rather than delaying dictionary writers for a whole scan.
@@ -155,7 +167,7 @@ UIModel and frontends consume runtime snapshots and commands rather than opening
 - Physical stores depend only on lower library/LMDB facilities and do not depend on runtime.
 - Runtime library implementations may depend on `MusicLibrary`, but public application consumers use `ao::rt::Library` roles and value types.
 - Sources consume committed library state and change events; storage does not know that sources exist.
-- Smart and ad-hoc sources consume the core expression system, but the expression system does not own source identity, ordering, leases, or deltas.
+- Predicate-backed saved and ad-hoc sources consume the core expression system, but the expression system does not own source identity, saved rank, leases, or deltas.
 - Projections consume source leases and library reads; sources do not depend on projections or frontends.
 - A projection combines source membership with presentation structure without allowing either concern to redefine the other.
 - View, workspace, completion, and playback services consume sources/projections through runtime-owned boundaries.
@@ -210,6 +222,10 @@ Commit rechecks runtime identity, availability, revision, and every target under
 A foreign or superseded binding is `Stale`, maintenance is `Unavailable`, and an effective commit returns a binding advanced to the published revision.
 Creating a binding validates that every target exists and returns `NotFound` otherwise; disappearance under an accepted exact-revision binding is an invariant violation rather than another authoring status.
 
+Saved-order authoring uses the parallel `BoundListOrder` evidence shape: runtime instance, committed revision, List id, and complete effective TrackId sequence.
+The writer uses committed revision as transaction authority and stable TrackIds as movement operands; a frontend source/view generation is only an earlier gesture-cancellation signal and cannot prove a write transaction current.
+Maintenance is an explicit `Unavailable` interval rather than a stream of stale revisions.
+
 A filtered runtime view follows a separate composition path:
 
 ```text
@@ -222,6 +238,19 @@ base ListId + filter expression
 
 Changing the filter replaces the active source/projection resources while retaining presentation state.
 Changing presentation reshapes the projection without changing base-list or filter identity.
+
+A saved List first composes parent membership, its local predicate, and its raw rank before any transient view filter or presentation:
+
+```text
+parent source + local expression + raw saved rank
+  -> effective saved-List source
+  -> optional transient filter
+  -> presentation sort/group
+  -> projection
+```
+
+An empty presentation sort preserves the effective source order.
+A nonempty sort controls projected and playback order without rewriting saved rank.
 
 ## Structural constraints
 
@@ -239,6 +268,7 @@ Changing presentation reshapes the projection without changing base-list or filt
 - Consumers use published track and list identities to refresh state; they do not retain transaction-bound core views beyond their scope.
 - `LibraryChanges` accepts only the coordinator's exact successor revision and completes that publication before another commit can be admitted.
 - Source caches and projections derive state from storage plus the ordered change stream; they are not independent persistence authorities.
+- Saved rank is a persistence overlay on a saved List, never membership and never All Tracks state.
 - Cached list sources retain stable identity until deletion or cache teardown; a lease keeps its exact source and
   upstream dependencies alive beyond cache teardown. Ad-hoc filtered sources remain weak-cached while leased.
 - Dictionary read caches never extend a store view beyond the owning `MusicLibrary`, and they do not provide transaction isolation or a dictionary snapshot.
@@ -282,6 +312,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`LibraryImportPlan`](../../app/include/ao/rt/library/LibraryImportPlan.h) is the one-shot preview-bound import capability.
 - [`LibraryChanges`](../../app/include/ao/rt/library/LibraryChanges.h) publishes revisioned committed changes.
 - [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) owns reusable sources and their dependency graph.
+- [`ListOrderSource`](../../app/include/ao/rt/source/ListOrderSource.h) derives effective saved-List order from raw rank plus current predicate membership.
 - [`TrackListProjection`](../../app/include/ao/rt/projection/TrackListProjection.h) is the concrete ordered-list projection boundary.
 - [`CoreRuntime.cpp`](../../app/runtime/CoreRuntime.cpp) is the ownership and lifetime composition root for the subsystem.
 
@@ -296,6 +327,7 @@ Audio decoder translation belongs to the [decoder session specification](../spec
 - [`LibraryAuthoringTest.cpp`](../../test/unit/runtime/library/LibraryAuthoringTest.cpp) protects availability, binding validation, all-or-none authoring, publication barriers, and terminal post-commit faults.
 - [`LibraryTaskServiceTest.cpp`](../../test/unit/runtime/library/LibraryTaskServiceTest.cpp) protects worker/callback task boundaries.
 - [`TrackSourceCacheTest.cpp`](../../test/unit/runtime/source/TrackSourceCacheTest.cpp) protects source lifetime, reuse, and refresh composition.
+- [`ListOrderSourceTest.cpp`](../../test/unit/runtime/source/ListOrderSourceTest.cpp) and [`ListOrderSourceObserverTest.cpp`](../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp) protect rank derivation, hidden ranks, parent changes, and delta translation.
 - [`TrackListProjectionLifecycleTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionLifecycleTest.cpp) and [`TrackListProjectionDeltaContractTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionDeltaContractTest.cpp) protect the source-to-projection boundary.
 - [`TrackListProjectionGroupingTest.cpp`](../../test/unit/runtime/projection/TrackListProjectionGroupingTest.cpp) protects normalized grouping keys and raw presentation labels.
 

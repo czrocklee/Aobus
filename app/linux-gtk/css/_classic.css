@@ -309,10 +309,6 @@
   text-transform: none;
 }
 
-.ao-theme-classic .ao-track-detail-section-line {
-  background-color: alpha(currentColor, 0.18);
-}
-
 .ao-theme-classic .ao-detail-show-all-button {
   padding: 1px 4px;
   border-radius: 0;

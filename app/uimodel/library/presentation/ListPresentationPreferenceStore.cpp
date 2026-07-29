@@ -4,11 +4,14 @@
 #include <ao/CoreIds.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/library/LibraryChanges.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -19,6 +22,18 @@ namespace ao::uimodel
     : _catalog{catalog}
   {
   }
+
+  ListPresentationPreferenceStore::ListPresentationPreferenceStore(TrackPresentationCatalog& catalog,
+                                                                   rt::LibraryChanges const& changes)
+    : _catalog{catalog}
+    , _lifecyclePtr{std::make_unique<ListPresentationPreferenceLifecycle>(_presentations,
+                                                                          changes,
+                                                                          [this](ListId const listId) noexcept
+                                                                          { _changed.emit(listId); })}
+  {
+  }
+
+  ListPresentationPreferenceStore::~ListPresentationPreferenceStore() = default;
 
   void ListPresentationPreferenceStore::setListPresentations(std::map<ListId, std::string> const& presentations)
   {

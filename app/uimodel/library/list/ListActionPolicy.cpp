@@ -17,6 +17,7 @@ namespace ao::uimodel
     {
       state.canEdit = true;
       state.canDelete = !selectedListHasChildren;
+      state.canDeleteSubtree = selectedListHasChildren;
     }
 
     return state;

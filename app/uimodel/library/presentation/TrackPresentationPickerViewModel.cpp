@@ -5,6 +5,7 @@
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
@@ -19,6 +20,19 @@
 
 namespace ao::uimodel
 {
+  TrackPresentationEligibility trackPresentationEligibility(ListId const listId, std::string_view const presentationId)
+  {
+    if (listId == rt::kAllTracksListId && presentationId == rt::kListOrderTrackPresentationId)
+    {
+      return {
+        .enabled = false,
+        .disabledReason = "All Tracks has no saved order. Create a saved List to arrange the full library manually.",
+      };
+    }
+
+    return {};
+  }
+
   TrackPresentationPickerViewModel::TrackPresentationPickerViewModel(
     rt::ViewService& views,
     rt::WorkspaceService& workspace,
@@ -81,6 +95,19 @@ namespace ao::uimodel
     result.enabled = true;
     result.activeViewId = activeViewId;
     result.label = _catalog.labelForId(foundState->presentation.id);
+
+    for (auto& item : result.menuItems)
+    {
+      if (item.type != TrackPresentationMenuItemType::Preset)
+      {
+        continue;
+      }
+
+      auto eligibility = trackPresentationEligibility(foundState->listId, item.id);
+      item.enabled = eligibility.enabled;
+      item.disabledReason = std::move(eligibility.disabledReason);
+    }
+
     return result;
   }
 
@@ -105,6 +132,11 @@ namespace ao::uimodel
     auto const foundState = _views.findTrackListState(activeViewId);
 
     if (!foundState)
+    {
+      return {};
+    }
+
+    if (!trackPresentationEligibility(foundState->listId, presentationId).enabled)
     {
       return {};
     }

@@ -9,12 +9,19 @@
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 
+namespace ao::rt
+{
+  class LibraryChanges;
+}
+
 namespace ao::uimodel
 {
+  class ListPresentationPreferenceLifecycle;
   class TrackPresentationCatalog;
 
   struct ListPresentationPreferenceState final
@@ -26,6 +33,13 @@ namespace ao::uimodel
   {
   public:
     explicit ListPresentationPreferenceStore(TrackPresentationCatalog& catalog);
+    ListPresentationPreferenceStore(TrackPresentationCatalog& catalog, rt::LibraryChanges const& changes);
+    ~ListPresentationPreferenceStore();
+
+    ListPresentationPreferenceStore(ListPresentationPreferenceStore const&) = delete;
+    ListPresentationPreferenceStore& operator=(ListPresentationPreferenceStore const&) = delete;
+    ListPresentationPreferenceStore(ListPresentationPreferenceStore&&) = delete;
+    ListPresentationPreferenceStore& operator=(ListPresentationPreferenceStore&&) = delete;
 
     std::map<ListId, std::string> const& listPresentations() const noexcept { return _presentations; }
     void setListPresentations(std::map<ListId, std::string> const& presentations);
@@ -42,5 +56,6 @@ namespace ao::uimodel
     TrackPresentationCatalog& _catalog;
     std::map<ListId, std::string> _presentations{};
     async::Signal<ListId> _changed;
+    std::unique_ptr<ListPresentationPreferenceLifecycle> _lifecyclePtr;
   };
 } // namespace ao::uimodel

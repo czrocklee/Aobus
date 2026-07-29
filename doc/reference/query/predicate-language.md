@@ -12,9 +12,9 @@ summary: Defines the exact predicate expression grammar, variables, aliases, ope
 This reference defines the current text surface accepted by `ao::query::parse()` and the predicate subset accepted by `ao::query::compileQuery()`.
 Predicate evaluation behavior belongs to the [predicate evaluation specification](../../spec/query/predicate-evaluation.md).
 
-Expressions are persisted as Smart List text without a separate language version number.
+Expressions are persisted as saved List filter text without a separate language version number.
 The in-memory AST and execution bytecode are not persisted surfaces.
-For Smart Lists, this language surface participates in the library database compatibility contract governed by `ao::library::kLibraryVersion`.
+For saved Lists, this language surface participates in the library database compatibility contract governed by `ao::library::kLibraryVersion`.
 Other retained or automated expressions use the compatibility policy of their containing surface.
 
 ## Code boundary
@@ -174,11 +174,11 @@ A fractional literal is accepted only when scaling produces an integer, so `44.1
 
 ## Compatibility and versioning
 
-Smart Lists persist expression text and recompile it when materialized.
+Saved Lists persist expression text and recompile it when materialized.
 Removing or renaming a variable, alias, operator, literal form, or unit can invalidate stored lists.
 Changing binding or truth semantics can change their membership without changing the list-record byte layout.
 
-The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../spec/query/predicate-evaluation.md), are part of the Smart List contract gated by `kLibraryVersion`.
+The grammar and catalog in this reference, together with the truth behavior in the [predicate evaluation specification](../../spec/query/predicate-evaluation.md), are part of the saved-List contract gated by `kLibraryVersion`.
 A change that expands the storable predicate surface beyond what an existing same-version reader accepts, or that can alter whether stored text parses or compiles, what it binds to, or which tracks it matches, must increment the library version.
 The old version is then rejected or explicitly migrated; the current database implementation accepts only an exact version match and has no in-place migration path.
 

@@ -35,7 +35,7 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 - Application-owned modal child dialogs are transient for and destroyed with their parent window.
 - Preferences has one application-owned instance and is non-modal.
 - Object editors do not commit a draft on cancel or ordinary close.
-- Smart List create/edit dialogs remain open with their draft intact when submission fails and close only after success or cancellation.
+- Saved-List create/edit dialogs remain open with their draft intact when submission fails and close only after success or cancellation.
 - Native chooser cancellation is a no-op.
 - The export-mode response and native folder, open, and save completions can access `ImportExportCoordinator` only while its callback scope remains live.
 - Open Library selecting the active normalized root reuses and presents the current window; selecting a different valid root replaces the active library/window pair.
@@ -74,8 +74,8 @@ Its theme selector is preview-only; theme persistence belongs to Preferences.
 
 Native file-dialog cancellation or dismissal is silent and creates no replacement.
 Other native file-dialog failures are logged and presented in a parent-bound transient message at the initiating window.
-A Smart List preview-source acquisition failure uses the editor's existing error label.
-Smart List create or edit rejection retains the draft and editor, while delete rejection presents a parent-bound transient message without changing the tree or selection.
+A saved-List preview-source acquisition failure uses the editor's existing error label.
+Saved-List create or edit rejection retains the draft and editor, while delete rejection presents a parent-bound transient message without changing the tree or selection.
 Deferred track-presentation selection retains the target view identity; if focus changes before application or the runtime rejects the change, it leaves the current view unchanged and presents a parent-bound transient message.
 Candidate preparation failure or active-pair retirement failure presents a parent-bound transient message and leaves the old pair visible, as specified by the active-library lifecycle.
 Layout-editor validation or persistence failure retains the draft and keeps the editor open.

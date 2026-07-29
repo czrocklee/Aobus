@@ -21,7 +21,9 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
@@ -41,6 +43,7 @@
 #include <format>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace ao::gtk::test
@@ -248,6 +251,49 @@ namespace ao::gtk::test
     CHECK(groupedRows < kMaximumPrefetchedRows);
   }
 
+  TEST_CASE("TrackViewPage - drag handle follows the shared List order capability", "[gtk][unit][track][list-order]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{[](library::MusicLibrary& musicLibrary)
+                                     { std::ignore = addAlbumTrack(musicLibrary, "Album"); }};
+    auto& runtime = fixture.runtime();
+    auto const listId =
+      ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Ordered"}));
+    auto const* manual = rt::builtinTrackPresentationPreset(rt::kListOrderTrackPresentationId);
+    REQUIRE(manual != nullptr);
+    auto const viewId = ao::test::requireValue(runtime.workspace().navigate(rt::NavigationRequest{
+      .target = rt::FilteredListTarget{.listId = listId, .filterExpression = ""},
+      .optPresentation =
+        rt::NavigationPresentation{
+          .mode = rt::NavigationPresentationMode::Override,
+          .spec = manual->spec,
+        },
+    }));
+    auto projectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
+    auto cache = TrackRowCache{runtime.library()};
+    auto modelPtr = TrackListModel::create(cache);
+    modelPtr->bindProjection(projectionPtr);
+    auto layoutStore = uimodel::TrackColumnLayoutStore{};
+    auto imageCache = ImageCache{200};
+    auto byteLoader = rt::ResourceByteLoader{runtime};
+    auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
+    auto page = TrackViewPage{listId, modelPtr, layoutStore, runtime, thumbnailLoader, manual->spec, viewId};
+
+    CHECK(page.hasOrderDragHandle());
+
+    REQUIRE(runtime.views().setPresentation(viewId, rt::defaultTrackPresentationSpec()));
+    page.applyPresentation(rt::defaultTrackPresentationSpec());
+    CHECK_FALSE(page.hasOrderDragHandle());
+
+    REQUIRE(runtime.views().setPresentation(viewId, manual->spec));
+    page.applyPresentation(manual->spec);
+    CHECK(page.hasOrderDragHandle());
+
+    REQUIRE(runtime.views().setFilter(viewId, "true"));
+    page.applyPresentation(manual->spec);
+    CHECK_FALSE(page.hasOrderDragHandle());
+  }
+
   TEST_CASE("TrackViewPage - stale inline metadata keeps the row value and shows status",
             "[gtk][regression][track-view][metadata]")
   {
@@ -293,8 +339,7 @@ namespace ao::gtk::test
     titleStack->set_visible_child("edit");
     REQUIRE(emitFocusEnter(*entry));
     entry->set_text("After");
-    REQUIRE(runtime.library().writer().createList(
-      rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
+    REQUIRE(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
     emitActivate(*entry);
     drainGtkEvents();
 

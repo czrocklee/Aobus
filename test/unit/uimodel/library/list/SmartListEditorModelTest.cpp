@@ -2,7 +2,6 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
-#include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/list/SmartListEditorModel.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -80,7 +79,6 @@ namespace ao::uimodel::test
 
     auto const draft = makeSmartListDraft(parentListId, editListId, name, description, expression);
 
-    CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
     CHECK(draft.parentId == parentListId);
     CHECK(draft.listId == editListId);
     CHECK(draft.name == name);
@@ -97,7 +95,6 @@ namespace ao::uimodel::test
 
     auto const draft = makeSmartListDraft(parentListId, kInvalidListId, name, description, expression);
 
-    CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
     CHECK(draft.parentId == parentListId);
     CHECK(draft.listId == kInvalidListId);
     CHECK(draft.name == name);
@@ -109,12 +106,39 @@ namespace ao::uimodel::test
   {
     auto const draft = makeSmartListDraft(kInvalidListId, kInvalidListId, "", "", "");
 
-    CHECK(draft.kind == rt::LibraryWriter::ListKind::Smart);
     CHECK(draft.parentId == kInvalidListId);
     CHECK(draft.listId == kInvalidListId);
     CHECK(draft.name.empty());
     CHECK(draft.description.empty());
     CHECK(draft.expression.empty());
+  }
+
+  TEST_CASE("SmartListEditorModel - explains direct and computed membership while editing",
+            "[uimodel][unit][list][writable-tag]")
+  {
+    auto const direct = makeSmartListEditorViewState(SmartListPreviewState{
+      .name = "Road Trip",
+      .localExpression = R"(#"road-trip")",
+      .hasPreviewSource = true,
+      .hasError = false,
+      .errorMessage = "",
+      .matchCount = 0,
+      .isAllTracks = true,
+    });
+    CHECK(direct.hasDirectMembershipEditing);
+    CHECK(direct.membershipEditingText == R"(Direct membership editing via #"road-trip")");
+
+    auto const computed = makeSmartListEditorViewState(SmartListPreviewState{
+      .name = "Recent Road Trip",
+      .localExpression = R"(#"road-trip" and $year >= 2020)",
+      .hasPreviewSource = true,
+      .hasError = false,
+      .errorMessage = "",
+      .matchCount = 0,
+      .isAllTracks = true,
+    });
+    CHECK_FALSE(computed.hasDirectMembershipEditing);
+    CHECK(computed.membershipEditingText == "Computed membership — edit tags or the expression");
   }
 
   TEST_CASE("SmartListEditorModel - hides unavailable preview source", "[uimodel][unit][list]")

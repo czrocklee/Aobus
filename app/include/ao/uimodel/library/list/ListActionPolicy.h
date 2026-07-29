@@ -12,6 +12,7 @@ namespace ao::uimodel
     bool canCreate = false;
     bool canEdit = false;
     bool canDelete = false;
+    bool canDeleteSubtree = false;
   };
 
   ListActionViewState describeListActions(ListId selectedListId, bool selectedListHasChildren);

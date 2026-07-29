@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/rt/library/LibraryAuthoring.h>
+
 #include <CLI/CLI.hpp>
 
 namespace ao::rt
@@ -14,5 +17,6 @@ namespace ao::cli
 {
   class CliRuntime;
 
+  Result<> validateListOrderCommandStatus(rt::ListOrderAuthoringStatus status);
   void configureListCommand(CLI::App& app, CliRuntime& cli);
 }

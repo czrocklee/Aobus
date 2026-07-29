@@ -51,7 +51,7 @@ namespace ao::gtk
     ListNavigationController* listNavigationController = nullptr;
     ThemeCoordinator* themeCoordinator = nullptr;
 
-    /// Creates a smart list from a filter expression under the given parent (defaults to the
+    /// Creates a saved List from a filter expression under the given parent (defaults to the
     /// navigation controller's dialog flow; injectable so components stay decoupled from it).
     std::function<void(ao::ListId parentListId, std::string expression)> createSmartListFromExpression{};
 

@@ -19,6 +19,7 @@ namespace ao::uimodel::test
       CHECK(state.canCreate == true);
       CHECK(state.canEdit == false);
       CHECK(state.canDelete == false);
+      CHECK(state.canDeleteSubtree == false);
     }
 
     SECTION("All Tracks list selection (system reserved)")
@@ -27,6 +28,7 @@ namespace ao::uimodel::test
       CHECK(state.canCreate == true);
       CHECK(state.canEdit == false);
       CHECK(state.canDelete == false);
+      CHECK(state.canDeleteSubtree == false);
     }
 
     SECTION("Normal list selection without children")
@@ -35,6 +37,7 @@ namespace ao::uimodel::test
       CHECK(state.canCreate == true);
       CHECK(state.canEdit == true);
       CHECK(state.canDelete == true);
+      CHECK(state.canDeleteSubtree == false);
     }
 
     SECTION("Normal list selection with children")
@@ -42,7 +45,8 @@ namespace ao::uimodel::test
       auto const state = describeListActions(ListId{1}, true);
       CHECK(state.canCreate == true);
       CHECK(state.canEdit == true);
-      CHECK(state.canDelete == false); // Cannot delete list with children
+      CHECK(state.canDelete == false);
+      CHECK(state.canDeleteSubtree == true);
     }
   }
 

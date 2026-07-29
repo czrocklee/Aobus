@@ -16,13 +16,13 @@ namespace ao::gtk
   }
 
   Glib::RefPtr<ListRowObject> ListRowObject::create(ListId id,
-                                                    bool smart,
+                                                    bool system,
                                                     Glib::ustring const& name,
                                                     Glib::ustring const& filter)
   {
     auto objPtr = Glib::make_refptr_for_instance<ListRowObject>(new ListRowObject{});
     objPtr->_listId = id;
-    objPtr->_isSmart = smart;
+    objPtr->_isSystem = system;
     objPtr->_name = name;
     objPtr->_filter = filter;
     return objPtr;

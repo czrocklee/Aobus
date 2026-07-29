@@ -36,10 +36,10 @@ namespace ao::rt::test
       auto manifest = library::FileManifestBuilder::makeEmpty().trackId(trackId).fileSize(10).mtime(20).serialize();
       CHECK(libraryFixture.library().manifest().writer(transaction).put("test.flac", manifest));
 
-      for (auto const* const name : std::array{"Manual A", "Manual B"})
+      for (auto const* const name : std::array{"Ordered A", "Ordered B"})
       {
         auto listBuilder = library::ListBuilder::makeEmpty();
-        listBuilder.name(name).tracks().add(trackId);
+        listBuilder.name(name).orderTrackIds().add(trackId);
         listIds.push_back(ao::test::requireValue(libraryFixture.library()
                                                    .lists()
                                                    .writer(transaction)
@@ -76,7 +76,7 @@ namespace ao::rt::test
     {
       auto const optList = listReader.get(listId);
       REQUIRE(optList);
-      CHECK(optList->tracks().empty());
+      CHECK(optList->orderTrackIds().empty());
     }
 
     CHECK(upsertedLists == listIds);

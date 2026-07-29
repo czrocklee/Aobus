@@ -148,5 +148,9 @@ namespace ao::uimodel::test
     REQUIRE(defaults.count("playback.playPause") == 1);
     CHECK(defaults.at("playback.playPause").front() == chord("Ctrl+P"));
     CHECK(defaults.count("workspace.revealCurrentTrack") == 1);
+    CHECK(defaults.at("track.orderMoveUp") == std::vector<KeyChord>{chord("Alt+Up")});
+    CHECK(defaults.at("track.orderMoveDown") == std::vector<KeyChord>{chord("Alt+Down")});
+    CHECK(defaults.at("track.orderMoveToTop") == std::vector<KeyChord>{chord("Alt+Home")});
+    CHECK(defaults.at("track.orderMoveToBottom") == std::vector<KeyChord>{chord("Alt+End")});
   }
 } // namespace ao::uimodel::test

@@ -39,11 +39,12 @@ add_library(ao_app_runtime STATIC
     runtime/resource/ResourceByteCache.cpp
     runtime/resource/ResourceByteLoader.cpp
     runtime/source/TrackSourceCache.cpp
-    runtime/source/ManualListSource.cpp
+    runtime/source/ListOrderSource.cpp
     runtime/NavigationHistory.cpp
     runtime/WorkspaceSessionYamlSchema.cpp
     runtime/WorkspaceService.cpp
     runtime/NotificationService.cpp
+    runtime/WritableTagList.cpp
     runtime/source/SmartListEvaluator.cpp
     runtime/source/SmartListSource.cpp
     runtime/TrackPresentation.cpp
@@ -95,6 +96,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.cpp
     uimodel/input/KeyChord.cpp
     uimodel/input/KeymapModel.cpp
+    uimodel/input/KeyRepeatGuard.cpp
     uimodel/input/KeymapStore.cpp
     uimodel/preference/PreferencesEditorModel.cpp
     uimodel/preference/WindowsTheme.cpp
@@ -104,6 +106,9 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/detail/TrackCustomMetadata.cpp
     uimodel/library/detail/TrackFieldGridSchema.cpp
     uimodel/library/list/ListActionPolicy.cpp
+    uimodel/library/list/ListMembershipAuthoringSession.cpp
+    uimodel/library/list/ListOrderAuthoringSession.cpp
+    uimodel/library/list/ListOrderPolicy.cpp
     uimodel/library/list/ListTreeProjection.cpp
     uimodel/library/list/SmartListEditorModel.cpp
     uimodel/library/list/SmartListTrackPresentationResolver.cpp
@@ -116,6 +121,7 @@ add_library(ao_app_uimodel STATIC
     uimodel/library/presentation/TrackFieldPresentationPolicy.cpp
     uimodel/library/presentation/TrackPresentationCatalog.cpp
     uimodel/library/presentation/ListPresentationPreferenceYamlSchema.cpp
+    uimodel/library/presentation/ListPresentationPreferenceLifecycle.cpp
     uimodel/library/presentation/ListPresentationPreferenceStore.cpp
     uimodel/library/presentation/TrackPresentationRecommender.cpp
     uimodel/library/presentation/TrackPresentationPickerViewModel.cpp

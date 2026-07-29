@@ -14,6 +14,7 @@
 #include <gtkmm/window.h>
 #include <sigc++/scoped_connection.h>
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -35,6 +36,7 @@ namespace ao::gtk
   class ThemeCoordinator;
   class TagPopover;
   class TrackViewPage;
+  enum class TrackOrderCommand : std::uint8_t;
 }
 
 namespace ao::gtk
@@ -53,7 +55,8 @@ namespace ao::gtk
   public:
     struct Callbacks final
     {
-      std::function<void()> onTagsMutated;
+      std::function<void()> onTagsMutated{};
+      std::function<void()> onManageListsRequested{};
     };
 
     TagEditController(Gtk::Window& parent,
@@ -84,6 +87,9 @@ namespace ao::gtk
 
   private:
     void createActions();
+    void buildContextActionsAndMenu(TrackViewPage& page);
+    void applyListMembershipToCurrentSelection(ListId listId, bool add);
+    void applyListOrderToCurrentSelection(TrackOrderCommand action);
     void openTagsPopover(TrackViewPage& page, double xPosition, double yPosition);
     void presentPropertiesDialog();
     void unparentClosedContextPopover();

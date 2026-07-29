@@ -19,7 +19,7 @@ namespace ao::tui
     std::string detail{};
   };
 
-  std::string listNodeIcon(rt::ListNodeKind kind);
+  std::string listNodeIcon();
   std::string listTitle(ListId listId, std::vector<LibraryNavEntry> const& items);
   std::vector<LibraryNavEntry> makeLibraryNavigation(std::span<rt::ListNode const> lists);
   std::vector<std::string> libraryNavigationLabels(std::vector<LibraryNavEntry> const& items);

@@ -64,9 +64,10 @@ Use the [specification template](../template/spec.md).
 ## Presentation
 
 - [Activity status](presentation/activity-status.md) defines notification and library-task projection, priority, detail eligibility, timeout, and local suppression.
-- [Track filtering](presentation/track-filter.md) defines quick-search resolution, runtime view filtering, status, and Smart List derivation.
+- [Track filtering](presentation/track-filter.md) defines quick-search resolution, runtime view filtering, status, and saved-List derivation.
 - [List-navigation tree](presentation/list-tree.md) defines the shared virtual root, effective-parent recovery, stable hierarchy, and frontend adaptation.
 - [Track-list presentation](presentation/track-presentation.md) defines grouping, sorting, classical order, and recommendation.
+- [Saved-List order authoring](presentation/list-order-authoring.md) defines eligibility, stable-ID movement, gesture invalidation, GTK drag behavior, and keyboard repeat policy.
 - [List presentation preference](presentation/list-preference.md) defines per-list selection, fallback, persistence ownership, and filter independence.
 - [Track-column layout](presentation/track-column-layout.md) defines shared field alignment, fixed/flexible sizing, weighted solving, resizing, and frontend adaptation.
 - [Selection summary](presentation/selection-summary.md) defines selected-track count, aggregate duration, and shared display text.

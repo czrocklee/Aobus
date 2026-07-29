@@ -13,14 +13,17 @@
 #include <gdkmm/rectangle.h>
 #include <giomm/menu.h>
 #include <glib.h>
+#include <glibmm/object.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/box.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/gestureclick.h>
 #include <gtkmm/image.h>
 #include <gtkmm/label.h>
+#include <gtkmm/listheader.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/object.h>
+#include <gtkmm/separator.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/treeexpander.h>
 #include <gtkmm/treelistrow.h>
@@ -45,6 +48,7 @@ namespace ao::gtk
   {
     _listScrolledWindow.set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
     _listScrolledWindow.set_child(_listView);
+    _listView.add_css_class("ao-list-navigation");
 
     auto factoryPtr = Gtk::SignalListItemFactory::create();
     factoryPtr->signal_setup().connect([this](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
@@ -54,10 +58,42 @@ namespace ao::gtk
 
     _listView.set_factory(factoryPtr);
 
+    auto headerFactoryPtr = Gtk::SignalListItemFactory::create();
+    headerFactoryPtr->signal_setup_obj().connect(
+      [](Glib::RefPtr<Glib::Object> const& objectPtr)
+      {
+        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(objectPtr);
+
+        if (!headerPtr)
+        {
+          return;
+        }
+
+        auto* const separator = Gtk::make_managed<Gtk::Separator>();
+        separator->add_css_class("ao-saved-list-separator");
+        headerPtr->set_child(*separator);
+      });
+    headerFactoryPtr->signal_bind_obj().connect(
+      [](Glib::RefPtr<Glib::Object> const& objectPtr)
+      {
+        auto const headerPtr = std::dynamic_pointer_cast<Gtk::ListHeader>(objectPtr);
+        auto* const separator = headerPtr ? dynamic_cast<Gtk::Separator*>(headerPtr->get_child()) : nullptr;
+
+        if (headerPtr == nullptr || separator == nullptr)
+        {
+          return;
+        }
+
+        separator->set_visible(headerPtr->get_start() != 0);
+      });
+    _listView.set_header_factory(headerFactoryPtr);
+
     auto menuModelPtr = Gio::Menu::create();
-    menuModelPtr->append("New Smart List...", "win.list-new-smart-list");
+    menuModelPtr->append("New List...", "win.list-new-smart-list");
+    menuModelPtr->append("New Playlist...", "win.list-new-playlist");
     menuModelPtr->append("Edit List...", "win.list-edit");
     menuModelPtr->append("Delete List", "win.list-delete");
+    menuModelPtr->append("Delete List and Descendants...", "win.list-delete-subtree");
     _listContextMenu.set_menu_model(menuModelPtr);
     _listContextMenu.set_parent(_listView);
   }
@@ -255,18 +291,19 @@ namespace ao::gtk
       return;
     }
 
+    listItemPtr->set_selectable(true);
+    listItemPtr->set_activatable(true);
+
+    box->set_margin_start(rowPtr->isSystem() ? 0 : 8);
     label->set_text(rowPtr->name());
 
     if (icon != nullptr)
     {
       auto iconName = Glib::ustring{"folder-saved-search-symbolic"};
+      auto const nameLower = rowPtr->name().lowercase();
 
-      if (auto const nameLower = rowPtr->name().lowercase(); nodePtr->hasChildren())
-      {
-        iconName = "folder-symbolic";
-      }
-      else if (auto const filterLower = rowPtr->filter().lowercase();
-               nameLower.find("favorite") != Glib::ustring::npos || filterLower.find("#fav") != Glib::ustring::npos)
+      if (auto const filterLower = rowPtr->filter().lowercase();
+          nameLower.find("favorite") != Glib::ustring::npos || filterLower.find("#fav") != Glib::ustring::npos)
       {
         iconName = "emblem-favorite-symbolic";
       }
@@ -281,10 +318,6 @@ namespace ao::gtk
       else if (nameLower.find("classic") != Glib::ustring::npos || nameLower.find("bach") != Glib::ustring::npos)
       {
         iconName = "audio-x-generic-symbolic";
-      }
-      else if (!rowPtr->isSmart())
-      {
-        iconName = "media-playlist-symbolic";
       }
 
       icon->set_from_icon_name(iconName);

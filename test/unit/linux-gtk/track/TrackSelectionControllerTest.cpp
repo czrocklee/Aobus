@@ -15,8 +15,10 @@
 #include <ao/rt/source/TrackSourceLease.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gdk/gdk.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
+#include <gtkmm/gestureclick.h>
 #include <gtkmm/label.h>
 #include <gtkmm/listitem.h>
 #include <gtkmm/multiselection.h>
@@ -25,6 +27,7 @@
 #include <gtkmm/signallistitemfactory.h>
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <vector>
 
@@ -169,6 +172,26 @@ namespace ao::gtk::test
         drainGtkEvents();
 
         CHECK(changed == true);
+      }
+
+      SECTION("secondary click on blank space does not request a track menu")
+      {
+        controller.configureActivation();
+        std::size_t requestCount = 0;
+        auto subscription = controller.signalContextMenuRequested().connect([&](double, double) { ++requestCount; });
+        auto host = GtkWindowFixture{};
+        host.window().set_default_size(400, 400);
+        host.mount(columnView);
+        host.present();
+        auto const secondaryClickPtr = findControllerIf<Gtk::GestureClick>(
+          columnView, [](Gtk::GestureClick const& gesture) { return gesture.get_button() == GDK_BUTTON_SECONDARY; });
+        REQUIRE(secondaryClickPtr);
+        REQUIRE(columnView.get_height() > 1);
+
+        ::g_signal_emit_by_name(
+          secondaryClickPtr->gobj(), "released", 1, 10.0, static_cast<double>(columnView.get_height() - 1));
+
+        CHECK(requestCount == 0);
       }
 
       columnView.set_model(Glib::RefPtr<Gtk::SelectionModel>{});

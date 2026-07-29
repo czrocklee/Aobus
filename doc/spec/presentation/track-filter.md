@@ -3,17 +3,17 @@ id: presentation.track-filter
 type: spec
 status: current
 domain: presentation
-summary: Defines quick-filter input resolution and completion, runtime view filtering, status, and Smart List derivation policy.
+summary: Defines quick-filter input resolution and completion, runtime view filtering, status, and saved-List derivation policy.
 ---
 # Track filtering
 
 ## Scope
 
 This specification defines the frontend-neutral behavior of the interactive track filter.
-It owns classification of raw input as empty, quick search, or explicit expression; quick-term expansion and completion; runtime view replacement; filter status; and the policy for deriving a Smart List draft.
+It owns classification of raw input as empty, quick search, or explicit expression; quick-term expansion and completion; runtime view replacement; filter status; and the policy for deriving a saved-List draft.
 
 The complete expression syntax and predicate truth rules belong to the [predicate language](../../reference/query/predicate-language.md) and [predicate evaluation](../query/predicate-evaluation.md) owners.
-Smart-list persistence and source membership belong to the [list model](../../reference/library/model/list.md) and [track source](../library/source/track-source.md) contracts.
+Saved-List persistence and source membership belong to the [list model](../../reference/library/model/list.md) and [track source](../library/source/track-source.md) contracts.
 Presentation grouping and ordering belong to [track-list presentation](track-presentation.md).
 
 ## Code boundary
@@ -34,12 +34,12 @@ UIModel filter policy is public under `app/include/ao/uimodel/library/track/`; r
 
 - Filtering changes membership but does not choose or persist a presentation.
 - Clearing the filter restores the base source while retaining the active presentation.
-- A transient filter is represented by base `ListId` plus expression text; it is not a stored Smart List.
+- A transient filter is represented by base `ListId` plus expression text; it is not a stored List.
 - GTK and TUI use the same UIModel resolver.
 - GTK and TUI use the same UIModel completer and therefore expose the same value set, ranking, replacement, and expression boundary.
-- Runtime evaluates resolved text through the same source and predicate path used by Smart Lists.
+- Runtime evaluates resolved text through the same source and predicate path used by saved Lists.
 - An invalid expression is observable in the view state and empty filtered membership without corrupting the base source.
-- Creating a Smart List uses the resolved expression, not the user's unresolved quick-search text.
+- Creating a saved List uses the resolved expression, not the user's unresolved quick-search text.
 
 ## Input resolution
 
@@ -106,9 +106,9 @@ The frontend-neutral view exposes:
 - resolved expression;
 - enabled state;
 - error presence and tooltip;
-- whether Create Smart List is allowed.
+- whether Create List is allowed.
 
-Create Smart List is allowed only when the resolved expression is non-empty and the current state has no error.
+Create List is allowed only when the resolved expression is non-empty and the current state has no error.
 
 ## Runtime transition
 
@@ -136,12 +136,12 @@ Resolution, source compilation, and view replacement are synchronous on their ow
 Quick filters do not create independent presentation preferences or library list records.
 Workspace/navigation state may retain base list, expression text, and exact presentation snapshot according to its owning persistence contract.
 
-Choosing Create Smart List opens the ordinary list mutation flow using the resolved expression.
+Choosing Create List opens the ordinary List mutation flow using the resolved expression.
 Only a successful library mutation turns that text into durable list data.
 
 ## Frontend observations
 
-GTK binds the shared track-filter completer to its entry, renders clear and Create Smart List actions, and keeps Create disabled while the current expression is empty or erroneous.
+GTK binds the shared track-filter completer to its entry, renders clear and Create List actions, and keeps Create disabled while the current expression is empty or erroneous.
 The clear action submits empty text.
 The create action emits the resolved expression.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/runtime/ViewServiceTestSupport.h"
 #include <ao/CoreIds.h>
@@ -9,6 +9,7 @@
 #include <ao/rt/ViewState.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -112,6 +113,18 @@ namespace ao::rt::test
       auto const found = service.findTrackListProjection(viewId);
       REQUIRE(found);
       CHECK((*found)->viewId() == viewId);
+    }
+
+    SECTION("the public base-source state reports live and then missing")
+    {
+      auto const state = service.listSourceState(viewId);
+      REQUIRE(state);
+      CHECK(*state == TrackSourceState::Live);
+
+      REQUIRE(env.workspace.closeView(viewId));
+      auto const missing = service.listSourceState(viewId);
+      REQUIRE_FALSE(missing);
+      CHECK(missing.error().code == Error::Code::NotFound);
     }
 
     SECTION("the checked projection lookup reports NotFound after destroy")

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -24,6 +24,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -91,16 +92,32 @@ namespace ao::rt::test
 
       return {};
     }
+
+    TrackId trackIdForUri(MusicLibrary& ml, std::string_view const uri)
+    {
+      auto transaction = ml.readTransaction();
+
+      for (auto const& [id, view] : ml.tracks().reader(transaction))
+      {
+        if (view.property().uri() == uri)
+        {
+          return id;
+        }
+      }
+
+      return kInvalidTrackId;
+    }
   } // namespace
 
   TEST_CASE("LibraryYaml - round trip preserves tracks, covers, and lists", "[runtime][workflow][import-export][yaml]")
   {
     auto const temp1 = ao::test::TempDir{};
     auto ml1 = library::test::makeTestMusicLibrary(temp1.path(), temp1.path());
-    auto const smartListName = std::string{"Smart List "} + std::string(256, 'S');
-    auto const smartFilter = std::string{"$title = \""} + std::string(256, 'x') + "\"";
-    auto const manualListName = std::string{"Manual List "} + std::string(256, 'M');
-    auto const manualListDescription = std::string{"Manual Description "} + std::string(256, 'D');
+    auto const filteredListName = std::string{"Filtered List "} + std::string(256, 'S');
+    auto const filteredListExpression = std::string{"$title = \""} + std::string(256, 'x') + "\"";
+    auto const orderedListName = std::string{"Ordered List "} + std::string(256, 'M');
+    auto const orderedListDescription = std::string{"Ordered Description "} + std::string(256, 'D');
+    auto const orderedListExpression = std::string{"#favorite"};
 
     // 1. Setup initial library
     {
@@ -131,12 +148,15 @@ namespace ao::rt::test
                                                                             .codec = AudioCodec::Flac});
       auto listTransaction = library::test::writeTransaction(ml1);
 
-      auto smartListBuilder = ListBuilder::makeEmpty().name(smartListName).filter(smartFilter);
-      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(smartListBuilder.serialize()));
+      auto filteredListBuilder = ListBuilder::makeEmpty().name(filteredListName).filter(filteredListExpression);
+      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(filteredListBuilder.serialize()));
 
-      auto manualListBuilder = ListBuilder::makeEmpty().name(manualListName).description(manualListDescription);
-      manualListBuilder.tracks().add(trackId);
-      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(manualListBuilder.serialize()));
+      auto orderedListBuilder = ListBuilder::makeEmpty()
+                                  .name(orderedListName)
+                                  .description(orderedListDescription)
+                                  .filter(orderedListExpression);
+      orderedListBuilder.orderTrackIds().add(trackId);
+      createList(ml1.lists().writer(listTransaction), ao::test::requireValue(orderedListBuilder.serialize()));
 
       REQUIRE(listTransaction.commit());
     }
@@ -217,30 +237,84 @@ namespace ao::rt::test
       CHECK(foundMood);
 
       // Check lists
-      std::int32_t smartCount = 0;
-      std::int32_t manualCount = 0;
+      bool foundFiltered = false;
+      bool foundOrdered = false;
 
       for (auto const& [lid, lview] : listReader)
       {
-        if (lview.isSmart())
+        CHECK(lid != kInvalidListId);
+
+        if (lview.name() == filteredListName)
         {
-          smartCount++;
-          CHECK(lview.name() == smartListName);
-          CHECK(lview.filter() == smartFilter);
+          foundFiltered = true;
+          CHECK(lview.filter() == filteredListExpression);
+          CHECK(lview.orderTrackIds().empty());
+        }
+        else if (lview.name() == orderedListName)
+        {
+          foundOrdered = true;
+          CHECK(lview.description() == orderedListDescription);
+          CHECK(lview.filter() == orderedListExpression);
+          REQUIRE(lview.orderTrackIds().size() == 1);
+          CHECK(lview.orderTrackIds()[0] == tracks[0].first);
         }
         else
         {
-          manualCount++;
-          CHECK(lview.name() == manualListName);
-          CHECK(lview.description() == manualListDescription);
-          REQUIRE(lview.tracks().size() == 1);
-          CHECK(lview.tracks()[0] == tracks[0].first);
+          FAIL("Unexpected List in round-trip result");
         }
       }
 
-      CHECK(smartCount == 1);
-      CHECK(manualCount == 1);
+      CHECK(foundFiltered);
+      CHECK(foundOrdered);
     }
+  }
+
+  TEST_CASE("LibraryYaml - round trip preserves hidden List ranks", "[runtime][regression][import-export][list-order]")
+  {
+    auto const sourceTemp = ao::test::TempDir{};
+    auto source = library::test::makeTestMusicLibrary(sourceTemp.path(), sourceTemp.path());
+    auto const visible = library::test::addTrack(source,
+                                                 library::test::TrackSpec{
+                                                   .title = "Visible",
+                                                   .uri = "visible.flac",
+                                                   .tags = {"roadtrip"},
+                                                 });
+    auto const hidden = library::test::addTrack(source,
+                                                library::test::TrackSpec{
+                                                  .title = "Temporarily hidden",
+                                                  .uri = "hidden.flac",
+                                                });
+    {
+      auto transaction = library::test::writeTransaction(source);
+      auto builder = ListBuilder::makeEmpty().name("Road Trip").filter("#roadtrip");
+      builder.orderTrackIds().add(hidden).add(visible);
+      createList(source.lists().writer(transaction), ao::test::requireValue(builder.serialize()));
+      REQUIRE(transaction.commit());
+    }
+    auto const yamlPath = sourceTemp.path() / "hidden-rank.yaml";
+    REQUIRE(LibraryYamlExporter{source}.exportToYaml(yamlPath, ExportMode::Full));
+
+    auto const targetTemp = ao::test::TempDir{};
+    auto target = library::test::makeTestMusicLibrary(targetTemp.path(), targetTemp.path());
+    REQUIRE(library::test::addTrack(target, library::test::makeEmptyTrackSpec("visible.flac")) != kInvalidTrackId);
+    REQUIRE(library::test::addTrack(target, library::test::makeEmptyTrackSpec("hidden.flac")) != kInvalidTrackId);
+
+    REQUIRE(LibraryYamlImporter{target}.importFromYamlOffline(yamlPath, ImportMode::Restore));
+
+    auto const importedVisible = trackIdForUri(target, "visible.flac");
+    auto const importedHidden = trackIdForUri(target, "hidden.flac");
+    REQUIRE(importedVisible != kInvalidTrackId);
+    REQUIRE(importedHidden != kInvalidTrackId);
+    auto transaction = target.readTransaction();
+    auto reader = target.lists().reader(transaction);
+    auto iterator = reader.begin();
+    REQUIRE(iterator != reader.end());
+    auto const& [listId, view] = *iterator;
+    CHECK(listId != kInvalidListId);
+    CHECK(view.filter() == "#roadtrip");
+    CHECK(std::ranges::equal(view.orderTrackIds(), std::array{importedHidden, importedVisible}));
+    ++iterator;
+    CHECK(iterator == reader.end());
   }
 
   TEST_CASE("LibraryYaml - restore preserves classical metadata fields", "[runtime][workflow][import-export][yaml]")
@@ -362,7 +436,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "merge.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: delta
 library:
   tracks:
@@ -426,7 +500,7 @@ library:
     SECTION("omitted collections preserve the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 library:
   tracks:
@@ -448,7 +522,7 @@ library:
     SECTION("present empty collections clear the merge baseline")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 library:
   tracks:
@@ -481,7 +555,7 @@ library:
 
       auto listTransaction = library::test::writeTransaction(source);
       auto listBuilder = ListBuilder::makeEmpty().name("Source List");
-      listBuilder.tracks().add(trackId);
+      listBuilder.orderTrackIds().add(trackId);
       createList(source.lists().writer(listTransaction), ao::test::requireValue(listBuilder.serialize()));
       REQUIRE(listTransaction.commit());
 
@@ -521,7 +595,7 @@ library:
       auto const yamlPath = std::filesystem::path{temp.path()} / "merge-report.yaml";
       {
         auto yaml = std::ofstream{yamlPath};
-        yaml << R"(version: 2
+        yaml << R"(version: 3
 export_mode: delta
 library:
   tracks:
@@ -533,7 +607,7 @@ library:
     - id: 1
       parentId: 0
       name: "Imported"
-      tracks:
+      order:
         - uri: track2.flac
 )";
       }
@@ -578,7 +652,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -591,7 +665,7 @@ library:
   lists:
     - id: 1
       name: Test List
-      tracks:
+      order:
         - uri: ./song.flac
         - uri: .\song2.flac
         - uri: nested\..\song3.flac
@@ -633,7 +707,7 @@ library:
     auto const listReader = ml.lists().reader(transaction);
     auto optList = listReader.get(ListId{1});
     REQUIRE(optList);
-    REQUIRE(optList->tracks().size() == 3);
+    REQUIRE(optList->orderTrackIds().size() == 3);
   }
 
   TEST_CASE("LibraryYaml - import accepts metadata and delta-mode YAML examples",
@@ -650,7 +724,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 2\n";
+      yaml << "version: 3\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";
@@ -666,7 +740,7 @@ library:
       yaml << "  lists:\n";
       yaml << "    - id: 1\n";
       yaml << "      name: \"Coverage List\"\n";
-      yaml << "      tracks:\n";
+      yaml << "      order:\n";
       yaml << "        - id: 1\n";
       yaml << "        - 2\n";
     }
@@ -684,7 +758,7 @@ library:
     auto const yamlPathDelta = std::filesystem::path{temp.path()} / "coverage_delta.yaml";
     {
       auto yaml = std::ofstream{yamlPathDelta};
-      yaml << "version: 2\n";
+      yaml << "version: 3\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: delta\n";
       yaml << "library:\n";
@@ -696,7 +770,7 @@ library:
       yaml << "  lists:\n";
       yaml << "    - id: 1\n";
       yaml << "      name: \"Coverage List\"\n";
-      yaml << "      tracks:\n";
+      yaml << "      order:\n";
       yaml << "        - id: 1\n";
     }
 
@@ -704,7 +778,7 @@ library:
     REQUIRE(resultDelta);
   }
 
-  TEST_CASE("LibraryYaml - version 2 rejects aliases and extension fields",
+  TEST_CASE("LibraryYaml - version 3 rejects aliases and extension fields",
             "[runtime][workflow][import-export][schema]")
   {
     auto const temp = ao::test::TempDir{};
@@ -715,7 +789,7 @@ library:
     SECTION("legacy mode alias")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: minimum
 library:
   tracks: []
@@ -731,7 +805,7 @@ library:
     SECTION("unknown root field")
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 extension_root: future
 library:
@@ -758,7 +832,7 @@ library:
     auto const yamlPath = std::filesystem::path{temp.path()} / "metadata.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << "version: 2\n";
+      yaml << "version: 3\n";
       yaml << "libraryId: \"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE\"\n";
       yaml << "export_mode: metadata\n";
       yaml << "library:\n";

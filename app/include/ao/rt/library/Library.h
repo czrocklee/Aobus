@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace ao::library
 {
@@ -55,12 +56,17 @@ namespace ao::rt
     // LibraryWriter directly (frontend-core guardrail), so these stay.
     Result<ListId> createList(LibraryListDraft const& draft);
     Result<UpdateListReply> updateList(LibraryListDraft const& draft);
-    Result<DeleteListReply> deleteList(ListId listId);
+    Result<DeleteListReply> deleteList(ListId listId, DeleteListOptions options = {});
+    Result<DeleteListReply> previewDeleteList(ListId listId, DeleteListOptions options = {});
+    Result<DeleteListSubtreeReply> deleteListAndDescendants(ListId listId, DeleteListOptions options = {});
+    Result<DeleteListSubtreeReply> previewDeleteListAndDescendants(ListId listId, DeleteListOptions options = {});
 
     LibraryAuthoringAvailability authoringAvailability() const;
     async::Subscription onAuthoringAvailabilityChanged(
       std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
+    Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
+    Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
 
   private:
     struct Impl;

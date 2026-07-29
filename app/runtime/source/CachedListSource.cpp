@@ -4,9 +4,11 @@
 #include "runtime/source/CachedListSource.h"
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/ListOrderSource.h>
+#include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
@@ -20,7 +22,7 @@
 namespace ao::rt
 {
   CachedListSource::CachedListSource(CachedListSourceDefinition definition,
-                                     std::unique_ptr<TrackSource> implementationPtr)
+                                     std::unique_ptr<ListOrderSource> implementationPtr)
     : _definition{std::move(definition)}, _implementationPtr{std::move(implementationPtr)}
   {
     if (_implementationPtr == nullptr)
@@ -38,7 +40,8 @@ namespace ao::rt
     _implementationPtr.reset();
   }
 
-  void CachedListSource::rebind(CachedListSourceDefinition definition, std::unique_ptr<TrackSource> implementationPtr)
+  void CachedListSource::rebind(CachedListSourceDefinition definition,
+                                std::unique_ptr<ListOrderSource> implementationPtr)
   {
     if (implementationPtr == nullptr)
     {
@@ -61,23 +64,17 @@ namespace ao::rt
     std::ignore = publishDelta(SourceReset{}, previousSize);
   }
 
-  bool CachedListSource::trySynchronizeManualDefinition(CachedListSourceDefinition const& definition)
+  std::optional<Error> CachedListSource::filterError() const
   {
-    if (_definition.kind != CachedListSourceKind::Manual || definition.kind != CachedListSourceKind::Manual)
-    {
-      return false;
-    }
+    auto const* const filterSource = dynamic_cast<SmartListSource const*>(&_implementationPtr->filteredParent());
+    return filterSource == nullptr ? std::nullopt : filterSource->error();
+  }
 
-    auto* const source = dynamic_cast<ManualListSource*>(_implementationPtr.get());
-
-    if (source == nullptr)
-    {
-      return false;
-    }
-
+  bool CachedListSource::trySynchronizeOrderDefinition(CachedListSourceDefinition const& definition)
+  {
     auto actualDefinition = _definition;
-    auto const storedTrackIds = source->storedTrackIds();
-    actualDefinition.storedTrackIds.assign(storedTrackIds.begin(), storedTrackIds.end());
+    auto const orderTrackIds = _implementationPtr->orderTrackIds();
+    actualDefinition.orderTrackIds.assign(orderTrackIds.begin(), orderTrackIds.end());
 
     if (actualDefinition != definition)
     {
@@ -99,11 +96,10 @@ namespace ao::rt
     invalidate();
   }
 
-  void CachedListSource::applyManualEditScript(delta::RegularTrackEditScript const& script)
+  void CachedListSource::applyOrderEditScript(delta::RegularTrackEditScript const& script)
   {
-    auto& source = manualImplementation();
-    source.applyManualEditScript(script);
-    syncManualDefinition(source);
+    _implementationPtr->applyOrderEditScript(script);
+    syncOrderDefinition(*_implementationPtr);
   }
 
   std::size_t CachedListSource::size() const
@@ -128,27 +124,10 @@ namespace ao::rt
     _lastPublishedSize = 0;
   }
 
-  ManualListSource& CachedListSource::manualImplementation()
+  void CachedListSource::syncOrderDefinition(ListOrderSource const& source)
   {
-    if (_definition.kind != CachedListSourceKind::Manual)
-    {
-      throwException<Exception>("Detailed manual operation targeted a non-manual cached source");
-    }
-
-    auto* const source = dynamic_cast<ManualListSource*>(_implementationPtr.get());
-
-    if (source == nullptr)
-    {
-      throwException<Exception>("Cached manual source has an incompatible implementation");
-    }
-
-    return *source;
-  }
-
-  void CachedListSource::syncManualDefinition(ManualListSource const& source)
-  {
-    auto const storedTrackIds = source.storedTrackIds();
-    _definition.storedTrackIds.assign(storedTrackIds.begin(), storedTrackIds.end());
+    auto const orderTrackIds = source.orderTrackIds();
+    _definition.orderTrackIds.assign(orderTrackIds.begin(), orderTrackIds.end());
   }
 
   void CachedListSource::subscribeToImplementation()

@@ -79,7 +79,7 @@ An empty Live projection is Gap at zero.
 
 `playFromView(viewId, startTrackId)` captures one coherent launch description from `ViewService`.
 The captured spec contains the exact source list id, quick-filter expression, and `sortBy` order; grouping, visible fields, redundant fields, and other display state do not become succession context.
-An empty sort preserves source order, including the stored relative order exposed by a manual source.
+An empty sort preserves source order, including the effective saved rank exposed by `ListOrderSource`.
 
 Changing or destroying the originating view after launch does not alter the session.
 Changing its filter or presentation affects only a later launch.
@@ -286,7 +286,7 @@ Observers are observational and do not choose succession policy.
 - [`ShuffleHistoryTest.cpp`](../../../test/unit/runtime/playback/ShuffleHistoryTest.cpp) proves sticky candidates, eligibility, path history, failed-pop behavior, invalidation, and the 64-entry bound.
 - [`PreparedNextRegistryTest.cpp`](../../../test/unit/runtime/playback/PreparedNextRegistryTest.cpp) proves active/retired replacement, independent anchors, exact disarm, winner resolution, invalidation races, and cancellation barriers.
 - [`PlaybackRestartDeadlineTest.cpp`](../../../test/unit/runtime/playback/PlaybackRestartDeadlineTest.cpp) proves the strict threshold, replacement and owner-destruction cancellation after callback queueing, synchronous reentrancy, pause/resume/seek control, session replacement, and shutdown.
-- [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp) proves launch atomicity, detached view context, live membership, repeat, prepared transitions, failure walking, and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
+- [`PlaybackSuccessionLaunchTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp) proves launch atomicity and detached view context; [`PlaybackSuccessionProjectionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionProjectionTest.cpp) proves live membership and repeat behavior; [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp) proves prepared transitions; [`PlaybackSuccessionFailureTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp) proves failure walking and internal observations; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) protects public reentrancy ordering and projection.
 - Source and projection suites linked from their owning specifications prove the ordered live input contract consumed here.
 
 ## Related documents

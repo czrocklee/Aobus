@@ -78,11 +78,15 @@ UIModel timers remain presentation-only for retained info and synthetic completi
 UIModel may subscribe to runtime services, combine several runtime snapshots, format display values, maintain an edit draft or gesture, and emit a runtime command or typed edit result.
 It does not own storage transactions, playback succession, audio control, runtime retry policy, or platform lifecycle.
 
-UIModel may resolve and complete quick-search text through runtime vocabulary ports, and may inspect a valid Smart List expression to recommend a presentation.
+UIModel may resolve and complete quick-search text through runtime vocabulary ports, and may inspect a valid saved-List expression to recommend a presentation.
 Those are authoring and recommendation policies: UIModel does not evaluate membership or redefine query grammar.
 
 UIModel also owns the shared list-navigation tree projection.
 It derives effective parent relationships, malformed-parent recovery, and stable sibling order once for GTK and TUI adapters.
+Rows carry one unified saved-List shape; nesting is a parent relationship, not a semantic Folder, Manual, or Smart kind.
+
+UIModel owns List-order eligibility, revision-bound authoring sessions, stable-ID movement intent, keyboard repeat suppression, and shared preference deletion cleanup.
+It permits saved-order writes only for a saved List in a flat presentation with empty `sortBy`; All Tracks, grouping, active presentation sorting, source errors, maintenance, and stale bindings are explicit disabled or cancelled states.
 
 UIModel owns semantic track-field column roles, including sizing, start/end
 alignment, persisted visibility, and stored-order projection.
@@ -114,7 +118,9 @@ Presentation owns the semantic state that those shell components adapt and rende
 
 `MainWindow` owns the visible window composition.
 `MainWindowCoordinator` binds runtime/UIModel collaborators to that composition.
-The smart-list preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryWriter` directly.
+The List preview dialog may compose read-only runtime evaluators against the const library view, but GTK cannot name committing transaction authority or call `LibraryWriter` directly.
+GTK owns generation-local drag handles, drop targets, indicators, autoscroll, and native shortcut dispatch.
+Rebuilding a track view destroys those gesture objects before their widgets; runtime revision and view/source generation changes invalidate retained order sessions rather than retargeting them.
 
 ### TUI
 
@@ -204,8 +210,8 @@ runtime list snapshot
 For a track-list view, the two independent inputs meet in runtime before presentation state flows outward:
 
 ```text
-ListId + filterExpression -> TrackSource membership
-TrackPresentationSpec    -> projection shape
+ListId + filterExpression -> TrackSource membership and saved source order
+TrackPresentationSpec    -> optional sort plus projection shape
 both                      -> rows and sections -> UIModel/frontend
 ```
 

@@ -120,7 +120,7 @@
   <data name="RepeatTooltip" xml:space="preserve"><value>Repeat</value></data>
 
   <data name="Presentation_library" xml:space="preserve"><value>Library</value></data>
-  <data name="Presentation_list_order" xml:space="preserve"><value>List Order</value></data>
+  <data name="Presentation_list_order" xml:space="preserve"><value>Manual Order</value></data>
   <data name="Presentation_songs" xml:space="preserve"><value>Songs</value></data>
   <data name="Presentation_albums" xml:space="preserve"><value>Albums</value></data>
   <data name="Presentation_artists" xml:space="preserve"><value>Artists</value></data>

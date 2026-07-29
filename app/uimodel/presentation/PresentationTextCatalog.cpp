@@ -42,7 +42,7 @@ namespace ao::uimodel
 
     constexpr auto kBuiltinTrackPresentationTexts = std::to_array<BuiltinTrackPresentationText>({
       {.id = "library", .text = {.label = "Library", .description = "All tracks in album-artist and album order."}},
-      {.id = "list-order", .text = {.label = "List Order", .description = "Flat list preserving source order."}},
+      {.id = "list-order", .text = {.label = "Manual Order", .description = "Arrange tracks in your own order."}},
       {.id = "songs", .text = {.label = "Songs", .description = "Flat list of every track ordered by title."}},
       {.id = "albums", .text = {.label = "Albums", .description = "Grouped by album with track-oriented columns."}},
       {.id = "artists",

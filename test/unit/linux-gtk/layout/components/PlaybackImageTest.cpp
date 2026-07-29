@@ -90,7 +90,7 @@ namespace ao::gtk::layout::test
     {
       auto output = std::ofstream{path};
       REQUIRE(output);
-      output << "version: 2\n"
+      output << "version: 3\n"
                 "export_mode: full\n"
                 "library:\n"
                 "  tracks:\n"

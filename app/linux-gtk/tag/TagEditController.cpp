@@ -9,10 +9,18 @@
 #include "track/TrackRowCache.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListNode.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
+#include <ao/rt/library/LibraryReader.h>
+#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
 #include <ao/uimodel/library/property/TagEdit.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 
@@ -30,10 +38,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <format>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -41,6 +54,10 @@ namespace ao::gtk
 {
   namespace
   {
+    std::string tagExpression(std::string_view const tag)
+    {
+      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+    }
   }
 
   TagEditController::TagEditController(Gtk::Window& parent,
@@ -94,12 +111,7 @@ namespace ao::gtk
     _contextYPosition = yPosition;
 
     _contextPopoverPtr = std::make_unique<Gtk::PopoverMenu>();
-
-    auto menuModelPtr = Gio::Menu::create();
-    menuModelPtr->append("Edit Tags", "ctx.edit-tags");
-    menuModelPtr->append("Properties", "ctx.properties");
-
-    _contextPopoverPtr->set_menu_model(menuModelPtr);
+    buildContextActionsAndMenu(page);
     _contextPopoverPtr->insert_action_group("ctx", _contextActionGroupPtr);
 
     _contextPopoverPtr->set_parent(page);
@@ -213,33 +225,249 @@ namespace ao::gtk
     _trackTagRemoveActionPtr->signal_activate().connect(
       [this](Glib::VariantBase const& parameter)
       { removeTagFromCurrentSelection(Glib::VariantBase::cast_dynamic<Glib::Variant<std::string>>(parameter).get()); });
+  }
 
+  void TagEditController::buildContextActionsAndMenu(TrackViewPage& page)
+  {
     _contextActionGroupPtr = Gio::SimpleActionGroup::create();
+    auto menuModelPtr = Gio::Menu::create();
+    auto addAction = [this](Glib::RefPtr<Gio::Menu> const& menuPtr,
+                            std::string const& label,
+                            std::string const& name,
+                            std::function<void()> callback,
+                            bool const enabled = true)
+    {
+      auto actionPtr = Gio::SimpleAction::create(name);
+      actionPtr->set_enabled(enabled);
+      actionPtr->signal_activate().connect([callback = std::move(callback)](Glib::VariantBase const&) { callback(); });
+      _contextActionGroupPtr->add_action(actionPtr);
+      menuPtr->append(label, std::format("ctx.{}", name));
+    };
 
-    auto editTagsActionPtr = Gio::SimpleAction::create("edit-tags");
-    editTagsActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const&)
+    addAction(menuModelPtr,
+              "Edit Tags",
+              "edit-tags",
+              [this]
+              {
+                auto* const activePage = _contextPage;
+                auto const xPosition = _contextXPosition;
+                auto const yPosition = _contextYPosition;
+                scheduleContextPopoverRetirement();
+
+                if (activePage != nullptr)
+                {
+                  openTagsPopover(*activePage, xPosition, yPosition);
+                }
+              });
+    addAction(menuModelPtr,
+              "Properties",
+              "properties",
+              [this]
+              {
+                scheduleContextPopoverRetirement();
+                presentPropertiesDialog();
+              });
+
+    auto const lists = _runtime.library().reader().lists();
+    auto const targets = uimodel::writableTagListTargets(lists);
+    auto addToListMenuPtr = Gio::Menu::create();
+    std::size_t addTargetCount = 0;
+    auto const activeListId = _optActiveSelection ? _optActiveSelection->listId : rt::kAllTracksListId;
+
+    for (auto const& target : targets)
+    {
+      if (_optActiveSelection && target.listId == _optActiveSelection->listId)
       {
-        auto* const page = _contextPage;
-        auto const xPosition = _contextXPosition;
-        auto const yPosition = _contextYPosition;
-        scheduleContextPopoverRetirement();
+        continue;
+      }
 
-        if (page != nullptr)
-        {
-          openTagsPopover(*page, xPosition, yPosition);
-        }
-      });
-    _contextActionGroupPtr->add_action(editTagsActionPtr);
+      auto const actionName = std::format("add-to-list-{}", target.listId.raw());
+      addAction(addToListMenuPtr,
+                std::format("{} ({})", target.name, tagExpression(target.tag)),
+                actionName,
+                [this, listId = target.listId]
+                {
+                  scheduleContextPopoverRetirement();
+                  applyListMembershipToCurrentSelection(listId, true);
+                });
+      ++addTargetCount;
+    }
 
-    auto propertiesActionPtr = Gio::SimpleAction::create("properties");
-    propertiesActionPtr->signal_activate().connect(
-      [this](Glib::VariantBase const&)
+    auto const hasOmittedComputedTargets = std::ranges::any_of(
+      lists,
+      [&targets, activeListId](rt::ListNode const& list)
       {
-        scheduleContextPopoverRetirement();
-        presentPropertiesDialog();
+        return list.id != activeListId &&
+               std::ranges::find(targets, list.id, &uimodel::WritableTagListTarget::listId) == targets.end();
       });
-    _contextActionGroupPtr->add_action(propertiesActionPtr);
+    auto addManageListsAction = [this, &addAction, &addToListMenuPtr](std::string const& label)
+    {
+      addAction(addToListMenuPtr,
+                label,
+                "manage-lists",
+                [this]
+                {
+                  scheduleContextPopoverRetirement();
+
+                  if (_callbacks.onManageListsRequested)
+                  {
+                    _callbacks.onManageListsRequested();
+                  }
+                });
+    };
+
+    if (hasOmittedComputedTargets)
+    {
+      addAction(
+        addToListMenuPtr,
+        "Other Lists have computed membership; edit their expression or track tags instead.",
+        "computed-lists-omitted",
+        [] {},
+        false);
+    }
+
+    if (addTargetCount == 0)
+    {
+      addAction(addToListMenuPtr, "No directly editable Playlists", "add-to-list-unavailable", [] {}, false);
+      addManageListsAction("Create a Playlist...");
+    }
+    else if (hasOmittedComputedTargets)
+    {
+      addManageListsAction("Manage Lists...");
+    }
+
+    menuModelPtr->append_submenu("Add to Playlist", addToListMenuPtr);
+
+    if (_optActiveSelection)
+    {
+      auto const current =
+        std::ranges::find(targets, _optActiveSelection->listId, &uimodel::WritableTagListTarget::listId);
+
+      if (current != targets.end())
+      {
+        addAction(menuModelPtr,
+                  std::format("Remove from {} ({})", current->name, tagExpression(current->tag)),
+                  "remove-from-current-list",
+                  [this, listId = current->listId]
+                  {
+                    scheduleContextPopoverRetirement();
+                    applyListMembershipToCurrentSelection(listId, false);
+                  });
+      }
+      else if (!rt::isVirtualListId(_optActiveSelection->listId) &&
+               std::ranges::find(lists, _optActiveSelection->listId, &rt::ListNode::id) != lists.end())
+      {
+        addAction(
+          menuModelPtr,
+          "Remove from this List is unavailable because its membership is computed.",
+          "remove-from-current-list-unavailable",
+          [] {},
+          false);
+      }
+    }
+
+    auto orderingMenuPtr = Gio::Menu::create();
+    auto const capabilities = page.orderCapabilities();
+
+    auto addOrderAction = [&](std::string const& label, std::string const& name, TrackOrderCommand const action)
+    {
+      addAction(orderingMenuPtr,
+                label,
+                name,
+                [this, action]
+                {
+                  scheduleContextPopoverRetirement();
+                  applyListOrderToCurrentSelection(action);
+                });
+    };
+
+    if (!capabilities.canAuthorOrder)
+    {
+      addAction(orderingMenuPtr, capabilities.disabledReason, "ordering-unavailable", [] {}, false);
+    }
+    else
+    {
+      if (capabilities.canRelativeMove)
+      {
+        addOrderAction("Move Up", "order-up", TrackOrderCommand::MoveUp);
+        addOrderAction("Move Down", "order-down", TrackOrderCommand::MoveDown);
+      }
+      else
+      {
+        addAction(orderingMenuPtr, "Move Up", "order-up", [] {}, false);
+        addAction(orderingMenuPtr, "Move Down", "order-down", [] {}, false);
+        addAction(orderingMenuPtr, capabilities.disabledReason, "relative-ordering-unavailable", [] {}, false);
+      }
+
+      if (capabilities.canAbsoluteMove)
+      {
+        addOrderAction("Move to Top", "order-top", TrackOrderCommand::MoveToTop);
+        addOrderAction("Move to Bottom", "order-bottom", TrackOrderCommand::MoveToBottom);
+      }
+
+      if (capabilities.canResetOrder)
+      {
+        addOrderAction("Reset Order", "order-reset", TrackOrderCommand::Reset);
+      }
+
+      if (capabilities.canForgetHiddenPositions)
+      {
+        addOrderAction("Forget Hidden Positions", "order-forget-hidden", TrackOrderCommand::ForgetHidden);
+      }
+    }
+
+    menuModelPtr->append_submenu("Manual Order", orderingMenuPtr);
+    _contextPopoverPtr->set_menu_model(menuModelPtr);
+  }
+
+  void TagEditController::applyListMembershipToCurrentSelection(ListId const listId, bool const add)
+  {
+    if (!_optActiveSelection || _optActiveSelection->selectedIds.empty())
+    {
+      return;
+    }
+
+    auto sessionResult =
+      uimodel::ListMembershipAuthoringSession::begin(_runtime.library(), _optActiveSelection->selectedIds);
+
+    if (!sessionResult)
+    {
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, sessionResult.error().message, rt::NotificationLifetime::history());
+      return;
+    }
+
+    auto result = add ? (*sessionResult)->addToList(listId) : (*sessionResult)->removeFromList(listId);
+
+    if (!result)
+    {
+      _runtime.notifications().post(
+        rt::NotificationSeverity::Error, result.error().message, rt::NotificationLifetime::history());
+      return;
+    }
+
+    auto const failed =
+      result->status == rt::TrackAuthoringStatus::Stale || result->status == rt::TrackAuthoringStatus::Unavailable;
+    _runtime.notifications().post(failed ? rt::NotificationSeverity::Error : rt::NotificationSeverity::Info,
+                                  result->notificationText,
+                                  failed ? rt::NotificationLifetime::history() : rt::NotificationLifetime::transient());
+
+    if (result->status == rt::TrackAuthoringStatus::Applied && _callbacks.onTagsMutated)
+    {
+      _callbacks.onTagsMutated();
+    }
+  }
+
+  void TagEditController::applyListOrderToCurrentSelection(TrackOrderCommand const action)
+  {
+    auto* const page = _contextPage;
+
+    if (page == nullptr)
+    {
+      return;
+    }
+
+    page->applyListOrderCommand(action);
   }
 
   void TagEditController::openTagsPopover(TrackViewPage& page, double xPosition, double yPosition)

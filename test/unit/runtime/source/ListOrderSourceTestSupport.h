@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -31,7 +31,7 @@ namespace ao::rt::test
 
       for (auto id : ids)
       {
-        builder.tracks().add(id);
+        builder.orderTrackIds().add(id);
       }
 
       return ao::test::requireValue(builder.serialize());

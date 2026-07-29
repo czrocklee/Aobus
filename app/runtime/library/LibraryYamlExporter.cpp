@@ -462,28 +462,27 @@ namespace ao::rt
         appendString(listNode, "description", listView.description());
       }
 
-      if (listView.isSmart())
+      if (!listView.filter().empty())
       {
         appendString(listNode, "filter", listView.filter());
-        return {};
       }
 
-      auto const tracks = listView.tracks();
+      auto const orderTrackIds = listView.orderTrackIds();
 
-      if (tracks.empty())
+      if (orderTrackIds.empty())
       {
         return {};
       }
 
-      auto tracksNode = listNode.append_child();
-      yaml::setKey(tracksNode, "tracks");
-      tracksNode |= ryml::SEQ;
+      auto orderNode = listNode.append_child();
+      yaml::setKey(orderNode, "order");
+      orderNode |= ryml::SEQ;
 
-      for (auto const trackId : tracks)
+      for (auto const trackId : orderTrackIds)
       {
         if (mode != ExportMode::ListOnly)
         {
-          tracksNode.append_child() << trackId.raw();
+          orderNode.append_child() << trackId.raw();
           continue;
         }
 
@@ -502,7 +501,7 @@ namespace ao::rt
             Error::Code::CorruptData, std::format("Track {} contains an invalid library URI", trackId.raw()));
         }
 
-        auto refNode = tracksNode.append_child();
+        auto refNode = orderNode.append_child();
         refNode |= ryml::MAP;
         appendString(refNode, "uri", uri->value());
       }
@@ -560,7 +559,7 @@ namespace ao::rt
       return std::unexpected{header.error()};
     }
 
-    root.append_child() << ryml::key("version") << 2;
+    root.append_child() << ryml::key("version") << 3;
     appendString(root, "libraryId", utility::formatUuid(header->libraryId));
     appendString(root, "export_mode", exportModeName(mode));
 

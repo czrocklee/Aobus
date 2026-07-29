@@ -3,13 +3,13 @@ id: library.yaml-format
 type: reference
 status: current
 domain: library
-summary: Defines version 2 of the portable, fail-closed YAML library interchange format.
+summary: Defines version 3 of the portable, fail-closed YAML library interchange format.
 ---
 # Library YAML format
 
 ## Scope and version
 
-This reference defines the exact version 2 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
+This reference defines the exact version 3 YAML surface emitted by `LibraryYamlExporter` and accepted by `LibraryYamlImporter`.
 It owns field names, node kinds, scalar widths, accepted values, omission rules, URI syntax, and compatibility behavior.
 
 Transfer modes, restore and merge behavior, authorization, atomicity, reports, and change publication belong to the [library YAML transfer specification](../../../spec/library/runtime/yaml-transfer.md).
@@ -25,7 +25,7 @@ Producer and consumer code lives under `app/runtime/library/`; the format transl
 The root is a closed map with this shape:
 
 ```yaml
-version: 2
+version: 3
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -35,7 +35,7 @@ library:
 
 | Field | Required | Producer | Type and values |
 |---|---|---|---|
-| `version` | Yes. | Always `2`. | Unsigned 32-bit integer; only `2` is accepted. |
+| `version` | Yes. | Always `3`. | Unsigned 32-bit integer; only `3` is accepted. |
 | `libraryId` | No. | Always emitted. | UUID text with hexadecimal digits and hyphens in `8-4-4-4-12` grouping; letter case is ignored. |
 | `export_mode` | Yes. | Always emitted. | `delta`, `metadata`, `full`, or `listOnly`. |
 | `library` | Yes. | Always emitted. | Closed map containing only `tracks` and `lists`. |
@@ -151,18 +151,18 @@ Each list is a closed map.
 | `parentId` | No. | Unsigned 32-bit payload list identity; omission or `0` means root. |
 | `name` | Yes. | Scalar string. |
 | `description` | No. | Scalar string. |
-| `filter` | No. | Scalar predicate text; presence selects a Smart List. |
-| `tracks` | No. | Sequence of manual-list track references. |
+| `filter` | No. | Scalar local predicate text; empty or omitted means identity (`true`). |
+| `order` | No. | Sequence of saved rank references; empty or omitted means no saved rank. |
 
-`filter` and `tracks` are mutually exclusive.
-A present `filter` must be non-empty and must parse and compile under the current query grammar.
-Omitting both creates an empty manual list.
-The producer always emits `id`, `parentId`, and `name`; it omits empty descriptions and empty manual membership.
+`filter` and `order` are independent and may coexist.
+A non-empty `filter` must parse and compile under the current query grammar.
+The producer always emits `id`, `parentId`, and `name`; it omits an empty description, identity filter, and empty order.
+Order references do not define membership and need not currently match the List expression.
 
-Manual-list track references accept these forms:
+Order references accept these forms:
 
 ```yaml
-tracks:
+order:
   - 42
   - id: 42
   - uri: music/example.flac
@@ -171,15 +171,15 @@ tracks:
 A scalar or `id` map refers to a track record's payload `id`.
 A `uri` map contains a Library URI and resolves through the target manifest.
 A map must contain exactly one of `id` or `uri`; unknown fields and ambiguous maps reject the document.
-Normal exports use scalar IDs, while `listOnly` exports use URI maps so lists can attach to tracks with different target IDs.
+Normal exports use scalar IDs, while `listOnly` exports use URI maps so ranks can attach to tracks with different target IDs.
 
 Dangling parent, track-ID, and URI references are ignored and counted in the import report.
 Known parent relationships must not point to self or form a cycle.
-Duplicate manual-list references collapse to their first resolved occurrence while preserving first-occurrence order.
+Duplicate resolved order references collapse to their first occurrence while preserving first-occurrence order.
 
-The core list header uses 16-bit string lengths and offsets.
-Each name, description, and filter is therefore limited to 65,535 bytes; the resolved track-ID array is limited to 16,383 entries; and the track-ID bytes plus name and description must fit a 65,535-byte offset.
-Exceeding any bound rejects the payload rather than truncating it.
+Each name, description, and filter is limited to 65,535 bytes by the core product limit.
+The resolved order count must fit unsigned 32-bit, and its four-byte entries plus text and canonical padding must fit checked host-size and storage limits.
+Exceeding any bound rejects the payload rather than narrowing or truncating it.
 
 ## Validation rules
 
@@ -191,22 +191,22 @@ The importer reports `FormatRejected` for malformed YAML and any violation of th
 - an unknown or duplicate field in any closed map;
 - a malformed UUID, Library URI, scalar, sequence, or numeric width;
 - duplicate nonzero track IDs, duplicate canonical track URIs, duplicate custom keys, or missing, zero, or duplicate list IDs;
-- simultaneous `filter` and `tracks`, an empty or invalid filter, a known parent cycle, or an ambiguous list-reference map;
+- an invalid non-empty filter, a known parent cycle, or an ambiguous list-order reference map;
 - a URI or list representation exceeding its core storage limit;
 - malformed or empty cover data.
 
 The URI and fixed-width list limits above are the format's current explicit resource ceilings.
-Version 2 does not otherwise cap total document bytes, aggregate decoded cover bytes, or one decoded cover blob.
+Version 3 does not otherwise cap total document bytes, aggregate decoded cover bytes, or one decoded cover blob.
 No broader transfer budget is currently defined.
 The observable failure and rollback contract is defined by the [transfer specification](../../../spec/library/runtime/yaml-transfer.md#failure-and-cancellation).
 
 ## Compatibility and versioning
 
-The importer accepts version 2 only.
-It has no version-1 reader, legacy mode alias, permissive unknown-field path, restore bypass, or conversion command.
+The importer accepts version 3 only.
+It has no version-1/version-2 reader, legacy `tracks` List field, permissive unknown-field path, restore bypass, or conversion command.
 There is no migration contract for earlier interchange files.
 
-Changing a field name, node kind, scalar width, accepted enum value, omission meaning, or predicate interpretation requires a new format version unless the change only narrows producer output within this accepted version-2 surface.
+Changing a field name, node kind, scalar width, accepted enum value, omission meaning, predicate interpretation, or rank-reference interpretation requires a new format version unless the change only narrows producer output within this accepted version-3 surface.
 Payload versioning is independent of the host-local database's `kLibraryVersion`.
 
 ## Examples
@@ -214,7 +214,7 @@ Payload versioning is independent of the host-local database's `kLibraryVersion`
 Full payload:
 
 ```yaml
-version: 2
+version: 3
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: full
 library:
@@ -240,13 +240,14 @@ library:
     - id: 7
       parentId: 0
       name: Favorites
-      tracks: [42]
+      filter: "#favorite"
+      order: [42]
 ```
 
 List-only payload:
 
 ```yaml
-version: 2
+version: 3
 libraryId: 123e4567-e89b-12d3-a456-426614174000
 export_mode: listOnly
 library:
@@ -254,7 +255,8 @@ library:
     - id: 7
       parentId: 0
       name: Favorites
-      tracks:
+      filter: "#favorite"
+      order:
         - uri: music/example.flac
 ```
 

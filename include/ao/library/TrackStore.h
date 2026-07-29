@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -128,6 +128,9 @@ namespace ao::library
      *         (isHotValid()/isColdValid() false, accessors yield defaults).
      */
     std::optional<TrackView> get(TrackId id, LoadMode mode = LoadMode::Both) const;
+
+    /** Number of rows visible for the selected load mode. */
+    std::size_t entryCount(LoadMode mode = LoadMode::Both) const;
 
     /**
      * Visit tracks selected by ID, preserving the requested order.

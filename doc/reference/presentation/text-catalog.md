@@ -100,7 +100,7 @@ An absent slot remains empty, text is copied unchanged, and a numeric year is fo
 | Stable id | Label | Description |
 |---|---|---|
 | `library` | Library | All tracks in album-artist and album order. |
-| `list-order` | List Order | Flat list preserving source order. |
+| `list-order` | Manual Order | Arrange tracks in your own order. |
 | `songs` | Songs | Flat list of every track ordered by title. |
 | `albums` | Albums | Grouped by album with track-oriented columns. |
 | `artists` | Artists | Grouped by album artist with discography ordering. |

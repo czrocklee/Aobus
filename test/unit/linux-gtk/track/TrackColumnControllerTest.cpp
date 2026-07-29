@@ -114,6 +114,26 @@ namespace ao::gtk::test
       CHECK(layoutStore.listLayouts().empty());
     }
 
+    SECTION("a leading utility column stays fixed outside the persisted field layout")
+    {
+      controller.configureColumns([](rt::TrackField) { return Gtk::SignalListItemFactory::create(); });
+      auto const utilityPtr = Gtk::ColumnViewColumn::create("", Gtk::SignalListItemFactory::create());
+      utilityPtr->set_id("test-utility");
+      utilityPtr->set_fixed_width(36);
+      controller.prependUtilityColumn(utilityPtr);
+      controller.syncLayout(std::vector{rt::TrackField::Artist, rt::TrackField::Title});
+
+      auto const columnsPtr = columnView.get_columns();
+      REQUIRE(columnsPtr);
+      CHECK(columnsPtr->get_object(0) == utilityPtr);
+      CHECK(fieldForColumn(std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(1))) ==
+            rt::TrackField::Artist);
+      CHECK(fieldForColumn(std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(2))) ==
+            rt::TrackField::Title);
+      drainGtkEvents();
+      CHECK(layoutStore.listLayouts().empty());
+    }
+
     SECTION("stored hidden columns remain hidden and survive a visible-column resize")
     {
       layoutStore.setListLayouts(

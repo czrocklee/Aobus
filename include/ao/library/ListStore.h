@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -61,7 +61,8 @@ namespace ao::library
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
-    // Absence is the only recoverable miss; storage faults throw (see lmdb).
+    // Absence is the only recoverable miss. Storage faults and structurally
+    // corrupt records throw (see lmdb).
     std::optional<ListView> get(ListId id) const;
 
   private:
@@ -92,6 +93,7 @@ namespace ao::library
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
     Iterator& operator++();
     void operator++(std::int32_t) { ++*this; }
+    // Throws when the stored record is structurally corrupt.
     value_type operator*() const;
 
   private:
@@ -107,12 +109,15 @@ namespace ao::library
   class [[nodiscard]] ListStore::Writer final
   {
   public:
+    // Invalid serialized records are rejected with CorruptData before mutation.
     Result<std::pair<ListId, ListView>> create(std::span<std::byte const> data);
     Result<> update(ListId id, std::span<std::byte const> data);
     // Returns true if a row was removed, false if the id was absent.
     bool remove(ListId id);
     Result<> clear();
 
+    // Absence is the only recoverable miss. Storage faults and structurally
+    // corrupt records throw.
     std::optional<ListView> get(ListId id) const;
 
   private:

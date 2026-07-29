@@ -25,6 +25,7 @@
 namespace Gtk
 {
   class Button;
+  class ListBoxRow;
 }
 
 namespace ao::rt
@@ -70,6 +71,7 @@ namespace ao::gtk
     // Returns the selected presentation ID. Auto is resolved to a concrete ID.
     std::string presentationId() const;
 
+    void configurePlaylistTemplate(std::string_view initialName = {}, std::string_view initialTag = {});
     void setLocalExpression(std::string_view expression);
     void showError(std::string_view message);
 
@@ -79,12 +81,15 @@ namespace ao::gtk
     void configurePreviewColumns();
     void rebuildPreviewSource();
     void updateSourceLabels();
+    void updatePlaylistExpression();
+    void updatePlaylistTagFromName();
     uimodel::SmartListEditorViewState editorViewState() const;
     void updateDialogState();
     void updatePreview();
 
     Gtk::Entry _nameEntry;
     Gtk::Entry _descEntry;
+    Gtk::Entry _membershipTagEntry;
     QueryExpressionBox _exprBox;
     Gtk::DropDown _presentationDropDown;
     Gtk::Button* _okButton = nullptr;
@@ -93,8 +98,10 @@ namespace ao::gtk
     Gtk::Box _rightPanel;
     Gtk::Label _inheritedExprLabel;
     Gtk::Label _effectiveExprLabel;
+    Gtk::Label _membershipEditingLabel;
     Gtk::Label _matchCountLabel;
     Gtk::Label _errorLabel;
+    Gtk::ListBoxRow* _membershipTagRow = nullptr;
     Gtk::ScrolledWindow _previewScrolledWindow;
     Gtk::ColumnView _previewColumnView;
     sigc::connection _exprTimeoutConnection;
@@ -110,5 +117,8 @@ namespace ao::gtk
 
     // Edit mode state
     ListId _editListId{kInvalidListId};
+    bool _playlistTemplate = false;
+    bool _membershipTagEdited = false;
+    bool _syncingMembershipTag = false;
   };
 } // namespace ao::gtk

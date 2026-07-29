@@ -5,6 +5,7 @@
 
 #include "app/AppConfigStore.h"
 #include "app/AppDialog.h"
+#include "app/GtkAccelTranslator.h"
 #include "app/KeymapApplicator.h"
 #include "app/MainWindowCoordinator.h"
 #include "app/MenuController.h"
@@ -18,6 +19,7 @@
 #include "platform/MprisArtUrlCache.h"
 #include "platform/MprisBridge.h"
 #include "portal/ImportExportCoordinator.h"
+#include "track/TrackOrderActions.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/AppRuntime.h>
@@ -30,6 +32,7 @@
 #include <gdkmm/enums.h>
 #include <gtkmm/applicationwindow.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/eventcontroller.h>
 #include <gtkmm/eventcontrollerkey.h>
 #include <gtkmm/gestureclick.h>
 
@@ -123,7 +126,9 @@ namespace ao::gtk
           { answer(responseId == Gtk::ResponseType::YES); });
       });
 
+    _keymap = _configStorePtr->loadKeymap(uimodel::defaultKeymap());
     installPlaybackSpaceShortcut();
+    installOrderKeyRepeatSuppression();
 
     // Mouse back/forward navigation (thumb buttons 8/9).
     auto mouseNavGesturePtr = Gtk::GestureClick::create();
@@ -307,6 +312,8 @@ namespace ao::gtk
   void MainWindow::applyKeymap(uimodel::KeymapModel const& keymap)
   {
     _configStorePtr->saveKeymap(keymap);
+    _keymap = keymap;
+    _orderKeyRepeatGuard.reset();
 
     if (auto const appPtr = get_application(); appPtr)
     {
@@ -348,5 +355,54 @@ namespace ao::gtk
       },
       false);
     add_controller(keyControllerPtr);
+  }
+
+  void MainWindow::installOrderKeyRepeatSuppression()
+  {
+    auto keyControllerPtr = Gtk::EventControllerKey::create();
+    keyControllerPtr->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+    keyControllerPtr->signal_key_pressed().connect(
+      [this](guint const keyval, guint const keycode, Gdk::ModifierType const modifiers)
+      {
+        auto const optChord = fromGtkKeyval(keyval, modifiers);
+
+        if (!optChord)
+        {
+          return false;
+        }
+
+        auto const optActionId = _keymap.actionFor(*optChord);
+
+        if (!optActionId || !isTrackOrderAction(*optActionId))
+        {
+          return false;
+        }
+
+        if (auto const physicalKeycode = keycode == 0 ? keyval : keycode;
+            isSinglePressTrackOrderAction(*optActionId) && !_orderKeyRepeatGuard.acceptPress(physicalKeycode))
+        {
+          return true;
+        }
+
+        _shellLayout.activateAction(*optActionId);
+        return true;
+      },
+      false);
+    keyControllerPtr->signal_key_released().connect(
+      [this](guint const keyval, guint const keycode, Gdk::ModifierType)
+      {
+        auto const physicalKeycode = keycode == 0 ? keyval : keycode;
+        _orderKeyRepeatGuard.release(physicalKeycode);
+      });
+    add_controller(keyControllerPtr);
+
+    property_is_active().signal_changed().connect(
+      [this]
+      {
+        if (!property_is_active().get_value())
+        {
+          _orderKeyRepeatGuard.reset();
+        }
+      });
   }
 } // namespace ao::gtk

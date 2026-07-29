@@ -9,6 +9,8 @@
 #include "track/TrackRowObject.h"
 #include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
@@ -49,6 +51,7 @@
 #include <gtkmm/window.h>
 #include <pangomm/layout.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <memory>
@@ -93,7 +96,7 @@ namespace ao::gtk
     _editListId = id;
     _nameEntry.set_text(node.name);
     _descEntry.set_text(node.description);
-    _exprBox.entry().set_text(node.smartExpression);
+    _exprBox.entry().set_text(node.expression);
     set_title("Edit List");
     _okButton->set_label("Save");
 
@@ -116,6 +119,34 @@ namespace ao::gtk
 
     return uimodel::resolveSmartListTrackPresentationId(
       selected, selected != GTK_INVALID_LIST_POSITION, localExpr, rt::builtinTrackPresentationPresets(), {});
+  }
+
+  void SmartListDialog::configurePlaylistTemplate(std::string_view const initialName, std::string_view const initialTag)
+  {
+    _playlistTemplate = true;
+    set_title("New Playlist");
+    _membershipTagRow->set_visible(true);
+    _exprBox.entry().set_editable(false);
+    _nameEntry.set_text(std::string{initialName});
+
+    auto const tag = initialTag.empty() ? initialName : initialTag;
+    _syncingMembershipTag = true;
+    _membershipTagEntry.set_text(std::string{tag});
+    _syncingMembershipTag = false;
+    _membershipTagEdited = !initialTag.empty();
+
+    auto const presets = rt::builtinTrackPresentationPresets();
+
+    for (std::size_t index = 0; index < presets.size(); ++index)
+    {
+      if (presets[index].spec.id == "list-order")
+      {
+        _presentationDropDown.set_selected(static_cast<std::uint32_t>(index + 1));
+        break;
+      }
+    }
+
+    updatePlaylistExpression();
   }
 
   void SmartListDialog::setLocalExpression(std::string_view expression)
@@ -160,11 +191,30 @@ namespace ao::gtk
 
     auto* const detailsList = Gtk::make_managed<FormBoxedList>();
     _nameEntry.set_placeholder_text("List name");
-    _nameEntry.signal_changed().connect([this] { updateDialogState(); });
+    _nameEntry.signal_changed().connect(
+      [this]
+      {
+        updatePlaylistTagFromName();
+        updateDialogState();
+      });
     detailsList->addEntryRow("Name", _nameEntry);
 
     _descEntry.set_placeholder_text("Optional description");
     detailsList->addEntryRow("Description", _descEntry);
+
+    _membershipTagEntry.set_placeholder_text("Visible tag used for membership");
+    _membershipTagEntry.signal_changed().connect(
+      [this]
+      {
+        if (!_syncingMembershipTag)
+        {
+          _membershipTagEdited = true;
+        }
+
+        updatePlaylistExpression();
+      });
+    _membershipTagRow = &detailsList->addEntryRow("Membership Tag", _membershipTagEntry);
+    _membershipTagRow->set_visible(false);
     _leftPanel.append(*detailsList);
 
     auto* const filterList = Gtk::make_managed<FormBoxedList>();
@@ -191,6 +241,10 @@ namespace ao::gtk
     _effectiveExprLabel.set_halign(Gtk::Align::END);
     _effectiveExprLabel.set_ellipsize(Pango::EllipsizeMode::END);
     filterList->addRow("Effective Filter", _effectiveExprLabel);
+
+    _membershipEditingLabel.set_halign(Gtk::Align::END);
+    _membershipEditingLabel.set_wrap(true);
+    filterList->addRow("Membership", _membershipEditingLabel);
 
     _leftPanel.append(*filterList);
 
@@ -355,7 +409,7 @@ namespace ao::gtk
 
       if (auto optNode = scope.listNode(_parentListId); optNode)
       {
-        inheritedExpr = optNode->smartExpression;
+        inheritedExpr = optNode->expression;
       }
       else
       {
@@ -370,6 +424,38 @@ namespace ao::gtk
     auto const localExpr = std::string{_exprBox.entry().get_text()};
     auto const effectiveExpression = ao::uimodel::combineSmartListEffectiveExpression(inheritedExpr, localExpr);
     _effectiveExprLabel.set_text(uimodel::formatSmartListExpressionDisplayText(effectiveExpression));
+  }
+
+  void SmartListDialog::updatePlaylistExpression()
+  {
+    if (!_playlistTemplate)
+    {
+      return;
+    }
+
+    auto const tag = _membershipTagEntry.get_text().raw();
+    auto expression = std::string{};
+
+    if (!tag.empty())
+    {
+      expression = query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = tag});
+    }
+
+    _exprTimeoutConnection.disconnect();
+    _exprBox.entry().set_text(expression);
+    updatePreview();
+  }
+
+  void SmartListDialog::updatePlaylistTagFromName()
+  {
+    if (!_playlistTemplate || _membershipTagEdited)
+    {
+      return;
+    }
+
+    _syncingMembershipTag = true;
+    _membershipTagEntry.set_text(_nameEntry.get_text());
+    _syncingMembershipTag = false;
   }
 
   uimodel::SmartListEditorViewState SmartListDialog::editorViewState() const
@@ -391,7 +477,11 @@ namespace ao::gtk
 
   void SmartListDialog::updateDialogState()
   {
-    _okButton->set_sensitive(editorViewState().canSubmit);
+    auto const state = editorViewState();
+    auto const playlistTagReady = !_playlistTemplate || !_membershipTagEntry.get_text().empty();
+    _okButton->set_sensitive(state.canSubmit && playlistTagReady);
+    _membershipEditingLabel.set_text(playlistTagReady ? state.membershipEditingText
+                                                      : "Choose a visible tag for Playlist membership");
   }
 
   void SmartListDialog::updatePreview()
@@ -426,8 +516,11 @@ namespace ao::gtk
     _errorLabel.set_visible(state.errorVisible);
     _errorLabel.set_text(state.errorText);
     _previewScrolledWindow.set_visible(state.previewVisible);
+    auto const playlistTagReady = !_playlistTemplate || !_membershipTagEntry.get_text().empty();
+    _membershipEditingLabel.set_text(playlistTagReady ? state.membershipEditingText
+                                                      : "Choose a visible tag for Playlist membership");
 
-    _okButton->set_sensitive(state.canSubmit);
+    _okButton->set_sensitive(state.canSubmit && playlistTagReady);
   }
 
   rt::LibraryListDraft SmartListDialog::draft() const

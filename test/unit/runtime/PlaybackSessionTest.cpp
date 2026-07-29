@@ -3,6 +3,7 @@
 
 #include "runtime/PlaybackSessionState.h"
 #include "runtime/PlaybackSessionYamlSchema.h"
+#include "runtime/playback/PlaybackCursorSession.h"
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
@@ -30,11 +31,13 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/yaml/RymlAdapter.h>
 
+#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -49,6 +52,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -168,24 +172,41 @@ namespace ao::rt::test
         runtime.playbackSessionConfigStore().save(kPlaybackSessionConfigGroup, session, PlaybackSessionYamlSchema{}));
     }
 
-    struct ManualView final
+    struct OrderedListView final
     {
       ListId listId = kInvalidListId;
       ViewId viewId = kInvalidViewId;
     };
 
-    ManualView createManualView(AppRuntime& runtime,
-                                std::vector<TrackId> trackIds,
-                                std::vector<TrackSortTerm> sortBy = {})
+    OrderedListView createOrderedListView(AppRuntime& runtime,
+                                          QueuedExecutor& executor,
+                                          std::vector<TrackId> trackIds,
+                                          std::vector<TrackSortTerm> sortBy = {})
     {
+      auto const membershipTag = std::array{std::string{"playbacksessionorder"}};
+      auto targetsResult = runtime.library().bindTrackTargets(trackIds);
+      INFO((targetsResult ? "initial membership targets bound" : targetsResult.error().message));
+      REQUIRE(targetsResult);
+      auto membershipResultValue = runtime.library().writer().editTags(*targetsResult, membershipTag, {});
+      INFO((membershipResultValue ? "initial membership updated" : membershipResultValue.error().message));
+      REQUIRE(membershipResultValue);
+      auto const& membershipResult = *membershipResultValue;
+      REQUIRE((membershipResult.status == TrackAuthoringStatus::Applied ||
+               membershipResult.status == TrackAuthoringStatus::NoOp));
+      executor.drain();
       runtime.reloadAllTracks();
-      auto const listId = ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{
-        .kind = LibraryWriter::ListKind::Manual,
+      auto listResult = runtime.library().writer().createList(LibraryWriter::ListDraft{
         .name = "Playback session order",
-        .trackIds = std::move(trackIds),
-      }));
+        .expression = "#playbacksessionorder",
+      });
+      INFO((listResult ? "playback List created" : listResult.error().message));
+      REQUIRE(listResult);
+      auto const listId = *listResult;
+      executor.drain();
       auto request = NavigationRequest{
         .target = FilteredListTarget{.listId = listId, .filterExpression = {}},
+        .optPresentation =
+          NavigationPresentation{.spec = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}}},
       };
 
       if (!sortBy.empty())
@@ -195,7 +216,71 @@ namespace ao::rt::test
 
       auto const created = runtime.workspace().navigate(request);
       REQUIRE(created);
-      return ManualView{.listId = listId, .viewId = *created};
+      return OrderedListView{.listId = listId, .viewId = *created};
+    }
+
+    void setOrderedListViewMembership(AppRuntime& runtime, std::span<TrackId const> const trackIds, bool const included)
+    {
+      auto const membershipTag = std::array{std::string{"playbacksessionorder"}};
+      auto targetsResult = runtime.library().bindTrackTargets(trackIds);
+      INFO((targetsResult ? "membership targets bound" : targetsResult.error().message));
+      REQUIRE(targetsResult);
+      auto resultValue = included ? runtime.library().writer().editTags(*targetsResult, membershipTag, {})
+                                  : runtime.library().writer().editTags(*targetsResult, {}, membershipTag);
+      INFO((resultValue ? "membership updated" : resultValue.error().message));
+      REQUIRE(resultValue);
+      auto const& result = *resultValue;
+      REQUIRE((result.status == TrackAuthoringStatus::Applied || result.status == TrackAuthoringStatus::NoOp));
+    }
+
+    LibraryWriter::MoveOrderAuthoringResult moveOrderedListViewOrder(AppRuntime& runtime,
+                                                                     OrderedListView const& view,
+                                                                     std::span<TrackId const> const selectedTrackIds,
+                                                                     std::optional<TrackId> const optBeforeTrackId)
+    {
+      auto const effectiveTrackIds = ao::test::requireValue(runtime.views().listSourceTrackIds(view.viewId));
+      auto binding = ao::test::requireValue(runtime.library().bindListOrder(view.listId, effectiveTrackIds));
+      return ao::test::requireValue(
+        runtime.library().writer().moveListOrder(binding, selectedTrackIds, optBeforeTrackId));
+    }
+
+    std::vector<TrackId> projectionTrackIds(TrackListProjection const& projection)
+    {
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(projection.size());
+
+      for (std::size_t index = 0; index < projection.size(); ++index)
+      {
+        trackIds.push_back(projection.trackIdAt(index));
+      }
+
+      return trackIds;
+    }
+
+    std::vector<TrackId> playbackProjectionTrackIds(AppRuntime& runtime, ViewId const viewId)
+    {
+      auto launchSpec = ao::test::requireValue(runtime.views().capturePlaybackLaunchSpec(viewId));
+      auto const viewProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(viewId));
+      REQUIRE(viewProjectionPtr->size() > 0);
+      auto sessionPtr = ao::test::requireValue(
+        PlaybackCursorSession::create(std::move(launchSpec),
+                                      viewProjectionPtr->trackIdAt(0),
+                                      runtime.sources(),
+                                      runtime.musicLibrary(),
+                                      RepeatMode::Off,
+                                      ShuffleMode::Off,
+                                      [](std::span<TrackId const> const candidates)
+                                      { return candidates.empty() ? kInvalidTrackId : candidates.front(); }));
+
+      auto trackIds = std::vector<TrackId>{};
+      trackIds.reserve(sessionPtr->projectionSize());
+
+      for (std::size_t index = 0; index < sessionPtr->projectionSize(); ++index)
+      {
+        trackIds.push_back(sessionPtr->trackIdAt(index));
+      }
+
+      return trackIds;
     }
 
     std::string rawPlaybackSessionYaml(TrackId const trackId,
@@ -728,7 +813,7 @@ namespace ao::rt::test
     auto const current = addPlayableTrack(runtime, *executor, "Current");
     auto const removedSuccessor = addPlayableTrack(runtime, *executor, "Removed successor");
     auto const finalSuccessor = addPlayableTrack(runtime, *executor, "Final successor");
-    auto const manual = createManualView(runtime, {current, removedSuccessor, finalSuccessor});
+    auto const orderedList = createOrderedListView(runtime, *executor, {current, removedSuccessor, finalSuccessor});
     executor->drain();
     auto const insertedIds = std::vector{insertedBeforeCurrent};
     auto const removedIds = std::vector{removedSuccessor};
@@ -736,15 +821,11 @@ namespace ao::rt::test
     auto const changedSubscription = runtime.playback().events().onSnapshot(
       [&](PlaybackSnapshot const& snapshot) noexcept { changedStates.push_back(snapshot); });
 
-    auto const inserted = runtime.library().writer().insertManualListTracks(manual.listId, 0, insertedIds);
-    REQUIRE(inserted);
-    REQUIRE(inserted->changed);
+    setOrderedListViewMembership(runtime, insertedIds, true);
     executor->drain();
-    auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, removedIds);
-    REQUIRE(removed);
-    REQUIRE(removed->changed);
+    setOrderedListViewMembership(runtime, removedIds, false);
 
-    auto const launched = startFromViewAndWait(runtime, *executor, manual.viewId, current);
+    auto const launched = startFromViewAndWait(runtime, *executor, orderedList.viewId, current);
 
     REQUIRE(launched);
     auto const accepted = runtime.playback().snapshot().succession;
@@ -1252,12 +1333,10 @@ namespace ao::rt::test
       auto runtime = makePlaybackSessionRuntime(tempDir, executor);
       addReadyAudioProvider(runtime);
       auto const first = addPlayableTrack(runtime, *executor, "First");
-      auto const second = addPlayableTrack(runtime, *executor, "Second");
+      addPlayableTrack(runtime, *executor, "Second");
       runtime.reloadAllTracks();
       auto const listId = ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{
-        .kind = LibraryWriter::ListKind::Manual,
         .name = "Temporary source",
-        .trackIds = {first, second},
       }));
       auto const view = runtime.workspace().navigate({.target = listId});
       REQUIRE(view);
@@ -1340,8 +1419,35 @@ namespace ao::rt::test
     CHECK(runtime.playback().snapshot().transport.transport == audio::Transport::Paused);
   }
 
-  TEST_CASE("PlaybackSession - sorted manual Gap ignores stored reorders with identical projected order",
-            "[runtime][regression][playback-session][manual-list]")
+  TEST_CASE("PlaybackSession - List views and playback share Manual Order and sorted projections",
+            "[runtime][regression][playback-session][list-order]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto* executor = static_cast<QueuedExecutor*>(nullptr);
+    auto runtime = makePlaybackSessionRuntime(tempDir, executor);
+    auto const alpha = addPlayableTrack(runtime, *executor, "Alpha");
+    auto const bravo = addPlayableTrack(runtime, *executor, "Bravo");
+    auto const charlie = addPlayableTrack(runtime, *executor, "Charlie");
+    auto const orderedList = createOrderedListView(runtime, *executor, {alpha, bravo, charlie});
+    auto const movedIds = std::vector{charlie};
+    auto const moved = moveOrderedListViewOrder(runtime, orderedList, movedIds, alpha);
+    REQUIRE(moved.status == ListOrderAuthoringStatus::Applied);
+    executor->drain();
+
+    auto viewProjectionPtr = ao::test::requireValue(runtime.views().findTrackListProjection(orderedList.viewId));
+    auto const manualOrder = std::vector{charlie, alpha, bravo};
+    CHECK(projectionTrackIds(*viewProjectionPtr) == manualOrder);
+    CHECK(playbackProjectionTrackIds(runtime, orderedList.viewId) == manualOrder);
+
+    auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
+    REQUIRE(runtime.views().setPresentation(orderedList.viewId, TrackPresentationSpec{.sortBy = titleSort}));
+    auto const titleOrder = std::vector{alpha, bravo, charlie};
+    CHECK(projectionTrackIds(*viewProjectionPtr) == titleOrder);
+    CHECK(playbackProjectionTrackIds(runtime, orderedList.viewId) == titleOrder);
+  }
+
+  TEST_CASE("PlaybackSession - sorted List Gap ignores stored order changes with identical projected order",
+            "[runtime][regression][playback-session][list-order]")
   {
     auto tempDir = ao::test::TempDir{};
     auto* executor = static_cast<QueuedExecutor*>(nullptr);
@@ -1351,13 +1457,11 @@ namespace ao::rt::test
     auto const alpha = addPlayableTrack(runtime, *executor, "Alpha");
     auto const charlie = addPlayableTrack(runtime, *executor, "Charlie");
     auto const titleSort = std::vector{TrackSortTerm{.field = TrackSortField::Title, .ascending = true}};
-    auto const manual = createManualView(runtime, {current, alpha, charlie}, titleSort);
-    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, current));
+    auto const orderedList = createOrderedListView(runtime, *executor, {current, alpha, charlie}, titleSort);
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, current));
 
     auto const currentIds = std::vector{current};
-    auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, currentIds);
-    REQUIRE(removed);
-    REQUIRE(removed->changed);
+    setOrderedListViewMembership(runtime, currentIds, false);
     executor->drain();
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
@@ -1369,7 +1473,7 @@ namespace ao::rt::test
     CHECK(beforePayload.currentTrackId == current);
     CHECK(beforePayload.anchorIndex == 1);
     CHECK(beforePayload.sortBy == titleSort);
-    auto const projectionResult = runtime.views().findTrackListProjection(manual.viewId);
+    auto const projectionResult = runtime.views().findTrackListProjection(orderedList.viewId);
     REQUIRE(projectionResult);
     auto const& projectionPtr = *projectionResult;
     REQUIRE(projectionPtr->size() == 2);
@@ -1382,9 +1486,8 @@ namespace ao::rt::test
     projectionBatchCount = 0;
 
     auto const movedIds = std::vector{charlie};
-    auto const moved = runtime.library().writer().moveManualListTracks(manual.listId, movedIds, 0);
-    REQUIRE(moved);
-    REQUIRE(moved->changed);
+    auto const moved = moveOrderedListViewOrder(runtime, orderedList, movedIds, alpha);
+    REQUIRE(moved.status == ListOrderAuthoringStatus::Applied);
     executor->drain();
 
     CHECK(projectionBatchCount == 0);
@@ -1405,8 +1508,8 @@ namespace ao::rt::test
     auto const first = addPlayableTrack(runtime, *executor, "First");
     auto const insertedTrack = addPlayableTrack(runtime, *executor, "Inserted successor");
     auto const originalSuccessor = addPlayableTrack(runtime, *executor, "Original successor");
-    auto const manual = createManualView(runtime, {first, originalSuccessor});
-    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, first));
+    auto const orderedList = createOrderedListView(runtime, *executor, {first, originalSuccessor});
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, first));
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
 
@@ -1415,9 +1518,7 @@ namespace ao::rt::test
     auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
 
     auto const insertedIds = std::vector{insertedTrack};
-    auto const inserted = runtime.library().writer().insertManualListTracks(manual.listId, 1, insertedIds);
-    REQUIRE(inserted);
-    REQUIRE(inserted->changed);
+    setOrderedListViewMembership(runtime, insertedIds, true);
     executor->drain();
 
     auto const afterSnapshot = runtime.playback().snapshot();
@@ -1440,8 +1541,8 @@ namespace ao::rt::test
     auto const second = addPlayableTrack(runtime, *executor, "Second");
     auto const third = addPlayableTrack(runtime, *executor, "Third");
     auto const fourth = addPlayableTrack(runtime, *executor, "Fourth");
-    auto const manual = createManualView(runtime, {current, second, third, fourth});
-    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, current));
+    auto const orderedList = createOrderedListView(runtime, *executor, {current, second, third, fourth});
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, current));
     runtime.playback().commands().setShuffleMode(ShuffleMode::On);
     runtime.playback().commands().pause();
     REQUIRE(runtime.savePlaybackSession());
@@ -1451,9 +1552,7 @@ namespace ao::rt::test
     auto const beforePayload = storedSession(runtime.playbackSessionConfigStore());
 
     auto const removedIds = std::vector{second};
-    auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, removedIds);
-    REQUIRE(removed);
-    REQUIRE(removed->changed);
+    setOrderedListViewMembership(runtime, removedIds, false);
     executor->drain();
 
     auto const afterSnapshot = runtime.playback().snapshot();
@@ -1475,8 +1574,8 @@ namespace ao::rt::test
     auto const historyTrack = addPlayableTrack(runtime, *executor, "History track");
     auto const second = addPlayableTrack(runtime, *executor, "Second");
     auto const third = addPlayableTrack(runtime, *executor, "Third");
-    auto const manual = createManualView(runtime, {historyTrack, second, third});
-    REQUIRE(startFromViewAndWait(runtime, *executor, manual.viewId, historyTrack));
+    auto const orderedList = createOrderedListView(runtime, *executor, {historyTrack, second, third});
+    REQUIRE(startFromViewAndWait(runtime, *executor, orderedList.viewId, historyTrack));
     runtime.playback().commands().setShuffleMode(ShuffleMode::On);
     runtime.playback().commands().next();
     auto const current = runtime.playback().snapshot().succession.currentTrackId;
@@ -1485,9 +1584,7 @@ namespace ao::rt::test
     runtime.playback().commands().pause();
 
     auto const removedIds = std::vector{historyTrack};
-    auto const removed = runtime.library().writer().removeManualListTracks(manual.listId, removedIds);
-    REQUIRE(removed);
-    REQUIRE(removed->changed);
+    setOrderedListViewMembership(runtime, removedIds, false);
     executor->drain();
     REQUIRE_FALSE(runtime.playback().snapshot().succession.hasPrevious);
     REQUIRE(runtime.savePlaybackSession());
@@ -1504,9 +1601,7 @@ namespace ao::rt::test
     CHECK(storedSession(runtime.playbackSessionConfigStore()) == beforePayload);
 
     auto const reinsertedIds = std::vector{historyTrack};
-    auto const reinserted = runtime.library().writer().insertManualListTracks(manual.listId, 0, reinsertedIds);
-    REQUIRE(reinserted);
-    REQUIRE(reinserted->changed);
+    setOrderedListViewMembership(runtime, reinsertedIds, true);
     executor->drain();
     CHECK_FALSE(runtime.playback().snapshot().succession.hasPrevious);
   }

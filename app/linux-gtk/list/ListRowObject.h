@@ -16,14 +16,14 @@ namespace ao::gtk
   public:
     ListId listId() const { return _listId; }
 
-    bool isSmart() const { return _isSmart; }
+    bool isSystem() const { return _isSystem; }
 
     Glib::ustring name() const { return _name; }
 
     Glib::ustring filter() const { return _filter; }
 
     static Glib::RefPtr<ListRowObject> create(ListId id,
-                                              bool smart,
+                                              bool system,
                                               Glib::ustring const& name,
                                               Glib::ustring const& filter = "");
 
@@ -32,7 +32,7 @@ namespace ao::gtk
 
   private:
     ListId _listId;
-    bool _isSmart = false;
+    bool _isSystem = false;
     Glib::ustring _name;
     Glib::ustring _filter;
   };

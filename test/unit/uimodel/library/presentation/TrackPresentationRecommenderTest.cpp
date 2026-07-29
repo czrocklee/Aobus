@@ -17,25 +17,25 @@ namespace ao::uimodel::test
     auto const builtins = rt::builtinTrackPresentationPresets();
     auto customs = std::vector<rt::CustomTrackPresentationPreset>{};
 
-    auto recommendSmart = [&](std::string const& filter)
+    auto recommendSaved = [&](std::string const& filter)
     {
       auto const context = ListPresentationContext{
-        .sourceKind = ListPresentationSourceKind::Smart,
-        .smartListFilter = filter,
+        .sourceKind = ListPresentationSourceKind::SavedList,
+        .listExpression = filter,
       };
       return recommendPresentation(context, builtins, customs).id;
     };
 
-    SECTION("manual list defaults to List Order")
+    SECTION("saved list uses its expression")
     {
       auto const context = ListPresentationContext{
         .listId = ListId{10},
-        .sourceKind = ListPresentationSourceKind::Manual,
-        .smartListFilter = "$composer = \"Bach\"",
+        .sourceKind = ListPresentationSourceKind::SavedList,
+        .listExpression = "$composer = \"Bach\"",
       };
       auto const result = recommendPresentation(context, builtins, customs);
 
-      CHECK(result.id == rt::kListOrderTrackPresentationId);
+      CHECK(result.id == "classical-composers");
     }
 
     SECTION("All Tracks retains the normal albums fallback")
@@ -51,72 +51,72 @@ namespace ao::uimodel::test
 
     SECTION("empty filter falls back to albums")
     {
-      CHECK(recommendSmart("") == "albums");
+      CHECK(recommendSaved("") == "albums");
     }
 
     SECTION("classical composer")
     {
-      CHECK(recommendSmart("$composer = \"Bach\"") == "classical-composers");
+      CHECK(recommendSaved("$composer = \"Bach\"") == "classical-composers");
     }
 
     SECTION("classical work")
     {
-      CHECK(recommendSmart("$work = \"Symphony 9\"") == "classical-works");
+      CHECK(recommendSaved("$work = \"Symphony 9\"") == "classical-works");
     }
 
     SECTION("technical fields")
     {
-      CHECK(recommendSmart("@sampleRate >= 96000") == "technical");
-      CHECK(recommendSmart("@bitDepth = 24") == "technical");
-      CHECK(recommendSmart("@bitrate > 320000") == "technical");
+      CHECK(recommendSaved("@sampleRate >= 96000") == "technical");
+      CHECK(recommendSaved("@bitDepth = 24") == "technical");
+      CHECK(recommendSaved("@bitrate > 320000") == "technical");
     }
 
     SECTION("query aliases use the same recommendation signals")
     {
-      CHECK(recommendSmart("$w = \"Symphony 9\"") == "classical-works");
-      CHECK(recommendSmart("@sr >= 96000") == "technical");
+      CHECK(recommendSaved("$w = \"Symphony 9\"") == "classical-works");
+      CHECK(recommendSaved("@sr >= 96000") == "technical");
     }
 
     SECTION("tag")
     {
-      CHECK(recommendSmart("#tag = \"favorite\"") == "tagging");
+      CHECK(recommendSaved("#tag = \"favorite\"") == "tagging");
     }
 
     SECTION("genre")
     {
-      CHECK(recommendSmart("$genre = \"Rock\"") == "albums");
+      CHECK(recommendSaved("$genre = \"Rock\"") == "albums");
     }
 
     SECTION("year")
     {
-      CHECK(recommendSmart("$year = 1990") == "albums");
+      CHECK(recommendSaved("$year = 1990") == "albums");
     }
 
     SECTION("album artist")
     {
-      CHECK(recommendSmart("$albumArtist = \"Artist\"") == "artists");
+      CHECK(recommendSaved("$albumArtist = \"Artist\"") == "artists");
     }
 
     SECTION("artist")
     {
-      CHECK(recommendSmart("$artist = \"Artist\"") == "albums");
+      CHECK(recommendSaved("$artist = \"Artist\"") == "albums");
     }
 
     SECTION("album")
     {
-      CHECK(recommendSmart("$album = \"Album\"") == "albums");
+      CHECK(recommendSaved("$album = \"Album\"") == "albums");
     }
 
     SECTION("mixed fields defaults to highest priority")
     {
       // work > composer > technical > tag > genre...
-      CHECK(recommendSmart("$work = \"A\" and $composer = \"B\"") == "classical-works");
-      CHECK(recommendSmart("$genre = \"Rock\" and #tag = \"fave\"") == "tagging");
+      CHECK(recommendSaved("$work = \"A\" and $composer = \"B\"") == "classical-works");
+      CHECK(recommendSaved("$genre = \"Rock\" and #tag = \"fave\"") == "tagging");
     }
 
     SECTION("invalid expression falls back")
     {
-      CHECK(recommendSmart("invalid syntax") == "albums");
+      CHECK(recommendSaved("invalid syntax") == "albums");
     }
   }
 } // namespace ao::uimodel::test

@@ -23,7 +23,7 @@ namespace ao::query
    * Values are the internal query bytecode field ids. Presentation order comes
    * from the field catalog, but keep the enum grouped by query domain so
    * white-box tests and hand-built plans stay readable. Query bytecode is
-   * runtime-only and not persisted; smart lists store expression text and
+   * runtime-only and not persisted; saved Lists store expression text and
    * recompile it when evaluated, so these ids are safe to reorder between
    * builds when the in-memory engine contract changes. Slot 8 is intentionally
    * left unused.

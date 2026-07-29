@@ -24,7 +24,7 @@ UIModel joins those values with `PresentationTextCatalog`; frontends do not rede
 | Order | Id | Grouping and structural intent |
 |---:|---|---|
 | 1 | `library` | Flat album-artist/album/disc/track order; global default. |
-| 2 | `list-order` | Flat source order; manual-list recommendation. |
+| 2 | `list-order` | Flat source order; user-facing **Manual Order**, selected explicitly or by the New Playlist template. |
 | 3 | `songs` | Flat title/artist/album order. |
 | 4 | `albums` | Album groups with track-oriented columns. |
 | 5 | `artists` | Album-artist groups with discography order. |
@@ -40,6 +40,8 @@ UIModel joins those values with `PresentationTextCatalog`; frontends do not rede
 The catalog order is the frontend menu order.
 Custom presets carry their own stable id, user-authored label, base preset id, and normalized presentation spec and follow the built-ins in catalogs.
 Exact field ids and sort/group enum values used by those specs belong to the [runtime track field catalog](../library/model/track-field.md).
+`list-order` has no special storage semantics: its empty `sortBy` exposes source order, and saved Lists may write their independent rank overlay only while the active presentation is flat and unsorted.
+All Tracks does not own such an overlay, so frontends disable `list-order` for that virtual source.
 
 ## Validation rules
 

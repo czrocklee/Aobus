@@ -59,6 +59,9 @@
 
   --ao-row-min-height: 44px;
   --ao-list-row-min-height: 28px;
+  --ao-section-divider-color: alpha(currentColor, 0.18);
+  --ao-list-section-divider-width: 1px;
+  --ao-list-section-spacing: var(--ao-spacing-lg);
   --ao-row-radius: 2px;
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.2);

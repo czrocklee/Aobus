@@ -5,12 +5,15 @@
 
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackListModel.h"
+#include "track/TrackOrderActions.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -18,7 +21,6 @@
 #include <gtkmm/box.h>
 #include <gtkmm/label.h>
 #include <gtkmm/multiselection.h>
-#include <gtkmm/popover.h>
 #include <gtkmm/scrolledwindow.h>
 #include <gtkmm/signallistitemfactory.h>
 #include <gtkmm/widget.h>
@@ -26,6 +28,7 @@
 #include <sigc++/signal.h>
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -50,6 +53,7 @@ namespace ao::gtk
 {
   class ResourceImageLoader;
   class TagPopover;
+  class TrackOrderDragController;
 
   class TrackViewPage final : public Gtk::Box
   {
@@ -65,7 +69,8 @@ namespace ao::gtk
                            uimodel::TrackColumnLayoutStore& layoutStore,
                            rt::AppRuntime& runtime,
                            ResourceImageLoader& thumbnailLoader,
-                           rt::TrackPresentationSpec const& presentation = rt::defaultTrackPresentationSpec());
+                           rt::TrackPresentationSpec const& presentation = rt::defaultTrackPresentationSpec(),
+                           rt::ViewId viewId = rt::kInvalidViewId);
     ~TrackViewPage() override;
 
     TrackViewPage(TrackViewPage const&) = delete;
@@ -74,6 +79,7 @@ namespace ao::gtk
     TrackViewPage& operator=(TrackViewPage&&) = delete;
 
     ListId listId() const noexcept { return _listId; }
+    rt::ViewId viewId() const noexcept { return _viewId; }
 
     TrackSelectionController& selectionController() noexcept { return _viewHostPtr->selectionController(); }
 
@@ -88,6 +94,9 @@ namespace ao::gtk
 
     CreateSmartListRequestedSignal& signalCreateSmartListRequested() noexcept;
     rt::TrackListProjection* projection() const noexcept { return _modelPtr ? _modelPtr->projection() : nullptr; }
+    bool hasOrderDragHandle() const noexcept { return _orderDragControllerPtr != nullptr; }
+    uimodel::ListOrderCapabilityState orderCapabilities() const;
+    void applyListOrderCommand(TrackOrderCommand command);
 
     void openTagPopover(TagPopover& popover, double xPosition, double yPosition);
     void setStatusMessage(std::string_view message);
@@ -110,6 +119,9 @@ namespace ao::gtk
     void buildStatusBar();
     void applyColumnViewStyles(Gtk::ColumnView& view);
     void updateSectionHeaders();
+    void installOrderDragController();
+    void setOrderCapabilityStatus(std::string_view message);
+    void clearOrderCapabilityStatus();
 
     void rebuildColumnView(std::span<rt::TrackField const> visibleFields);
 
@@ -120,11 +132,12 @@ namespace ao::gtk
 
     // Child widgets
     Gtk::Label _statusLabel;
+    std::optional<std::string> _optOrderCapabilityStatus;
     Gtk::ScrolledWindow _scrolledWindow;
-    Gtk::Popover _contextPopover;
 
     // Models
     ListId _listId;
+    rt::ViewId _viewId;
     Glib::RefPtr<TrackListModel> _modelPtr;
     uimodel::TrackColumnLayoutStore& _layoutStore;
     rt::AppRuntime& _runtime;
@@ -140,6 +153,7 @@ namespace ao::gtk
 
     // Controllers (owned)
     std::unique_ptr<TrackColumnViewHost> _viewHostPtr;
+    std::unique_ptr<TrackOrderDragController> _orderDragControllerPtr;
 
     // Signals
     CreateSmartListRequestedSignal _createSmartListRequested;

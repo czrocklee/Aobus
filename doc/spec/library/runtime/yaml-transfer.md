@@ -12,7 +12,7 @@ summary: Defines strict export, restore, merge, preview authorization, reporting
 This specification defines library YAML export and import behavior.
 It owns mode semantics, baselines, payload scope, overlays, preview-bound authorization, atomicity, reports, and change publication.
 
-The exact version 2 document shape is defined by the [library YAML format reference](../../../reference/library/format/yaml.md).
+The exact version 3 document shape is defined by the [library YAML format reference](../../../reference/library/format/yaml.md).
 Library ownership and the storage/change pipeline are defined by [library architecture](../../../architecture/library.md).
 CLI flags and output rendering belong to the [CLI command reference](../../../reference/cli/command.md).
 
@@ -37,7 +37,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 ## Invariants
 
 - One export observes metadata, tracks, lists, resources, dictionary values, and manifest facts through one read transaction.
-- Version 2 uses the closed schema and explicit collection scope defined by the format reference.
+- Version 3 uses the closed schema and explicit collection scope defined by the format reference.
 - Every URI crossing YAML, manifest, Writer, or scan boundaries becomes a `LibraryUri`; playback, read-model, fingerprint, export/import baseline, and scan-apply access resolve it again beneath the weakly canonical root and reject escaping or unresolved symlinks. An absent root or ordinary missing suffix remains valid for first-run metadata restore.
 - Import validates the complete document before applying any persistent mutation.
 - One committed import applies content and any adopted `libraryId` through one write transaction and one library revision.
@@ -47,6 +47,7 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - Restore scope is determined by payload mode, never inferred from omitted collections.
 - A payload has at most one track record for each canonical URI; merge matches tracks only by canonical manifest URI, and payload track IDs exist only for intra-payload references.
 - Lists in the payload are recreated with new target IDs and then have parents remapped.
+- A List filter and saved order are independent: the filter determines local membership, while order references preserve rank only.
 
 ## State model
 
@@ -55,7 +56,7 @@ The application import path has two operations:
 ```text
 prepare(path, import mode)
   -> read exact source bytes
-  -> parse and validate version 2
+  -> parse and validate version 3
   -> prepare track/list data
   -> capture target runtime + library id + committed revision
   -> run mutation path in an uncommitted preview transaction
@@ -86,7 +87,7 @@ It does not reuse a nullable branch inside the live operation and is not the fro
 | `delta` | Fields different from a readable file baseline; otherwise all non-empty fields. | Complete map when non-empty. | Complete sequence when non-empty. | Complete sequence when different from a readable file baseline; otherwise omitted. | Omitted. | Included. |
 | `metadata` | All non-empty curated metadata. | Complete map when non-empty. | Complete sequence when non-empty. | Always present, including empty. | Omitted. | Included. |
 | `full` | All non-empty curated metadata. | Complete map when non-empty. | Complete sequence when non-empty. | Always present, including empty. | Included, including zero values. | Included. |
-| `listOnly` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI membership references. |
+| `listOnly` | No track records. | No track records. | No track records. | No track records. | No track records. | Included with URI rank references. |
 
 The exporter constructs the complete YAML tree before opening the destination file.
 For `delta`, a missing, unsupported, or unreadable audio file means no baseline and causes emission of all applicable current values.
@@ -139,14 +140,15 @@ Present `fileSize` and `mtime` fields override those facts.
 ### Lists
 
 Lists are created in payload order, then parent relationships are applied in a second pass so a child may precede its parent.
-Manual membership resolves payload IDs through tracks created or updated by this import and URI references through the target manifest.
+Saved order resolves payload IDs through tracks created or updated by this import and URI references through the target manifest.
 
-A Smart List filter must be non-empty and must parse and compile under the current query grammar.
+An empty or omitted filter means the identity predicate; a nonempty filter must parse and compile under the current query grammar.
+Filter and order may coexist, and order references never add a track to List membership.
 Known payload parent relationships must be self-free and acyclic before any list is written.
 Every recreated list must fit the fixed-width core list layout; an oversized text field, track array, or combined offset rejects the import instead of truncating data.
 
 Unresolved parent and track references are ignored and counted.
-Manual membership keeps the first resolved occurrence and preserves first-occurrence order.
+Saved order keeps the first resolved occurrence and preserves first-occurrence order, including ranks for tracks that are currently outside effective membership.
 
 ### Reports
 
@@ -154,7 +156,7 @@ Every import, preview, and plan returns an `ImportReport`:
 
 | Field | Meaning |
 |---|---|
-| `payloadVersion` | Accepted interchange version; currently `2`. |
+| `payloadVersion` | Accepted interchange version; currently `3`. |
 | `payloadMode` | `delta`, `metadata`, `full`, or `listOnly`. |
 | `targetScope` | `Library` for track-bearing payloads or `Lists` for `listOnly`. |
 | `tracksCreated` | Imported records that do not match a merge baseline. |
@@ -192,15 +194,15 @@ Offline import has no runtime publication phase; its transaction commit result i
 Once synchronous transfer work begins it has no internal stop checkpoint; after a possible commit it returns to the callback executor without reinterpreting committed state as cancelled.
 The operation matrix belongs to [library task execution](task-execution.md#cancellation).
 
-Version 2 currently defines no transfer-specific total-document, aggregate-cover, or per-cover byte budget beyond the exact field and core-storage limits in the format reference.
+Version 3 currently defines no transfer-specific total-document, aggregate-cover, or per-cover byte budget beyond the exact field and core-storage limits in the format reference.
 No configurable prepared-memory ceiling, streaming path, or additional bounded-transfer proposal is currently defined.
 Adding a limit must preserve the guarantee that the current exporter cannot produce a file the importer rejects solely for size.
 
 ## Persistence and versioning
 
-Version 2 is a portable interchange format, not the physical database format.
+Version 3 is a portable interchange format, not the physical database format.
 Restore and merge always write current `MusicLibrary` records.
-The importer accepts no earlier interchange version and provides no migration or legacy-restore path.
+The importer accepts no earlier interchange version, including version 2, and provides no migration or legacy-restore path.
 
 ## Frontend observations
 

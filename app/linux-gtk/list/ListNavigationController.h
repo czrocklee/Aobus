@@ -21,10 +21,12 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace ao::rt
 {
   class AppRuntime;
+  struct LibraryListDraft;
 }
 
 namespace ao::gtk
@@ -60,6 +62,7 @@ namespace ao::gtk
     void rebuildTree(TrackRowCache& dataProvider);
     void select(ListId listId);
     void createSmartListFromExpression(ListId parentListId, std::string expression);
+    void openNewPlaylistDialog();
     Result<ListId> submitListDraft(rt::LibraryListDraft const& draft, std::string presentationId);
 
     void addActionsTo(Gio::ActionMap& actionMap);
@@ -77,6 +80,14 @@ namespace ao::gtk
     void openEditListDialog(ListId listId);
 
     void handleDeleteListActivated();
+    void handleDeleteListSubtreeActivated();
+    void presentDeleteConfirmation(ListId listId,
+                                   bool deleteDescendants,
+                                   std::string title,
+                                   std::string message,
+                                   std::optional<rt::DeleteListReply::TagImpact> optTagImpact);
+    void commitDeleteList(ListId listId, bool deleteDescendants, bool removeWritableTag);
+    void showDeleteError(ListId listId, std::string_view message);
     void handleEditListActivated();
 
     Gtk::Window& _parent;
@@ -88,7 +99,9 @@ namespace ao::gtk
     std::unique_ptr<ListNavigationPanel> _panelPtr;
 
     Glib::RefPtr<Gio::SimpleAction> _newListActionPtr;
+    Glib::RefPtr<Gio::SimpleAction> _newPlaylistActionPtr;
     Glib::RefPtr<Gio::SimpleAction> _deleteListActionPtr;
+    Glib::RefPtr<Gio::SimpleAction> _deleteListSubtreeActionPtr;
     Glib::RefPtr<Gio::SimpleAction> _editListActionPtr;
 
     ListId _pendingSelectId{0};

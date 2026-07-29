@@ -16,14 +16,14 @@ namespace ao::gtk::test
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
 
     auto const id = ListId{42};
-    bool const isSmart = true;
+    bool const isSystem = true;
     auto const* const name = "Test List";
     auto const* const filter = "artist:\"Test Artist\"";
 
-    auto const rowPtr = ListRowObject::create(id, isSmart, name, filter);
+    auto const rowPtr = ListRowObject::create(id, isSystem, name, filter);
 
     CHECK(rowPtr->listId() == id);
-    CHECK(rowPtr->isSmart() == isSmart);
+    CHECK(rowPtr->isSystem() == isSystem);
     CHECK(rowPtr->name() == name);
     CHECK(rowPtr->filter() == filter);
   }

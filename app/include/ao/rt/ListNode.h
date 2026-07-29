@@ -5,25 +5,16 @@
 
 #include <ao/CoreIds.h>
 
-#include <cstdint>
 #include <string>
 
 namespace ao::rt
 {
-  enum class ListNodeKind : std::uint8_t
-  {
-    Folder,
-    Manual,
-    Smart,
-  };
-
   struct ListNode final
   {
     ListId id{};
     ListId parentId{kInvalidListId};
     std::string name{};
     std::string description{};
-    ListNodeKind kind = ListNodeKind::Folder;
-    std::string smartExpression{};
+    std::string expression{};
   };
 } // namespace ao::rt

@@ -40,7 +40,7 @@ namespace ao::tui
 
       auto const displayName = row.name.empty() ? std::string{"<Unnamed List>"} : row.name;
       auto label = std::string(depth * 2, ' ');
-      label.append(listNodeIcon(row.kind));
+      label.append(listNodeIcon());
       label.push_back(' ');
       label.append(displayName);
 
@@ -52,16 +52,9 @@ namespace ao::tui
     }
   } // namespace
 
-  std::string listNodeIcon(rt::ListNodeKind const kind)
+  std::string listNodeIcon()
   {
-    switch (kind)
-    {
-      case rt::ListNodeKind::Folder: return "[+]";
-      case rt::ListNodeKind::Manual: return "[#]";
-      case rt::ListNodeKind::Smart: return "[?]";
-    }
-
-    return "[ ]";
+    return "[L]";
   }
 
   std::string listTitle(ListId const listId, std::vector<LibraryNavEntry> const& items)

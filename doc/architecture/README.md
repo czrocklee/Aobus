@@ -93,7 +93,7 @@ This table records primary structural relationships rather than every document l
 | [Persistence and managed state](persistence-and-managed-state.md) | Filesystem, LMDB, YAML, and state-owner boundaries | Library durability, workspace and playback sessions, application and UI-local state |
 | [Encoded media](encoded-media.md) | Encoded bytes and filesystem mappings | Library ingestion and identity, audio decoding, resource persistence, and their lifetime boundaries |
 | [Library](library.md) | Core storage, query, and async mechanisms | Track expressions, workspace views, playback resolution, and presentation projections |
-| [Track expression](track-expression.md) | Query language and library values | Smart membership, filtering, completion, scalar formatting, presentation, and CLI output |
+| [Track expression](track-expression.md) | Query language and library values | Saved-List membership, filtering, completion, scalar formatting, presentation, and CLI output |
 | [Playback](playback.md) | Library identities and sources, runtime execution, managed state | Audio quality, presentation, and platform output adapters |
 | [Workspace](workspace.md) | Library sources, track expressions, presentation values, runtime execution, and managed-state boundaries | Interactive session lifecycle, application-level reveal composition, and presentation consumers |
 | [Interactive session lifecycle](interactive-session-lifecycle.md) | Runtime execution, persistence, library, workspace, playback, and failure authorities | Presentation and frontend composition roots |
@@ -116,7 +116,7 @@ The table tracks capability families with architecture-bearing boundaries, not e
 | Durable library data and managed state | [Persistence and managed state](persistence-and-managed-state.md) | Current | Exact schemas, paths, and state-owner behavior remain delegated to reference and specifications. |
 | Library storage, tasks, live sources, and projections | [Library](library.md) | Current | Scan, transfer, mutation, source, and projection behavior is split into library specifications. |
 | Encoded-media reading and container reuse | [Encoded media](encoded-media.md) | Current | Encoded media owns `ao_media`, its zero-copy lifetime model, and its library/audio consumer directions; exact reader behavior and surfaces belong to specification and reference. |
-| Smart Lists, filtering, completion, and scalar formatting | [Track expression](track-expression.md) | Current | Presentation remains a separate owner for track-list shape and rendering. |
+| Saved Lists, filtering, completion, and scalar formatting | [Track expression](track-expression.md) | Current | Saved rank remains owned by Library sources; presentation remains a separate owner for track-list shape and rendering. |
 | Interactive playback and platform audio output | [Playback](playback.md) | Current | Session persistence and audio-execution behavior remains delegated to the playback specification and reference owners. |
 | Audio-quality evidence and presentation | [Audio quality](audio-quality.md) | Current | The slice remains subordinate to playback and presentation ownership. |
 | Resource and cover-art delivery | [Resource delivery](resource-delivery.md) | Current | Interactive reads are bounded and asynchronous; runtime owns shared encoded-byte delivery while GTK, WinUI, TUI, and MPRIS own their frontend transforms and stale-result suppression. |

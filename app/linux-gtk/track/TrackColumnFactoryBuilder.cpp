@@ -5,6 +5,7 @@
 
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
+#include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
 #include <ao/async/Subscription.h>
 #include <ao/library/FileManifestLayout.h>
@@ -14,6 +15,7 @@
 
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
+#include <glib-object.h>
 #include <glibmm/main.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/entry.h>
@@ -269,6 +271,20 @@ namespace ao::gtk
       // the shared cached row objects make GTK skip the rebind on items_changed.
       updateStatusStyles(listItemPtr, rowPtr);
       updatePlayingStyles(*listItemPtr, field, isRowPlaying(*rowPtr, playingModel));
+
+      if (auto* const child = listItemPtr->get_child(); child != nullptr)
+      {
+        ::g_object_set_data(
+          G_OBJECT(child->gobj()), kBoundTrackIdDataKey, GUINT_TO_POINTER(static_cast<guint>(rowPtr->trackId().raw())));
+      }
+    }
+
+    void handleTextColumnUnbind(Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+    {
+      if (auto* const child = listItemPtr->get_child(); child != nullptr)
+      {
+        ::g_object_set_data(G_OBJECT(child->gobj()), kBoundTrackIdDataKey, nullptr);
+      }
     }
 
     void closeInlineEditor(Gtk::Stack& stack, CellBindingState& bindingState)
@@ -492,6 +508,8 @@ namespace ao::gtk
 
     factoryPtr->signal_bind().connect([field, editable, playingModelRaw](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
                                       { handleTextColumnBind(listItemPtr, field, editable, *playingModelRaw); });
+    factoryPtr->signal_unbind().connect([](Glib::RefPtr<Gtk::ListItem> const& listItemPtr)
+                                        { handleTextColumnUnbind(listItemPtr); });
 
     return factoryPtr;
   }

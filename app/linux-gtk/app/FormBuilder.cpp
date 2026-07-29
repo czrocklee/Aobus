@@ -29,7 +29,7 @@ namespace ao::gtk
 
   FormBoxedList::~FormBoxedList() = default;
 
-  void FormBoxedList::addRow(std::string const& labelText, Gtk::Widget& widget)
+  Gtk::ListBoxRow& FormBoxedList::addRow(std::string const& labelText, Gtk::Widget& widget)
   {
     auto* const row = Gtk::make_managed<Gtk::ListBoxRow>();
     auto* const box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kRowSpacing);
@@ -49,11 +49,12 @@ namespace ao::gtk
     row->set_child(*box);
     row->set_activatable(false);
     append(*row);
+    return *row;
   }
 
-  void FormBoxedList::addEntryRow(std::string const& labelText, Gtk::Widget& entry)
+  Gtk::ListBoxRow& FormBoxedList::addEntryRow(std::string const& labelText, Gtk::Widget& entry)
   {
     entry.add_css_class("flat-entry");
-    addRow(labelText, entry);
+    return addRow(labelText, entry);
   }
 } // namespace ao::gtk

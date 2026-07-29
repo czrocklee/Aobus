@@ -50,8 +50,7 @@ namespace ao::uimodel::test
     SECTION("an intervening commit reports the edit as stale")
     {
       auto sessionPtr = beginSession(fixture, std::array{trackId});
-      REQUIRE(fixture.library().writer().createList(
-        rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
+      REQUIRE(fixture.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
 
       auto const result = applyTagEdit(*sessionPtr, std::array{std::string{"Tag1"}}, {});
 

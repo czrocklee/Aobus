@@ -78,7 +78,7 @@ namespace ao::uimodel
     std::string libraryTaskProgressCompact(rt::LibraryTaskProgressKind kind, std::string_view subject) const;
 
     // Wraps a query-parser diagnostic in the shared label the filter entry and
-    // the Smart List editor both show.
+    // the saved-List editor both show.
     std::string trackFilterError(std::string_view diagnostic) const;
   };
 } // namespace ao::uimodel

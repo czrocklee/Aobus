@@ -89,7 +89,7 @@ namespace ao::gtk
     _createSmartListButton.add_css_class("ao-quick-filter-create");
     _createSmartListButton.set_icon_name("list-add-symbolic");
     _createSmartListButton.set_has_frame(false);
-    _createSmartListButton.set_tooltip_text("Create smart list from current filter");
+    _createSmartListButton.set_tooltip_text("Create List from current filter");
     _createSmartListButton.set_sensitive(false);
     _createSmartListButton.signal_clicked().connect(
       sigc::mem_fun(*this, &TrackQuickFilter::handleCreateSmartListClicked));

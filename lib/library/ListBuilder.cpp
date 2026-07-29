@@ -17,9 +17,19 @@
 
 namespace ao::library
 {
-  //=============================================================================
-  // ListBuilder - factory methods
-  //=============================================================================
+  namespace
+  {
+    bool checkedAdd(std::size_t& value, std::size_t const amount) noexcept
+    {
+      if (amount > std::numeric_limits<std::size_t>::max() - value)
+      {
+        return false;
+      }
+
+      value += amount;
+      return true;
+    }
+  } // namespace
 
   ListBuilder ListBuilder::makeEmpty()
   {
@@ -33,24 +43,19 @@ namespace ao::library
     builder._name = view.name();
     builder._description = view.description();
     builder._filter = view.filter();
-    builder._tracksBuilder._isSmart = view.isSmart();
 
-    for (auto const id : view.tracks())
+    for (auto const id : view.orderTrackIds())
     {
-      builder._tracksBuilder.add(id);
+      builder._orderTrackIdsBuilder.add(id);
     }
 
     return builder;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::tracks()
+  ListBuilder::OrderTrackIdsBuilder& ListBuilder::orderTrackIds()
   {
-    return _tracksBuilder;
+    return _orderTrackIdsBuilder;
   }
-
-  //=============================================================================
-  // Direct setters
-  //=============================================================================
 
   ListBuilder& ListBuilder::name(std::string_view name)
   {
@@ -76,11 +81,7 @@ namespace ao::library
     return *this;
   }
 
-  //=============================================================================
-  // TracksBuilder
-  //=============================================================================
-
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::add(TrackId id)
+  ListBuilder::OrderTrackIdsBuilder& ListBuilder::OrderTrackIdsBuilder::add(TrackId id)
   {
     if (_trackIdMembership.insert(id).second)
     {
@@ -90,102 +91,82 @@ namespace ao::library
     return *this;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::remove(TrackId id)
+  ListBuilder::OrderTrackIdsBuilder& ListBuilder::OrderTrackIdsBuilder::remove(TrackId id)
   {
     std::erase(_trackIds, id);
     _trackIdMembership.erase(id);
     return *this;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::clear()
+  ListBuilder::OrderTrackIdsBuilder& ListBuilder::OrderTrackIdsBuilder::clear()
   {
     _trackIds.clear();
     _trackIdMembership.clear();
     return *this;
   }
 
-  ListBuilder::TracksBuilder& ListBuilder::TracksBuilder::smart(bool smart)
-  {
-    _isSmart = smart;
-    return *this;
-  }
-
-  //=============================================================================
-  // ListBuilder - serialization
-  //=============================================================================
-
   Result<std::vector<std::byte>> ListBuilder::serialize() const
   {
     auto const& name = _name;
     auto const& description = _description;
     auto const& expression = _filter;
-    auto const& trackIds = _tracksBuilder._trackIds;
+    auto const& orderTrackIds = _orderTrackIdsBuilder._trackIds;
 
     auto const nameLength = name.size();
     auto const descLength = description.size();
     auto const filterLength = expression.size();
-    constexpr auto kMaxFieldValue = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max());
+    constexpr auto kMaxTextLength = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max());
+    constexpr auto kMaxStoredCount = static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max());
 
-    if (trackIds.size() > kMaxFieldValue / sizeof(TrackId))
+    if (orderTrackIds.size() > kMaxStoredCount ||
+        orderTrackIds.size() > std::numeric_limits<std::size_t>::max() / sizeof(TrackId))
     {
       return makeError(
         Error::Code::ValueTooLarge,
-        std::format(
-          "List contains {} tracks; at most {} can be serialized", trackIds.size(), kMaxFieldValue / sizeof(TrackId)));
+        std::format("List contains {} order track IDs; the count cannot be serialized", orderTrackIds.size()));
     }
 
-    auto const trackIdsSize = trackIds.size() * sizeof(TrackId);
+    auto const orderTrackIdsSize = orderTrackIds.size() * sizeof(TrackId);
 
-    if (nameLength > kMaxFieldValue || descLength > kMaxFieldValue || filterLength > kMaxFieldValue)
+    if (nameLength > kMaxTextLength || descLength > kMaxTextLength || filterLength > kMaxTextLength)
     {
-      return makeError(Error::Code::ValueTooLarge, "List text field exceeds the 65535-byte storage limit");
+      return makeError(Error::Code::ValueTooLarge, "List text field exceeds the 65535-byte product limit");
     }
 
-    if (trackIdsSize + nameLength > kMaxFieldValue || trackIdsSize + nameLength + descLength > kMaxFieldValue)
+    std::size_t logicalSize = kListHeaderSize;
+
+    if (!checkedAdd(logicalSize, orderTrackIdsSize) || !checkedAdd(logicalSize, nameLength) ||
+        !checkedAdd(logicalSize, descLength) || !checkedAdd(logicalSize, filterLength) ||
+        logicalSize > std::numeric_limits<std::size_t>::max() - (kListHeaderAlignment - 1))
     {
-      return makeError(
-        Error::Code::ValueTooLarge, "List track IDs, name, and description exceed the storage offset limit");
+      return makeError(Error::Code::ValueTooLarge, "List record size overflows the host address space");
     }
 
-    // Offsets are relative to kListHeaderSize (start of trackIds array)
-    // No internal alignment, just pack fields consecutively
-    auto const descOffset = trackIdsSize + nameLength;
-    auto const filterOffset = descOffset + descLength;
-
-    // Total payload size, aligned to 4 bytes for LMDB
-    auto const totalSize = kListHeaderSize + trackIdsSize + nameLength + descLength + filterLength;
-    auto const payloadSize = (totalSize + 3) & ~3ULL;
+    auto const payloadSize =
+      (logicalSize + (kListHeaderAlignment - 1)) & ~(static_cast<std::size_t>(kListHeaderAlignment) - 1);
 
     auto result = std::vector<std::byte>{};
     result.reserve(payloadSize);
 
-    // Build header
     auto header = ListHeader{};
-    header.trackIdCount = static_cast<std::uint32_t>(trackIds.size());
-    header.nameOffset = static_cast<std::uint16_t>(trackIdsSize);
-    header.nameLength = static_cast<std::uint16_t>(nameLength);
-    header.descOffset = static_cast<std::uint16_t>(descOffset);
-    header.descLength = static_cast<std::uint16_t>(descLength);
-    header.filterOffset = static_cast<std::uint16_t>(filterOffset);
-    header.filterLength = static_cast<std::uint16_t>(filterLength);
+    header.orderTrackIdCount = static_cast<std::uint32_t>(orderTrackIds.size());
+    header.nameLength = static_cast<std::uint32_t>(nameLength);
+    header.descLength = static_cast<std::uint32_t>(descLength);
+    header.filterLength = static_cast<std::uint32_t>(filterLength);
     header.parentId = _parentId.raw();
 
-    // Copy header
     result.insert_range(result.end(), utility::bytes::view(header));
 
-    // Copy trackIds
-    if (!trackIds.empty())
+    if (!orderTrackIds.empty())
     {
-      result.insert_range(result.end(), utility::bytes::view(std::span<TrackId const>{trackIds}));
+      result.insert_range(result.end(), utility::bytes::view(std::span<TrackId const>{orderTrackIds}));
     }
 
-    // Copy strings
     result.insert_range(result.end(), utility::bytes::view(name));
     result.insert_range(result.end(), utility::bytes::view(description));
     result.insert_range(result.end(), utility::bytes::view(expression));
 
-    // Pad to 4-byte alignment
-    while (result.size() % 4 != 0)
+    while (result.size() < payloadSize)
     {
       result.push_back(std::byte{0});
     }

@@ -182,8 +182,8 @@ namespace ao::gtk::test
 
     SECTION("focus changes before the idle apply")
     {
-      auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
-        rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Other"}));
+      auto const secondListId =
+        ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Other"}));
       auto const secondViewId = ao::test::requireValue(runtime.workspace().navigate({.target = secondListId}));
       auto const secondPresentationId = runtime.views().trackListState(secondViewId).presentation.id;
       drainGtkEvents();

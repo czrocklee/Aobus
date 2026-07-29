@@ -10,7 +10,7 @@ summary: Defines ordered track sources, source leases, delta batches, caches, an
 ## Scope
 
 This specification defines the observable ordered-membership and incremental-update contracts of track sources.
-It owns leases, source identity, manual and smart membership, source edit algebra, cache rebinding, and invalidation.
+It owns leases, source identity, saved-List expression and rank composition, source edit algebra, cache rebinding, and invalidation.
 
 Projection behavior belongs to the [track-list](../projection/track-list.md) and [track-detail](../projection/track-detail.md) specifications.
 Changeset production belongs to [library change publication](../runtime/change-publication.md).
@@ -27,6 +27,8 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 - **Reset** installs a complete replacement state.
 - **Invalidation** is the terminal semantic end of a source identity.
 - **Lease** is the non-null shared ownership handle that pins a source and its dependency graph.
+- **Raw order** is one saved List's persisted unique `orderTrackIds` sequence, including hidden ranks.
+- **Effective List order** is matching ranked members followed by matching unranked members in filtered-parent order.
 
 ## Invariants
 
@@ -36,6 +38,8 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 - Invalid or duplicate identities in a unique source state are programmer errors.
 - Invalidation publishes at most once; destruction or cache teardown alone is not semantic invalidation.
 - A lease pins the exact source identity and every upstream dependency needed for its subscription lifetime.
+- A List expression determines membership and a saved order determines rank; neither field selects a persisted List kind.
+- An empty List expression is the identity predicate `true`.
 
 ## Source kinds
 
@@ -44,22 +48,38 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 The all-tracks source contains every stored track id in its canonical source order.
 It consumes committed track insertions, deletions, and metadata updates and publishes one sequential batch per changeset.
 
-### Manual lists
+### Saved Lists
 
-A manual source keeps stored intent separate from effective membership.
-Its effective order is the stable subsequence of stored ids currently present in its parent source.
-When an upstream track disappears and later re-enters, it returns to its stored position.
+Every saved List uses one fixed pipeline:
 
-Exact manual insert and remove scripts are applied without a reset fallback.
-A move is the same canonical script shape: descending removals followed by one insertion.
-A change affecting only currently hidden stored ids updates stored order without publishing an effective source batch.
-Parent reorder alone does not reorder manual intent.
+```text
+parent source
+  -> SmartListSource(local expression)
+  -> ListOrderSource(raw order)
+  -> CachedListSource stable shell
+```
 
-### Smart lists
-
-A smart source evaluates its expression against its parent source and preserves the matching stable subsequence of parent order.
+`SmartListSource` preserves the stable subsequence of parent order that matches the local expression.
 An empty expression matches all upstream tracks.
-An invalid expression exposes an empty membership and an expression error without invalidating sibling sources.
+An invalid expression exposes empty membership and an expression error without invalidating sibling sources.
+
+For filtered membership `M` and raw order `R`, `ListOrderSource` exposes:
+
+```text
+ranked   = [id in R where id is in M]
+unranked = [id in M where id is not in R]
+effective = ranked followed by unranked
+```
+
+An id in `R` but not `M` remains a hidden rank.
+If it later re-enters membership, it returns according to its position in `R`.
+New matching ids enter the unranked tail in filtered-parent order.
+A parent reorder changes only unranked-tail order; ranked members keep raw-order precedence.
+
+Exact raw-order scripts are applied without a reset fallback.
+A move uses descending removals followed by one insertion.
+A change affecting only hidden ranks updates raw order without publishing an effective source batch.
+A reset clears the overlay and restores filtered-parent order.
 
 Expression syntax and per-track truth belong to the [predicate language](../../../reference/query/predicate-language.md) and [predicate evaluation](../../query/predicate-evaluation.md) contracts.
 
@@ -73,7 +93,7 @@ Equal specs share one weak-cached source identity while leased.
 
 ## Cache and dependency behavior
 
-The cache owns all-tracks, list source shells, smart evaluators, and list dependency links.
+The cache owns all-tracks, List source shells, expression evaluators, rank overlays, and List dependency links.
 Cached list identities are stable shells that can rebind an updated implementation.
 The cache retains each acquired list identity until that list is deleted or the cache is destroyed.
 Ad-hoc filtered sources are weak-cached and may be rebuilt after their last lease is released.
@@ -82,7 +102,7 @@ A list definition update may rebind its implementation while preserving the shel
 Deleting a list invalidates its source and dependent chain terminally.
 Recreating the same numeric list id creates a new source identity; an old invalidated lease never revives.
 
-For each committed library changeset the cache applies deletions, collection changes, detailed manual content, list upserts, and metadata updates in the order required to expose one coherent derived result.
+For each committed library changeset the cache applies deletions, raw order changes, List definition upserts, and track metadata changes in the order required to expose one coherent derived result.
 Reentrant mutations are rejected while the cache applies a committed revision.
 Only refresh requests discovered during that application are queued and drained afterward, so observers never see a half-rebound graph.
 
@@ -111,11 +131,11 @@ Subscriptions release before their source or changes owner; source destruction d
 
 - [`TrackSource.h`](../../../../app/include/ao/rt/source/TrackSource.h), [`TrackSourceDelta.h`](../../../../app/include/ao/rt/source/TrackSourceDelta.h), and [`TrackSourceLease.h`](../../../../app/include/ao/rt/source/TrackSourceLease.h) define source identity and batches.
 - [`TrackSourceCache.h`](../../../../app/include/ao/rt/source/TrackSourceCache.h) owns cache and dependency composition.
-- Source implementations under [`app/runtime/source/`](../../../../app/runtime/source/) own all/manual/smart behavior.
+- [`SmartListSource.h`](../../../../app/include/ao/rt/source/SmartListSource.h), [`ListOrderSource.h`](../../../../app/include/ao/rt/source/ListOrderSource.h), and their implementations own expression membership and rank-overlay behavior.
 
 ## Test map
 
-Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove edit validation, leases, cache identity, manual intent, smart membership, reentrancy, and mutation-storm equivalence.
+Source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) prove edit validation, leases, cache identity, expression membership, ranked/unranked order, hidden-rank recovery, reentrancy, and mutation-storm equivalence.
 
 ## Related documents
 

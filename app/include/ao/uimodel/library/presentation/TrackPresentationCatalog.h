@@ -34,6 +34,8 @@ namespace ao::uimodel
     TrackPresentationMenuItemType type = TrackPresentationMenuItemType::Preset;
     std::string id = {};
     std::string label = {};
+    bool enabled = true;
+    std::string disabledReason = {};
 
     bool operator==(TrackPresentationMenuItem const&) const = default;
   };

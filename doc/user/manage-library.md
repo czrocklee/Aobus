@@ -3,13 +3,13 @@ id: user.manage-library
 type: user-guide
 status: current
 domain: library
-summary: Reconciles music files, filters tracks, and creates reusable Smart Lists.
+summary: Reconciles music files, filters tracks, and creates reusable saved Lists.
 ---
 # Manage a music library
 
 ## Outcome
 
-Your library reflects the supported audio files beneath its root, and frequently used searches are available as Smart Lists.
+Your library reflects the supported audio files beneath its root, and frequently used searches are available as saved Lists.
 
 ## Steps
 
@@ -37,20 +37,21 @@ Curated library metadata remains authoritative after initial import; rescanning 
    aobus -C /music scan
    ```
 
-### Filter and save a Smart List in GTK
+### Filter and save a List in GTK
 
 1. Enter words in the quick-filter field for a broad search, or enter a query expression for exact matching.
 2. Check that the visible rows are the intended result.
-3. Use **Create smart list from current filter**, or right-click an eligible list and choose **New Smart List...**.
+3. Use **Create List from current filter**, or right-click a source row and choose **New List...**.
 4. Give the list a name, adjust its filter or presentation, review the preview, and choose **Create**.
 
-Smart Lists keep a predicate rather than a copied membership list, so their results follow later library mutations.
+Saved Lists keep a predicate rather than a copied membership list, so their results follow later library mutations.
+They may also retain an independent manual rank; see [Organize music with Lists and Playlists](organize-with-lists.md).
 
 ## Verify the result
 
 - A second dry-run scan reports no actionable file changes after a successful apply.
-- Selecting the Smart List reproduces the intended filtered result.
-- Editing metadata that participates in the predicate updates the Smart List result through the live library change path.
+- Selecting the saved List reproduces the intended filtered result.
+- Editing metadata that participates in the predicate updates the List result through the live library change path.
 
 ## Related documents
 
@@ -58,3 +59,4 @@ Smart Lists keep a predicate rather than a copied membership list, so their resu
 - [Track-filter specification](../spec/presentation/track-filter.md)
 - [Predicate language reference](../reference/query/predicate-language.md)
 - [Library scan and audio identity](../spec/library/runtime/scan-and-identity.md)
+- [Organize music with Lists and Playlists](organize-with-lists.md)

@@ -50,10 +50,13 @@ One `LibraryChangeSet` may describe:
 - complete library reset;
 - inserted, deleted, and metadata-mutated track ids;
 - upserted and deleted list ids;
-- a canonical regular remove/insert/update edit script or complete reset for each affected manual list.
+- a canonical regular remove/insert/update edit script or complete reset for each affected saved List raw order.
 
-Manual removals use descending stored-coordinate ranges.
-A manual move is represented by those removals followed by one insertion in the sequence after all preceding edits.
+Raw-order removals use descending stored-coordinate ranges.
+A saved-order move is represented by those removals followed by one insertion in the sequence after all preceding edits.
+Raw-order coordinates may include hidden ranks and are never projection row coordinates.
+`ListOrderSource` is the only consumer that translates a raw-order change into an effective source delta.
+One semantic Remove-from-Playlist command may carry `tracksMutated`, `listsUpserted`, and `listOrderChanges` together at one revision.
 One committed transaction produces at most one changeset.
 
 ## Ordering and delivery

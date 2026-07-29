@@ -14,7 +14,7 @@ This area is the lookup surface for exact library fields, entity shapes, identif
 ## Responsibilities
 
 - Track metadata, technical properties, cover entries, codec values, and field capabilities.
-- List kinds, fields, membership representation, and identifier rules.
+- Unified List fields, predicate membership, saved rank, and identifier rules.
 - Links to the physical LMDB layout and portable YAML format.
 
 ## System context
@@ -39,7 +39,7 @@ Behavioral transitions belong to [library specifications](../../spec/library/REA
 
 - [Track model](model/track.md) enumerates persisted metadata, technical values, cover entries, codec values, tags, and custom metadata.
 - [Runtime track field catalog](model/track-field.md) enumerates application field ids, capabilities, sort/group mappings, completion flags, and query bridges; the presentation catalog owns labels.
-- [List model](model/list.md) enumerates list fields, kinds, identifiers, and stored membership shape.
+- [List model](model/list.md) enumerates unified List fields, identifiers, predicate membership, and stored rank shape.
 
 ### Storage
 
@@ -47,7 +47,7 @@ Behavioral transitions belong to [library specifications](../../spec/library/REA
 
 ### Format
 
-- [Library YAML format](format/yaml.md) defines the portable, fail-closed version 2 interchange shape.
+- [Library YAML format](format/yaml.md) defines the portable, fail-closed version 3 interchange shape.
 - [Supported audio files](../media/audio-file.md) defines recognized extensions, imported tag mappings, and encoded payload ranges under the media owner.
 
 ## Recommended reading paths

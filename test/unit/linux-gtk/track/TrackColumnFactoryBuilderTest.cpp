@@ -198,8 +198,7 @@ namespace ao::gtk::test
 
         stack->set_visible_child("edit");
         REQUIRE(emitFocusEnter(*entry));
-        REQUIRE(fixture.runtime().library().writer().createList(
-          rt::LibraryWriter::ListDraft{.kind = rt::LibraryWriter::ListKind::Manual, .name = "Unrelated"}));
+        REQUIRE(fixture.runtime().library().writer().createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
 
         // Replace the invalidated session before its deferred teardown runs.
         // Clearing the old session must disconnect that exact idle callback.

@@ -356,7 +356,7 @@ namespace ao::gtk
     modelPtr->bindProjection(projPtr);
 
     auto trackPagePtr = std::make_unique<TrackViewPage>(
-      listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, foundState->presentation);
+      listId, modelPtr, _layoutStore, _runtime, _thumbnailLoader, foundState->presentation, viewId);
     trackPagePtr->setGroupCoverPlaceholderStyle(_groupCoverPlaceholderStyle);
     auto const pageId = std::format("view-{}", viewId.raw());
 

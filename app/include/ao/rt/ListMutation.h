@@ -4,29 +4,22 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/rt/TrackMutation.h>
 
 #include <cstddef>
-#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace ao::rt
 {
-  enum class LibraryListKind : std::uint8_t
-  {
-    Smart,
-    Manual,
-  };
-
   struct LibraryListDraft final
   {
-    LibraryListKind kind = LibraryListKind::Smart;
     ListId parentId = kInvalidListId;
     ListId listId = kInvalidListId;
     std::string name{};
     std::string description{};
     std::string expression{};
-    std::vector<TrackId> trackIds{};
   };
 
   struct ListFieldChange final
@@ -41,54 +34,94 @@ namespace ao::rt
   struct UpdateListReply final
   {
     bool changed = false;
-    bool trackOrderChanged = false;
     std::vector<ListFieldChange> fieldChanges{};
-    std::vector<TrackId> addedTrackIds{};
-    std::vector<TrackId> removedTrackIds{};
 
     bool operator==(UpdateListReply const&) const = default;
   };
 
-  struct InsertManualListTracksReply final
+  struct MoveListOrderReply final
   {
-    bool changed = false;
-    std::size_t insertionIndex = 0;
-    std::vector<TrackId> insertedTrackIds{};
-    std::vector<TrackId> duplicateRequest{};
-    std::vector<TrackId> alreadyPresent{};
-    std::vector<TrackId> missingTrack{};
-
-    bool operator==(InsertManualListTracksReply const&) const = default;
-  };
-
-  struct RemoveManualListTracksReply final
-  {
-    bool changed = false;
-    std::vector<TrackId> removedTrackIds{};
-    std::vector<TrackId> duplicateRequest{};
-    std::vector<TrackId> notPresent{};
-
-    bool operator==(RemoveManualListTracksReply const&) const = default;
-  };
-
-  struct MoveManualListTracksReply final
-  {
-    bool changed = false;
-    std::size_t insertionIndexAfterRemoval = 0;
     std::vector<TrackId> selectedTrackIds{};
-    std::vector<TrackId> duplicateRequest{};
-    std::vector<TrackId> notPresent{};
+    std::optional<TrackId> optBeforeTrackId{};
 
-    bool operator==(MoveManualListTracksReply const&) const = default;
+    bool operator==(MoveListOrderReply const&) const = default;
+  };
+
+  struct ResetListOrderReply final
+  {
+    std::size_t forgottenPositionCount = 0;
+
+    bool operator==(ResetListOrderReply const&) const = default;
+  };
+
+  struct ForgetHiddenListOrderReply final
+  {
+    std::size_t forgottenPositionCount = 0;
+
+    bool operator==(ForgetHiddenListOrderReply const&) const = default;
+  };
+
+  struct AddTracksToListReply final
+  {
+    ListId listId{};
+    std::string listName{};
+    std::string tag{};
+    std::vector<TrackId> targetTrackIds{};
+    EditTrackTagsReply tagEdit{};
+
+    bool operator==(AddTracksToListReply const&) const = default;
+  };
+
+  struct RemoveTracksFromListReply final
+  {
+    ListId listId{};
+    std::string listName{};
+    std::string tag{};
+    std::vector<TrackId> targetTrackIds{};
+    EditTrackTagsReply tagEdit{};
+    std::vector<TrackId> forgottenPositionTrackIds{};
+
+    bool operator==(RemoveTracksFromListReply const&) const = default;
   };
 
   struct DeleteListReply final
   {
     ListId listId{};
     std::string name{};
-    std::string kind{};
-    std::uint64_t trackCount = 0;
+    std::size_t orderTrackIdCount = 0;
+    struct TagReference final
+    {
+      ListId listId{};
+      std::string name{};
+
+      bool operator==(TagReference const&) const = default;
+    };
+
+    struct TagImpact final
+    {
+      std::string tag{};
+      std::size_t taggedTrackCount = 0;
+      std::size_t removedFromTrackCount = 0;
+      std::vector<TagReference> otherListReferences{};
+
+      bool operator==(TagImpact const&) const = default;
+    };
+
+    std::optional<TagImpact> optTagImpact{};
 
     bool operator==(DeleteListReply const&) const = default;
+  };
+
+  struct DeleteListOptions final
+  {
+    bool removeWritableTagFromTracks = false;
+  };
+
+  struct DeleteListSubtreeReply final
+  {
+    ListId rootListId{};
+    std::vector<DeleteListReply> deletedLists{};
+
+    bool operator==(DeleteListSubtreeReply const&) const = default;
   };
 } // namespace ao::rt

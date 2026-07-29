@@ -43,8 +43,8 @@ namespace ao::uimodel
     if (!selectedIndexValid || selectedIndex == kSmartListAutoTrackPresentationIndex)
     {
       auto const context = ListPresentationContext{
-        .sourceKind = ListPresentationSourceKind::Smart,
-        .smartListFilter = localExpression,
+        .sourceKind = ListPresentationSourceKind::SavedList,
+        .listExpression = localExpression,
       };
       return recommendPresentation(context, builtinPresets, customPresets).id;
     }

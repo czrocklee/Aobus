@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -7,16 +7,40 @@
 #include <ao/library/ListView.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
 
 #include <cstddef>
 #include <expected>
+#include <format>
 #include <optional>
 #include <span>
+#include <string_view>
 #include <utility>
 
 namespace ao::library
 {
+  namespace
+  {
+    [[noreturn]] void throwCorruptList(ListId const id)
+    {
+      detail::throwLibraryError(Error::Code::CorruptData, std::format("List {} record is structurally corrupt", id));
+    }
+
+    Result<ListView> validateListPayload(std::span<std::byte const> const data, std::string_view const operation)
+    {
+      auto view = ListView{data};
+
+      if (!view.isValid())
+      {
+        return makeError(
+          Error::Code::CorruptData, std::format("Cannot {} a structurally corrupt List record", operation));
+      }
+
+      return view;
+    }
+  } // namespace
+
   ListStore::ListStore(lmdb::Database db, detail::LibraryIdentity const& identity)
     : _database{std::move(db)}, _identity{&identity}
   {
@@ -62,7 +86,14 @@ namespace ao::library
       return std::nullopt;
     }
 
-    return ListView{*optBytes};
+    auto view = ListView{*optBytes};
+
+    if (!view.isValid())
+    {
+      throwCorruptList(id);
+    }
+
+    return view;
   }
 
   // Iterator implementation
@@ -85,7 +116,15 @@ namespace ao::library
   ListStore::Reader::Iterator::value_type ListStore::Reader::Iterator::operator*() const
   {
     auto&& [id, buffer] = *_iter;
-    return {ListId{id}, ListView{buffer}};
+    auto const listId = ListId{id};
+    auto view = ListView{buffer};
+
+    if (!view.isValid())
+    {
+      throwCorruptList(listId);
+    }
+
+    return {listId, view};
   }
 
   // Writer implementation
@@ -96,6 +135,13 @@ namespace ao::library
 
   Result<std::pair<ListId, ListView>> ListStore::Writer::create(std::span<std::byte const> data)
   {
+    auto viewResult = validateListPayload(data, "create");
+
+    if (!viewResult)
+    {
+      return std::unexpected{viewResult.error()};
+    }
+
     auto idResult = _writer.append(data);
 
     if (!idResult)
@@ -104,11 +150,16 @@ namespace ao::library
     }
 
     auto id = *idResult;
-    return std::pair{ListId{id}, ListView{data}};
+    return std::pair{ListId{id}, *viewResult};
   }
 
   Result<> ListStore::Writer::update(ListId id, std::span<std::byte const> data)
   {
+    if (auto viewResult = validateListPayload(data, "update"); !viewResult)
+    {
+      return std::unexpected{viewResult.error()};
+    }
+
     return _writer.update(id.raw(), data);
   }
 
@@ -131,6 +182,13 @@ namespace ao::library
       return std::nullopt;
     }
 
-    return ListView{*optBytes};
+    auto view = ListView{*optBytes};
+
+    if (!view.isValid())
+    {
+      throwCorruptList(id);
+    }
+
+    return view;
   }
 } // namespace ao::library

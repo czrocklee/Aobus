@@ -12,7 +12,7 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/source/AllTracksSource.h>
-#include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -28,6 +28,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -50,18 +51,10 @@ namespace ao::rt
     {
       auto definition = CachedListSourceDefinition{
         .parentId = view.parentId(),
-        .kind = view.isSmart() ? CachedListSourceKind::Smart : CachedListSourceKind::Manual,
+        .expression = std::string{view.filter()},
       };
 
-      if (view.isSmart())
-      {
-        definition.smartExpression = view.filter();
-      }
-      else
-      {
-        definition.storedTrackIds.assign(view.tracks().begin(), view.tracks().end());
-      }
-
+      definition.orderTrackIds.assign(view.orderTrackIds().begin(), view.orderTrackIds().end());
       return definition;
     }
   } // namespace
@@ -117,7 +110,11 @@ namespace ao::rt
     }
 
     _allTracksPtr->applyCollectionChange(event.tracksInserted, event.tracksDeleted);
-    auto const detailedListIds = applyManualContentChanges(event);
+    // Membership changes must reach predicate parents before an accompanying
+    // raw-rank edit. Remove-from-List then publishes one final visible removal
+    // instead of a transient reorder followed by departure.
+    notifyMetadataUpdates(event);
+    auto const detailedListIds = applyListOrderChanges(event);
 
     for (auto const id : event.listsUpserted)
     {
@@ -126,16 +123,14 @@ namespace ao::rt
         refreshList(id);
       }
     }
-
-    notifyMetadataUpdates(event);
   }
 
-  std::vector<ListId> TrackSourceCache::applyManualContentChanges(LibraryChangeSet const& event)
+  std::vector<ListId> TrackSourceCache::applyListOrderChanges(LibraryChangeSet const& event)
   {
     auto detailedListIds = std::vector<ListId>{};
-    detailedListIds.reserve(event.manualContentChanges.size());
+    detailedListIds.reserve(event.listOrderChanges.size());
 
-    for (auto const& contentChange : event.manualContentChanges)
+    for (auto const& contentChange : event.listOrderChanges)
     {
       if (std::ranges::contains(event.listsDeleted, contentChange.listId))
       {
@@ -161,7 +156,7 @@ namespace ao::rt
 
           if constexpr (std::same_as<Operation, delta::RegularTrackEditScript>)
           {
-            sourcePtr->applyManualEditScript(operation);
+            sourcePtr->applyOrderEditScript(operation);
           }
           else
           {
@@ -234,6 +229,11 @@ namespace ao::rt
       return source->error();
     }
 
+    if (auto const* source = dynamic_cast<CachedListSource const*>(&lease.source()); source != nullptr)
+    {
+      return source->filterError();
+    }
+
     return std::nullopt;
   }
 
@@ -278,7 +278,7 @@ namespace ao::rt
 
     auto definition = definitionOf(*optView);
 
-    if (definition == sourcePtr->definition() || sourcePtr->trySynchronizeManualDefinition(definition))
+    if (definition == sourcePtr->definition() || sourcePtr->trySynchronizeOrderDefinition(definition))
     {
       return;
     }
@@ -420,18 +420,16 @@ namespace ao::rt
     return {};
   }
 
-  std::unique_ptr<TrackSource> TrackSourceCache::buildImplementation(library::ListView const& view,
-                                                                     TrackSourceLease const& parentLease)
+  std::unique_ptr<ListOrderSource> TrackSourceCache::buildImplementation(library::ListView const& view,
+                                                                         TrackSourceLease const& parentLease)
   {
-    if (view.isSmart())
-    {
-      auto sourcePtr = std::make_unique<SmartListSource>(parentLease, _smartEvaluator);
-      sourcePtr->setExpression(std::string{view.filter()});
-      sourcePtr->reload();
-      return sourcePtr;
-    }
-
-    return std::make_unique<ManualListSource>(view, parentLease);
+    auto filterSourcePtr = std::make_shared<SmartListSource>(parentLease, _smartEvaluator);
+    filterSourcePtr->setExpression(std::string{view.filter()});
+    filterSourcePtr->reload();
+    auto filterLease = TrackSourceLease{std::static_pointer_cast<TrackSource>(std::move(filterSourcePtr))};
+    auto const order = view.orderTrackIds();
+    return std::make_unique<ListOrderSource>(
+      std::span<TrackId const>{order.begin(), order.size()}, std::move(filterLease));
   }
 
   void TrackSourceCache::linkGraph(ListId const listId, ListId const parentId)

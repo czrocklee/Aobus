@@ -46,7 +46,10 @@ Exactly one top-level command is required.
 | `list update` | `<id> [--name] [--desc] [--filter] [--parent] [--dry-run]` |
 | `list add` | `<listId> <trackId>... [--dry-run]` |
 | `list remove` | `<listId> <trackId>... [--dry-run]` |
-| `list delete` | `<id> [--dry-run]` |
+| `list order move` | `<listId> <trackId>... [--before <trackId>]` |
+| `list order reset` | `<listId>` |
+| `list order forget-hidden` | `<listId>` |
+| `list delete` | `<id> [--descendants] [--dry-run]` |
 | `list dump` | `[--raw]` |
 | `tag list` | none |
 | `tag show` | `<id>...` |
@@ -79,7 +82,8 @@ Track update field options are:
 
 `--set` and `--unset` are repeatable.
 At least one field option is required.
-An explicitly empty `list update --filter ''` converts a Smart List to manual.
+An explicitly empty `list update --filter ''` installs the identity predicate, so the List inherits all parent members.
+It does not change a persisted List kind because no such kind exists.
 
 ### Structured output rules
 
@@ -106,12 +110,13 @@ Mutation/administrative shapes:
 | `track create` | `action, dryRun, trackId?, uri, title, artist` |
 | `track update` | `dryRun, matched, updated, trackIds, changes` |
 | `track delete` | `action, dryRun, trackId, uri, title, removedFromListIds` |
-| `list show` | `lists[...]` or `list{ id,name,description,type,parentId,filter?,tracks[...] }` |
-| `list create` | `action, dryRun, listId?, name, type, parentId, filter?` |
-| `list update` | `action, dryRun, listId, changed, fields, addedTrackIds, removedTrackIds` |
-| `list add` | `action, dryRun, listId, changed, insertionIndex, insertedTrackIds, duplicateRequest, alreadyPresent, missingTrack` |
-| `list remove` | `action, dryRun, listId, changed, removedTrackIds, duplicateRequest, notPresent` |
-| `list delete` | `action, dryRun, listId, name, type, trackCount` |
+| `list show` | collection rows use `id,name,description,parentId,filter,order`; detail additionally uses effective `tracks[{id,title,artist,album}]` |
+| `list create` | `action, dryRun, listId?, name, parentId, filter` |
+| `list update` | `action, dryRun, listId, changed, fields` |
+| `list add/remove` | `action, dryRun, listId, listName, tag, changed, targetTrackIds, changes, forgottenPositionTrackIds`; Add leaves the final vector empty |
+| `list order move` | `action, listId, status, selectedTrackIds, beforeTrackId?` |
+| `list order reset/forget-hidden` | `action, listId, status, selectedTrackIds, forgottenPositionCount` |
+| `list delete` | ordinary: `action, dryRun, listId, name, forgottenPositionCount`; descendants: `action, dryRun, rootListId, deletedLists` |
 | `tag list` | `tags[{name,count}]` |
 | `tag show` | `trackId?` or `trackIds?`, plus `tags` |
 | `tag add/remove` | `action, tag, dryRun, updated, trackIds, changes` |
@@ -154,12 +159,20 @@ Plain `lib import` output identifies whether the operation is a preview, then pr
 | exit `1` | domain or internal failure |
 | other nonzero | CLI11 usage/parse failure |
 
+For saved-order commands, runtime `Stale` maps to a `Conflict` domain failure and runtime `Unavailable` maps to an `InvalidState` domain failure.
+Both write the error to stderr, emit no success document, and exit `1`; only `Applied` and `NoOp` reach the normal output path.
+
 ## Validation rules
 
 - `track show --format` is mutually exclusive with YAML/JSON.
 - Explicit missing ids fail before mutation.
 - List parent existence, self-parenting, and cycles are rejected.
-- Manual membership commands reject Smart Lists.
+- `list add/remove` require a List whose complete local expression is one positive tag predicate; compound, negated, or non-tag predicates are not directly writable.
+- `list remove` removes that global tag from the target tracks and also forgets their saved positions in the List; plain output states both effects.
+- `list order move` binds the current effective sequence, preserves selected relative order, inserts it before the optional anchor, and moves it to the bottom when the anchor is omitted.
+- The saved-order runtime may return `Applied`, `NoOp`, `Stale`, or `Unavailable`.
+  CLI output uses `applied` or `no-op`; `Stale` fails as `Conflict`, `Unavailable` fails as `InvalidState`, and none of NoOp/Stale/Unavailable advances library revision.
+- Ordinary List deletion rejects a List with descendants; `--descendants` explicitly selects complete-subtree deletion, and `--dry-run` reports the same subtree without committing.
 - `lib verify` fails only for Missing or Error, while still reporting Changed/Moved.
 - `lib resource export` fails for missing id or file IO.
 - Create dry-runs omit transaction-allocated ids.

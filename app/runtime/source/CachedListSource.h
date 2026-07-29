@@ -4,13 +4,13 @@
 #pragma once
 
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackEditScript.h>
 #include <ao/rt/source/TrackSource.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -19,19 +19,13 @@
 namespace ao::rt
 {
   class TrackSourceCache;
-  class ManualListSource;
-  enum class CachedListSourceKind : std::uint8_t
-  {
-    Manual,
-    Smart,
-  };
+  class ListOrderSource;
 
   struct CachedListSourceDefinition final
   {
     ListId parentId = kInvalidListId;
-    CachedListSourceKind kind = CachedListSourceKind::Manual;
-    std::string smartExpression{};
-    std::vector<TrackId> storedTrackIds{};
+    std::string expression{};
+    std::vector<TrackId> orderTrackIds{};
 
     friend bool operator==(CachedListSourceDefinition const&, CachedListSourceDefinition const&) = default;
   };
@@ -39,7 +33,7 @@ namespace ao::rt
   class CachedListSource final : public TrackSource
   {
   public:
-    CachedListSource(CachedListSourceDefinition definition, std::unique_ptr<TrackSource> implementationPtr);
+    CachedListSource(CachedListSourceDefinition definition, std::unique_ptr<ListOrderSource> implementationPtr);
     ~CachedListSource() override;
 
     CachedListSource(CachedListSource const&) = delete;
@@ -48,12 +42,13 @@ namespace ao::rt
     CachedListSource& operator=(CachedListSource&&) = delete;
 
     CachedListSourceDefinition const& definition() const noexcept { return _definition; }
+    std::optional<Error> filterError() const;
 
-    void rebind(CachedListSourceDefinition definition, std::unique_ptr<TrackSource> implementationPtr);
-    bool trySynchronizeManualDefinition(CachedListSourceDefinition const& definition);
+    void rebind(CachedListSourceDefinition definition, std::unique_ptr<ListOrderSource> implementationPtr);
+    bool trySynchronizeOrderDefinition(CachedListSourceDefinition const& definition);
     void semanticInvalidate();
 
-    void applyManualEditScript(delta::RegularTrackEditScript const& script);
+    void applyOrderEditScript(delta::RegularTrackEditScript const& script);
 
     std::size_t size() const override;
     TrackId trackIdAt(std::size_t index) const override;
@@ -61,13 +56,12 @@ namespace ao::rt
 
   private:
     void discardSnapshot() noexcept override;
-    ManualListSource& manualImplementation();
-    void syncManualDefinition(ManualListSource const& source);
+    void syncOrderDefinition(ListOrderSource const& source);
     void subscribeToImplementation();
     void handleImplementationBatch(TrackSourceDelta const& batch);
 
     CachedListSourceDefinition _definition{};
-    std::unique_ptr<TrackSource> _implementationPtr;
+    std::unique_ptr<ListOrderSource> _implementationPtr;
     async::Subscription _implementationSubscription;
     std::size_t _lastPublishedSize = 0;
   };

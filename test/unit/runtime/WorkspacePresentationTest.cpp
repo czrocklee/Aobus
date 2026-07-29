@@ -148,7 +148,7 @@ namespace ao::rt::test
 
     requireBackNavigation(runtime);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
-    CHECK(state.presentation.id == "list-order");
+    CHECK(state.presentation.id == kDefaultTrackPresentationId);
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation rejects a missing active view",
@@ -181,7 +181,7 @@ namespace ao::rt::test
 
     requireBackNavigation(runtime);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
-    CHECK(state.presentation.id == "list-order");
+    CHECK(state.presentation.id == kDefaultTrackPresentationId);
   }
 
   TEST_CASE("WorkspaceService - setActivePresentation can skip recording history",

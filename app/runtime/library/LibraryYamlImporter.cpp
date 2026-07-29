@@ -72,17 +72,17 @@ namespace ao::rt
       ryml::ConstNodeRef node;
     };
 
-    struct ValidatedListTrackIdReference final
+    struct ValidatedListOrderIdReference final
     {
       std::uint32_t yamlId = 0;
     };
 
-    struct ValidatedListTrackUriReference final
+    struct ValidatedListOrderUriReference final
     {
       std::string uri;
     };
 
-    using ValidatedListTrackReference = std::variant<ValidatedListTrackIdReference, ValidatedListTrackUriReference>;
+    using ValidatedListOrderReference = std::variant<ValidatedListOrderIdReference, ValidatedListOrderUriReference>;
 
     struct ValidatedList final
     {
@@ -91,8 +91,7 @@ namespace ao::rt
       std::string_view name;
       std::string_view description;
       std::string_view filter;
-      std::vector<ValidatedListTrackReference> trackReferences;
-      bool isSmart = false;
+      std::vector<ValidatedListOrderReference> orderReferences;
     };
 
     struct ValidatedImport final
@@ -269,7 +268,7 @@ namespace ao::rt
     });
     constexpr auto kCoverFields = std::to_array<std::string_view>({"type", "data"});
     constexpr auto kListFields =
-      std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "tracks"});
+      std::to_array<std::string_view>({"id", "parentId", "name", "description", "filter", "order"});
     constexpr auto kListReferenceFields = std::to_array<std::string_view>({"id", "uri"});
 
     Result<> validateTrackNestedSchema(ryml::ConstNodeRef const& trackNode)
@@ -494,84 +493,84 @@ namespace ao::rt
       return {};
     }
 
-    Result<ValidatedListTrackReference> validateListTrackReference(ryml::ConstNodeRef const& trackRef)
+    Result<ValidatedListOrderReference> validateListOrderReference(ryml::ConstNodeRef const& orderRef)
     {
-      if (trackRef.is_val())
+      if (orderRef.is_val())
       {
-        auto trackId = requireScalarAs<std::uint32_t>(trackRef, "List record.tracks[]");
+        auto trackId = requireScalarAs<std::uint32_t>(orderRef, "List record.order[]");
 
         if (!trackId)
         {
           return std::unexpected{trackId.error()};
         }
 
-        return ValidatedListTrackIdReference{.yamlId = *trackId};
+        return ValidatedListOrderIdReference{.yamlId = *trackId};
       }
 
-      if (!trackRef.is_map())
+      if (!orderRef.is_map())
       {
-        return makeError(Error::Code::FormatRejected, "List track reference must be a scalar or map");
+        return makeError(Error::Code::FormatRejected, "List order reference must be a scalar or map");
       }
 
-      if (auto result = rejectUnknownFields(trackRef, kListReferenceFields, "List track reference"); !result)
+      if (auto result = rejectUnknownFields(orderRef, kListReferenceFields, "List order reference"); !result)
       {
         return std::unexpected{result.error()};
       }
 
-      auto const trackIdNode = yaml::findChild(trackRef, "id");
-      auto const uriNode = yaml::findChild(trackRef, "uri");
+      auto const trackIdNode = yaml::findChild(orderRef, "id");
+      auto const uriNode = yaml::findChild(orderRef, "uri");
 
       if (trackIdNode.readable() == uriNode.readable())
       {
-        return makeError(Error::Code::FormatRejected, "List track reference must contain exactly one of 'id' or 'uri'");
+        return makeError(Error::Code::FormatRejected, "List order reference must contain exactly one of 'id' or 'uri'");
       }
 
       if (trackIdNode.readable())
       {
-        auto trackId = requireScalarAs<std::uint32_t>(trackIdNode, "List record.tracks[].id");
+        auto trackId = requireScalarAs<std::uint32_t>(trackIdNode, "List record.order[].id");
 
         if (!trackId)
         {
           return std::unexpected{trackId.error()};
         }
 
-        return ValidatedListTrackIdReference{.yamlId = *trackId};
+        return ValidatedListOrderIdReference{.yamlId = *trackId};
       }
 
-      auto uri = requireScalar(uriNode, "List record.tracks[].uri");
+      auto uri = requireScalar(uriNode, "List record.order[].uri");
 
       if (!uri)
       {
         return std::unexpected{uri.error()};
       }
 
-      auto normalized = parseLibraryUri(*uri, "List record.tracks[].uri");
+      auto normalized = parseLibraryUri(*uri, "List record.order[].uri");
 
       if (!normalized)
       {
         return std::unexpected{normalized.error()};
       }
 
-      return ValidatedListTrackUriReference{.uri = std::move(*normalized)};
+      return ValidatedListOrderUriReference{.uri = std::move(*normalized)};
     }
 
-    Result<> validateManualListTracks(ryml::ConstNodeRef const& tracksNode, ValidatedList& list)
+    Result<> validateListOrder(ryml::ConstNodeRef const& orderNode, ValidatedList& list)
     {
-      if (auto result = requireSequence(tracksNode, "List record.tracks"); !result)
+      if (auto result = requireSequence(orderNode, "List record.order"); !result)
       {
         return std::unexpected{result.error()};
       }
 
-      for (auto const& trackRef : tracksNode.children())
+      for (auto const& orderRef : orderNode.children())
       {
-        auto reference = validateListTrackReference(trackRef);
+        auto reference = validateListOrderReference(orderRef);
 
         if (!reference)
         {
           return std::unexpected{reference.error()};
         }
 
-        list.trackReferences.push_back(std::move(*reference));
+        list.orderReferences.push_back(std::move(*reference));
       }
 
       return {};
@@ -580,12 +579,7 @@ namespace ao::rt
     Result<> validateListContents(ryml::ConstNodeRef const& listNode, ValidatedList& list)
     {
       auto const filterNode = yaml::findChild(listNode, "filter");
-      auto const tracksNode = yaml::findChild(listNode, "tracks");
-
-      if (filterNode.readable() && tracksNode.readable())
-      {
-        return makeError(Error::Code::FormatRejected, "List record cannot contain both 'filter' and 'tracks'");
-      }
+      auto const orderNode = yaml::findChild(listNode, "order");
 
       if (filterNode.readable())
       {
@@ -596,33 +590,29 @@ namespace ao::rt
           return std::unexpected{filter.error()};
         }
 
-        if (filter->empty())
+        if (!filter->empty())
         {
-          return makeError(Error::Code::FormatRejected, "List record.filter must be non-empty");
+          auto expression = query::parse(*filter);
+
+          if (!expression)
+          {
+            return makeError(Error::Code::FormatRejected,
+                             std::format("List record.filter is invalid: {}", expression.error().message));
+          }
+
+          if (auto plan = query::compileQuery(*expression); !plan)
+          {
+            return makeError(
+              Error::Code::FormatRejected, std::format("List record.filter is invalid: {}", plan.error().message));
+          }
         }
 
-        auto expression = query::parse(*filter);
-
-        if (!expression)
-        {
-          return makeError(
-            Error::Code::FormatRejected, std::format("List record.filter is invalid: {}", expression.error().message));
-        }
-
-        if (auto plan = query::compileQuery(*expression); !plan)
-        {
-          return makeError(
-            Error::Code::FormatRejected, std::format("List record.filter is invalid: {}", plan.error().message));
-        }
-
-        list.isSmart = true;
         list.filter = *filter;
-        return {};
       }
 
-      if (tracksNode.readable())
+      if (orderNode.readable())
       {
-        return validateManualListTracks(tracksNode, list);
+        return validateListOrder(orderNode, list);
       }
 
       return {};
@@ -753,11 +743,11 @@ namespace ao::rt
                                              library::TrackBuilder::PreparedHot const& preparedHot,
                                              library::TrackBuilder::PreparedCold const& preparedCold) const;
 
-    Result<> buildStaticListTracks(library::ListBuilder& builder,
-                                   ValidatedList const& importedList,
-                                   std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
-                                   library::FileManifestStore::Reader const& manifestReader,
-                                   ImportReport& report) const;
+    Result<> buildListOrder(library::ListBuilder& builder,
+                            ValidatedList const& importedList,
+                            std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
+                            library::FileManifestStore::Reader const& manifestReader,
+                            ImportReport& report) const;
     Result<> updateListParent(ValidatedList const& importedList,
                               std::unordered_map<std::uint32_t, ListId> const& yamlListIdToNewListId,
                               library::ListStore::Writer& listWriter,
@@ -1168,7 +1158,7 @@ namespace ao::rt
       return std::unexpected{version.error()};
     }
 
-    constexpr std::uint32_t kYamlFormatVersion = 2;
+    constexpr std::uint32_t kYamlFormatVersion = 3;
 
     if (*version != kYamlFormatVersion)
     {
@@ -2137,19 +2127,14 @@ namespace ao::rt
 
     for (auto const& importedList : lists)
     {
-      auto builder = library::ListBuilder::makeEmpty().name(importedList.name).description(importedList.description);
+      auto builder = library::ListBuilder::makeEmpty()
+                       .name(importedList.name)
+                       .description(importedList.description)
+                       .filter(importedList.filter);
 
-      if (importedList.isSmart)
+      if (auto result = buildListOrder(builder, importedList, yamlTrackIdToInternalId, manifestReader, report); !result)
       {
-        builder.filter(importedList.filter);
-      }
-      else
-      {
-        if (auto result = buildStaticListTracks(builder, importedList, yamlTrackIdToInternalId, manifestReader, report);
-            !result)
-        {
-          return result;
-        }
+        return result;
       }
 
       auto payload = builder.serialize();
@@ -2185,20 +2170,20 @@ namespace ao::rt
     return {};
   }
 
-  Result<> LibraryYamlImporter::Impl::buildStaticListTracks(
+  Result<> LibraryYamlImporter::Impl::buildListOrder(
     library::ListBuilder& builder,
     ValidatedList const& importedList,
     std::unordered_map<std::uint32_t, TrackId> const& yamlTrackIdToInternalId,
     library::FileManifestStore::Reader const& manifestReader,
     ImportReport& report) const
   {
-    for (auto const& trackReference : importedList.trackReferences)
+    for (auto const& orderReference : importedList.orderReferences)
     {
-      if (auto const* idReference = std::get_if<ValidatedListTrackIdReference>(&trackReference); idReference != nullptr)
+      if (auto const* idReference = std::get_if<ValidatedListOrderIdReference>(&orderReference); idReference != nullptr)
       {
         if (auto const it = yamlTrackIdToInternalId.find(idReference->yamlId); it != yamlTrackIdToInternalId.end())
         {
-          builder.tracks().add(it->second);
+          builder.orderTrackIds().add(it->second);
         }
         else
         {
@@ -2208,11 +2193,11 @@ namespace ao::rt
         continue;
       }
 
-      auto const& uriReference = std::get<ValidatedListTrackUriReference>(trackReference);
+      auto const& uriReference = std::get<ValidatedListOrderUriReference>(orderReference);
 
       if (auto const manifestResult = manifestReader.get(uriReference.uri); manifestResult)
       {
-        builder.tracks().add(manifestResult->trackId());
+        builder.orderTrackIds().add(manifestResult->trackId());
       }
       else if (manifestResult.error().code == Error::Code::NotFound)
       {

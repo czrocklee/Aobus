@@ -26,7 +26,7 @@ namespace ao::rt
   class SmartListEvaluator;
 
   /**
-   * SmartListSource - A reactive smart list that filters another TrackSource.
+   * SmartListSource - A reactive predicate source that filters another TrackSource.
    *
    * It holds its own members and relies on SmartListEvaluator to drive updates
    * based on library changes.

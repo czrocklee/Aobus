@@ -78,7 +78,8 @@ Clicking a section header selects its first track; dragging a header edge instal
 
 The list overlay renders All Tracks first and walks the shared list tree in preorder.
 Children of the virtual All Tracks root retain zero terminal indentation, while every additional user-list ancestor adds two spaces.
-Folder, Manual, and Smart rows receive terminal-specific `[+]`, `[#]`, and `[?]` icons, and Smart List expressions appear as detail text.
+Every saved List uses the terminal-specific `[L]` icon, and a nonempty local expression appears as detail text.
+Nesting expresses derivation from a parent List; it does not introduce a Folder or List kind.
 
 Overlay toggle keys reopen/close their own panel.
 Return activates the selected list, presentation, or output row.

@@ -122,24 +122,24 @@ namespace ao::rt::test
       return std::string{optView->name()};
     }
 
-    bool listContainsTrack(MusicLibraryFixture& libraryFixture, ListId listId, TrackId trackId)
+    bool listOrderContainsTrack(MusicLibraryFixture& libraryFixture, ListId listId, TrackId trackId)
     {
       auto transaction = libraryFixture.library().readTransaction();
       auto const optView = libraryFixture.library().lists().reader(transaction).get(listId);
       REQUIRE(optView);
-      return std::ranges::contains(optView->tracks(), trackId);
+      return std::ranges::contains(optView->orderTrackIds(), trackId);
     }
 
-    ListId createManualList(MusicLibraryFixture& libraryFixture,
-                            std::string_view name,
-                            std::vector<TrackId> trackIds = {})
+    ListId createListWithOrder(MusicLibraryFixture& libraryFixture,
+                               std::string_view name,
+                               std::vector<TrackId> trackIds = {})
     {
       auto transaction = library::test::writeTransaction(libraryFixture.library());
       auto builder = library::ListBuilder::makeEmpty().name(name);
 
       for (auto const trackId : trackIds)
       {
-        builder.tracks().add(trackId);
+        builder.orderTrackIds().add(trackId);
       }
 
       auto const createResult =
@@ -268,7 +268,7 @@ namespace ao::rt::test
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
-    auto draft = LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Draft"};
+    auto draft = LibraryWriter::ListDraft{.name = "Draft"};
 
     auto const dryRun = writer.previewCreateList(draft);
 
@@ -286,29 +286,27 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
-    auto const listId = createManualList(libraryFixture, "Before");
+    auto const listId = createListWithOrder(libraryFixture, "Before", {trackId});
     auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
-    auto draft = LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Manual, .listId = listId, .name = "After", .trackIds = {trackId}};
+    auto draft = LibraryWriter::ListDraft{.listId = listId, .name = "After"};
 
     auto const dryRun = writer.previewUpdateList(draft);
 
     REQUIRE(dryRun);
     CHECK(dryRun->changed);
     CHECK(dryRun->fieldChanges[0] == ListFieldChange{.field = "name", .oldValue = "Before", .newValue = "After"});
-    CHECK(dryRun->addedTrackIds == std::vector<TrackId>{trackId});
     CHECK(listName(libraryFixture, listId) == "Before");
-    CHECK_FALSE(listContainsTrack(libraryFixture, listId, trackId));
+    CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 0);
 
     auto const commit = writer.updateList(draft);
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
     CHECK(listName(libraryFixture, listId) == "After");
-    CHECK(listContainsTrack(libraryFixture, listId, trackId));
+    CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.listsMutated == 1);
   }
 
@@ -316,7 +314,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
-    auto const listId = createManualList(libraryFixture, "Delete Me", {trackId});
+    auto const listId = createListWithOrder(libraryFixture, "Delete Me", {trackId});
     auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
@@ -326,8 +324,7 @@ namespace ao::rt::test
 
     REQUIRE(dryRun);
     CHECK(dryRun->name == "Delete Me");
-    CHECK(dryRun->kind == "manual");
-    CHECK(dryRun->trackCount == 1);
+    CHECK(dryRun->orderTrackIdCount == 1);
     CHECK(listExists(libraryFixture, listId));
     CHECK(recorder.listsMutated == 0);
 
@@ -342,7 +339,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Delete Track");
-    auto const listId = createManualList(libraryFixture, "Manual", {trackId});
+    auto const listId = createListWithOrder(libraryFixture, "Ordered", {trackId});
     auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
@@ -355,7 +352,7 @@ namespace ao::rt::test
     CHECK(dryRun->title == "Delete Track");
     CHECK(dryRun->removedFromListIds == std::vector<ListId>{listId});
     CHECK(trackExists(libraryFixture, trackId));
-    CHECK(listContainsTrack(libraryFixture, listId, trackId));
+    CHECK(listOrderContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 0);
     CHECK(recorder.listsMutated == 0);
@@ -364,7 +361,7 @@ namespace ao::rt::test
     REQUIRE(commit);
     CHECK(*commit == *dryRun);
     CHECK_FALSE(trackExists(libraryFixture, trackId));
-    CHECK_FALSE(listContainsTrack(libraryFixture, listId, trackId));
+    CHECK_FALSE(listOrderContainsTrack(libraryFixture, listId, trackId));
     CHECK(recorder.tracksMutated == 0);
     CHECK(recorder.collectionChanged == 1);
     CHECK(recorder.listsMutated == 1);

@@ -13,7 +13,7 @@
 namespace ao::uimodel
 {
   /**
-   * Smart List authoring: the editor's expression handling, live preview, view
+   * Saved-List authoring: the editor's expression handling, live preview, view
    * state, and the draft it finally submits.
    *
    * A frontend dialog owns the widgets and feeds observations in through
@@ -43,6 +43,8 @@ namespace ao::uimodel
     bool isAllTracks = false;
     std::string previewStatusText;
     std::string errorText;
+    std::string membershipEditingText;
+    bool hasDirectMembershipEditing = false;
     bool expressionValid = true;
     bool queryInvalid = false;
     bool canSubmit = false;

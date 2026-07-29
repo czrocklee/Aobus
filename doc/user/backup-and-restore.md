@@ -21,7 +21,7 @@ Back up the music files separately and preserve their paths relative to the musi
 GTK prepares a restore preview and requires confirmation before changing the library.
 CLI import defaults to merge; committing a restore requires an explicit mode and destructive-confirmation flag.
 
-Only version 2 YAML is accepted.
+Only version 3 YAML is accepted.
 Earlier interchange files have no compatibility or conversion path and must be recreated from their source library with a current exporter.
 
 Track paths belong to the selected music root.
@@ -74,7 +74,7 @@ Canceling the dialog leaves the target unchanged.
 
 - `aobus -C /target lib stats` reports the expected track, list, resource, and storage counts.
 - `aobus -C /target lib verify` reports no missing or error-class issues.
-- Representative tracks retain the expected curated metadata, tags, covers, and list membership.
+- Representative tracks retain the expected curated metadata, tags, covers, List membership, and saved List order.
 - The separately restored audio files exist at the paths expected beneath the target music root.
 
 ## Related documents

@@ -5,12 +5,14 @@
 
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
+#include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 
 #include <gdk/gdk.h>
 #include <gdk/gdkkeysyms.h>
 #include <gdkmm/enums.h>
+#include <glib-object.h>
 #include <glib.h>
 #include <glibmm/refptr.h>
 #include <gtkmm/columnview.h>
@@ -27,6 +29,7 @@
 #include <gtkmm/widget.h>
 #include <sigc++/functors/mem_fun.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -67,6 +70,21 @@ namespace ao::gtk
       }
 
       return nullptr;
+    }
+
+    TrackId trackIdForWidget(Gtk::Widget const* widget)
+    {
+      for (auto const* current = widget; current != nullptr; current = current->get_parent())
+      {
+        auto const rawId = GPOINTER_TO_UINT(::g_object_get_data(G_OBJECT(current->gobj()), kBoundTrackIdDataKey));
+
+        if (rawId != 0U)
+        {
+          return TrackId{rawId};
+        }
+      }
+
+      return kInvalidTrackId;
     }
 
     std::vector<std::uint32_t> selectedPositions(Gtk::SelectionModel const& selectionModel)
@@ -217,16 +235,8 @@ namespace ao::gtk
     auto const secondaryClickControllerPtr = Gtk::GestureClick::create();
     secondaryClickControllerPtr->set_button(GDK_BUTTON_SECONDARY);
 
-    secondaryClickControllerPtr->signal_released().connect(
-      [this](std::int32_t, double xPosition, double yPosition)
-      {
-        if (selectedTrackCount() == 0)
-        {
-          return;
-        }
-
-        _contextMenuRequested.emit(xPosition, yPosition);
-      });
+    secondaryClickControllerPtr->signal_released().connect([this](std::int32_t, double xPosition, double yPosition)
+                                                           { handleSecondaryClick(xPosition, yPosition); });
 
     _columnView.add_controller(secondaryClickControllerPtr);
   }
@@ -248,6 +258,24 @@ namespace ao::gtk
   void TrackSelectionController::handleSelectionChanged(std::uint32_t /*position*/, std::uint32_t /*nItems*/)
   {
     _selectionChanged.emit();
+  }
+
+  void TrackSelectionController::handleSecondaryClick(double const xPosition, double const yPosition)
+  {
+    auto const* const target = _columnView.pick(xPosition, yPosition, Gtk::PickFlags::NON_TARGETABLE);
+    auto const clickedTrackId = trackIdForWidget(target);
+
+    if (clickedTrackId == kInvalidTrackId)
+    {
+      return;
+    }
+
+    if (auto const selectedIds = selectedTrackIds(); !std::ranges::contains(selectedIds, clickedTrackId))
+    {
+      selectTrack(clickedTrackId);
+    }
+
+    _contextMenuRequested.emit(xPosition, yPosition);
   }
 
   TrackId TrackSelectionController::trackIdAtPosition(std::uint32_t position) const noexcept

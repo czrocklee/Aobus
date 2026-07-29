@@ -10,7 +10,10 @@
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/ListMutation.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewIds.h>
@@ -26,20 +29,37 @@
 #include <giomm/actionmap.h>
 #include <giomm/simpleaction.h>
 #include <glibmm/variant.h>
+#include <gtkmm/box.h>
+#include <gtkmm/checkbutton.h>
 #include <gtkmm/dialog.h>
+#include <gtkmm/enums.h>
+#include <gtkmm/label.h>
 #include <gtkmm/object.h>
 #include <gtkmm/widget.h>
 #include <gtkmm/window.h>
 
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::gtk
 {
+  namespace
+  {
+    constexpr int kDeleteDialogWidth = 420;
+    constexpr int kDeleteMessageWidthChars = 65;
+
+    std::string displayedTag(std::string_view const tag)
+    {
+      return query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = std::string{tag}});
+    }
+  } // namespace
+
   ListNavigationController::ListNavigationController(Gtk::Window& parent,
                                                      rt::AppRuntime& runtime,
                                                      Callbacks callbacks,
@@ -97,10 +117,19 @@ namespace ao::gtk
                                                  { openNewSmartListDialog(); });
     _newListActionPtr->set_enabled(false);
 
+    _newPlaylistActionPtr = Gio::SimpleAction::create("list-new-playlist");
+    _newPlaylistActionPtr->signal_activate().connect([this](Glib::VariantBase const&) { openNewPlaylistDialog(); });
+    _newPlaylistActionPtr->set_enabled(false);
+
     _deleteListActionPtr = Gio::SimpleAction::create("list-delete");
     _deleteListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
                                                     { handleDeleteListActivated(); });
     _deleteListActionPtr->set_enabled(false);
+
+    _deleteListSubtreeActionPtr = Gio::SimpleAction::create("list-delete-subtree");
+    _deleteListSubtreeActionPtr->signal_activate().connect([this](Glib::VariantBase const&)
+                                                           { handleDeleteListSubtreeActivated(); });
+    _deleteListSubtreeActionPtr->set_enabled(false);
 
     _editListActionPtr = Gio::SimpleAction::create("list-edit");
     _editListActionPtr->signal_activate().connect([this](Glib::VariantBase const& /*variant*/)
@@ -111,7 +140,9 @@ namespace ao::gtk
   void ListNavigationController::addActionsTo(Gio::ActionMap& actionMap)
   {
     actionMap.add_action(_newListActionPtr);
+    actionMap.add_action(_newPlaylistActionPtr);
     actionMap.add_action(_deleteListActionPtr);
+    actionMap.add_action(_deleteListSubtreeActionPtr);
     actionMap.add_action(_editListActionPtr);
   }
 
@@ -142,6 +173,11 @@ namespace ao::gtk
     }
 
     syncSelectionFromWorkspace(_runtime.workspace().snapshot().activeViewId);
+
+    if (auto const selectedListId = _panelPtr->selectedListId(); selectedListId != kInvalidListId)
+    {
+      updateListActions(selectedListId);
+    }
   }
 
   void ListNavigationController::select(ListId listId)
@@ -190,7 +226,9 @@ namespace ao::gtk
     auto const state = ao::uimodel::describeListActions(listId, _panelPtr->hasListChildren(listId));
 
     _newListActionPtr->set_enabled(state.canCreate);
+    _newPlaylistActionPtr->set_enabled(state.canCreate);
     _deleteListActionPtr->set_enabled(state.canDelete);
+    _deleteListSubtreeActionPtr->set_enabled(state.canDeleteSubtree);
     _editListActionPtr->set_enabled(state.canEdit);
   }
 
@@ -208,9 +246,19 @@ namespace ao::gtk
       _newListActionPtr->set_enabled(state.canCreate);
     }
 
+    if (_newPlaylistActionPtr)
+    {
+      _newPlaylistActionPtr->set_enabled(state.canCreate);
+    }
+
     if (_deleteListActionPtr)
     {
       _deleteListActionPtr->set_enabled(state.canDelete);
+    }
+
+    if (_deleteListSubtreeActionPtr)
+    {
+      _deleteListSubtreeActionPtr->set_enabled(state.canDeleteSubtree);
     }
 
     if (_editListActionPtr)
@@ -225,6 +273,35 @@ namespace ao::gtk
   {
     auto const parentListId = ao::uimodel::parentForNewSmartList(_panelPtr->selectedListId());
     openNewListDialog(parentListId);
+  }
+
+  void ListNavigationController::openNewPlaylistDialog()
+  {
+    if (_dataProvider == nullptr)
+    {
+      return;
+    }
+
+    auto const parentListId = ao::uimodel::parentForNewSmartList(_panelPtr->selectedListId());
+    auto* dialog = Gtk::make_managed<SmartListDialog>(_parent, _runtime, parentListId, *_dataProvider);
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
+    dialog->configurePlaylistTemplate();
+    dialog->signal_response().connect(
+      [this, dialog, tokenPtr](std::int32_t const responseId)
+      {
+        if (responseId == Gtk::ResponseType::OK)
+        {
+          if (auto const submitted = submitListDraft(dialog->draft(), dialog->presentationId()); !submitted)
+          {
+            dialog->showError(submitted.error().message);
+            return;
+          }
+        }
+
+        dialog->close();
+      });
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
+    dialog->present();
   }
 
   void ListNavigationController::openNewListDialog(ListId parentListId, std::string initialExpression)
@@ -378,27 +455,159 @@ namespace ao::gtk
       return;
     }
 
-    if (_panelPtr->hasListChildren(listId))
+    auto const preview = _runtime.library().previewDeleteList(listId);
+
+    if (!preview)
     {
-      APP_LOG_ERROR("Cannot delete a list that still has child lists");
+      showDeleteError(listId, preview.error().message);
       return;
     }
 
-    if (auto const deleteResult = _runtime.library().deleteList(listId); !deleteResult)
+    presentDeleteConfirmation(
+      listId,
+      false,
+      "Delete List?",
+      std::format("Delete \"{}\"?\n\nThe List will be removed. Music files will be kept.", preview->name),
+      preview->optTagImpact);
+  }
+
+  void ListNavigationController::handleDeleteListSubtreeActivated()
+  {
+    auto const listId = _panelPtr->selectedListId();
+
+    if (rt::isVirtualListId(listId))
     {
-      APP_LOG_ERROR("Failed to delete list {}: {}", listId, deleteResult.error().message);
-      auto* const dialog = AppDialog::presentMessage(
-        _parent,
-        "Unable to Delete List",
-        deleteResult.error().message,
-        {AppDialogAction{
-          .label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
-        Gtk::ResponseType::CLOSE);
-      auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
-      dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
+      return;
+    }
+
+    auto const preview = _runtime.library().previewDeleteListAndDescendants(listId);
+
+    if (!preview)
+    {
+      showDeleteError(listId, preview.error().message);
+      return;
+    }
+
+    auto message = std::format("Delete {} Lists in this derived subtree?\n\n", preview->deletedLists.size());
+
+    for (auto const& list : preview->deletedLists)
+    {
+      message.append(std::format("• {} ({})\n", list.name, list.listId));
+    }
+
+    message.append("\nTags used by nested Playlists are kept.\nMusic files will be kept.");
+    auto optTagImpact = preview->deletedLists.empty() ? std::optional<rt::DeleteListReply::TagImpact>{}
+                                                      : preview->deletedLists.front().optTagImpact;
+    presentDeleteConfirmation(
+      listId, true, "Delete List and Descendants?", std::move(message), std::move(optTagImpact));
+  }
+
+  void ListNavigationController::presentDeleteConfirmation(ListId const listId,
+                                                           bool const deleteDescendants,
+                                                           std::string title,
+                                                           std::string message,
+                                                           std::optional<rt::DeleteListReply::TagImpact> optTagImpact)
+  {
+    auto* const dialog = Gtk::make_managed<AppDialog>();
+    dialog->set_title(std::move(title));
+    dialog->configureForParent(_parent);
+    dialog->setCloseResponse(Gtk::ResponseType::CANCEL);
+    dialog->addCancelAction("Cancel", Gtk::ResponseType::CANCEL);
+    dialog->addPrimaryAction(deleteDescendants ? "Delete All" : "Delete", Gtk::ResponseType::YES);
+    dialog->setDefaultResponse(Gtk::ResponseType::CANCEL);
+
+    auto* const content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+    content->set_size_request(kDeleteDialogWidth, -1);
+    auto* const messageLabel = Gtk::make_managed<Gtk::Label>(std::move(message));
+    messageLabel->set_halign(Gtk::Align::START);
+    messageLabel->set_xalign(0.0F);
+    messageLabel->set_wrap(true);
+    messageLabel->set_max_width_chars(kDeleteMessageWidthChars);
+    content->append(*messageLabel);
+
+    auto* cleanupCheck = static_cast<Gtk::CheckButton*>(nullptr);
+
+    if (optTagImpact)
+    {
+      cleanupCheck = Gtk::make_managed<Gtk::CheckButton>(std::format("Also remove {} from {} track{}",
+                                                                     displayedTag(optTagImpact->tag),
+                                                                     optTagImpact->taggedTrackCount,
+                                                                     optTagImpact->taggedTrackCount == 1 ? "" : "s"));
+      cleanupCheck->set_active(false);
+      content->append(*cleanupCheck);
+
+      if (!optTagImpact->otherListReferences.empty())
+      {
+        auto references = std::string{};
+
+        for (auto const& reference : optTagImpact->otherListReferences)
+        {
+          if (!references.empty())
+          {
+            references.append(", ");
+          }
+
+          references.append(reference.name);
+        }
+
+        auto* const warningLabel =
+          Gtk::make_managed<Gtk::Label>(std::format("{} is also referenced by: {}. Removing it may change those Lists.",
+                                                    displayedTag(optTagImpact->tag),
+                                                    references));
+        warningLabel->set_halign(Gtk::Align::START);
+        warningLabel->set_xalign(0.0F);
+        warningLabel->set_wrap(true);
+        warningLabel->add_css_class("warning");
+        content->append(*warningLabel);
+      }
+    }
+
+    dialog->setContentWidget(*content);
+    dialog->signal_response().connect(
+      [this, dialog, listId, deleteDescendants, cleanupCheck](std::int32_t const responseId)
+      {
+        if (responseId == Gtk::ResponseType::YES)
+        {
+          commitDeleteList(listId, deleteDescendants, cleanupCheck != nullptr && cleanupCheck->get_active());
+        }
+
+        dialog->close();
+      });
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
+    dialog->present();
+  }
+
+  void ListNavigationController::commitDeleteList(ListId const listId,
+                                                  bool const deleteDescendants,
+                                                  bool const removeWritableTag)
+  {
+    auto const options = rt::DeleteListOptions{.removeWritableTagFromTracks = removeWritableTag};
+    auto result = deleteDescendants
+                    ? _runtime.library()
+                        .deleteListAndDescendants(listId, options)
+                        .transform([](rt::DeleteListSubtreeReply const&) {})
+                    : _runtime.library().deleteList(listId, options).transform([](rt::DeleteListReply const&) {});
+
+    if (!result)
+    {
+      showDeleteError(listId, result.error().message);
       return;
     }
 
     _pendingSelectId = rt::kAllTracksListId;
+  }
+
+  void ListNavigationController::showDeleteError(ListId const listId, std::string_view const message)
+  {
+    APP_LOG_ERROR("Failed to delete list {}: {}", listId, message);
+    auto* const dialog = AppDialog::presentMessage(
+      _parent,
+      "Unable to Delete List",
+      std::string{message},
+      {AppDialogAction{.label = "Close", .responseId = Gtk::ResponseType::CLOSE, .role = AppDialogActionRole::Cancel}},
+      Gtk::ResponseType::CLOSE);
+    auto tokenPtr = std::make_shared<ThemeRegistrationToken>(_themeCoordinator.registerToplevel(*dialog));
+    dialog->signal_hide().connect([tokenPtr] { (*tokenPtr).reset(); });
   }
 } // namespace ao::gtk

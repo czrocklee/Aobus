@@ -12,7 +12,7 @@ summary: Defines expression ownership from authoring through predicate membershi
 This document owns the structural boundary of Aobus track expressions.
 It explains how shared syntax becomes a predicate, a completion context, or a per-track string and how those results compose with library sources and presentation.
 
-It does not define the exact expression grammar, predicate truth rules, completion ranking, format output, smart-list membership behavior, or track-list presentation behavior.
+It does not define the exact expression grammar, predicate truth rules, completion ranking, format output, saved-List membership behavior, saved ordering, or track-list presentation behavior.
 Those contracts belong to the linked specifications and references.
 
 ## System context
@@ -51,8 +51,9 @@ Evaluation that needs dictionary data receives an explicit bounded read context 
 
 ### Library and runtime consumers
 
-`LibraryWriter` validates a smart-list expression before committing its text as part of a list definition.
+`LibraryWriter` validates a saved-List expression before committing its text as part of a List definition.
 `TrackSourceCache`, `SmartListSource`, and `SmartListEvaluator` compile that text and maintain the resulting ordered membership over an upstream source.
+`ListOrderSource` then applies the List's independent saved-rank overlay; expression evaluation neither reads nor mutates that rank.
 The same source machinery materializes transient `ViewService` filters without persisting a new list.
 During one membership rebuild, `SmartListEvaluator` creates one dictionary read cache/context, binds each plan once, and reuses those bindings across track evaluations; cache presence and eviction do not change predicate results.
 
@@ -64,7 +65,7 @@ The runtime does not redefine expression grammar or field aliases.
 
 ### UIModel authoring and recommendation
 
-UIModel owns platform-neutral interpretation of quick-filter input, filter view state, Smart List draft and preview policy, and track-presentation recommendation.
+UIModel owns platform-neutral interpretation of quick-filter input, filter view state, List draft and preview policy, and track-presentation recommendation.
 It may parse or serialize a core expression, but it cannot implement a second grammar or evaluator.
 
 Quick-search policy retains a typed runtime-field list, obtains canonical expression variables through the bridge, and delegates system-variable source text to the core variable formatter and constants and dynamic variables to the core serializer.
@@ -89,6 +90,9 @@ The content and shape axes of a runtime track-list view remain independent:
 listId + filterExpression
   -> TrackSource membership
 
+saved List orderTrackIds
+  -> source order before presentation
+
 TrackPresentationSpec
   -> sort + group + visible fields
 
@@ -107,7 +111,7 @@ TrackSource + TrackPresentationSpec
 
 ## Data and control flow
 
-### Persisted Smart List
+### Persisted List
 
 ```text
 frontend editor or CLI command
@@ -117,13 +121,15 @@ frontend editor or CLI command
   -> TrackSourceCache dependency graph
   -> SmartListSource parse + compile
   -> SmartListEvaluator over parent membership
+  -> ListOrderSource over raw saved rank
   -> ordered derived TrackSource
 ```
 
-The stored value is expression text, not an AST or execution bytecode.
-Opening or refreshing the Smart List recompiles it against the current implementation.
+The stored predicate value is expression text, not an AST or execution bytecode.
+The same List record independently stores raw rank TrackIds; those IDs do not participate in predicate truth.
+Opening or refreshing the List recompiles its expression against the current implementation, then applies rank to the resulting membership.
 The text has no separate language identity or version.
-For a persisted Smart List, the accepted grammar, field catalog, binding behavior, and evaluation meaning are part of the library database contract gated by `ao::library::kLibraryVersion`, even when the list-record byte layout is unchanged.
+For a persisted List, the accepted grammar, field catalog, binding behavior, and evaluation meaning are part of the library database contract gated by `ao::library::kLibraryVersion`, even when the list-record byte layout is unchanged.
 Other retained expression surfaces use the compatibility version or policy owned by their containing format rather than introducing a per-expression dialect.
 
 ### Transient track filter
@@ -172,7 +178,7 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 ## Structural constraints
 
 - Expression text is persistence-facing; changing the storable predicate surface or altering whether retained text parses, what it binds to, or which tracks it matches is incompatible for every containing persistence or automation contract that retains that text.
-- Smart List compatibility is gated by the library database version; the library YAML, playback-session, workspace, and CLI surfaces retain their own independent compatibility owners.
+- Saved-List predicate compatibility is gated by the library database version; the library YAML, playback-session, workspace, and CLI surfaces retain their own independent compatibility owners.
 - `ExecutionPlan` and `FormatPlan` are runtime-only and are never persisted as compatibility surfaces.
 - Plans own every expression symbol needed for later dictionary binding and can outlive the library against which they were first evaluated.
 - A dictionary-using plan is bound explicitly for one bounded batch; a later batch creates a new binding and can observe a newer committed dictionary generation.
@@ -185,12 +191,13 @@ This path does not create `TrackPresentationSpec`, projection rows, or frontend 
 - The runtime field catalog may advertise a query-variable bridge only when that typed field resolves in the core query descriptor catalog.
 - Query-to-runtime reverse lookup, value-completion eligibility, quick-search construction, and presentation recommendation consume that typed identity instead of maintaining raw variable-name mappings.
 - A frontend must not scan `MusicLibrary` to implement ordinary expression evaluation or completion when a runtime service exists.
-- The GTK Smart List preview's direct construction of `SmartListEvaluator` against `MusicLibrary` is a contained migration seam, not the normal frontend boundary.
+- The GTK saved-List preview's direct construction of `SmartListEvaluator` against `MusicLibrary` is a contained migration seam, not the normal frontend boundary.
 
 ## Failure, cancellation, and lifetime boundaries
 
 Parsing and compilation return typed `Result` failures at their public boundaries.
-Smart-list mutation rejects an invalid expression before commit, while an already materialized source stages an expression error without invalidating sibling sources.
+Saved-List mutation rejects an invalid nonempty expression before commit, while an already materialized source stages an expression error without invalidating sibling sources.
+An empty expression compiles as constant true and does not select a different persisted kind.
 View filtering publishes the accepted expression, replacement projection, revision, and optional expression error through runtime state.
 
 Completion is synchronous and tolerant of incomplete text.
@@ -212,8 +219,9 @@ Source leases and projections retain their ordinary lifetime rules from the [lib
 - [`Completion.h`](../../include/ao/query/Completion.h) defines tolerant core completion analysis.
 - [`FieldCatalog.h`](../../include/ao/query/FieldCatalog.h) defines typed variable descriptors and lookup.
 - [`TrackField`](../../app/include/ao/rt/TrackField.h) defines the application capability catalog and typed query bridge.
-- [`LibraryWriter.cpp`](../../app/runtime/library/LibraryWriter.cpp) validates persisted Smart List definitions.
+- [`LibraryWriter.cpp`](../../app/runtime/library/LibraryWriter.cpp) validates persisted List definitions.
 - [`SmartListSource`](../../app/include/ao/rt/source/SmartListSource.h), [`SmartListEvaluator`](../../app/include/ao/rt/source/SmartListEvaluator.h), and [`TrackSourceCache`](../../app/include/ao/rt/source/TrackSourceCache.h) materialize predicate membership.
+- [`ListOrderSource`](../../app/include/ao/rt/source/ListOrderSource.h) applies independent saved rank after predicate evaluation.
 - [`ViewService`](../../app/include/ao/rt/ViewService.h) combines base list, transient filter, presentation, and projection state.
 - [`CompletionService`](../../app/include/ao/rt/completion/CompletionService.h) and [`QueryExpressionCompleter`](../../app/include/ao/rt/completion/QueryExpressionCompleter.h) compose live runtime completion.
 - [`TrackFilterResolver`](../../app/include/ao/uimodel/library/track/TrackFilterResolver.h) and [`TrackFilterCompleter`](../../app/include/ao/uimodel/library/track/TrackFilterCompleter.h) own shared quick-filter authoring and completion policy.

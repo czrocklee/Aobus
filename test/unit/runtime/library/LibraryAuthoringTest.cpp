@@ -13,6 +13,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -26,6 +27,7 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -146,8 +148,8 @@ namespace ao::rt::test
     auto changedSubscription = fixture.runtimeLibrary().changes().onChanged(
       [&](LibraryChangeSet const&) noexcept
       {
-        auto nestedResult = fixture.runtimeLibrary().writer().createList(
-          LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Nested mutation"});
+        auto nestedResult =
+          fixture.runtimeLibrary().writer().createList(LibraryWriter::ListDraft{.name = "Nested mutation"});
         nestedMutationRejected = !nestedResult && nestedResult.error().code == Error::Code::InvalidState;
       });
 
@@ -225,6 +227,9 @@ namespace ao::rt::test
       CHECK(availability.state == LibraryAuthoringState::Maintenance);
       CHECK(availability.maintenanceKind == LibraryMaintenanceKind::ScanApply);
       CHECK_FALSE(mutationService.beginInteractiveMutation());
+      auto const listOrderBinding = mutationService.bindListOrder(kAllTracksListId, std::span<TrackId const>{});
+      REQUIRE_FALSE(listOrderBinding);
+      CHECK(listOrderBinding.error().code == Error::Code::InvalidState);
     }
 
     auto const availability = mutationService.availability();
@@ -273,7 +278,6 @@ namespace ao::rt::test
     REQUIRE(boundResult);
 
     auto draft = LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Manual,
       .name = "Unrelated",
     };
     REQUIRE(fixture.runtimeLibrary().writer().createList(draft));

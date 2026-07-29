@@ -14,6 +14,8 @@
 #include "track/TrackColumnViewHost.h"
 #include "track/TrackFieldUi.h"
 #include "track/TrackListModel.h"
+#include "track/TrackOrderActions.h"
+#include "track/TrackOrderDragController.h"
 #include "track/TrackRowObject.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -22,9 +24,16 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewIds.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/projection/TrackListProjection.h>
+#include <ao/rt/source/TrackSource.h>
 #include <ao/uimodel/field/TrackFieldEditPolicy.h>
+#include <ao/uimodel/library/list/ListOrderAuthoringSession.h>
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
@@ -55,6 +64,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -241,9 +251,11 @@ namespace ao::gtk
                                uimodel::TrackColumnLayoutStore& layoutStore,
                                rt::AppRuntime& runtime,
                                ResourceImageLoader& thumbnailLoader,
-                               rt::TrackPresentationSpec const& presentation)
+                               rt::TrackPresentationSpec const& presentation,
+                               rt::ViewId const viewId)
     : Gtk::Box{Gtk::Orientation::VERTICAL}
     , _listId{listId}
+    , _viewId{viewId}
     , _modelPtr{std::move(modelPtr)}
 
     , _layoutStore{layoutStore}
@@ -281,6 +293,7 @@ namespace ao::gtk
           *_modelPtr);
       });
 
+    installOrderDragController();
     _viewHostPtr->columnController().syncLayout(presentation.visibleFields);
 
     // 2. Configure decorators and styles
@@ -288,15 +301,12 @@ namespace ao::gtk
 
     applyColumnViewStyles(_viewHostPtr->columnView());
 
-    _contextPopover.set_has_arrow(false);
-
     // 3. Finally attach model and add to scrolled window
     _viewHostPtr->columnView().set_model(_selectionModelPtr);
 
     _scrolledWindow.set_child(_viewHostPtr->columnView());
     _scrolledWindow.set_vexpand(true);
     _scrolledWindow.set_hexpand(true);
-    _contextPopover.set_parent(_viewHostPtr->columnView());
 
     append(_statusLabel);
     append(_scrolledWindow);
@@ -304,8 +314,8 @@ namespace ao::gtk
 
   TrackViewPage::~TrackViewPage()
   {
+    _orderDragControllerPtr.reset();
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
-    _contextPopover.unparent();
     _scrolledWindow.unset_child();
   }
 
@@ -401,6 +411,7 @@ namespace ao::gtk
 
   void TrackViewPage::setStatusMessage(std::string_view message)
   {
+    _optOrderCapabilityStatus.reset();
     _statusLabel.set_text(std::string{message});
 
     if (message.empty())
@@ -414,8 +425,32 @@ namespace ao::gtk
 
   void TrackViewPage::clearStatusMessage()
   {
+    _optOrderCapabilityStatus.reset();
     _statusLabel.set_text("");
     _statusLabel.set_visible(false);
+  }
+
+  void TrackViewPage::setOrderCapabilityStatus(std::string_view const message)
+  {
+    _optOrderCapabilityStatus = std::string{message};
+    _statusLabel.set_text(*_optOrderCapabilityStatus);
+    _statusLabel.set_visible(!message.empty());
+  }
+
+  void TrackViewPage::clearOrderCapabilityStatus()
+  {
+    if (!_optOrderCapabilityStatus)
+    {
+      return;
+    }
+
+    if (_statusLabel.get_text().raw() == *_optOrderCapabilityStatus)
+    {
+      _statusLabel.set_text("");
+      _statusLabel.set_visible(false);
+    }
+
+    _optOrderCapabilityStatus.reset();
   }
 
   void TrackViewPage::applyPresentation(rt::TrackPresentationSpec const& presentation)
@@ -460,9 +495,9 @@ namespace ao::gtk
     };
 
     // 1. Detach UI from Model and Tree immediately.
+    _orderDragControllerPtr.reset();
     _viewHostPtr->columnView().set_model(Glib::RefPtr<Gtk::SelectionModel>{});
     _scrolledWindow.unset_child();
-    _contextPopover.unparent();
 
     // 2. Create a new generation off-tree.
     auto& newView = _viewHostPtr->rebuild(_modelPtr, _layoutStore, _selectionModelPtr, factoryProvider, _listId);
@@ -470,6 +505,7 @@ namespace ao::gtk
     // 3. Configure structural properties before attaching model (Safe)
     applyColumnViewStyles(newView);
 
+    installOrderDragController();
     _viewHostPtr->columnController().setLayoutAndApply(visibleFields);
     _viewHostPtr->columnController().updateTitlePositionVariable();
 
@@ -487,7 +523,6 @@ namespace ao::gtk
 
     // 7. Swap the child in the live UI tree
     _scrolledWindow.set_child(newView);
-    _contextPopover.set_parent(newView);
 
     // 8. Restore scroll position to selection if possible (Deferred to idle for stability)
     Glib::signal_idle().connect_once(sigc::track_object(
@@ -502,6 +537,157 @@ namespace ao::gtk
       *this));
 
     _viewHostPtr->configureSelectionActivation();
+  }
+
+  void TrackViewPage::installOrderDragController()
+  {
+    _orderDragControllerPtr.reset();
+
+    if (_viewId == rt::kInvalidViewId)
+    {
+      clearOrderCapabilityStatus();
+      return;
+    }
+
+    if (auto const capabilities = orderCapabilities(); !capabilities.canGapMove)
+    {
+      auto const stateResult = _runtime.views().findTrackListState(_viewId);
+      auto const sourceState = _runtime.views().listSourceState(_viewId);
+      auto const savedList = stateResult && !rt::isVirtualListId(stateResult->listId);
+      auto const authoring = _runtime.library().authoringAvailability();
+      auto const shouldExplain =
+        savedList &&
+        (capabilities.canAuthorOrder || stateResult->presentation.id == rt::kListOrderTrackPresentationId ||
+         authoring.state == rt::LibraryAuthoringState::Maintenance || stateResult->optFilterError || !sourceState ||
+         *sourceState != rt::TrackSourceState::Live);
+
+      if (shouldExplain)
+      {
+        setOrderCapabilityStatus(capabilities.disabledReason);
+      }
+      else
+      {
+        clearOrderCapabilityStatus();
+      }
+
+      return;
+    }
+
+    clearOrderCapabilityStatus();
+    _orderDragControllerPtr = std::make_unique<TrackOrderDragController>(
+      _runtime,
+      _viewId,
+      _viewHostPtr->columnView(),
+      _scrolledWindow,
+      _viewHostPtr->selectionController(),
+      TrackOrderDragController::Callbacks{
+        .onStatus = [this](std::string message) { setStatusMessage(message); },
+        .onClearStatus = [this] { clearStatusMessage(); },
+      });
+    _viewHostPtr->columnController().prependUtilityColumn(_orderDragControllerPtr->column());
+  }
+
+  uimodel::ListOrderCapabilityState TrackViewPage::orderCapabilities() const
+  {
+    auto const stateResult = _runtime.views().findTrackListState(_viewId);
+
+    if (!stateResult)
+    {
+      return uimodel::ListOrderCapabilityState{
+        .disabledReason = "This view is no longer available.",
+      };
+    }
+
+    auto const sourceState = _runtime.views().listSourceState(_viewId);
+    return uimodel::describeListOrderCapabilities(uimodel::ListOrderCapabilityInput{
+      .listId = stateResult->listId,
+      .presentation = stateResult->presentation,
+      .quickFilterExpression = stateResult->filterExpression,
+      .sourceLive = sourceState && *sourceState == rt::TrackSourceState::Live,
+      .sourceHasError = stateResult->optFilterError.has_value(),
+      .authoring = _runtime.library().authoringAvailability(),
+    });
+  }
+
+  void TrackViewPage::applyListOrderCommand(TrackOrderCommand const command)
+  {
+    auto sessionResult = uimodel::ListOrderAuthoringSession::begin(_runtime.library(), _runtime.views(), _viewId);
+
+    if (!sessionResult)
+    {
+      setStatusMessage(sessionResult.error().message);
+      return;
+    }
+
+    auto& session = **sessionResult;
+    auto const selectedIds = _viewHostPtr->selectionController().selectedTrackIds();
+    auto const handleStatus = [this](rt::ListOrderAuthoringStatus const status, std::string const& appliedMessage)
+    {
+      switch (status)
+      {
+        case rt::ListOrderAuthoringStatus::Applied: setStatusMessage(appliedMessage); return;
+        case rt::ListOrderAuthoringStatus::NoOp: setStatusMessage("Order unchanged."); return;
+        case rt::ListOrderAuthoringStatus::Stale:
+          setStatusMessage("The List changed. Start the order action again.");
+          return;
+        case rt::ListOrderAuthoringStatus::Unavailable:
+          setStatusMessage("Library editing is currently unavailable.");
+          return;
+      }
+    };
+    auto const handleMove = [this, &handleStatus](auto result)
+    {
+      if (!result)
+      {
+        setStatusMessage(result.error().message);
+        return;
+      }
+
+      handleStatus(result->status,
+                   std::format("Moved {} track{} in Manual Order.",
+                               result->reply.selectedTrackIds.size(),
+                               result->reply.selectedTrackIds.size() == 1 ? "" : "s"));
+    };
+
+    switch (command)
+    {
+      case TrackOrderCommand::MoveUp: handleMove(session.moveUp(selectedIds)); return;
+      case TrackOrderCommand::MoveDown: handleMove(session.moveDown(selectedIds)); return;
+      case TrackOrderCommand::MoveToTop: handleMove(session.moveToTop(selectedIds)); return;
+      case TrackOrderCommand::MoveToBottom: handleMove(session.moveToBottom(selectedIds)); return;
+      case TrackOrderCommand::Reset:
+      {
+        auto result = session.resetOrder();
+
+        if (!result)
+        {
+          setStatusMessage(result.error().message);
+          return;
+        }
+
+        handleStatus(result->status,
+                     std::format("Reset Manual Order and forgot {} saved position{}.",
+                                 result->reply.forgottenPositionCount,
+                                 result->reply.forgottenPositionCount == 1 ? "" : "s"));
+        return;
+      }
+      case TrackOrderCommand::ForgetHidden:
+      {
+        auto result = session.forgetHiddenPositions();
+
+        if (!result)
+        {
+          setStatusMessage(result.error().message);
+          return;
+        }
+
+        handleStatus(result->status,
+                     std::format("Forgot {} hidden saved position{}.",
+                                 result->reply.forgottenPositionCount,
+                                 result->reply.forgottenPositionCount == 1 ? "" : "s"));
+        return;
+      }
+    }
   }
 
   void TrackViewPage::updateSectionHeaders()
@@ -595,7 +781,7 @@ namespace ao::gtk
 
   void TrackViewPage::applyColumnViewStyles(Gtk::ColumnView& view)
   {
-    view.set_reorderable(true);
+    view.set_reorderable(false);
     view.get_style_context()->add_provider(_viewHostPtr->cssProvider(), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   }
 } // namespace ao::gtk

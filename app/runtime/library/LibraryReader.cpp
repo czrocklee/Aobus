@@ -169,8 +169,7 @@ namespace ao::rt
         .parentId = view.parentId(),
         .name = std::string{view.name()},
         .description = std::string{view.description()},
-        .kind = view.isSmart() ? ListNodeKind::Smart : ListNodeKind::Manual,
-        .smartExpression = std::string{view.filter()},
+        .expression = std::string{view.filter()},
       };
     }
   } // namespace
@@ -279,7 +278,7 @@ namespace ao::rt
     return listNodeDataFromView(id, *optView);
   }
 
-  std::vector<TrackId> LibraryReader::listTrackIds(ListId id) const
+  std::vector<TrackId> LibraryReader::listOrderTrackIds(ListId id) const
   {
     auto const reader = _implPtr->library.lists().reader(_implPtr->transaction);
     auto const optView = reader.get(id);
@@ -291,7 +290,7 @@ namespace ao::rt
 
     auto ids = std::vector<TrackId>{};
 
-    for (auto const trackId : optView->tracks())
+    for (auto const trackId : optView->orderTrackIds())
     {
       ids.push_back(trackId);
     }

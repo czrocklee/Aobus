@@ -68,7 +68,7 @@ Inputs arrive through stable core/runtime values, narrow runtime services, DTO s
 - `field` owns shared track-field formatting, edit codecs, patch policy, and inline-edit workflow.
 - `layout` owns the neutral layout document, action/component catalogs, component state, and shell session.
 - `presentation` owns the cross-feature immutable authored-copy catalog; feature-specific projections still live with their feature capsule.
-- `library/list` owns list-tree and Smart List authoring policy.
+- `library/list` owns list-tree, saved-List authoring, membership, and order policy.
 - `library/presentation` owns track presentation catalogs, preferences, editors, recommendation, and column policy.
 - `library/track`, `library/detail`, and `library/property` own their corresponding list, detail, and properties presentation behavior.
 - `playback` owns published playback presentation and interaction, never succession or session-save coordination.

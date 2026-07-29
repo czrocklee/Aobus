@@ -61,12 +61,10 @@ namespace ao::gtk::test
       store.save(layoutState, preferenceState);
     }
 
-    ListId createManualList(rt::AppRuntime& runtime, std::string name, std::vector<TrackId> trackIds = {})
+    ListId createList(rt::AppRuntime& runtime, std::string name)
     {
       return ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
-        .kind = rt::LibraryWriter::ListKind::Manual,
         .name = std::move(name),
-        .trackIds = std::move(trackIds),
       }));
     }
 
@@ -101,7 +99,7 @@ namespace ao::gtk::test
 
     {
       auto runtime = makeRuntime(tempDir);
-      otherListId = createManualList(runtime, "History destination");
+      otherListId = createList(runtime, "History destination");
       REQUIRE(runtime.workspace().navigate({
         .target = rt::kAllTracksListId,
         .optPresentation =
@@ -162,7 +160,7 @@ namespace ao::gtk::test
 
     {
       auto runtime = makeRuntime(tempDir);
-      listId = createManualList(runtime, "Preferred manual list");
+      listId = createList(runtime, "Preferred list");
       savePresentationPreference(tempDir, listId, "albums");
     }
 
@@ -201,7 +199,7 @@ namespace ao::gtk::test
       auto runtime = makeRuntime(tempDir);
       rt::test::addReadyAudioProvider(runtime);
       trackId = addPlayableTrack(runtime, "Restored plain track");
-      listId = createManualList(runtime, "Restored plain list", {trackId});
+      listId = createList(runtime, "Restored plain list");
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
         .target = listId,
         .optPresentation =
@@ -274,7 +272,7 @@ namespace ao::gtk::test
       auto runtime = makeRuntime(tempDir);
       rt::test::addReadyAudioProvider(runtime);
       auto const trackId = addPlayableTrack(runtime, "Restored filtered track");
-      listId = createManualList(runtime, "Restored filtered list", {trackId});
+      listId = createList(runtime, "Restored filtered list");
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
         .target =
           rt::FilteredListTarget{
@@ -339,7 +337,7 @@ namespace ao::gtk::test
       auto runtime = makeRuntime(tempDir);
       rt::test::addReadyAudioProvider(runtime);
       trackId = addPlayableTrack(runtime, "Restored new-view track");
-      listId = createManualList(runtime, "Restored new-view list", {trackId});
+      listId = createList(runtime, "Restored new-view list");
       auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
       REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
       REQUIRE(waitForPlaybackSettlement(runtime, trackId));

@@ -76,6 +76,7 @@ namespace ao::library::test
     auto const temp = ao::test::TempDir{};
     constexpr std::uint32_t kLegacyV1LibraryVersion = 1;
     constexpr std::uint32_t kPreviousColdLayoutLibraryVersion = 2;
+    constexpr std::uint32_t kPreUnifiedListOrderingLibraryVersion = 4;
 
     SECTION("future version")
     {
@@ -100,6 +101,16 @@ namespace ao::library::test
     {
       static_assert(kPreviousColdLayoutLibraryVersion != kLibraryVersion);
       createLibraryMetadataHeader(temp.path(), kPreviousColdLayoutLibraryVersion);
+
+      auto const result = openTestMusicLibrary(temp.path(), temp.path());
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
+    }
+
+    SECTION("version 4 before unified List ordering")
+    {
+      static_assert(kPreUnifiedListOrderingLibraryVersion != kLibraryVersion);
+      createLibraryMetadataHeader(temp.path(), kPreUnifiedListOrderingLibraryVersion);
 
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);

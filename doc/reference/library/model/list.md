@@ -3,7 +3,7 @@ id: library.list-model
 type: reference
 status: current
 domain: library
-summary: Enumerates list identifiers, fields, kinds, hierarchy, and stored membership shape.
+summary: Enumerates saved List identifiers, fields, hierarchy, local expressions, and optional order ranks.
 ---
 # List model
 
@@ -25,35 +25,39 @@ The persisted list model belongs to the **core libraries** layer in the [system 
 | `parentId` | `ListId` | Parent list; zero means the All Tracks root. |
 | `name` | UTF-8 text | User-visible list name. |
 | `description` | UTF-8 text | Optional description. |
-| `filter` | UTF-8 text | Local smart-list expression under the containing library format contract; non-empty selects smart kind. |
-| `trackIds` | Ordered `TrackId` sequence | Stored manual membership; ignored by smart lists. |
+| `filter` | UTF-8 text | Local predicate applied to the parent source; empty is the identity expression `true`. |
+| `orderTrackIds` | Unique ordered `TrackId` sequence | Optional rank overlay; it never defines membership. |
 
 The All Tracks root uses the reserved runtime identity `kAllTracksListId` and is not a normal stored list row.
 
-## Kinds
+## Unified semantics
 
-- A smart list has non-empty `filter`; its stored `trackIds` have no membership effect.
-- A manual list has empty `filter`; its explicit `trackIds` are stored intent.
+Every stored row has the same model.
+There is no persisted Manual, Smart, Folder, or Playlist kind, and `filter` and `orderTrackIds` are independent fields.
 
-A child smart list applies its local filter to its parent's effective membership.
-A child manual list exposes the stable subsequence of stored ids currently present in its parent.
+A List applies its local expression to its parent's effective ordered source.
+Its optional ranks then place currently matching ranked ids first in stored order and append matching unranked ids in parent order.
+An id in `orderTrackIds` that does not currently match is a hidden rank: it is absent from effective membership but resumes its stored position if it matches again.
+A child consumes the parent's complete effective order, so hierarchy always denotes source derivation rather than display-only organization.
 
 The exact filter text surface belongs to the [predicate language](../../../reference/query/predicate-language.md), and its runtime membership belongs to [track sources](../../../spec/library/source/track-source.md).
 
 ## Validation rules
 
-Names, descriptions, filters, membership arrays, and aggregate serialized size must fit the `ListHeader` offset/length widths.
-Each text field is limited to 65,535 bytes, the track-id array is limited to 16,383 entries, and the track-id bytes plus name and description must fit the 65,535-byte filter offset.
-`ListBuilder::serialize()` returns `ValueTooLarge` instead of narrowing an out-of-range value.
+Each text field is limited to 65,535 bytes by product policy even though the physical length field is 32-bit.
+The stored order count must fit unsigned 32-bit, multiplication and aggregate record sizing use checked host-size arithmetic, and the record is padded canonically to a four-byte boundary.
+`ListBuilder::serialize()` returns `ValueTooLarge` instead of narrowing an out-of-range count or size.
+
+`ListBuilder::OrderTrackIdsBuilder` retains only the first occurrence of an id.
+Runtime mutation and YAML import require resolved order ids to identify existing tracks; an order id need not currently match the List expression.
 Parent relationships must identify an allowed root or existing list and must not create a cycle.
-Smart expressions must compile before a committing create or update.
-Full manual drafts contain unique existing track ids after canonicalization.
+An empty expression is valid identity behavior; every non-empty expression must parse and compile before a committing create or update.
 
 ## Compatibility and versioning
 
 The physical version is owned by the [library database reference](../storage/database.md).
 The database version also gates how stored `filter` text parses, binds, and selects membership; the expression carries no separate language version.
-Changing kind detection, hierarchy meaning, stored membership semantics, or predicate behavior for existing filter text is a behavioral and storage compatibility change.
+Changing hierarchy meaning, expression membership, rank-overlay semantics, or predicate behavior for existing filter text is a behavioral and storage compatibility change.
 
 ## Implementation authority
 
@@ -64,8 +68,8 @@ Changing kind detection, hierarchy meaning, stored membership semantics, or pred
 ## Test authority
 
 - List builder, layout, store, and view tests under [`test/unit/library/`](../../../../test/unit/library/) lock the persisted surface.
-- [`LibraryWriterManualListTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterManualListTest.cpp) locks validation and membership command semantics.
-- Manual and smart source tests under [`test/unit/runtime/source/`](../../../../test/unit/runtime/source/) lock effective membership.
+- [`LibraryWriterListOrderTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListOrderTest.cpp) and [`LibraryWriterListMembershipTest.cpp`](../../../../test/unit/runtime/library/LibraryWriterListMembershipTest.cpp) lock rank and tag-backed editing semantics.
+- [`ListOrderSourceTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceTest.cpp), [`ListOrderSourceObserverTest.cpp`](../../../../test/unit/runtime/source/ListOrderSourceObserverTest.cpp), and predicate-source tests lock effective membership and ordering.
 
 ## Related documents
 

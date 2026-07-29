@@ -45,6 +45,7 @@ namespace ao::gtk
 
     // Column setup — calls factoryProvider for each presentable field
     void configureColumns(FactoryProvider const& factoryProvider);
+    void prependUtilityColumn(Glib::RefPtr<Gtk::ColumnViewColumn> const& columnPtr);
 
     // Layout management
     void applyColumnLayout(std::span<rt::TrackField const> visibleFields);
@@ -85,6 +86,7 @@ namespace ao::gtk
     void updateSharedColumnLayout();
     void applySolvedColumnWidths(std::span<uimodel::TrackColumnSolveSpec const> specs);
     std::int32_t resolvedViewportWidth() const;
+    std::int32_t leadingUtilityWidth() const;
     std::vector<rt::TrackField> visibleFieldsInColumnOrder() const;
     std::vector<std::int32_t> visibleColumnWidths() const;
     std::vector<rt::TrackField> visibleFieldsInStoredOrder(std::span<rt::TrackField const> visibleFields) const;
@@ -101,6 +103,7 @@ namespace ao::gtk
     uimodel::TrackColumnLayoutStore& _layoutStore;
 
     std::vector<ColumnBinding> _columns;
+    std::size_t _leadingUtilityColumnCount = 0;
     sigc::scoped_connection _columnViewMappedConnection;
     sigc::scoped_connection _horizontalAdjustmentChangedConnection;
     sigc::scoped_connection _horizontalPageSizeChangedConnection;

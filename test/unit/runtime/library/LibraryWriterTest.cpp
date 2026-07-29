@@ -3,12 +3,17 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/TestUtils.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/detail/LibraryError.h>
+#include <ao/lmdb/Environment.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
+#include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -16,9 +21,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -26,6 +33,30 @@
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    struct RawListRecord final
+    {
+      std::uint32_t listId = 0;
+      std::span<std::byte const> payload{};
+    };
+
+    void seedRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
+    {
+      auto environment = lmdb::test::openEnvironment(path, {.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
+      auto transaction = lmdb::test::beginWriteTransaction(environment);
+      auto database = lmdb::test::openDatabase(transaction, "lists");
+      auto writer = database.writer(transaction);
+
+      for (auto const& record : records)
+      {
+        REQUIRE(writer.create(record.listId, record.payload));
+      }
+
+      REQUIRE(transaction.commit());
+    }
+  } // namespace
+
   TEST_CASE("LibraryWriter - updateMetadata publishes TracksMutated", "[runtime][unit][library][mutation]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -250,18 +281,16 @@ namespace ao::rt::test
     CHECK(result.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("LibraryWriter - manual lists can be created and updated", "[runtime][unit][library][list]")
+  TEST_CASE("LibraryWriter - lists can be created and updated", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto const t1 = libraryFixture.addTrack("A");
     auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
-    draft.name = "Manual List";
-    draft.kind = LibraryWriter::ListKind::Manual;
-    draft.trackIds = {t1};
+    draft.name = "List";
+    draft.expression = R"(#favorite)";
 
     auto const listId = ao::test::requireValue(service.createList(draft));
     CHECK(listId != kInvalidListId);
@@ -269,10 +298,14 @@ namespace ao::rt::test
     auto updateDraft = LibraryWriter::ListDraft{};
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
-    updateDraft.kind = LibraryWriter::ListKind::Manual;
-    updateDraft.trackIds = {t1, t1};
+    updateDraft.expression = R"(#favorite or #recent)";
     auto const updateResult = service.updateList(updateDraft);
     REQUIRE(updateResult);
+
+    auto const optNode = writerFixture.library().reader().listNode(listId);
+    REQUIRE(optNode);
+    CHECK(optNode->name == "Updated");
+    CHECK(optNode->expression == R"(#favorite or #recent)");
   }
 
   TEST_CASE("LibraryWriter - updateList publishes ListsMutated", "[runtime][unit][library][mutation]")
@@ -283,7 +316,6 @@ namespace ao::rt::test
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
-    draft.kind = LibraryWriter::ListKind::Manual;
     draft.name = "Original";
     auto const listId = ao::test::requireValue(service.createList(draft));
 
@@ -291,7 +323,6 @@ namespace ao::rt::test
     auto sub = changes.onChanged([&](LibraryChangeSet const& ev) noexcept { upserted = ev.listsUpserted; });
 
     auto updateDraft = LibraryWriter::ListDraft{};
-    updateDraft.kind = LibraryWriter::ListKind::Manual;
     updateDraft.listId = listId;
     updateDraft.name = "Updated";
     auto const updateResult = service.updateList(updateDraft);
@@ -311,7 +342,6 @@ namespace ao::rt::test
     SECTION("invalid smart filter")
     {
       auto draft = LibraryWriter::ListDraft{};
-      draft.kind = LibraryWriter::ListKind::Smart;
       draft.name = "Invalid";
       draft.expression = "(";
 
@@ -323,22 +353,22 @@ namespace ao::rt::test
             library::ListStore::Reader::Iterator{});
     }
 
-    SECTION("empty smart filter")
+    SECTION("empty expression matches the parent source")
     {
       auto draft = LibraryWriter::ListDraft{};
-      draft.kind = LibraryWriter::ListKind::Smart;
       draft.name = "Empty";
 
       auto const result = service.createList(draft);
-      REQUIRE_FALSE(result);
-      CHECK(result.error().code == Error::Code::InvalidInput);
-      CHECK(result.error().message.contains("must be non-empty"));
+      REQUIRE(result);
+
+      auto const optNode = writerFixture.library().reader().listNode(*result);
+      REQUIRE(optNode);
+      CHECK(optNode->expression.empty());
     }
 
     SECTION("missing parent")
     {
       auto draft = LibraryWriter::ListDraft{};
-      draft.kind = LibraryWriter::ListKind::Manual;
       draft.name = "Child";
       draft.parentId = ListId{999};
 
@@ -351,7 +381,6 @@ namespace ao::rt::test
     SECTION("self parent")
     {
       auto draft = LibraryWriter::ListDraft{};
-      draft.kind = LibraryWriter::ListKind::Manual;
       draft.name = "List";
       auto const listId = ao::test::requireValue(service.createList(draft));
 
@@ -366,18 +395,15 @@ namespace ao::rt::test
     SECTION("descendant parent")
     {
       auto parentDraft = LibraryWriter::ListDraft{};
-      parentDraft.kind = LibraryWriter::ListKind::Manual;
       parentDraft.name = "Parent";
       auto const parentId = ao::test::requireValue(service.createList(parentDraft));
 
       auto childDraft = LibraryWriter::ListDraft{};
-      childDraft.kind = LibraryWriter::ListKind::Manual;
       childDraft.name = "Child";
       childDraft.parentId = parentId;
       auto const childId = ao::test::requireValue(service.createList(childDraft));
 
       auto grandchildDraft = LibraryWriter::ListDraft{};
-      grandchildDraft.kind = LibraryWriter::ListKind::Manual;
       grandchildDraft.name = "Grandchild";
       grandchildDraft.parentId = childId;
       auto const grandchildId = ao::test::requireValue(service.createList(grandchildDraft));
@@ -399,8 +425,7 @@ namespace ao::rt::test
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
-    draft.kind = LibraryWriter::ListKind::Manual;
-    draft.name = "Manual";
+    draft.name = "List";
     auto const listId = ao::test::requireValue(service.createList(draft));
     draft.listId = listId;
 
@@ -420,7 +445,6 @@ namespace ao::rt::test
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
-    draft.kind = LibraryWriter::ListKind::Manual;
     draft.listId = ListId{999};
     draft.name = "Missing";
 
@@ -438,7 +462,6 @@ namespace ao::rt::test
     auto& service = writerFixture.writer();
 
     auto draft = LibraryWriter::ListDraft{};
-    draft.kind = LibraryWriter::ListKind::Manual;
     draft.name = "ToDelete";
     auto const listId = ao::test::requireValue(service.createList(draft));
 
@@ -449,5 +472,119 @@ namespace ao::rt::test
 
     REQUIRE(deleted.size() == 1);
     CHECK(deleted[0] == listId);
+  }
+
+  TEST_CASE("LibraryWriter - subtree delete previews and commits every descendant atomically",
+            "[runtime][unit][list-delete][delete-subtree]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
+    auto& writer = writerFixture.writer();
+    auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.name = "Parent"}));
+    auto const childId =
+      ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.parentId = parentId, .name = "Child"}));
+    auto const grandchildId =
+      ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.parentId = childId, .name = "Grandchild"}));
+    auto const unrelatedId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.name = "Unrelated"}));
+
+    auto const ordinaryDelete = writer.deleteList(parentId);
+    REQUIRE_FALSE(ordinaryDelete);
+    CHECK(ordinaryDelete.error().code == Error::Code::Conflict);
+    CHECK(ordinaryDelete.error().message.contains("Child"));
+
+    auto const preview = writer.previewDeleteListAndDescendants(parentId);
+    REQUIRE(preview);
+    CHECK(preview->rootListId == parentId);
+    REQUIRE(preview->deletedLists.size() == 3);
+    CHECK(preview->deletedLists[0].listId == parentId);
+    CHECK(preview->deletedLists[1].listId == childId);
+    CHECK(preview->deletedLists[2].listId == grandchildId);
+    CHECK(writerFixture.library().reader().listNode(parentId).has_value());
+    CHECK(writerFixture.library().reader().listNode(childId).has_value());
+    CHECK(writerFixture.library().reader().listNode(grandchildId).has_value());
+
+    auto events = std::vector<LibraryChangeSet>{};
+    auto sub = changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
+    auto const result = writer.deleteListAndDescendants(parentId);
+
+    REQUIRE(result);
+    CHECK(result->deletedLists == preview->deletedLists);
+    REQUIRE(events.size() == 1);
+    CHECK(events.front().listsDeleted == std::vector{parentId, childId, grandchildId});
+    CHECK_FALSE(writerFixture.library().reader().listNode(parentId).has_value());
+    CHECK_FALSE(writerFixture.library().reader().listNode(childId).has_value());
+    CHECK_FALSE(writerFixture.library().reader().listNode(grandchildId).has_value());
+    CHECK(writerFixture.library().reader().listNode(unrelatedId).has_value());
+  }
+
+  TEST_CASE("LibraryWriter - subtree delete rejects cycles without deleting any List",
+            "[runtime][regression][list-delete][delete-subtree]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const firstPayload =
+      ao::test::requireValue(library::ListBuilder::makeEmpty().parentId(ListId{2}).name("First").serialize());
+    auto const secondPayload =
+      ao::test::requireValue(library::ListBuilder::makeEmpty().parentId(ListId{1}).name("Second").serialize());
+    seedRawListRecords(temp.path(),
+                       std::array{RawListRecord{.listId = 1, .payload = firstPayload},
+                                  RawListRecord{.listId = 2, .payload = secondPayload}});
+    auto musicLibrary = library::MusicLibrary{temp.path(), temp.path()};
+    auto changes = makeInlineLibraryChanges(musicLibrary);
+    auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
+    auto events = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
+
+    auto const result = writerFixture.writer().deleteListAndDescendants(ListId{1});
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
+    CHECK(result.error().message.contains("cycle"));
+    auto transaction = musicLibrary.readTransaction();
+    auto reader = musicLibrary.lists().reader(transaction);
+    CHECK(reader.get(ListId{1}).has_value());
+    CHECK(reader.get(ListId{2}).has_value());
+    CHECK(events.empty());
+  }
+
+  TEST_CASE("LibraryWriter - corrupt List iteration aborts subtree deletion without partial state",
+            "[runtime][regression][list-delete][delete-subtree]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto const rootPayload = ao::test::requireValue(library::ListBuilder::makeEmpty().name("Root").serialize());
+    auto const childPayload =
+      ao::test::requireValue(library::ListBuilder::makeEmpty().parentId(ListId{1}).name("Child").serialize());
+    auto const corruptPayload = std::array<std::byte, 4>{};
+    seedRawListRecords(temp.path(),
+                       std::array{RawListRecord{.listId = 1, .payload = rootPayload},
+                                  RawListRecord{.listId = 2, .payload = childPayload},
+                                  RawListRecord{.listId = 3, .payload = corruptPayload}});
+    auto musicLibrary = library::MusicLibrary{temp.path(), temp.path()};
+    auto changes = makeInlineLibraryChanges(musicLibrary);
+    auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
+    auto events = std::vector<LibraryChangeSet>{};
+    auto subscription =
+      changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
+
+    try
+    {
+      std::ignore = writerFixture.writer().deleteListAndDescendants(ListId{1});
+      FAIL("corrupt List subtree scan did not throw");
+    }
+    catch (library::detail::LibraryException const& error)
+    {
+      CHECK(error.error().code == Error::Code::CorruptData);
+    }
+
+    auto transaction = musicLibrary.readTransaction();
+    auto reader = musicLibrary.lists().reader(transaction);
+    auto const optRoot = reader.get(ListId{1});
+    auto const optChild = reader.get(ListId{2});
+    REQUIRE(optRoot);
+    REQUIRE(optChild);
+    CHECK(optRoot->name() == "Root");
+    CHECK(optChild->parentId() == ListId{1});
+    CHECK(events.empty());
   }
 } // namespace ao::rt::test

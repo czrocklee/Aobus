@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
@@ -89,14 +89,7 @@ namespace ao::library
       return false;
     }
 
-    std::size_t rowCount = 0;
-
-    switch (mode)
-    {
-      case LoadMode::Hot: rowCount = _hotReader.entryCount(); break;
-      case LoadMode::Cold: rowCount = _coldReader.entryCount(); break;
-      case LoadMode::Both: rowCount = std::min(_hotReader.entryCount(), _coldReader.entryCount()); break;
-    }
+    auto const rowCount = entryCount(mode);
 
     constexpr std::size_t kCursorScanDensityDenominator = 4;
     auto const minimumDenseSelection = (rowCount / kCursorScanDensityDenominator) +
@@ -108,6 +101,18 @@ namespace ao::library
     }
 
     return std::ranges::adjacent_find(ids, std::ranges::greater_equal{}) == ids.end();
+  }
+
+  std::size_t TrackStore::Reader::entryCount(LoadMode const mode) const
+  {
+    switch (mode)
+    {
+      case LoadMode::Hot: return _hotReader.entryCount();
+      case LoadMode::Cold: return _coldReader.entryCount();
+      case LoadMode::Both: return std::min(_hotReader.entryCount(), _coldReader.entryCount());
+    }
+
+    return 0;
   }
 
   TrackStore::Reader::Iterator TrackStore::Reader::begin(LoadMode mode) const

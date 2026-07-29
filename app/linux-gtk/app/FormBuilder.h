@@ -5,6 +5,7 @@
 
 #include <glibmm/refptr.h>
 #include <gtkmm/listbox.h>
+#include <gtkmm/listboxrow.h>
 #include <gtkmm/sizegroup.h>
 #include <gtkmm/widget.h>
 
@@ -26,8 +27,8 @@ namespace ao::gtk
     FormBoxedList(FormBoxedList&&) = delete;
     FormBoxedList& operator=(FormBoxedList&&) = delete;
 
-    void addRow(std::string const& labelText, Gtk::Widget& widget);
-    void addEntryRow(std::string const& labelText, Gtk::Widget& entry);
+    Gtk::ListBoxRow& addRow(std::string const& labelText, Gtk::Widget& widget);
+    Gtk::ListBoxRow& addEntryRow(std::string const& labelText, Gtk::Widget& entry);
 
   private:
     Glib::RefPtr<Gtk::SizeGroup> _labelSizeGroupPtr;

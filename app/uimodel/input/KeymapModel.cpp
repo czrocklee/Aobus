@@ -211,6 +211,10 @@ namespace ao::uimodel
       {"playback.toggleShuffle", {chord("Ctrl+U")}},
       {"playback.cycleRepeat", {chord("Ctrl+R")}},
       {"workspace.revealCurrentTrack", {chord("Ctrl+L")}},
+      {"track.orderMoveUp", {chord("Alt+Up")}},
+      {"track.orderMoveDown", {chord("Alt+Down")}},
+      {"track.orderMoveToTop", {chord("Alt+Home")}},
+      {"track.orderMoveToBottom", {chord("Alt+End")}},
     };
   }
 } // namespace ao::uimodel

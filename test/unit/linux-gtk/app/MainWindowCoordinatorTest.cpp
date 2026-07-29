@@ -232,9 +232,7 @@ namespace ao::gtk::test
     rt::test::addReadyAudioProvider(runtime);
     auto& playback = runtime.playback();
     auto const sourceListId = ao::test::requireValue(runtime.library().writer().createList(rt::LibraryWriter::ListDraft{
-      .kind = rt::LibraryWriter::ListKind::Manual,
       .name = "Temporary sequence source",
-      .trackIds = {trackId},
     }));
     runtime.reloadAllTracks();
     auto const sourceViewId = ao::test::requireValue(runtime.workspace().navigate({.target = sourceListId}));

@@ -60,12 +60,18 @@ Track show/update and tag add/remove may select explicit ids or a predicate expr
 Predicate selection uses the shared query compiler/evaluator; formatted track output uses the scalar format-expression compiler.
 Format expressions are plain-output only and cannot be combined with YAML/JSON output.
 
-List detail uses the runtime source path, so manual-list parent membership and nested Smart List filtering match interactive frontends.
+List detail uses the runtime source path, so parent composition, local filtering, and the saved rank overlay match interactive frontends.
+The returned `tracks` sequence is effective membership in effective order; the separate `order` field is raw saved rank and may contain currently hidden tracks.
 
 ### Preview and commit
 
 Writer-backed dry-run commands invoke the corresponding `preview*` runtime method.
 The writer performs normal validation and mutation logic inside the write transaction, constructs the ordinary reply, suppresses change publication, and aborts instead of committing.
+
+`list add` and `list remove` delegate to the shared writable-tag List operation.
+Add mutates the List's positive tag on the selected tracks; Remove mutates that tag and atomically forgets their saved List positions.
+Saved-order moves bind the current effective sequence and committed revision before asking the writer to apply stable-ID movement, so an intervening mutation is reported instead of applying stale row coordinates.
+Ordinary List delete rejects descendants, while `list delete --descendants` selects one atomic complete-subtree operation and its dry-run exposes the same affected rows.
 
 Scan dry-run uses the scan plan without apply.
 Library import dry-run decodes and applies through the import transaction, then aborts and does not update restore metadata.

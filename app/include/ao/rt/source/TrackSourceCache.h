@@ -44,6 +44,7 @@ namespace ao::rt
   class LibraryChanges;
   struct LibraryChangeSet;
   class CachedListSource;
+  class ListOrderSource;
 
   class TrackSourceCache final
   {
@@ -67,7 +68,7 @@ namespace ao::rt
     void handleLibraryChange(LibraryChangeSet const& event) noexcept;
     void handleLibraryReset();
     void handleIncrementalLibraryChange(LibraryChangeSet const& event);
-    std::vector<ListId> applyManualContentChanges(LibraryChangeSet const& event);
+    std::vector<ListId> applyListOrderChanges(LibraryChangeSet const& event);
     void notifyMetadataUpdates(LibraryChangeSet const& event);
     void refreshList(ListId listId);
     void eraseList(ListId listId);
@@ -75,8 +76,8 @@ namespace ao::rt
     void drainPendingRefreshes();
     void refreshListNow(ListId listId);
     std::shared_ptr<CachedListSource> findSource(ListId listId);
-    std::unique_ptr<TrackSource> buildImplementation(library::ListView const& view,
-                                                     TrackSourceLease const& parentLease);
+    std::unique_ptr<ListOrderSource> buildImplementation(library::ListView const& view,
+                                                         TrackSourceLease const& parentLease);
     void linkGraph(ListId listId, ListId parentId);
     void unlinkGraph(ListId listId);
     void collectDescendantsPostorder(ListId listId, std::vector<ListId>& listIds) const;

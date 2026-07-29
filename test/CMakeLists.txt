@@ -164,6 +164,7 @@ add_executable(ao_core_test
      unit/uimodel/field/TrackFieldFormatterTest.cpp
     unit/uimodel/input/KeyChordTest.cpp
     unit/uimodel/input/KeymapModelTest.cpp
+    unit/uimodel/input/KeyRepeatGuardTest.cpp
     unit/uimodel/input/KeymapStoreTest.cpp
     unit/uimodel/preference/PreferencesEditorModelTest.cpp
     unit/uimodel/preference/ThemePresetTest.cpp
@@ -186,6 +187,9 @@ add_executable(ao_core_test
     unit/uimodel/library/detail/TrackFieldGridPolicyTest.cpp
     unit/uimodel/library/detail/TrackFieldGridSchemaTest.cpp
     unit/uimodel/library/list/ListActionPolicyTest.cpp
+    unit/uimodel/library/list/ListMembershipAuthoringSessionTest.cpp
+    unit/uimodel/library/list/ListOrderAuthoringSessionTest.cpp
+    unit/uimodel/library/list/ListOrderPolicyTest.cpp
     unit/uimodel/library/list/ListTreeProjectionTest.cpp
     unit/uimodel/library/list/SmartListEditorModelTest.cpp
     unit/uimodel/library/list/SmartListTrackPresentationResolverTest.cpp
@@ -256,7 +260,8 @@ add_executable(ao_core_test
     unit/runtime/library/LibraryWriterTagCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackCreateCommandTest.cpp
     unit/runtime/library/LibraryWriterTrackDeleteCommandTest.cpp
-    unit/runtime/library/LibraryWriterManualListTest.cpp
+    unit/runtime/library/LibraryWriterListMembershipTest.cpp
+    unit/runtime/library/LibraryWriterListOrderTest.cpp
     unit/runtime/TrackFieldTest.cpp
     unit/runtime/library/LibraryWriterDryRunTest.cpp
     unit/runtime/library/LibraryChangesTest.cpp
@@ -278,7 +283,10 @@ add_executable(ao_core_test
     unit/runtime/PlaybackTransportSelectionTest.cpp
     unit/runtime/PlaybackTransportTest.cpp
     unit/runtime/PlaybackTransportTokenTest.cpp
-    unit/runtime/PlaybackSuccessionTest.cpp
+    unit/runtime/PlaybackSuccessionLaunchTest.cpp
+    unit/runtime/PlaybackSuccessionProjectionTest.cpp
+    unit/runtime/PlaybackSuccessionAdvanceTest.cpp
+    unit/runtime/PlaybackSuccessionFailureTest.cpp
     unit/runtime/PlaybackSessionTest.cpp
     unit/runtime/source/AllTracksSourceTest.cpp
     unit/runtime/source/TrackSourceCacheTest.cpp
@@ -294,14 +302,15 @@ add_executable(ao_core_test
     unit/runtime/completion/MetadataValueCompleterTest.cpp
     unit/runtime/NotificationServiceTest.cpp
     unit/runtime/NotificationServiceExpiryTest.cpp
+    unit/runtime/WritableTagListTest.cpp
     unit/runtime/completion/QueryExpressionCompleterTest.cpp
     unit/runtime/ViewServiceLifecycleTest.cpp
     unit/runtime/ViewServiceListFilterTest.cpp
     unit/runtime/ViewServicePresentationTest.cpp
     unit/runtime/ViewServiceSelectionTest.cpp
     unit/runtime/ConfigStoreTest.cpp
-    unit/runtime/source/ManualListSourceObserverTest.cpp
-    unit/runtime/source/ManualListSourceTest.cpp
+    unit/runtime/source/ListOrderSourceObserverTest.cpp
+    unit/runtime/source/ListOrderSourceTest.cpp
     unit/runtime/NavigationHistoryTest.cpp
     unit/runtime/WorkspaceHistoryTest.cpp
     unit/runtime/WorkspaceNavigationTest.cpp

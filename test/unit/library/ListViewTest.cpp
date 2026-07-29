@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestUtils.h"
 #include <ao/CoreIds.h>
@@ -9,8 +9,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <span>
 #include <vector>
 
@@ -20,7 +23,7 @@ namespace ao::library::test
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
     auto const view = ListView{payload};
-    CHECK(view.tracks().empty());
+    CHECK(view.orderTrackIds().empty());
   }
 
   TEST_CASE("ListView - returns serialized field values", "[library][unit][list]")
@@ -29,45 +32,42 @@ namespace ao::library::test
       ao::test::requireValue(ListBuilder::makeEmpty().name("Test").description("Desc").parentId(ListId{9}).serialize());
     auto const view = ListView{payload};
 
-    CHECK(view.tracks().empty());
+    CHECK(view.orderTrackIds().empty());
     CHECK(view.name() == "Test");
     CHECK(view.description() == "Desc");
     CHECK(view.filter().empty());
-    CHECK(view.isSmart() == false);
     CHECK(view.parentId() == ListId{9});
     CHECK(view.isRootParent() == false);
   }
 
-  TEST_CASE("ListView - returns track IDs for manual lists", "[library][unit][list]")
+  TEST_CASE("ListView - returns stored order track IDs", "[library][unit][list]")
   {
     auto builder = ListBuilder::makeEmpty().name("My List").description("Description");
-    builder.tracks().add(TrackId{100});
-    builder.tracks().add(TrackId{200});
-    builder.tracks().add(TrackId{300});
+    builder.orderTrackIds().add(TrackId{100});
+    builder.orderTrackIds().add(TrackId{200});
+    builder.orderTrackIds().add(TrackId{300});
     auto const payload = ao::test::requireValue(builder.serialize());
     auto const view = ListView{payload};
 
-    CHECK(view.tracks().size() == 3);
-    CHECK_FALSE(view.tracks().empty());
+    CHECK(view.orderTrackIds().size() == 3);
+    CHECK_FALSE(view.orderTrackIds().empty());
     CHECK(view.name() == "My List");
     CHECK(view.description() == "Description");
-    CHECK(view.isSmart() == false);
-    CHECK(view.tracks()[0] == TrackId{100});
-    CHECK(view.tracks()[1] == TrackId{200});
-    CHECK(view.tracks()[2] == TrackId{300});
+    CHECK(view.orderTrackIds()[0] == TrackId{100});
+    CHECK(view.orderTrackIds()[1] == TrackId{200});
+    CHECK(view.orderTrackIds()[2] == TrackId{300});
   }
 
-  TEST_CASE("ListView - returns filters for smart lists", "[library][unit][list]")
+  TEST_CASE("ListView - returns local expressions", "[library][unit][list]")
   {
     auto const payload = ao::test::requireValue(
       ListBuilder::makeEmpty().name("Smart List").description("A smart list").filter("@year > 2020").serialize());
     auto const view = ListView{payload};
 
-    CHECK(view.tracks().empty());
+    CHECK(view.orderTrackIds().empty());
     CHECK(view.name() == "Smart List");
     CHECK(view.description() == "A smart list");
     CHECK(view.filter() == "@year > 2020");
-    CHECK(view.isSmart() == true);
   }
 
   TEST_CASE("ListView - returns empty strings when lengths are zero", "[library][unit][list]")
@@ -89,7 +89,7 @@ namespace ao::library::test
       CHECK(view.name().empty());
       CHECK(view.description().empty());
       CHECK(view.filter().empty());
-      CHECK(view.tracks().empty());
+      CHECK(view.orderTrackIds().empty());
       CHECK(view.parentId() == kInvalidListId);
     };
 
@@ -103,7 +103,7 @@ namespace ao::library::test
     {
       auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
       auto header = ListHeader{};
-      header.trackIdCount = 4;
+      header.orderTrackIdCount = 4;
       std::memcpy(data.data(), &header, sizeof(ListHeader));
       checkPoisoned(ListView{data});
     }
@@ -112,7 +112,6 @@ namespace ao::library::test
     {
       auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
       auto header = ListHeader{};
-      header.nameOffset = 0;
       header.nameLength = 16;
       std::memcpy(data.data(), &header, sizeof(ListHeader));
       checkPoisoned(ListView{data});
@@ -125,22 +124,36 @@ namespace ao::library::test
     CHECK(ListView{payload}.isValid());
   }
 
-  TEST_CASE("ListView - isSmart", "[library][unit][list]")
+  TEST_CASE("ListView - rejects trailing bytes and nonzero padding", "[library][unit][list]")
   {
-    auto const manualPayload = ao::test::requireValue(ListBuilder::makeEmpty().name("Manual").serialize());
-    auto const manualView = ListView{manualPayload};
-    CHECK(manualView.isSmart() == false);
+    auto trailingPayload = ao::test::requireValue(ListBuilder::makeEmpty().name("Aligned").serialize());
+    trailingPayload.insert(trailingPayload.end(), 4, std::byte{0});
+    CHECK_FALSE(ListView{trailingPayload}.isValid());
 
-    auto const smartPayload =
-      ao::test::requireValue(ListBuilder::makeEmpty().name("Smart").filter("@year > 2020").serialize());
-    auto const smartView = ListView{smartPayload};
-    CHECK(smartView.isSmart() == true);
+    auto nonzeroPaddingPayload = ao::test::requireValue(ListBuilder::makeEmpty().name("x").serialize());
+    nonzeroPaddingPayload.back() = std::byte{1};
+    CHECK_FALSE(ListView{nonzeroPaddingPayload}.isValid());
   }
 
-  TEST_CASE("ListView - returns large track ID counts", "[library][unit][list]")
+  TEST_CASE("ListView - rejects an unaligned record base", "[library][regression][list]")
   {
     auto const payload = ao::test::requireValue(ListBuilder::makeEmpty().name("Test").serialize());
-    auto const view = ListView{payload};
-    CHECK(view.tracks().empty());
+    auto backing = std::vector<std::byte>(payload.size() + 1);
+    std::ranges::copy(payload, backing.begin() + 1);
+    auto const unaligned = std::span<std::byte const>{backing.data() + 1, payload.size()};
+
+    CHECK_FALSE(ListView{unaligned}.isValid());
+  }
+
+  TEST_CASE("ListView - rejects a track count that overflows a 32-bit host", "[library][regression][list]")
+  {
+    if constexpr (sizeof(std::size_t) == 4)
+    {
+      auto data = std::vector<std::byte>(kListHeaderSize, std::byte{0});
+      auto header = ListHeader{};
+      header.orderTrackIdCount = std::numeric_limits<std::uint32_t>::max();
+      std::memcpy(data.data(), &header, sizeof(header));
+      CHECK_FALSE(ListView{data}.isValid());
+    }
   }
 } // namespace ao::library::test

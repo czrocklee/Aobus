@@ -62,8 +62,7 @@ Classical Conductors groups by Conductor and keeps Composer, Work, Ensemble, and
 
 ## Recommendation
 
-Manual lists recommend the source-order preset so reorder controls correspond to visible order.
-Smart-list recommendation inspects successfully parsed filter variables with this priority:
+Saved-List recommendation inspects successfully parsed local-filter variables with this priority:
 
 | Filter signal | Recommended intent |
 |---|---|
@@ -78,7 +77,13 @@ Smart-list recommendation inspects successfully parsed filter variables with thi
 
 Canonical variable names and their documented aliases resolve through the same typed core descriptor before UIModel applies this priority.
 Recommendation is a one-way read of expression structure.
-It neither compiles the predicate nor changes Smart List or transient-filter membership.
+An empty or invalid expression and All Tracks fall back to Albums.
+It neither compiles the predicate nor changes saved-List or transient-filter membership.
+
+Manual Order is the built-in flat presentation whose `sortBy` is empty.
+It preserves the effective source sequence produced by the saved List's rank overlay.
+It is selected explicitly by the user or by the New Playlist template; storage does not classify a List as manual and recommendation does not infer Manual Order from an empty filter.
+All Tracks may still preserve source order in a custom flat unsorted presentation, but it has no writable rank overlay and its Manual Order choice is disabled.
 
 ## Failure and lifecycle
 

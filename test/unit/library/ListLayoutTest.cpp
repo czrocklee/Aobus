@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/library/ListLayout.h>
 
@@ -17,13 +17,10 @@ namespace ao::library::test
 
   TEST_CASE("ListHeader - stores fields at stable offsets", "[library][unit][list]")
   {
-    CHECK(offsetof(ListHeader, trackIdCount) == 0);
-    CHECK(offsetof(ListHeader, nameOffset) == 4);
-    CHECK(offsetof(ListHeader, nameLength) == 6);
-    CHECK(offsetof(ListHeader, descOffset) == 8);
-    CHECK(offsetof(ListHeader, descLength) == 10);
-    CHECK(offsetof(ListHeader, filterOffset) == 12);
-    CHECK(offsetof(ListHeader, filterLength) == 14);
+    CHECK(offsetof(ListHeader, orderTrackIdCount) == 0);
+    CHECK(offsetof(ListHeader, nameLength) == 4);
+    CHECK(offsetof(ListHeader, descLength) == 8);
+    CHECK(offsetof(ListHeader, filterLength) == 12);
     CHECK(offsetof(ListHeader, parentId) == 16);
   }
 } // namespace ao::library::test

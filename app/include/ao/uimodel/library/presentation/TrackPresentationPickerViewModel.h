@@ -42,6 +42,16 @@ namespace ao::uimodel
     rt::TrackPresentationSpec spec{};
   };
 
+  struct TrackPresentationEligibility final
+  {
+    bool enabled = true;
+    std::string disabledReason{};
+
+    bool operator==(TrackPresentationEligibility const&) const = default;
+  };
+
+  TrackPresentationEligibility trackPresentationEligibility(ListId listId, std::string_view presentationId);
+
   class TrackPresentationPickerViewModel final
   {
   public:

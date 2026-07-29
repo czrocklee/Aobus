@@ -113,6 +113,13 @@ namespace ao::gtk
       auto* const btn = Gtk::make_managed<Gtk::Button>(item.label);
       btn->set_halign(Gtk::Align::FILL);
       btn->set_has_frame(false);
+      btn->set_sensitive(item.enabled);
+
+      if (!item.disabledReason.empty())
+      {
+        btn->set_tooltip_text(item.disabledReason);
+      }
+
       btn->add_css_class("ao-presentation-menu-item");
 
       if (item.type == uimodel::TrackPresentationMenuItemType::CreateCustomView)

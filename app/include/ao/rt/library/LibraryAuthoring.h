@@ -73,7 +73,55 @@ namespace ao::rt
     friend class LibraryMutationService;
   };
 
+  /**
+   * Immutable evidence for one saved List's complete effective source order at
+   * a committed library revision.
+   */
+  class BoundListOrder final
+  {
+  public:
+    BoundListOrder(BoundListOrder const&) = default;
+    BoundListOrder& operator=(BoundListOrder const&) = default;
+    BoundListOrder(BoundListOrder&&) noexcept = default;
+    BoundListOrder& operator=(BoundListOrder&&) noexcept = default;
+    ~BoundListOrder() = default;
+
+    std::uint64_t runtimeInstanceId() const noexcept { return _runtimeInstanceId; }
+    std::uint64_t libraryRevision() const noexcept { return _libraryRevision; }
+    ListId listId() const noexcept { return _listId; }
+    std::span<TrackId const> effectiveTrackIds() const noexcept { return _effectiveTrackIds; }
+
+    bool operator==(BoundListOrder const&) const = default;
+
+  private:
+    BoundListOrder(std::uint64_t runtimeInstanceId,
+                   std::uint64_t libraryRevision,
+                   ListId listId,
+                   std::vector<TrackId> effectiveTrackIds)
+      : _runtimeInstanceId{runtimeInstanceId}
+      , _libraryRevision{libraryRevision}
+      , _listId{listId}
+      , _effectiveTrackIds{std::move(effectiveTrackIds)}
+    {
+    }
+
+    std::uint64_t _runtimeInstanceId = 0;
+    std::uint64_t _libraryRevision = 0;
+    ListId _listId = kInvalidListId;
+    std::vector<TrackId> _effectiveTrackIds;
+
+    friend class LibraryMutationService;
+  };
+
   enum class TrackAuthoringStatus : std::uint8_t
+  {
+    Applied,
+    NoOp,
+    Stale,
+    Unavailable,
+  };
+
+  enum class ListOrderAuthoringStatus : std::uint8_t
   {
     Applied,
     NoOp,
@@ -87,5 +135,12 @@ namespace ao::rt
     TrackAuthoringStatus status = TrackAuthoringStatus::NoOp;
     Reply reply{};
     std::optional<BoundTrackTargets> optNextTargets{};
+  };
+
+  template<typename Reply>
+  struct ListOrderAuthoringResult final
+  {
+    ListOrderAuthoringStatus status = ListOrderAuthoringStatus::NoOp;
+    Reply reply{};
   };
 } // namespace ao::rt

@@ -54,6 +54,7 @@ namespace ao::gtk
   private:
     void handleSelectionChanged(std::uint32_t position, std::uint32_t nItems);
     void handleActivateCurrentSelection();
+    void handleSecondaryClick(double xPosition, double yPosition);
     TrackId trackIdAtPosition(std::uint32_t position) const noexcept;
 
     Gtk::ColumnView& _columnView;

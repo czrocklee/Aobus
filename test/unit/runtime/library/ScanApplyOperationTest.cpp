@@ -652,14 +652,14 @@ namespace ao::rt::test
                       spec.customMetadata = {{"catalog", "AOB-42"}};
                     });
 
-    auto manualListId = kInvalidListId;
+    auto orderedListId = kInvalidListId;
     {
       auto transaction = library::test::writeTransaction(ml);
       auto listBuilder = library::ListBuilder::makeEmpty();
-      listBuilder.name("Manual").tracks().add(originalTrackId);
+      listBuilder.name("Ordered").orderTrackIds().add(originalTrackId);
       auto createResult = ml.lists().writer(transaction).create(ao::test::requireValue(listBuilder.serialize()));
       REQUIRE(createResult);
-      manualListId = createResult->first;
+      orderedListId = createResult->first;
       REQUIRE(transaction.commit());
     }
 
@@ -726,10 +726,10 @@ namespace ao::rt::test
     CHECK(newManifestResult->audioPayloadLength() == originalPayloadLength);
     CHECK(newManifestResult->audioSignature() == originalSignature);
 
-    auto const optManualList = ml.lists().reader(transaction).get(manualListId);
-    REQUIRE(optManualList);
-    REQUIRE(optManualList->tracks().size() == 1);
-    CHECK(optManualList->tracks()[0] == originalTrackId);
+    auto const optOrderedList = ml.lists().reader(transaction).get(orderedListId);
+    REQUIRE(optOrderedList);
+    REQUIRE(optOrderedList->orderTrackIds().size() == 1);
+    CHECK(optOrderedList->orderTrackIds()[0] == originalTrackId);
   }
 
   TEST_CASE("ScanApplyOperation - rejects moved files whose live identity changed after preparation",

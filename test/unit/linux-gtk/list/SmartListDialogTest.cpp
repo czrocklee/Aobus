@@ -6,8 +6,9 @@
 #include "test/unit/linux-gtk/GtkTestSupport.h"
 #include "track/TrackRowCache.h"
 #include <ao/CoreIds.h>
+#include <ao/query/Expression.h>
+#include <ao/query/Serializer.h>
 #include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -31,7 +32,7 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(dialog.editListId() == kInvalidListId);
-    CHECK(dialog.draft().kind == rt::LibraryWriter::ListKind::Smart);
+    CHECK(dialog.draft().expression.empty());
 
     bool foundTwoPane = false;
     bool foundConfigPane = false;
@@ -158,5 +159,26 @@ namespace ao::gtk::test
     drainGtkEvents();
 
     CHECK(okButton->get_sensitive());
+  }
+
+  TEST_CASE("SmartListDialog - Playlist template exposes a visible tag and chooses Manual Order",
+            "[gtk][unit][smart-list-dialog][playlist]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto fixture = GtkRuntimeFixture{};
+    auto window = Gtk::Window{};
+    auto cache = TrackRowCache{fixture.runtime().library()};
+    auto dialog = SmartListDialog{window, fixture.runtime(), rt::kAllTracksListId, cache};
+
+    dialog.configurePlaylistTemplate("Road Trip");
+    drainGtkEvents();
+
+    auto* const membershipTagLabel = findLabelByText(dialog, "Membership Tag");
+    REQUIRE(membershipTagLabel != nullptr);
+    CHECK(membershipTagLabel->get_visible());
+    CHECK(dialog.get_title() == "New Playlist");
+    CHECK(dialog.presentationId() == "list-order");
+    CHECK(dialog.draft().expression ==
+          query::serialize(query::VariableExpression{.type = query::VariableType::Tag, .name = "Road Trip"}));
   }
 } // namespace ao::gtk::test

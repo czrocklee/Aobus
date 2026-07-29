@@ -56,9 +56,15 @@ The literal plus key is `+` without modifiers or a trailing doubled plus after m
 | `playback.toggleShuffle` | `Ctrl+U` |
 | `playback.cycleRepeat` | `Ctrl+R` |
 | `workspace.revealCurrentTrack` | `Ctrl+L` |
+| `track.orderMoveUp` | `Alt+Up` |
+| `track.orderMoveDown` | `Alt+Down` |
+| `track.orderMoveToTop` | `Alt+Home` |
+| `track.orderMoveToBottom` | `Alt+End` |
 
 Other actions have no shipped global shortcut.
 `Ctrl+,` is an app-scoped fixed preference accelerator and is not part of this keymap.
+The four order shortcuts act only when the active saved List is flat and unsorted.
+GTK accepts one command per physical key-down/key-up cycle, so OS auto-repeat while a key remains held does not produce repeated full-order commits.
 
 ## Override surface
 

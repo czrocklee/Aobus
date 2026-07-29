@@ -26,6 +26,7 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutYamlSchema.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
@@ -241,6 +242,7 @@ namespace ao::winui
     }
 
     _libraryRuntimePtr = createRuntime(root);
+    bindPresentationPreferenceLifecycle();
     bindPlaybackRuntime(_libraryRuntimePtr);
   }
 
@@ -257,6 +259,7 @@ namespace ao::winui
     }
 
     _playbackCommandsPtr.reset();
+    _presentationPreferenceLifecyclePtr.reset();
     _playbackRuntimePtr.reset();
     _libraryRuntimePtr.reset();
   }
@@ -316,6 +319,36 @@ namespace ao::winui
     }
 
     return runtimePtr;
+  }
+
+  void LibrarySession::bindPresentationPreferenceLifecycle()
+  {
+    _presentationPreferenceLifecyclePtr.reset();
+    _presentationPreferenceLifecyclePtr = std::make_unique<uimodel::ListPresentationPreferenceLifecycle>(
+      _presentationPreferences.presentations,
+      _libraryRuntimePtr->library().changes(),
+      [this](ListId const) noexcept
+      {
+        try
+        {
+          auto const saved = _settingsStorePtr->save(
+            "trackView.presentations", _presentationPreferences, uimodel::ListPresentationPreferenceYamlSchema{});
+
+          if (!saved)
+          {
+            APP_LOG_WARN(
+              "LibrarySession: failed to persist deleted List preference cleanup: {}", saved.error().message);
+          }
+        }
+        catch (std::exception const& error)
+        {
+          APP_LOG_WARN("LibrarySession: deleted List preference cleanup failed: {}", error.what());
+        }
+        catch (...)
+        {
+          APP_LOG_WARN("LibrarySession: deleted List preference cleanup failed");
+        }
+      });
   }
 
   void LibrarySession::bindPlaybackRuntime(std::shared_ptr<rt::AppRuntime> runtimePtr)
@@ -521,6 +554,7 @@ namespace ao::winui
       }
 
       owner->_libraryRuntimePtr = std::move(candidatePtr);
+      owner->bindPresentationPreferenceLifecycle();
       owner->_settings.lastLibraryPath = utility::pathToUtf8(root);
 
       if (auto const saved = owner->saveSettings(); !saved)

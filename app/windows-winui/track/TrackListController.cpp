@@ -27,6 +27,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnWidthSolver.h>
 #include <ao/uimodel/library/presentation/TrackFieldPresentationPolicy.h>
 #include <ao/uimodel/library/presentation/TrackGroupHeadingPresentation.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/library/track/IndexedTrackRowCache.h>
 #include <ao/uimodel/library/track/TrackDisplayIndex.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -716,6 +717,13 @@ namespace ao::winui
     if (presentationId == "tracks" || presentationId == "folders" || presentationId == "playlists")
     {
       presentationId = rt::kDefaultTrackPresentationId;
+    }
+
+    auto const eligibility = uimodel::trackPresentationEligibility(activeListId(), presentationId);
+
+    if (!eligibility.enabled)
+    {
+      return makeError(Error::Code::InvalidInput, eligibility.disabledReason);
     }
 
     auto const* preset = rt::builtinTrackPresentationPreset(presentationId);

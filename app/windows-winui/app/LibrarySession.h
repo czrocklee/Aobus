@@ -32,6 +32,7 @@ namespace ao::rt
 
 namespace ao::uimodel
 {
+  class ListPresentationPreferenceLifecycle;
   class PlaybackCommandSurface;
 }
 
@@ -95,6 +96,7 @@ namespace ao::winui
     };
 
     std::shared_ptr<rt::AppRuntime> createRuntime(std::filesystem::path const& root);
+    void bindPresentationPreferenceLifecycle();
     void bindPlaybackRuntime(std::shared_ptr<rt::AppRuntime> runtimePtr);
     void retainPlaybackUntilIdle();
     void scheduleAdoptLibraryPlayback();
@@ -133,6 +135,7 @@ namespace ao::winui
     uimodel::ListPresentationPreferenceState _presentationPreferences{};
     std::shared_ptr<rt::AppRuntime> _libraryRuntimePtr;
     std::shared_ptr<rt::AppRuntime> _playbackRuntimePtr;
+    std::unique_ptr<uimodel::ListPresentationPreferenceLifecycle> _presentationPreferenceLifecyclePtr;
     std::unique_ptr<uimodel::PlaybackCommandSurface> _playbackCommandsPtr;
     LibrarySessionCallbacks _callbacks{};
     async::Subscription _retainedPlaybackSub;

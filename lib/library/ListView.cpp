@@ -8,11 +8,27 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string_view>
+#include <utility>
 
 namespace ao::library
 {
+  namespace
+  {
+    bool checkedAdd(std::size_t& value, std::size_t const amount) noexcept
+    {
+      if (amount > std::numeric_limits<std::size_t>::max() - value)
+      {
+        return false;
+      }
+
+      value += amount;
+      return true;
+    }
+  } // namespace
+
   ListView::ListView(std::span<std::byte const> data) noexcept
     : _payload{data}
   {
@@ -23,39 +39,85 @@ namespace ao::library
       return;
     }
 
-    auto const size = data.size();
-    auto const trackIdBytes = static_cast<std::size_t>(header->trackIdCount) * sizeof(TrackId);
+    auto const orderTrackIdBytes64 =
+      std::uint64_t{header->orderTrackIdCount} * static_cast<std::uint64_t>(sizeof(TrackId));
 
-    auto fieldFits = [size](std::uint16_t offset, std::uint16_t length) noexcept
-    { return kListHeaderSize + static_cast<std::size_t>(offset) + static_cast<std::size_t>(length) <= size; };
-
-    if (trackIdBytes > size - kListHeaderSize || !fieldFits(header->nameOffset, header->nameLength) ||
-        !fieldFits(header->descOffset, header->descLength) || !fieldFits(header->filterOffset, header->filterLength))
+    if (!std::in_range<std::size_t>(orderTrackIdBytes64))
     {
       return;
     }
 
+    auto const orderTrackIdBytes = static_cast<std::size_t>(orderTrackIdBytes64);
+    std::size_t variableSize = orderTrackIdBytes;
+    auto const nameOffset = variableSize;
+
+    if (!checkedAdd(variableSize, header->nameLength))
+    {
+      return;
+    }
+
+    auto const descOffset = variableSize;
+
+    if (!checkedAdd(variableSize, header->descLength))
+    {
+      return;
+    }
+
+    auto const filterOffset = variableSize;
+
+    if (!checkedAdd(variableSize, header->filterLength))
+    {
+      return;
+    }
+
+    std::size_t logicalSize = kListHeaderSize;
+
+    if (!checkedAdd(logicalSize, variableSize) ||
+        logicalSize > std::numeric_limits<std::size_t>::max() - (kListHeaderAlignment - 1))
+    {
+      return;
+    }
+
+    auto const recordSize =
+      (logicalSize + (kListHeaderAlignment - 1)) & ~(static_cast<std::size_t>(kListHeaderAlignment) - 1);
+
+    if (data.size() != recordSize)
+    {
+      return;
+    }
+
+    for (auto const byte : data.subspan(logicalSize))
+    {
+      if (byte != std::byte{0})
+      {
+        return;
+      }
+    }
+
+    _nameOffset = nameOffset;
+    _descOffset = descOffset;
+    _filterOffset = filterOffset;
     _header = header;
   }
 
-  std::string_view ListView::stringAt(std::uint16_t offset, std::uint16_t length) const noexcept
+  std::string_view ListView::stringAt(std::size_t offset, std::uint32_t length) const noexcept
   {
     return utility::bytes::stringView(_payload.subspan(kListHeaderSize + offset, length));
   }
 
   std::string_view ListView::name() const noexcept
   {
-    return _header == nullptr ? std::string_view{} : stringAt(_header->nameOffset, _header->nameLength);
+    return _header == nullptr ? std::string_view{} : stringAt(_nameOffset, _header->nameLength);
   }
 
   std::string_view ListView::description() const noexcept
   {
-    return _header == nullptr ? std::string_view{} : stringAt(_header->descOffset, _header->descLength);
+    return _header == nullptr ? std::string_view{} : stringAt(_descOffset, _header->descLength);
   }
 
   std::string_view ListView::filter() const noexcept
   {
-    return _header == nullptr ? std::string_view{} : stringAt(_header->filterOffset, _header->filterLength);
+    return _header == nullptr ? std::string_view{} : stringAt(_filterOffset, _header->filterLength);
   }
 
   ListId ListView::parentId() const noexcept
@@ -68,14 +130,14 @@ namespace ao::library
     return parentId() == kInvalidListId;
   }
 
-  ListView::TrackProxy ListView::tracks() const noexcept
+  ListView::OrderTrackIdProxy ListView::orderTrackIds() const noexcept
   {
     if (_header == nullptr)
     {
-      return TrackProxy{};
+      return OrderTrackIdProxy{};
     }
 
-    auto const trackIdBytes = static_cast<std::size_t>(_header->trackIdCount) * sizeof(TrackId);
-    return TrackProxy{utility::layout::viewArray<TrackId>(_payload.subspan(kListHeaderSize, trackIdBytes))};
+    auto const orderTrackIdBytes = static_cast<std::size_t>(_header->orderTrackIdCount) * sizeof(TrackId);
+    return OrderTrackIdProxy{utility::layout::viewArray<TrackId>(_payload.subspan(kListHeaderSize, orderTrackIdBytes))};
   }
 } // namespace ao::library

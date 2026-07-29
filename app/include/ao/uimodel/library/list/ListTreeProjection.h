@@ -18,7 +18,7 @@ namespace ao::uimodel
     ListId id = kInvalidListId;
     ListId parentId = kInvalidListId;
     std::string name;
-    rt::ListNodeKind kind = rt::ListNodeKind::Folder;
+    bool isSystem = false;
     std::string localExpression = {};
     std::vector<ListId> childIds = {};
   };

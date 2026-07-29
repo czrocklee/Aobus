@@ -60,6 +60,7 @@ add_library(aobus-gtk-lib STATIC
     track/TrackColumnViewHost.cpp
     track/TrackQuickFilter.cpp
     track/TrackPresentationButton.cpp
+    track/TrackOrderDragController.cpp
     track/TrackSelectionController.cpp
     track/TrackListModel.cpp
     track/TrackCustomViewDialog.cpp
@@ -70,6 +71,7 @@ add_library(aobus-gtk-lib STATIC
 
     list/ListNavigationController.cpp
     list/ListNavigationPanel.cpp
+    list/ListNavigationSectionModel.cpp
     list/ListTreeModelBuilder.cpp
     list/ListRowObject.cpp
     list/ListTreeItem.cpp

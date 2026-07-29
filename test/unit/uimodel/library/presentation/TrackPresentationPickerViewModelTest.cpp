@@ -12,6 +12,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <vector>
 
 namespace ao::uimodel::test
@@ -60,6 +61,31 @@ namespace ao::uimodel::test
     CHECK(optCommand->targetViewId == fixture.workspace.snapshot().activeViewId);
     CHECK(optCommand->targetListId == rt::kAllTracksListId);
     CHECK(optCommand->spec.id == "albums");
+    CHECK(fixture.preferences.listPresentations().empty());
+  }
+
+  TEST_CASE("TrackPresentationPickerViewModel - All Tracks exposes Manual Order as disabled with its reason",
+            "[uimodel][regression][presentation][list-order]")
+  {
+    auto fixture = TrackPresentationFixture{};
+    REQUIRE(fixture.workspace.navigate({.target = rt::kAllTracksListId}));
+    auto rendered = std::vector<TrackPresentationPickerState>{};
+    auto workflow = TrackPresentationPickerViewModel{fixture.viewService,
+                                                     fixture.workspace,
+                                                     fixture.catalog,
+                                                     fixture.preferences,
+                                                     [&rendered](auto const& state) { rendered.push_back(state); }};
+
+    workflow.refresh();
+
+    REQUIRE(rendered.size() == 1);
+    auto const item =
+      std::ranges::find(rendered.front().menuItems, rt::kListOrderTrackPresentationId, &TrackPresentationMenuItem::id);
+    REQUIRE(item != rendered.front().menuItems.end());
+    CHECK_FALSE(item->enabled);
+    CHECK(item->disabledReason ==
+          "All Tracks has no saved order. Create a saved List to arrange the full library manually.");
+    CHECK_FALSE(workflow.selectPresentation(rt::kListOrderTrackPresentationId));
     CHECK(fixture.preferences.listPresentations().empty());
   }
 

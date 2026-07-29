@@ -163,7 +163,7 @@ namespace ao::rt::test
 
     requireBackNavigation(runtime);
     auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
-    CHECK(state.presentation.id == "list-order");
+    CHECK(state.presentation.id == kDefaultTrackPresentationId);
   }
 
   TEST_CASE("WorkspaceService - goBack works after closing the active view", "[runtime][unit][workspace][history]")
@@ -234,10 +234,10 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    auto const listA = ao::test::requireValue(runtime.library().writer().createList(
-      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "A"}));
-    auto const listB = ao::test::requireValue(runtime.library().writer().createList(
-      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "B"}));
+    auto const listA =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"}));
+    auto const listB =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "B"}));
 
     requireNavigation(runtime, NavigationRequest{.target = listA, .recordHistory = true});
     auto const viewA = runtime.workspace().snapshot().activeViewId;

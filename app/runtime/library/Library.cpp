@@ -21,6 +21,7 @@
 #include <memory>
 #include <span>
 #include <utility>
+#include <vector>
 
 namespace ao::rt
 {
@@ -94,9 +95,25 @@ namespace ao::rt
     return _implPtr->writer.updateList(draft);
   }
 
-  Result<DeleteListReply> Library::deleteList(ListId const listId)
+  Result<DeleteListReply> Library::deleteList(ListId const listId, DeleteListOptions const options)
   {
-    return _implPtr->writer.deleteList(listId);
+    return _implPtr->writer.deleteList(listId, options);
+  }
+
+  Result<DeleteListReply> Library::previewDeleteList(ListId const listId, DeleteListOptions const options)
+  {
+    return _implPtr->writer.previewDeleteList(listId, options);
+  }
+
+  Result<DeleteListSubtreeReply> Library::deleteListAndDescendants(ListId const listId, DeleteListOptions const options)
+  {
+    return _implPtr->writer.deleteListAndDescendants(listId, options);
+  }
+
+  Result<DeleteListSubtreeReply> Library::previewDeleteListAndDescendants(ListId const listId,
+                                                                          DeleteListOptions const options)
+  {
+    return _implPtr->writer.previewDeleteListAndDescendants(listId, options);
   }
 
   LibraryAuthoringAvailability Library::authoringAvailability() const
@@ -113,5 +130,16 @@ namespace ao::rt
   Result<BoundTrackTargets> Library::bindTrackTargets(std::span<TrackId const> trackIds) const
   {
     return _implPtr->mutationService.bindTrackTargets(trackIds);
+  }
+
+  Result<BoundListOrder> Library::bindListOrder(ListId const listId,
+                                                std::span<TrackId const> const effectiveTrackIds) const
+  {
+    return _implPtr->mutationService.bindListOrder(listId, effectiveTrackIds);
+  }
+
+  Result<BoundListOrder> Library::bindListOrder(ListId const listId, std::vector<TrackId>&& effectiveTrackIds) const
+  {
+    return _implPtr->mutationService.bindListOrder(listId, std::move(effectiveTrackIds));
   }
 } // namespace ao::rt

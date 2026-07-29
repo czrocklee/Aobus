@@ -207,9 +207,7 @@ namespace ao::rt::test
         thirdTrackId = addPlayableTrack("Third");
         application.sources.reloadAllTracks();
         listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
-          .kind = LibraryWriter::ListKind::Manual,
           .name = "Playback order",
-          .trackIds = {firstTrackId, secondTrackId, thirdTrackId},
         }));
         viewId = ao::test::requireValue(application.workspace.navigate({.target = listId}));
         application.addReadyProvider();

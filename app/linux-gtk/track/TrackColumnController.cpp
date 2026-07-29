@@ -124,6 +124,21 @@ namespace ao::gtk
     _syncingColumnLayout = wasSyncingColumnLayout;
   }
 
+  void TrackColumnController::prependUtilityColumn(Glib::RefPtr<Gtk::ColumnViewColumn> const& columnPtr)
+  {
+    if (!columnPtr)
+    {
+      return;
+    }
+
+    auto const wasSyncingColumnLayout = _syncingColumnLayout;
+    _syncingColumnLayout = true;
+    _columnView.insert_column(static_cast<::guint>(_leadingUtilityColumnCount), columnPtr);
+    ++_leadingUtilityColumnCount;
+    _syncingColumnLayout = wasSyncingColumnLayout;
+    queueTitlePositionVariableUpdate();
+  }
+
   void TrackColumnController::applyColumnLayout(std::span<rt::TrackField const> visibleFields)
   {
     auto const wasSyncingColumnLayout = _syncingColumnLayout;
@@ -141,7 +156,8 @@ namespace ao::gtk
           continue;
         }
 
-        ensureColumnPosition(columnsPtr, static_cast<std::size_t>(index), binding->columnPtr);
+        ensureColumnPosition(
+          columnsPtr, _leadingUtilityColumnCount + static_cast<std::size_t>(index), binding->columnPtr);
       }
     }
 
@@ -355,11 +371,38 @@ namespace ao::gtk
     {
       if (auto const pageSize = adjPtr->get_page_size(); pageSize > 0.0)
       {
-        return static_cast<std::int32_t>(std::lround(pageSize));
+        return std::max(0, static_cast<std::int32_t>(std::lround(pageSize)) - leadingUtilityWidth());
       }
     }
 
-    return std::max(0, _columnView.get_width());
+    return std::max(0, _columnView.get_width() - leadingUtilityWidth());
+  }
+
+  std::int32_t TrackColumnController::leadingUtilityWidth() const
+  {
+    auto const columnsPtr = _columnView.get_columns();
+
+    if (!columnsPtr)
+    {
+      return 0;
+    }
+
+    std::int32_t width = 0;
+    auto const count =
+      std::min<std::size_t>(_leadingUtilityColumnCount, static_cast<std::size_t>(columnsPtr->get_n_items()));
+
+    for (std::size_t index = 0; index < count; ++index)
+    {
+      auto const columnPtr =
+        std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(static_cast<::guint>(index)));
+
+      if (columnPtr && columnPtr->get_visible())
+      {
+        width += std::max(0, columnPtr->get_fixed_width());
+      }
+    }
+
+    return width;
   }
 
   std::vector<rt::TrackField> TrackColumnController::visibleFieldsInColumnOrder() const
@@ -408,7 +451,7 @@ namespace ao::gtk
     {
       auto const gtkColumnPtr = std::dynamic_pointer_cast<Gtk::ColumnViewColumn>(columnsPtr->get_object(index));
 
-      if (gtkColumnPtr && gtkColumnPtr->get_visible())
+      if (gtkColumnPtr && gtkColumnPtr->get_visible() && rt::trackFieldFromId(std::string{gtkColumnPtr->get_id()}))
       {
         widths.push_back(gtkColumnPtr->get_fixed_width());
       }

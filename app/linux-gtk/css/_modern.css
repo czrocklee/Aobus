@@ -18,6 +18,7 @@
   /* Further soften list row edges. */
   --ao-row-hover-bg: alpha(currentColor, 0.04);
   --ao-row-selected-bg: alpha(@theme_selected_bg_color, 0.1);
+  --ao-section-divider-color: alpha(currentColor, 0.08);
 
   --ao-detail-section-header-min-height: 24px;
   --ao-detail-section-label-margin-left: 16px;
@@ -937,10 +938,6 @@ listview>row:first-child .ao-track-section-box {
   letter-spacing: 0.08em;
   opacity: 0.62;
   text-transform: uppercase;
-}
-
-.ao-theme-modern .ao-track-detail-section-line {
-  background-color: alpha(currentColor, 0.08);
 }
 
 /* Right-side Detail pane property contrast */

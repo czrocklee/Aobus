@@ -43,19 +43,19 @@ namespace ao::uimodel
         auto path = std::vector<ListId>{};
         auto currentId = entry.first;
 
-        while (currentId != rt::kAllTracksListId && visitStates.at(currentId) == ParentVisitState::Unvisited)
+        while (currentId != kInvalidListId && visitStates.at(currentId) == ParentVisitState::Unvisited)
         {
           visitStates.at(currentId) = ParentVisitState::Visiting;
           path.push_back(currentId);
           currentId = effectiveParentIds.at(currentId);
         }
 
-        if (currentId != rt::kAllTracksListId && visitStates.at(currentId) == ParentVisitState::Visiting)
+        if (currentId != kInvalidListId && visitStates.at(currentId) == ParentVisitState::Visiting)
         {
           if (auto const cycleBegin = std::ranges::find(path, currentId); cycleBegin != path.end())
           {
             auto const cycleRoot = *std::ranges::min_element(cycleBegin, path.end());
-            effectiveParentIds.at(cycleRoot) = rt::kAllTracksListId;
+            effectiveParentIds.at(cycleRoot) = kInvalidListId;
           }
         }
 
@@ -78,9 +78,9 @@ namespace ao::uimodel
         }
 
         auto const parentId =
-          (row.parentId != kInvalidListId && row.parentId != id && projection.rowsById.contains(row.parentId))
+          !rt::isVirtualListId(row.parentId) && row.parentId != id && projection.rowsById.contains(row.parentId)
             ? row.parentId
-            : rt::kAllTracksListId;
+            : kInvalidListId;
         result.emplace(id, parentId);
       }
 
@@ -94,27 +94,32 @@ namespace ao::uimodel
   {
     auto projection = ListTreeProjection{};
 
-    projection.rowsById.emplace(rt::kAllTracksListId,
-                                ListTreeProjectionRow{.id = rt::kAllTracksListId,
-                                                      .parentId = kInvalidListId,
-                                                      .name = "All Tracks",
-                                                      .kind = rt::ListNodeKind::Folder});
+    projection.rowsById.emplace(
+      rt::kAllTracksListId,
+      ListTreeProjectionRow{
+        .id = rt::kAllTracksListId, .parentId = kInvalidListId, .name = "All Tracks", .isSystem = true});
     projection.rootIds.push_back(rt::kAllTracksListId);
 
     for (auto const& node : snapshot)
     {
-      projection.rowsById.emplace(node.id,
-                                  ListTreeProjectionRow{.id = node.id,
-                                                        .parentId = node.parentId,
-                                                        .name = node.name,
-                                                        .kind = node.kind,
-                                                        .localExpression = node.smartExpression});
+      projection.rowsById.emplace(
+        node.id,
+        ListTreeProjectionRow{
+          .id = node.id, .parentId = node.parentId, .name = node.name, .localExpression = node.expression});
     }
 
     for (auto const& [id, parentId] : effectiveParentIds(projection))
     {
       projection.rowsById.at(id).parentId = parentId;
-      projection.rowsById.at(parentId).childIds.push_back(id);
+
+      if (parentId == kInvalidListId)
+      {
+        projection.rootIds.push_back(id);
+      }
+      else
+      {
+        projection.rowsById.at(parentId).childIds.push_back(id);
+      }
     }
 
     return projection;

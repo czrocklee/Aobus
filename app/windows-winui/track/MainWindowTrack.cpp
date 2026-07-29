@@ -18,6 +18,7 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
+#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/utility/Path.h>
@@ -49,18 +50,12 @@ namespace winrt::Aobus::implementation
 
     Microsoft::UI::Xaml::Controls::Symbol navigationSymbol(ao::uimodel::ListTreeProjectionRow const& row) noexcept
     {
-      if (!row.childIds.empty())
-      {
-        return Microsoft::UI::Xaml::Controls::Symbol::Folder;
-      }
-
       if (row.id == ao::rt::kAllTracksListId)
       {
         return Microsoft::UI::Xaml::Controls::Symbol::MusicInfo;
       }
 
-      return row.kind == ao::rt::ListNodeKind::Folder ? Microsoft::UI::Xaml::Controls::Symbol::Folder
-                                                      : Microsoft::UI::Xaml::Controls::Symbol::Find;
+      return Microsoft::UI::Xaml::Controls::Symbol::Find;
     }
 
     hstring navigationLabel(ao::uimodel::ListTreeProjectionRow const& row)
@@ -486,9 +481,18 @@ namespace winrt::Aobus::implementation
     for (auto const& preset : ao::rt::builtinTrackPresentationPresets())
     {
       auto item = Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
+      auto const eligibility = ao::uimodel::trackPresentationEligibility(_trackListPtr->activeListId(), preset.spec.id);
       auto const optText = textCatalog.builtinTrackPresentation(preset.spec.id);
       item.Text(to_hstring(ao::winui::stableResourceString(
         "Presentation_", preset.spec.id, optText ? optText->label : std::string_view{preset.spec.id})));
+      item.IsEnabled(eligibility.enabled);
+
+      if (!eligibility.enabled)
+      {
+        Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
+          item, box_value(to_hstring(eligibility.disabledReason)));
+      }
+
       item.Click(
         [weak, presentationId = preset.spec.id](
           Windows::Foundation::IInspectable const& /*sender*/, Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)

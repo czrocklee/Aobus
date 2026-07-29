@@ -12,7 +12,7 @@ summary: Defines predicate compilation, track-field truth semantics, access requ
 This specification defines how a parsed track expression becomes a boolean `ExecutionPlan` and how that plan evaluates one `library::TrackView`.
 The exact grammar, variable names, aliases, operators, and units belong to the [predicate language reference](../../reference/query/predicate-language.md).
 
-Smart-list source ordering, incremental membership, and source errors belong to [track sources](../library/source/track-source.md).
+Saved-List source ordering, incremental membership, and source errors belong to [track sources](../library/source/track-source.md).
 Quick-search input expansion belongs to [track filtering](../presentation/track-filter.md).
 
 ## Code boundary
@@ -42,7 +42,7 @@ Its public compiler and evaluator interfaces live under `include/ao/query/` and 
 - Predicate evaluation never changes the track, dictionary, source, or presentation state.
 - Parsing and compilation do not read or mutate a library dictionary; a plan owns all symbol text required for later binding.
 - An execution plan contains no library or dictionary pointer.
-- A plan is runtime-only; persisted Smart Lists retain their expression text and recompile it.
+- A plan is runtime-only; persisted Lists retain their local expression text and recompile it.
 
 ## Field semantics
 
@@ -100,7 +100,7 @@ The profile is the union of the storage tiers required by all field loads in the
 
 Supplying every tier required by the plan is a caller precondition of `PlanEvaluator::matches()` and `evaluateFull()`.
 The evaluator enforces that contract before any constant-plan shortcut; absence of an individual field within a supplied tier remains ordinary predicate data and follows the field semantics above.
-Smart-list evaluation uses the plan profile to choose the minimum track-store load mode across the plans evaluated in one batch.
+Saved-List evaluation uses the plan profile to choose the minimum track-store load mode across the plans evaluated in one batch.
 Constant true and false predicates require no track data.
 
 ## Commands and transitions
@@ -118,7 +118,7 @@ Plans with no dictionary access may use the context-free convenience overloads.
 Supplying an explicit `DictionaryReadContext` or bound plan is a precondition for plans whose `requiresDictionary` flag is true.
 
 `SmartListSource` parses an empty expression as the constant `true` for source evaluation.
-`LibraryWriter` treats an empty Smart List expression as no smart expression at the list-definition boundary, so list kind semantics remain owned by the library contracts.
+`LibraryWriter` stores an empty List expression as the identity predicate; it does not select a different List kind.
 
 ## Failure and cancellation
 
@@ -139,10 +139,10 @@ Ordinary missing values inside a present tier remain non-matching according to t
 ## Persistence and versioning
 
 Execution plans and internal field opcodes are not persisted.
-Smart List records store local expression text, while runtime view filters retain expression text in view/session state according to their owning contracts.
+Saved List records store local expression text, while runtime view filters retain expression text in view/session state according to their owning contracts.
 
 A predicate change must consider retained expressions even when no record byte changes.
-For Smart Lists, accepted grammar, field binding, and the truth behavior in this specification are part of the library database contract gated by `ao::library::kLibraryVersion`.
+For saved Lists, accepted grammar, field binding, and the truth behavior in this specification are part of the library database contract gated by `ao::library::kLibraryVersion`.
 A change that expands the storable predicate surface beyond what an existing same-version reader accepts, or that can alter whether stored text parses or compiles, what it binds to, or which tracks it matches, must increment that version.
 The old version is then rejected or explicitly migrated; the current database accepts only an exact version match and provides no in-place migration.
 

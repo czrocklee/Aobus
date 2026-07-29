@@ -266,7 +266,7 @@ namespace ao::rt::test
     void writeImportPayload(std::filesystem::path const& path, std::string_view title)
     {
       auto yaml = std::ofstream{path};
-      yaml << "version: 2\n"
+      yaml << "version: 3\n"
               "export_mode: full\n"
               "library:\n"
               "  tracks:\n"
@@ -470,7 +470,7 @@ namespace ao::rt::test
     auto planResult = runtime.spawn(service.prepareLibraryImportAsync(yamlPath, ImportMode::Restore)).get();
 
     REQUIRE(planResult);
-    CHECK(planResult->report().payloadVersion == 2);
+    CHECK(planResult->report().payloadVersion == 3);
     CHECK(planResult->report().payloadMode == ExportMode::Full);
     CHECK(planResult->report().targetScope == ImportTargetScope::Library);
     CHECK(planResult->report().tracksCreated == 1);
@@ -781,8 +781,7 @@ namespace ao::rt::test
       REQUIRE(authoringResult);
       CHECK(authoringResult->status == TrackAuthoringStatus::Unavailable);
 
-      auto listResult = runtimeLibrary.writer().createList(
-        LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Blocked"});
+      auto listResult = runtimeLibrary.writer().createList(LibraryWriter::ListDraft{.name = "Blocked"});
       REQUIRE_FALSE(listResult);
       CHECK(listResult.error().code == Error::Code::InvalidState);
     }

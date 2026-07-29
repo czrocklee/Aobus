@@ -253,9 +253,7 @@ namespace ao::rt::test
                       [executor] { executor->drain(); });
     appPtr->sources().reloadAllTracks();
     auto const listId = ao::test::requireValue(appPtr->library().writer().createList(LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Manual,
       .name = "Teardown order",
-      .trackIds = {firstTrackId, secondTrackId},
     }));
     auto const viewId = ao::test::requireValue(appPtr->workspace().navigate({.target = listId}));
     auto const previousPositionRevision = appPtr->playback().snapshot().transport.positionRevision;

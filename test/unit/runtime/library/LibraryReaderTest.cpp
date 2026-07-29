@@ -60,8 +60,8 @@ namespace ao::rt::test
       ResourceId resourceId{};
       DictionaryId artistId{};
       DictionaryId albumId{};
-      ListId manualListId{};
-      ListId smartListId{};
+      ListId orderedListId{};
+      ListId filteredListId{};
     };
 
     CoreRuntime makeCoreRuntime(ao::test::TempDir const& tempDir)
@@ -140,15 +140,15 @@ namespace ao::rt::test
                                .serialize();
       CHECK(musicLibrary.manifest().writer(transaction).put(kTrackUri, manifestPayload));
 
-      auto manualListBuilder = library::ListBuilder::makeEmpty();
-      manualListBuilder.name("Manual List").description("Pinned songs").tracks().add(trackId);
-      [[maybe_unused]] auto [manualListId, manualListView] = ao::test::requireValue(
-        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(manualListBuilder.serialize())));
+      auto orderedListBuilder = library::ListBuilder::makeEmpty();
+      orderedListBuilder.name("Ordered List").description("Pinned songs").orderTrackIds().add(trackId);
+      [[maybe_unused]] auto [orderedListId, orderedListView] = ao::test::requireValue(
+        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(orderedListBuilder.serialize())));
 
-      auto smartListBuilder = library::ListBuilder::makeEmpty();
-      smartListBuilder.name("Smart List").parentId(manualListId).filter("@artist = \"An Artist\"");
-      [[maybe_unused]] auto [smartListId, smartListView] = ao::test::requireValue(
-        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(smartListBuilder.serialize())));
+      auto filteredListBuilder = library::ListBuilder::makeEmpty();
+      filteredListBuilder.name("Filtered List").parentId(orderedListId).filter("@artist = \"An Artist\"");
+      [[maybe_unused]] auto [filteredListId, filteredListView] = ao::test::requireValue(
+        musicLibrary.lists().writer(transaction).create(ao::test::requireValue(filteredListBuilder.serialize())));
 
       REQUIRE(transaction.commit());
       auto const artistId = musicLibrary.dictionary().lookupId("An Artist");
@@ -159,8 +159,8 @@ namespace ao::rt::test
                                     .resourceId = resourceId,
                                     .artistId = artistId,
                                     .albumId = albumId,
-                                    .manualListId = manualListId,
-                                    .smartListId = smartListId};
+                                    .orderedListId = orderedListId,
+                                    .filteredListId = filteredListId};
     }
   } // namespace
 
@@ -264,34 +264,32 @@ namespace ao::rt::test
     auto scope = runtime.library().reader();
     auto const nodes = scope.lists();
 
-    auto const manualIt =
-      std::ranges::find_if(nodes, [&](ListNode const& node) { return node.id == seeded.manualListId; });
-    REQUIRE(manualIt != nodes.end());
-    CHECK(manualIt->parentId == kInvalidListId);
-    CHECK(manualIt->name == "Manual List");
-    CHECK(manualIt->description == "Pinned songs");
-    CHECK(manualIt->kind == ListNodeKind::Manual);
-    CHECK(manualIt->smartExpression.empty());
+    auto const orderedIt =
+      std::ranges::find_if(nodes, [&](ListNode const& node) { return node.id == seeded.orderedListId; });
+    REQUIRE(orderedIt != nodes.end());
+    CHECK(orderedIt->parentId == kInvalidListId);
+    CHECK(orderedIt->name == "Ordered List");
+    CHECK(orderedIt->description == "Pinned songs");
+    CHECK(orderedIt->expression.empty());
 
-    auto const optManualNode = scope.listNode(seeded.manualListId);
-    REQUIRE(optManualNode);
-    CHECK(optManualNode->name == "Manual List");
-    CHECK(optManualNode->description == "Pinned songs");
+    auto const optOrderedNode = scope.listNode(seeded.orderedListId);
+    REQUIRE(optOrderedNode);
+    CHECK(optOrderedNode->name == "Ordered List");
+    CHECK(optOrderedNode->description == "Pinned songs");
 
-    auto const smartIt =
-      std::ranges::find_if(nodes, [&](ListNode const& node) { return node.id == seeded.smartListId; });
-    REQUIRE(smartIt != nodes.end());
-    CHECK(smartIt->parentId != kInvalidListId);
-    CHECK(smartIt->parentId == seeded.manualListId);
-    CHECK(smartIt->name == "Smart List");
-    CHECK(smartIt->kind == ListNodeKind::Smart);
-    CHECK(smartIt->smartExpression == "@artist = \"An Artist\"");
+    auto const filteredIt =
+      std::ranges::find_if(nodes, [&](ListNode const& node) { return node.id == seeded.filteredListId; });
+    REQUIRE(filteredIt != nodes.end());
+    CHECK(filteredIt->parentId != kInvalidListId);
+    CHECK(filteredIt->parentId == seeded.orderedListId);
+    CHECK(filteredIt->name == "Filtered List");
+    CHECK(filteredIt->expression == "@artist = \"An Artist\"");
 
     auto const optMissingNode = scope.listNode(ListId{999999});
     CHECK_FALSE(optMissingNode);
   }
 
-  TEST_CASE("LibraryReader - reads stored list membership", "[runtime][unit][library][readmodel]")
+  TEST_CASE("LibraryReader - reads stored List order", "[runtime][unit][library][readmodel]")
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
@@ -299,9 +297,9 @@ namespace ao::rt::test
 
     auto scope = runtime.library().reader();
 
-    CHECK(scope.listTrackIds(seeded.manualListId) == std::vector<TrackId>{seeded.trackId});
-    CHECK(scope.listTrackIds(seeded.smartListId).empty());
-    CHECK(scope.listTrackIds(ListId{999999}).empty());
+    CHECK(scope.listOrderTrackIds(seeded.orderedListId) == std::vector<TrackId>{seeded.trackId});
+    CHECK(scope.listOrderTrackIds(seeded.filteredListId).empty());
+    CHECK(scope.listOrderTrackIds(ListId{999999}).empty());
   }
 
   TEST_CASE("LibraryReader - snapshots tag DTOs", "[runtime][unit][library][readmodel]")

@@ -6,7 +6,6 @@
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/ListStore.h>
-#include <ao/library/ListView.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
@@ -17,7 +16,6 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
-#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
@@ -28,6 +26,7 @@
 #include <gsl-lite/gsl-lite.hpp>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <format>
@@ -76,39 +75,18 @@ namespace ao::rt
       return preset->spec;
     }
 
-    bool isManualList(library::MusicLibrary const& library, ListId const listId)
-    {
-      if (listId == kAllTracksListId)
-      {
-        return false;
-      }
-
-      auto const transaction = library.readTransaction();
-      auto const optView = library.lists().reader(transaction).get(listId);
-      return optView && !optView->isSmart();
-    }
-
-    TrackPresentationSpec initialPresentation(TrackListViewConfig const& initial, library::MusicLibrary const& library)
+    TrackPresentationSpec initialPresentation(TrackListViewConfig const& initial)
     {
       if (initial.optPresentation)
       {
         return normalizeTrackPresentationSpec(*initial.optPresentation);
       }
 
-      auto const manualList = isManualList(library, initial.listId);
       auto const hasExplicitOrder = initial.groupBy != TrackGroupKey::None || !initial.sortBy.empty();
 
       if (hasExplicitOrder)
       {
         auto result = presentationForGroup(initial.groupBy);
-
-        if (manualList && initial.groupBy == TrackGroupKey::None)
-        {
-          if (auto const* preset = builtinTrackPresentationPreset(kListOrderTrackPresentationId); preset != nullptr)
-          {
-            result = preset->spec;
-          }
-        }
 
         result.id.clear();
         result.groupBy = initial.groupBy;
@@ -119,16 +97,6 @@ namespace ao::rt
         }
 
         return result;
-      }
-
-      if (manualList)
-      {
-        auto const* preset = builtinTrackPresentationPreset(kListOrderTrackPresentationId);
-
-        if (preset != nullptr)
-        {
-          return preset->spec;
-        }
       }
 
       return presentationForGroup(initial.groupBy);
@@ -143,7 +111,7 @@ namespace ao::rt
                                                        TrackSourceCache& sources)
     {
       auto activeSourceLease = baseSourceLease;
-      auto optFilterError = std::optional<Error>{};
+      auto optFilterError = sources.sourceError(baseSourceLease);
 
       if (!filterExpression.empty())
       {
@@ -155,7 +123,11 @@ namespace ao::rt
         }
 
         activeSourceLease = std::move(*sourceResult);
-        optFilterError = sources.sourceError(activeSourceLease);
+
+        if (auto optQuickFilterError = sources.sourceError(activeSourceLease); optQuickFilterError)
+        {
+          optFilterError = std::move(optQuickFilterError);
+        }
       }
 
       auto projectionPtr = std::make_shared<TrackListProjection>(viewId, activeSourceLease, library);
@@ -213,6 +185,7 @@ namespace ao::rt
     async::Signal<TrackListProjectionChanged const&> projectionChangedSignal;
     async::Signal<ViewService::PresentationChanged const&> presentationChangedSignal;
     async::Signal<ViewService::SelectionChanged const&> selectionChangedSignal;
+    async::Signal<ViewService::ViewDestroyed const&> viewDestroyedSignal;
   };
 
   ViewService::ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources)
@@ -240,6 +213,11 @@ namespace ao::rt
     return _implPtr->selectionChangedSignal.connect(std::move(handler));
   }
 
+  async::Subscription ViewService::onViewDestroyed(std::move_only_function<void(ViewDestroyed const&) noexcept> handler)
+  {
+    return _implPtr->viewDestroyedSignal.connect(std::move(handler));
+  }
+
   Result<ViewId> ViewService::createView(TrackListViewConfig const& initial)
   {
     auto baseSourceResult = _implPtr->sources.acquire(initial.listId);
@@ -250,7 +228,7 @@ namespace ao::rt
     }
 
     auto const id = ViewId{_implPtr->nextViewId};
-    auto const presentation = initialPresentation(initial, _implPtr->library);
+    auto const presentation = initialPresentation(initial);
     auto resourcesResult = prepareViewResources(id,
                                                 initial.listId,
                                                 std::move(*baseSourceResult),
@@ -290,6 +268,7 @@ namespace ao::rt
     auto const it = _implPtr->views.find(viewId);
     gsl_Assert(it != _implPtr->views.end());
     _implPtr->views.erase(it);
+    _implPtr->viewDestroyedSignal.emit(ViewDestroyed{.viewId = viewId});
   }
 
   Result<> ViewService::setFilter(ViewId const viewId, std::string filterExpression)
@@ -453,6 +432,45 @@ namespace ao::rt
     }
 
     return iter->second.projectionPtr;
+  }
+
+  Result<TrackSourceState> ViewService::listSourceState(ViewId const viewId) const
+  {
+    auto const iter = _implPtr->views.find(viewId);
+
+    if (iter == _implPtr->views.end())
+    {
+      return missingViewError(viewId);
+    }
+
+    return iter->second.baseSourceLease->state();
+  }
+
+  Result<std::vector<TrackId>> ViewService::listSourceTrackIds(ViewId const viewId) const
+  {
+    auto const iter = _implPtr->views.find(viewId);
+
+    if (iter == _implPtr->views.end())
+    {
+      return missingViewError(viewId);
+    }
+
+    auto const& source = *iter->second.baseSourceLease;
+
+    if (source.state() != TrackSourceState::Live)
+    {
+      return makeError(Error::Code::InvalidState, std::format("View {} List source is unavailable", viewId));
+    }
+
+    auto trackIds = std::vector<TrackId>{};
+    trackIds.reserve(source.size());
+
+    for (std::size_t index = 0; index < source.size(); ++index)
+    {
+      trackIds.push_back(source.trackIdAt(index));
+    }
+
+    return trackIds;
   }
 
   std::unique_ptr<TrackDetailProjection> ViewService::detailProjection(DetailTarget const& target,

@@ -17,4 +17,6 @@ File names use a four-digit sequence and a concise noun phrase, for example `000
 Accepted decisions are immutable except for status and links that mark them superseded.
 Use the [decision template](../template/decision.md).
 
-No decision record has been accepted in the new system yet.
+## Accepted decisions
+
+- [Decision 0001: unify saved Lists with an independent order overlay](0001-unified-list-ordering.md)

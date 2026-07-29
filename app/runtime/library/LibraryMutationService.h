@@ -19,6 +19,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 namespace ao::async
 {
@@ -96,6 +97,12 @@ namespace ao::rt
       std::optional<Mutation> optMutation{};
     };
 
+    struct ListOrderAuthoringStart final
+    {
+      ListOrderAuthoringStatus status = ListOrderAuthoringStatus::Unavailable;
+      std::optional<Mutation> optMutation{};
+    };
+
     LibraryMutationService(async::Executor& callbackExecutor,
                            library::WritableMusicLibrary writableLibrary,
                            LibraryChanges& changes);
@@ -113,10 +120,13 @@ namespace ao::rt
     async::Subscription onAvailabilityChanged(
       std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
+    Result<BoundListOrder> bindListOrder(ListId listId, std::span<TrackId const> effectiveTrackIds) const;
+    Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
     BoundTrackTargets advanceBoundTargets(BoundTrackTargets const& targets, std::uint64_t revision) const;
 
     Result<Mutation> beginInteractiveMutation();
     AuthoringStart beginAuthoringMutation(BoundTrackTargets const& targets);
+    ListOrderAuthoringStart beginListOrderAuthoringMutation(BoundListOrder const& order);
     Result<MaintenanceGuard> beginMaintenance(LibraryMaintenanceKind kind);
     Result<Mutation> beginMaintenanceMutation(MaintenanceGuard const& guard);
 

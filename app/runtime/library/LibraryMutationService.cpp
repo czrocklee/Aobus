@@ -7,15 +7,19 @@
 #include <ao/Error.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Subscription.h>
+#include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/Log.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 
+#include <boost/unordered/unordered_flat_set.hpp>
 #include <gsl-lite/gsl-lite.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -256,6 +260,93 @@ namespace ao::rt
     return BoundTrackTargets{runtimeInstanceId, revision, std::vector<TrackId>{trackIds.begin(), trackIds.end()}};
   }
 
+  Result<BoundListOrder> LibraryMutationService::bindListOrder(ListId const listId,
+                                                               std::span<TrackId const> const effectiveTrackIds) const
+  {
+    return bindListOrder(listId, std::vector<TrackId>{effectiveTrackIds.begin(), effectiveTrackIds.end()});
+  }
+
+  Result<BoundListOrder> LibraryMutationService::bindListOrder(ListId const listId,
+                                                               std::vector<TrackId>&& effectiveTrackIds) const
+  {
+    auto transaction = _library.readTransaction();
+    auto const revision = _library.libraryRevision(transaction);
+    std::uint64_t runtimeInstanceId = 0;
+
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+
+      if (_state != LibraryAuthoringState::Available || revision != _availableRevision)
+      {
+        return makeError(Error::Code::InvalidState, "Library authoring is unavailable");
+      }
+
+      runtimeInstanceId = _runtimeInstanceId;
+    }
+
+    if (isVirtualListId(listId))
+    {
+      return makeError(Error::Code::InvalidInput, "Manual order requires a saved List");
+    }
+
+    if (!_library.lists().reader(transaction).get(listId))
+    {
+      return makeError(Error::Code::NotFound, std::format("List order target not found: {}", listId));
+    }
+
+    auto remainingTrackIds = boost::unordered_flat_set<TrackId, std::hash<TrackId>>{};
+    remainingTrackIds.reserve(effectiveTrackIds.size());
+
+    for (auto const trackId : effectiveTrackIds)
+    {
+      if (trackId == kInvalidTrackId || !remainingTrackIds.insert(trackId).second)
+      {
+        return makeError(Error::Code::InvalidInput, std::format("Invalid effective List order track: {}", trackId));
+      }
+    }
+
+    auto trackReader = _library.tracks().reader(transaction);
+    auto const rowCount = trackReader.entryCount(library::TrackStore::Reader::LoadMode::Hot);
+    constexpr std::size_t kCursorScanDensityDenominator = 4;
+    auto const minimumDenseSelection = (rowCount / kCursorScanDensityDenominator) +
+                                       static_cast<std::size_t>(rowCount % kCursorScanDensityDenominator != 0);
+    auto const useCursorScan = rowCount != 0 && effectiveTrackIds.size() >= minimumDenseSelection;
+
+    if (useCursorScan)
+    {
+      for (auto&& [storedTrackId, view] : trackReader.hot())
+      {
+        std::ignore = view;
+        remainingTrackIds.erase(storedTrackId);
+
+        if (remainingTrackIds.empty())
+        {
+          break;
+        }
+      }
+    }
+    else
+    {
+      for (auto const trackId : effectiveTrackIds)
+      {
+        if (trackReader.get(trackId, library::TrackStore::Reader::LoadMode::Hot))
+        {
+          remainingTrackIds.erase(trackId);
+        }
+      }
+    }
+
+    if (!remainingTrackIds.empty())
+    {
+      auto const missingTrackId = *std::ranges::find_if(
+        effectiveTrackIds, [&remainingTrackIds](TrackId const trackId) { return remainingTrackIds.contains(trackId); });
+      return makeError(
+        Error::Code::InvalidInput, std::format("Invalid effective List order track: {}", missingTrackId));
+    }
+
+    return BoundListOrder{runtimeInstanceId, revision, listId, std::move(effectiveTrackIds)};
+  }
+
   BoundTrackTargets LibraryMutationService::advanceBoundTargets(BoundTrackTargets const& targets,
                                                                 std::uint64_t revision) const
   {
@@ -352,6 +443,38 @@ namespace ao::rt
     }
 
     auto result = AuthoringStart{.status = TrackAuthoringStatus::NoOp};
+    result.optMutation.emplace(Mutation{*this, std::move(*writerLockResult), std::move(transaction)});
+    return result;
+  }
+
+  LibraryMutationService::ListOrderAuthoringStart LibraryMutationService::beginListOrderAuthoringMutation(
+    BoundListOrder const& order)
+  {
+    if (order._runtimeInstanceId != _runtimeInstanceId)
+    {
+      return ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::Stale};
+    }
+
+    auto writerLockResult = acquireWriter(LibraryAuthoringState::Available, "List order authoring");
+
+    if (!writerLockResult)
+    {
+      return ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::Unavailable};
+    }
+
+    {
+      auto const stateLock = std::scoped_lock{_stateMutex};
+
+      if (order._runtimeInstanceId != _runtimeInstanceId || order._libraryRevision != _availableRevision)
+      {
+        return ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::Stale};
+      }
+    }
+
+    auto transaction = _writableLibrary.writeTransaction();
+    gsl_Assert(order._listId != kInvalidListId);
+    gsl_Assert(_library.lists().writer(transaction).get(order._listId));
+    auto result = ListOrderAuthoringStart{.status = ListOrderAuthoringStatus::NoOp};
     result.optMutation.emplace(Mutation{*this, std::move(*writerLockResult), std::move(transaction)});
     return result;
   }

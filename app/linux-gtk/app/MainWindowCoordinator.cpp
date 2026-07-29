@@ -50,7 +50,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -67,8 +66,14 @@ namespace ao::gtk
       , resourceImageLoader{resourceByteLoader, imageCache, runtime.async()}
       , playbackCommandSurface{runtime.playback(), [&runtime] { std::ignore = runtime.playSelectionInFocusedView(); }}
       , trackPresentationCatalog{runtime.workspace()}
-      , trackPresentationPreferences{trackPresentationCatalog}
-      , tagEditController{window, runtime, TagEditController::Callbacks{.onTagsMutated = [] {}}, themeCoordinator}
+      , trackPresentationPreferences{trackPresentationCatalog, runtime.library().changes()}
+      , tagEditController{window,
+                          runtime,
+                          TagEditController::Callbacks{
+                            .onTagsMutated = [] {},
+                            .onManageListsRequested = [this] { listNavigationController.openNewPlaylistDialog(); },
+                          },
+                          themeCoordinator}
       , listNavigationController{window,
                                  runtime,
                                  ListNavigationController::Callbacks{
@@ -135,10 +140,8 @@ namespace ao::gtk
 
       return trackPresentationPreferences.presentationForList(uimodel::ListPresentationContext{
         .listId = listId,
-        .sourceKind = optNode->kind == rt::ListNodeKind::Smart ? uimodel::ListPresentationSourceKind::Smart
-                                                               : uimodel::ListPresentationSourceKind::Manual,
-        .smartListFilter =
-          optNode->kind == rt::ListNodeKind::Smart ? std::string_view{optNode->smartExpression} : std::string_view{},
+        .sourceKind = uimodel::ListPresentationSourceKind::SavedList,
+        .listExpression = optNode->expression,
       });
     }
 
@@ -252,14 +255,9 @@ namespace ao::gtk
       [this](rt::LibraryChangeSet const& mutation) noexcept
       {
         if (!mutation.libraryReset && mutation.listsUpserted.empty() && mutation.listsDeleted.empty() &&
-            mutation.manualContentChanges.empty())
+            mutation.listOrderChanges.empty())
         {
           return;
-        }
-
-        for (auto const deletedId : mutation.listsDeleted)
-        {
-          _implPtr->trackPresentationPreferences.clearPresentationForList(deletedId);
         }
 
         rebuildListPages();

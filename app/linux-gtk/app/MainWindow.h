@@ -5,6 +5,7 @@
 
 #include "app/ShellLayoutController.h"
 #include <ao/Error.h>
+#include <ao/uimodel/input/KeyRepeatGuard.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/preference/ThemePreset.h>
@@ -90,6 +91,7 @@ namespace ao::gtk
 
   private:
     void installPlaybackSpaceShortcut();
+    void installOrderKeyRepeatSuppression();
 
     rt::AppRuntime& _runtime;
     std::shared_ptr<AppConfigStore> _configStorePtr;
@@ -99,6 +101,8 @@ namespace ao::gtk
     std::unique_ptr<WindowActionRegistry> _windowActionRegistryPtr;
     std::unique_ptr<MenuController> _menuControllerPtr;
     std::unique_ptr<platform::MprisBridge> _mprisBridgePtr;
+    uimodel::KeymapModel _keymap;
+    uimodel::KeyRepeatGuard _orderKeyRepeatGuard;
     SessionPhase _sessionPhase = SessionPhase::Constructed;
     bool _mprisStarted = false;
   };

@@ -165,7 +165,7 @@ button.ao-track-detail-section-header:focus-within image {
 
 .ao-track-detail-section-line {
   min-height: 1px;
-  background-color: alpha(currentColor, 0.4);
+  background-color: var(--ao-section-divider-color);
 }
 
 .ao-detail-show-all-button {
@@ -378,6 +378,23 @@ listbox.ao-boxed-list>row entry.flat-entry:focus {
 
 .ao-list-row:hover {
   background-color: var(--ao-row-hover-bg);
+}
+
+.ao-list-navigation {
+  padding-top: var(--ao-list-section-spacing);
+}
+
+.ao-list-navigation > header {
+  padding: 0;
+}
+
+.ao-list-navigation separator.ao-saved-list-separator {
+  min-height: var(--ao-list-section-divider-width);
+  margin: var(--ao-list-section-spacing) var(--ao-spacing-md);
+  padding: 0;
+  border: none;
+  background-color: var(--ao-section-divider-color);
+  background-image: none;
 }
 
 .ao-list-filter-label {
@@ -744,6 +761,18 @@ columnview>listview>row:selected {
   background-color: var(--ao-row-selected-bg);
   color: @theme_fg_color;
   border-radius: var(--ao-row-radius);
+}
+
+columnview row.ao-order-drop-before {
+  border-top: 2px solid @accent_color;
+}
+
+columnview row.ao-order-drop-after {
+  border-bottom: 2px solid @accent_color;
+}
+
+.ao-order-drag-handle {
+  color: alpha(currentColor, 0.55);
 }
 
 .ao-inline-editor-stack {

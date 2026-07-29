@@ -13,6 +13,7 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/projection/TrackListProjection.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -20,6 +21,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -49,12 +51,36 @@ namespace ao::rt::test
       return result;
     }
 
-    std::vector<TrackId> storedManualTrackIds(library::MusicLibrary& library, ListId listId)
+    std::vector<TrackId> storedOrderTrackIds(library::MusicLibrary& library, ListId listId)
     {
       auto transaction = library.readTransaction();
       auto optView = library.lists().reader(transaction).get(listId);
       REQUIRE(optView);
-      return {optView->tracks().begin(), optView->tracks().end()};
+      return {optView->orderTrackIds().begin(), optView->orderTrackIds().end()};
+    }
+
+    std::vector<TrackId> effectiveOrder(std::span<TrackId const> orderTrackIds, std::span<TrackId const> parentTrackIds)
+    {
+      auto result = std::vector<TrackId>{};
+      result.reserve(parentTrackIds.size());
+
+      for (auto const trackId : orderTrackIds)
+      {
+        if (std::ranges::contains(parentTrackIds, trackId))
+        {
+          result.push_back(trackId);
+        }
+      }
+
+      for (auto const trackId : parentTrackIds)
+      {
+        if (!std::ranges::contains(orderTrackIds, trackId))
+        {
+          result.push_back(trackId);
+        }
+      }
+
+      return result;
     }
 
     std::vector<TrackId> matchingYears(library::MusicLibrary& library,
@@ -129,13 +155,11 @@ namespace ao::rt::test
     auto changes = makeInlineLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
-    auto const manualListId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Manual,
-      .name = "Oracle manual",
-      .trackIds = initialTrackIds,
+    auto const orderedListId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
+      .name = "Oracle ordered",
+      .expression = "$year >= 2020",
     }));
     auto const smartListId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Smart,
       .name = "Oracle smart",
       .expression = "$year >= 2020",
     }));
@@ -143,11 +167,11 @@ namespace ao::rt::test
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto allTracksLease = ao::test::requireValue(cache.acquire(kAllTracksListId));
-    auto manualLease = ao::test::requireValue(cache.acquire(manualListId));
+    auto orderedLease = ao::test::requireValue(cache.acquire(orderedListId));
     auto smartLease = ao::test::requireValue(cache.acquire(smartListId));
-    auto manualProjection = TrackListProjection{
+    auto orderedProjection = TrackListProjection{
       kInvalidViewId,
-      manualLease,
+      orderedLease,
       libraryFixture.library(),
       TrackOrderSpec{.sortBy = {TrackSortTerm{.field = TrackSortField::Title}}},
     };
@@ -161,25 +185,47 @@ namespace ao::rt::test
     auto assertOracle = [&]
     {
       auto const allExpected = storedTrackIds(libraryFixture.library());
-      auto const manualExpected = storedManualTrackIds(libraryFixture.library(), manualListId);
+      auto const orderedParentExpected = matchingYears(libraryFixture.library(), allExpected, 2020);
+      auto const orderedExpected =
+        effectiveOrder(storedOrderTrackIds(libraryFixture.library(), orderedListId), orderedParentExpected);
       auto const smartExpected = matchingYears(libraryFixture.library(), allExpected, 2020);
 
       CHECK(sourceTrackIds(allTracksLease.source()) == allExpected);
-      CHECK(sourceTrackIds(manualLease.source()) == manualExpected);
+      CHECK(sourceTrackIds(orderedLease.source()) == orderedExpected);
       CHECK(sourceTrackIds(smartLease.source()) == smartExpected);
-      CHECK(projectionTrackIds(manualProjection) == sortedByTitle(libraryFixture.library(), manualExpected));
+      CHECK(projectionTrackIds(orderedProjection) == sortedByTitle(libraryFixture.library(), orderedExpected));
       CHECK(projectionTrackIds(smartProjection) == sortedByTitle(libraryFixture.library(), smartExpected));
     };
 
     assertOracle();
 
-    for (std::uint32_t step = 0; step < 64; ++step)
+    {
+      auto const visibleTrackIds = sourceTrackIds(orderedLease.source());
+      REQUIRE(visibleTrackIds.size() > 1);
+      auto const rankedTrackId = visibleTrackIds.back();
+      auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(orderedListId, visibleTrackIds));
+      auto const move = writer.moveListOrder(binding, std::array{rankedTrackId}, visibleTrackIds.front());
+      REQUIRE(move);
+      REQUIRE(move->status == ListOrderAuthoringStatus::Applied);
+      assertOracle();
+
+      REQUIRE(writerFixture.updateMetadata(std::array{rankedTrackId}, MetadataPatch{.optYear = 2010}));
+      CHECK_FALSE(orderedLease->indexOf(rankedTrackId).has_value());
+      assertOracle();
+
+      REQUIRE(writerFixture.updateMetadata(std::array{rankedTrackId}, MetadataPatch{.optYear = 2025}));
+      REQUIRE(orderedLease->indexOf(rankedTrackId).has_value());
+      CHECK(orderedLease->trackIdAt(0) == rankedTrackId);
+      assertOracle();
+    }
+
+    for (std::uint32_t step = 0; step < 48; ++step)
     {
       auto const liveTrackIds = storedTrackIds(libraryFixture.library());
-      auto const manualTrackIds = storedManualTrackIds(libraryFixture.library(), manualListId);
+      auto const orderedTrackIds = sourceTrackIds(orderedLease.source());
       REQUIRE_FALSE(liveTrackIds.empty());
 
-      switch (step % 5U)
+      switch (step % 4U)
       {
         case 0:
         {
@@ -191,21 +237,28 @@ namespace ao::rt::test
           break;
         }
         case 1:
-          if (manualTrackIds.size() > 2)
+          if (orderedTrackIds.size() > 2)
           {
-            auto const target = manualTrackIds[step % manualTrackIds.size()];
-            REQUIRE(writer.moveManualListTracks(manualListId, std::span{&target, 1}, 0));
+            auto const target = orderedTrackIds[1 + (step % (orderedTrackIds.size() - 1))];
+            auto binding =
+              ao::test::requireValue(writerFixture.library().bindListOrder(orderedListId, orderedTrackIds));
+            auto const result = writer.moveListOrder(binding, std::span{&target, 1}, orderedTrackIds.front());
+            REQUIRE(result);
+            REQUIRE((result->status == ListOrderAuthoringStatus::Applied ||
+                     result->status == ListOrderAuthoringStatus::NoOp));
           }
 
           break;
         case 2:
-          if (manualTrackIds.size() > 8)
-          {
-            auto const target = manualTrackIds[step % manualTrackIds.size()];
-            REQUIRE(writer.removeManualListTracks(manualListId, std::span{&target, 1}));
-          }
+        {
+          auto binding = ao::test::requireValue(writerFixture.library().bindListOrder(orderedListId, orderedTrackIds));
+          auto const result = writer.resetListOrder(binding);
+          REQUIRE(result);
+          REQUIRE(
+            (result->status == ListOrderAuthoringStatus::Applied || result->status == ListOrderAuthoringStatus::NoOp));
 
           break;
+        }
         case 3:
           if (liveTrackIds.size() > 12)
           {
@@ -213,19 +266,6 @@ namespace ao::rt::test
           }
 
           break;
-        case 4:
-        {
-          auto const candidate = std::ranges::find_if(liveTrackIds,
-                                                      [&manualTrackIds](TrackId trackId)
-                                                      { return !std::ranges::contains(manualTrackIds, trackId); });
-
-          if (candidate != liveTrackIds.end())
-          {
-            REQUIRE(writer.insertManualListTracks(manualListId, manualTrackIds.size(), std::span{&*candidate, 1}));
-          }
-
-          break;
-        }
         default: break;
       }
 

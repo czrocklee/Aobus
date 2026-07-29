@@ -15,6 +15,7 @@
 #include <ao/async/Subscription.h>
 
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -34,6 +35,7 @@ namespace ao::rt
 {
   class TrackSourceCache;
   class TrackSource;
+  enum class TrackSourceState : std::uint8_t;
   class WorkspaceService;
   class LibraryChanges;
 
@@ -58,6 +60,11 @@ namespace ao::rt
       TrackPresentationSpec presentation{};
     };
 
+    struct ViewDestroyed final
+    {
+      ViewId viewId{};
+    };
+
     ViewService(async::Executor& executor, library::MusicLibrary const& library, TrackSourceCache& sources);
     ~ViewService();
 
@@ -76,6 +83,7 @@ namespace ao::rt
     async::Subscription onPresentationChanged(
       std::move_only_function<void(PresentationChanged const&) noexcept> handler);
     async::Subscription onSelectionChanged(std::move_only_function<void(SelectionChanged const&) noexcept> handler);
+    async::Subscription onViewDestroyed(std::move_only_function<void(ViewDestroyed const&) noexcept> handler);
 
     // View lookups come in two forms. The precondition form assumes the caller
     // already holds a live view id, so an unknown id is a programming error and
@@ -100,6 +108,8 @@ namespace ao::rt
     std::chrono::milliseconds selectionDuration(ViewId viewId) const;
 
     Result<std::shared_ptr<TrackListProjection>> findTrackListProjection(ViewId viewId);
+    Result<TrackSourceState> listSourceState(ViewId viewId) const;
+    Result<std::vector<TrackId>> listSourceTrackIds(ViewId viewId) const;
 
   private:
     friend class WorkspaceService;

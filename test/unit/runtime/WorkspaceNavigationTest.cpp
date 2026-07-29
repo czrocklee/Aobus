@@ -109,8 +109,8 @@ namespace ao::rt::test
     auto fixture = WorkspaceRuntimeFixture{};
     auto& runtime = fixture.runtime;
 
-    auto listId = ao::test::requireValue(runtime.library().writer().createList(
-      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Test List"}));
+    auto listId =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"}));
     REQUIRE(runtime.workspace().navigate({.target = listId}));
 
     auto activeViewId = runtime.workspace().snapshot().activeViewId;
@@ -319,11 +319,11 @@ namespace ao::rt::test
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
     auto runtime = makeRuntime(tempDir, std::move(executorPtr));
-    auto const firstListId = ao::test::requireValue(runtime.library().writer().createList(
-      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "First observed"}));
+    auto const firstListId =
+      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First observed"}));
     executor->drain();
-    auto const secondListId = ao::test::requireValue(runtime.library().writer().createList(
-      LibraryWriter::ListDraft{.kind = LibraryWriter::ListKind::Manual, .name = "Second observed"}));
+    auto const secondListId = ao::test::requireValue(
+      runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second observed"}));
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
     bool reentrantNavigateSucceeded = false;

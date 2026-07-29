@@ -217,7 +217,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "covers.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 library:
   tracks:
@@ -252,7 +252,7 @@ library:
 
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: delta
 library:
   tracks:

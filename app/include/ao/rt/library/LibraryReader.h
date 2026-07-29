@@ -52,7 +52,7 @@ namespace ao::rt
     // List tree
     std::vector<ListNode> lists() const;
     std::optional<ListNode> listNode(ListId id) const;
-    std::vector<TrackId> listTrackIds(ListId id) const;
+    std::vector<TrackId> listOrderTrackIds(ListId id) const;
 
     // Tags
 

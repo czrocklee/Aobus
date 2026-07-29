@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "list/ListNavigationSectionModel.h"
 #include "list/ListTreeItem.h"
 #include <ao/CoreIds.h>
 
@@ -27,6 +28,7 @@ namespace ao::gtk
     {
       Glib::RefPtr<Gio::ListStore<ListTreeItem>> storePtr;
       Glib::RefPtr<Gtk::TreeListModel> treeModelPtr;
+      Glib::RefPtr<ListNavigationSectionModel> sectionModelPtr;
       Glib::RefPtr<Gtk::SingleSelection> selectionModelPtr;
       std::map<ListId, Glib::RefPtr<ListTreeItem>> nodesById;
     };

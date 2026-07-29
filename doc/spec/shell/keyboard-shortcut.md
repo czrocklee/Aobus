@@ -72,6 +72,8 @@ The store does not expose a generic commit-receipt system.
 
 Shortcut operations are synchronous and expose no cancellation.
 The transient capture popup defers self-destruction through an idle callback whose connection is cancelled by its destructor.
+Saved-List order actions additionally use a platform-neutral physical-key repeat guard at the GTK dispatch edge.
+That action-specific policy accepts one mutation per key-down/key-up cycle and belongs to the [saved-List order authoring specification](../presentation/list-order-authoring.md); it does not change ordinary accelerator repeat behavior.
 
 ## Persistence and versioning
 
@@ -93,6 +95,7 @@ They remain GTK-owned until a shared scoped-shortcut contract is defined.
 ## Implementation map
 
 - [`KeyChord.cpp`](../../../app/uimodel/input/KeyChord.cpp), [`KeymapModel.cpp`](../../../app/uimodel/input/KeymapModel.cpp), and [`KeymapStore.cpp`](../../../app/uimodel/input/KeymapStore.cpp) own neutral policy and the explicit override schema.
+- [`KeyRepeatGuard.cpp`](../../../app/uimodel/input/KeyRepeatGuard.cpp) owns physical-key repeat suppression for mutation-sensitive actions.
 - [`KeymapApplicator.cpp`](../../../app/linux-gtk/app/KeymapApplicator.cpp) and [`GtkAccelTranslator.cpp`](../../../app/linux-gtk/app/GtkAccelTranslator.cpp) own GTK projection.
 - [`ShortcutEditorWidget.cpp`](../../../app/linux-gtk/preference/ShortcutEditorWidget.cpp) owns live GTK editing and conflict confirmation.
 - [`AppConfigStore.cpp`](../../../app/linux-gtk/app/AppConfigStore.cpp) owns the global group adapter.
@@ -110,3 +113,4 @@ They remain GTK-owned until a shared scoped-shortcut contract is defined.
 - [Keyboard map reference](../../reference/shell/keymap.md)
 - [Application managed-state surface](../../reference/persistence/application-config.md)
 - [Shell layout lifecycle](layout-lifecycle.md)
+- [Saved-List order authoring](../presentation/list-order-authoring.md)

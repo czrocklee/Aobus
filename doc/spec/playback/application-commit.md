@@ -225,8 +225,10 @@ producers while succession and the remaining runtime graph are alive.
 - [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp)
   protects coherent publication, observer deferral, FIFO ordering, supersession,
   terminal exception closure, scheduler rejection, and queued-command lifetime.
-- [`PlaybackSuccessionTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionTest.cpp)
-  protects asynchronous admission, failure isolation, candidate installation,
+- [`PlaybackSuccessionLaunchTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp),
+  [`PlaybackSuccessionAdvanceTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp),
+  and [`PlaybackSuccessionFailureTest.cpp`](../../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp)
+  protect asynchronous admission, failure isolation, candidate installation,
   and prepared-next correlation.
 - [`PlaybackSessionTest.cpp`](../../../test/unit/runtime/PlaybackSessionTest.cpp)
   protects coherent restore, repeated-restore baselines, backlog/reentrant restore

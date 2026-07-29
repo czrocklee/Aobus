@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -37,8 +38,11 @@ namespace ao::rt
   public:
     using MetadataAuthoringResult = TrackAuthoringResult<UpdateTrackMetadataReply>;
     using TagAuthoringResult = TrackAuthoringResult<EditTrackTagsReply>;
-
-    using ListKind = LibraryListKind;
+    using AddToListAuthoringResult = TrackAuthoringResult<AddTracksToListReply>;
+    using RemoveFromListAuthoringResult = TrackAuthoringResult<RemoveTracksFromListReply>;
+    using MoveOrderAuthoringResult = ListOrderAuthoringResult<MoveListOrderReply>;
+    using ResetOrderAuthoringResult = ListOrderAuthoringResult<ResetListOrderReply>;
+    using ForgetHiddenOrderAuthoringResult = ListOrderAuthoringResult<ForgetHiddenListOrderReply>;
     using ListDraft = LibraryListDraft;
 
     ~LibraryWriter();
@@ -60,6 +64,10 @@ namespace ao::rt
     Result<EditTrackTagsReply> previewEditTags(std::span<TrackId const> trackIds,
                                                std::span<std::string const> tagsToAdd,
                                                std::span<std::string const> tagsToRemove);
+    Result<AddToListAuthoringResult> addTracksToList(ListId listId, BoundTrackTargets const& targets);
+    Result<AddTracksToListReply> previewAddTracksToList(ListId listId, std::span<TrackId const> trackIds);
+    Result<RemoveFromListAuthoringResult> removeTracksFromList(ListId listId, BoundTrackTargets const& targets);
+    Result<RemoveTracksFromListReply> previewRemoveTracksFromList(ListId listId, std::span<TrackId const> trackIds);
 
     // Returns an error when the draft is invalid, such as a malformed smart
     // filter or an invalid parent relationship.
@@ -69,19 +77,15 @@ namespace ao::rt
     // another error when the draft is invalid.
     Result<UpdateListReply> updateList(ListDraft const& draft);
     Result<UpdateListReply> previewUpdateList(ListDraft const& draft);
-    Result<InsertManualListTracksReply> insertManualListTracks(ListId listId,
-                                                               std::size_t insertionIndex,
-                                                               std::span<TrackId const> trackIds);
-    Result<InsertManualListTracksReply> previewInsertManualListTracks(ListId listId,
-                                                                      std::size_t insertionIndex,
-                                                                      std::span<TrackId const> trackIds);
-    Result<RemoveManualListTracksReply> removeManualListTracks(ListId listId, std::span<TrackId const> trackIds);
-    Result<RemoveManualListTracksReply> previewRemoveManualListTracks(ListId listId, std::span<TrackId const> trackIds);
-    Result<MoveManualListTracksReply> moveManualListTracks(ListId listId,
-                                                           std::span<TrackId const> trackIds,
-                                                           std::size_t insertionIndexAfterRemoval);
-    Result<DeleteListReply> deleteList(ListId listId);
-    Result<DeleteListReply> previewDeleteList(ListId listId);
+    Result<MoveOrderAuthoringResult> moveListOrder(BoundListOrder const& order,
+                                                   std::span<TrackId const> selectedTrackIds,
+                                                   std::optional<TrackId> optBeforeTrackId);
+    Result<ResetOrderAuthoringResult> resetListOrder(BoundListOrder const& order);
+    Result<ForgetHiddenOrderAuthoringResult> forgetHiddenListOrder(BoundListOrder const& order);
+    Result<DeleteListReply> deleteList(ListId listId, DeleteListOptions options = {});
+    Result<DeleteListReply> previewDeleteList(ListId listId, DeleteListOptions options = {});
+    Result<DeleteListSubtreeReply> deleteListAndDescendants(ListId listId, DeleteListOptions options = {});
+    Result<DeleteListSubtreeReply> previewDeleteListAndDescendants(ListId listId, DeleteListOptions options = {});
 
     Result<DeleteTrackReply> deleteTrack(TrackId trackId);
     Result<DeleteTrackReply> previewDeleteTrack(TrackId trackId);

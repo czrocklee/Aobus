@@ -73,7 +73,7 @@ They do not rebuild the authoritative aggregate, allocate independent workspace 
 - `AppRuntime` may compose one accepted workspace command with a playback reveal request without becoming another workspace state owner.
 - `ViewService` may acquire library sources and construct projections for its workspace collaborator, but it does not own focus, navigation history, frontend layout, or managed paths.
 - The [library architecture](library.md) owns `ListId`, source membership, leases, and projection mechanics below the view boundary.
-- The [track expression architecture](track-expression.md) owns expression compilation and membership semantics used by filtered and Smart List views.
+- The [track expression architecture](track-expression.md) owns expression compilation and membership semantics used by filtered and saved-List views.
 - The [presentation architecture](presentation.md) owns display and interaction policy, not the workspace aggregate.
 - The [persistence and managed-state architecture](persistence-and-managed-state.md) owns stores and schemas; workspace owns the meaning of its session candidate.
 - The [playback architecture](playback.md) owns transport and succession even when a workspace command initiates reveal or play intent.

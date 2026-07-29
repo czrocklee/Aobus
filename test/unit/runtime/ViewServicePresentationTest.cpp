@@ -76,37 +76,35 @@ namespace ao::rt::test
     }
   }
 
-  TEST_CASE("ViewService - absent presentation defaults exact manual lists to List Order",
+  TEST_CASE("ViewService - absent presentation uses the normal library default for saved Lists",
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const manualListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Manual,
-      .name = "Manual order",
+    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
+      .name = "Saved List",
     }));
 
-    auto const created = env.requireView({.listId = manualListId});
+    auto const created = env.requireView({.listId = listId});
     auto const state = service.trackListState(created);
 
-    CHECK(state.presentation.id == kListOrderTrackPresentationId);
+    CHECK(state.presentation.id == kDefaultTrackPresentationId);
     CHECK(state.groupBy == TrackGroupKey::None);
-    CHECK(state.sortBy.empty());
+    CHECK_FALSE(state.sortBy.empty());
   }
 
-  TEST_CASE("ViewService - explicit presentation wins over the manual List Order default",
+  TEST_CASE("ViewService - explicit presentation wins over the saved List default",
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const manualListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Manual,
+    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
       .name = "Explicit order",
     }));
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
 
-    auto const created = env.requireView({.listId = manualListId, .optPresentation = albumsPreset->spec});
+    auto const created = env.requireView({.listId = listId, .optPresentation = albumsPreset->spec});
     auto const state = service.trackListState(created);
 
     CHECK(state.presentation.id == "albums");
@@ -114,22 +112,21 @@ namespace ao::rt::test
     CHECK_FALSE(state.sortBy.empty());
   }
 
-  TEST_CASE("ViewService - smart and All Tracks sources retain the normal default presentation",
+  TEST_CASE("ViewService - saved Lists and All Tracks retain the normal default presentation",
             "[runtime][unit][view][presentation]")
   {
     auto env = ViewServiceFixture{};
     auto& service = env.service;
-    auto const smartListId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
-      .kind = LibraryWriter::ListKind::Smart,
-      .name = "Smart order",
+    auto const listId = ao::test::requireValue(env.writer().createList(LibraryWriter::ListDraft{
+      .name = "Filtered List",
       .expression = "true",
     }));
 
     auto const allTracks = env.requireView();
-    auto const smart = env.requireView({.listId = smartListId});
+    auto const savedList = env.requireView({.listId = listId});
 
     CHECK(service.trackListState(allTracks).presentation.id == kDefaultTrackPresentationId);
-    CHECK(service.trackListState(smart).presentation.id == kDefaultTrackPresentationId);
+    CHECK(service.trackListState(savedList).presentation.id == kDefaultTrackPresentationId);
   }
 
   TEST_CASE("ViewService - playback launch capture contains exact list filter and sort only",

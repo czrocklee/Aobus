@@ -46,7 +46,7 @@ Use an explicit track id instead of `--filter` when the change must target one k
 ## Verify the result
 
 - Reopen the track detail or run `aobus -C /music track show <id>` and confirm the new values.
-- Queries and Smart Lists using the changed fields update to the new result.
+- Queries and saved Lists using the changed fields update to the new result.
 - The frontend reporting surface reports a failure instead of showing an uncommitted edit as saved.
 
 ## Related documents

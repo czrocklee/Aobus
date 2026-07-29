@@ -3,11 +3,11 @@
 
 #include "test/unit/RuntimeTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/runtime/source/ManualListSourceTestSupport.h"
+#include "test/unit/runtime/source/ListOrderSourceTestSupport.h"
 #include "test/unit/runtime/source/TrackSourceTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackEditScript.h>
-#include <ao/rt/source/ManualListSource.h>
+#include <ao/rt/source/ListOrderSource.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/SmartListSource.h>
 #include <ao/rt/source/TrackSource.h>
@@ -24,19 +24,19 @@ namespace ao::rt::test
 {
   namespace
   {
-    std::vector<TrackId> storedTrackIdsOf(ManualListSource const& source)
+    std::vector<TrackId> orderTrackIdsOf(ListOrderSource const& source)
     {
-      auto const trackIds = source.storedTrackIds();
+      auto const trackIds = source.orderTrackIds();
       return {trackIds.begin(), trackIds.end()};
     }
   } // namespace
 
-  TEST_CASE("ManualListSource - parent hide and re-entry preserve manual intent and position",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - parent hide and re-entry preserve stored rank and position",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -60,11 +60,11 @@ namespace ao::rt::test
     CHECK(insertion.start == 1);
     CHECK(insertion.trackIds == std::vector{TrackId{2}});
     CHECK(sourceTrackIds(source) == expectedStored);
-    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(orderTrackIdsOf(source) == expectedStored);
   }
 
-  TEST_CASE("ManualListSource - quick filter remains a stable subsequence of stored manual order",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - quick filter remains a stable subsequence of stored order",
+            "[runtime][unit][source][list-order]")
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack(library::test::makeTrackSpec("First", 2024));
@@ -73,22 +73,22 @@ namespace ao::rt::test
     auto const third = libraryFixture.addTrack(library::test::makeTrackSpec("Third", 2024));
     auto parentPtr = makeMutableTrackSource({third, hidden, first, second});
     auto view = ListViewOwner{{second, hidden, third, first}};
-    auto manualPtr = std::make_shared<ManualListSource>(view.view(), TrackSourceLease{parentPtr});
+    auto orderPtr = std::make_shared<ListOrderSource>(view.view().orderTrackIds(), TrackSourceLease{parentPtr});
     auto evaluator = SmartListEvaluator{libraryFixture.library()};
-    auto quickFilter = SmartListSource{TrackSourceLease{manualPtr}, evaluator};
+    auto quickFilter = SmartListSource{TrackSourceLease{orderPtr}, evaluator};
     quickFilter.setExpression("$year >= 2020");
     quickFilter.reload();
 
-    CHECK(sourceTrackIds(*manualPtr) == std::vector{second, hidden, third, first});
+    CHECK(sourceTrackIds(*orderPtr) == std::vector{second, hidden, third, first});
     CHECK(sourceTrackIds(quickFilter) == std::vector{second, third, first});
     auto quickFilterSpy = TrackSourceBatchSpy{quickFilter};
 
-    manualPtr->applyManualEditScript(delta::RegularTrackEditScript{
+    orderPtr->applyOrderEditScript(delta::RegularTrackEditScript{
       .edits = {delta::RemoveRange{.start = 2, .trackIds = {third}},
                 delta::InsertRange{.start = 0, .trackIds = {third}}},
     });
 
-    CHECK(sourceTrackIds(*manualPtr) == std::vector{third, second, hidden, first});
+    CHECK(sourceTrackIds(*orderPtr) == std::vector{third, second, hidden, first});
     CHECK(sourceTrackIds(quickFilter) == std::vector{third, second, first});
     REQUIRE(quickFilterSpy.batches.size() == 1);
     REQUIRE(sourceEditScript(quickFilterSpy.batches.front()).edits.size() == 2);
@@ -100,12 +100,12 @@ namespace ao::rt::test
     CHECK(insertion.trackIds == std::vector{third});
   }
 
-  TEST_CASE("ManualListSource - ignores parent reorder when membership is unchanged",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - ignores parent reorder when membership is unchanged",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -121,12 +121,35 @@ namespace ao::rt::test
     CHECK(batches.empty());
   }
 
-  TEST_CASE("ManualListSource - translates one mixed parent batch into one child batch",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - empty stored order forwards the exact regular parent script",
+            "[runtime][regression][source][list-order]")
+  {
+    auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
+    auto view = ListViewOwner{std::vector<TrackId>{}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
+    auto batches = std::vector<TrackSourceDelta>{};
+    [[maybe_unused]] auto subscription =
+      source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
+    auto const parentScript = delta::RegularTrackEditScript{
+      .edits = {delta::RemoveRange{.start = 0, .trackIds = {TrackId{1}}},
+                delta::InsertRange{.start = 1, .trackIds = {TrackId{4}}},
+                delta::UpdateRange{.start = 0, .trackIds = {TrackId{2}}}},
+    };
+
+    parentPtr->replaceWithBatch(std::vector{TrackId{2}, TrackId{4}, TrackId{3}}, parentScript);
+
+    REQUIRE(batches.size() == 1);
+    CHECK(sourceEditScript(batches.front()) == parentScript);
+    CHECK(sourceTrackIds(source) == std::vector{TrackId{2}, TrackId{4}, TrackId{3}});
+    CHECK(orderTrackIdsOf(source).empty());
+  }
+
+  TEST_CASE("ListOrderSource - translates one mixed parent batch into one child batch",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -149,12 +172,12 @@ namespace ao::rt::test
     CHECK(sourceTrackIds(source) == expected);
   }
 
-  TEST_CASE("ManualListSource - coalesces parent updates in effective manual coordinates",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - coalesces parent updates in effective order coordinates",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}, TrackId{4}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{3}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -169,17 +192,17 @@ namespace ao::rt::test
     REQUIRE(batches.size() == 1);
     REQUIRE(sourceEditScript(batches.front()).edits.size() == 1);
     auto const& update = std::get<delta::UpdateRange>(sourceEditScript(batches.front()).edits.front());
-    auto const expectedUpdated = std::vector{TrackId{1}, TrackId{3}};
+    auto const expectedUpdated = std::vector{TrackId{1}, TrackId{3}, TrackId{2}};
     CHECK(update.start == 0);
     CHECK(update.trackIds == expectedUpdated);
   }
 
-  TEST_CASE("ManualListSource - hidden parent changes do not publish a child batch",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - unranked parent changes publish in tail coordinates",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{9}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -188,16 +211,19 @@ namespace ao::rt::test
     parentPtr->update(TrackId{9});
     parentPtr->remove(TrackId{8});
 
-    CHECK(sourceTrackIds(source) == std::vector{TrackId{1}});
-    CHECK(batches.empty());
+    CHECK(sourceTrackIds(source) == std::vector{TrackId{1}, TrackId{9}});
+    REQUIRE(batches.size() == 3);
+    CHECK(std::holds_alternative<delta::InsertRange>(sourceEditScript(batches[0]).edits.front()));
+    CHECK(std::holds_alternative<delta::UpdateRange>(sourceEditScript(batches[1]).edits.front()));
+    CHECK(std::holds_alternative<delta::RemoveRange>(sourceEditScript(batches[2]).edits.front()));
   }
 
-  TEST_CASE("ManualListSource - parent reset rebuilds effective state without discarding stored intent",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - parent reset rebuilds effective state without discarding stored intent",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}, TrackId{3}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -209,15 +235,14 @@ namespace ao::rt::test
     REQUIRE(batches.size() == 1);
     CHECK(std::holds_alternative<SourceReset>(batches.front()));
     CHECK(sourceTrackIds(source) == expectedEffective);
-    CHECK(storedTrackIdsOf(source) == expectedStored);
+    CHECK(orderTrackIdsOf(source) == expectedStored);
   }
 
-  TEST_CASE("ManualListSource - parent invalidation is terminal and emitted once",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - parent invalidation is terminal and emitted once", "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}});
     auto view = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+    auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
     auto batches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto subscription =
       source.subscribe([&batches](TrackSourceDelta const& batch) noexcept { batches.push_back(batch); });
@@ -230,14 +255,14 @@ namespace ao::rt::test
     CHECK(source.state() == TrackSourceState::Invalidated);
   }
 
-  TEST_CASE("ManualListSource - invalidation propagates through a leased manual chain",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - invalidation propagates through a leased order chain",
+            "[runtime][unit][source][list-order]")
   {
     auto rootPtr = makeMutableTrackSource({TrackId{1}, TrackId{2}, TrackId{3}});
     auto innerView = ListViewOwner{{TrackId{1}, TrackId{2}}};
-    auto innerPtr = std::make_shared<ManualListSource>(innerView.view(), TrackSourceLease{rootPtr});
+    auto innerPtr = std::make_shared<ListOrderSource>(innerView.view().orderTrackIds(), TrackSourceLease{rootPtr});
     auto outerView = ListViewOwner{{TrackId{2}}};
-    auto outer = ManualListSource{outerView.view(), TrackSourceLease{innerPtr}};
+    auto outer = ListOrderSource{outerView.view().orderTrackIds(), TrackSourceLease{innerPtr}};
     auto innerBatches = std::vector<TrackSourceDelta>{};
     auto outerBatches = std::vector<TrackSourceDelta>{};
     [[maybe_unused]] auto innerSubscription =
@@ -255,15 +280,15 @@ namespace ao::rt::test
     CHECK(std::holds_alternative<SourceInvalidated>(outerBatches.front()));
   }
 
-  TEST_CASE("ManualListSource - lease pins its parent for the subscription lifetime",
-            "[runtime][unit][source][manual-list]")
+  TEST_CASE("ListOrderSource - lease pins its parent for the subscription lifetime",
+            "[runtime][unit][source][list-order]")
   {
     auto parentPtr = makeMutableTrackSource({TrackId{1}});
     auto weakParentPtr = std::weak_ptr<MutableTrackSource>{parentPtr};
     auto view = ListViewOwner{{TrackId{1}}};
 
     {
-      auto source = ManualListSource{view.view(), TrackSourceLease{parentPtr}};
+      auto source = ListOrderSource{view.view().orderTrackIds(), TrackSourceLease{parentPtr}};
       parentPtr = nullptr;
 
       CHECK_FALSE(weakParentPtr.expired());

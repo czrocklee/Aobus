@@ -54,7 +54,7 @@ namespace ao::rt::test
       return result->first;
     }
 
-    std::optional<std::vector<std::string>> listTrackUris(library::MusicLibrary& ml, std::string_view listName)
+    std::optional<std::vector<std::string>> listOrderUris(library::MusicLibrary& ml, std::string_view listName)
     {
       auto transaction = ml.readTransaction();
       auto const listReader = ml.lists().reader(transaction);
@@ -68,9 +68,9 @@ namespace ao::rt::test
         }
 
         auto result = std::vector<std::string>{};
-        result.reserve(view.tracks().size());
+        result.reserve(view.orderTrackIds().size());
 
-        for (auto const trackId : view.tracks())
+        for (auto const trackId : view.orderTrackIds())
         {
           auto const optTrack = trackReader.get(trackId);
 
@@ -113,7 +113,7 @@ namespace ao::rt::test
       REQUIRE(manifestWriter.put(uri, builder.serialize()));
 
       auto listBuilder = ListBuilder::makeEmpty().name("My URI List");
-      listBuilder.tracks().add(trackId);
+      listBuilder.orderTrackIds().add(trackId);
       createList(ml1.lists().writer(transaction), ao::test::requireValue(listBuilder.serialize()));
 
       REQUIRE(transaction.commit());
@@ -178,8 +178,8 @@ namespace ao::rt::test
       {
         listCount++;
         CHECK(lview.name() == "My URI List");
-        REQUIRE(lview.tracks().size() == 1);
-        CHECK(lview.tracks()[0] == targetTrackId); // Remapped!
+        REQUIRE(lview.orderTrackIds().size() == 1);
+        CHECK(lview.orderTrackIds()[0] == targetTrackId); // Remapped!
       }
 
       CHECK(listCount == 1);
@@ -204,7 +204,7 @@ namespace ao::rt::test
     auto const yamlPath = std::filesystem::path{temp.path()} / "child-first.yaml";
     {
       auto yaml = std::ofstream{yamlPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 library:
   tracks:
@@ -214,7 +214,7 @@ library:
     - id: 2
       parentId: 1
       name: Child
-      tracks:
+      order:
         - 10
     - id: 1
       parentId: 0
@@ -254,8 +254,8 @@ library:
       CHECK(optParent->parentId() == kInvalidListId);
       CHECK(optChild->parentId() == parentId);
       CHECK(childId != parentId);
-      REQUIRE(optChild->tracks().size() == 1);
-      CHECK(optChild->tracks()[0] == trackId);
+      REQUIRE(optChild->orderTrackIds().size() == 1);
+      CHECK(optChild->orderTrackIds()[0] == trackId);
     }
   }
 
@@ -269,7 +269,7 @@ library:
     {
       auto yaml = std::ofstream{yamlPath};
       yaml << R"(
-version: 2
+version: 3
 export_mode: full
 library:
   tracks:
@@ -278,7 +278,7 @@ library:
   lists:
     - id: 1
       name: Parent
-      tracks:
+      order:
         - 10
         - 999
         - uri: invalid-uri.flac
@@ -290,7 +290,7 @@ library:
 
     auto const report = importer.importFromYamlOffline(yamlPath);
     REQUIRE(report);
-    CHECK(report->payloadVersion == 2);
+    CHECK(report->payloadVersion == 3);
     CHECK(report->payloadMode == ExportMode::Full);
     CHECK(report->targetScope == ImportTargetScope::Library);
     CHECK(report->danglingReferencesIgnored == 3);
@@ -306,7 +306,7 @@ library:
 
       if (view.name() == "Parent")
       {
-        REQUIRE(view.tracks().size() == 1);
+        REQUIRE(view.orderTrackIds().size() == 1);
         CHECK(view.parentId() == kInvalidListId);
       }
       else if (view.name() == "Dangling Parent")
@@ -318,7 +318,7 @@ library:
     CHECK(listCount == 2);
   }
 
-  TEST_CASE("LibraryYaml - mixed manual list references preserve first-occurrence order across round-trip",
+  TEST_CASE("LibraryYaml - mixed list order references preserve first-occurrence order across round-trip",
             "[runtime][workflow][import-export][list]")
   {
     auto const sourceTemp = ao::test::TempDir{};
@@ -327,7 +327,7 @@ library:
 
     {
       auto yaml = std::ofstream{inputPath};
-      yaml << R"(version: 2
+      yaml << R"(version: 3
 export_mode: full
 library:
   tracks:
@@ -340,7 +340,7 @@ library:
   lists:
     - id: 1
       name: Mixed References
-      tracks:
+      order:
         - uri: second.flac
         - 10
         - id: 20
@@ -354,7 +354,7 @@ library:
     REQUIRE(sourceImporter.importFromYamlOffline(inputPath));
 
     auto const expectedUris = std::vector<std::string>{"second.flac", "first.flac", "third.flac"};
-    auto const optSourceUris = listTrackUris(sourceLibrary, "Mixed References");
+    auto const optSourceUris = listOrderUris(sourceLibrary, "Mixed References");
     REQUIRE(optSourceUris);
     CHECK(*optSourceUris == expectedUris);
 
@@ -367,7 +367,7 @@ library:
     auto targetImporter = LibraryYamlImporter{targetLibrary};
     REQUIRE(targetImporter.importFromYamlOffline(exportedPath));
 
-    auto const optTargetUris = listTrackUris(targetLibrary, "Mixed References");
+    auto const optTargetUris = listOrderUris(targetLibrary, "Mixed References");
     REQUIRE(optTargetUris);
     CHECK(*optTargetUris == expectedUris);
   }

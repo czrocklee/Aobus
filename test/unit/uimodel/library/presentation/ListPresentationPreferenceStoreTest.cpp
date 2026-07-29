@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "test/unit/RuntimeTestSupport.h"
+#include "test/unit/TestUtils.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
+#include <ao/rt/library/LibraryWriter.h>
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
@@ -91,35 +95,35 @@ namespace ao::uimodel::test
     CHECK(store.presentationForList(allTracksContext).id == "albums");
   }
 
-  TEST_CASE("ListPresentationPreferenceStore - resolves list kind defaults after saved preference lookup",
+  TEST_CASE("ListPresentationPreferenceStore - resolves saved-list defaults after preference lookup",
             "[uimodel][unit][library][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.preferences;
-    auto const manualListId = ListId{42};
-    auto const manualContext = ListPresentationContext{
-      .listId = manualListId,
-      .sourceKind = ListPresentationSourceKind::Manual,
+    auto const savedListId = ListId{42};
+    auto const emptySavedContext = ListPresentationContext{
+      .listId = savedListId,
+      .sourceKind = ListPresentationSourceKind::SavedList,
     };
-    auto const smartContext = ListPresentationContext{
+    auto const expressionContext = ListPresentationContext{
       .listId = ListId{43},
-      .sourceKind = ListPresentationSourceKind::Smart,
-      .smartListFilter = "$composer = \"Bach\"",
+      .sourceKind = ListPresentationSourceKind::SavedList,
+      .listExpression = "$composer = \"Bach\"",
     };
     auto const allTracksContext = ListPresentationContext{
       .listId = rt::kAllTracksListId,
       .sourceKind = ListPresentationSourceKind::AllTracks,
     };
 
-    CHECK(store.presentationForList(manualContext).id == rt::kListOrderTrackPresentationId);
-    CHECK(store.presentationForList(smartContext).id == "classical-composers");
+    CHECK(store.presentationForList(emptySavedContext).id == "albums");
+    CHECK(store.presentationForList(expressionContext).id == "classical-composers");
     CHECK(store.presentationForList(allTracksContext).id == "albums");
 
-    store.setPresentationIdForList(manualListId, "albums");
-    CHECK(store.presentationForList(manualContext).id == "albums");
+    store.setPresentationIdForList(savedListId, rt::kListOrderTrackPresentationId);
+    CHECK(store.presentationForList(emptySavedContext).id == rt::kListOrderTrackPresentationId);
 
-    store.setPresentationIdForList(manualListId, "missing-preset");
-    CHECK(store.presentationForList(manualContext).id == rt::kListOrderTrackPresentationId);
+    store.setPresentationIdForList(savedListId, "missing-preset");
+    CHECK(store.presentationForList(emptySavedContext).id == "albums");
   }
 
   TEST_CASE("ListPresentationPreferenceStore - bulk state emits only when changed",
@@ -137,5 +141,39 @@ namespace ao::uimodel::test
     REQUIRE(events.size() == 1);
     CHECK(events[0] == kInvalidListId);
     CHECK(store.listPresentations().at(rt::kAllTracksListId) == "albums");
+  }
+
+  TEST_CASE("ListPresentationPreferenceLifecycle - cascade deletion clears every preference",
+            "[uimodel][unit][presentation][delete-subtree]")
+  {
+    auto storage = rt::test::MusicLibraryFixture{};
+    auto changes = rt::test::makeInlineLibraryChanges(storage.library());
+    auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
+    auto& writer = writerFixture.writer();
+    auto const parentId = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Parent"}));
+    auto const childId =
+      ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.parentId = parentId, .name = "Child"}));
+    auto const grandchildId = ao::test::requireValue(
+      writer.createList(rt::LibraryWriter::ListDraft{.parentId = childId, .name = "Grandchild"}));
+    auto const unrelatedId =
+      ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Unrelated"}));
+    auto preferences = std::map<ListId, std::string>{
+      {parentId, "songs"},
+      {childId, "albums"},
+      {grandchildId, std::string{rt::kListOrderTrackPresentationId}},
+      {unrelatedId, "songs"},
+    };
+    auto removed = std::vector<ListId>{};
+    auto lifecycle = ListPresentationPreferenceLifecycle{
+      preferences,
+      changes,
+      [&removed](ListId const listId) noexcept { removed.push_back(listId); },
+    };
+
+    REQUIRE(writer.deleteListAndDescendants(parentId));
+
+    CHECK(removed == std::vector{parentId, childId, grandchildId});
+    REQUIRE(preferences.size() == 1);
+    CHECK(preferences.contains(unrelatedId));
   }
 } // namespace ao::uimodel::test

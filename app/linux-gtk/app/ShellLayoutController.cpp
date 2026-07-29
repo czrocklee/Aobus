@@ -19,6 +19,9 @@
 #include "playback/AobusSoulWindow.h"
 #include "playback/OutputDevicePopover.h"
 #include "tag/TagEditController.h"
+#include "track/TrackOrderActions.h"
+#include "track/TrackPageHost.h"
+#include "track/TrackViewPage.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
@@ -30,7 +33,9 @@
 #include <ao/rt/Log.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/WorkspaceService.h>
+#include <ao/rt/WorkspaceSnapshot.h>
 #include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailProjection.h>
 #include <ao/uimodel/layout/action/LayoutActionAvailability.h>
@@ -209,8 +214,20 @@ namespace ao::gtk
     registerWorkspaceActions(registerAction, hasActiveSequence);
     registerTrackActions(registerAction);
 
-    _playbackSubs.push_back(commandSurface(_dependencies.playbackCommandSurface)
-                              .onAvailabilityChanged([this] noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(commandSurface(_dependencies.playbackCommandSurface)
+                                          .onAvailabilityChanged([this] noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onSelectionChanged(
+      [this](rt::ViewService::SelectionChanged const&) noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onPresentationChanged(
+      [this](rt::ViewService::PresentationChanged const&) noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onProjectionChanged(
+      [this](rt::TrackListProjectionChanged const&) noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.views().onViewDestroyed(
+      [this](rt::ViewService::ViewDestroyed const&) noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(
+      _runtime.workspace().onChanged([this](rt::WorkspaceChanged const&) noexcept { refreshExportedActions(); }));
+    _actionStateSubscriptions.push_back(_runtime.library().onAuthoringAvailabilityChanged(
+      [this](rt::LibraryAuthoringAvailability const&) noexcept { refreshExportedActions(); }));
   }
 
   ShellLayoutController::~ShellLayoutController()
@@ -457,6 +474,85 @@ namespace ao::gtk
         return uimodel::LayoutActionAvailability{
           .enabled = !projPtr->snapshot().trackIds.empty(), .disabledReason = ""};
       });
+
+    registerTrackOrderActions(registerAction);
+  }
+
+  void ShellLayoutController::registerTrackOrderActions(RegisterActionFn const& registerAction)
+  {
+    auto const registerOrderAction =
+      [this, &registerAction](std::string_view const id, std::string_view const label, TrackOrderCommand const command)
+    {
+      registerAction(
+        id,
+        label,
+        "Tracks",
+        uimodel::LayoutActionCapability::None,
+        [this, command](layout::ActionActivationContext&)
+        {
+          if (_dependencies.trackPageHost == nullptr)
+          {
+            return;
+          }
+
+          auto* const entry = _dependencies.trackPageHost->currentVisible();
+
+          if (entry != nullptr && entry->pagePtr != nullptr)
+          {
+            entry->pagePtr->applyListOrderCommand(command);
+          }
+        },
+        [this, command](layout::ActionActivationContext const&) -> uimodel::LayoutActionAvailability
+        {
+          if (_dependencies.trackPageHost == nullptr)
+          {
+            return {.enabled = false, .disabledReason = "No track view is available."};
+          }
+
+          auto const* const entry = _dependencies.trackPageHost->currentVisible();
+
+          if (entry == nullptr || entry->pagePtr == nullptr)
+          {
+            return {.enabled = false, .disabledReason = "No track view is available."};
+          }
+
+          auto const capabilities = entry->pagePtr->orderCapabilities();
+          bool enabled = false;
+
+          switch (command)
+          {
+            case TrackOrderCommand::MoveUp:
+            case TrackOrderCommand::MoveDown: enabled = capabilities.canRelativeMove; break;
+            case TrackOrderCommand::MoveToTop:
+            case TrackOrderCommand::MoveToBottom: enabled = capabilities.canAbsoluteMove; break;
+            case TrackOrderCommand::Reset: enabled = capabilities.canResetOrder; break;
+            case TrackOrderCommand::ForgetHidden: enabled = capabilities.canForgetHiddenPositions; break;
+          }
+
+          if (enabled && command != TrackOrderCommand::Reset && command != TrackOrderCommand::ForgetHidden)
+          {
+            enabled = entry->pagePtr->selectionController().selectedTrackCount() > 0;
+          }
+
+          auto disabledReason = std::string{};
+
+          if (!enabled)
+          {
+            disabledReason = capabilities.disabledReason.empty() ? "Select at least one track to change Manual Order."
+                                                                 : capabilities.disabledReason;
+          }
+
+          return {.enabled = enabled, .disabledReason = std::move(disabledReason)};
+        });
+    };
+
+    registerOrderAction(kTrackOrderMoveUpActionId, "Move Up in Manual Order", TrackOrderCommand::MoveUp);
+    registerOrderAction(kTrackOrderMoveDownActionId, "Move Down in Manual Order", TrackOrderCommand::MoveDown);
+    registerOrderAction(kTrackOrderMoveToTopActionId, "Move to Top of Manual Order", TrackOrderCommand::MoveToTop);
+    registerOrderAction(
+      kTrackOrderMoveToBottomActionId, "Move to Bottom of Manual Order", TrackOrderCommand::MoveToBottom);
+    registerOrderAction(kTrackOrderResetActionId, "Reset Manual Order", TrackOrderCommand::Reset);
+    registerOrderAction(kTrackOrderForgetHiddenActionId, "Forget Hidden Positions", TrackOrderCommand::ForgetHidden);
   }
 
   void ShellLayoutController::attachToWindow()
@@ -984,6 +1080,21 @@ namespace ao::gtk
   void ShellLayoutController::activateAction(std::string_view id)
   {
     auto ctx = actionContext(id);
+
+    if (auto const availability = _actionRegistry.state(id, ctx); !availability.enabled)
+    {
+      if (isTrackOrderAction(id) && _dependencies.trackPageHost != nullptr)
+      {
+        if (auto* const entry = _dependencies.trackPageHost->currentVisible();
+            entry != nullptr && entry->pagePtr != nullptr)
+        {
+          entry->pagePtr->setStatusMessage(availability.disabledReason);
+        }
+      }
+
+      return;
+    }
+
     _actionRegistry.activate(id, ctx);
   }
 

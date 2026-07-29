@@ -17,12 +17,13 @@ Use the [user guide template](../template/user-guide.md) for a new task.
 ## Start and manage a library
 
 - [Get started](get-started.md) opens a music root, builds its index, and starts the first track in GTK.
-- [Manage a library](manage-library.md) reconciles files, previews scans, filters tracks, and creates Smart Lists.
+- [Manage a library](manage-library.md) reconciles files, previews scans, filters tracks, and creates saved Lists.
 - [Back up and restore](backup-and-restore.md) exports portable library data and chooses restore or merge deliberately.
 
 ## Listen and curate
 
 - [Play music](play-music.md) starts a sequence and controls transport, volume, output, and quality inspection.
+- [Organize music with Lists and Playlists](organize-with-lists.md) defines membership, nesting, Manual Order, Add/Remove, and safe deletion workflows.
 - [Edit track metadata](edit-metadata.md) changes built-in fields, custom metadata, and tags for one or more tracks.
 - [Customize the GTK application](customize-application.md) changes appearance, layout, output, panel state, and keyboard bindings.
 

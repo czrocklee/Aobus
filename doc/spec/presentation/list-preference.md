@@ -12,17 +12,17 @@ summary: Defines per-list presentation selection, recommendation fallback, persi
 This specification defines how Aobus chooses and remembers the presentation normally used for one library list.
 The presentation's grouping, sorting, and field behavior belongs to [track-list presentation](track-presentation.md), and exact built-in ids belong to the [track preset reference](../../reference/presentation/track-preset.md).
 
-List content and Smart List expressions belong to the [list model](../../reference/library/model/list.md).
+List membership expressions and saved rank overlays belong to the [list model](../../reference/library/model/list.md).
 Transient quick-filter behavior belongs to [track filtering](track-filter.md).
 
 ## Code boundary
 
-This contract spans the **application runtime**, **UIModel**, and GTK persistence adapter layers from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation](../../architecture/presentation.md), [workspace](../../architecture/workspace.md), and [persistence and managed-state](../../architecture/persistence-and-managed-state.md) architectures.
-Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map, recommendation policy, and versioned semantic schema; GTK owns the per-library persistence location and save boundary.
+This contract spans the **application runtime**, **UIModel**, and frontend persistence adapters from the [system architecture](../../architecture/system-overview.md), as refined by the [presentation](../../architecture/presentation.md), [workspace](../../architecture/workspace.md), and [persistence and managed-state](../../architecture/persistence-and-managed-state.md) architectures.
+Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map, deletion lifecycle, recommendation policy, and versioned semantic schema; each frontend owns its per-library persistence location and save boundary.
 
 ## Terminology
 
-- **List content** is the membership intent or Smart List predicate owned by the library.
+- **List membership** is the local predicate composed with parent membership by the library.
 - **Presentation preference** is an optional `ListId -> presentation id` choice.
 - **Active presentation** is the exact `TrackPresentationSpec` installed in one runtime view.
 - **Recommendation** is the source-aware fallback used when no resolvable preference exists.
@@ -37,7 +37,8 @@ Runtime owns the active `TrackPresentationSpec`; UIModel owns the preference map
 - Unknown saved presentation ids fall back instead of blocking list opening.
 - Runtime navigation snapshots retain exact presentation state independently of the saved default preference.
 - Replaying history does not write a new preference.
-- GTK presentation preferences are per library and do not become global application state.
+- Presentation preferences are per library and do not become global application state.
+- Deleting a saved List removes its preference in the shared UIModel lifecycle; one cascade change removes every deleted descendant preference.
 
 ## State model
 
@@ -67,11 +68,13 @@ Presentation resolution for a list follows this order:
 
 Current source-aware recommendation is:
 
-- manual list: `list-order`;
-- Smart List: inspect its successfully parsed local filter and choose by the priority in [track-list presentation](track-presentation.md#recommendation);
-- All Tracks or another non-Smart source: `albums`.
+- saved List with a nonempty, successfully parsed local expression: choose by the priority in [track-list presentation](track-presentation.md#recommendation);
+- saved List with an empty expression: `albums`;
+- All Tracks: `albums`.
 
-An invalid Smart List expression falls back to `albums` recommendation and does not change source membership or error state.
+An invalid saved-List expression falls back to `albums` recommendation and does not change source membership or error state.
+`Manual Order` is an explicit user preference rather than a recommendation inferred from List storage.
+The New Playlist template selects that preference when it creates a tag-backed List.
 
 ## Commands and transitions
 
@@ -84,6 +87,7 @@ Workspace restoration installs the exact presentation stored with each view and 
 Navigation-history replay likewise restores the recorded exact presentation without resolving a new default.
 Playback restoration submits the same `NewViewDefault` request as ordinary GTK navigation: an existing plain view keeps its exact presentation, while a newly created plain view receives the preference or recommendation.
 Changing the presentation through a normal user-selection path installs the new runtime spec and may update the base list's saved preference.
+When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 
 Applying a quick filter changes only `filterExpression` and active source/projection resources.
 It does not create a new preference or rerun list recommendation.
@@ -97,7 +101,7 @@ Back/forward restoration applies that snapshot as replay and must not reinterpre
 An unknown or removed presentation id is recoverable and selects the recommendation path.
 An empty built-in catalog may produce an empty fallback spec; ordinary application composition supplies the built-in catalog.
 
-UIModel preference operations, recommendation, and persistence conversion are synchronous and have no cancellation point.
+UIModel preference operations, recommendation, deletion cleanup, and persistence conversion are synchronous and have no cancellation point.
 An unsupported version, duplicate or invalid list id, empty id, or structural mismatch rejects the complete persisted preference group and preserves the caller's seeded state.
 An unknown nonempty presentation id remains a valid extensible reference and follows recommendation fallback.
 GTK load/save failures do not mutate library list records.
@@ -114,18 +118,19 @@ Unknown custom ids remain tolerated because custom presentations may be removed 
 Unversioned legacy preference maps and unsupported future versions are rejected without migration or automatic rewrite.
 The explicit schema returns `NotSupported` for a future version before interpreting its preferences.
 
-TUI currently uses runtime presentation state but does not use the GTK per-library preference store.
+TUI currently uses runtime presentation state but does not persist this preference map.
 
 ## Frontend observations
 
 Presentation pickers resolve labels and specs through the shared catalog.
 The active view observes the selected `TrackPresentationSpec`; frontends do not read or write list storage to remember the choice.
 
-Quick-filter controls and Smart List editors may display the current presentation, but filter editing remains independent from preference mutation.
+Quick-filter controls and List editors may display the current presentation, but filter editing remains independent from preference mutation.
 
 ## Implementation map
 
 - [`ListPresentationPreferenceStore`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceStore.h) owns the map and resolution order.
+- [`ListPresentationPreferenceLifecycle`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h) owns shared cleanup from `listsDeleted`.
 - [`ListPresentationPreferenceYamlSchema`](../../../app/include/ao/uimodel/library/presentation/ListPresentationPreferenceYamlSchema.h) owns explicit YAML mapping, the versioned document, and semantic conversion.
 - [`TrackPresentationRecommender`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationRecommender.h) owns source-aware fallback policy.
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
@@ -135,7 +140,7 @@ Quick-filter controls and Smart List editors may display the current presentatio
 
 ## Test map
 
-- [`ListPresentationPreferenceStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp) proves map behavior, resolution, and fallbacks.
+- [`ListPresentationPreferenceStoreTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceStoreTest.cpp) proves map behavior, resolution, fallbacks, and cascade cleanup.
 - [`ListPresentationPreferenceYamlSchemaTest.cpp`](../../../test/unit/uimodel/library/presentation/ListPresentationPreferenceYamlSchemaTest.cpp) proves version gates, opaque ids, and whole-group rejection.
 - [`TrackPresentationRecommenderTest.cpp`](../../../test/unit/uimodel/library/presentation/TrackPresentationRecommenderTest.cpp) proves source-aware recommendations.
 - [`GtkLayoutStateStoreTest.cpp`](../../../test/unit/linux-gtk/app/GtkLayoutStateStoreTest.cpp) proves per-library persistence.

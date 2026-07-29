@@ -31,9 +31,10 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - **Effective change** means serialized library state differs after applying a valid command.
 - **Preview** executes the command path but leaves its write transaction uncommitted and publishes nothing.
 - **Target binding** is runtime-created evidence containing one runtime instance id, committed library revision, and exact ordered track-id set.
+- **Order binding** is runtime-created evidence containing one runtime instance id, committed library revision, saved List id, and complete effective source order.
 - **Interactive admission** accepts a command only while authoring is `Available` and no earlier commit is awaiting publication completion.
 - **Dictionary overlay** is the write-transaction-local text/id delta used while serializing records; it is not visible through committed dictionary reads.
-- **Stored order** is the complete explicit membership order of a manual list, including ids hidden by an upstream source.
+- **Raw order** is a saved List's persisted rank sequence, including ids currently hidden by its parent or local expression.
 
 ## Invariants
 
@@ -45,6 +46,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - An effective command commits one revision and publishes exactly one matching changeset through the coordinator before authoring becomes available at that revision.
 - Interactive commands are rejected throughout import, scan-apply, and audio-identity maintenance.
 - Metadata and tag commits require a current target binding and revalidate runtime identity, availability, revision, and every target while holding coordinator writer ownership.
+- Order commits require a current order binding and revalidate runtime identity, availability, revision, List identity, selection, and anchor while holding coordinator writer ownership.
 - A preview returns the same classifications and report values as its committing counterpart from the same starting state, except it returns no allocated durable id.
 - Dictionary rows and every record that references them commit in the same native transaction; committed dictionary publication completes before application change delivery.
 - A preview, abort, serialization failure, or commit failure leaves committed dictionary lookup, size, and generation unchanged.
@@ -96,47 +98,73 @@ The preview validates and prepares the same import but does not expose a `TrackI
 
 ### Delete track
 
-Deleting an existing track removes its hot and cold records and manifest row and removes every occurrence from manual lists in the same transaction.
-The reply reports the deleted track and affected list memberships.
+Deleting an existing track removes its hot and cold records and manifest row and removes every occurrence from every saved List raw order in the same transaction.
+The reply reports the deleted track and affected List ids.
 A missing track returns `NotFound`.
 
 ## List commands
 
-### Kinds and drafts
+### Definitions and drafts
 
-A list draft is either smart or manual.
-A smart draft stores a filter expression and computes membership; a manual draft stores explicit track ids and has no filter expression.
+A List draft carries definition fields only: id for update, parent, name, description, and local expression.
+There is no Manual, Smart, Folder, or Playlist kind.
+An empty expression is the identity predicate and a non-empty expression computes membership from the parent source.
+The draft never carries order ids.
 
-Creation and update validate the name, parent relationship, kind-specific fields, smart expression, membership ids, size bounds, and parent cycles before commit.
-A non-empty Smart List expression must parse and compile under the [predicate contracts](../../query/predicate-evaluation.md) before the transaction commits.
+Creation and update validate the name, parent relationship, expression, size bounds, and parent cycles before commit.
+A non-empty List expression must parse and compile under the [predicate contracts](../../query/predicate-evaluation.md) before the transaction commits.
 A stale update target returns `NotFound`.
 
-Full manual drafts canonicalize duplicate ids to first occurrence and reject missing track ids atomically.
+Updating definition fields copies the existing raw order unchanged.
 An unchanged update is a successful no-op.
 
-### Manual insert
+### Saved order
 
-Insertion uses a gap index in the current stored order, from zero through the current size.
-Requested ids are classified in request order with this precedence: duplicate request, already present, missing track, inserted.
-Only inserted ids enter the list, in their first request order.
-An all-skipped request is a successful no-op.
+`Library::bindListOrder` accepts one saved List id and its complete current effective source order only while authoring is available.
+The returned `BoundListOrder` is authoritative evidence for one runtime instance and committed global library revision.
+Any intervening effective library commit makes it stale, including a commit unrelated to that List.
 
-### Manual remove
+`moveListOrder` accepts selected ids and an optional `beforeTrackId`; no anchor means the complete raw-order end.
+The command deduplicates the selection and preserves its relative order from the bound effective sequence, never request or widget-selection order.
+Every selected id and anchor must belong to the bound sequence, and the anchor must be unselected.
 
-Removal selects each requested id at most once.
-The reply distinguishes duplicate requests and ids not present in stored order.
-Existing ids are removed atomically, and their reported order follows stored order rather than request order.
+The writer first simulates the effective move.
+An empty selection or unchanged effective sequence is `NoOp` and does not materialize or commit an order.
+For an effective move, the writer appends every currently unranked member in bound order, retains hidden ranks, applies the move to the complete raw order, verifies that its visible projection equals the requested result, then writes one List value and revision.
+This is lazy full materialization: creating, viewing, filtering, changing metadata, or merely selecting Manual Order never writes order ids.
 
-### Manual move
+`resetListOrder` clears every visible and hidden rank.
+`forgetHiddenListOrder` removes only raw-order ids absent from the bound effective membership and preserves the current visible order.
+Both return `NoOp` when nothing would be forgotten.
 
-Move selects existing requested ids once, preserves their stored relative order, removes them, and inserts them at a gap measured after removal.
-The reply distinguishes duplicate requests and absent ids.
-Empty selection and a resulting identical order are successful no-ops.
+Order commands return `Applied`, `NoOp`, `Stale`, or `Unavailable`.
+Malformed selection or anchor input is a `Result` error rather than a partial mutation.
+
+### Tag-backed membership editing
+
+Add/Remove to Playlist is available only when the parsed local expression root is exactly one positive tag variable.
+That is an operation capability derived from the AST, not a persisted List kind.
+Compound, negated, invalid, or non-tag expressions have computed membership and reject direct membership commands.
+
+Add validates the complete bound track selection and, for a nested List, requires every target to belong to the target List's parent source.
+It adds the ordinary visible tag atomically, does not materialize raw order, and leaves a new member in the unranked tail.
+Already-present tags are idempotent no-ops.
+
+Explicit Remove removes the ordinary tag and removes each selected id from the target List raw order in the same transaction.
+The reply identifies every forgotten position, and the changeset carries both track mutation and raw-order evidence.
+Its user-facing result must name the visible tag and explicitly say that saved positions were forgotten; reporting only membership removal is incomplete.
+Removing the same tag through the generic tag editor does not alter raw order; a later re-entry therefore restores the hidden rank.
 
 ### List deletion
 
-Deleting an existing list removes its stored definition.
-Source invalidation and dependent-list behavior follow the source specification after the committed deletion is published.
+Ordinary deletion rejects a List with direct dependents and reports their identities; it never reparents or silently cascades.
+`previewDeleteListAndDescendants` returns the complete subtree before the separate cascade command removes every row atomically.
+
+Deletion of a directly editable single-tag List preserves ordinary track tags by default.
+The preview reports the tag, tagged-track count, and other remaining List expressions that reference it.
+An explicit `removeWritableTagFromTracks` option removes that tag from all affected tracks in the same transaction as the single or cascade List deletion.
+
+Every deleted List id is published so shared presentation-preference lifecycle code can remove all corresponding frontend state.
 A missing list returns `NotFound`.
 
 ## Failure and cancellation
@@ -173,7 +201,7 @@ Exact records and identifier allocation belong to the [library database referenc
 ## Test map
 
 - [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
-- `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, lists, manual ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
+- `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
 - [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, no-op binding retention, and post-commit fault closure.
 
 ## Related documents

@@ -14,59 +14,35 @@
 
 namespace ao::library
 {
-  /**
-   * ListBuilder - Fluent builder for constructing list binary data.
-   *
-   * Stores strings as string_view pointing to external data.
-   *
-   * Usage:
-   *   // Create a manual list
-   *   auto builder = ListBuilder::makeEmpty();
-   *   builder.name("My Playlist").description("Great songs");
-   *   builder.tracks().add(trackId1).add(trackId2);
-   *   auto payload = builder.serialize();
-   *
-   *   // Create a smart list
-   *   auto builder = ListBuilder::makeEmpty();
-   *   builder.name("Smart List").description("Filtered").filter("@genre = rock");
-   *   auto payload = builder.serialize();
-   */
+  /** Fluent builder for one saved List record. */
   class ListBuilder
   {
   public:
-    // Factory methods
     static ListBuilder makeEmpty();
     static ListBuilder fromView(ListView const& view);
 
-    //=============================================================================
-    // TracksBuilder - nested class for track management
-    //=============================================================================
-    class TracksBuilder
+    class OrderTrackIdsBuilder
     {
     public:
-      explicit TracksBuilder() = default;
+      explicit OrderTrackIdsBuilder() = default;
 
       /** Adds an ID only on its first occurrence, preserving request order. */
-      TracksBuilder& add(TrackId id);
+      OrderTrackIdsBuilder& add(TrackId id);
 
-      /** Removes every occurrence, including duplicates from legacy records. */
-      TracksBuilder& remove(TrackId id);
-      TracksBuilder& clear();
-      TracksBuilder& smart(bool smart);
+      /** Removes every occurrence. */
+      OrderTrackIdsBuilder& remove(TrackId id);
+      OrderTrackIdsBuilder& clear();
 
       std::vector<TrackId> const& ids() const { return _trackIds; }
-      bool isSmart() const { return _isSmart; }
 
     private:
       friend class ListBuilder;
 
       std::vector<TrackId> _trackIds;
       std::unordered_set<TrackId> _trackIdMembership;
-      bool _isSmart = false;
     };
 
-    // Sub-builder accessor
-    TracksBuilder& tracks();
+    OrderTrackIdsBuilder& orderTrackIds();
 
     // Direct setters
     ListBuilder& name(std::string_view name);
@@ -74,22 +50,17 @@ namespace ao::library
     ListBuilder& filter(std::string_view filter);
     ListBuilder& parentId(ListId parentId);
 
-    // Serialization validates every field against the fixed-width ListHeader layout.
+    // Serialization validates every field and every derived extent.
     Result<std::vector<std::byte>> serialize() const;
 
   private:
     explicit ListBuilder() = default;
 
-    // Data storage - string_view pointing to external data
     std::string_view _name;
     std::string_view _description;
     std::string_view _filter;
     ListId _parentId = kInvalidListId;
 
-    // TracksBuilder needs access to modify ListBuilder's isSmart flag
-    friend class TracksBuilder;
-
-    // Sub-builder stored as member
-    TracksBuilder _tracksBuilder;
+    OrderTrackIdsBuilder _orderTrackIdsBuilder;
   };
 } // namespace ao::library

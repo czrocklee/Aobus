@@ -132,19 +132,14 @@ namespace ao::uimodel
       return fallbackSpec(builtinPresets);
     };
 
-    if (context.sourceKind == ListPresentationSourceKind::Manual)
-    {
-      return findPreset(rt::kListOrderTrackPresentationId);
-    }
-
     auto fallbackSpec = findPreset("albums");
 
-    if (context.sourceKind != ListPresentationSourceKind::Smart || context.smartListFilter.empty())
+    if (context.sourceKind != ListPresentationSourceKind::SavedList || context.listExpression.empty())
     {
       return fallbackSpec;
     }
 
-    auto const expr = query::parse(context.smartListFilter);
+    auto const expr = query::parse(context.listExpression);
 
     if (!expr)
     {
