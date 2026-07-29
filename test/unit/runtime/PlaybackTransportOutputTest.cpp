@@ -7,8 +7,11 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/Format.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/Transport.h>
+#include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -19,6 +22,29 @@
 
 namespace ao::rt::test
 {
+  namespace
+  {
+    audio::flow::Graph verifiedSystemGraph()
+    {
+      auto const format = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false};
+      return audio::flow::Graph{
+        .nodes =
+          {
+            audio::flow::Node{.id = "system-stream",
+                              .type = audio::flow::NodeType::Stream,
+                              .name = "System Stream",
+                              .optFormat = format},
+            audio::flow::Node{
+              .id = "system-sink", .type = audio::flow::NodeType::Sink, .name = "System Sink", .optFormat = format},
+          },
+        .connections =
+          {
+            audio::flow::Connection{.sourceId = "system-stream", .destinationId = "system-sink", .isActive = true},
+          },
+      };
+    }
+  } // namespace
+
   TEST_CASE("PlaybackTransport output device - devices output and quality signal subscriptions",
             "[runtime][unit][playback][output]")
   {
@@ -106,6 +132,50 @@ namespace ao::rt::test
 
     CHECK(fixture.playbackTransport.play(desc, ListId{1}));
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == TrackId{1});
+  }
+
+  TEST_CASE("PlaybackTransport output device - paused playback continues to publish graph quality changes",
+            "[runtime][regression][playback][output]")
+  {
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+    auto qualityEvents = std::vector<PlaybackTransport::QualityChanged>{};
+    auto qualitySub =
+      fixture.playbackTransport.onQualityChanged([&](auto const& event) noexcept { qualityEvents.push_back(event); });
+
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    auto const testFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const request =
+      playbackRequest(TrackId{1}, testFile.string(), "Paused Quality", "Aobus", std::chrono::minutes{2});
+    REQUIRE(fixture.playbackTransport.play(request, ListId{1}));
+    REQUIRE(fixture.renderTarget != nullptr);
+
+    fixture.renderTarget->handleRouteReady("mock_anchor");
+    REQUIRE(fixture.executor.drainUntil([&] { return static_cast<bool>(fixture.onGraphChangedCb); }));
+
+    fixture.onGraphChangedCb(verifiedSystemGraph());
+    REQUIRE(fixture.executor.drainUntil(
+      [&]
+      {
+        return !qualityEvents.empty() &&
+               qualityEvents.back().quality.pipelineQuality == audio::Quality::BitwisePerfect &&
+               qualityEvents.back().quality.fullyVerified;
+      }));
+
+    fixture.playbackTransport.pause();
+    REQUIRE(fixture.playbackTransport.state().transport == audio::Transport::Paused);
+
+    auto interventionGraph = verifiedSystemGraph();
+    interventionGraph.nodes.front().softwareVolumeNotUnity = true;
+    interventionGraph.nodes.front().maxSoftwareGain = 0.5F;
+    fixture.onGraphChangedCb(interventionGraph);
+    REQUIRE(fixture.executor.drainUntil(
+      [&] { return qualityEvents.back().quality.pipelineQuality == audio::Quality::LinearIntervention; }));
+
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Paused);
+    CHECK(qualityEvents.back().ready);
+    CHECK(qualityEvents.back().quality.pipelineQuality == audio::Quality::LinearIntervention);
   }
 
   TEST_CASE("PlaybackTransport output device - auto-select notifies device list subscribers",

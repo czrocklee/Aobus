@@ -16,6 +16,7 @@
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <ftxui/dom/elements.hpp>
@@ -140,6 +141,48 @@ namespace ao::tui::test
     CHECK(text.contains("1:05"));
     CHECK(text.contains("2:05"));
     CHECK(text.contains("Vol 42%"));
+  }
+
+  TEST_CASE("PlaybackPanel - paused soul retains its sampled frame while live quality changes",
+            "[tui][regression][playback][soul]")
+  {
+    auto state = rt::PlaybackTransportSnapshot{
+      .transport = audio::Transport::Paused,
+      .ready = true,
+      .quality = rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                  .pipelineQuality = audio::Quality::BitwisePerfect,
+                                  .overall = audio::Quality::BitwisePerfect},
+    };
+    auto const renderAt = [&state](std::chrono::milliseconds const animationElapsed)
+    {
+      auto screen = ftxui::Screen::Create(ftxui::Dimension::Fixed(96), ftxui::Dimension::Fixed(1));
+      ftxui::Render(screen,
+                    playbackBar(PlaybackBarViewState{
+                      .playbackState = &state,
+                      .animationElapsed = animationElapsed,
+                      .soulMotion = uimodel::aobusSoulMotionAt(std::chrono::milliseconds{2080}),
+                    }));
+      return screen;
+    };
+
+    auto const early = renderAt(std::chrono::milliseconds{0});
+    auto const late = renderAt(std::chrono::milliseconds{5120});
+    CHECK(early.PixelAt(0, 0).character == "⠚");
+    CHECK(early.PixelAt(1, 0).character == "⠉");
+    CHECK(early.PixelAt(2, 0).character == "⠓");
+    CHECK(late.PixelAt(0, 0).character == early.PixelAt(0, 0).character);
+    CHECK(late.PixelAt(1, 0).character == early.PixelAt(1, 0).character);
+    CHECK(late.PixelAt(2, 0).character == early.PixelAt(2, 0).character);
+    CHECK(late.PixelAt(1, 0).foreground_color == early.PixelAt(1, 0).foreground_color);
+
+    state.quality.pipelineQuality = audio::Quality::LinearIntervention;
+    state.quality.overall = audio::Quality::LinearIntervention;
+    auto const changed = renderAt(std::chrono::milliseconds{5120});
+
+    CHECK(changed.PixelAt(0, 0).character == early.PixelAt(0, 0).character);
+    CHECK(changed.PixelAt(1, 0).character == early.PixelAt(1, 0).character);
+    CHECK(changed.PixelAt(2, 0).character == early.PixelAt(2, 0).character);
+    CHECK_FALSE(changed.PixelAt(1, 0).foreground_color == early.PixelAt(1, 0).foreground_color);
   }
 
   TEST_CASE("PlaybackPanel - playback bar anchors the soul button at the far left", "[tui][unit][playback]")

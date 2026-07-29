@@ -18,6 +18,6 @@ namespace ftxui
 namespace ao::tui
 {
   ftxui::Element soulButtonElement(audio::Transport transport,
-                                   uimodel::AobusSoulRgb aura,
-                                   std::chrono::milliseconds animationElapsed);
+                                   uimodel::AobusSoulVisualFrame const& visual,
+                                   std::chrono::milliseconds transientElapsed);
 } // namespace ao::tui

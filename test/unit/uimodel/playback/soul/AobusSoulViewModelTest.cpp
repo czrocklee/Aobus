@@ -3,7 +3,9 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/ApplicationPlaybackTestSupport.h"
+#include "test/unit/runtime/PlaybackUiTestSupport.h"
 #include <ao/audio/Quality.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackMode.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
@@ -28,49 +30,90 @@ namespace ao::uimodel::test
     SECTION("Initial render when idle")
     {
       REQUIRE(!log.empty());
-      CHECK(log.last().isBreathing == false);
+      CHECK(log.last().motionMode == AobusSoulMotionMode::Dormant);
       CHECK(log.last().aura == SoulAura::Dormant);
     }
   }
 
   TEST_CASE("AobusSoulViewModel - playback signal resolves to branded aura", "[uimodel][unit][playback][soul]")
   {
-    CHECK(resolveSoulAura(false, true, rt::QualityState{.overall = audio::Quality::BitwisePerfect}) ==
+    CHECK(resolveSoulAura(audio::Transport::Idle, true, rt::QualityState{.overall = audio::Quality::BitwisePerfect}) ==
           SoulAura::Dormant);
-    CHECK(resolveSoulAura(true, false, rt::QualityState{.overall = audio::Quality::BitwisePerfect}) ==
-          SoulAura::Veiled);
-    CHECK(resolveSoulAura(true,
+    CHECK(resolveSoulAura(audio::Transport::Playing,
+                          false,
+                          rt::QualityState{.overall = audio::Quality::BitwisePerfect}) == SoulAura::Veiled);
+    CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                                            .pipelineQuality = audio::Quality::BitwisePerfect,
                                            .overall = audio::Quality::BitwisePerfect}) == SoulAura::Radiant);
-    CHECK(resolveSoulAura(true,
+    CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                                            .pipelineQuality = audio::Quality::LosslessPadded,
                                            .overall = audio::Quality::LosslessPadded}) == SoulAura::Flowing);
-    CHECK(resolveSoulAura(true,
+    CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                                            .pipelineQuality = audio::Quality::LosslessFloat,
                                            .overall = audio::Quality::LosslessFloat}) == SoulAura::Flowing);
-    CHECK(resolveSoulAura(true,
+    CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                                            .pipelineQuality = audio::Quality::LinearIntervention,
                                            .overall = audio::Quality::LinearIntervention}) == SoulAura::Turbulent);
-    CHECK(resolveSoulAura(true,
+    CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::LossySource,
                                            .pipelineQuality = audio::Quality::BitwisePerfect,
                                            .overall = audio::Quality::LossySource}) == SoulAura::Veiled);
-    CHECK(resolveSoulAura(true,
+    CHECK(resolveSoulAura(audio::Transport::Playing,
                           true,
                           rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                                            .pipelineQuality = audio::Quality::BitwisePerfect,
                                            .overall = audio::Quality::BitwisePerfect,
                                            .fullyVerified = false}) == SoulAura::Veiled);
-    CHECK(resolveSoulAura(true, true, rt::QualityState{.overall = audio::Quality::Clipped}) == SoulAura::Burning);
+    CHECK(resolveSoulAura(audio::Transport::Playing, true, rt::QualityState{.overall = audio::Quality::Clipped}) ==
+          SoulAura::Burning);
+  }
+
+  TEST_CASE("AobusSoulViewModel - paused playback freezes motion and keeps the live quality aura",
+            "[uimodel][regression][playback][soul]")
+  {
+    auto fixture = PlaybackUiFixture{};
+    fixture.makePlaybackReady();
+    auto const trackId = fixture.addPlayableTrack("Paused Soul");
+    auto& playback = fixture.runtime.playback();
+    auto log = ao::test::RenderLog<AobusSoulViewState>{};
+    auto const viewModel = AobusSoulViewModel{playback, [&log](auto const& view) { log.render(view); }};
+    REQUIRE(fixture.playFromView(trackId));
+    REQUIRE(log.last().motionMode == AobusSoulMotionMode::Animating);
+    auto const playingAura = log.last().aura;
+
+    playback.commands().pause();
+
+    REQUIRE(playback.snapshot().transport.transport == audio::Transport::Paused);
+    CHECK(log.last().motionMode == AobusSoulMotionMode::Frozen);
+    CHECK(log.last().aura == playingAura);
+  }
+
+  TEST_CASE("resolveSoulAura uses live quality while paused", "[uimodel][regression][playback][soul]")
+  {
+    CHECK(resolveSoulAura(audio::Transport::Paused,
+                          true,
+                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                           .pipelineQuality = audio::Quality::BitwisePerfect,
+                                           .overall = audio::Quality::BitwisePerfect}) == SoulAura::Radiant);
+    CHECK(resolveSoulAura(audio::Transport::Paused,
+                          true,
+                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                           .pipelineQuality = audio::Quality::LinearIntervention,
+                                           .overall = audio::Quality::LinearIntervention}) == SoulAura::Turbulent);
+    CHECK(resolveSoulAura(audio::Transport::Paused,
+                          false,
+                          rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                                           .pipelineQuality = audio::Quality::BitwisePerfect,
+                                           .overall = audio::Quality::BitwisePerfect}) == SoulAura::Veiled);
   }
 
   TEST_CASE("AobusSoulViewModel - unchanged aura snapshots do not rerender", "[uimodel][regression][playback][soul]")
@@ -124,12 +167,48 @@ namespace ao::uimodel::test
     CHECK(kAobusSoulCoreGradientStop == 0.382);
   }
 
-  TEST_CASE("AobusSoul - frame updates require visible active playback", "[uimodel][unit][playback][soul]")
+  TEST_CASE("AobusSoul - motion mode follows transport state", "[uimodel][unit][playback][soul]")
   {
-    CHECK(shouldAnimateAobusSoul(true, true, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(false, true, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(true, false, false));
-    CHECK_FALSE(shouldAnimateAobusSoul(true, true, true));
+    CHECK(aobusSoulMotionMode(audio::Transport::Playing) == AobusSoulMotionMode::Animating);
+    CHECK(aobusSoulMotionMode(audio::Transport::Paused) == AobusSoulMotionMode::Frozen);
+    CHECK(aobusSoulMotionMode(audio::Transport::Idle) == AobusSoulMotionMode::Dormant);
+    CHECK(aobusSoulMotionMode(audio::Transport::Seeking) == AobusSoulMotionMode::Dormant);
+
+    CHECK(shouldAnimateAobusSoul(AobusSoulMotionMode::Animating, true, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Frozen, true, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Dormant, true, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Animating, false, false));
+    CHECK_FALSE(shouldAnimateAobusSoul(AobusSoulMotionMode::Animating, true, true));
+  }
+
+  TEST_CASE("AobusSoul - frozen animation retains the exact sampled frame while aura changes",
+            "[uimodel][regression][playback][soul]")
+  {
+    auto animation = AobusSoulAnimationState{};
+    animation.setMotionMode(AobusSoulMotionMode::Animating);
+    animation.advance(kAobusSoulHuePeriod / 4.0);
+    auto const animated = animation.visualFrame(kAobusSoulTurbulent);
+
+    animation.setMotionMode(AobusSoulMotionMode::Frozen);
+    animation.advance(std::chrono::seconds{5});
+    auto const frozen = animation.visualFrame(kAobusSoulTurbulent);
+
+    CHECK(frozen == animated);
+
+    auto const recolored = animation.visualFrame(kAobusSoulRadiant);
+    CHECK(recolored.motion == frozen.motion);
+    CHECK(recolored.gradientColors == aobusSoulGradientColors(kAobusSoulRadiant, frozen.motion.hueShiftDegrees));
+    CHECK_FALSE(recolored.gradientColors.body == frozen.gradientColors.body);
+
+    auto const frozenElapsed = animation.elapsed();
+    animation.setMotionMode(AobusSoulMotionMode::Animating);
+    animation.advance(std::chrono::milliseconds{20});
+    CHECK(animation.elapsed() > frozenElapsed);
+    CHECK_FALSE(animation.motionFrame() == frozen.motion);
+
+    animation.setMotionMode(AobusSoulMotionMode::Dormant);
+    CHECK(animation.elapsed() == std::chrono::duration<double>::zero());
+    CHECK(animation.motionFrame() == AobusSoulMotionFrame{});
   }
 
   TEST_CASE("AobusSoul - motion recipe exposes the shared GTK and TUI timing phases", "[uimodel][unit][playback][soul]")

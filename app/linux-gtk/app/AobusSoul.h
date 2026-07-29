@@ -38,19 +38,20 @@ namespace ao::gtk
       Seal   // Balanced (Bars/Pause)
     };
 
-    void breathe(bool breathing);
+    void setMotionMode(uimodel::AobusSoulMotionMode motionMode);
     void setInnerGlyph(InnerGlyph glyph);
     void setBaseStrokeWidth(float width);
     void setInnerGlyphScale(float scale);
     void setAura(Gdk::RGBA const& aura);
     void setShowFullLogo(bool show);
 
-    bool isBreathing() const;
+    uimodel::AobusSoulMotionMode motionMode() const;
     bool isTickActive() const;
     bool shouldShowFullLogo() const;
     float baseStrokeWidth() const;
     float innerGlyphScale() const;
     Gdk::RGBA aura() const;
+    uimodel::AobusSoulVisualFrame visualFrame() const;
 
     static Gdk::RGBA mapSoulAura(uimodel::SoulAura aura);
 

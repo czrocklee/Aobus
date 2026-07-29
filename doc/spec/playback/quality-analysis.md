@@ -42,7 +42,7 @@ Its behavioral implementation is centered on [`QualityAnalyzer.cpp`](../../../li
 - A missing Sink or any missing path-node format clears full-verification confidence without fabricating a conversion finding.
 - A conversion finding is attached to the destination node because that node receives the changed representation.
 - Sample rate, channel count, and precision are evaluated independently, so one transition may produce multiple findings.
-- The analyzer owns the finding-to-severity mapping; runtime, UIModel, GTK, and TUI consume that severity instead of redefining it.
+- The analyzer owns the finding-to-severity mapping; runtime, UIModel, GTK, TUI, and WinUI consume that severity instead of redefining it.
 - Software amplification is clipping-risk evidence, not proof that samples clipped.
 
 ## State model
@@ -142,6 +142,13 @@ Changing classification or precedence is a behavioral change to this specificati
 `PlaybackService::QualityChanged` publishes that same state plus route readiness on the callback executor.
 Consumers may observe more than one event during route settlement and must render the latest accepted snapshot rather than rely on an exact event count.
 
+The shared Soul aura consumes readiness and quality while transport is Playing or Paused.
+Playing advances Soul motion; Paused freezes the last sampled breath, rotation, luminance, and hue phase while retaining the selected aura.
+Later readiness or quality snapshots recolor that frozen sample, and resumed playback continues from its retained phase.
+Other transport states use the Dormant aura rather than retaining stale playback quality.
+UIModel owns the `Animating`, `Frozen`, and `Dormant` policy, accumulated active elapsed time, motion sampling, and aura-plus-motion visual-frame composition.
+Frontend adapters provide frame deltas, own clock registration and concrete geometry, and may quantize the shared visual frame for their rendering medium without changing aura or freeze semantics.
+
 UIModel derives one delivery-focused headline and visual category with this precedence:
 
 1. no usable quality state;
@@ -163,7 +170,7 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [`Player.cpp`](../../../lib/audio/Player.cpp) builds the merged graph, gates route generations, and publishes accepted quality results.
 - Backend graph adapters under [`lib/audio/backend/`](../../../lib/audio/backend/) provide platform route evidence.
 - [`PlaybackState.h`](../../../app/include/ao/rt/PlaybackState.h) and [`PlaybackTransport.cpp`](../../../app/runtime/playback/PlaybackTransport.cpp) own internal runtime transport state; [`PlaybackSnapshot.h`](../../../app/include/ao/rt/playback/PlaybackSnapshot.h) and [`PlaybackService.cpp`](../../../app/runtime/playback/PlaybackService.cpp) own coherent public publication.
-- [`AudioQualityFormatter`](../../../app/include/ao/uimodel/playback/quality/AudioQualityFormatter.h) owns shared presentation derivation.
+- [`AudioQualityFormatter`](../../../app/include/ao/uimodel/playback/quality/AudioQualityFormatter.h) and [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) own shared presentation derivation.
 
 ## Test map
 
@@ -172,7 +179,8 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [`AlsaGraphRegistryTest.cpp`](../../../test/unit/audio/backend/detail/AlsaGraphRegistryTest.cpp) proves ALSA hardware/software/unclassified graph evidence and gain publication.
 - [`PlaybackTransportOutputTest.cpp`](../../../test/unit/runtime/PlaybackTransportOutputTest.cpp) proves lower snapshot/event agreement and route-ready publication; [`PlaybackServiceTest.cpp`](../../../test/unit/runtime/PlaybackServiceTest.cpp) proves public output/readiness/quality correlation.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) proves label, category, precision, gain, and headline precedence.
-- [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) and [`QualityIndicatorStyleTest.cpp`](../../../test/unit/tui/QualityIndicatorStyleTest.cpp) prove frontend consumption of shared presentation state.
+- [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) proves transport-aware aura and motion policy.
+- [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp), [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp), and [`QualityIndicatorStyleTest.cpp`](../../../test/unit/tui/QualityIndicatorStyleTest.cpp) prove frontend consumption of shared presentation state.
 
 ## Related documents
 

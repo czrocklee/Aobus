@@ -137,7 +137,7 @@ These routes expose where a change crosses architecture owners without duplicati
 | Session restore and active-library replacement | Frontend composition root -> managed-state candidate -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |
 | Desktop shell construction | GTK layout policy -> GTK registries and widget tree; or WinUI shared policy -> native Modern/Classic XAML surfaces | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
 | Failure reporting | Subsystem failure -> typed result or event -> owning recovery boundary -> runtime notification or application-leaf presentation | [Failure and reporting](failure-and-reporting.md) plus the originating subsystem architecture |
-| Audio-quality presentation | Engine and provider evidence -> Player analysis -> runtime snapshot -> shared UIModel interpretation -> GTK or TUI rendering | [Audio quality](audio-quality.md), refining [playback](playback.md) and [presentation](presentation.md) |
+| Audio-quality presentation | Engine and provider evidence -> Player analysis -> runtime snapshot -> shared UIModel interpretation -> GTK, TUI, or WinUI rendering | [Audio quality](audio-quality.md), refining [playback](playback.md) and [presentation](presentation.md) |
 
 The [architecture landscape](README.md) owns the portfolio classification, relationship map, and capability coverage that connect these flows.
 

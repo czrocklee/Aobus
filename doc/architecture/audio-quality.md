@@ -3,14 +3,14 @@ id: architecture.audio-quality
 type: architecture
 status: current
 domain: playback
-summary: Defines ownership and dependency flow for audio quality evidence from Core route providers through runtime, UIModel, GTK, and TUI.
+summary: Defines ownership and dependency flow for audio quality evidence from Core route providers through runtime, UIModel, GTK, TUI, and WinUI.
 ---
 # Audio quality architecture
 
 ## Scope
 
 This document owns the cross-boundary structure of playback quality analysis.
-It assigns ownership for route evidence, graph composition, analysis, runtime publication, platform-neutral presentation, and frontend adaptation from Core audio through GTK and TUI.
+It assigns ownership for route evidence, graph composition, analysis, runtime publication, platform-neutral presentation, and frontend adaptation from Core audio through GTK, TUI, and WinUI.
 
 It does not define which conversion is lossless, how round-trip proof works, headline precedence, exact enum members, labels, or colors.
 Those facts belong to the [audio quality specification](../spec/playback/quality-analysis.md) and [surface reference](../reference/playback/quality-surface.md).
@@ -34,9 +34,9 @@ Application runtime: PlaybackService QualityState + event
                      |
                      v
 UIModel: shared verdict, labels, category, Soul aura
-                 /           \
-                v             v
-              GTK             TUI
+              /          |          \
+             v           v           v
+           GTK          TUI        WinUI
 ```
 
 The relevant boundaries are:
@@ -46,7 +46,7 @@ The relevant boundaries are:
 | Graph evidence and analysis | Core libraries | `include/ao/audio/` | `lib/audio/` and `lib/audio/backend/` |
 | Accepted application snapshot and event | Application runtime | `app/include/ao/rt/playback/PlaybackService.h`, `PlaybackSnapshot.h` | `app/runtime/playback/PlaybackService.cpp`, `PlaybackTransport.cpp` |
 | Shared presentation policy | UIModel | `app/include/ao/uimodel/playback/quality/` and `soul/` | `app/uimodel/playback/quality/` and `soul/` |
-| Toolkit/terminal adaptation | Frontends | Frontend-local | `app/linux-gtk/playback/`, `app/linux-gtk/css/`, and `app/tui/` |
+| Toolkit/terminal adaptation | Frontends | Frontend-local | `app/linux-gtk/playback/`, `app/linux-gtk/css/`, `app/tui/`, and `app/windows-winui/playback/` |
 
 ## Responsibilities
 
@@ -84,22 +84,25 @@ UIModel owns shared interpretation for display: node/format/finding labels, one 
 It consumes runtime quality values and does not traverse the provider graph or call Player/Engine.
 
 The quality formatter owns presentation precedence independently of the analyzer's compatibility-oriented `overall` field.
-The Soul view model additionally combines transport playing state and output readiness with quality state.
+The Soul view model additionally combines transport state and output readiness with quality state.
+`AobusSoulAnimationState` owns the frontend-neutral motion mode, accumulated active elapsed time, and latest sampled motion frame.
+Frontends supply frame deltas and retain clock registration, visibility gating, and toolkit-specific drawing; the shared state freezes or resets the sample according to UIModel policy and composes it with the current aura.
 
 ### Frontend adapters
 
 GTK owns pipeline widgets, CSS classes, and volume-widget rendering.
 TUI owns terminal pipeline layout and color adaptation.
-Both consume UIModel values; neither owns a second severity table or headline policy.
+WinUI owns native XAML and composition rendering.
+All three consume UIModel values; none owns a second severity table, headline policy, or Soul aura interpretation.
 
 ## Boundaries and dependency direction
 
-- Core audio quality types cannot depend on runtime, UIModel, GTK, or TUI.
+- Core audio quality types cannot depend on runtime, UIModel, GTK, TUI, or WinUI.
 - Backend graph producers depend only on Core audio flow values and platform facilities.
 - Player may compose Engine and provider evidence but cannot emit frontend strings or categories.
 - Runtime may expose stable Core quality values but cannot depend on UIModel formatting or frontend style types.
 - UIModel may depend on runtime snapshots and Core value types but cannot include Player, Engine, Backend, or platform graph-control headers.
-- GTK and TUI may adapt UIModel categories and labels but cannot reinterpret finding kinds into different severities.
+- GTK, TUI, and WinUI may adapt UIModel categories and labels but cannot reinterpret finding kinds into different severities.
 - Platform volume-assistance state and quality evidence may originate from the same backend, but runtime volume presentation and analyzer findings remain separate consumers.
 
 ## Data and control flow
@@ -126,7 +129,7 @@ provider graph callback
   -> PlaybackService refreshes PlaybackState
   -> QualityChanged(QualityState, ready)
   -> UIModel presentation
-  -> GTK/TUI rendering
+  -> GTK/TUI/WinUI rendering
 ```
 
 Provider graphs may change when a route appears, formats settle, external streams join or leave, mute/volume changes, or a backend changes volume provenance.
@@ -165,7 +168,8 @@ Frontend subscriptions are released before their runtime owner.
 - [`QualityAnalyzer.cpp`](../../lib/audio/QualityAnalyzer.cpp) is the pure classification boundary.
 - [`PlaybackTransport.cpp`](../../app/runtime/playback/PlaybackTransport.cpp) adapts Player status into internal runtime state; [`PlaybackService.cpp`](../../app/runtime/playback/PlaybackService.cpp) carries accepted output, readiness, and quality in the coherent public snapshot.
 - [`AudioQualityFormatter.cpp`](../../app/uimodel/playback/quality/AudioQualityFormatter.cpp) and [`AobusSoulViewModel.cpp`](../../app/uimodel/playback/soul/AobusSoulViewModel.cpp) own shared presentation.
-- [`AudioPipelinePanel.cpp`](../../app/linux-gtk/playback/AudioPipelinePanel.cpp), [`AudioQualityCss.cpp`](../../app/linux-gtk/playback/AudioQualityCss.cpp), and [`QualityPanel.cpp`](../../app/tui/QualityPanel.cpp) are frontend adapters.
+- [`AobusSoul.cpp`](../../app/linux-gtk/app/AobusSoul.cpp), [`SoulButton.cpp`](../../app/tui/SoulButton.cpp), and [`AobusSoulControl.cpp`](../../app/windows-winui/playback/AobusSoulControl.cpp) adapt shared Soul presentation for each frontend.
+- [`AudioPipelinePanel.cpp`](../../app/linux-gtk/playback/AudioPipelinePanel.cpp), [`AudioQualityCss.cpp`](../../app/linux-gtk/playback/AudioQualityCss.cpp), and [`QualityPanel.cpp`](../../app/tui/QualityPanel.cpp) adapt detailed quality presentation.
 
 ## Test map
 
@@ -173,7 +177,7 @@ Frontend subscriptions are released before their runtime owner.
 - Backend tests under [`test/unit/audio/backend/`](../../test/unit/audio/backend/) protect provider graph ownership and publication.
 - [`PlaybackTransportOutputTest.cpp`](../../test/unit/runtime/PlaybackTransportOutputTest.cpp) protects lower runtime snapshot/event adaptation, while [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp) protects coherent public correlation.
 - [`AudioQualityFormatterTest.cpp`](../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) and [`AobusSoulViewModelTest.cpp`](../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protect the UIModel boundary.
-- [`AudioPipelinePanelTest.cpp`](../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) and [`QualityIndicatorStyleTest.cpp`](../../test/unit/tui/QualityIndicatorStyleTest.cpp) protect frontend consumption of shared UIModel values.
+- [`AobusSoulTest.cpp`](../../test/unit/linux-gtk/app/AobusSoulTest.cpp), [`PlaybackPanelTest.cpp`](../../test/unit/tui/PlaybackPanelTest.cpp), [`AudioPipelinePanelTest.cpp`](../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp), and [`QualityIndicatorStyleTest.cpp`](../../test/unit/tui/QualityIndicatorStyleTest.cpp) protect frontend consumption of shared UIModel values.
 
 ## Related documents
 

@@ -171,14 +171,96 @@ namespace ao::uimodel
       .hueShiftDegrees = kAobusSoulMaxHueShiftDegrees * std::sin(huePhase)};
   }
 
-  bool shouldAnimateAobusSoul(bool const playing, bool const visible, bool const minimized) noexcept
+  AobusSoulVisualFrame aobusSoulVisualFrame(AobusSoulRgb const aura, AobusSoulMotionFrame const& motion) noexcept
   {
-    return playing && visible && !minimized;
+    return AobusSoulVisualFrame{
+      .motion = motion,
+      .gradientColors = aobusSoulGradientColors(aura, motion.hueShiftDegrees),
+    };
   }
 
-  SoulAura resolveSoulAura(bool const playing, bool const ready, rt::QualityState const& signal) noexcept
+  AobusSoulVisualFrame aobusSoulVisualAt(AobusSoulRgb const aura, std::chrono::duration<double> const elapsed) noexcept
   {
-    if (!playing)
+    return aobusSoulVisualFrame(aura, aobusSoulMotionAt(elapsed));
+  }
+
+  AobusSoulMotionMode aobusSoulMotionMode(audio::Transport const transport) noexcept
+  {
+    switch (transport)
+    {
+      case audio::Transport::Playing: return AobusSoulMotionMode::Animating;
+      case audio::Transport::Paused: return AobusSoulMotionMode::Frozen;
+      case audio::Transport::Idle:
+      case audio::Transport::Opening:
+      case audio::Transport::Buffering:
+      case audio::Transport::Seeking:
+      case audio::Transport::Stopping:
+      case audio::Transport::Error: return AobusSoulMotionMode::Dormant;
+    }
+
+    return AobusSoulMotionMode::Dormant;
+  }
+
+  bool shouldAnimateAobusSoul(AobusSoulMotionMode const motionMode, bool const visible, bool const minimized) noexcept
+  {
+    return motionMode == AobusSoulMotionMode::Animating && visible && !minimized;
+  }
+
+  void AobusSoulAnimationState::setMotionMode(AobusSoulMotionMode const motionMode) noexcept
+  {
+    if (_motionMode == motionMode)
+    {
+      return;
+    }
+
+    auto const previousMode = _motionMode;
+    _motionMode = motionMode;
+
+    if (_motionMode == AobusSoulMotionMode::Dormant)
+    {
+      _elapsed = std::chrono::duration<double>::zero();
+      _motionFrame = {};
+    }
+    else if (_motionMode == AobusSoulMotionMode::Animating && previousMode == AobusSoulMotionMode::Dormant)
+    {
+      _motionFrame = aobusSoulMotionAt(_elapsed);
+    }
+  }
+
+  void AobusSoulAnimationState::advance(std::chrono::duration<double> const delta) noexcept
+  {
+    if (_motionMode != AobusSoulMotionMode::Animating || delta <= std::chrono::duration<double>::zero())
+    {
+      return;
+    }
+
+    _elapsed += delta;
+    _motionFrame = aobusSoulMotionAt(_elapsed);
+  }
+
+  AobusSoulMotionMode AobusSoulAnimationState::motionMode() const noexcept
+  {
+    return _motionMode;
+  }
+
+  std::chrono::duration<double> AobusSoulAnimationState::elapsed() const noexcept
+  {
+    return _elapsed;
+  }
+
+  AobusSoulMotionFrame const& AobusSoulAnimationState::motionFrame() const noexcept
+  {
+    return _motionFrame;
+  }
+
+  AobusSoulVisualFrame AobusSoulAnimationState::visualFrame(AobusSoulRgb const aura) const noexcept
+  {
+    return aobusSoulVisualFrame(aura, _motionFrame);
+  }
+
+  SoulAura resolveSoulAura(audio::Transport const transport, bool const ready, rt::QualityState const& signal) noexcept
+  {
+    if (transport != audio::Transport::Playing && transport != audio::Transport::Paused)
     {
       return SoulAura::Dormant;
     }
@@ -239,11 +321,9 @@ namespace ao::uimodel
 
   void AobusSoulViewModel::render(rt::PlaybackTransportSnapshot const& state)
   {
-    bool const playing = (state.transport == audio::Transport::Playing);
-
     auto view = AobusSoulViewState{};
-    view.isBreathing = playing;
-    view.aura = resolveSoulAura(playing, state.ready, state.quality);
+    view.motionMode = aobusSoulMotionMode(state.transport);
+    view.aura = resolveSoulAura(state.transport, state.ready, state.quality);
 
     if (_hasLastView && view == _lastView)
     {

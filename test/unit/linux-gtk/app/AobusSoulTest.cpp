@@ -8,13 +8,88 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <gdkmm/rgba.h>
+#include <gsk/gsk.h>
+#include <gtk/gtk.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/snapshot.h>
+#include <gtkmm/window.h>
 
 #include <cstdint>
+#include <memory>
+#include <optional>
 
 namespace ao::gtk::test
 {
+  namespace
+  {
+    struct RenderNodeDeleter final
+    {
+      void operator()(::GskRenderNode* node) const noexcept { ::gsk_render_node_unref(node); }
+    };
+
+    std::optional<Gdk::RGBA> gradientBodyColor(::GskRenderNode const* node)
+    {
+      if (node == nullptr)
+      {
+        return std::nullopt;
+      }
+
+      switch (::gsk_render_node_get_node_type(node))
+      {
+        case GSK_LINEAR_GRADIENT_NODE:
+        {
+          ::gsize stopCount = 0;
+          auto const* const stops = ::gsk_linear_gradient_node_get_color_stops(node, &stopCount);
+
+          if (stopCount == 0)
+          {
+            return std::nullopt;
+          }
+
+          auto const& body = stops[stopCount - 1].color;
+          return Gdk::RGBA{body.red, body.green, body.blue, body.alpha};
+        }
+        case GSK_CONTAINER_NODE:
+        {
+          auto const childCount = ::gsk_container_node_get_n_children(node);
+
+          for (::guint childIndex = 0; childIndex < childCount; ++childIndex)
+          {
+            if (auto const optColor = gradientBodyColor(::gsk_container_node_get_child(node, childIndex)); optColor)
+            {
+              return optColor;
+            }
+          }
+
+          break;
+        }
+        case GSK_TRANSFORM_NODE: return gradientBodyColor(::gsk_transform_node_get_child(node));
+        case GSK_STROKE_NODE: return gradientBodyColor(::gsk_stroke_node_get_child(node));
+        case GSK_OPACITY_NODE: return gradientBodyColor(::gsk_opacity_node_get_child(node));
+        default: break;
+      }
+
+      return std::nullopt;
+    }
+
+    std::optional<Gdk::RGBA> renderedGradientBody(Gtk::Window& parent, AobusSoul& soul)
+    {
+      auto snapshotPtr = Gtk::Snapshot::create();
+      parent.snapshot_child(soul, snapshotPtr);
+      auto nodePtr = std::unique_ptr<::GskRenderNode, RenderNodeDeleter>{::gtk_snapshot_to_node(snapshotPtr->gobj())};
+      return gradientBodyColor(nodePtr.get());
+    }
+
+    Gdk::RGBA rgbaFromSoulRgb(uimodel::AobusSoulRgb const color)
+    {
+      constexpr float kMaxChannel = 255.0F;
+      return Gdk::RGBA{static_cast<float>(color.red) / kMaxChannel,
+                       static_cast<float>(color.green) / kMaxChannel,
+                       static_cast<float>(color.blue) / kMaxChannel,
+                       1.0F};
+    }
+  } // namespace
+
   TEST_CASE("AobusSoul - renders widget state and applies presentation setters", "[gtk][unit][app][soul]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
@@ -25,18 +100,18 @@ namespace ao::gtk::test
     {
       CHECK(soul.get_visible() == true);
       CHECK(soul.has_css_class("ao-soul"));
-      CHECK_FALSE(soul.isBreathing());
+      CHECK(soul.motionMode() == uimodel::AobusSoulMotionMode::Dormant);
       CHECK_FALSE(soul.shouldShowFullLogo());
     }
 
-    SECTION("breathe toggles animation state")
+    SECTION("motion mode controls animation state")
     {
-      soul.breathe(true);
-      CHECK(soul.isBreathing());
+      soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
+      CHECK(soul.motionMode() == uimodel::AobusSoulMotionMode::Animating);
       CHECK_FALSE(soul.isTickActive());
 
-      soul.breathe(false);
-      CHECK_FALSE(soul.isBreathing());
+      soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
+      CHECK(soul.motionMode() == uimodel::AobusSoulMotionMode::Frozen);
       CHECK_FALSE(soul.isTickActive());
     }
 
@@ -45,16 +120,16 @@ namespace ao::gtk::test
       auto windowFixture = GtkWindowFixture{};
       windowFixture.mount(soul);
 
-      soul.breathe(true);
+      soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
       CHECK_FALSE(soul.isTickActive());
 
       windowFixture.present();
       CHECK(soul.isTickActive());
 
-      soul.breathe(false);
+      soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
       CHECK_FALSE(soul.isTickActive());
 
-      soul.breathe(true);
+      soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
       CHECK(soul.isTickActive());
 
       windowFixture.unmount();
@@ -108,5 +183,48 @@ namespace ao::gtk::test
 
       CHECK(soul.get_request_mode() == Gtk::SizeRequestMode::CONSTANT_SIZE);
     }
+  }
+
+  TEST_CASE("AobusSoul - paused motion freezes the drawn frame while quality aura remains live",
+            "[gtk][regression][soul]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto soul = AobusSoul{};
+    soul.set_size_request(65, 65);
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(soul);
+    windowFixture.present();
+    soul.setAura(Gdk::RGBA{"#A855F7"});
+    soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
+
+    REQUIRE(pumpGtkEventsUntil([&soul] { return soul.visualFrame().motion.rotationDegrees > 0.1; }));
+    auto const animated = soul.visualFrame();
+
+    soul.setMotionMode(uimodel::AobusSoulMotionMode::Frozen);
+
+    REQUIRE(soul.motionMode() == uimodel::AobusSoulMotionMode::Frozen);
+    REQUIRE_FALSE(soul.isTickActive());
+    auto const frozen = soul.visualFrame();
+    CHECK(frozen == animated);
+
+    auto const optRadiant = renderedGradientBody(windowFixture.window(), soul);
+    REQUIRE(optRadiant);
+    CHECK(*optRadiant == rgbaFromSoulRgb(frozen.gradientColors.body));
+
+    soul.setAura(Gdk::RGBA{"#F59E0B"});
+
+    CHECK(soul.motionMode() == uimodel::AobusSoulMotionMode::Frozen);
+    CHECK_FALSE(soul.isTickActive());
+    auto const recolored = soul.visualFrame();
+    CHECK(recolored.motion == frozen.motion);
+    CHECK(recolored.gradientColors ==
+          uimodel::aobusSoulGradientColors(uimodel::kAobusSoulTurbulent, frozen.motion.hueShiftDegrees));
+    auto const optTurbulent = renderedGradientBody(windowFixture.window(), soul);
+    REQUIRE(optTurbulent);
+    CHECK(*optTurbulent == rgbaFromSoulRgb(recolored.gradientColors.body));
+
+    soul.setMotionMode(uimodel::AobusSoulMotionMode::Animating);
+    REQUIRE(soul.isTickActive());
+    CHECK(pumpGtkEventsUntil([&soul, frozen] { return soul.visualFrame().motion != frozen.motion; }));
   }
 } // namespace ao::gtk::test

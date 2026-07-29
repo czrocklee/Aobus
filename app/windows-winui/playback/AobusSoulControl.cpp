@@ -180,19 +180,20 @@ namespace winrt::Aobus::implementation
   void AobusSoulControl::applyViewState(ao::uimodel::AobusSoulViewState const& state)
   {
     _viewState = state;
+    _animation.setMotionMode(state.motionMode);
     _aura = ao::uimodel::aobusSoulAuraRgb(state.aura);
-    renderFrame();
     updateAnimationRegistration();
+    renderFrame();
   }
 
   void AobusSoulControl::updateAnimationRegistration()
   {
     auto const animate = ao::uimodel::shouldAnimateAobusSoul(
-      _viewState.isBreathing, _loaded && _windowVisible && _presentationActive, _windowMinimized);
+      _viewState.motionMode, _loaded && _windowVisible && _presentationActive, _windowMinimized);
 
     if (animate && !_rendering)
     {
-      _animationStarted = std::chrono::steady_clock::now();
+      _optPreviousFrameTime.reset();
       _renderingToken = Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
         [this](Windows::Foundation::IInspectable const&, Windows::Foundation::IInspectable const&) { renderFrame(); });
       _rendering = true;
@@ -200,7 +201,6 @@ namespace winrt::Aobus::implementation
     else if (!animate)
     {
       stopAnimation();
-      renderFrame();
     }
   }
 
@@ -211,6 +211,8 @@ namespace winrt::Aobus::implementation
       Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(_renderingToken);
       _rendering = false;
     }
+
+    _optPreviousFrameTime.reset();
   }
 
   void AobusSoulControl::updateGeometry()
@@ -239,24 +241,27 @@ namespace winrt::Aobus::implementation
 
   void AobusSoulControl::renderFrame()
   {
-    auto motion = ao::uimodel::AobusSoulMotionFrame{};
-    auto const active = _rendering && _viewState.isBreathing;
-
-    if (active)
+    if (_rendering && _animation.motionMode() == ao::uimodel::AobusSoulMotionMode::Animating)
     {
-      motion = ao::uimodel::aobusSoulMotionAt(std::chrono::steady_clock::now() - _animationStarted);
+      auto const frameTime = std::chrono::steady_clock::now();
+
+      if (_optPreviousFrameTime)
+      {
+        _animation.advance(frameTime - *_optPreviousFrameTime);
+      }
+
+      _optPreviousFrameTime = frameTime;
     }
 
-    auto const gradientColors = ao::uimodel::aobusSoulGradientColors(_aura, active ? motion.hueShiftDegrees : 0.0);
-    _cyanStop.Color(color(gradientColors.core));
-    _auraStop.Color(color(gradientColors.body));
-    _auraTailStop.Color(color(gradientColors.body));
-    _glyphBrush.Color(color(gradientColors.body));
-    _ringRotation.Angle(active ? motion.rotationDegrees : 0.0);
-    auto const opacity = active ? motion.luminance : 1.0;
-    _ring.Opacity(opacity);
-    _playGlyph.Opacity(opacity);
-    _pauseGlyph.Opacity(opacity);
+    auto const visual = _animation.visualFrame(_aura);
+    _cyanStop.Color(color(visual.gradientColors.core));
+    _auraStop.Color(color(visual.gradientColors.body));
+    _auraTailStop.Color(color(visual.gradientColors.body));
+    _glyphBrush.Color(color(visual.gradientColors.body));
+    _ringRotation.Angle(visual.motion.rotationDegrees);
+    _ring.Opacity(visual.motion.luminance);
+    _playGlyph.Opacity(visual.motion.luminance);
+    _pauseGlyph.Opacity(visual.motion.luminance);
 
     auto const available = std::min(ActualWidth(), ActualHeight());
 
@@ -265,7 +270,7 @@ namespace winrt::Aobus::implementation
       auto const& geometry = ao::uimodel::kAobusSoulGeometry;
       auto const expandedStroke = _baseStrokeWidth * ao::uimodel::kAobusSoulGoldenRatio;
       auto const scale = available / ((geometry.radius + (expandedStroke / 2.0)) * 2.0);
-      auto const stroke = _baseStrokeWidth + ((expandedStroke - _baseStrokeWidth) * (active ? motion.breath : 0.0));
+      auto const stroke = _baseStrokeWidth + ((expandedStroke - _baseStrokeWidth) * visual.motion.breath);
       _ring.StrokeThickness(stroke * scale);
     }
   }

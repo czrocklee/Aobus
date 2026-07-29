@@ -112,7 +112,7 @@ namespace ao::gtk
         std::make_unique<ao::uimodel::AobusSoulViewModel>(*_playback,
                                                           [this](ao::uimodel::AobusSoulViewState const& view)
                                                           {
-                                                            _bigSoul.breathe(view.isBreathing);
+                                                            _bigSoul.setMotionMode(view.motionMode);
                                                             _bigSoul.setAura(AobusSoul::mapSoulAura(view.aura));
                                                           });
     }
@@ -128,7 +128,7 @@ namespace ao::gtk
         std::make_unique<ao::uimodel::AobusSoulViewModel>(*_playback,
                                                           [this](ao::uimodel::AobusSoulViewState const& view)
                                                           {
-                                                            _bigSoul.breathe(view.isBreathing);
+                                                            _bigSoul.setMotionMode(view.motionMode);
                                                             _bigSoul.setAura(AobusSoul::mapSoulAura(view.aura));
                                                           });
     }

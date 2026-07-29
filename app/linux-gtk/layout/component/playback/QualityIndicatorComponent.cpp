@@ -37,7 +37,7 @@ namespace ao::gtk::layout
         , _soulViewModel{_runtime.playback(),
                          [this](uimodel::AobusSoulViewState const& view)
                          {
-                           _soul.breathe(view.isBreathing);
+                           _soul.setMotionMode(view.motionMode);
                            _soul.setAura(AobusSoul::mapSoulAura(view.aura));
                          }}
       {

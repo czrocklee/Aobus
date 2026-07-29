@@ -7,7 +7,6 @@
 #include "PlaybackStatusFormatter.h"
 #include "SoulButton.h"
 #include "Style.h"
-#include <ao/audio/Transport.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 
@@ -126,11 +125,10 @@ namespace ao::tui
     auto const elapsed = formatDuration(effectiveElapsed);
     auto const duration = state.duration.count() > 0 ? formatDuration(state.duration) : std::string{"--:--"};
     auto const volume = std::format("Vol {}%", static_cast<std::int32_t>(std::round(state.volume.level * 100.0F)));
-    auto const soulAura =
-      uimodel::resolveSoulAura(state.transport == audio::Transport::Playing, state.ready, state.quality);
+    auto const soulAura = uimodel::resolveSoulAura(state.transport, state.ready, state.quality);
+    auto const soulVisual = uimodel::aobusSoulVisualFrame(uimodel::aobusSoulAuraRgb(soulAura), view.soulMotion);
     auto outputElementPtr = outputDeviceBadge(view.outputView, view.outputDeviceHovered);
-    auto soulButtonElementPtr =
-      soulButtonElement(state.transport, uimodel::aobusSoulAuraRgb(soulAura), view.animationElapsed);
+    auto soulButtonElementPtr = soulButtonElement(state.transport, soulVisual, view.animationElapsed);
     auto seekRailElementPtr = seekRail(effectiveElapsed, state.duration, seekRailColumns(view.terminalColumns));
 
     if (view.outputDeviceBox != nullptr)

@@ -45,6 +45,7 @@
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionInterpolator.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -333,6 +334,8 @@ namespace ao::tui
       std::optional<std::chrono::milliseconds>& optPreviewElapsed;
       CoverArtLoader& coverArt;
       bool kittyCoverArt = false;
+      uimodel::AobusSoulAnimationState soulAnimation{};
+      std::optional<uimodel::FrameClock::TimePoint> optPreviousSoulFrameTime;
 
       ftxui::Element operator()()
       {
@@ -360,6 +363,23 @@ namespace ao::tui
         auto const& state = playback.snapshot().transport;
         hitRegions.clearFrameLocalRows();
         auto const frameTime = monotonicFrameTime();
+        auto const soulMotionMode = uimodel::aobusSoulMotionMode(state.transport);
+        soulAnimation.setMotionMode(soulMotionMode);
+
+        if (soulMotionMode == uimodel::AobusSoulMotionMode::Animating)
+        {
+          if (optPreviousSoulFrameTime)
+          {
+            soulAnimation.advance(frameTime - *optPreviousSoulFrameTime);
+          }
+
+          optPreviousSoulFrameTime = frameTime;
+        }
+        else
+        {
+          optPreviousSoulFrameTime.reset();
+        }
+
         auto const displayElapsed = optPreviewElapsed.value_or(playbackClock.interpolateElapsed(frameTime));
         auto const animationElapsed =
           std::chrono::duration_cast<std::chrono::milliseconds>(frameTime.time_since_epoch());
@@ -494,6 +514,7 @@ namespace ao::tui
           playbackBar(PlaybackBarViewState{.playbackState = &state,
                                            .displayElapsed = displayElapsed,
                                            .animationElapsed = animationElapsed,
+                                           .soulMotion = soulAnimation.motionFrame(),
                                            .outputView = &outputDevices.viewState(),
                                            .outputDeviceBox = &hitRegions.outputDeviceButtonBox,
                                            .soulButtonBox = &hitRegions.soulButtonBox,
@@ -665,6 +686,8 @@ namespace ao::tui
       .optPreviewElapsed = optPreviewElapsed,
       .coverArt = coverArt,
       .kittyCoverArt = kittyCoverArt,
+      .soulAnimation = {},
+      .optPreviousSoulFrameTime = std::nullopt,
     };
     auto rendererPtr = ftxui::Renderer([&frameRenderer] { return frameRenderer(); });
 

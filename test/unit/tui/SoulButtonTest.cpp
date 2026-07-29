@@ -36,7 +36,9 @@ namespace ao::tui::test
   {
     auto renderAt = [](std::chrono::milliseconds const animationElapsed)
     {
-      return renderScreen(soulButtonElement(audio::Transport::Playing, uimodel::kAobusSoulRadiant, animationElapsed));
+      return renderScreen(soulButtonElement(audio::Transport::Playing,
+                                            uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, animationElapsed),
+                                            animationElapsed));
     };
 
     CHECK(soulButtonCells(renderAt(std::chrono::milliseconds{0})) == std::array<std::string, 3>{" ", " ", "⡷"});
@@ -57,7 +59,9 @@ namespace ao::tui::test
   {
     auto renderAt = [](std::chrono::milliseconds const animationElapsed)
     {
-      return renderScreen(soulButtonElement(audio::Transport::Playing, uimodel::kAobusSoulRadiant, animationElapsed));
+      return renderScreen(soulButtonElement(audio::Transport::Playing,
+                                            uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, animationElapsed),
+                                            animationElapsed));
     };
 
     // These timestamps have the same rotation frame. Only GTK's stroke-width
@@ -66,24 +70,33 @@ namespace ao::tui::test
     CHECK(soulButtonCells(renderAt(std::chrono::milliseconds{8983})) == std::array<std::string, 3>{" ", " ", "⠳"});
   }
 
-  TEST_CASE("SoulButton - paused state freezes into a static quality-colored arc", "[tui][unit][soul]")
+  TEST_CASE("SoulButton - paused state preserves the sampled arc while quality color changes", "[tui][unit][soul]")
   {
-    auto renderAt = [](std::chrono::milliseconds const animationElapsed)
-    { return renderScreen(soulButtonElement(audio::Transport::Paused, uimodel::kAobusSoulRadiant, animationElapsed)); };
+    auto const frozenVisual = uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, std::chrono::milliseconds{2080});
+    auto const renderAt = [&frozenVisual](std::chrono::milliseconds const transientElapsed)
+    { return renderScreen(soulButtonElement(audio::Transport::Paused, frozenVisual, transientElapsed)); };
 
     auto const early = renderAt(std::chrono::milliseconds{0});
     auto const late = renderAt(std::chrono::milliseconds{5120});
 
-    CHECK(soulButtonCells(early) == std::array<std::string, 3>{" ", "⠒", " "});
-    CHECK(soulButtonCells(late) == std::array<std::string, 3>{" ", "⠒", " "});
+    CHECK(soulButtonCells(early) == std::array<std::string, 3>{"⠚", "⠉", "⠓"});
+    CHECK(soulButtonCells(late) == soulButtonCells(early));
     CHECK(early.PixelAt(1, 0).foreground_color == late.PixelAt(1, 0).foreground_color);
+
+    auto const recoloredVisual = uimodel::aobusSoulVisualFrame(uimodel::kAobusSoulTurbulent, frozenVisual.motion);
+    auto const recolored =
+      renderScreen(soulButtonElement(audio::Transport::Paused, recoloredVisual, std::chrono::milliseconds{9000}));
+    CHECK(soulButtonCells(recolored) == soulButtonCells(early));
+    CHECK_FALSE(recolored.PixelAt(1, 0).foreground_color == early.PixelAt(1, 0).foreground_color);
   }
 
   TEST_CASE("SoulButton - playing aura projects cyan core onto the rotating arc edge", "[tui][unit][soul]")
   {
     auto renderAt = [](std::chrono::milliseconds const animationElapsed)
     {
-      return renderScreen(soulButtonElement(audio::Transport::Playing, uimodel::kAobusSoulRadiant, animationElapsed));
+      return renderScreen(soulButtonElement(audio::Transport::Playing,
+                                            uimodel::aobusSoulVisualAt(uimodel::kAobusSoulRadiant, animationElapsed),
+                                            animationElapsed));
     };
 
     // The GTK cyan-core side of the gradient moves over the same three-cell

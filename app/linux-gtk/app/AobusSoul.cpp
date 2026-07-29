@@ -73,17 +73,15 @@ namespace ao::gtk
     Gdk::RGBA amber{rgbaFromSoulRgb(uimodel::kAobusSoulAnchorAmber)};
     Gdk::RGBA aura{cyan};
 
-    std::chrono::duration<double> time{0.0};
-    bool isStopped = true;
+    uimodel::AobusSoulAnimationState animation{};
     bool shouldShowFullLogo = false;
 
     float baseStrokeWidth = static_cast<float>(uimodel::kAobusSoulGeometry.baseStrokeWidth);
     float innerGlyphScale = 1.0F;
 
-    std::optional<uimodel::FrameClock::TimePoint> optFirstFrameTime;
+    std::optional<uimodel::FrameClock::TimePoint> optPreviousFrameTime;
     std::uint32_t tickId = 0;
     bool isMapped = false;
-    bool isBreathing = false;
 
     std::unique_ptr<::GskPath, PathDeleter> pathSigilPtr{};
     std::unique_ptr<::GskPath, PathDeleter> pathSealPtr{};
@@ -161,7 +159,8 @@ namespace ao::gtk
 
   void AobusSoul::startTickIfNeeded()
   {
-    if (!_implPtr->isMapped || !_implPtr->isBreathing || _implPtr->tickId != 0)
+    if (!_implPtr->isMapped || _implPtr->animation.motionMode() != uimodel::AobusSoulMotionMode::Animating ||
+        _implPtr->tickId != 0)
     {
       return;
     }
@@ -171,13 +170,12 @@ namespace ao::gtk
       {
         auto const frameTime = uimodel::FrameClock::fromMicros(clockPtr->get_frame_time());
 
-        if (!_implPtr->optFirstFrameTime)
+        if (_implPtr->optPreviousFrameTime)
         {
-          _implPtr->optFirstFrameTime = frameTime;
+          _implPtr->animation.advance(frameTime - *_implPtr->optPreviousFrameTime);
         }
 
-        _implPtr->time = frameTime - *_implPtr->optFirstFrameTime;
-        _implPtr->isStopped = false;
+        _implPtr->optPreviousFrameTime = frameTime;
 
         queue_draw();
         return true;
@@ -191,11 +189,13 @@ namespace ao::gtk
       remove_tick_callback(_implPtr->tickId);
       _implPtr->tickId = 0;
     }
+
+    _implPtr->optPreviousFrameTime.reset();
   }
 
-  bool AobusSoul::isBreathing() const
+  uimodel::AobusSoulMotionMode AobusSoul::motionMode() const
   {
-    return _implPtr->isBreathing;
+    return _implPtr->animation.motionMode();
   }
 
   bool AobusSoul::isTickActive() const
@@ -213,25 +213,27 @@ namespace ao::gtk
     return _implPtr->aura;
   }
 
-  void AobusSoul::breathe(bool const breathing)
+  uimodel::AobusSoulVisualFrame AobusSoul::visualFrame() const
   {
-    if (_implPtr->isBreathing == breathing)
+    return _implPtr->animation.visualFrame(soulRgbFromRgba(_implPtr->aura));
+  }
+
+  void AobusSoul::setMotionMode(uimodel::AobusSoulMotionMode const motionMode)
+  {
+    if (_implPtr->animation.motionMode() == motionMode)
     {
       return;
     }
 
-    _implPtr->isBreathing = breathing;
+    _implPtr->animation.setMotionMode(motionMode);
 
-    if (breathing)
+    if (motionMode == uimodel::AobusSoulMotionMode::Animating)
     {
       startTickIfNeeded();
     }
     else
     {
       stopTick();
-      _implPtr->optFirstFrameTime.reset();
-      _implPtr->time = std::chrono::duration<double>::zero();
-      _implPtr->isStopped = true;
     }
 
     queue_draw();
@@ -351,7 +353,7 @@ namespace ao::gtk
       return;
     }
 
-    auto const aura = Gdk::RGBA{_implPtr->isStopped ? _implPtr->cyan : _implPtr->aura};
+    auto const aura = _implPtr->aura;
 
     float const strokeWidthVariance = _implPtr->baseStrokeWidth * (static_cast<float>(AobusSoul::kGoldenRatio) - 1.0F);
     float const maxStrokeWidth = _implPtr->baseStrokeWidth + strokeWidthVariance;
@@ -390,18 +392,11 @@ namespace ao::gtk
     }
 
     // 2. Draw 'o' (Soul)
-    float rotationAngle = 0.0F;
-    float currentStrokeBase = _implPtr->baseStrokeWidth;
-    float currentOpacity = 1.0F;
-    auto motion = uimodel::AobusSoulMotionFrame{};
-
-    if (!_implPtr->isStopped)
-    {
-      motion = uimodel::aobusSoulMotionAt(_implPtr->time);
-      rotationAngle = static_cast<float>(motion.rotationDegrees);
-      currentStrokeBase = static_cast<float>(_implPtr->baseStrokeWidth + (strokeWidthVariance * motion.breath));
-      currentOpacity = static_cast<float>(motion.luminance);
-    }
+    auto const visual = _implPtr->animation.visualFrame(soulRgbFromRgba(aura));
+    auto const rotationAngle = static_cast<float>(visual.motion.rotationDegrees);
+    auto const currentStrokeBase =
+      static_cast<float>(_implPtr->baseStrokeWidth + (strokeWidthVariance * visual.motion.breath));
+    auto const currentOpacity = static_cast<float>(visual.motion.luminance);
 
     ::gsk_stroke_set_line_width(_implPtr->cachedStrokePtr.get(), currentStrokeBase / kRefHeight);
 
@@ -419,14 +414,10 @@ namespace ao::gtk
 
     ::gtk_snapshot_push_stroke(snapshotPtr->gobj(), _implPtr->unitPathOPtr.get(), _implPtr->cachedStrokePtr.get());
 
-    // Calculate Aura Flow (Hue Shift)
-    float const hueShift = _implPtr->isStopped ? 0.0F : static_cast<float>(motion.hueShiftDegrees);
-
     static constexpr std::size_t kStopCount = 3;
     auto stops = std::array<::GskColorStop, kStopCount>{};
-    auto const gradientColors = uimodel::aobusSoulGradientColors(soulRgbFromRgba(aura), hueShift);
-    auto const shiftedCyan = rgbaFromSoulRgb(gradientColors.core, _implPtr->cyan.get_alpha());
-    auto const shiftedAura = rgbaFromSoulRgb(gradientColors.body, aura.get_alpha());
+    auto const shiftedCyan = rgbaFromSoulRgb(visual.gradientColors.core, _implPtr->cyan.get_alpha());
+    auto const shiftedAura = rgbaFromSoulRgb(visual.gradientColors.body, aura.get_alpha());
 
     // Player UI: Cyan as the core (38.2%), Indicator (Quality) as the dominant body (61.8%)
     static constexpr float kCoreOffset = static_cast<float>(uimodel::kAobusSoulCoreGradientStop);

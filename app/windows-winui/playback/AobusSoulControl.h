@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 
 namespace ao::rt
 {
@@ -53,11 +54,12 @@ namespace winrt::Aobus::implementation
     Microsoft::UI::Xaml::Controls::Grid _pauseGlyph{nullptr};
 
     ao::uimodel::AobusSoulViewState _viewState{};
+    ao::uimodel::AobusSoulAnimationState _animation{};
     ao::uimodel::AobusSoulRgb _aura = ao::uimodel::kAobusSoulUiCyan;
     double _baseStrokeWidth = ao::uimodel::kAobusSoulGeometry.baseStrokeWidth;
     double _innerGlyphScale = 1.0;
     std::unique_ptr<ao::uimodel::AobusSoulViewModel> _viewModelPtr;
-    std::chrono::steady_clock::time_point _animationStarted{};
+    std::optional<std::chrono::steady_clock::time_point> _optPreviousFrameTime;
     event_token _renderingToken{};
     bool _rendering = false;
     bool _loaded = false;

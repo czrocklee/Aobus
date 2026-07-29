@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -32,7 +33,6 @@ namespace ao::tui
     constexpr double kTerminalCellCenterScale = 2.0;
     constexpr double kTerminalCellCenterOffset = 0.5;
     constexpr double kSoulGradientDiagonalScale = 4.0;
-    constexpr double kPausedSoulLuminance = 0.85;
     constexpr double kTransientSoulLuminance = 0.9;
     constexpr double kDormantSoulLuminance = 0.5;
     constexpr auto kSoulTransientPulsePeriod =
@@ -85,7 +85,6 @@ namespace ao::tui
                     SoulFrame{"⢀", "⣀", "⡴"},
                     SoulFrame{" ", "⣀", "⡴"}},
     });
-    constexpr auto kPausedSoulFrame = SoulFrame{" ", "⠒", " "};
     constexpr auto kDormantSoulFrame = SoulFrame{" ", "⠂", " "};
 
     ftxui::Element fixedText(std::string_view const value,
@@ -116,10 +115,8 @@ namespace ao::tui
       return std::min(frameIndex, frameCount - 1);
     }
 
-    SoulArcBreadth soulArcBreadth(std::chrono::milliseconds const elapsed)
+    SoulArcBreadth soulArcBreadth(double const breath)
     {
-      auto const breath = uimodel::aobusSoulMotionAt(elapsed).breath;
-
       if (breath < kSoulNarrowBreathThreshold)
       {
         return SoulArcBreadth::Narrow;
@@ -133,9 +130,20 @@ namespace ao::tui
       return SoulArcBreadth::Balanced;
     }
 
-    SoulFrame const& soulArcFrame(std::chrono::milliseconds const elapsed, std::chrono::duration<double> const period)
+    SoulFrame const& soulArcFrame(uimodel::AobusSoulMotionFrame const& motion)
     {
-      auto const& frames = kPlayingSoulArcFrames[static_cast<std::size_t>(soulArcBreadth(elapsed))];
+      auto const& frames = kPlayingSoulArcFrames[static_cast<std::size_t>(soulArcBreadth(motion.breath))];
+      auto const normalizedRotation = std::fmod(std::max(0.0, motion.rotationRadians), 2.0 * std::numbers::pi);
+      auto const frameIndex =
+        static_cast<std::size_t>((normalizedRotation * static_cast<double>(frames.size())) / (2.0 * std::numbers::pi));
+      return frames[std::min(frameIndex, frames.size() - 1)];
+    }
+
+    SoulFrame const& transientSoulArcFrame(std::chrono::milliseconds const elapsed,
+                                           std::chrono::duration<double> const period)
+    {
+      auto const motion = uimodel::aobusSoulMotionAt(elapsed);
+      auto const& frames = kPlayingSoulArcFrames[static_cast<std::size_t>(soulArcBreadth(motion.breath))];
       return frames[soulFrameIndex(elapsed, period, frames.size())];
     }
 
@@ -143,9 +151,8 @@ namespace ao::tui
     {
       SoulFrame frame{};
       std::optional<double> optRotation{};
-      SoulRgb aura{};
+      uimodel::AobusSoulGradientColors gradientColors{};
       double luminance = 1.0;
-      double hueShiftDegrees = 0.0;
     };
 
     double soulGradientPosition(std::size_t const cellIndex, double const rotation)
@@ -162,13 +169,11 @@ namespace ao::tui
       return std::clamp(kTerminalCellCenterOffset - ((localX + localY) / kSoulGradientDiagonalScale), 0.0, 1.0);
     }
 
-    SoulRgb soulGradientColor(SoulRgb const aura,
+    SoulRgb soulGradientColor(uimodel::AobusSoulGradientColors const& gradientColors,
                               std::optional<double> const optRotation,
                               std::size_t const cellIndex,
-                              double const luminance,
-                              double const hueShiftDegrees)
+                              double const luminance)
     {
-      auto const gradientColors = uimodel::aobusSoulGradientColors(aura, hueShiftDegrees);
       auto const shiftedCyan = gradientColors.core;
       auto const shiftedAura = gradientColors.body;
 
@@ -196,8 +201,7 @@ namespace ao::tui
 
       for (std::size_t cellIndex = 0; cellIndex < spec.frame.size(); ++cellIndex)
       {
-        auto const color =
-          soulGradientColor(spec.aura, spec.optRotation, cellIndex, spec.luminance, spec.hueShiftDegrees);
+        auto const color = soulGradientColor(spec.gradientColors, spec.optRotation, cellIndex, spec.luminance);
         auto cellPtr = ftxui::text(std::string{spec.frame[cellIndex]});
 
         if (spec.frame[cellIndex] != " ")
@@ -218,28 +222,23 @@ namespace ao::tui
   } // namespace
 
   ftxui::Element soulButtonElement(audio::Transport const transport,
-                                   SoulRgb const aura,
-                                   std::chrono::milliseconds const animationElapsed)
+                                   uimodel::AobusSoulVisualFrame const& visual,
+                                   std::chrono::milliseconds const transientElapsed)
   {
     switch (transport)
     {
       case audio::Transport::Playing:
-      {
-        auto const motion = uimodel::aobusSoulMotionAt(animationElapsed);
-        return soulFrameElement({.frame = soulArcFrame(animationElapsed, uimodel::kAobusSoulRotationPeriod),
-                                 .optRotation = motion.rotationRadians,
-                                 .aura = aura,
-                                 .luminance = motion.luminance,
-                                 .hueShiftDegrees = motion.hueShiftDegrees});
-      }
       case audio::Transport::Paused:
-        return soulFrameElement({.frame = kPausedSoulFrame, .aura = aura, .luminance = kPausedSoulLuminance});
+        return soulFrameElement({.frame = soulArcFrame(visual.motion),
+                                 .optRotation = visual.motion.rotationRadians,
+                                 .gradientColors = visual.gradientColors,
+                                 .luminance = visual.motion.luminance});
       case audio::Transport::Opening:
       case audio::Transport::Buffering:
       case audio::Transport::Seeking:
       {
-        return soulFrameElement({.frame = soulArcFrame(animationElapsed, kSoulTransientPulsePeriod),
-                                 .aura = aura,
+        return soulFrameElement({.frame = transientSoulArcFrame(transientElapsed, kSoulTransientPulsePeriod),
+                                 .gradientColors = visual.gradientColors,
                                  .luminance = kTransientSoulLuminance});
       }
       case audio::Transport::Error:
@@ -253,6 +252,6 @@ namespace ao::tui
 
     // Dormant: stopped playback keeps a dim cyan core, matching the GTK soul.
     return soulFrameElement(
-      {.frame = kDormantSoulFrame, .aura = uimodel::kAobusSoulUiCyan, .luminance = kDormantSoulLuminance});
+      {.frame = kDormantSoulFrame, .gradientColors = visual.gradientColors, .luminance = kDormantSoulLuminance});
   }
 } // namespace ao::tui

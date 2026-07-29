@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/uimodel/playback/soul/AobusSoulViewModel.h>
+
 #include <ftxui/screen/box.hpp>
 
 #include <chrono>
@@ -32,6 +34,7 @@ namespace ao::tui
     rt::PlaybackTransportSnapshot const* playbackState = nullptr;
     std::chrono::milliseconds displayElapsed{};
     std::chrono::milliseconds animationElapsed{};
+    uimodel::AobusSoulMotionFrame soulMotion{};
     uimodel::OutputDeviceViewState const* outputView = nullptr;
     ftxui::Box* outputDeviceBox = nullptr;
     ftxui::Box* soulButtonBox = nullptr;

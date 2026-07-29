@@ -99,7 +99,7 @@ This table records primary structural relationships rather than every document l
 | [Interactive session lifecycle](interactive-session-lifecycle.md) | Runtime execution, persistence, library, workspace, playback, and failure authorities | Presentation and frontend composition roots |
 | [Application shell](application-shell.md) | Presentation boundaries, UIModel layout values and policy, runtime services, managed state, and desktop lifecycle | GTK widget tree and editor; WinUI Modern/Classic native shells |
 | [Presentation](presentation.md) | Runtime snapshots and commands from domain and application systems | GTK, WinUI, TUI, and non-interactive CLI adaptation |
-| [Audio quality](audio-quality.md) | Playback route evidence and execution generations | Runtime quality state, shared presentation policy, GTK, and TUI |
+| [Audio quality](audio-quality.md) | Playback route evidence and execution generations | Runtime quality state, shared presentation policy, GTK, TUI, and WinUI |
 | [Resource delivery](resource-delivery.md) | Media cover evidence, library blobs and references, playback/projection identities | GTK and WinUI images, TUI artwork, MPRIS art URLs, and CLI export |
 
 ## Capability coverage

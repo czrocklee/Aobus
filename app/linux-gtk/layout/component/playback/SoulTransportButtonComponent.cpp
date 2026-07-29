@@ -111,7 +111,7 @@ namespace ao::gtk::layout
 
       void applySoulState(uimodel::AobusSoulViewState const& view)
       {
-        _soul.breathe(view.isBreathing);
+        _soul.setMotionMode(view.motionMode);
         _soul.setAura(AobusSoul::mapSoulAura(view.aura));
       }
 

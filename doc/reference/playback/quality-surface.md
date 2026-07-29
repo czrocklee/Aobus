@@ -18,7 +18,7 @@ Its compatibility authority is the public Core audio, runtime state, and UIModel
 ## Code boundary
 
 This surface spans the **Core audio**, **application runtime**, and **UIModel** layers in the [system architecture](../../architecture/system-overview.md), following the ownership described by the [audio quality architecture](../../architecture/audio-quality.md) and [playback architecture](../../architecture/playback.md).
-Core types live in `include/ao/audio/`, the runtime mirror lives in `app/include/ao/rt/PlaybackState.h`, and shared presentation types live in `app/include/ao/uimodel/playback/quality/`; GTK/TUI adapt categories without redefining them.
+Core types live in `include/ao/audio/`, the runtime mirror lives in `app/include/ao/rt/PlaybackState.h`, and shared presentation types live in `app/include/ao/uimodel/playback/quality/` and `app/include/ao/uimodel/playback/soul/`; GTK, TUI, and WinUI adapt categories without redefining them.
 
 ## Surface
 
@@ -150,6 +150,39 @@ The raw conclusion/category and Soul aura surfaces have explicit `Clipped` mappi
 | `Informational` | `ao-quality-informational` | `#6B7280` |
 | `Clipped` | `ao-quality-clipped` | `#EF4444` |
 
+### Soul aura and motion
+
+`AobusSoulViewState` exposes a `SoulAura aura` and an `AobusSoulMotionMode motionMode`.
+`AobusSoulVisualFrame` exposes an `AobusSoulMotionFrame motion` and `AobusSoulGradientColors gradientColors`.
+`AobusSoulAnimationState` owns accumulated active elapsed time and the current motion sample.
+`advance(delta)` changes that sample only in `Animating`; `Frozen` retains the exact breath, rotation, luminance, and hue-shift values; `Dormant` resets elapsed time and the sample.
+`visualFrame(aura)` composes the retained sample with the current aura, so a quality update can recolor a frozen frame without changing its motion values.
+`aobusSoulVisualAt(aura, elapsed)` remains the pure direct-sampling operation, while `aobusSoulVisualFrame(aura, motion)` composes an already sampled or frozen frame.
+The transport mapping is:
+
+| Transport | Aura input | `motionMode` |
+|---|---|---|
+| `Playing` | Current readiness and quality | `Animating` |
+| `Paused` | Current readiness and quality | `Frozen` |
+| `Idle`, `Opening`, `Buffering`, `Seeking`, `Stopping`, `Error` | `Dormant` | `Dormant` |
+
+For Playing and Paused, `resolveSoulAura` selects the first matching row:
+
+| Priority | Condition | `SoulAura` | Brand color |
+|---:|---|---|---|
+| 1 | Output is not ready | `Veiled` | `#6B7280` |
+| 2 | Overall or pipeline quality is `Clipped` | `Burning` | `#EF4444` |
+| 3 | Pipeline quality is `LinearIntervention` | `Turbulent` | `#F59E0B` |
+| 4 | Path is not fully verified, or source quality is `LossySource` or `Unknown` | `Veiled` | `#6B7280` |
+| 5 | Pipeline quality is `BitwisePerfect` | `Radiant` | `#A855F7` |
+| 6 | Pipeline quality is `LosslessPadded` or `LosslessFloat` | `Flowing` | `#10B981` |
+| 7 | Pipeline quality is `LossySource` or `Unknown` | `Veiled` | `#6B7280` |
+
+Paused presentation stops frame advancement and preserves the last drawn motion sample.
+Later accepted readiness and quality snapshots replace its aura and recompute the gradient around the frozen hue shift; they do not reset its angle, breath, luminance, or hue phase.
+Resuming continues from the retained elapsed phase.
+Frontend adapters own clocks, frame registration, and rendering mechanics but do not change the shared aura or motion-mode policy.
+
 ## Validation rules
 
 - Software amplification requires reported maximum software gain greater than `1.0F + 1e-4F`.
@@ -177,12 +210,15 @@ Consumers must not infer severity from enum declaration order or duplicate a fin
 - [`Graph.h`](../../../include/ao/audio/flow/Graph.h) owns graph node and connection evidence fields.
 - [`PlaybackState.h`](../../../app/include/ao/rt/PlaybackState.h) owns the runtime mirror.
 - [`AudioQualityFormatter.h`](../../../app/include/ao/uimodel/playback/quality/AudioQualityFormatter.h) and [`AudioQualityFormatter.cpp`](../../../app/uimodel/playback/quality/AudioQualityFormatter.cpp) own shared labels, categories, and headline precedence.
-- [`AudioQualityCss.cpp`](../../../app/linux-gtk/playback/AudioQualityCss.cpp), [`_variables.css`](../../../app/linux-gtk/css/_variables.css), and [`AobusSoulViewModel.h`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) own frontend class/color adapters.
+- [`AudioQualityCss.cpp`](../../../app/linux-gtk/playback/AudioQualityCss.cpp) and [`_variables.css`](../../../app/linux-gtk/css/_variables.css) own GTK class/color adapters.
+- [`AobusSoulViewModel.h`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h) and [`AobusSoulViewModel.cpp`](../../../app/uimodel/playback/soul/AobusSoulViewModel.cpp) own the shared Soul aura and motion surface.
 
 ## Test authority
 
 - [`QualityAnalyzerTest.cpp`](../../../test/unit/audio/QualityAnalyzerTest.cpp) locks the finding and severity surface.
 - [`AudioQualityFormatterTest.cpp`](../../../test/unit/uimodel/playback/quality/AudioQualityFormatterTest.cpp) locks labels, mappings, and structured headlines.
+- [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) locks transport-aware Soul aura and motion mappings.
+- [`AobusSoulTest.cpp`](../../../test/unit/linux-gtk/app/AobusSoulTest.cpp) and [`PlaybackPanelTest.cpp`](../../../test/unit/tui/PlaybackPanelTest.cpp) lock exact-frame pause and live paused-aura adaptation.
 - [`AudioPipelinePanelTest.cpp`](../../../test/unit/linux-gtk/playback/AudioPipelinePanelTest.cpp) locks GTK pipeline/category consumption.
 - [`QualityIndicatorStyleTest.cpp`](../../../test/unit/tui/QualityIndicatorStyleTest.cpp) locks TUI category colors and raw conclusion labels.
 

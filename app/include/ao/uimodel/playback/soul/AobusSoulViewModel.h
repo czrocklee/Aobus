@@ -4,6 +4,7 @@
 #pragma once
 
 #include <ao/async/Subscription.h>
+#include <ao/audio/Transport.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <chrono>
@@ -30,6 +31,13 @@ namespace ao::uimodel
     Burning,
   };
 
+  enum class AobusSoulMotionMode : std::uint8_t
+  {
+    Dormant,
+    Animating,
+    Frozen,
+  };
+
   struct AobusSoulRgb final
   {
     std::uint8_t red = 0;
@@ -54,6 +62,16 @@ namespace ao::uimodel
     double rotationDegrees = 0.0;
     double luminance = 1.0;
     double hueShiftDegrees = 0.0;
+
+    friend bool operator==(AobusSoulMotionFrame const&, AobusSoulMotionFrame const&) = default;
+  };
+
+  struct AobusSoulVisualFrame final
+  {
+    AobusSoulMotionFrame motion{};
+    AobusSoulGradientColors gradientColors{};
+
+    friend bool operator==(AobusSoulVisualFrame const&, AobusSoulVisualFrame const&) = default;
   };
 
   struct AobusSoulGeometry final
@@ -98,19 +116,39 @@ namespace ao::uimodel
   struct AobusSoulViewState final
   {
     SoulAura aura = SoulAura::Dormant;
-    bool isBreathing = false;
+    AobusSoulMotionMode motionMode = AobusSoulMotionMode::Dormant;
 
     bool operator==(AobusSoulViewState const&) const = default;
   };
 
-  SoulAura resolveSoulAura(bool playing, bool ready, rt::QualityState const& signal) noexcept;
+  SoulAura resolveSoulAura(audio::Transport transport, bool ready, rt::QualityState const& signal) noexcept;
   AobusSoulRgb aobusSoulAuraRgb(SoulAura aura) noexcept;
   AobusSoulRgb aobusSoulShiftRgb(AobusSoulRgb color, double shiftDegrees) noexcept;
   AobusSoulGradientColors aobusSoulGradientColors(AobusSoulRgb aura, double hueShiftDegrees) noexcept;
   AobusSoulRgb aobusSoulMixRgb(AobusSoulRgb from, AobusSoulRgb to, double fraction) noexcept;
   AobusSoulRgb aobusSoulScaleRgb(AobusSoulRgb color, double factor) noexcept;
   AobusSoulMotionFrame aobusSoulMotionAt(std::chrono::duration<double> elapsed) noexcept;
-  bool shouldAnimateAobusSoul(bool playing, bool visible, bool minimized) noexcept;
+  AobusSoulVisualFrame aobusSoulVisualFrame(AobusSoulRgb aura, AobusSoulMotionFrame const& motion) noexcept;
+  AobusSoulVisualFrame aobusSoulVisualAt(AobusSoulRgb aura, std::chrono::duration<double> elapsed) noexcept;
+  AobusSoulMotionMode aobusSoulMotionMode(audio::Transport transport) noexcept;
+  bool shouldAnimateAobusSoul(AobusSoulMotionMode motionMode, bool visible, bool minimized) noexcept;
+
+  class AobusSoulAnimationState final
+  {
+  public:
+    void setMotionMode(AobusSoulMotionMode motionMode) noexcept;
+    void advance(std::chrono::duration<double> delta) noexcept;
+
+    AobusSoulMotionMode motionMode() const noexcept;
+    std::chrono::duration<double> elapsed() const noexcept;
+    AobusSoulMotionFrame const& motionFrame() const noexcept;
+    AobusSoulVisualFrame visualFrame(AobusSoulRgb aura) const noexcept;
+
+  private:
+    AobusSoulMotionMode _motionMode = AobusSoulMotionMode::Dormant;
+    std::chrono::duration<double> _elapsed{};
+    AobusSoulMotionFrame _motionFrame{};
+  };
 
   class AobusSoulViewModel final
   {
