@@ -207,14 +207,15 @@ namespace ao::gtk::layout::test
 
   TEST_CASE("LayoutRuntimeFixture - detaches its window child before fixture teardown", "[gtk][unit][layout][lifetime]")
   {
-    auto child = Gtk::Box{};
+    auto childPtr = std::unique_ptr<Gtk::Box>{};
 
     {
       auto fixture = LayoutRuntimeFixture{"io.github.aobus.layout_fixture_teardown_test"};
-      fixture.window().set_child(child);
-      REQUIRE(child.get_parent() == &fixture.window());
+      childPtr = std::make_unique<Gtk::Box>();
+      fixture.window().set_child(*childPtr);
+      REQUIRE(childPtr->get_parent() == &fixture.window());
     }
 
-    CHECK(child.get_parent() == nullptr);
+    CHECK(childPtr->get_parent() == nullptr);
   }
 } // namespace ao::gtk::layout::test
