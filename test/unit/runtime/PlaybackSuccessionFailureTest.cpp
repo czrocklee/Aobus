@@ -24,6 +24,38 @@ namespace ao::rt::test
   using playback_succession::PlaybackSuccessionFixture;
   using playback_succession::PlaybackSuccessionSeekFixture;
   using playback_succession::PlaybackSuccessionTransportFixture;
+  using playback_succession::PlaybackSuccessionTransportFixtureConfig;
+
+  TEST_CASE("PlaybackSuccession - accepted final decoder failure skips the failed candidate",
+            "[runtime][regression][playback-succession][failure]")
+  {
+    auto fixture = PlaybackSuccessionTransportFixture{PlaybackSuccessionTransportFixtureConfig{
+      .finalOpenFailureFileName = "transport-playable-2.flac",
+    }};
+    fixture.buildFourTrackManualView();
+    REQUIRE(fixture.playAndWait(fixture.firstTrackId));
+
+    REQUIRE(fixture.successionPtr->playFromView(fixture.viewId, fixture.thirdTrackId));
+    auto const recovered = fixture.transport.executor.drainUntil(
+      [&]
+      {
+        return fixture.successionPtr->state().currentTrackId == fixture.fourthTrackId &&
+               fixture.transport.playbackTransport.state().transport == audio::Transport::Playing;
+      },
+      std::chrono::seconds{5});
+    REQUIRE(recovered);
+
+    CHECK(fixture.successionPtr->state().currentTrackId == fixture.fourthTrackId);
+    CHECK(fixture.transport.playbackTransport.state().nowPlaying.trackId == fixture.fourthTrackId);
+    auto const feed = fixture.transport.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().severity == NotificationSeverity::Warning);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::history());
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
+    CHECK(report.templateId == NotificationReportTemplate::PlaybackTracksSkipped);
+    CHECK(report.count == 1);
+  }
 
   TEST_CASE("PlaybackSuccession - navigation stops after three consecutive unplayable candidates",
             "[runtime][unit][playback-succession][failure]")

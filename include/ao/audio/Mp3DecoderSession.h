@@ -5,20 +5,21 @@
 
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
   class [[nodiscard]] Mp3DecoderSession final : public detail::DecoderSessionBase<Mp3DecoderSession>
   {
   public:
-    explicit Mp3DecoderSession(Format outputFormat);
+    explicit Mp3DecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~Mp3DecoderSession() override;
 
     // Not copyable or movable

@@ -6,8 +6,10 @@
 #include "test/unit/audio/ScriptedDecoderSession.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -85,7 +87,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
     auto engine = Engine{std::move(backendPtr),
@@ -145,7 +147,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21},
                                         std::byte{0x22},
@@ -198,7 +200,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
     auto const thirdData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
@@ -264,7 +266,7 @@ namespace ao::audio::test
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
 
@@ -295,7 +297,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
 
@@ -384,7 +386,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
     auto const secondData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
     auto engine = Engine{
@@ -421,17 +423,19 @@ namespace ao::audio::test
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
-    auto decoderFactoryCallCount = std::atomic<std::size_t>{0};
+    auto decoderFactoryCallCount = std::atomic{std::size_t{0}};
     auto engine = Engine{std::move(backendPtr),
                          device,
-                         [&](std::filesystem::path const& path, Format const&)
+                         [&](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
                          {
                            decoderFactoryCallCount.fetch_add(1, std::memory_order_relaxed);
                            auto const codec = path.extension() == ".mp3" ? AudioCodec::Mp3 : AudioCodec::Flac;
-                           auto decoderPtr = std::make_unique<ScriptedDecoderSession>(
-                             makeScriptedStreamInfo(format, codec, codec == AudioCodec::Mp3));
+                           auto info = makeScriptedStreamInfo(format, codec, codec == AudioCodec::Mp3);
+                           info.outputFormat =
+                             pcmFormat(info.sourceFormat, optOutputEncoding.value_or(format.encoding));
+                           auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
                            decoderPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
                            return decoderPtr;
                          }};
@@ -453,7 +457,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x35}, std::byte{0x36}, std::byte{0x37}, std::byte{0x38}};
     auto const secondData = std::vector{std::byte{0x45}, std::byte{0x46}, std::byte{0x47}, std::byte{0x48}};
     auto engine = Engine{
@@ -490,8 +494,8 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const firstFormat = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
-    auto const secondFormat = Format{.sampleRate = 2000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const firstFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const secondFormat = PcmFormat{.sampleRate = 2000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x45}, std::byte{0x46}, std::byte{0x47}, std::byte{0x48}};
     auto const secondData = std::vector{std::byte{0x55}, std::byte{0x56}, std::byte{0x57}, std::byte{0x58}};
     auto engine = Engine{std::move(backendPtr),
@@ -522,12 +526,73 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
   }
 
+  TEST_CASE("Engine - gapless lookahead never lowers a higher-precision successor",
+            "[audio][regression][gapless][precision]")
+  {
+    auto const firstFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const secondFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makePathScriptedDecoderFactory({
+                           {.path = "first.flac",
+                            .info = makeScriptedStreamInfo(firstFormat),
+                            .data = std::vector<std::byte>(4, std::byte{0x11})},
+                           {.path = "second.flac",
+                            .info = makeScriptedStreamInfo(secondFormat),
+                            .data = std::vector<std::byte>(6, std::byte{0x22})},
+                         })};
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
+    auto const prepared = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+
+    REQUIRE(prepared);
+    CHECK(prepared->transition == Engine::PreparedTransitionMode::DrainFallback);
+    CHECK(backendRaw->currentFormat() == firstFormat);
+    CHECK(countBackendEvents(backendRaw->events(), "open") == 1);
+  }
+
+  TEST_CASE("Engine - gapless lookahead widens a lower-precision successor into the active PCM mode",
+            "[audio][regression][gapless][precision]")
+  {
+    auto const firstFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto const secondFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const firstData = std::vector<std::byte>(6, std::byte{0x31});
+    auto const secondData = std::vector<std::byte>(6, std::byte{0x42});
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr),
+                         makeEngineTestDevice(),
+                         makePathScriptedDecoderFactory({
+                           {.path = "first.flac", .info = makeScriptedStreamInfo(firstFormat), .data = firstData},
+                           {.path = "second.flac", .info = makeScriptedStreamInfo(secondFormat), .data = secondData},
+                         })};
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "first.flac"}));
+    auto const prepared = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "second.flac"}));
+
+    REQUIRE(prepared);
+    CHECK(prepared->transition == Engine::PreparedTransitionMode::Gapless);
+    CHECK(backendRaw->currentFormat() == firstFormat);
+
+    auto* const target = backendRaw->target();
+    REQUIRE(target != nullptr);
+    auto output = std::array<std::byte, 6>{};
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == firstData);
+    REQUIRE(target->renderPcm(output).bytesWritten == output.size());
+    CHECK(std::vector<std::byte>{output.begin(), output.end()} == secondData);
+    CHECK(countBackendEvents(backendRaw->events(), "open") == 1);
+  }
+
   TEST_CASE("Engine - transport and route changes cancel prepared successor", "[audio][unit][engine-gapless][cancel]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x49}, std::byte{0x4A}, std::byte{0x4B}, std::byte{0x4C}};
     auto const secondData = std::vector{std::byte{0x59}, std::byte{0x5A}, std::byte{0x5B}, std::byte{0x5C}};
     auto engine = Engine{std::move(backendPtr),
@@ -575,7 +640,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
     auto const secondData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
     auto engine = Engine{std::move(backendPtr),
@@ -607,7 +672,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
     auto const secondData = std::vector{std::byte{0x61}, std::byte{0x62}, std::byte{0x63}, std::byte{0x64}};
     auto engine = Engine{std::move(backendPtr),
@@ -645,7 +710,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x81}, std::byte{0x82}, std::byte{0x83}, std::byte{0x84}};
     auto const secondData = std::vector{std::byte{0x91}, std::byte{0x92}, std::byte{0x93}, std::byte{0x94}};
     auto engine = Engine{std::move(backendPtr),
@@ -678,7 +743,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x71}, std::byte{0x72}, std::byte{0x73}, std::byte{0x74}};
     auto engine = Engine{std::move(backendPtr),
                          device,
@@ -716,7 +781,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
     auto const candidateData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
@@ -769,8 +834,7 @@ namespace ao::audio::test
     CHECK(optAdvancedItemId == secondItem.id);
   }
 
-  TEST_CASE("Engine - staged decode error processed before commit rejects without replacing active playback",
-            "[audio][unit][engine][staged]")
+  TEST_CASE("Engine - staging inspects without decoding or replacing active playback", "[audio][unit][engine][staged]")
   {
     auto failureGate = StagedFailureGate{};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
@@ -778,10 +842,8 @@ namespace ao::audio::test
     auto engine = Engine{std::move(backendPtr),
                          makeEngineTestDevice(),
                          makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate)};
-    auto stateChanged = CallbackLatch{};
     auto failureCount = std::atomic{std::size_t{0}};
     auto endedCount = std::atomic{std::size_t{0}};
-    engine.setOnStateChanged([&] { stateChanged.notify(); });
     engine.setOnPlaybackFailure([&](Engine::PlaybackFailure const&)
                                 { failureCount.fetch_add(1, std::memory_order_relaxed); });
     engine.setOnTrackEnded([&](Engine::TrackEnded const&) { endedCount.fetch_add(1, std::memory_order_relaxed); });
@@ -797,23 +859,13 @@ namespace ao::audio::test
 
     auto candidate = engine.stagePlayback(makePlaybackItem(PlaybackInput{.filePath = "candidate-failure.flac"}));
     REQUIRE(candidate);
-    auto releaseGuard = StagedFailureReleaseGuard{failureGate};
-    REQUIRE(failureGate.waitForRead());
-
-    releaseGuard.release();
-    REQUIRE(stateChanged.waitForCount(1));
-
-    auto const committed = engine.commitPlayback(std::move(*candidate));
-    REQUIRE_FALSE(committed);
-    CHECK(committed.error().code == Error::Code::IoError);
-    CHECK(committed.error().message == "gated staged decode failure");
+    CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{50}));
     CHECK(engine.playbackGeneration() == activeGeneration);
     CHECK(engine.transport() == Transport::Playing);
     CHECK(backendRaw->target() == activeTarget);
     CHECK(engine.clearNext() == nextItem.id);
     CHECK(failureCount.load(std::memory_order_relaxed) == 0);
     CHECK(endedCount.load(std::memory_order_relaxed) == 0);
-    CHECK(stateChanged.count() == 1);
   }
 
   TEST_CASE("Engine - staged commit before decode error publishes one active failure", "[audio][unit][engine][staged]")
@@ -839,10 +891,11 @@ namespace ao::audio::test
     auto candidate = engine.stagePlayback(candidateItem);
     REQUIRE(candidate);
     auto releaseGuard = StagedFailureReleaseGuard{failureGate};
-    REQUIRE(failureGate.waitForRead());
+    CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{50}));
 
     auto const committed = engine.commitPlayback(std::move(*candidate));
     REQUIRE(committed);
+    REQUIRE(failureGate.waitForRead());
     releaseGuard.release();
     REQUIRE(failureLatch.waitForCount(1));
     REQUIRE(endedLatch.waitForCount(1));
@@ -865,7 +918,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
     auto const secondData = std::vector{std::byte{0x51}, std::byte{0x52}, std::byte{0x53}, std::byte{0x54}};
     auto const explicitData = std::vector{std::byte{0x61}, std::byte{0x62}, std::byte{0x63}, std::byte{0x64}};
@@ -920,10 +973,12 @@ namespace ao::audio::test
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
-    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [format](std::filesystem::path const& path, Format const&)
+    auto const format = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto const factory = [format](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(makeScriptedStreamInfo(format));
+      auto info = makeScriptedStreamInfo(format);
+      info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(format.encoding));
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
 
       if (auto data = std::vector<std::byte>(100000, std::byte{0}); path == "prepared-failure.flac")
       {
@@ -958,5 +1013,40 @@ namespace ao::audio::test
     CHECK(failure.recoverable);
     CHECK(engine.transport() == Transport::Playing);
     CHECK_FALSE(engine.clearNext());
+  }
+
+  namespace
+  {
+    DecodedStreamInfo scriptedInfoFor(PcmFormat const& format)
+    {
+      return makeScriptedStreamInfo(format);
+    }
+  } // namespace
+
+  TEST_CASE("Engine - an unreduced mode never pulls a wider successor down for a splice",
+            "[audio][regression][engine][gapless]")
+  {
+    // Sonata case: 16-bit is playing because the track is 16-bit, not because
+    // the device is limited. Reusing it would quietly downgrade a 24-bit
+    // successor that this device can almost certainly carry in full.
+    auto const currentFormat = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const successorFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto const data = std::vector{std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}};
+    auto engine = Engine{std::make_unique<FakeCapturingBackend>(),
+                         makeEngineTestDevice(),
+                         makePathScriptedDecoderFactory({
+                           {.path = "current-16.flac", .info = scriptedInfoFor(currentFormat), .data = data},
+                           {.path = "next-24.flac", .info = scriptedInfoFor(successorFormat), .data = data},
+                         })};
+
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "current-16.flac"}));
+    REQUIRE(engine.status().transport == Transport::Playing);
+
+    auto const prepared = engine.setNext(makePlaybackItem(PlaybackInput{.filePath = "next-24.flac"}));
+
+    REQUIRE(prepared);
+    CHECK(prepared->transition == Engine::PreparedTransitionMode::DrainFallback);
+    engine.stop();
   }
 } // namespace ao::audio::test

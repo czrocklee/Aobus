@@ -4,24 +4,22 @@
 #include "TrackSession.h"
 
 #include <ao/Error.h>
-#include <ao/audio/BackendIds.h>
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/FormatNegotiator.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PcmSource.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/StreamingSource.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <chrono>
-#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <utility>
 
 namespace ao::audio::detail
@@ -38,11 +36,11 @@ namespace ao::audio::detail
     // precise IoError/NotSupported code, which is propagated unchanged.
     std::unique_ptr<DecoderSession> makeDecoder(TrackSession::DecoderFactoryFn const& decoderFactory,
                                                 std::filesystem::path const& path,
-                                                Format const& outputFormat)
+                                                std::optional<SampleEncoding> optOutputEncoding)
     {
       if (decoderFactory)
       {
-        auto decoderPtr = decoderFactory(path, outputFormat);
+        auto decoderPtr = decoderFactory(path, optOutputEncoding);
 
         if (!decoderPtr)
         {
@@ -53,7 +51,7 @@ namespace ao::audio::detail
         return decoderPtr;
       }
 
-      auto res = createDecoderSession(path, outputFormat);
+      auto res = createDecoderSession(path, optOutputEncoding);
 
       if (!res)
       {
@@ -64,18 +62,12 @@ namespace ao::audio::detail
     }
   } // namespace
 
-  Result<TrackSession::PreparedTrack> TrackSession::prepare(PlaybackInput const& input,
-                                                            Device const& device,
-                                                            BackendId const& backendId,
-                                                            ProfileId const& profileId,
-                                                            DecoderFactoryFn const& decoderFactory,
-                                                            std::chrono::milliseconds const initialOffset)
+  Result<TrackSession::Inspection> TrackSession::inspect(PlaybackInput const& input,
+                                                         DecoderFactoryFn const& decoderFactory)
   {
-    auto const outputFormat = [] { return Format{.isInterleaved = true}; }();
-
     try
     {
-      auto decoderPtr = makeDecoder(decoderFactory, input.filePath, outputFormat);
+      auto decoderPtr = makeDecoder(decoderFactory, input.filePath, std::nullopt);
 
       if (auto const openResult = decoderPtr->open(input.filePath); !openResult)
       {
@@ -84,16 +76,46 @@ namespace ao::audio::detail
 
       auto info = decoderPtr->streamInfo();
 
-      if (info.outputFormat.sampleRate == 0 || info.outputFormat.channels == 0 || info.outputFormat.bitDepth == 0)
+      if (info.sourceFormat.sampleRate == 0 || info.sourceFormat.channels == 0 ||
+          info.sourceFormat.precisionBits == 0 || info.outputFormat.encoding == SampleEncoding::Unknown)
       {
-        throwDecoderError(Error::Code::InitFailed, "Decoder did not return a valid output format");
+        throwDecoderError(Error::Code::InitFailed, "Decoder did not return a valid inspected signal format");
       }
 
-      auto backendFormat = Format{};
+      return Inspection{.info = info};
+    }
+    catch (DecoderException const& ex)
+    {
+      return std::unexpected{ex.error()};
+    }
+  }
 
-      negotiateFormat(input.filePath, info, decoderPtr, backendFormat, device, backendId, profileId, decoderFactory);
+  Result<TrackSession::PreparedTrack> TrackSession::prepare(PlaybackInput const& input,
+                                                            Inspection const& inspection,
+                                                            PcmFormat const& backendFormat,
+                                                            DecoderFactoryFn const& decoderFactory,
+                                                            std::chrono::milliseconds const initialOffset)
+  {
+    try
+    {
+      auto decoderPtr = makeDecoder(decoderFactory, input.filePath, backendFormat.encoding);
 
-      info = decoderPtr->streamInfo();
+      if (auto const openResult = decoderPtr->open(input.filePath); !openResult)
+      {
+        throwDecoderError(openResult.error());
+      }
+
+      auto const info = decoderPtr->streamInfo();
+
+      if (!(info.sourceFormat == inspection.info.sourceFormat))
+      {
+        throwDecoderError(Error::Code::FormatRejected, "Track signal format changed after inspection");
+      }
+
+      if (!(info.outputFormat == backendFormat))
+      {
+        throwDecoderError(Error::Code::FormatRejected, "Decoder did not produce the PCM format selected by backend");
+      }
 
       if (initialOffset > std::chrono::milliseconds{0})
       {
@@ -128,55 +150,6 @@ namespace ao::audio::detail
     return OpenedTrack{.sourcePtr = std::shared_ptr<PcmSource>{std::move(preparedTrack.sourcePtr)},
                        .backendFormat = preparedTrack.backendFormat,
                        .info = preparedTrack.info};
-  }
-
-  void TrackSession::negotiateFormat(std::filesystem::path const& path,
-                                     DecodedStreamInfo& info,
-                                     std::unique_ptr<DecoderSession>& decoderPtr,
-                                     Format& backendFormat,
-                                     Device const& device,
-                                     BackendId const& backendId,
-                                     ProfileId const& profileId,
-                                     DecoderFactoryFn const& decoderFactory)
-  {
-    // Shared-mode server backends (PipeWire, WASAPI) convert any stream format
-    // themselves, so the decoder output passes through unnegotiated.
-    if ((backendId == kBackendPipeWire || backendId == kBackendWasapi) && profileId == kProfileShared)
-    {
-      backendFormat = info.outputFormat;
-      return;
-    }
-
-    auto const plan = FormatNegotiator::buildPlan(info.sourceFormat, device.capabilities);
-
-    if (plan.isResampleRequired)
-    {
-      throwDecoderError(
-        Error::Code::NotSupported,
-        std::format(
-          "{} does not support {} Hz and Aobus has no resampler yet", backendId, info.sourceFormat.sampleRate));
-    }
-
-    if (plan.isChannelRemapRequired)
-    {
-      throwDecoderError(Error::Code::NotSupported,
-                        std::format("{} does not support {} channels and Aobus has no channel remapper yet",
-                                    backendId,
-                                    static_cast<std::int32_t>(info.sourceFormat.channels)));
-    }
-
-    if (!(plan.decoderOutputFormat == info.sourceFormat))
-    {
-      decoderPtr->close();
-      decoderPtr = makeDecoder(decoderFactory, path, plan.decoderOutputFormat);
-
-      if (auto const reOpenResult = decoderPtr->open(path); !reOpenResult)
-      {
-        throwDecoderError(reOpenResult.error());
-      }
-    }
-
-    backendFormat = plan.deviceFormat;
   }
 
   std::unique_ptr<StreamingSource> TrackSession::preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,

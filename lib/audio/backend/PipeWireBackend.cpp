@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/backend/PipeWireBackend.h>
+
+#include "detail/DecoderOutput.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
-#include <ao/audio/backend/PipeWireBackend.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
 #include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 #include <ao/audio/backend/detail/PipeWireRuntime.h>
@@ -19,17 +25,12 @@ extern "C"
 {
 #include <pipewire/loop.h>
 #include <pipewire/pipewire.h>
-#include <spa/param/audio/raw.h>
-#include <spa/param/format.h>
 #include <spa/param/param.h>
 #include <spa/param/props.h>
-#include <spa/pod/body.h>
-#include <spa/pod/builder.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/pod.h>
 #include <spa/support/loop.h>
 #include <spa/utils/defs.h>
-#include <spa/utils/type.h>
 }
 
 #include <algorithm>
@@ -38,9 +39,15 @@ extern "C"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <ctime>
+#include <expected>
 #include <format>
 #include <memory>
+#include <optional>
+#include <string>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 namespace ao::audio::backend
 {
@@ -49,6 +56,7 @@ namespace ao::audio::backend
   namespace
   {
     constexpr std::size_t kPodBufferSize = 1024;
+    constexpr std::int64_t kOpenTimeoutNanoseconds = 5'000'000'000;
 
     std::int32_t completeLoopBarrier(::spa_loop* /*loop*/,
                                      bool /*async*/,
@@ -121,11 +129,17 @@ namespace ao::audio::backend
     // Members
     PipeWireEnvironmentGuard envGuard;
     RenderTarget* renderTarget = nullptr;
-    Format format;
+    SignalFormat sourceFormat;
+    PcmFormat format;
+    std::optional<SignalFormat> optLastSourceFormat;
+    std::optional<PcmFormat> optLastNegotiatedFormat;
+    std::vector<SampleEncoding> offeredEncodings;
+    std::optional<Error> optOpenError;
+    std::optional<std::string> optPendingRouteAnchor;
+    ::pw_stream_state streamState = PW_STREAM_STATE_UNCONNECTED;
+    bool opening = false;
     std::atomic<bool> renderAdmissionOpen{false};
     std::atomic<bool> drainPending{false};
-    bool strictFormatRequired = false;
-    bool strictFormatRejected = false;
     bool routeAnchorReported = false;
 
     PwThreadLoopPtr threadLoopPtr;
@@ -221,9 +235,9 @@ namespace ao::audio::backend
     auto const maxSize = buffer->buffer->datas[0].maxsize;
     auto stride = buffer->buffer->datas[0].chunk->stride;
 
-    if (stride == 0 && format.channels > 0 && format.bitDepth > 0)
+    if (stride == 0 && format.channels > 0 && format.encoding != SampleEncoding::Unknown)
     {
-      stride = format.channels * (format.bitDepth / 8);
+      stride = static_cast<std::int32_t>(frameBytes(format));
     }
 
     if (stride == 0)
@@ -299,8 +313,36 @@ namespace ao::audio::backend
   {
     if (auto optNegotiated = parseRawStreamFormat(param); optNegotiated)
     {
-      format = *optNegotiated;
-      renderTarget->handleFormatChanged(format);
+      if (optNegotiated->sampleRate != sourceFormat.sampleRate || optNegotiated->channels != sourceFormat.channels ||
+          !std::ranges::contains(offeredEncodings, optNegotiated->encoding))
+      {
+        optOpenError = Error{
+          .code = Error::Code::FormatRejected, .message = "PipeWire negotiated a PCM mode outside the lossless offer"};
+      }
+      else if (format.encoding != SampleEncoding::Unknown && !samePcmMode(format, *optNegotiated))
+      {
+        optOpenError =
+          Error{.code = Error::Code::FormatRejected, .message = "PipeWire changed PCM mode after stream activation"};
+      }
+      else if (format.encoding == SampleEncoding::Unknown)
+      {
+        format = *optNegotiated;
+      }
+    }
+    else
+    {
+      optOpenError =
+        Error{.code = Error::Code::FormatRejected, .message = "PipeWire negotiated an unrecognized raw PCM format"};
+    }
+
+    if (threadLoopPtr)
+    {
+      ::pw_thread_loop_signal(threadLoopPtr.get(), false);
+    }
+
+    if (!opening && optOpenError && renderTarget != nullptr)
+    {
+      renderTarget->handleBackendError(optOpenError->message);
     }
   }
 
@@ -313,7 +355,10 @@ namespace ao::audio::backend
       {
         if (std::abs(volFloat - volume.exchange(volFloat)) > detail::kVolumeEpsilon)
         {
-          renderTarget->handlePropertyChanged(propertySnapshot(PropertyId::Volume, PropertyValue{volFloat}));
+          if (!opening && renderTarget != nullptr)
+          {
+            renderTarget->handlePropertyChanged(propertySnapshot(PropertyId::Volume, PropertyValue{volFloat}));
+          }
         }
       }
     }
@@ -324,7 +369,10 @@ namespace ao::audio::backend
       {
         if (muteBool != muted.exchange(muteBool))
         {
-          renderTarget->handlePropertyChanged(propertySnapshot(PropertyId::Muted, PropertyValue{muteBool}));
+          if (!opening && renderTarget != nullptr)
+          {
+            renderTarget->handlePropertyChanged(propertySnapshot(PropertyId::Muted, PropertyValue{muteBool}));
+          }
         }
       }
     }
@@ -336,7 +384,13 @@ namespace ao::audio::backend
   {
     if (newState == PW_STREAM_STATE_ERROR)
     {
-      renderTarget->handleBackendError(errorMessage != nullptr ? errorMessage : "Unknown PipeWire error");
+      auto const* const message = errorMessage != nullptr ? errorMessage : "Unknown PipeWire error";
+      optOpenError = Error{.code = Error::Code::InitFailed, .message = message};
+
+      if (!opening && renderTarget != nullptr)
+      {
+        renderTarget->handleBackendError(message);
+      }
     }
     else if (newState == PW_STREAM_STATE_PAUSED || newState == PW_STREAM_STATE_STREAMING)
     {
@@ -345,9 +399,22 @@ namespace ao::audio::backend
         if (auto id = ::pw_stream_get_node_id(streamPtr.get()); id != PW_ID_ANY)
         {
           routeAnchorReported = true;
-          renderTarget->handleRouteReady(std::format("{}", id));
+          optPendingRouteAnchor = std::format("{}", id);
+
+          if (!opening && renderTarget != nullptr)
+          {
+            renderTarget->handleRouteReady(*optPendingRouteAnchor);
+            optPendingRouteAnchor.reset();
+          }
         }
       }
+    }
+
+    streamState = newState;
+
+    if (threadLoopPtr)
+    {
+      ::pw_thread_loop_signal(threadLoopPtr.get(), false);
     }
   }
 
@@ -434,7 +501,19 @@ namespace ao::audio::backend
 
   PipeWireBackend::~PipeWireBackend() = default;
 
-  Result<> PipeWireBackend::open(Format const& format, RenderTarget* target)
+  std::optional<PcmFormat> PipeWireBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
+  {
+    if (_exclusiveMode && _implPtr->optLastSourceFormat == sourceFormat && _implPtr->optLastNegotiatedFormat)
+    {
+      return _implPtr->optLastNegotiatedFormat;
+    }
+
+    return Backend::prewarmFormatHint(sourceFormat);
+  }
+
+  // PipeWire negotiation must remain one transaction under the native thread-loop lock.
+  // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+  Result<OpenedPcmMode> PipeWireBackend::open(SignalFormat const& sourceFormat, RenderTarget* target)
   {
     bool const useExclusive = _exclusiveMode && !_targetDeviceId.empty();
 
@@ -443,105 +522,161 @@ namespace ao::audio::backend
       return makeError(Error::Code::InitFailed, "PipeWire not initialized");
     }
 
-    auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
-    _implPtr->renderTarget = target;
-    _implPtr->format = format;
-    _implPtr->routeAnchorReported = false;
+    close();
+    auto offeredEncodings = ::ao::audio::detail::losslessPcmEncodings(sourceFormat);
 
-    // PipeWire's property constructor is a variadic C API terminated by null keys.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
-    auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new(nullptr, nullptr));
-    ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_TYPE, "Audio");
-    ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_CATEGORY, "Playback");
-    ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_ROLE, "Music");
-    ::pw_properties_set(propsPtr.get(), PW_KEY_APP_NAME, "Aobus");
-    ::pw_properties_set(propsPtr.get(), PW_KEY_APP_ID, "io.github.Aobus");
-    ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_NAME, "Aobus Playback");
-    ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_RATE, std::format("1/{}", format.sampleRate).c_str());
-
-    if (!_targetDeviceId.empty())
+    if (offeredEncodings.empty())
     {
-      ::pw_properties_set(propsPtr.get(), PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+      return makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for PipeWire");
+    }
 
-      if (useExclusive)
+    if (!useExclusive)
+    {
+      // Shared PipeWire can convert the preferred source-native client format.
+      // Keep that mode deterministic so explicit-start worker preparation can
+      // normally be reused after native negotiation. Exclusive mode retains
+      // every lossless candidate because the target may reject the first one.
+      offeredEncodings.resize(1);
+    }
+
+    auto optError = std::optional<Error>{};
+    auto negotiatedFormat = PcmFormat{};
+    auto optRouteAnchor = std::optional<std::string>{};
+    {
+      auto guard = PwThreadLoopGuard{_implPtr->threadLoopPtr.get()};
+      _implPtr->renderTarget = target;
+      _implPtr->sourceFormat = sourceFormat;
+      _implPtr->format = {};
+      _implPtr->offeredEncodings = offeredEncodings;
+      _implPtr->optOpenError.reset();
+      _implPtr->optPendingRouteAnchor.reset();
+      _implPtr->streamState = PW_STREAM_STATE_UNCONNECTED;
+      _implPtr->routeAnchorReported = false;
+      _implPtr->opening = true;
+
+      // PipeWire's property constructor is a variadic C API terminated by null keys.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
+      auto propsPtr = utility::makeUniquePtr<::pw_properties_free>(::pw_properties_new(nullptr, nullptr));
+      ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_TYPE, "Audio");
+      ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_CATEGORY, "Playback");
+      ::pw_properties_set(propsPtr.get(), PW_KEY_MEDIA_ROLE, "Music");
+      ::pw_properties_set(propsPtr.get(), PW_KEY_APP_NAME, "Aobus");
+      ::pw_properties_set(propsPtr.get(), PW_KEY_APP_ID, "io.github.Aobus");
+      ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_NAME, "Aobus Playback");
+      ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_RATE, std::format("1/{}", sourceFormat.sampleRate).c_str());
+
+      if (!_targetDeviceId.empty())
       {
-        ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_EXCLUSIVE, "true");
+        ::pw_properties_set(propsPtr.get(), PW_KEY_TARGET_OBJECT, _targetDeviceId.c_str());
+
+        if (useExclusive)
+        {
+          ::pw_properties_set(propsPtr.get(), PW_KEY_NODE_EXCLUSIVE, "true");
+        }
       }
+
+      _implPtr->streamPtr.reset(::pw_stream_new(_implPtr->corePtr.get(), "Aobus Playback", propsPtr.release()));
+
+      if (!_implPtr->streamPtr)
+      {
+        optError = Error{.code = Error::Code::InitFailed, .message = "Failed to create PipeWire stream"};
+      }
+      else
+      {
+        _implPtr->streamListener.reset();
+        ::pw_stream_add_listener(
+          _implPtr->streamPtr.get(), _implPtr->streamListener.get(), &Impl::streamEvents, _implPtr.get());
+
+        auto buffer = std::array<std::byte, kPodBufferSize>{};
+        auto const* param = detail::buildRawStreamFormatOffer(buffer, sourceFormat, offeredEncodings);
+
+        if (param == nullptr)
+        {
+          optError = Error{.code = Error::Code::FormatRejected, .message = "Failed to build PipeWire PCM offer"};
+        }
+        else
+        {
+          auto params = std::array<::spa_pod const*, 1>{param};
+          auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_INACTIVE |
+                                                      PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
+
+          if (useExclusive)
+          {
+            flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
+          }
+
+          if (::pw_stream_connect(_implPtr->streamPtr.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) <
+              0)
+          {
+            optError = Error{.code = Error::Code::InitFailed, .message = "Failed to connect PipeWire stream"};
+          }
+          else if (::pw_stream_set_active(_implPtr->streamPtr.get(), true) < 0)
+          {
+            optError = Error{.code = Error::Code::InitFailed, .message = "Failed to activate PipeWire PCM negotiation"};
+          }
+          else
+          {
+            // An inactive PipeWire stream is not guaranteed to negotiate its
+            // Format param. Activate it while render admission remains closed,
+            // then return it to the prepared state before decoder setup.
+            auto deadline = ::timespec{};
+            ::pw_thread_loop_get_time(_implPtr->threadLoopPtr.get(), &deadline, kOpenTimeoutNanoseconds);
+
+            while (!_implPtr->optOpenError && (_implPtr->format.encoding == SampleEncoding::Unknown ||
+                                               (_implPtr->streamState != PW_STREAM_STATE_PAUSED &&
+                                                _implPtr->streamState != PW_STREAM_STATE_STREAMING)))
+            {
+              if (::pw_thread_loop_timed_wait_full(_implPtr->threadLoopPtr.get(), &deadline) < 0)
+              {
+                optError =
+                  Error{.code = Error::Code::InitFailed, .message = "Timed out waiting for PipeWire PCM negotiation"};
+                break;
+              }
+            }
+
+            if (_implPtr->optOpenError)
+            {
+              optError = _implPtr->optOpenError;
+            }
+            else if (!optError)
+            {
+              negotiatedFormat = _implPtr->format;
+              optRouteAnchor = std::move(_implPtr->optPendingRouteAnchor);
+              _implPtr->applyCachedControls();
+              _implPtr->outputControlAvailable.store(!useExclusive, std::memory_order_relaxed);
+            }
+
+            if (::pw_stream_set_active(_implPtr->streamPtr.get(), false) < 0 && !optError)
+            {
+              optError = Error{
+                .code = Error::Code::InitFailed, .message = "Failed to suspend PipeWire stream after PCM negotiation"};
+            }
+          }
+        }
+      }
+
+      _implPtr->opening = false;
     }
 
-    _implPtr->streamPtr.reset(::pw_stream_new(_implPtr->corePtr.get(), "Aobus Playback", propsPtr.release()));
-
-    if (!_implPtr->streamPtr)
+    if (optError)
     {
-      return makeError(Error::Code::InitFailed, "Failed to create stream");
+      close();
+      return std::unexpected{std::move(*optError)};
     }
 
-    _implPtr->streamListener.reset();
-    ::pw_stream_add_listener(
-      _implPtr->streamPtr.get(), _implPtr->streamListener.get(), &Impl::streamEvents, _implPtr.get());
-
-    auto spaFmt = SPA_AUDIO_FORMAT_S16_LE;
-
-    if (format.isFloat && format.bitDepth == 32)
+    if (optRouteAnchor && target != nullptr)
     {
-      spaFmt = SPA_AUDIO_FORMAT_F32_LE;
-    }
-    else if (format.bitDepth == 32)
-    {
-      spaFmt = (format.validBits == 24) ? SPA_AUDIO_FORMAT_S24_32_LE : SPA_AUDIO_FORMAT_S32_LE;
-    }
-    else if (format.bitDepth == 24)
-    {
-      spaFmt = SPA_AUDIO_FORMAT_S24_LE;
+      target->handleRouteReady(*optRouteAnchor);
     }
 
-    auto buffer = std::array<std::uint8_t, kPodBufferSize>{};
-    auto builder = ::spa_pod_builder{};
-    ::spa_pod_builder_init(&builder, buffer.data(), buffer.size());
-    auto frame = ::spa_pod_frame{};
-    ::spa_pod_builder_push_object(&builder, &frame, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
+    _implPtr->optLastSourceFormat = sourceFormat;
+    _implPtr->optLastNegotiatedFormat = negotiatedFormat;
 
-    ::spa_pod_builder_prop(&builder, SPA_FORMAT_mediaType, 0);
-    ::spa_pod_builder_id(&builder, SPA_MEDIA_TYPE_audio);
-
-    ::spa_pod_builder_prop(&builder, SPA_FORMAT_mediaSubtype, 0);
-    ::spa_pod_builder_id(&builder, SPA_MEDIA_SUBTYPE_raw);
-
-    ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_format, 0);
-    ::spa_pod_builder_id(&builder, spaFmt);
-
-    ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_rate, 0);
-    ::spa_pod_builder_int(&builder, static_cast<int32_t>(format.sampleRate));
-
-    ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_channels, 0);
-    ::spa_pod_builder_int(&builder, static_cast<int32_t>(format.channels));
-
-    if (format.channels == 2)
-    {
-      auto position = std::array<std::uint32_t, 2>{SPA_AUDIO_CHANNEL_FL, SPA_AUDIO_CHANNEL_FR};
-      ::spa_pod_builder_prop(&builder, SPA_FORMAT_AUDIO_position, 0);
-      ::spa_pod_builder_array(&builder, sizeof(std::uint32_t), SPA_TYPE_Id, position.size(), position.data());
-    }
-
-    auto const* param = static_cast<::spa_pod const*>(::spa_pod_builder_pop(&builder, &frame));
-    auto params = std::array<::spa_pod const*, 1>{param};
-    auto flags = static_cast<::pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_INACTIVE |
-                                                PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
-
-    if (useExclusive)
-    {
-      flags = static_cast<::pw_stream_flags>(flags | PW_STREAM_FLAG_EXCLUSIVE | PW_STREAM_FLAG_NO_CONVERT);
-    }
-
-    if (::pw_stream_connect(_implPtr->streamPtr.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, flags, params.data(), 1) < 0)
-    {
-      return makeError(Error::Code::InitFailed, "Failed to connect stream");
-    }
-
-    _implPtr->applyCachedControls();
-    _implPtr->outputControlAvailable.store(!useExclusive, std::memory_order_relaxed);
-
-    return {};
+    // PipeWire negotiates a client stream format; the graph node behind it may
+    // resample, remix, or requantize without reporting a direct endpoint. The
+    // endpoint therefore stays unconfirmed and only lossless client formats are
+    // offered, in both shared and exclusive mode.
+    return OpenedPcmMode{.clientFormat = negotiatedFormat};
   }
 
   void PipeWireBackend::start()
@@ -601,6 +736,10 @@ namespace ao::audio::backend
   {
     _implPtr->stopRenderCycles();
     _implPtr->destroyStream();
+    _implPtr->renderTarget = nullptr;
+    _implPtr->format = {};
+    _implPtr->offeredEncodings.clear();
+    _implPtr->opening = false;
   }
 
   BackendId PipeWireBackend::backendId() const

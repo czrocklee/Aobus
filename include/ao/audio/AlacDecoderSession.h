@@ -5,20 +5,21 @@
 
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
   class [[nodiscard]] AlacDecoderSession final : public detail::DecoderSessionBase<AlacDecoderSession>
   {
   public:
-    explicit AlacDecoderSession(Format outputFormat);
+    explicit AlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~AlacDecoderSession() override;
 
     AlacDecoderSession(AlacDecoderSession const&) = delete;

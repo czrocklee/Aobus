@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/Mp3DecoderSession.h>
+
+#include "detail/DecoderOutputAdapter.h"
 #include "detail/MappedFileCursor.h"
-#include "detail/OutputFormatValidation.h"
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/Mp3DecoderSession.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/audio/detail/Mpg123Runtime.h>
 #include <ao/utility/ByteView.h>
@@ -35,7 +38,6 @@ namespace ao::audio
   namespace
   {
     constexpr std::uint8_t kMp3PcmBitDepth = 16;
-    constexpr std::uint8_t kFloat32BitDepth = 32;
 
     template<typename Action>
     decltype(auto) terminateOnException(Action&& action) noexcept
@@ -60,18 +62,6 @@ namespace ao::audio
       return (mode == MPG123_M_MONO) ? 1U : 2U;
     }
 
-    std::uint8_t bitDepthFromEncoding(int encoding) noexcept
-    {
-      auto const bytesPerSample = ::mpg123_encsize(encoding);
-
-      if (bytesPerSample <= 0)
-      {
-        return 0U;
-      }
-
-      return static_cast<std::uint8_t>(bytesPerSample * 8);
-    }
-
     std::string mpg123ErrorMessage(mpg123_handle* handle, int error)
     {
       char const* const detail = error == MPG123_ERR ? ::mpg123_strerror(handle) : ::mpg123_plain_strerror(error);
@@ -81,7 +71,7 @@ namespace ao::audio
 
   struct Mp3DecoderSession::Impl final
   {
-    Format requestedOutput;
+    detail::DecoderOutputAdapter outputAdapter;
     detail::Mpg123EnvironmentGuard mpg123Environment;
     mpg123_handle* mh = nullptr;
     detail::MappedFileCursor fileCursor;
@@ -92,8 +82,8 @@ namespace ao::audio
     bool eof = false;
     int initErr = MPG123_OK;
 
-    Impl(Format const& output)
-      : requestedOutput{output}
+    Impl(std::optional<SampleEncoding> optOutputEncoding)
+      : outputAdapter{optOutputEncoding}
     {
       mh = ::mpg123_new(nullptr, &initErr);
 
@@ -160,39 +150,11 @@ namespace ao::audio
           Error::Code::InitFailed, "Failed to reset MP3 output formats: " + mpg123ErrorMessage(mh, err));
       }
 
-      auto const encoding = [&] -> std::int32_t
-      {
-        if (requestedOutput.isFloat)
-        {
-          if (requestedOutput.bitDepth == 0 || requestedOutput.bitDepth == kFloat32BitDepth)
-          {
-            // mpg123.h owns this C macro; include-cleaner cannot map its provider.
-            return MPG123_ENC_FLOAT_32; // NOLINT(misc-include-cleaner)
-          }
+      // Decode one stable native format. The shared output adapter performs all
+      // precision-preserving container expansion after stream inspection.
+      auto constexpr kEncoding = MPG123_ENC_SIGNED_16; // NOLINT(misc-include-cleaner)
 
-          return 0;
-        }
-
-        if (requestedOutput.bitDepth == 0 || requestedOutput.bitDepth == kMp3PcmBitDepth)
-        {
-          // mpg123.h owns this C macro; include-cleaner cannot map its provider.
-          return MPG123_ENC_SIGNED_16; // NOLINT(misc-include-cleaner)
-        }
-
-        return 0;
-      }();
-
-      if (encoding == 0)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported MP3 output sample format");
-      }
-
-      if (requestedOutput.channels > 2)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported MP3 channel count");
-      }
-
-      if (int const err = ::mpg123_format2(mh, 0, MPG123_MONO | MPG123_STEREO, encoding); err != MPG123_OK)
+      if (int const err = ::mpg123_format2(mh, 0, MPG123_MONO | MPG123_STEREO, kEncoding); err != MPG123_OK)
       {
         detail::throwDecoderError(
           Error::Code::NotSupported, "Unsupported MP3 output format: " + mpg123ErrorMessage(mh, err));
@@ -211,20 +173,15 @@ namespace ao::audio
           Error::Code::DecodeFailed, "Failed to get MP3 format: " + mpg123ErrorMessage(mh, err));
       }
 
-      auto actualOutput = Format{
-        .sampleRate = static_cast<std::uint32_t>(rate),
-        .channels = channelCountFromMpg123(channels),
-        .bitDepth = bitDepthFromEncoding(encoding),
-        // mpg123.h owns this C macro; include-cleaner cannot map its provider.
-        .isFloat = (encoding & MPG123_ENC_FLOAT) != 0, // NOLINT(misc-include-cleaner)
-        .isInterleaved = true,
-      };
-      actualOutput.validBits = actualOutput.bitDepth;
+      if (encoding != MPG123_ENC_SIGNED_16) // NOLINT(misc-include-cleaner)
+      {
+        detail::throwDecoderError(Error::Code::NotSupported, "MP3 decoder changed its native PCM encoding");
+      }
 
-      info.sourceFormat = actualOutput;
-      info.sourceFormat.isFloat = false;
-      info.sourceFormat.bitDepth = kMp3PcmBitDepth;
-      info.sourceFormat.validBits = kMp3PcmBitDepth;
+      info.sourceFormat = SignalFormat{.sampleRate = static_cast<std::uint32_t>(rate),
+                                       .channels = channelCountFromMpg123(channels),
+                                       .precisionBits = kMp3PcmBitDepth,
+                                       .sampleKind = SampleKind::Integer};
 
       if (auto frameInfo = mpg123_frameinfo2{}; ::mpg123_info2(mh, &frameInfo) == MPG123_OK)
       {
@@ -232,7 +189,14 @@ namespace ao::audio
         info.sourceFormat.channels = channelCountFromFrameMode(frameInfo.mode);
       }
 
-      info.outputFormat = actualOutput;
+      auto const configured = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
+
+      if (!configured)
+      {
+        detail::throwDecoderError(configured.error());
+      }
+
+      info.outputFormat = *configured;
       info.isLossy = true;
       info.codec = AudioCodec::Mp3;
     }
@@ -312,8 +276,8 @@ namespace ao::audio
         return PcmBlock{.endOfStream = true};
       }
 
-      auto const bytesPerFrame =
-        static_cast<std::uint32_t>(impl->info.outputFormat.channels) * (impl->info.outputFormat.bitDepth / 8U);
+      constexpr std::uint32_t kNativeBytesPerSample = 2;
+      auto const bytesPerFrame = static_cast<std::uint32_t>(impl->info.outputFormat.channels) * kNativeBytesPerSample;
 
       if (bytesPerFrame == 0)
       {
@@ -330,11 +294,15 @@ namespace ao::audio
       std::uint64_t const currentFrameIndex = impl->nextFrameIndex;
       impl->nextFrameIndex += frames;
 
-      return PcmBlock{.bytes = {impl->decodeBuffer.data(), done},
-                      .bitDepth = impl->info.outputFormat.bitDepth,
-                      .frames = frames,
-                      .firstFrameIndex = currentFrameIndex,
-                      .endOfStream = false};
+      auto converted = impl->outputAdapter.convert({impl->decodeBuffer.data(), done});
+
+      if (!converted)
+      {
+        detail::throwDecoderError(converted.error());
+      }
+
+      return PcmBlock{
+        .bytes = *converted, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = false};
     }
     catch (detail::DecoderException const& ex)
     {
@@ -343,8 +311,8 @@ namespace ao::audio
     }
   }
 
-  Mp3DecoderSession::Mp3DecoderSession(Format outputFormat)
-    : _implPtr{std::make_unique<Impl>(outputFormat)}
+  Mp3DecoderSession::Mp3DecoderSession(std::optional<SampleEncoding> optOutputEncoding)
+    : _implPtr{std::make_unique<Impl>(optOutputEncoding)}
   {
   }
 
@@ -381,19 +349,6 @@ namespace ao::audio
 
       _implPtr->refreshStreamInfo();
 
-      if (auto const result =
-            detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "MP3");
-          !result)
-      {
-        detail::throwDecoderError(result.error());
-      }
-
-      if (_implPtr->requestedOutput.validBits != 0 &&
-          _implPtr->requestedOutput.validBits != _implPtr->info.outputFormat.validBits)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported MP3 output valid bits");
-      }
-
       if (off_t const samples = ::mpg123_length(_implPtr->mh);
           samples > 0 && _implPtr->info.outputFormat.sampleRate > 0)
       {
@@ -426,6 +381,7 @@ namespace ao::audio
 
     _implPtr->fileCursor.close();
     _implPtr->decodeBuffer.clear();
+    _implPtr->outputAdapter.reset();
     _implPtr->nextFrameIndex = 0;
     _implPtr->optTerminalError.reset();
     _implPtr->eof = false;

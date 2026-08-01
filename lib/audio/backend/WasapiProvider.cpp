@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/backend/WasapiProvider.h>
+
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Subscription.h>
-#include <ao/audio/backend/WasapiProvider.h>
 #include <ao/audio/backend/WasapiSharedBackend.h>
-#include <ao/audio/backend/detail/AudioBackendFormatSupport.h>
 #include <ao/audio/backend/detail/WasapiGraphRegistry.h>
 #include <ao/audio/backend/detail/WasapiProviderMonitorHooks.h>
 #include <ao/audio/backend/detail/WasapiStrings.h>
@@ -85,22 +85,6 @@ namespace ao::audio::backend
       CO_MTA_USAGE_COOKIE _cookie{};
       bool _active = false;
     };
-
-    DeviceFormatCapabilities sharedModeCapabilities()
-    {
-      auto caps = DeviceFormatCapabilities{};
-
-      // Shared mode with AUTOCONVERTPCM accepts any sample rate and channel
-      // count (the audio engine converts), so those lists stay empty, which
-      // FormatNegotiator treats as unconstrained.
-      detail::addSampleFormatCapability(caps, {.bitDepth = 16, .validBits = 16, .isFloat = false});
-      detail::addSampleFormatCapability(caps, {.bitDepth = 24, .validBits = 24, .isFloat = false});
-      detail::addSampleFormatCapability(caps, {.bitDepth = 32, .validBits = 24, .isFloat = false});
-      detail::addSampleFormatCapability(caps, {.bitDepth = 32, .validBits = 32, .isFloat = false});
-      detail::addSampleFormatCapability(caps, {.bitDepth = 32, .validBits = 32, .isFloat = true});
-
-      return caps;
-    }
 
     std::string friendlyName(IMMDevice* device, std::string const& fallback)
     {
@@ -195,8 +179,7 @@ namespace ao::audio::backend
         devices.push_back({.id = DeviceId{std::move(utf8Id)},
                            .displayName = std::move(name),
                            .isDefault = (wideId == defaultId),
-                           .backendId = kBackendWasapi,
-                           .capabilities = sharedModeCapabilities()});
+                           .backendId = kBackendWasapi});
       }
 
       // PlaybackService auto-selects the first device of the first backend, so
@@ -241,6 +224,7 @@ namespace ao::audio::backend
         if (riid == __uuidof(IUnknown) || riid == __uuidof(IMMNotificationClient))
         {
           *object = static_cast<IMMNotificationClient*>(this);
+          AddRef();
           return S_OK;
         }
 

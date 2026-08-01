@@ -6,7 +6,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/Error.h>
 #include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,7 +28,7 @@ namespace ao::audio::test
       auto data = source;
       data.resize(16);
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
       auto const result = decoder.open(temp.path);
       REQUIRE_FALSE(result);
@@ -41,7 +41,7 @@ namespace ao::audio::test
       auto data = source;
       data.resize(data.size() / 2);
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
       auto const terminal = readUntilTerminalState(decoder, 512);
@@ -63,7 +63,7 @@ namespace ao::audio::test
                 0xA5);
 
       auto const temp = ao::test::TempFile{data, ".flac"};
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
       auto const terminal = readUntilTerminalState(decoder, 512);

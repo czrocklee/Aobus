@@ -63,18 +63,21 @@ namespace ao::test
       auto const invalidInput = Result<>{makeError(Error::Code::InvalidInput, "Invalid user value")};
       auto const corruptData = Result<>{makeError(Error::Code::CorruptData, "Corrupt file")};
       auto const conflict = Result<>{makeError(Error::Code::Conflict, "Record already exists")};
+      auto const resourceBusy = Result<>{makeError(Error::Code::ResourceBusy, "Audio device is busy")};
       auto const tooLarge = Result<>{makeError(Error::Code::ValueTooLarge, "Serialized record is too large")};
       auto const resourceExhausted = Result<>{makeError(Error::Code::ResourceExhausted, "Resource IDs exhausted")};
 
       REQUIRE_FALSE(invalidInput);
       REQUIRE_FALSE(corruptData);
       REQUIRE_FALSE(conflict);
+      REQUIRE_FALSE(resourceBusy);
       REQUIRE_FALSE(tooLarge);
       REQUIRE_FALSE(resourceExhausted);
 
       CHECK(invalidInput.error().code == Error::Code::InvalidInput);
       CHECK(corruptData.error().code == Error::Code::CorruptData);
       CHECK(conflict.error().code == Error::Code::Conflict);
+      CHECK(resourceBusy.error().code == Error::Code::ResourceBusy);
       CHECK(tooLarge.error().code == Error::Code::ValueTooLarge);
       CHECK(resourceExhausted.error().code == Error::Code::ResourceExhausted);
     }

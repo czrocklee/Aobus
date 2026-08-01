@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -28,8 +28,8 @@ namespace ao::audio::backend::detail
   struct WasapiRouteState final
   {
     std::string routeAnchor;
-    std::optional<Format> optInputFormat{};
-    std::optional<Format> optMixFormat{};
+    std::optional<PcmFormat> optInputFormat{};
+    std::optional<PcmFormat> optMixFormat{};
     float volume = 1.0F;
     bool muted = false;
   };

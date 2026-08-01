@@ -29,7 +29,8 @@ Its behavioral implementation is centered on [`QualityAnalyzer.cpp`](../../../li
 - **Assessment** is the ordered quality record for one node on the playback path.
 - **Finding** is one analyzer-owned observation attached to the node that owns or receives it.
 - **Fully verified** means the analyzed path reaches a Sink and every path node reports a format.
-- **Effective precision** is `validBits` when known, otherwise the format container bit depth.
+- **Logical source precision** is `SignalFormat::precisionBits` and is owned only by the inspected signal.
+- **PCM nominal precision** and **representation width** come from a concrete `PcmFormat`'s `SampleEncoding`; they describe the encoded scale and container, not how many source-information bits survive.
 - **Round-trip proof** is evidence that an integer source can pass through float and return to an integer representation without losing its proven source precision.
 
 ## Invariants
@@ -86,20 +87,22 @@ For each adjacent pair with reported formats, the analyzer compares:
 
 - sample rate, producing Resampling when it changes;
 - channel count, producing ChannelMapping when it changes;
-- precision domain and effective bit count, producing lossless padding, lossless float mapping, proven lossless round trip, or truncation.
+- signal/encoding domain, nominal bit count, and concrete representation width, producing lossless padding, lossless float mapping, proven lossless round trip, or truncation.
 
-Integer widening within the integer domain is lossless when destination effective precision is not smaller.
-Float widening within the float domain is lossless float mapping when destination effective precision is not smaller; narrowing is truncation.
-Integer-to-32-bit-float mapping is lossless only through 24 effective source bits; integer-to-64-bit-float mapping is lossless through 32 effective source bits.
+Integer representation widening within the integer domain is lossless when the destination encoding's nominal precision is not smaller.
+Integer narrowing back to a precision that is still at least the proven source precision is a proven lossless round trip, because the discarded bits were only padding added upstream: a 24-bit source widened into a 32-bit container and delivered to a 24-bit endpoint loses nothing.
+Any earlier truncation, gain, mix, or resampling clears that proof, after which the same narrowing is truncation.
+Float representation widening within the float domain is lossless float mapping when destination nominal precision is not smaller; nominal narrowing is truncation.
+Integer-to-32-bit-float mapping is lossless only through 24 proven source bits.
 Other integer-to-float changes are quantizing truncation.
-Float-to-integer changes are truncation unless round-trip proof remains valid and the destination effective precision can contain the proven source precision.
+Float-to-integer changes are truncation unless round-trip proof remains valid and the destination encoding can contain the proven source precision.
 
-A valid-bits-only precision change is classified only when both formats report nonzero valid-bit counts.
-If either side omits valid bits and container width/domain does not otherwise change, the analyzer does not infer padding or truncation.
+The analyzer never derives alignment or container width from source precision.
+`Signed24PackedLe`, `Signed24In32Le`, and `Signed32Le` therefore remain distinguishable representation evidence.
 
 ### Round-trip proof
 
-Proof starts only from a non-float source with a reported format and records its effective precision.
+Proof starts only from an integer source with a reported format and records its logical precision.
 It survives bit-transparent padding and float mapping.
 It is invalidated by a missing format or any software/unclassified volume change, amplification, mute, resampling, channel mapping, truncation, or external mixing.
 
@@ -187,5 +190,6 @@ The architectural requirement that pipeline panels consume ordered assessments a
 - [Audio quality architecture](../../architecture/audio-quality.md)
 - [Playback architecture](../../architecture/playback.md)
 - [Audio quality surface reference](../../reference/playback/quality-surface.md)
+- [PCM format surface](../../reference/playback/pcm-format.md)
 - [Decoder session](decoder-session.md)
 - [Audio execution and concurrency](audio-execution.md)

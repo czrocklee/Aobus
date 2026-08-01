@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/backend/WasapiSharedBackend.h>
+
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Property.h>
-#include <ao/audio/backend/WasapiSharedBackend.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/backend/detail/WasapiFormat.h>
 #include <ao/audio/backend/detail/WasapiGraphRegistry.h>
 #include <ao/audio/backend/detail/WasapiRenderBuffer.h>
@@ -169,10 +171,7 @@ namespace ao::audio::backend::test
     REQUIRE(optFormat);
     CHECK(optFormat->sampleRate == 48000);
     CHECK(optFormat->channels == 2);
-    CHECK(optFormat->bitDepth == 32);
-    CHECK(optFormat->validBits == 24);
-    CHECK_FALSE(optFormat->isFloat);
-    CHECK(optFormat->isInterleaved);
+    CHECK(optFormat->encoding == SampleEncoding::Signed24In32Le);
   }
 
   TEST_CASE("formatFromWaveFormat leaves unsupported endpoint encoding unknown", "[audio][unit][wasapi][format]")

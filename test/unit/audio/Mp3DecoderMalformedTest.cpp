@@ -4,8 +4,8 @@
 #include "DecoderTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -28,7 +28,7 @@ namespace ao::audio::test
       auto data = source;
       data.resize(data.size() / 2);
       auto const temp = ao::test::TempFile{data, ".mp3"};
-      auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
       auto const terminal = readUntilTerminalState(decoder, 512);
@@ -63,7 +63,7 @@ namespace ao::audio::test
                 0xA5);
 
       auto const temp = ao::test::TempFile{data, ".mp3"};
-      auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
       auto const terminal = readUntilTerminalState(decoder, 512);

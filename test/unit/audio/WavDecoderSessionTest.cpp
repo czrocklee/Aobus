@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/WavDecoderSession.h>
+
 #include "DecoderTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/wav/TestWav.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/WavDecoderSession.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/media/wav/Riff.h>
 #include <ao/utility/ByteView.h>
 
@@ -19,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -73,7 +77,7 @@ namespace ao::audio::test
   TEST_CASE("WavDecoderSession - decodes real 16-bit PCM without rewriting bytes", "[audio][unit][wav]")
   {
     auto const fixture = requireAudioFixture("basic_metadata.wav");
-    auto decoder = WavDecoderSession{Format{.isInterleaved = true}};
+    auto decoder = WavDecoderSession{std::nullopt};
 
     REQUIRE(decoder.open(fixture));
     auto const info = decoder.streamInfo();
@@ -81,8 +85,9 @@ namespace ao::audio::test
     CHECK_FALSE(info.isLossy);
     CHECK(info.sourceFormat.sampleRate == 44100);
     CHECK(info.sourceFormat.channels == 2);
-    CHECK(info.sourceFormat.bitDepth == 16);
-    CHECK(info.outputFormat == info.sourceFormat);
+    CHECK(info.sourceFormat.precisionBits == 16);
+    CHECK(signalFormat(info.outputFormat) == info.sourceFormat);
+    CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
 
     auto const parsed = requireParsedWave(fixture);
     auto blockResult = decoder.readNextBlock();
@@ -97,23 +102,21 @@ namespace ao::audio::test
   TEST_CASE("WavDecoderSession - decodes real extensible 24-bit PCM", "[audio][unit][wav]")
   {
     auto const fixture = requireAudioFixture("hires.wav");
-    auto decoder = WavDecoderSession{Format{.bitDepth = 24, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed24PackedLe};
 
     REQUIRE(decoder.open(fixture));
     auto const info = decoder.streamInfo();
     CHECK(info.codec == AudioCodec::Wav);
     CHECK(info.sourceFormat.sampleRate == 96000);
     CHECK(info.sourceFormat.channels == 2);
-    CHECK(info.sourceFormat.bitDepth == 24);
-    CHECK(info.sourceFormat.validBits == 24);
-    CHECK(info.outputFormat.bitDepth == 24);
-    CHECK(info.outputFormat.validBits == 24);
+    CHECK(info.sourceFormat.precisionBits == 24);
+    CHECK(encodingContainerBits(info.outputFormat.encoding) == 24);
 
     auto const parsed = requireParsedWave(fixture);
     auto blockResult = decoder.readNextBlock();
     REQUIRE(blockResult);
     auto const& block = *blockResult;
-    CHECK(block.bitDepth == 24);
+    CHECK(info.outputFormat.encoding == SampleEncoding::Signed24PackedLe);
     REQUIRE(block.bytes.size() <= parsed.wave.data.size());
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
@@ -140,7 +143,7 @@ namespace ao::audio::test
     };
     auto data = ao::test::wav::makeWav({.bitsPerSample = 32, .audioData = audioData});
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto decoder = WavDecoderSession{Format{.bitDepth = 32, .validBits = 32, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed32Le};
 
     for (std::size_t openCount = 0; openCount < 2; ++openCount)
     {
@@ -153,7 +156,7 @@ namespace ao::audio::test
     }
   }
 
-  TEST_CASE("WavDecoderSession - converts 24-bit integer extremes to 16-bit output", "[audio][unit][wav]")
+  TEST_CASE("WavDecoderSession - rejects precision-losing integer output", "[audio][unit][wav]")
   {
     auto const audioData = std::vector<std::uint8_t>{
       0xFF,
@@ -168,24 +171,11 @@ namespace ao::audio::test
     };
     auto data = ao::test::wav::makeWav({.bitsPerSample = 24, .audioData = audioData});
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .validBits = 16, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed16Le};
 
-    REQUIRE(decoder.open(temp.path));
-    auto const info = decoder.streamInfo();
-    CHECK(info.sourceFormat.validBits == 24);
-    CHECK(info.outputFormat.validBits == 16);
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-
-    auto const expected = std::vector<std::uint8_t>{
-      0xFF,
-      0x7F,
-      0x00,
-      0x80,
-      0x00,
-      0x00,
-    };
-    CHECK(std::ranges::equal(blockResult->bytes, asBytes(expected)));
+    auto const result = decoder.open(temp.path);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("WavDecoderSession - preserves a partial final passthrough block", "[audio][unit][wav]")
@@ -200,7 +190,7 @@ namespace ao::audio::test
 
     auto data = ao::test::wav::makeWav({.bitsPerSample = 16, .audioData = audioData});
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .validBits = 16, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed16Le};
 
     REQUIRE(decoder.open(temp.path));
 
@@ -220,16 +210,15 @@ namespace ao::audio::test
   TEST_CASE("WavDecoderSession - preserves real 32-bit float PCM", "[audio][unit][wav]")
   {
     auto const fixture = requireAudioFixture("float32.wav");
-    auto decoder = WavDecoderSession{Format{.isInterleaved = true}};
+    auto decoder = WavDecoderSession{std::nullopt};
 
     REQUIRE(decoder.open(fixture));
     auto const info = decoder.streamInfo();
     CHECK(info.codec == AudioCodec::Wav);
     CHECK(info.sourceFormat.sampleRate == 48000);
-    CHECK(info.sourceFormat.isFloat);
-    CHECK(info.outputFormat.isFloat);
-    CHECK(info.outputFormat.bitDepth == 32);
-    CHECK(info.outputFormat.validBits == 32);
+    CHECK(info.sourceFormat.sampleKind == SampleKind::FloatingPoint);
+    CHECK(isFloatEncoding(info.outputFormat.encoding));
+    CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
 
     auto const parsed = requireParsedWave(fixture);
     auto blockResult = decoder.readNextBlock();
@@ -239,7 +228,7 @@ namespace ao::audio::test
     CHECK(std::ranges::equal(block.bytes, parsed.wave.data.first(block.bytes.size())));
   }
 
-  TEST_CASE("WavDecoderSession - converts 32-bit float PCM to requested integer output", "[audio][unit][wav]")
+  TEST_CASE("WavDecoderSession - rejects float-to-integer output", "[audio][unit][wav]")
   {
     auto const samples = std::vector{-1.0F, 0.0F, 1.0F, 0.5F};
     auto data = ao::test::wav::makeWav({.sampleFormat = ao::test::wav::SampleFormat::IeeeFloat,
@@ -247,36 +236,22 @@ namespace ao::audio::test
                                         .validBitsPerSample = 32,
                                         .audioData = floatSamples(std::span{samples})});
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .validBits = 16, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed16Le};
 
-    REQUIRE(decoder.open(temp.path));
-    auto const info = decoder.streamInfo();
-    CHECK(info.sourceFormat.isFloat);
-    CHECK_FALSE(info.outputFormat.isFloat);
-    CHECK(info.outputFormat.bitDepth == 16);
-    CHECK(info.outputFormat.validBits == 16);
-
-    auto blockResult = decoder.readNextBlock();
-    REQUIRE(blockResult);
-    auto const& block = *blockResult;
-    REQUIRE(block.bytes.size() == samples.size() * sizeof(std::int16_t));
-    CHECK(readLe16(block.bytes, 0) == -32768);
-    CHECK(readLe16(block.bytes, 2) == 0);
-    CHECK(readLe16(block.bytes, 4) == 32767);
-    CHECK(readLe16(block.bytes, 6) == 16384);
+    auto const result = decoder.open(temp.path);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("WavDecoderSession - converts real unsigned 8-bit PCM to signed 16-bit output", "[audio][unit][wav]")
   {
     auto const fixture = requireAudioFixture("u8.wav");
-    auto decoder = WavDecoderSession{Format{.isInterleaved = true}};
+    auto decoder = WavDecoderSession{std::nullopt};
 
     REQUIRE(decoder.open(fixture));
     auto const info = decoder.streamInfo();
-    CHECK(info.sourceFormat.bitDepth == 8);
-    CHECK(info.sourceFormat.validBits == 8);
-    CHECK(info.outputFormat.bitDepth == 16);
-    CHECK(info.outputFormat.validBits == 8);
+    CHECK(info.sourceFormat.precisionBits == 8);
+    CHECK(encodingContainerBits(info.outputFormat.encoding) == 16);
 
     auto const parsed = requireParsedWave(fixture);
     auto blockResult = decoder.readNextBlock();
@@ -298,7 +273,7 @@ namespace ao::audio::test
     auto data = ao::test::wav::makeWav({});
     ao::test::wav::appendTruncatedChunk(data, "JUNK", 100);
     auto const temp = ao::test::TempFile{data, ".wav"};
-    auto decoder = WavDecoderSession{Format{.isInterleaved = true}};
+    auto decoder = WavDecoderSession{std::nullopt};
 
     auto const openResult = decoder.open(temp.path);
 
@@ -311,7 +286,7 @@ namespace ao::audio::test
 
   TEST_CASE("WavDecoderSession - seek and end-of-stream are stable", "[audio][unit][wav]")
   {
-    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed16Le};
 
     REQUIRE(decoder.open(requireAudioFixture("basic_metadata.wav")));
     REQUIRE(decoder.seek(std::chrono::milliseconds{500}));
@@ -321,18 +296,12 @@ namespace ao::audio::test
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
   }
 
-  TEST_CASE("WavDecoderSession - reports unsupported fixed output requests", "[audio][unit][wav][error]")
+  TEST_CASE("WavDecoderSession - reports invalid input", "[audio][unit][wav][error]")
   {
     auto const integerFixture = requireAudioFixture("basic_metadata.wav");
-    auto const floatFixture = requireAudioFixture("float32.wav");
+    CHECK(WavDecoderSession{SampleEncoding::Float32Le}.open(integerFixture));
 
-    CHECK((!WavDecoderSession{Format{.sampleRate = 1, .bitDepth = 16, .isInterleaved = true}}.open(integerFixture)));
-    CHECK((!WavDecoderSession{Format{.channels = 1, .bitDepth = 16, .isInterleaved = true}}.open(integerFixture)));
-    CHECK((!WavDecoderSession{Format{.bitDepth = 16, .isInterleaved = false}}.open(integerFixture)));
-    CHECK((!WavDecoderSession{Format{.bitDepth = 32, .isFloat = true, .isInterleaved = true}}.open(integerFixture)));
-    CHECK((!WavDecoderSession{Format{.bitDepth = 24, .validBits = 16, .isInterleaved = true}}.open(floatFixture)));
-
-    auto decoder = WavDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = WavDecoderSession{SampleEncoding::Signed16Le};
     CHECK(!decoder.open("/path/to/nowhere/nonexistent.wav"));
     checkClosedSession(decoder);
   }

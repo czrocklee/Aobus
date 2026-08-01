@@ -5,20 +5,21 @@
 
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
   class [[nodiscard]] WavDecoderSession final : public detail::DecoderSessionBase<WavDecoderSession>
   {
   public:
-    explicit WavDecoderSession(Format outputFormat);
+    explicit WavDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~WavDecoderSession() override;
 
     WavDecoderSession(WavDecoderSession const&) = delete;

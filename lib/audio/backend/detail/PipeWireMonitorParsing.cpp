@@ -1,21 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/backend/detail/AudioBackendFormatSupport.h>
-#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 #include <ao/audio/backend/detail/PipeWireMonitorParsing.h>
-#include <ao/utility/ByteView.h>
+
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 
 extern "C"
 {
 #include <pipewire/keys.h>
-#include <spa/param/audio/raw.h>
-#include <spa/param/format.h>
 #include <spa/param/param.h>
 #include <spa/param/props.h>
-#include <spa/pod/body.h>
 #include <spa/pod/iter.h>
 #include <spa/pod/pod.h>
 #include <spa/utils/dict.h>
@@ -23,7 +18,6 @@ extern "C"
 }
 
 #include <algorithm>
-#include <array>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
@@ -32,7 +26,6 @@ extern "C"
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 namespace ao::audio::backend::detail
@@ -101,189 +94,8 @@ namespace ao::audio::backend::detail
     return record;
   }
 
-  std::optional<SampleFormatCapability> sampleFormatCapabilityFromSpaFormat(std::uint32_t spaFmt) noexcept
-  {
-    switch (spaFmt)
-    {
-      case SPA_AUDIO_FORMAT_S16_LE:
-      case SPA_AUDIO_FORMAT_S16_BE: return SampleFormatCapability{.bitDepth = 16, .validBits = 16, .isFloat = false};
-      case SPA_AUDIO_FORMAT_S24_LE:
-      case SPA_AUDIO_FORMAT_S24_BE: return SampleFormatCapability{.bitDepth = 24, .validBits = 24, .isFloat = false};
-      case SPA_AUDIO_FORMAT_S24_32_LE:
-      case SPA_AUDIO_FORMAT_S24_32_BE: return SampleFormatCapability{.bitDepth = 32, .validBits = 24, .isFloat = false};
-      case SPA_AUDIO_FORMAT_S32_LE:
-      case SPA_AUDIO_FORMAT_S32_BE: return SampleFormatCapability{.bitDepth = 32, .validBits = 32, .isFloat = false};
-      case SPA_AUDIO_FORMAT_F32_LE:
-      case SPA_AUDIO_FORMAT_F32_BE: return SampleFormatCapability{.bitDepth = 32, .validBits = 32, .isFloat = true};
-      case SPA_AUDIO_FORMAT_F64_LE:
-      case SPA_AUDIO_FORMAT_F64_BE: return SampleFormatCapability{.bitDepth = 64, .validBits = 64, .isFloat = true};
-      default: return std::nullopt;
-    }
-  }
-
-  namespace
-
-  {
-    void addUnique(std::vector<std::uint32_t>& output, std::uint32_t value)
-    {
-      if (!std::ranges::contains(output, value))
-      {
-        output.push_back(value);
-      }
-    }
-
-    void collectChoiceIntValues(::spa_pod_choice const* choice, std::vector<std::uint32_t>& output)
-    {
-      auto const nVals = SPA_POD_CHOICE_N_VALUES(choice);
-
-      if (nVals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Int)
-      {
-        return;
-      }
-
-      auto const* vals = static_cast<std::int32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-
-      if (auto const choiceType = SPA_POD_CHOICE_TYPE(choice);
-          choiceType == SPA_CHOICE_Enum || choiceType == SPA_CHOICE_None)
-      {
-        for (std::uint32_t i = 0; i < nVals; ++i)
-        {
-          addUnique(output, static_cast<std::uint32_t>(vals[i]));
-        }
-      }
-      else if (choiceType == SPA_CHOICE_Range)
-      {
-        auto const min = (nVals > 1) ? vals[1] : vals[0];
-        auto const max = (nVals > 2) ? vals[2] : min;
-
-        static constexpr auto kCommonRates =
-          std::array<std::uint32_t, 8>{44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000};
-
-        for (auto rate : kCommonRates)
-        {
-          if (std::cmp_greater_equal(rate, min) && std::cmp_less_equal(rate, max))
-          {
-            addUnique(output, rate);
-          }
-        }
-
-        addUnique(output, static_cast<std::uint32_t>(vals[0]));
-      }
-    }
-
-    void collectIntValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
-    {
-      if (pod == nullptr)
-      {
-        return;
-      }
-
-      if (::spa_pod_is_int(pod) != 0)
-      {
-        if (std::int32_t val = 0; ::spa_pod_get_int(pod, &val) == 0)
-        {
-          addUnique(output, static_cast<std::uint32_t>(val));
-        }
-      }
-      else if (::spa_pod_is_choice(pod) != 0)
-      {
-        auto const podSpan = utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
-        auto const* choice = utility::layout::view<::spa_pod_choice>(podSpan);
-        collectChoiceIntValues(choice, output);
-      }
-    }
-
-    void collectIdValues(::spa_pod const* pod, std::vector<std::uint32_t>& output)
-    {
-      if (pod == nullptr)
-      {
-        return;
-      }
-
-      if (::spa_pod_is_id(pod) != 0)
-      {
-        if (std::uint32_t val = 0; ::spa_pod_get_id(pod, &val) == 0)
-        {
-          addUnique(output, val);
-        }
-      }
-      else if (::spa_pod_is_choice(pod) != 0)
-      {
-        auto const podSpan = utility::bytes::view(pod, pod->size + sizeof(::spa_pod));
-        auto const* choice = utility::layout::view<::spa_pod_choice>(podSpan);
-        auto const nVals = SPA_POD_CHOICE_N_VALUES(choice);
-
-        if (nVals == 0 || SPA_POD_CHOICE_VALUE_TYPE(choice) != SPA_TYPE_Id)
-        {
-          return;
-        }
-
-        auto const* vals = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
-
-        if (auto const choiceType = SPA_POD_CHOICE_TYPE(choice);
-            choiceType == SPA_CHOICE_Enum || choiceType == SPA_CHOICE_None)
-        {
-          for (std::uint32_t i = 0; i < nVals; ++i)
-          {
-            addUnique(output, vals[i]);
-          }
-        }
-      }
-    }
-  } // namespace
-
-  void parseEnumFormat(::spa_pod const* param, DeviceFormatCapabilities& caps)
-  {
-    if (param == nullptr || ::spa_pod_is_object(param) == 0)
-    {
-      return;
-    }
-
-    ::spa_pod_prop const* prop = nullptr;
-    auto const podSpan = utility::bytes::view(param, param->size + sizeof(::spa_pod));
-    auto const* obj = utility::layout::view<::spa_pod_object>(podSpan);
-
-    SPA_POD_OBJECT_FOREACH(obj, prop)
-    {
-      if (prop->key == SPA_FORMAT_AUDIO_format)
-      {
-        auto formats = std::vector<std::uint32_t>{};
-        collectIdValues(&prop->value, formats);
-
-        for (auto const format : formats)
-        {
-          if (auto const optCapability = sampleFormatCapabilityFromSpaFormat(format); optCapability)
-          {
-            addSampleFormatCapability(caps, *optCapability);
-          }
-        }
-      }
-      else if (prop->key == SPA_FORMAT_AUDIO_rate)
-      {
-        collectIntValues(&prop->value, caps.sampleRates);
-      }
-      else if (prop->key == SPA_FORMAT_AUDIO_channels)
-      {
-        auto channels = std::vector<std::uint32_t>{};
-        collectIntValues(&prop->value, channels);
-
-        for (auto const channelCount : channels)
-        {
-          static constexpr std::uint32_t kMaxChannelCount = 255;
-
-          if (channelCount > 0 && channelCount <= kMaxChannelCount)
-          {
-            if (auto const c8 = static_cast<std::uint8_t>(channelCount); !std::ranges::contains(caps.channelCounts, c8))
-            {
-              caps.channelCounts.push_back(c8);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  std::optional<Format> currentFormatFromNodeParam(std::uint32_t const paramId, ::spa_pod const* const param) noexcept
+  std::optional<PcmFormat> currentFormatFromNodeParam(std::uint32_t const paramId,
+                                                      ::spa_pod const* const param) noexcept
   {
     if (paramId != SPA_PARAM_Format)
     {
@@ -293,7 +105,7 @@ namespace ao::audio::backend::detail
     return parseRawStreamFormat(param);
   }
 
-  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, Format>& nodeFormatMap,
+  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, PcmFormat>& nodeFormatMap,
                                         std::uint32_t const nodeId,
                                         std::uint32_t const paramId,
                                         ::spa_pod const* const param)
@@ -316,15 +128,17 @@ namespace ao::audio::backend::detail
   {
     bool copyFloatValues(::spa_pod const& pod, std::vector<float>& output)
     {
-      auto values = std::array<float, 16>{};
-      auto const count = ::spa_pod_copy_array_full(&pod, SPA_TYPE_Float, sizeof(float), values.data(), values.size());
+      std::uint32_t count = 0;
+      std::uint32_t valueSize = 0;
+      std::uint32_t valueType = SPA_TYPE_None;
+      auto const* values = static_cast<float const*>(::spa_pod_get_array_full(&pod, &count, &valueSize, &valueType));
 
-      if (count == 0)
+      if (values == nullptr || count == 0U || valueSize != sizeof(float) || valueType != SPA_TYPE_Float)
       {
         return false;
       }
 
-      output.assign(values.begin(), values.begin() + count);
+      output.assign(values, values + count);
       return true;
     }
   } // namespace

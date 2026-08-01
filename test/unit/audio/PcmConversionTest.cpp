@@ -3,6 +3,11 @@
 
 #include <ao/audio/PcmConversion.h>
 
+#include <ao/Error.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -10,6 +15,7 @@
 #include <cstdint>
 #include <limits>
 #include <span>
+#include <vector>
 
 namespace ao::audio::test
 {
@@ -140,5 +146,158 @@ namespace ao::audio::test
       CHECK(destination[1] == 0x7FFFFF);
       CHECK(destination[2] == -1);
     }
+  }
+
+  TEST_CASE("convertPcmEncoding - S24-in-32 uses the low 24 bits", "[audio][regression][pcm]")
+  {
+    auto const source = std::to_array<std::byte>(
+      {std::byte{0x56}, std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed24In32Le, destination);
+
+    REQUIRE(result);
+    CHECK(destination == std::vector<std::byte>{std::byte{0x56},
+                                                std::byte{0x34},
+                                                std::byte{0x12},
+                                                std::byte{0x00},
+                                                std::byte{0xFF},
+                                                std::byte{0xFF},
+                                                std::byte{0xFF},
+                                                std::byte{0xFF}});
+  }
+
+  TEST_CASE("convertPcmEncoding - S16 to S32 uses the full 32-bit scale", "[audio][regression][pcm]")
+  {
+    auto const source = std::to_array<std::byte>({std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
+
+    REQUIRE(result);
+    CHECK(destination == std::vector<std::byte>{std::byte{0x00},
+                                                std::byte{0x00},
+                                                std::byte{0x34},
+                                                std::byte{0x12},
+                                                std::byte{0x00},
+                                                std::byte{0x00},
+                                                std::byte{0xFF},
+                                                std::byte{0xFF}});
+  }
+
+  TEST_CASE("convertPcmEncoding - S24 to S32 scales to the full 32-bit range", "[audio][unit][pcm]")
+  {
+    auto const source = std::to_array<std::byte>({std::byte{0x56}, std::byte{0x34}, std::byte{0x12}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
+
+    REQUIRE(result);
+    CHECK(destination == std::vector<std::byte>{std::byte{0x00}, std::byte{0x56}, std::byte{0x34}, std::byte{0x12}});
+  }
+
+  TEST_CASE("convertPcmEncoding - integer narrowing is rejected", "[audio][regression][pcm]")
+  {
+    // 0x123456 and 0xFFFFFF (-1) packed little-endian.
+    auto const source = std::to_array<std::byte>(
+      {std::byte{0x56}, std::byte{0x34}, std::byte{0x12}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed16Le, destination);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
+    CHECK(destination.empty());
+  }
+
+  TEST_CASE("convertPcmEncoding - float source is never quantized to integer PCM", "[audio][regression][pcm]")
+  {
+    auto const source = std::to_array<std::byte>({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x3F}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Float32Le};
+
+    auto const result = convertPcmEncoding(
+      source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed24PackedLe, destination);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
+    CHECK(destination.empty());
+  }
+
+  TEST_CASE("convertPcmEncoding - integer PCM converts to exact Float32 samples", "[audio][unit][pcm]")
+  {
+    auto const source = std::to_array<std::byte>(
+      {std::byte{0xFF}, std::byte{0xFF}, std::byte{0x7F}, std::byte{0x00}, std::byte{0x00}, std::byte{0x80}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Float32Le, destination);
+
+    REQUIRE(result);
+    CHECK(destination == std::vector<std::byte>{std::byte{0xFE},
+                                                std::byte{0xFF},
+                                                std::byte{0x7F},
+                                                std::byte{0x3F},
+                                                std::byte{0x00},
+                                                std::byte{0x00},
+                                                std::byte{0x80},
+                                                std::byte{0xBF}});
+  }
+
+  TEST_CASE("convertPcmEncoding - Float32 cannot convert losslessly to integer PCM", "[audio][unit][pcm]")
+  {
+    auto const source = std::to_array<std::byte>({std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x3F}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Float32Le};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
+    CHECK(destination.empty());
+  }
+
+  TEST_CASE("convertPcmEncoding - input must contain complete interleaved frames", "[audio][regression][pcm]")
+  {
+    auto const source = std::to_array<std::byte>(
+      {std::byte{0x01}, std::byte{0x00}, std::byte{0x02}, std::byte{0x00}, std::byte{0x03}, std::byte{0x00}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, signalFormat(sourceFormat), SampleEncoding::Signed32Le, destination);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(destination.empty());
+  }
+
+  TEST_CASE("convertPcmEncoding - byte layout and logical signal must describe the same stream", "[audio][unit][pcm]")
+  {
+    auto const source = std::to_array<std::byte>({std::byte{0x01}, std::byte{0x00}});
+    auto destination = std::vector<std::byte>{};
+    auto const sourceFormat = PcmFormat{.sampleRate = 48000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const mismatchedSignal = SignalFormat{.sampleRate = 44100, .channels = 1, .precisionBits = 16};
+
+    auto const result =
+      convertPcmEncoding(source, sourceFormat, mismatchedSignal, SampleEncoding::Signed32Le, destination);
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidInput);
+    CHECK(destination.empty());
   }
 } // namespace ao::audio::test

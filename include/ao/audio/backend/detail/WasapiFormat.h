@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -24,8 +24,8 @@ namespace ao::audio::backend::detail
   /**
    * @brief Converts a PCM/IEEE-float Windows wave format to the graph format model.
    *
-   * Unknown encodings and dimensions that cannot be represented by Format stay
+   * Unknown encodings and dimensions that cannot be represented by PcmFormat stay
    * unknown so the quality graph does not claim a verified endpoint format.
    */
-  std::optional<Format> formatFromWaveFormat(WAVEFORMATEX const& wave) noexcept;
+  std::optional<PcmFormat> formatFromWaveFormat(WAVEFORMATEX const& wave) noexcept;
 } // namespace ao::audio::backend::detail

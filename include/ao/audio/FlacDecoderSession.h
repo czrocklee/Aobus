@@ -5,20 +5,21 @@
 
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/detail/DecoderSessionBase.h>
 
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
   class [[nodiscard]] FlacDecoderSession final : public detail::DecoderSessionBase<FlacDecoderSession>
   {
   public:
-    explicit FlacDecoderSession(Format outputFormat);
+    explicit FlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding);
     ~FlacDecoderSession() override;
 
     // Not copyable or movable

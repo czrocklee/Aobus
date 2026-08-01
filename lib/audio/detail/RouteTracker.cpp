@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/detail/RouteTracker.h>
+
 #include <ao/AudioCodec.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/RouteAnchor.h>
-#include <ao/audio/detail/RouteTracker.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <mutex>
 #include <optional>
@@ -14,7 +16,7 @@
 
 namespace ao::audio::detail
 {
-  void RouteTracker::setDecoder(Format sourceFormat, Format outputFormat, bool isLossy, AudioCodec codec)
+  void RouteTracker::setDecoder(SignalFormat sourceFormat, PcmFormat outputFormat, bool isLossy, AudioCodec codec)
   {
     auto const lock = std::scoped_lock{_mutex};
     _state.sourceFormat = sourceFormat;
@@ -23,7 +25,7 @@ namespace ao::audio::detail
     _state.codec = codec;
   }
 
-  void RouteTracker::setEngineFormat(Format format)
+  void RouteTracker::setEngineFormat(PcmFormat format)
   {
     auto const lock = std::scoped_lock{_mutex};
     _state.engineOutputFormat = format;

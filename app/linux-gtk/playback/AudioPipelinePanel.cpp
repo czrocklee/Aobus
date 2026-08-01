@@ -5,7 +5,6 @@
 
 #include "playback/AudioQualityCss.h"
 #include <ao/audio/QualityAnalyzer.h>
-#include <ao/audio/flow/Graph.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -121,11 +120,7 @@ namespace ao::gtk
       // Format details
       if (assessment.optFormat)
       {
-        // The source node reports the track's true resolution (valid bits);
-        // downstream nodes report the transport container width.
-        auto const preferValidBits = assessment.nodeType == audio::flow::NodeType::Source;
-        auto const formatStr =
-          std::string{"("} + uimodel::audioFormatLabel(*assessment.optFormat, preferValidBits) + ")";
+        auto const formatStr = std::string{"("} + uimodel::audioFormatLabel(*assessment.optFormat) + ")";
         auto* formatLabel = Gtk::make_managed<Gtk::Label>(formatStr);
         formatLabel->add_css_class("dim-label");
         headerBox->append(*formatLabel);

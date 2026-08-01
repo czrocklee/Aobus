@@ -84,7 +84,7 @@ appended to the FIFO. One deferred task consumes one command and schedules the
 next drain after settlement.
 
 `startFromView` reports synchronous view, membership, request, readiness, and
-worker-task admission. Success does not mean that the decoder opened or that a
+worker-task admission. Success does not mean that decoder preparation completed or that a
 new current subject was installed. When called by an observer it initially
 reports successful command-queue admission; it has no separate public completion
 token. Session restore keeps its call-level result on `AppRuntime` and is
@@ -100,8 +100,9 @@ discarded before touching either lower owner when it reaches the queue head.
 ### Explicit start and navigation
 
 Succession synchronously validates and constructs a cursor candidate, then
-admits audio preparation without replacing public state. Decoder open, format
-negotiation, initial seek, and preroll run on an async worker while the previous
+admits isolated audio preparation without replacing public state. An inspection decoder
+opens on an async worker and records logical signal facts.
+Preparation briefly returns to the callback executor so Engine can revalidate its captured route and obtain the selected Backend's non-blocking prewarm hint, then resumes on a worker to open, seek, and preroll an optimistic lossless decoder output while the previous
 succession session, transport subject, snapshot, and audio generation remain
 current.
 The lower preparing observation may mark an in-progress commit, but it does not
@@ -112,15 +113,30 @@ candidate, live source, and membership; transport re-resolves the track and
 compares `PlaybackInput`; Engine revalidates playback generation, route, and
 start context. Player task-handle cancellation and the callback-resumption
 stop-token checkpoint prevent a superseded worker completion from reaching
-those acceptance checks. Only then may Engine adopt the source, transport
-commit the start, succession install the candidate and request best-effort
-lookahead, and the service publish the settled snapshot. Format evidence is
-revalidated for gapless lookahead, where compatibility with the current stream
-determines whether Engine may arm a splice; it is not separate explicit-start
-evidence.
+those acceptance checks. Only then may Engine adopt the prepared token and
+commit it: the commit retires the old render target and opens the backend on its
+native handle. Engine activates the optimistic source when its complete PCM mode matches the backend result; otherwise it synchronously rebuilds the decoder output in that returned mode before activation. Transport then commits the start,
+succession installs the candidate and requests best-effort lookahead, and the
+service publishes the settled snapshot. Current physical PCM-mode evidence is
+revalidated for gapless lookahead, where lossless compatibility with the
+successor signal determines whether Engine may arm a splice; it is not separate
+explicit-start evidence.
 Before installation, succession reapplies the current repeat and shuffle modes
 to the candidate so policy changes accepted during worker preparation are not
 lost.
+
+The destructive commit has three accepted outcomes. A started receipt installs
+the candidate and emits the normal started/now-playing observations. A source
+that is already naturally complete returns `playbackStarted == false`, installs
+the candidate provenance, emits no started/now-playing observation or failure,
+and lets its queued track-ended settlement drive normal succession. If backend
+activation or final decoder setup fails after Engine accepts the generation,
+the receipt also reports `playbackStarted == false`: transport still installs
+the candidate provenance and settles its cancellation barrier, emits no
+started/now-playing observation, and lets the queued typed failure drive route
+reporting or recoverable succession. This prevents a final media failure from
+being relabeled as route activation and prevents the retired previous track
+from remaining the semantic current subject.
 
 Unprepared Next and Previous retain their synchronous navigation start path.
 
@@ -173,9 +189,12 @@ validation errors return to the caller. A queued command has no later public
 result channel; playback execution failures continue through the internal
 recovery and notification owners.
 
-An admitted view-start decoder failure is asynchronous: it publishes the
-existing track-open notification and leaves the previous session and snapshot
-unchanged. A newer start, stop, navigation command, final seek, output change,
+An inspection decoder failure is asynchronous: it publishes the existing
+track-open notification and leaves the previous session and snapshot unchanged.
+Failure of optimistic final-decoder preparation is not published before commit; the token retains inspection evidence and the destructive commit retries against the backend's actual PCM mode.
+A fallback final decoder failure after destructive commit instead follows the accepted
+failed-start outcome above and may cause succession to skip that candidate. A
+newer start, stop, navigation command, final seek, output change,
 clear, source or membership mutation, or shutdown invalidates the pending
 start. A semantic acceptance veto completes once as `Conflict`, allowing start
 or lookahead completion to clear the matching pending state deterministically;

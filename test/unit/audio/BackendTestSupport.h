@@ -7,9 +7,10 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/BackendProvider.h>
-#include <ao/audio/Device.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 
 #include <fakeit.hpp>
@@ -19,8 +20,8 @@
 
 namespace ao::audio
 {
-  struct Format;
   class RenderTarget;
+  struct Device;
 }
 
 namespace ao::audio::test
@@ -34,7 +35,7 @@ namespace ao::audio::test
   public:
     explicit MockBackendProxy(Backend& real);
 
-    Result<> open(Format const& f, RenderTarget* t) override;
+    Result<OpenedPcmMode> open(SignalFormat const& f, RenderTarget* t) override;
     void start() override;
     void pause() override;
     void resume() override;
@@ -86,7 +87,9 @@ namespace ao::audio::test
       : _mock{}
     {
       // Provide default 'fake' behavior for all common methods to avoid UnexpectedMethodCallException
-      fakeit::Fake(Method(_mock, open));
+      fakeit::When(Method(_mock, open))
+        .AlwaysDo([this](SignalFormat const& sourceFormat, RenderTarget*& target) -> Result<OpenedPcmMode>
+                  { return _base.open(sourceFormat, target); });
       fakeit::Fake(Method(_mock, start));
       fakeit::Fake(Method(_mock, pause));
       fakeit::Fake(Method(_mock, resume));

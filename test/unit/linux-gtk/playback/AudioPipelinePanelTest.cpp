@@ -5,9 +5,9 @@
 
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
-#include <ao/audio/Format.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
@@ -124,20 +124,20 @@ namespace ao::gtk::test
     auto inspector = AudioPipelinePanelInspector{widget};
 
     auto view = uimodel::AudioPipelineViewState{};
-    view.quality = rt::QualityState{
-      .sourceQuality = audio::Quality::BitwisePerfect,
-      .pipelineQuality = audio::Quality::BitwisePerfect,
-      .overall = audio::Quality::BitwisePerfect,
-      .assessments = {
-        audio::NodeQualityAssessment{
-          .nodeId = "ao-source",
-          .nodeName = "Source",
-          .nodeType = audio::flow::NodeType::Source,
-          .optFormat = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .validBits = 16},
-          .findings = {audio::QualityFinding{
-            .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect}},
-        },
-      }};
+    view.quality =
+      rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
+                       .pipelineQuality = audio::Quality::BitwisePerfect,
+                       .overall = audio::Quality::BitwisePerfect,
+                       .assessments = {
+                         audio::NodeQualityAssessment{
+                           .nodeId = "ao-source",
+                           .nodeName = "Source",
+                           .nodeType = audio::flow::NodeType::Source,
+                           .optFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16},
+                           .findings = {audio::QualityFinding{
+                             .kind = audio::QualityFindingKind::BitPerfect, .quality = audio::Quality::BitwisePerfect}},
+                         },
+                       }};
 
     widget.apply(view);
 

@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Format.h>
-#include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+
+#include <ao/audio/NodeFormat.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/Quality.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <boost/unordered/unordered_flat_map.hpp>
@@ -18,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ao::audio
@@ -26,39 +31,41 @@ namespace ao::audio
   {
     constexpr float kGainEpsilon = 1e-4F;
 
-    bool isLosslessBitDepthChange(Format const& sourceFormat, Format const& destinationFormat) noexcept
+    std::uint8_t representationBits(NodeFormat const& format) noexcept
     {
-      if (sourceFormat.isFloat == destinationFormat.isFloat)
+      if (auto const* pcmFormat = std::get_if<PcmFormat>(&format); pcmFormat != nullptr)
       {
-        return effectiveBits(sourceFormat) <= effectiveBits(destinationFormat);
+        return encodingContainerBits(pcmFormat->encoding);
       }
 
-      if (!sourceFormat.isFloat && destinationFormat.isFloat)
-      {
-        if (destinationFormat.bitDepth == 32)
-        {
-          return effectiveBits(sourceFormat) <= 24;
-        }
+      return std::get<SignalFormat>(format).precisionBits;
+    }
 
-        if (destinationFormat.bitDepth == 64)
-        {
-          return effectiveBits(sourceFormat) <= 32;
-        }
+    bool isLosslessBitDepthChange(NodeFormat const& sourceFormat, NodeFormat const& destinationFormat) noexcept
+    {
+      auto const sourceSignal = signalFormat(sourceFormat);
+      auto const destinationSignal = signalFormat(destinationFormat);
+
+      if (sourceSignal.sampleKind == destinationSignal.sampleKind)
+      {
+        return sourceSignal.precisionBits <= destinationSignal.precisionBits;
+      }
+
+      if (sourceSignal.sampleKind == SampleKind::Integer && destinationSignal.sampleKind == SampleKind::FloatingPoint)
+      {
+        return representationBits(destinationFormat) == 32U && sourceSignal.precisionBits <= 24U;
       }
 
       return false;
     }
 
-    bool hasKnownEffectiveBitChange(Format const& sourceFormat, Format const& destinationFormat) noexcept
+    bool hasFormatPrecisionChange(NodeFormat const& sourceFormat, NodeFormat const& destinationFormat) noexcept
     {
-      return sourceFormat.validBits != 0U && destinationFormat.validBits != 0U &&
-             effectiveBits(sourceFormat) != effectiveBits(destinationFormat);
-    }
-
-    bool hasFormatPrecisionChange(Format const& sourceFormat, Format const& destinationFormat) noexcept
-    {
-      return sourceFormat.bitDepth != destinationFormat.bitDepth || sourceFormat.isFloat != destinationFormat.isFloat ||
-             hasKnownEffectiveBitChange(sourceFormat, destinationFormat);
+      auto const sourceSignal = signalFormat(sourceFormat);
+      auto const destinationSignal = signalFormat(destinationFormat);
+      return sourceSignal.precisionBits != destinationSignal.precisionBits ||
+             sourceSignal.sampleKind != destinationSignal.sampleKind ||
+             representationBits(sourceFormat) != representationBits(destinationFormat);
     }
 
     void addFinding(NodeQualityAssessment& assessment, QualityFinding finding)
@@ -238,8 +245,10 @@ namespace ao::audio
 
       auto const& f1 = *previousNode.optFormat;
       auto const& f2 = *currentNode.optFormat;
+      auto const s1 = signalFormat(f1);
+      auto const s2 = signalFormat(f2);
 
-      if (f1.sampleRate != f2.sampleRate)
+      if (s1.sampleRate != s2.sampleRate)
       {
         addFinding(targetAssessment,
                    QualityFinding{.kind = QualityFindingKind::Resampling,
@@ -249,7 +258,7 @@ namespace ao::audio
         optProvenPrecision.reset();
       }
 
-      if (f1.channels != f2.channels)
+      if (s1.channels != s2.channels)
       {
         addFinding(targetAssessment,
                    QualityFinding{.kind = QualityFindingKind::ChannelMapping,
@@ -261,7 +270,8 @@ namespace ao::audio
 
       if (hasFormatPrecisionChange(f1, f2))
       {
-        if (f1.isFloat && !f2.isFloat && optProvenPrecision && *optProvenPrecision <= effectiveBits(f2))
+        if (s1.sampleKind == SampleKind::FloatingPoint && s2.sampleKind == SampleKind::Integer &&
+            optProvenPrecision.value_or(UINT8_MAX) <= s2.precisionBits)
         {
           addFinding(targetAssessment,
                      QualityFinding{.kind = QualityFindingKind::LosslessRoundTrip,
@@ -273,10 +283,27 @@ namespace ao::audio
         {
           addFinding(
             targetAssessment,
-            QualityFinding{.kind = f2.isFloat ? QualityFindingKind::LosslessFloat : QualityFindingKind::LosslessPadding,
-                           .quality = f2.isFloat ? Quality::LosslessFloat : Quality::LosslessPadded,
-                           .optFromFormat = f1,
-                           .optToFormat = f2});
+            QualityFinding{
+              .kind = s2.sampleKind == SampleKind::FloatingPoint ? QualityFindingKind::LosslessFloat
+                                                                 : QualityFindingKind::LosslessPadding,
+              .quality = s2.sampleKind == SampleKind::FloatingPoint ? Quality::LosslessFloat : Quality::LosslessPadded,
+              .optFromFormat = f1,
+              .optToFormat = f2});
+        }
+        else if (s1.sampleKind == SampleKind::Integer && s2.sampleKind == SampleKind::Integer &&
+                 optProvenPrecision.value_or(UINT8_MAX) <= s2.precisionBits)
+        {
+          // Narrowing an integer container back to bits that were only padded
+          // on the way in returns the original samples. A 24-bit source widened
+          // into a 32-bit container and delivered to a 24-bit endpoint loses
+          // nothing, so the padding finding upstream already tells the whole
+          // story. Any earlier truncation, gain, or mix clears the proven
+          // precision, and this narrowing is then reported as truncation.
+          addFinding(targetAssessment,
+                     QualityFinding{.kind = QualityFindingKind::LosslessRoundTrip,
+                                    .quality = Quality::LosslessPadded,
+                                    .optFromFormat = f1,
+                                    .optToFormat = f2});
         }
         else
         {
@@ -339,9 +366,10 @@ namespace ao::audio
 
     auto optProvenPrecision = std::optional<std::uint8_t>{};
 
-    if (auto const& optSourceFormat = path.front()->optFormat; optSourceFormat && !optSourceFormat->isFloat)
+    if (auto const& optSourceFormat = path.front()->optFormat;
+        optSourceFormat && signalFormat(*optSourceFormat).sampleKind == SampleKind::Integer)
     {
-      optProvenPrecision = effectiveBits(*optSourceFormat);
+      optProvenPrecision = signalFormat(*optSourceFormat).precisionBits;
     }
 
     for (size_t i = 0; i < path.size(); ++i)

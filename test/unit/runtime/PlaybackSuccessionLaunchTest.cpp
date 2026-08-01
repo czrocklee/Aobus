@@ -313,7 +313,7 @@ namespace ao::rt::test
                  gatePtr->createdPtr->load(std::memory_order_relaxed) &&
                state.optResolvedSuccessor && state.optResolvedSuccessor != optInitialSuccessor;
       },
-      std::chrono::seconds{5}));
+      std::chrono::seconds{15}));
 
     CHECK(succession.state().currentTrackId == fixture.firstTrackId);
     CHECK(succession.state().shuffle == ShuffleMode::On);

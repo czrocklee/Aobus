@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+
+#include <ao/audio/NodeFormat.h>
+#include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -14,6 +16,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -33,16 +36,32 @@ namespace ao::audio::backend::detail
     {
       auto graph = flow::Graph{};
 
+      auto optStreamFormat = std::optional<NodeFormat>{};
+      auto optSinkFormat = std::optional<NodeFormat>{};
+
+      if (state.optMode)
+      {
+        // The stream carries bytes, so it keeps the concrete client encoding.
+        // The sink is hardware, so it reports the precision the endpoint
+        // actually resolves rather than the width of the container feeding it.
+        optStreamFormat = state.optMode->clientFormat;
+
+        if (state.optMode->optEndpoint)
+        {
+          optSinkFormat = state.optMode->optEndpoint->signalFormat;
+        }
+      }
+
       graph.nodes.push_back({.id = "alsa-stream",
                              .type = flow::NodeType::Stream,
                              .name = "ALSA Stream",
-                             .optFormat = state.optFormat,
+                             .optFormat = optStreamFormat,
                              .objectPath = ""});
 
       auto sink = flow::Node{.id = "alsa-sink",
                              .type = flow::NodeType::Sink,
                              .name = state.routeAnchor,
-                             .optFormat = state.optFormat,
+                             .optFormat = optSinkFormat,
                              .objectPath = state.routeAnchor};
 
       sink.isMuted = state.muted;
@@ -70,7 +89,8 @@ namespace ao::audio::backend::detail
       }
 
       graph.nodes.push_back(std::move(sink));
-      graph.connections.push_back({.sourceId = "alsa-stream", .destinationId = "alsa-sink", .isActive = true});
+      graph.connections.push_back(
+        {.sourceId = "alsa-stream", .destinationId = "alsa-sink", .isActive = state.optMode.has_value()});
 
       return graph;
     }

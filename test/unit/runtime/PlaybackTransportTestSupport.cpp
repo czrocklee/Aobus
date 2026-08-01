@@ -3,6 +3,7 @@
 
 #include "PlaybackTransportTestSupport.h"
 
+#include "lib/audio/detail/DecoderOutput.h"
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/BackendTestSupport.h"
@@ -13,16 +14,19 @@
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/rt/PlaybackState.h>
 #include <ao/rt/ViewIds.h>
 
+#include <catch2/catch_test_macros.hpp>
 #include <fakeit.hpp>
 
 #include <chrono>
@@ -146,10 +150,13 @@ namespace ao::rt::test
       fakeit::When(Method(spyBackendPtr->mock(), profileId)).AlwaysReturn(audio::ProfileId{audio::kProfileShared});
       fakeit::When(Method(spyBackendPtr->mock(), open))
         .AlwaysDo(
-          [renderTargetAddress](audio::Format const& /*format*/, audio::RenderTarget* target) -> Result<>
+          [renderTargetAddress](
+            audio::SignalFormat const& sourceFormat, audio::RenderTarget*& target) -> Result<audio::OpenedPcmMode>
           {
             *renderTargetAddress = target;
-            return {};
+            auto const encodings = audio::detail::losslessPcmEncodings(sourceFormat);
+            REQUIRE_FALSE(encodings.empty());
+            return audio::OpenedPcmMode{.clientFormat = audio::pcmFormat(sourceFormat, encodings.front())};
           });
       fakeit::When(Method(mockProvider, createBackend))
         .AlwaysDo([spyBackendOwnerAddress](audio::Device const&, audio::ProfileId const&)

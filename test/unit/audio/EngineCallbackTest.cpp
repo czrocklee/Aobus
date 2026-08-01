@@ -7,9 +7,13 @@
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -48,12 +52,12 @@ namespace ao::audio::test
       {
       }
 
-      Result<> open(Format const& format, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
       {
         auto const lock = std::scoped_lock{_mutex};
-        _format = format;
+        _format = pcmFormat(sourceFormat, SampleEncoding::Signed16Le);
         _target = target;
-        return {};
+        return OpenedPcmMode{.clientFormat = _format};
       }
 
       void start() override {}
@@ -157,7 +161,7 @@ namespace ao::audio::test
       std::condition_variable _cv;
       std::shared_ptr<BackendLifecycleCounts> _lifecycleCountsPtr;
       RenderTarget* _target = nullptr;
-      Format _format{};
+      PcmFormat _format{};
       bool _blockStop = false;
       bool _stopEntered = false;
       bool _releaseStop = false;
@@ -263,8 +267,10 @@ namespace ao::audio::test
 
     target->handleUnderrun();
     target->handlePositionAdvanced(100);
-    target->handleFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
-    target->handleFormatChanged(Format{.sampleRate = 48000, .channels = 2, .bitDepth = 24, .isInterleaved = true});
+    auto const changedFormat =
+      PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Signed24PackedLe};
+    target->handleFormatChanged(changedFormat);
+    target->handleFormatChanged(changedFormat);
     backendRaw->emitPropertyChanged(PropertyId::Volume);
 
     CHECK(stateChanged.waitForCount(1));
@@ -391,6 +397,8 @@ namespace ao::audio::test
     auto* const backendRaw = backendPtr.get();
     auto engine = Engine{std::move(backendPtr), device, makeScriptedEngineDecoderFactory()};
 
+    engine.play(makePlaybackItem(PlaybackInput{.filePath = "song.flac"}));
+    REQUIRE(backendRaw->target() != nullptr);
     backendRaw->blockStop();
     auto shutdownFuture = std::async(std::launch::async, [&engine] { engine.shutdown(); });
     auto const stopWasEntered = backendRaw->waitForStopEntered(std::chrono::seconds{1});

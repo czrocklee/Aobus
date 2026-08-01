@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2025 Aobus Contributors
 
 #include <ao/audio/backend/PipeWireMonitor.h>
+
 #include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/ByteView.h>
 
@@ -18,7 +19,7 @@ extern "C"
 
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/backend/detail/PipeWireMonitorParsing.h>
 #include <ao/audio/flow/Graph.h>
@@ -55,12 +56,6 @@ namespace ao::audio::backend
 
   namespace
   {
-    enum class NodeBindingRole : std::uint8_t
-    {
-      Stream,
-      Sink,
-    };
-
     bool isActiveLink(::pw_link_state state) noexcept
     {
       return state == PW_LINK_STATE_PAUSED || state == PW_LINK_STATE_ACTIVE;
@@ -89,7 +84,6 @@ namespace ao::audio::backend
     {
       std::uint32_t id = PW_ID_ANY;
       Impl* impl = nullptr;
-      NodeBindingRole role = NodeBindingRole::Sink;
       detail::PwProxyPtr<::pw_node> proxyPtr;
       detail::SpaHookGuard listener;
 
@@ -97,7 +91,6 @@ namespace ao::audio::backend
       {
         id = PW_ID_ANY;
         impl = nullptr;
-        role = NodeBindingRole::Sink;
         listener.reset();
         proxyPtr.reset();
       }
@@ -217,8 +210,7 @@ namespace ao::audio::backend
     std::unordered_map<std::uint32_t, LinkBinding> linkBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> streamNodeBindings;
     std::unordered_map<std::uint32_t, std::unique_ptr<NodeBinding>> sinkNodeBindings;
-    std::unordered_map<std::uint32_t, Format> nodeFormatMap;
-    std::unordered_map<std::uint32_t, DeviceFormatCapabilities> sinkCapabilitiesMap;
+    std::unordered_map<std::uint32_t, PcmFormat> nodeFormatMap;
     std::unordered_map<std::uint32_t, SinkProps> sinkPropsMap;
 
     std::atomic<bool> stopping{false};
@@ -403,7 +395,6 @@ namespace ao::audio::backend
         {
           impl->sinkNodeBindings.erase(it);
           impl->nodeFormatMap.erase(id);
-          impl->sinkCapabilitiesMap.erase(id);
           impl->sinkPropsMap.erase(id);
           needsRefresh = true;
         }
@@ -472,11 +463,6 @@ namespace ao::audio::backend
         if (id == SPA_PARAM_Format)
         {
           detail::updateCurrentFormatFromNodeParam(impl->nodeFormatMap, binding->id, id, param);
-        }
-        else if (binding->role == NodeBindingRole::Sink && id == SPA_PARAM_EnumFormat)
-        {
-          auto& caps = impl->sinkCapabilitiesMap[binding->id];
-          parseEnumFormat(param, caps);
         }
         else if (id == SPA_PARAM_Props)
         {
@@ -643,7 +629,6 @@ namespace ao::audio::backend
     nodes.clear();
     links.clear();
     nodeFormatMap.clear();
-    sinkCapabilitiesMap.clear();
     sinkPropsMap.clear();
     corePtr.reset();
     contextPtr.reset();
@@ -781,19 +766,11 @@ namespace ao::audio::backend
         }
 
         auto const description = (node.nodeNick.empty() ? "" : node.nodeName);
-        auto caps = DeviceFormatCapabilities{};
-
-        if (auto const it = sinkCapabilitiesMap.find(id); it != sinkCapabilitiesMap.end())
-        {
-          caps = it->second;
-        }
-
         devices.push_back({.id = DeviceId{deviceId},
                            .displayName = displayName,
                            .description = description,
                            .isDefault = false,
-                           .backendId = kBackendPipeWire,
-                           .capabilities = std::move(caps)});
+                           .backendId = kBackendPipeWire});
       }
     }
 
@@ -966,7 +943,6 @@ namespace ao::audio::backend
       auto bindingPtr = std::make_unique<NodeBinding>();
       bindingPtr->id = streamId;
       bindingPtr->impl = this;
-      bindingPtr->role = NodeBindingRole::Stream;
       bindingPtr->proxyPtr.reset(static_cast<::pw_node*>(node));
       auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
       ::pw_node_subscribe_params(
@@ -996,18 +972,14 @@ namespace ao::audio::backend
           auto bindingPtr = std::make_unique<NodeBinding>();
           bindingPtr->id = id;
           bindingPtr->impl = this;
-          bindingPtr->role = NodeBindingRole::Sink;
           bindingPtr->proxyPtr.reset(static_cast<::pw_node*>(proxy));
 
-          auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_EnumFormat, SPA_PARAM_Props});
+          auto const params = std::to_array<std::uint32_t>({SPA_PARAM_Format, SPA_PARAM_Props});
           ::pw_node_subscribe_params(
             bindingPtr->proxyPtr.get(), utility::layout::asLegacyPtr<std::uint32_t>(params.data()), params.size());
           constexpr std::uint32_t kFormatSequence = 1;
-          constexpr std::uint32_t kEnumFormatSequence = 2;
-          constexpr std::uint32_t kPropsSequence = 3;
+          constexpr std::uint32_t kPropsSequence = 2;
           ::pw_node_enum_params(bindingPtr->proxyPtr.get(), kFormatSequence, SPA_PARAM_Format, 0, UINT32_MAX, nullptr);
-          ::pw_node_enum_params(
-            bindingPtr->proxyPtr.get(), kEnumFormatSequence, SPA_PARAM_EnumFormat, 0, UINT32_MAX, nullptr);
           ::pw_node_enum_params(bindingPtr->proxyPtr.get(), kPropsSequence, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
 
           auto* sinkBinding = bindingPtr.get();

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/StreamingSource.h>
+
 #include "detail/StreamingBufferPolicy.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/StreamingSource.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ThreadName.h>
 

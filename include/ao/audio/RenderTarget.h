@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 
 #include <cstddef>
@@ -12,8 +13,6 @@
 
 namespace ao::audio
 {
-  struct Format;
-
   struct RenderPcmResult final
   {
     std::size_t bytesWritten = 0;
@@ -68,7 +67,7 @@ namespace ao::audio
     virtual void handleRouteReady(std::string_view routeAnchor) noexcept = 0;
 
     /// Called by the backend when its input stream format is negotiated or changes.
-    virtual void handleFormatChanged(Format const& format) noexcept = 0;
+    virtual void handleFormatChanged(PcmFormat const& format) noexcept = 0;
 
     /// Called by the backend when a runtime property changes externally.
     virtual void handlePropertyChanged(PropertySnapshot snapshot) noexcept = 0;

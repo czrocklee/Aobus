@@ -6,16 +6,21 @@
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
+#include "test/unit/audio/BackendTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
+#include <ao/Error.h>
+#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/PlaybackState.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <fakeit.hpp>
 
 #include <array>
 #include <chrono>
@@ -309,6 +314,39 @@ namespace ao::rt::test
 
     CHECK(fixture.notificationService.feed().entries.size() == 1);
     CHECK(fixture.playbackTransport.state().nowPlaying.trackId == replacementTrack);
+  }
+
+  // A device held by another application stops playback and must not trigger a
+  // succession skip, but it can be released at any moment with no event to
+  // retract the report. Pinning it would leave a stale error on screen long
+  // after the device became available again.
+  TEST_CASE("PlaybackTransport playback - a busy device reports a clearable failure",
+            "[runtime][regression][playback][error]")
+  {
+    auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
+    fixture.onDevicesChangedCb(fixture.status.devices);
+    fixture.executor.drain();
+
+    fakeit::When(Method(fixture.spyBackendPtr->mock(), open))
+      .AlwaysDo([](audio::SignalFormat const&, audio::RenderTarget*&) -> Result<audio::OpenedPcmMode>
+                { return makeError(Error::Code::ResourceBusy, "Device is in use by another application"); });
+
+    auto const fixtureUri = fixture.installAudioFixture();
+    auto const trackId = fixture.libraryFixture.addTrack({.title = "Busy Device Track", .uri = fixtureUri});
+
+    // The request itself is accepted; the route failure arrives on the engine's
+    // own notification path rather than as a synchronous rejection.
+    CHECK(fixture.playbackTransport.playTrack(trackId, ListId{7}));
+    REQUIRE(fixture.executor.drainUntil([&] { return !fixture.notificationService.feed().entries.empty(); }));
+
+    auto const feed = fixture.notificationService.feed();
+    REQUIRE(feed.entries.size() == 1);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::history());
+    REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
+    CHECK(std::get<NotificationReport>(feed.entries.front().message).templateId ==
+          NotificationReportTemplate::PlaybackRouteActivationFailed);
+    // Still a stop, not a skip: nothing advanced past the track.
+    CHECK(fixture.playbackTransport.state().transport == audio::Transport::Error);
   }
 
   TEST_CASE("PlaybackTransport playback - route activation failures dedupe by kind", "[runtime][unit][playback][error]")

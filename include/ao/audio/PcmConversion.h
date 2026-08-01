@@ -3,12 +3,18 @@
 
 #pragma once
 
+#include <ao/Error.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
+
 #include <algorithm>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <span>
 #include <type_traits>
+#include <vector>
 
 namespace ao::audio
 {
@@ -54,4 +60,18 @@ namespace ao::audio
   void unpackS24PcmSamples(std::span<std::byte const> source,
                            std::span<std::int32_t> destination,
                            std::uint8_t shift = 0) noexcept;
+
+  /**
+   * @brief Converts interleaved little-endian PCM between explicit encodings.
+   *
+   * Container width and integer alignment are handled exactly when the target
+   * encoding preserves the logical source precision. `sourcePcmFormat` owns
+   * the byte layout; `sourceSignalFormat` owns the number of meaningful bits.
+   * Precision-losing and quantizing conversions are rejected.
+   */
+  Result<> convertPcmEncoding(std::span<std::byte const> source,
+                              PcmFormat const& sourcePcmFormat,
+                              SignalFormat const& sourceSignalFormat,
+                              SampleEncoding destinationEncoding,
+                              std::vector<std::byte>& destination);
 } // namespace ao::audio

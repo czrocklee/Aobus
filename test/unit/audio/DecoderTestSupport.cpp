@@ -4,7 +4,8 @@
 #include "DecoderTestSupport.h"
 
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -24,8 +25,8 @@ namespace ao::audio::test
     CHECK(block->bytes.empty());
 
     auto const info = decoder.streamInfo();
-    CHECK(info.sourceFormat == Format{});
-    CHECK(info.outputFormat == Format{});
+    CHECK(info.sourceFormat == SignalFormat{});
+    CHECK(info.outputFormat == PcmFormat{});
     CHECK(info.duration == std::chrono::milliseconds{0});
     CHECK_FALSE(info.isLossy);
   }

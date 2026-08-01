@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <span>
 #include <string>
 
 namespace ao::audio::test
@@ -75,7 +76,8 @@ namespace ao::rt::test::playback_succession
     std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr = {},
     std::filesystem::path blockedFileName = {},
     bool failBlockedPreparation = false,
-    bool blockEveryLookahead = false);
+    bool blockEveryLookahead = false,
+    std::filesystem::path finalOpenFailureFileName = {});
 
   struct PlaybackSuccessionTransportFixtureConfig final
   {
@@ -83,6 +85,7 @@ namespace ao::rt::test::playback_succession
     std::filesystem::path blockedFileName{};
     bool failBlockedPreparation = false;
     bool blockEveryLookahead = false;
+    std::filesystem::path finalOpenFailureFileName{};
   };
 
   struct PlaybackSuccessionTransportFixture final
@@ -97,7 +100,9 @@ namespace ao::rt::test::playback_succession
 
     LibraryWriter& writer();
     TrackId addPlayableTrack(std::string title);
+    void openManualView(std::span<TrackId const> trackIds);
     void buildThreeTrackManualView();
+    void buildFourTrackManualView();
     void buildTwoTrackManualView();
     void queueNaturalAdvance();
     Result<> playAndWait(TrackId trackId);
@@ -118,6 +123,7 @@ namespace ao::rt::test::playback_succession
     TrackId firstTrackId = kInvalidTrackId;
     TrackId secondTrackId = kInvalidTrackId;
     TrackId thirdTrackId = kInvalidTrackId;
+    TrackId fourthTrackId = kInvalidTrackId;
     ListId listId = kInvalidListId;
     ViewId viewId = kInvalidViewId;
     std::map<TrackId, std::filesystem::path> trackPaths;

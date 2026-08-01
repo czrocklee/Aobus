@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/AlacDecoderSession.h>
+
+#include "detail/DecoderOutputAdapter.h"
 #include "detail/Mp4PacketSource.h"
-#include "detail/OutputFormatValidation.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/AlacDecoderSession.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/PcmConversion.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
@@ -22,8 +23,8 @@
 #include <cstdint>
 #include <expected>
 #include <filesystem>
-#include <format>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string_view>
 #include <utility>
@@ -35,7 +36,6 @@ namespace ao::audio
 
   namespace
   {
-    [[maybe_unused]] constexpr std::int32_t kSignExtensionMask = ~0x00FFFFFF;
     constexpr std::size_t kAlacConfigOffset = 12;
     constexpr std::size_t kAlacConfigSize = 24;
     constexpr std::size_t kAlacCompatibleVersionOffset = kAlacConfigOffset + 4;
@@ -78,22 +78,36 @@ namespace ao::audio
         detail::throwDecoderError(Error::Code::InitFailed, "Invalid ALAC stream configuration");
       }
     }
+
+    SampleEncoding nativeAlacEncoding(std::uint8_t const precisionBits) noexcept
+    {
+      if (precisionBits <= 16U)
+      {
+        return SampleEncoding::Signed16Le;
+      }
+
+      if (precisionBits <= 24U)
+      {
+        return SampleEncoding::Signed24PackedLe;
+      }
+
+      return SampleEncoding::Signed32Le;
+    }
   } // namespace
 
   struct AlacDecoderSession::Impl final
   {
-    Format requestedOutput;
+    detail::DecoderOutputAdapter outputAdapter;
     DecodedStreamInfo info;
 
     std::unique_ptr<ALACDecoder> decoderPtr;
 
     detail::Mp4PacketSource packetSource;
 
-    std::vector<std::byte> sourcePcm;
     std::vector<std::byte> targetPcm;
 
-    Impl(Format const& output)
-      : requestedOutput{output}
+    Impl(std::optional<SampleEncoding> optOutputEncoding)
+      : outputAdapter{optOutputEncoding}
     {
       decoderPtr = std::make_unique<ALACDecoder>();
     }
@@ -105,8 +119,8 @@ namespace ao::audio
     }
   };
 
-  AlacDecoderSession::AlacDecoderSession(Format outputFormat)
-    : _implPtr{std::make_unique<Impl>(outputFormat)}
+  AlacDecoderSession::AlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding)
+    : _implPtr{std::make_unique<Impl>(optOutputEncoding)}
   {
   }
 
@@ -152,39 +166,18 @@ namespace ao::audio
 
       _implPtr->info.sourceFormat.channels = config.numChannels;
       _implPtr->info.sourceFormat.sampleRate = config.sampleRate;
-      _implPtr->info.sourceFormat.bitDepth = config.bitDepth;
-      _implPtr->info.sourceFormat.validBits = config.bitDepth;
-      _implPtr->info.sourceFormat.isInterleaved = true;
+      _implPtr->info.sourceFormat.precisionBits = config.bitDepth;
+      _implPtr->info.sourceFormat.sampleKind = SampleKind::Integer;
 
-      _implPtr->info.outputFormat = _implPtr->info.sourceFormat;
+      auto const configured = _implPtr->outputAdapter.configure(
+        _implPtr->info.sourceFormat, nativeAlacEncoding(_implPtr->info.sourceFormat.precisionBits));
 
-      if (_implPtr->requestedOutput.bitDepth != 0)
+      if (!configured)
       {
-        _implPtr->info.outputFormat.bitDepth = _implPtr->requestedOutput.bitDepth;
-        _implPtr->info.outputFormat.validBits = (_implPtr->requestedOutput.validBits != 0)
-                                                  ? _implPtr->requestedOutput.validBits
-                                                  : _implPtr->info.sourceFormat.validBits;
+        detail::throwDecoderError(configured.error());
       }
 
-      if (auto const result =
-            detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "ALAC");
-          !result)
-      {
-        detail::throwDecoderError(result.error());
-      }
-
-      auto const sourceBitDepth = _implPtr->info.sourceFormat.bitDepth;
-      auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
-      auto const supportedConversion = sourceBitDepth == outputBitDepth ||
-                                       (sourceBitDepth == 16 && outputBitDepth == 32) ||
-                                       (sourceBitDepth == 24 && outputBitDepth == 32);
-
-      if (_implPtr->requestedOutput.isFloat || !supportedConversion ||
-          _implPtr->info.outputFormat.validBits != sourceBitDepth)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported,
-                                  std::format("Unsupported ALAC conversion: {} -> {}", sourceBitDepth, outputBitDepth));
-      }
+      _implPtr->info.outputFormat = *configured;
 
       return {};
     }
@@ -197,8 +190,8 @@ namespace ao::audio
   void AlacDecoderSession::close() noexcept
   {
     _implPtr->packetSource.close();
-    _implPtr->sourcePcm.clear();
     _implPtr->targetPcm.clear();
+    _implPtr->outputAdapter.reset();
     _implPtr->info = {};
   }
 
@@ -233,72 +226,20 @@ namespace ao::audio
                              ? _implPtr->decoderPtr->mConfig.frameLength
                              : static_cast<std::uint32_t>(kALACDefaultFramesPerPacket);
 
-    auto const sourceBps = _implPtr->info.sourceFormat.bitDepth;
-    auto const targetBps = _implPtr->info.outputFormat.bitDepth;
+    auto const sourceBps = _implPtr->info.sourceFormat.precisionBits;
     auto const channels = _implPtr->info.outputFormat.channels;
 
-    auto const sourceBytesPerFrame = channels * bytesPerSample(_implPtr->info.sourceFormat);
-    auto const targetBytesPerFrame = channels * bytesPerSample(_implPtr->info.outputFormat);
+    auto const nativeSampleBytes = static_cast<std::uint32_t>((sourceBps + 7U) / 8U);
+    auto const nativeBytesPerFrame = channels * nativeSampleBytes;
 
-    if (sourceBytesPerFrame == 0 || targetBytesPerFrame == 0)
+    if (nativeBytesPerFrame == 0)
     {
       return makeError(Error::Code::DecodeFailed, "Invalid ALAC format calculation");
     }
 
     std::uint32_t frameCount = 0;
 
-    // Reuse member buffers to avoid per-block allocations
-    if (sourceBps != targetBps)
-    {
-      _implPtr->sourcePcm.resize(static_cast<std::size_t>(maxFrames) * sourceBytesPerFrame);
-      auto bitBuffer = BitBuffer{};
-      ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
-
-      auto const status = _implPtr->decoderPtr->Decode(
-        &bitBuffer, layout::asMutablePtr<uint8_t>(std::span{_implPtr->sourcePcm}), maxFrames, channels, &frameCount);
-
-      if (status != 0)
-      {
-        return makeError(Error::Code::DecodeFailed, "ALAC decode failed");
-      }
-
-      if (frameCount == 0 || frameCount > maxFrames)
-      {
-        return makeError(Error::Code::DecodeFailed, "Invalid ALAC decoded frame count");
-      }
-
-      _implPtr->targetPcm.resize(static_cast<std::size_t>(frameCount) * targetBytesPerFrame);
-
-      if (sourceBps == 16 && targetBps == 32)
-      {
-        auto const src = layout::viewArray<std::int16_t>(std::span{_implPtr->sourcePcm});
-        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_implPtr->targetPcm});
-        padPcmSamples<std::int16_t, std::int32_t>(src, dst, 16);
-      }
-      else if (sourceBps == 24 && targetBps == 32)
-      {
-        auto const dst = layout::viewArrayMutable<std::int32_t>(std::span{_implPtr->targetPcm});
-        unpackS24PcmSamples(_implPtr->sourcePcm, dst, 8);
-      }
-      else
-      {
-        return makeError(
-          Error::Code::NotSupported, std::format("Unsupported ALAC conversion: {} -> {}", sourceBps, targetBps));
-      }
-
-      _implPtr->packetSource.advance();
-
-      return PcmBlock{
-        .bytes = _implPtr->targetPcm,
-        .bitDepth = targetBps,
-        .frames = frameCount,
-        .firstFrameIndex = firstFrameIndex,
-        .endOfStream = _implPtr->packetSource.isAtEnd(),
-      };
-    }
-
-    // Direct decode
-    _implPtr->targetPcm.resize(static_cast<std::size_t>(maxFrames) * targetBytesPerFrame);
+    _implPtr->targetPcm.resize(static_cast<std::size_t>(maxFrames) * nativeBytesPerFrame);
 
     auto bitBuffer = BitBuffer{};
     ::BitBufferInit(&bitBuffer, layout::asLegacyPtr<std::uint8_t>(packet), layout::size32(packet));
@@ -316,12 +257,18 @@ namespace ao::audio
       return makeError(Error::Code::DecodeFailed, "Invalid ALAC decoded frame count");
     }
 
-    _implPtr->targetPcm.resize(static_cast<std::size_t>(frameCount) * targetBytesPerFrame);
+    _implPtr->targetPcm.resize(static_cast<std::size_t>(frameCount) * nativeBytesPerFrame);
+    auto converted = _implPtr->outputAdapter.convert(_implPtr->targetPcm);
+
+    if (!converted)
+    {
+      return std::unexpected{converted.error()};
+    }
+
     _implPtr->packetSource.advance();
 
     return PcmBlock{
-      .bytes = _implPtr->targetPcm,
-      .bitDepth = targetBps,
+      .bytes = *converted,
       .frames = frameCount,
       .firstFrameIndex = firstFrameIndex,
       .endOfStream = _implPtr->packetSource.isAtEnd(),

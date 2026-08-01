@@ -3,6 +3,8 @@
 
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
 
+#include <ao/audio/SampleEncoding.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
@@ -11,13 +13,14 @@
 #include <vector>
 
 using namespace ao::audio::backend::detail;
+using ao::audio::SampleEncoding;
 
 TEST_CASE("AlsaPcmVolume - S16 unity gain preserves samples", "[audio][unit][alsa]")
 {
   auto samples = std::vector<std::int16_t>{1000, -1000, 0, 32767, -32768};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int16_t)};
 
-  applyAlsaSoftwareGain(pcm, 16, 16, false, 1.0F);
+  applyAlsaSoftwareGain(pcm, SampleEncoding::Signed16Le, 1.0F);
 
   CHECK(samples[0] == 1000);
   CHECK(samples[1] == -1000);
@@ -31,7 +34,7 @@ TEST_CASE("AlsaPcmVolume - S16 half gain scales samples", "[audio][unit][alsa]")
   auto samples = std::vector<std::int16_t>{1000, -1000, 0, 32766, -32766};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int16_t)};
 
-  applyAlsaSoftwareGain(pcm, 16, 16, false, 0.5F);
+  applyAlsaSoftwareGain(pcm, SampleEncoding::Signed16Le, 0.5F);
 
   CHECK(samples[0] == 500);
   CHECK(samples[1] == -500);
@@ -45,7 +48,7 @@ TEST_CASE("AlsaPcmVolume - S16 zero gain mutes samples", "[audio][unit][alsa]")
   auto samples = std::vector<std::int16_t>{1000, -1000};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int16_t)};
 
-  applyAlsaSoftwareGain(pcm, 16, 16, false, 0.0F);
+  applyAlsaSoftwareGain(pcm, SampleEncoding::Signed16Le, 0.0F);
 
   CHECK(samples[0] == 0);
   CHECK(samples[1] == 0);
@@ -56,7 +59,7 @@ TEST_CASE("AlsaPcmVolume - S32 half gain scales samples", "[audio][unit][alsa]")
   auto samples = std::vector<std::int32_t>{2000000, -2000000};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int32_t)};
 
-  applyAlsaSoftwareGain(pcm, 32, 32, false, 0.5F);
+  applyAlsaSoftwareGain(pcm, SampleEncoding::Signed32Le, 0.5F);
 
   CHECK(samples[0] == 1000000);
   CHECK(samples[1] == -1000000);
@@ -68,7 +71,7 @@ TEST_CASE("AlsaPcmVolume - S24 in S32 half gain scales valid bits", "[audio][uni
   auto samples = std::vector<std::int32_t>{4000000, -4000000, 8388607, -8388608};
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size() * sizeof(std::int32_t)};
 
-  applyAlsaSoftwareGain(pcm, 32, 24, false, 0.5F);
+  applyAlsaSoftwareGain(pcm, SampleEncoding::Signed24In32Le, 0.5F);
 
   CHECK(samples[0] == 2000000);
   CHECK(samples[1] == -2000000);
@@ -96,7 +99,7 @@ TEST_CASE("AlsaPcmVolume - packed S24 half gain scales sign-extended samples", "
   };
   auto pcm = std::span{reinterpret_cast<std::byte*>(samples.data()), samples.size()};
 
-  applyAlsaSoftwareGain(pcm, 24, 24, true, 0.5F);
+  applyAlsaSoftwareGain(pcm, SampleEncoding::Signed24PackedLe, 0.5F);
 
   // 65536 * 0.5 = 32768 (0x00, 0x80, 0x00)
   CHECK(samples[0] == 0x00);

@@ -3,11 +3,18 @@
 
 #include "test/unit/audio/FakeCapturingBackend.h"
 
+#include "lib/audio/detail/DecoderOutput.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <mutex>
@@ -20,13 +27,53 @@ namespace ao::audio::test
   FakeCapturingBackend::FakeCapturingBackend() = default;
   FakeCapturingBackend::~FakeCapturingBackend() = default;
 
-  Result<> FakeCapturingBackend::open(Format const& format, RenderTarget* target)
+  std::optional<PcmFormat> FakeCapturingBackend::prewarmFormatHint(SignalFormat const& format) const noexcept
   {
     auto const lock = std::scoped_lock{_mutex};
-    recordEvent("open", format);
+
+    if (_optPrewarmEncoding)
+    {
+      return pcmFormat(format, *_optPrewarmEncoding);
+    }
+
+    return Backend::prewarmFormatHint(format);
+  }
+
+  Result<OpenedPcmMode> FakeCapturingBackend::open(SignalFormat const& format, RenderTarget* target)
+  {
+    auto const lock = std::scoped_lock{_mutex};
+
+    if (!_openResult)
+    {
+      return std::unexpected{_openResult.error()};
+    }
+
+    auto const encodings = detail::losslessPcmEncodings(format);
+    auto const optSelected = _optSelectedEncoding;
+
+    if (encodings.empty() && !optSelected)
+    {
+      return makeError(Error::Code::FormatRejected, "No test PCM encoding available");
+    }
+
+    auto const encoding = optSelected.value_or(encodings.empty() ? SampleEncoding::Unknown : encodings.front());
+    _format = pcmFormat(format, encoding);
+    recordEvent("open", _format);
     _target = target;
-    _format = format;
-    return _openResult;
+
+    auto optEndpoint = std::optional<ConfirmedEndpoint>{};
+
+    if (_optEndpointPrecisionBits)
+    {
+      optEndpoint =
+        ConfirmedEndpoint{.signalFormat = SignalFormat{
+                            .sampleRate = _format.sampleRate,
+                            .channels = _format.channels,
+                            .precisionBits = *_optEndpointPrecisionBits,
+                            .sampleKind = isFloatEncoding(encoding) ? SampleKind::FloatingPoint : SampleKind::Integer}};
+    }
+
+    return OpenedPcmMode{.clientFormat = _format, .optEndpoint = optEndpoint};
   }
 
   void FakeCapturingBackend::start()
@@ -136,6 +183,24 @@ namespace ao::audio::test
     _openResult = res;
   }
 
+  void FakeCapturingBackend::setPrewarmEncoding(std::optional<SampleEncoding> optEncoding)
+  {
+    auto const lock = std::scoped_lock{_mutex};
+    _optPrewarmEncoding = optEncoding;
+  }
+
+  void FakeCapturingBackend::setSelectedEncoding(std::optional<SampleEncoding> optEncoding)
+  {
+    auto const lock = std::scoped_lock{_mutex};
+    _optSelectedEncoding = optEncoding;
+  }
+
+  void FakeCapturingBackend::setConfirmedEndpointPrecision(std::optional<std::uint8_t> optPrecisionBits)
+  {
+    auto const lock = std::scoped_lock{_mutex};
+    _optEndpointPrecisionBits = optPrecisionBits;
+  }
+
   void FakeCapturingBackend::setPropertyError(std::optional<Error::Code> optErr)
   {
     auto const lock = std::scoped_lock{_mutex};
@@ -166,7 +231,7 @@ namespace ao::audio::test
     return _target;
   }
 
-  Format FakeCapturingBackend::currentFormat() const
+  PcmFormat FakeCapturingBackend::currentFormat() const
   {
     auto const lock = std::scoped_lock{_mutex};
     return _format;
@@ -186,7 +251,7 @@ namespace ao::audio::test
     }
   }
 
-  void FakeCapturingBackend::emitFormatChanged(Format const& format)
+  void FakeCapturingBackend::emitFormatChanged(PcmFormat const& format)
   {
     RenderTarget* target = nullptr;
     {
@@ -283,7 +348,7 @@ namespace ao::audio::test
     };
   }
 
-  void FakeCapturingBackend::recordEvent(std::string_view name, Format const& format)
+  void FakeCapturingBackend::recordEvent(std::string_view name, PcmFormat const& format)
   {
     _events.push_back({.name = std::string{name}, .format = format});
 

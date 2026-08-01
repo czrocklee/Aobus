@@ -9,9 +9,13 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -27,6 +31,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stop_token>
 #include <thread>
 #include <tuple>
@@ -40,7 +45,10 @@ namespace ao::audio::test
     class FakeBlockingPropertyBackend final : public Backend
     {
     public:
-      Result<> open(Format const& /*format*/, RenderTarget* /*target*/) override { return {}; }
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* /*target*/) override
+      {
+        return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
+      }
       void start() override {}
       void pause() override {}
       void resume() override {}
@@ -116,11 +124,11 @@ namespace ao::audio::test
     class RenderingBackend final : public Backend
     {
     public:
-      Result<> open(Format const& format, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
       {
-        _format = format;
+        _format = pcmFormat(sourceFormat, SampleEncoding::Signed16Le);
         _target.store(target, std::memory_order_relaxed);
-        return {};
+        return OpenedPcmMode{.clientFormat = _format};
       }
 
       void start() override
@@ -187,7 +195,7 @@ namespace ao::audio::test
 
     private:
       std::atomic<RenderTarget*> _target{nullptr};
-      Format _format{};
+      PcmFormat _format{};
       std::jthread _thread;
     };
   } // namespace
@@ -246,11 +254,15 @@ namespace ao::audio::test
                                .isDefault = false,
                                .backendId = kBackendNone};
 
-    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
+    auto const fmt = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto const factory = [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
+      auto const sourceFormat = signalFormat(fmt);
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
+        DecodedStreamInfo{.sourceFormat = sourceFormat,
+                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
+                          .duration = std::chrono::milliseconds{0},
+                          .isLossy = false});
       auto data = std::vector(4096, std::byte{0});
       decPtr->setReadScript({{.data = data, .endOfStream = false},
                              {.data = data, .endOfStream = false},

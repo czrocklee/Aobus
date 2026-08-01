@@ -6,11 +6,12 @@
 #include <ao/Error.h>
 #include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/SignalFormat.h>
 
 namespace ao::audio
 {
-  struct Format;
   class RenderTarget;
 
   /**
@@ -29,7 +30,7 @@ namespace ao::audio
     NullBackend(NullBackend&&) = delete;
     NullBackend& operator=(NullBackend&&) = delete;
 
-    Result<> open(Format const& format, RenderTarget* target) override;
+    Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override;
     void start() override;
     void pause() override;
     void resume() override;

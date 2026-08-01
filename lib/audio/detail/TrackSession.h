@@ -4,18 +4,18 @@
 #pragma once
 
 #include <ao/Error.h>
-#include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PcmSource.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/StreamingSource.h>
 
 #include <chrono>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
@@ -25,48 +25,45 @@ namespace ao::audio
 namespace ao::audio::detail
 {
   /**
-   * @brief Manages a single track playback session, including decoder lifecycle and format negotiation.
+   * @brief Manages inspection, exact decoder output preparation, and activation for one track.
    */
   class TrackSession final
   {
   public:
     using DecoderFactoryFn =
-      std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, Format const&)>;
+      std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, std::optional<SampleEncoding>)>;
     using OnSourceErrorFn = std::function<void(Error const&)>;
+
+    struct Inspection
+    {
+      DecodedStreamInfo info;
+    };
 
     struct OpenedTrack
     {
       std::shared_ptr<PcmSource> sourcePtr;
-      Format backendFormat;
+      PcmFormat backendFormat;
       DecodedStreamInfo info;
     };
 
     struct PreparedTrack
     {
       std::unique_ptr<StreamingSource> sourcePtr;
-      Format backendFormat;
+      PcmFormat backendFormat;
       DecodedStreamInfo info;
     };
 
+    static Result<Inspection> inspect(PlaybackInput const& input, DecoderFactoryFn const& decoderFactory);
+
     static Result<PreparedTrack> prepare(PlaybackInput const& input,
-                                         Device const& device,
-                                         BackendId const& backendId,
-                                         ProfileId const& profileId,
+                                         Inspection const& inspection,
+                                         PcmFormat const& backendFormat,
                                          DecoderFactoryFn const& decoderFactory,
                                          std::chrono::milliseconds initialOffset = {});
 
     static Result<OpenedTrack> activate(PreparedTrack preparedTrack, OnSourceErrorFn onSourceError);
 
   private:
-    static void negotiateFormat(std::filesystem::path const& path,
-                                DecodedStreamInfo& info,
-                                std::unique_ptr<DecoderSession>& decoderPtr,
-                                Format& backendFormat,
-                                Device const& device,
-                                BackendId const& backendId,
-                                ProfileId const& profileId,
-                                DecoderFactoryFn const& decoderFactory);
-
     static std::unique_ptr<StreamingSource> preparePcmSource(std::unique_ptr<DecoderSession> decoderPtr,
                                                              DecodedStreamInfo const& info);
   };

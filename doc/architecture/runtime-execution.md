@@ -96,8 +96,12 @@ It owns flight bookkeeping and exact-flight completion tokens, not the external 
 An owner therefore cancels its external lifetime scope before clearing the coalescer; a late completion token cannot match a replacement flight for the same key.
 
 Interactive playback uses the same rule for view-based starts and gapless lookahead.
-Player captures an isolated move-only preparation value containing copied route, decoder-factory, input, and generation evidence; a worker may open, negotiate, seek, and preroll through that value without accessing Player, Engine, runtime services, or frontend state.
-After resuming on the callback executor, upper request/source identity and Engine playback/route context are revalidated before adoption can allocate a source generation or publish any state.
+Player captures an isolated move-only preparation value containing copied route, decoder-factory, input, and generation evidence.
+An explicit-start worker first inspects the signal, then returns through a cancellation checkpoint to the callback executor so Engine can revalidate the route and synchronously obtain a non-blocking prewarm hint from the selected Backend.
+The isolated value resumes on a worker to optimistically open, seek, and preroll the final decoder in that hinted mode.
+A compatible gapless-lookahead worker opens the final decoder in the already-active PCM encoding, seeks, and prerolls it.
+No worker opens or reconfigures a backend or accesses Player, Engine, runtime services, or frontend state; the intermediate Backend hint query occurs only after returning to the callback and Engine control domains.
+After the final worker phase resumes on the callback executor, upper request/source identity and Engine playback/route context are revalidated before adoption can allocate a source generation or publish any state.
 The old playback session remains authoritative during this round trip.
 
 Mutating library tasks enter coordinator maintenance on the callback executor before slow preparation begins.
@@ -148,10 +152,18 @@ Playback preparation specializes that round trip:
 
 ```text
 callback executor: validate request and capture isolated audio evidence
-  -> worker pool: decoder open, format negotiation, initial seek, preroll
-  -> callback executor: reject stale request or ask Engine to adopt
-  -> explicit start only: commit transport and succession as one settled subject
+  -> worker pool: inspect the signal
+  -> callback executor: revalidate route evidence and obtain the Backend prewarm hint
+  -> worker pool: prepare a lossless decoder output in the hinted mode
+  -> callback executor: reject stale request or ask Engine to adopt the prepared token
+  -> Engine commit: open backend and compare its actual PCM mode
+  -> exact match: activate the prepared source
+  -> mismatch or failed optimistic preparation: synchronously rebuild the exact decoder output
+  -> commit transport and succession as one settled accepted subject; a queued start failure may then recover or stop it
 ```
+
+Optimistic preparation failure preserves the successful inspection so commit can retry after the backend chooses its exact mode.
+Gapless lookahead also opens, seeks, and prerolls its final decoder on the worker when it can reuse an already-open compatible PCM mode; workers never open or reconfigure a backend.
 
 A mutating library task refines the round trip:
 
@@ -274,7 +286,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`CliRuntimeTest.cpp`](../../test/unit/cli/CliRuntimeTest.cpp) protects CLI worker round trips, callback-failure task completion, terminal exception propagation, and producer-first callback draining.
 - [`EngineConcurrencyTest.cpp`](../../test/unit/audio/EngineConcurrencyTest.cpp) protects the audio control/event thread boundary.
 - [`EngineCallbackTest.cpp`](../../test/unit/audio/EngineCallbackTest.cpp) protects callback delivery and teardown constraints.
-- [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor.
+- [`PlayerTest.cpp`](../../test/unit/audio/PlayerTest.cpp) protects marshalling from engine/provider events to the callback executor and cancellation while optimistic preroll is blocked on a worker.
 - [`PlaybackServiceTest.cpp`](../../test/unit/runtime/PlaybackServiceTest.cpp), [`PlaybackSuccessionLaunchTest.cpp`](../../test/unit/runtime/PlaybackSuccessionLaunchTest.cpp), [`PlaybackSuccessionAdvanceTest.cpp`](../../test/unit/runtime/PlaybackSuccessionAdvanceTest.cpp), and [`PlaybackSuccessionFailureTest.cpp`](../../test/unit/runtime/PlaybackSuccessionFailureTest.cpp) exercise the public playback service and executor-affine internal succession owner.
 - [`NotificationServiceTest.cpp`](../../test/unit/runtime/NotificationServiceTest.cpp) exercises bounded candidate commit, keyed correlation, immutable update delivery, and reentrant commands.
 - [`NotificationServiceExpiryTest.cpp`](../../test/unit/runtime/NotificationServiceExpiryTest.cpp) exercises sleeper injection, unchanged suppression, keyed lifetime transitions, deferred expiry, generation rejection, cancellation races, and queued-callback teardown.

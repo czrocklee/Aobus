@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/Player.h>
+
 #include "AudioFixtureSupport.h"
 #include "BackendTestSupport.h"
 #include "EngineTestSupport.h"
 #include "ScriptedDecoderSession.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendIds.h>
@@ -16,13 +20,16 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
-#include <ao/audio/Player.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/RouteAnchor.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
@@ -61,9 +68,9 @@ namespace ao::audio::test
       return Engine::RouteStatus{
         .state =
           {
-            .sourceFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-            .decoderOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
-            .engineOutputFormat = {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false},
+            .sourceFormat = {.sampleRate = 44100, .channels = 2, .precisionBits = 16},
+            .decoderOutputFormat = {.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le},
+            .engineOutputFormat = {.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le},
             .codec = AudioCodec::Flac,
           },
         .optAnchor = RouteAnchor{.backend = kBackendNone, .id = "mock-stream-id"},
@@ -103,6 +110,18 @@ namespace ao::audio::test
         renderTarget = target;
       }
 
+      void setOpenError(std::optional<Error> optError)
+      {
+        auto const lock = std::scoped_lock{mutex};
+        optOpenError = std::move(optError);
+      }
+
+      std::optional<Error> openError() const
+      {
+        auto const lock = std::scoped_lock{mutex};
+        return optOpenError;
+      }
+
       void recordRoute(std::string_view const route)
       {
         auto const lock = std::scoped_lock{mutex};
@@ -139,6 +158,7 @@ namespace ao::audio::test
       RenderTarget* renderTarget = nullptr;
       std::vector<std::string> subscribedRoutes;
       BackendProvider::OnDevicesChangedCallback devicesCallback;
+      std::optional<Error> optOpenError;
     };
 
     class BarrierBackend final : public NullBackend
@@ -149,10 +169,15 @@ namespace ao::audio::test
       {
       }
 
-      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
       {
+        if (auto const optError = _probePtr->openError(); optError)
+        {
+          return std::unexpected{*optError};
+        }
+
         _probePtr->publishTarget(target);
-        return {};
+        return NullBackend::open(sourceFormat, target);
       }
 
       void close() override { _probePtr->publishTarget(nullptr); }
@@ -288,11 +313,11 @@ namespace ao::audio::test
       {
       }
 
-      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
       {
         _probePtr->publishTarget(target);
         target->handleRouteReady(_route);
-        return {};
+        return NullBackend::open(sourceFormat, target);
       }
 
       void close() override { _probePtr->publishTarget(nullptr); }
@@ -785,11 +810,11 @@ namespace ao::audio::test
       ReentrantBackend(ReentrantBackend&&) = delete;
       ReentrantBackend& operator=(ReentrantBackend&&) = delete;
 
-      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
       {
         auto const lock = std::scoped_lock{probePtr->mutex};
         probePtr->target = target;
-        return {};
+        return NullBackend::open(sourceFormat, target);
       }
 
       void close() override
@@ -1117,7 +1142,8 @@ namespace ao::audio::test
       {},
       [] { return true; },
       [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
-    REQUIRE(gatePtr->waitForEntry());
+    REQUIRE(
+      executor.drainUntil([&] { return gatePtr->blocked.load(std::memory_order_relaxed); }, std::chrono::seconds{5}));
 
     bool heartbeat = false;
     executor.defer([&] { heartbeat = true; });
@@ -1136,6 +1162,92 @@ namespace ao::audio::test
     CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) > 0);
     CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) ==
           gatePtr->createdPtr->load(std::memory_order_relaxed));
+  }
+
+  TEST_CASE("Player - blocked optimistic preroll leaves the callback executor responsive and cancels safely",
+            "[audio][regression][player][concurrency]")
+  {
+    auto gatePtr = std::make_shared<BlockingPreparationGate>();
+    auto const candidatePath = std::filesystem::path{"preroll-blocked.flac"};
+    auto decoderFactory = [gatePtr, candidatePath](
+                            std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      auto const format = makeEngineTestFormat();
+      auto const sourceFormat = signalFormat(format);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
+        .duration = std::chrono::seconds{2},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(100000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+
+      if (path == candidatePath)
+      {
+        gatePtr->createdPtr->fetch_add(1, std::memory_order_relaxed);
+        decoderPtr->setDestroyCounter(gatePtr->destroyedPtr);
+
+        if (optOutputEncoding)
+        {
+          decoderPtr->setReadObserver(
+            [gatePtr](std::size_t const readCount)
+            {
+              if (readCount == 1)
+              {
+                gatePtr->enterAndWait();
+              }
+            });
+        }
+      }
+
+      return decoderPtr;
+    };
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto runtime = async::Runtime{executor, 1};
+    auto player = Player{runtime, std::move(decoderFactory)};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 201}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    executor.drain();
+
+    bool acceptanceCalled = false;
+    bool completionCalled = false;
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 202}, .input = PlaybackInput{.filePath = candidatePath}},
+      {},
+      [&]
+      {
+        acceptanceCalled = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
+    REQUIRE(
+      executor.drainUntil([&] { return gatePtr->blocked.load(std::memory_order_relaxed); }, std::chrono::seconds{5}));
+
+    bool heartbeat = false;
+    executor.defer([&] { heartbeat = true; });
+    executor.drain();
+    CHECK(heartbeat);
+    CHECK(player.transport() == Transport::Playing);
+    CHECK_FALSE(acceptanceCalled);
+    CHECK_FALSE(completionCalled);
+
+    player.cancelStartPreparation();
+    gatePtr->release.release();
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK_FALSE(acceptanceCalled);
+    CHECK_FALSE(completionCalled);
+    CHECK(gatePtr->createdPtr->load(std::memory_order_relaxed) == 2);
+    CHECK(gatePtr->destroyedPtr->load(std::memory_order_relaxed) == 2);
   }
 
   TEST_CASE("Player - explicit cancellation discards a blocked start preparation",
@@ -1270,6 +1382,44 @@ namespace ao::audio::test
     executor.drain();
   }
 
+  TEST_CASE("Player - unexpected preparation exceptions reach the async diagnostic boundary",
+            "[audio][regression][error][concurrency]")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
+    auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
+    auto const factory = [](std::filesystem::path const&,
+                            std::optional<SampleEncoding>) -> std::unique_ptr<DecoderSession>
+    { throwException<Exception>("unexpected preparation failure"); };
+    auto player = Player{runtime, factory};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+    bool acceptanceCalled = false;
+    bool completionCalled = false;
+
+    REQUIRE(player.stagePlaybackAsync(
+      Engine::PlaybackItem{
+        .id = Engine::PlaybackItemId{.value = 104}, .input = PlaybackInput{.filePath = "invariant.flac"}},
+      {},
+      [&]
+      {
+        acceptanceCalled = true;
+        return true;
+      },
+      [&](Result<Engine::PreparedPlaybackStart>) { completionCalled = true; }));
+    REQUIRE(exceptionRecorder.waitForCount(1));
+
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK_FALSE(acceptanceCalled);
+    CHECK_FALSE(completionCalled);
+    rt::test::requireSingleRecordedException<Exception>(exceptionRecorder, "cancellable coroutine");
+  }
+
   TEST_CASE("Player - start acceptance veto completes exactly once with conflict",
             "[audio][regression][player][concurrency]")
   {
@@ -1345,14 +1495,15 @@ namespace ao::audio::test
     auto probePtr = std::make_shared<BarrierBackendProbe>();
     auto executor = QueuedExecutor{};
     auto runtime = async::Runtime{executor, 1};
-    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto player =
       Player{runtime,
-             [format](std::filesystem::path const& path, Format const&)
+             [format](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
              {
                auto const lossy = path.extension() == ".mp3";
-               auto decoderPtr = std::make_unique<ScriptedDecoderSession>(
-                 makeScriptedStreamInfo(format, lossy ? AudioCodec::Mp3 : AudioCodec::Flac, lossy));
+               auto info = makeScriptedStreamInfo(format, lossy ? AudioCodec::Mp3 : AudioCodec::Flac, lossy);
+               info.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(format.encoding));
+               auto decoderPtr = std::make_unique<ScriptedDecoderSession>(info);
                decoderPtr->setReadScript(
                  {{.data = std::vector<std::byte>(4096, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
                return decoderPtr;
@@ -1418,7 +1569,7 @@ namespace ao::audio::test
 
     SECTION("changed snapshot")
     {
-      device.description = "Changed output capabilities";
+      device.description = "Changed output description";
       probePtr->emitDevices({device});
       executor.drain();
       gatePtr->release.release();
@@ -1554,7 +1705,7 @@ namespace ao::audio::test
           gatePtr->createdPtr->load(std::memory_order_relaxed));
   }
 
-  TEST_CASE("Player - staged decode error processed before commit preserves active generations and lookahead",
+  TEST_CASE("Player - staging prerolls without activating or replacing the active session",
             "[audio][unit][player][staged]")
   {
     auto failureGate = StagedFailureGate{};
@@ -1582,8 +1733,7 @@ namespace ao::audio::test
       .input = PlaybackInput{.filePath = "candidate-failure.flac"},
     });
     REQUIRE(candidate);
-    auto releaseGuard = StagedFailureReleaseGuard{failureGate};
-    REQUIRE(failureGate.waitForRead());
+    CHECK_FALSE(failureGate.waitForRead(std::chrono::milliseconds{0}));
 
     std::size_t stateChangedCount = 0;
     std::size_t failureCount = 0;
@@ -1591,13 +1741,6 @@ namespace ao::audio::test
     player.setOnStateChanged([&] { ++stateChangedCount; });
     player.setOnPlaybackFailure([&](Engine::PlaybackFailure const&) { ++failureCount; });
     player.setOnTrackEnded([&](Engine::TrackEnded const&) { ++endedCount; });
-    releaseGuard.release();
-    REQUIRE(executor.drainUntil([&] { return stateChangedCount == 1; }, std::chrono::seconds{5}));
-
-    auto const committed = player.commitPlayback(std::move(*candidate));
-    REQUIRE_FALSE(committed);
-    CHECK(committed.error().code == Error::Code::IoError);
-    CHECK(committed.error().message == "gated staged decode failure");
     CHECK(player.audioPlaybackGeneration() == audioGeneration);
     CHECK(player.playbackGeneration() == graphGeneration);
     CHECK(player.transport() == Transport::Playing);
@@ -1605,7 +1748,7 @@ namespace ao::audio::test
     CHECK(player.clearPreparedNext() == nextItem.id);
     CHECK(failureCount == 0);
     CHECK(endedCount == 0);
-    CHECK(stateChangedCount == 1);
+    CHECK(stateChangedCount == 0);
   }
 
   TEST_CASE("Player - accepted play and stop filter an old failure already queued on its executor",
@@ -1654,6 +1797,42 @@ namespace ao::audio::test
     CHECK(failureCount == 0);
   }
 
+  TEST_CASE("Player - failed committed start advances callback and graph barriers",
+            "[audio][regression][player][barrier]")
+  {
+    auto probePtr = std::make_shared<BarrierBackendProbe>();
+    auto executor = QueuedExecutor{};
+    auto player = Player{executor, makeScriptedEngineDecoderFactory()};
+    player.addProvider(std::make_unique<BarrierProvider>(probePtr));
+    executor.drain();
+    REQUIRE(player.setOutputDevice(kBarrierBackend, DeviceId{"barrier-device"}, kProfileShared));
+
+    REQUIRE(player.play(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 201}, .input = PlaybackInput{.filePath = "current.flac"}}));
+    executor.drain();
+    auto candidate = player.stagePlayback(Engine::PlaybackItem{
+      .id = Engine::PlaybackItemId{.value = 202}, .input = PlaybackInput{.filePath = "replacement.flac"}});
+    REQUIRE(candidate);
+
+    auto const oldAudioGeneration = player.audioPlaybackGeneration();
+    auto const oldGraphGeneration = player.playbackGeneration();
+    std::size_t failureCount = 0;
+    player.setOnPlaybackFailure([&](Engine::PlaybackFailure const&) { ++failureCount; });
+    probePtr->setOpenError(Error{.code = Error::Code::ResourceBusy, .message = "device busy"});
+
+    auto const committed = player.commitPlayback(std::move(*candidate));
+    REQUIRE(committed);
+    CHECK_FALSE(committed->playbackStarted);
+    CHECK(committed->generation == committed->cancellationBarrier.generation);
+    CHECK(player.audioPlaybackGeneration() > oldAudioGeneration);
+    CHECK(player.playbackGeneration() > oldGraphGeneration);
+    CHECK(player.transport() == Transport::Error);
+    CHECK(probePtr->target() == nullptr);
+    CHECK_FALSE(player.clearPreparedNext());
+
+    REQUIRE(executor.drainUntil([&] { return failureCount == 1; }, std::chrono::seconds{5}));
+  }
+
   TEST_CASE("Player - accepted play and stop filter an old route already queued on its executor",
             "[audio][unit][player][barrier]")
   {
@@ -1699,7 +1878,7 @@ namespace ao::audio::test
   TEST_CASE("Player - accepted play and stop filter an old track end already queued on its executor",
             "[audio][unit][player][barrier]")
   {
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto probePtr = std::make_shared<BarrierBackendProbe>();
     auto executor = QueuedExecutor{};
@@ -1751,7 +1930,7 @@ namespace ao::audio::test
   TEST_CASE("Player - queued gapless route follows the graph generation advanced on the executor",
             "[audio][unit][player][gapless]")
   {
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
     auto const secondData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
     auto probePtr = std::make_shared<SynchronousGraphProbe>();
@@ -1789,12 +1968,13 @@ namespace ao::audio::test
   TEST_CASE("Player - prepared source failure preserves item and audio generation on executor forwarding",
             "[audio][unit][player][failure]")
   {
-    auto const format = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [format](std::filesystem::path const& path, Format const&)
+    auto const format = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto const factory = [format](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
+      auto const sourceFormat = signalFormat(format);
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = format,
-        .outputFormat = format,
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
         .duration = std::chrono::seconds{1},
         .isLossy = false,
         .codec = AudioCodec::Flac,

@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include "detail/OutputFormatValidation.h"
+#include <ao/audio/WavDecoderSession.h>
+
+#include "detail/DecoderOutputAdapter.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/WavDecoderSession.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/media/wav/Riff.h>
 #include <ao/utility/MappedFile.h>
@@ -15,13 +18,13 @@
 #include <algorithm>
 #include <bit>
 #include <chrono>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -67,11 +70,6 @@ namespace ao::audio
     std::int32_t readLe32(std::span<std::byte const> bytes, std::size_t offset) noexcept
     {
       return std::bit_cast<std::int32_t>(readLe32Bits(bytes, offset));
-    }
-
-    float readLeFloat32(std::span<std::byte const> bytes, std::size_t offset) noexcept
-    {
-      return std::bit_cast<float>(readLe32Bits(bytes, offset));
     }
 
     std::int32_t readIntegerSample(std::span<std::byte const> source, std::uint16_t bitsPerSample) noexcept
@@ -139,129 +137,35 @@ namespace ao::audio
       }
     }
 
-    bool canCopyIntegerPcmBytes(Format const& source, Format const& output) noexcept
+    SampleEncoding nativeWavEncoding(media::wav::FormatChunk const& format)
     {
-      // RIFF PCM input and this decoder's integer PcmBlock output are both
-      // little-endian. The sample type, interleaving, container width, and
-      // valid width must also match before their byte representations are
-      // identical. The parser currently rejects restricted-valid-width input;
-      // keeping that requirement here makes the fast path independently safe.
-      return !source.isFloat && !output.isFloat && source.isInterleaved && output.isInterleaved &&
-             source.bitDepth == output.bitDepth && source.validBits == source.bitDepth &&
-             output.validBits == output.bitDepth;
-    }
-
-    bool isSupportedIntegerOutput(std::uint8_t bitDepth) noexcept
-    {
-      return bitDepth == 16 || bitDepth == 24 || bitDepth == 32;
-    }
-
-    Format selectFloatOutputFormat(Format const& requestedOutput, Format sourceFormat)
-    {
-      auto outputFormat = sourceFormat;
-
-      if (requestedOutput.bitDepth == 0)
+      if (format.isFloat)
       {
-        if (requestedOutput.validBits != 0)
-        {
-          detail::throwDecoderError(Error::Code::NotSupported, "Unsupported WAV float output format");
-        }
-
-        outputFormat.bitDepth = 32;
-        outputFormat.validBits = 32;
-        outputFormat.isFloat = true;
-        return outputFormat;
+        return format.bitsPerSample == 32U ? SampleEncoding::Float32Le : SampleEncoding::Unknown;
       }
 
-      if (requestedOutput.isFloat)
+      if (format.bitsPerSample <= 16U)
       {
-        if (requestedOutput.bitDepth != 32 || (requestedOutput.validBits != 0 && requestedOutput.validBits != 32))
-        {
-          detail::throwDecoderError(Error::Code::NotSupported, "Unsupported WAV float output format");
-        }
-
-        outputFormat.bitDepth = 32;
-        outputFormat.validBits = 32;
-        outputFormat.isFloat = true;
-        return outputFormat;
+        return SampleEncoding::Signed16Le;
       }
 
-      auto const outputValidBits =
-        requestedOutput.validBits != 0 ? requestedOutput.validBits : requestedOutput.bitDepth;
-
-      if (!isSupportedIntegerOutput(requestedOutput.bitDepth) || outputValidBits != requestedOutput.bitDepth)
+      if (format.bitsPerSample <= 24U)
       {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported WAV float output format");
+        return SampleEncoding::Signed24PackedLe;
       }
 
-      outputFormat.bitDepth = requestedOutput.bitDepth;
-      outputFormat.validBits = outputValidBits;
-      outputFormat.isFloat = false;
-      return outputFormat;
-    }
-
-    Format selectIntegerOutputFormat(Format const& requestedOutput, Format sourceFormat)
-    {
-      auto outputFormat = sourceFormat;
-      auto outputBitDepth = requestedOutput.bitDepth;
-
-      if (outputBitDepth == 0)
+      if (format.bitsPerSample <= 32U)
       {
-        outputBitDepth = sourceFormat.bitDepth <= 8 ? 16 : sourceFormat.bitDepth;
+        return SampleEncoding::Signed32Le;
       }
 
-      if (requestedOutput.isFloat || !isSupportedIntegerOutput(outputBitDepth))
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported WAV integer output format");
-      }
-
-      auto const outputValidBits =
-        requestedOutput.validBits != 0 ? requestedOutput.validBits : std::min(sourceFormat.validBits, outputBitDepth);
-
-      if (outputValidBits != std::min(sourceFormat.validBits, outputBitDepth))
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported WAV output valid bits");
-      }
-
-      outputFormat.bitDepth = outputBitDepth;
-      outputFormat.validBits = outputValidBits;
-      outputFormat.isFloat = false;
-      return outputFormat;
-    }
-
-    std::int32_t floatToIntegerSample(float sample, std::uint8_t outputBits) noexcept
-    {
-      if (std::isnan(sample))
-      {
-        return 0;
-      }
-
-      auto const minValue = -(std::int64_t{1} << (outputBits - 1U));
-      auto const maxValue = (std::int64_t{1} << (outputBits - 1U)) - 1;
-
-      if (sample <= -1.0F)
-      {
-        return static_cast<std::int32_t>(minValue);
-      }
-
-      if (sample >= 1.0F)
-      {
-        return static_cast<std::int32_t>(maxValue);
-      }
-
-      if (!std::isfinite(sample))
-      {
-        return 0;
-      }
-
-      auto const scaled = std::llround(static_cast<double>(sample) * static_cast<double>(maxValue));
-      return static_cast<std::int32_t>(std::clamp<std::int64_t>(scaled, minValue, maxValue));
+      return SampleEncoding::Unknown;
     }
   } // namespace
 
   struct WavDecoderSession::Impl final
   {
-    Format requestedOutput;
+    detail::DecoderOutputAdapter outputAdapter;
     utility::MappedFile file;
     DecodedStreamInfo info;
     std::vector<std::byte> pcmBuffer{};
@@ -273,32 +177,28 @@ namespace ao::audio
     std::uint16_t sourceBlockAlign = 0;
     bool eof = false;
 
-    explicit Impl(Format output)
-      : requestedOutput{output}
+    explicit Impl(std::optional<SampleEncoding> optOutputEncoding)
+      : outputAdapter{optOutputEncoding}
     {
     }
 
     void selectOutputFormat(media::wav::FormatChunk const& format)
     {
-      auto sourceFormat = Format{
+      auto const sourceFormat = SignalFormat{
         .sampleRate = format.sampleRate,
         .channels = static_cast<std::uint8_t>(format.channels),
-        .bitDepth = static_cast<std::uint8_t>(format.bitsPerSample),
-        .validBits = static_cast<std::uint8_t>(format.validBitsPerSample),
-        .isFloat = format.isFloat,
-        .isInterleaved = true,
+        .precisionBits = static_cast<std::uint8_t>(format.validBitsPerSample),
+        .sampleKind = format.isFloat ? SampleKind::FloatingPoint : SampleKind::Integer,
       };
+      auto const configured = outputAdapter.configure(sourceFormat, nativeWavEncoding(format));
 
-      auto outputFormat = format.isFloat ? selectFloatOutputFormat(requestedOutput, sourceFormat)
-                                         : selectIntegerOutputFormat(requestedOutput, sourceFormat);
-
-      if (auto const result = detail::validateFixedOutputRequest(requestedOutput, outputFormat, "WAV"); !result)
+      if (!configured)
       {
-        detail::throwDecoderError(result.error());
+        detail::throwDecoderError(configured.error());
       }
 
       info.sourceFormat = sourceFormat;
-      info.outputFormat = outputFormat;
+      info.outputFormat = *configured;
       info.isLossy = false;
       info.codec = AudioCodec::Wav;
     }
@@ -306,8 +206,8 @@ namespace ao::audio
     std::span<std::byte const> dataBytes() const noexcept { return file.bytes().subspan(dataOffset, dataSize); }
   };
 
-  WavDecoderSession::WavDecoderSession(Format outputFormat)
-    : _implPtr{std::make_unique<Impl>(outputFormat)}
+  WavDecoderSession::WavDecoderSession(std::optional<SampleEncoding> optOutputEncoding)
+    : _implPtr{std::make_unique<Impl>(optOutputEncoding)}
   {
   }
 
@@ -356,6 +256,7 @@ namespace ao::audio
     _implPtr->file.unmap();
     _implPtr->info = {};
     _implPtr->pcmBuffer.clear();
+    _implPtr->outputAdapter.reset();
     _implPtr->nextFrameIndex = 0;
     _implPtr->totalFrames = 0;
     _implPtr->dataOffset = 0;
@@ -416,35 +317,16 @@ namespace ao::audio
 
     _implPtr->pcmBuffer.clear();
 
-    if (_implPtr->info.outputFormat.isFloat ||
-        canCopyIntegerPcmBytes(_implPtr->info.sourceFormat, _implPtr->info.outputFormat))
+    if (_implPtr->info.sourceFormat.sampleKind == SampleKind::FloatingPoint)
     {
       _implPtr->pcmBuffer.resize(sourceBytes.size());
       std::memcpy(_implPtr->pcmBuffer.data(), sourceBytes.data(), sourceBytes.size());
     }
-    else if (_implPtr->info.sourceFormat.isFloat)
-    {
-      auto const outputSampleBytes = static_cast<std::size_t>(bytesPerSample(_implPtr->info.outputFormat));
-      auto const sampleCount = static_cast<std::size_t>(frames) * _implPtr->info.outputFormat.channels;
-
-      _implPtr->pcmBuffer.resize(sampleCount * outputSampleBytes);
-      auto outputBytes = std::span<std::byte>{_implPtr->pcmBuffer};
-
-      for (std::size_t sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
-      {
-        auto const sampleOffset = sampleIndex * sizeof(float);
-        auto const sample = floatToIntegerSample(
-          readLeFloat32(sourceBytes.subspan(sampleOffset, sizeof(float)), 0), _implPtr->info.outputFormat.bitDepth);
-        writeIntegerSample(outputBytes.subspan(sampleIndex * outputSampleBytes, outputSampleBytes),
-                           sample,
-                           _implPtr->info.outputFormat.bitDepth,
-                           _implPtr->info.outputFormat.bitDepth);
-      }
-    }
     else
     {
       auto const sourceSampleBytes = static_cast<std::size_t>((_implPtr->sourceBitsPerSample + 7U) / 8U);
-      auto const outputSampleBytes = static_cast<std::size_t>(bytesPerSample(_implPtr->info.outputFormat));
+      auto const nativeEncoding = _implPtr->outputAdapter.nativeFormat().encoding;
+      auto const outputSampleBytes = static_cast<std::size_t>(bytesPerSample(nativeEncoding));
       auto const sampleCount = static_cast<std::size_t>(frames) * _implPtr->info.outputFormat.channels;
 
       _implPtr->pcmBuffer.resize(sampleCount * outputSampleBytes);
@@ -457,19 +339,23 @@ namespace ao::audio
           readIntegerSample(sourceBytes.subspan(sampleOffset, sourceSampleBytes), _implPtr->sourceBitsPerSample);
         writeIntegerSample(outputBytes.subspan(sampleIndex * outputSampleBytes, outputSampleBytes),
                            sample,
-                           _implPtr->info.sourceFormat.validBits,
-                           _implPtr->info.outputFormat.bitDepth);
+                           static_cast<std::uint8_t>(_implPtr->sourceBitsPerSample),
+                           encodingNominalBits(nativeEncoding));
       }
+    }
+
+    auto converted = _implPtr->outputAdapter.convert(_implPtr->pcmBuffer);
+
+    if (!converted)
+    {
+      return std::unexpected{converted.error()};
     }
 
     _implPtr->nextFrameIndex += frames;
     _implPtr->eof = _implPtr->nextFrameIndex == _implPtr->totalFrames;
 
-    return PcmBlock{.bytes = _implPtr->pcmBuffer,
-                    .bitDepth = _implPtr->info.outputFormat.bitDepth,
-                    .frames = frames,
-                    .firstFrameIndex = currentFrameIndex,
-                    .endOfStream = _implPtr->eof};
+    return PcmBlock{
+      .bytes = *converted, .frames = frames, .firstFrameIndex = currentFrameIndex, .endOfStream = _implPtr->eof};
   }
 
   DecodedStreamInfo WavDecoderSession::streamInfo() const noexcept

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "RenderTimeline.h"
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/RenderTarget.h>
 
 #include <atomic>

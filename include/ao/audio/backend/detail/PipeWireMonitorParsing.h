@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 
 #include <cstdint>
 #include <optional>
@@ -101,22 +100,12 @@ namespace ao::audio::backend::detail
   NodeRecord parseNodeRecord(std::uint32_t version, ::spa_dict const* props) noexcept;
 
   /**
-   * @brief Converts a SPA audio format ID to Aobus SampleFormatCapability.
-   */
-  std::optional<SampleFormatCapability> sampleFormatCapabilityFromSpaFormat(std::uint32_t spaFmt) noexcept;
-
-  /**
-   * @brief Parses an EnumFormat SPA pod into DeviceFormatCapabilities.
-   */
-  void parseEnumFormat(::spa_pod const* param, DeviceFormatCapabilities& caps);
-
-  /**
    * @brief Returns the current node format only for active Format params.
    *
    * EnumFormat params describe supported candidates and must not be treated as
    * the current stream/sink format.
    */
-  std::optional<Format> currentFormatFromNodeParam(std::uint32_t paramId, ::spa_pod const* param) noexcept;
+  std::optional<PcmFormat> currentFormatFromNodeParam(std::uint32_t paramId, ::spa_pod const* param) noexcept;
 
   /**
    * @brief Updates the live format cache from an active Format param.
@@ -125,7 +114,7 @@ namespace ao::audio::backend::detail
    * the node; EnumFormat and other params are capabilities or unrelated state
    * and do not touch the live-format cache.
    */
-  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, Format>& nodeFormatMap,
+  void updateCurrentFormatFromNodeParam(std::unordered_map<std::uint32_t, PcmFormat>& nodeFormatMap,
                                         std::uint32_t nodeId,
                                         std::uint32_t paramId,
                                         ::spa_pod const* param);

@@ -2,6 +2,8 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
+
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/backend/detail/AudioBackendVolumeMath.h>
 #include <ao/utility/ByteView.h>
 
@@ -36,12 +38,12 @@ namespace ao::audio::backend::detail
       }
     }
 
-    void applyS32(std::span<std::byte> pcm, float gain, std::uint8_t validBits) noexcept
+    void applyS32(std::span<std::byte> pcm, float gain, bool useS24Scale) noexcept
     {
       auto const samples = utility::layout::viewArrayMutable<std::int32_t>(pcm);
-      auto const [limitMin, limitMax] = [validBits] -> std::pair<std::int64_t, std::int64_t>
+      auto const [limitMin, limitMax] = [useS24Scale] -> std::pair<std::int64_t, std::int64_t>
       {
-        if (validBits == 24)
+        if (useS24Scale)
         {
           return {kS24Min, kS24Max};
         }
@@ -54,6 +56,16 @@ namespace ao::audio::backend::detail
         std::int64_t const scaled =
           static_cast<std::int64_t>(std::round(static_cast<double>(sample) * static_cast<double>(gain)));
         sample = static_cast<std::int32_t>(std::clamp<std::int64_t>(scaled, limitMin, limitMax));
+      }
+    }
+
+    void applyF32(std::span<std::byte> pcm, float gain) noexcept
+    {
+      auto const samples = utility::layout::viewArrayMutable<float>(pcm);
+
+      for (auto& sample : samples)
+      {
+        sample *= gain;
       }
     }
 
@@ -92,11 +104,7 @@ namespace ao::audio::backend::detail
     }
   } // namespace
 
-  void applyAlsaSoftwareGain(std::span<std::byte> pcm,
-                             std::uint8_t bitDepth,
-                             std::uint8_t validBits,
-                             bool is3Byte24Bit,
-                             float gain) noexcept
+  void applyAlsaSoftwareGain(std::span<std::byte> pcm, SampleEncoding const encoding, float gain) noexcept
   {
     if (gain > 1.0F - kVolumeEpsilon)
     {
@@ -109,19 +117,27 @@ namespace ao::audio::backend::detail
       return;
     }
 
-    if (is3Byte24Bit)
+    if (encoding == SampleEncoding::Signed24PackedLe)
     {
       applyS243Le(pcm, gain);
       return;
     }
 
-    if (bitDepth == 16)
+    if (encoding == SampleEncoding::Signed16Le)
     {
       applyS16(pcm, gain);
     }
-    else if (bitDepth == 32)
+    else if (encoding == SampleEncoding::Signed24In32Le)
     {
-      applyS32(pcm, gain, validBits);
+      applyS32(pcm, gain, true);
+    }
+    else if (encoding == SampleEncoding::Signed32Le)
+    {
+      applyS32(pcm, gain, false);
+    }
+    else if (encoding == SampleEncoding::Float32Le)
+    {
+      applyF32(pcm, gain);
     }
   }
 } // namespace ao::audio::backend::detail

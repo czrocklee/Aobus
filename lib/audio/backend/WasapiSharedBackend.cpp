@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/backend/WasapiSharedBackend.h>
+
+#include "detail/DecoderOutput.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
-#include <ao/audio/backend/WasapiSharedBackend.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/backend/detail/AudioBackendRenderProgress.h>
 #include <ao/audio/backend/detail/WasapiFormat.h>
 #include <ao/audio/backend/detail/WasapiGraphRegistry.h>
@@ -73,9 +78,9 @@ namespace ao::audio::backend
       }
     }
 
-    WAVEFORMATEXTENSIBLE toWaveFormat(Format const& format) noexcept
+    WAVEFORMATEXTENSIBLE toWaveFormat(PcmFormat const& format) noexcept
     {
-      auto const containerBytes = bytesPerSample(format);
+      auto const containerBytes = bytesPerSample(format.encoding);
 
       auto wave = WAVEFORMATEXTENSIBLE{};
       wave.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
@@ -86,9 +91,10 @@ namespace ao::audio::backend
       wave.Format.nAvgBytesPerSec = format.sampleRate * wave.Format.nBlockAlign;
       wave.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
       // WAVEFORMATEXTENSIBLE exposes valid bits through its C ABI union.
-      wave.Samples.wValidBitsPerSample = effectiveBits(format); // NOLINT(cppcoreguidelines-pro-type-union-access)
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
+      wave.Samples.wValidBitsPerSample = encodingNominalBits(format.encoding);
       wave.dwChannelMask = channelMaskFor(format.channels);
-      wave.SubFormat = format.isFloat ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
+      wave.SubFormat = isFloatEncoding(format.encoding) ? KSDATAFORMAT_SUBTYPE_IEEE_FLOAT : KSDATAFORMAT_SUBTYPE_PCM;
       return wave;
     }
 
@@ -126,7 +132,7 @@ namespace ao::audio::backend
     };
   } // namespace
 
-  std::optional<Format> detail::formatFromWaveFormat(WAVEFORMATEX const& wave) noexcept
+  std::optional<PcmFormat> detail::formatFromWaveFormat(WAVEFORMATEX const& wave) noexcept
   {
     if (wave.nSamplesPerSec == 0 || wave.nChannels == 0 || wave.nChannels > std::numeric_limits<std::uint8_t>::max() ||
         wave.wBitsPerSample == 0 || wave.wBitsPerSample > std::numeric_limits<std::uint8_t>::max())
@@ -174,12 +180,36 @@ namespace ao::audio::backend
       return std::nullopt;
     }
 
-    return Format{.sampleRate = wave.nSamplesPerSec,
-                  .channels = static_cast<std::uint8_t>(wave.nChannels),
-                  .bitDepth = static_cast<std::uint8_t>(wave.wBitsPerSample),
-                  .validBits = static_cast<std::uint8_t>(validBits),
-                  .isFloat = isFloat,
-                  .isInterleaved = true};
+    auto encoding = SampleEncoding::Unknown;
+
+    if (isFloat && wave.wBitsPerSample == 32U && validBits == 32U)
+    {
+      encoding = SampleEncoding::Float32Le;
+    }
+    else if (!isFloat && wave.wBitsPerSample == 16U && validBits == 16U)
+    {
+      encoding = SampleEncoding::Signed16Le;
+    }
+    else if (!isFloat && wave.wBitsPerSample == 24U && validBits == 24U)
+    {
+      encoding = SampleEncoding::Signed24PackedLe;
+    }
+    else if (!isFloat && wave.wBitsPerSample == 32U && validBits == 24U)
+    {
+      encoding = SampleEncoding::Signed24In32Le;
+    }
+    else if (!isFloat && wave.wBitsPerSample == 32U && validBits == 32U)
+    {
+      encoding = SampleEncoding::Signed32Le;
+    }
+
+    if (encoding == SampleEncoding::Unknown)
+    {
+      return std::nullopt;
+    }
+
+    return PcmFormat{
+      .sampleRate = wave.nSamplesPerSec, .channels = static_cast<std::uint8_t>(wave.nChannels), .encoding = encoding};
   }
 
   struct WasapiSharedBackend::Impl final
@@ -188,8 +218,8 @@ namespace ao::audio::backend
 
     std::string deviceId; // UTF-8 endpoint ID; empty selects the default endpoint
     std::string routeAnchor;
-    Format format;
-    std::optional<Format> optMixFormat;
+    PcmFormat format;
+    std::optional<PcmFormat> optMixFormat;
     RenderTarget* renderTarget = nullptr;
 
     ComPtr<IAudioClient> audioClient;
@@ -329,6 +359,13 @@ namespace ao::audio::backend
     if (auto const hr = audioClient->GetCurrentPadding(&padding); FAILED(hr))
     {
       failStream(std::format("WASAPI: GetCurrentPadding failed ({})", describeHresult(hr)));
+      return false;
+    }
+
+    if (padding > bufferFrames)
+    {
+      failStream(
+        std::format("WASAPI: endpoint reported {} padding frames for a {}-frame buffer", padding, bufferFrames));
       return false;
     }
 
@@ -497,12 +534,18 @@ namespace ao::audio::backend
     }
   }
 
-  Result<> WasapiSharedBackend::open(Format const& format, RenderTarget* target)
+  Result<OpenedPcmMode> WasapiSharedBackend::open(SignalFormat const& sourceFormat, RenderTarget* target)
   {
     close();
 
-    _implPtr->format = format;
-    _implPtr->renderTarget = target;
+    auto const encodings = ::ao::audio::detail::losslessPcmEncodings(sourceFormat);
+
+    if (encodings.empty())
+    {
+      return makeError(Error::Code::FormatRejected, "No lossless WASAPI input encoding is available");
+    }
+
+    auto const format = pcmFormat(sourceFormat, encodings.front());
     _implPtr->paused.store(false, std::memory_order_relaxed);
     _implPtr->fatalStreamError.store(false, std::memory_order_relaxed);
 
@@ -554,7 +597,7 @@ namespace ao::audio::backend
     constexpr DWORD kStreamFlags =
       AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
 
-    auto optMixFormat = std::optional<Format>{};
+    auto optMixFormat = std::optional<PcmFormat>{};
     WAVEFORMATEX* rawMixFormat = nullptr;
 
     if (SUCCEEDED(audioClient->GetMixFormat(&rawMixFormat)) && rawMixFormat != nullptr)
@@ -633,10 +676,12 @@ namespace ao::audio::backend
     }
 
     _implPtr->bytesPerFrame = frameBytes(format);
+    _implPtr->format = format;
     _implPtr->optMixFormat = optMixFormat;
     _implPtr->renderEvent = renderEvent;
     _implPtr->audioClient = std::move(audioClient);
     _implPtr->renderClient = std::move(renderClient);
+    _implPtr->renderTarget = target;
 
     {
       auto const lock = std::scoped_lock{_implPtr->sessionMutex};
@@ -653,7 +698,11 @@ namespace ao::audio::backend
 
     _implPtr->publishGraphState();
 
-    return {};
+    // Shared mode runs behind the Windows mixer, which converts on our behalf.
+    // The mix format is endpoint evidence for the graph, not a confirmation of
+    // the direct hardware endpoint, so this result reports only the lossless
+    // client format configured above.
+    return OpenedPcmMode{.clientFormat = format};
   }
 
   void WasapiSharedBackend::start()

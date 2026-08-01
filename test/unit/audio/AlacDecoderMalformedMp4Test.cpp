@@ -5,7 +5,7 @@
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/audio/AlacDecoderSession.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/media/mp4/Demuxer.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -134,7 +134,7 @@ namespace ao::audio::test
       auto const mp4Data =
         makeSyntheticAlacMp4(fixture.cookie, {.payload = {0x01, 0x02, 0x03, 0x04}, .chunkOffset = 0x00FF'FFFFU});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
       CHECK(!decoder.readNextBlock());
@@ -144,7 +144,7 @@ namespace ao::audio::test
     {
       auto const mp4Data = makeSyntheticAlacMp4(fixture.cookie, {.payload = std::vector<std::uint8_t>(32, 0xA5)});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
       CHECK(!decoder.readNextBlock());
@@ -154,7 +154,7 @@ namespace ao::audio::test
     {
       auto const mp4Data = makeSyntheticAlacMp4(fixture.cookie, {.payload = std::vector<std::uint8_t>(32, 0xA5)});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 32, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed32Le};
 
       REQUIRE(decoder.open(temp.path));
       CHECK(!decoder.readNextBlock());
@@ -173,7 +173,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       CHECK(!decoder.open(temp.path));
     }
@@ -186,7 +186,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       CHECK(!decoder.open(temp.path));
     }
@@ -198,7 +198,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       CHECK(!decoder.open(temp.path));
     }
@@ -211,7 +211,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       CHECK(!decoder.open(temp.path));
     }
@@ -223,7 +223,7 @@ namespace ao::audio::test
 
       auto const mp4Data = makeSyntheticAlacMp4(cookie, {.payload = {0, 0, 0, 0}});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       CHECK(!decoder.open(temp.path));
     }
@@ -238,7 +238,7 @@ namespace ao::audio::test
       auto const mp4Data =
         makeSyntheticAlacMp4(fixture.cookie, {.payload = fixture.firstPacket, .timescale = 0, .duration = 44100});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
 
@@ -252,7 +252,7 @@ namespace ao::audio::test
       auto const mp4Data =
         makeSyntheticAlacMp4(fixture.cookie, {.payload = fixture.firstPacket, .includeTiming = false});
       auto const temp = ao::test::TempFile{mp4Data, ".m4a"};
-      auto decoder = AlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto decoder = AlacDecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(decoder.open(temp.path));
 

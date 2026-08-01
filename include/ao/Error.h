@@ -28,6 +28,7 @@ namespace ao
       NotSupported,
       InvalidState,
       Conflict,
+      ResourceBusy,
       ValueTooLarge,
       ResourceExhausted,
     };

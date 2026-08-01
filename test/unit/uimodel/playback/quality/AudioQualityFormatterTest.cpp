@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Format.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -25,7 +28,7 @@ namespace ao::uimodel::test
 
   TEST_CASE("AudioQualityFormatter - audioFormatLabel", "[uimodel][unit][playback][quality]")
   {
-    auto format = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16};
+    auto format = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
     CHECK(audioFormatLabel(format) == "44.1 kHz · 16-bit · Stereo");
 
     format.channels = 1;
@@ -36,25 +39,12 @@ namespace ao::uimodel::test
 
     format.channels = 6;
     format.sampleRate = 48000;
-    format.bitDepth = 24;
+    format.precisionBits = 24;
     CHECK(audioFormatLabel(format) == "48.0 kHz · 24-bit · 6 ch");
 
-    // A low-resolution source padded into a wider container: by default the
-    // container width is shown (downstream nodes), but with preferValidBits the
-    // true precision is reported (source node).
-    format.channels = 2;
-    format.sampleRate = 44100;
-    format.bitDepth = 32;
-    format.validBits = 16;
-    CHECK(audioFormatLabel(format) == "44.1 kHz · 32-bit · Stereo");
-    CHECK(audioFormatLabel(format, true) == "44.1 kHz · 16-bit · Stereo");
-
-    format.validBits = 24;
-    CHECK(audioFormatLabel(format, true) == "44.1 kHz · 24-bit · Stereo");
-
-    // preferValidBits with validBits == 0 falls back to the container width.
-    format.validBits = 0;
-    CHECK(audioFormatLabel(format, true) == "44.1 kHz · 32-bit · Stereo");
+    auto const paddedFormat =
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Signed32Le};
+    CHECK(audioFormatLabel(paddedFormat) == "44.1 kHz · 32-bit · Stereo");
   }
 
   TEST_CASE("AudioQualityFormatter - quality categories map raw quality to visual tiers",
@@ -80,9 +70,11 @@ namespace ao::uimodel::test
             "[uimodel][unit][playback][quality]")
   {
     auto const float32 =
-      audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 32, .isFloat = true};
-    auto const int32 = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 32};
-    auto const int24In32 = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 24};
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Float32Le};
+    auto const int32 =
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Signed32Le};
+    auto const int24In32 =
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Signed24In32Le};
 
     CHECK(audioFindingLabel(audio::QualityFinding{
             .kind = audio::QualityFindingKind::Truncation, .optFromFormat = float32, .optToFormat = int24In32}) ==
@@ -118,11 +110,13 @@ namespace ao::uimodel::test
   TEST_CASE("AudioQualityFormatter - presentation headlines prioritize pipeline delivery",
             "[uimodel][unit][playback][quality]")
   {
-    auto const sourceFormat = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .validBits = 16};
-    auto const paddedFormat = audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 24, .validBits = 24};
+    auto const sourceFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
+    auto const paddedFormat =
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Signed24PackedLe};
     auto const floatFormat =
-      audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 32, .isFloat = true};
-    auto const resampledFormat = audio::Format{.sampleRate = 48000, .channels = 2, .bitDepth = 16, .validBits = 16};
+      audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = audio::SampleEncoding::Float32Le};
+    auto const resampledFormat =
+      audio::PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = audio::SampleEncoding::Signed16Le};
 
     SECTION("lossless clean path is bit-perfect")
     {
@@ -232,7 +226,8 @@ namespace ao::uimodel::test
 
     SECTION("channel mapping is diagnostic")
     {
-      auto const monoFormat = audio::Format{.sampleRate = 44100, .channels = 1, .bitDepth = 16, .validBits = 16};
+      auto const monoFormat =
+        audio::PcmFormat{.sampleRate = 44100, .channels = 1, .encoding = audio::SampleEncoding::Signed16Le};
       auto const presentation = audioQualityPresentation(
         rt::QualityState{.sourceQuality = audio::Quality::BitwisePerfect,
                          .pipelineQuality = audio::Quality::LinearIntervention,

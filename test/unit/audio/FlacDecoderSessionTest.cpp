@@ -1,24 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/FlacDecoderSession.h>
+
 #include "DecoderTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
-#include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/PcmConversion.h>
-#include <ao/utility/ByteView.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
 #include <chrono>
-#include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <vector>
 
 namespace ao::audio::test
 {
@@ -26,7 +21,7 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
-    auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = FlacDecoderSession{SampleEncoding::Signed24PackedLe};
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
@@ -50,45 +45,26 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.flac");
 
-    auto decoder = FlacDecoderSession{Format{.bitDepth = 24, .isInterleaved = true}};
+    auto decoder = FlacDecoderSession{SampleEncoding::Signed24PackedLe};
     REQUIRE(decoder.open(testFile));
     CHECK(decoder.readNextBlock());
 
-    auto paddedDecoder = FlacDecoderSession{Format{.bitDepth = 32, .isInterleaved = true}};
+    auto paddedDecoder = FlacDecoderSession{SampleEncoding::Signed32Le};
     REQUIRE(paddedDecoder.open(testFile));
-    CHECK(paddedDecoder.streamInfo().outputFormat.bitDepth == 32);
-    CHECK(paddedDecoder.streamInfo().outputFormat.validBits == 24);
+    CHECK(encodingContainerBits(paddedDecoder.streamInfo().outputFormat.encoding) == 32);
     auto const block = paddedDecoder.readNextBlock();
     REQUIRE(block);
-    CHECK(block->bitDepth == 32);
     CHECK_FALSE(block->bytes.empty());
   }
 
-  TEST_CASE("FlacDecoderSession - scales 24-bit samples for 16-bit output", "[audio][unit][flac]")
+  TEST_CASE("FlacDecoderSession - rejects precision-losing output", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("hires.flac");
-    auto sourceDecoder = FlacDecoderSession{Format{.bitDepth = 24, .isInterleaved = true}};
-    auto targetDecoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
-    REQUIRE(sourceDecoder.open(testFile));
-    REQUIRE(targetDecoder.open(testFile));
-
-    auto const sourceBlock = sourceDecoder.readNextBlock();
-    auto const targetBlock = targetDecoder.readNextBlock();
-    REQUIRE(sourceBlock);
-    REQUIRE(targetBlock);
-    REQUIRE(sourceBlock->frames == targetBlock->frames);
-
-    auto sourceSamples = std::vector<std::int32_t>(sourceBlock->bytes.size() / 3U);
-    unpackS24PcmSamples(sourceBlock->bytes, sourceSamples);
-    auto const targetSamples = utility::layout::viewArray<std::int16_t>(targetBlock->bytes);
-    auto const samplesToCheck = std::min({sourceSamples.size(), targetSamples.size(), std::size_t{256}});
-    REQUIRE(samplesToCheck > 0);
-
-    for (std::size_t index = 0; index < samplesToCheck; ++index)
-    {
-      CHECK(targetSamples[index] == static_cast<std::int16_t>(sourceSamples[index] >> 8U));
-    }
+    auto const result = decoder.open(testFile);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::NotSupported);
   }
 
   TEST_CASE("FlacDecoderSession - seek to reported duration lands on the final frame", "[audio][unit][flac]")
@@ -98,7 +74,7 @@ namespace ao::audio::test
     // so the seek lands on the final frame rather than at end of stream; libFLAC
     // builds otherwise disagree on out-of-range seeks and drop the position.
     auto const testFile = requireAudioFixture("basic_metadata.flac");
-    auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
     REQUIRE(decoder.open(testFile));
     auto const info = decoder.streamInfo();
@@ -113,7 +89,7 @@ namespace ao::audio::test
   TEST_CASE("FlacDecoderSession - stable end of stream", "[audio][unit][flac]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
-    auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
     REQUIRE(decoder.open(testFile));
     CHECK(readUntilStableEndOfStream(decoder, 512) > 0);
@@ -121,7 +97,7 @@ namespace ao::audio::test
 
   TEST_CASE("FlacDecoderSession - reports error paths", "[audio][unit][flac][error]")
   {
-    auto decoder = FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
 
     SECTION("Seek on unopened file")
     {
@@ -144,30 +120,28 @@ namespace ao::audio::test
       CHECK(!decoder.open(tempFile.path));
     }
 
-    SECTION("Unsupported fixed output requests fail during open")
+    SECTION("Precision-losing output fails during open")
     {
       auto const testFile = requireAudioFixture("hires.flac");
 
-      CHECK((!FlacDecoderSession{Format{.sampleRate = 1, .bitDepth = 16, .isInterleaved = true}}.open(testFile)));
-      CHECK((!FlacDecoderSession{Format{.channels = 1, .bitDepth = 16, .isInterleaved = true}}.open(testFile)));
-      CHECK((!FlacDecoderSession{Format{.bitDepth = 16, .isInterleaved = false}}.open(testFile)));
-      CHECK((!FlacDecoderSession{Format{.bitDepth = 32, .isFloat = true, .isInterleaved = true}}.open(testFile)));
-      CHECK((!FlacDecoderSession{Format{.bitDepth = 32, .validBits = 16, .isInterleaved = true}}.open(testFile)));
-      CHECK((!FlacDecoderSession{Format{.bitDepth = 8, .isInterleaved = true}}.open(testFile)));
+      CHECK(!FlacDecoderSession{SampleEncoding::Signed16Le}.open(testFile));
+      CHECK(FlacDecoderSession{SampleEncoding::Float32Le}.open(testFile));
+      CHECK(FlacDecoderSession{SampleEncoding::Signed32Le}.open(testFile));
     }
 
     SECTION("Close and failed reopen clear stream state")
     {
       auto const testFile = requireAudioFixture("hires.flac");
+      auto lifecycleDecoder = FlacDecoderSession{SampleEncoding::Signed24PackedLe};
 
-      REQUIRE(decoder.open(testFile));
-      decoder.close();
-      decoder.close();
-      checkClosedSession(decoder);
+      REQUIRE(lifecycleDecoder.open(testFile));
+      lifecycleDecoder.close();
+      lifecycleDecoder.close();
+      checkClosedSession(lifecycleDecoder);
 
-      REQUIRE(decoder.open(testFile));
-      CHECK(!decoder.open("/path/to/nowhere/nonexistent.flac"));
-      checkClosedSession(decoder);
+      REQUIRE(lifecycleDecoder.open(testFile));
+      CHECK(!lifecycleDecoder.open("/path/to/nowhere/nonexistent.flac"));
+      checkClosedSession(lifecycleDecoder);
     }
   }
 } // namespace ao::audio::test

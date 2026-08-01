@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
+#include <ao/audio/NodeFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -49,8 +49,8 @@ namespace ao::audio
     QualityFindingKind kind = QualityFindingKind::Unknown;
     Quality quality = Quality::Unknown;
     float gain = 0.0F;
-    std::optional<Format> optFromFormat{};
-    std::optional<Format> optToFormat{};
+    std::optional<NodeFormat> optFromFormat{};
+    std::optional<NodeFormat> optToFormat{};
     std::vector<std::string> sharedApps{};
 
     bool operator==(QualityFinding const&) const = default;
@@ -67,7 +67,7 @@ namespace ao::audio
     std::string nodeId{};
     std::string nodeName{};
     flow::NodeType nodeType = flow::NodeType::Intermediary;
-    std::optional<Format> optFormat{};
+    std::optional<NodeFormat> optFormat{};
     Quality worstQuality = Quality::BitwisePerfect;
     std::vector<QualityFinding> findings{};
 

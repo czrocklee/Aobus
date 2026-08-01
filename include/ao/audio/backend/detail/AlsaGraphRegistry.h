@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
+#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/flow/Graph.h>
 
@@ -32,7 +32,11 @@ namespace ao::audio::backend::detail
   struct AlsaRouteState final
   {
     std::string routeAnchor;
-    std::optional<Format> optFormat{};
+
+    // The whole opened mode, not a copy of one format: the stream node shows
+    // the client byte layout and the sink node shows the confirmed endpoint
+    // signal, so the graph cannot disagree with what Engine validated.
+    std::optional<OpenedPcmMode> optMode{};
     float volume = 1.0F;
     bool muted = false;
     AlsaVolumeControlMode volumeMode = AlsaVolumeControlMode::Unavailable;

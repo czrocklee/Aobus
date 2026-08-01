@@ -104,7 +104,7 @@ namespace ao::audio::test
     {
       CHECK(optRouteState->sourceFormat.sampleRate == 44100);
       CHECK(optRouteState->sourceFormat.channels == 2);
-      CHECK(optRouteState->sourceFormat.bitDepth == 16);
+      CHECK(optRouteState->sourceFormat.precisionBits == 16);
     }
 
     SECTION("AudioRouteFormatState has engine output format")

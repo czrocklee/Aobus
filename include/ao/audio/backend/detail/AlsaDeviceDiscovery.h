@@ -5,20 +5,15 @@
 
 #include <ao/audio/Device.h>
 
-#include <string>
 #include <vector>
 
 namespace ao::audio::backend::detail
 {
   /**
-   * @brief Queries hardware capabilities for a specific ALSA device name (e.g., "hw:0,0").
-   */
-  DeviceFormatCapabilities queryAlsaDeviceCapabilities(std::string const& deviceName);
-
-  /**
-
-   * @brief Enumerates all available ALSA playback devices (physical cards).
-   * Returns a list of devices in both 'plughw' and 'hw' variants.
+   * @brief Enumerates direct ALSA hardware playback devices for physical cards.
+   *
+   * Plugin PCMs such as `plughw` are omitted because they may convert the
+   * client stream and cannot satisfy the exclusive backend's raw-mode contract.
    */
   std::vector<Device> enumerateAlsaPlaybackDevices();
 } // namespace ao::audio::backend::detail

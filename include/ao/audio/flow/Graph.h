@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <ao/audio/Format.h>
+#include <ao/audio/NodeFormat.h>
 
 #include <cstdint>
 #include <optional>
@@ -34,7 +34,7 @@ namespace ao::audio::flow
     std::string id{};
     NodeType type = NodeType::Intermediary;
     std::string name{};
-    std::optional<Format> optFormat = std::nullopt;
+    std::optional<NodeFormat> optFormat = std::nullopt;
     bool hardwareVolumeNotUnity = false;
     bool softwareVolumeNotUnity = false;
     float maxSoftwareGain = 0.0F;

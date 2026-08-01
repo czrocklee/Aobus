@@ -51,7 +51,7 @@ Use the [specification template](../template/spec.md).
 - [Playback application commits](playback/application-commit.md) defines command admission, supersession, coherent snapshot publication, observer reentrancy, transient events, and shutdown.
 - [Audio quality analysis](playback/quality-analysis.md) defines graph evidence, fidelity axes, conversion proof, runtime publication, and verdict precedence.
 - [Playback succession cursor](playback/cursor.md) defines live-projection launch, anchors, navigation, repeat, shuffle, prepared-next, and failure walking.
-- [Decoder session](playback/decoder-session.md) defines decoder lifecycle, format negotiation, PCM representations, and failures.
+- [Decoder session](playback/decoder-session.md) defines decoder lifecycle, inspection, exact PCM output selection, and failures.
 - [Audio execution and concurrency](playback/audio-execution.md) defines control serialization, event delivery, realtime rendering, gapless transitions, generation fences, backend lifetime, and shutdown.
 - [Playback session persistence](playback/session-persistence.md) defines strict restore, normalization, deferred transport, event-driven best-effort saving, discard, and shutdown.
 

@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Format.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
+
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -34,6 +38,8 @@ TEST_CASE("AlsaGraphRegistry - initial subscription receives neutral graph", "[a
   CHECK_FALSE(receivedGraph.nodes[1].hardwareVolumeNotUnity);
   CHECK_FALSE(receivedGraph.nodes[1].softwareVolumeNotUnity);
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
+  REQUIRE(receivedGraph.connections.size() == 1);
+  CHECK_FALSE(receivedGraph.connections.front().isActive);
 }
 
 TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers", "[audio][unit][alsa]")
@@ -52,21 +58,49 @@ TEST_CASE("AlsaGraphRegistry - hardware volume publish updates subscribers", "[a
   CHECK_FALSE(receivedGraph.nodes[1].isMuted);
 }
 
-TEST_CASE("AlsaGraphRegistry - published negotiated format reaches stream and sink", "[audio][unit][alsa]")
+TEST_CASE("AlsaGraphRegistry - stream shows the client bytes and sink shows the endpoint signal", "[audio][unit][alsa]")
 {
   auto registry = AlsaGraphRegistry{};
   auto receivedGraph = Graph{};
-  auto const negotiatedFormat = ao::audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 32, .validBits = 16};
+
+  // A 32-bit container in front of a converter that only resolves 24 bits.
+  // Copying one format into both nodes, as the registry used to, would report
+  // this endpoint as 32-bit and hide the truncation it performs.
+  auto const clientFormat =
+    ao::audio::PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = ao::audio::SampleEncoding::Signed32Le};
+  auto const endpointSignal = ao::audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 24};
 
   auto sub = registry.subscribe("hw:0,0", [&](Graph const& g) { receivedGraph = g; });
 
-  registry.publish({.routeAnchor = "hw:0,0", .optFormat = negotiatedFormat});
+  registry.publish(
+    {.routeAnchor = "hw:0,0",
+     .optMode = ao::audio::OpenedPcmMode{
+       .clientFormat = clientFormat, .optEndpoint = ao::audio::ConfirmedEndpoint{.signalFormat = endpointSignal}}});
 
   REQUIRE(receivedGraph.nodes.size() == 2);
   REQUIRE(receivedGraph.nodes[0].optFormat);
   REQUIRE(receivedGraph.nodes[1].optFormat);
-  CHECK(*receivedGraph.nodes[0].optFormat == negotiatedFormat);
-  CHECK(*receivedGraph.nodes[1].optFormat == negotiatedFormat);
+  CHECK(std::get<ao::audio::PcmFormat>(*receivedGraph.nodes[0].optFormat) == clientFormat);
+  CHECK(std::get<ao::audio::SignalFormat>(*receivedGraph.nodes[1].optFormat) == endpointSignal);
+  REQUIRE(receivedGraph.connections.size() == 1);
+  CHECK(receivedGraph.connections.front().isActive);
+}
+
+TEST_CASE("AlsaGraphRegistry - an unconfirmed endpoint leaves the sink format empty", "[audio][unit][alsa]")
+{
+  auto registry = AlsaGraphRegistry{};
+  auto receivedGraph = Graph{};
+  auto const clientFormat =
+    ao::audio::PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = ao::audio::SampleEncoding::Signed24PackedLe};
+
+  auto sub = registry.subscribe("hw:0,0", [&](Graph const& g) { receivedGraph = g; });
+
+  registry.publish({.routeAnchor = "hw:0,0", .optMode = ao::audio::OpenedPcmMode{.clientFormat = clientFormat}});
+
+  REQUIRE(receivedGraph.nodes.size() == 2);
+  REQUIRE(receivedGraph.nodes[0].optFormat);
+  CHECK(std::get<ao::audio::PcmFormat>(*receivedGraph.nodes[0].optFormat) == clientFormat);
+  CHECK_FALSE(receivedGraph.nodes[1].optFormat);
 }
 
 TEST_CASE("AlsaGraphRegistry - software volume publish updates subscribers", "[audio][unit][alsa]")

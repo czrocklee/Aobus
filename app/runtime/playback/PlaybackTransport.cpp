@@ -82,8 +82,7 @@ namespace ao::rt
                                   .displayName = source.displayName,
                                   .description = source.description,
                                   .isDefault = source.isDefault,
-                                  .backendId = source.backendId,
-                                  .capabilities = source.capabilities};
+                                  .backendId = source.backendId};
     }
 
     OutputBackendSnapshot toOutputBackendSnapshot(audio::BackendProvider::Status const& source)
@@ -207,6 +206,19 @@ namespace ao::rt
     bool isOutputFailureKind(PlaybackFailureKind kind) noexcept
     {
       return kind == PlaybackFailureKind::RouteActivation || kind == PlaybackFailureKind::DeviceLost;
+    }
+
+    /**
+     * @brief Whether an output failure describes a condition that can clear itself.
+     *
+     * A device held by another application is the case in point: nothing Aobus
+     * does resolves it, so playback stops and succession must not skip ahead,
+     * but the holder can exit at any time and the report stops being true
+     * without any further event to retract it.
+     */
+    bool isTransientOutputFailure(PlaybackFailure const& failure) noexcept
+    {
+      return isOutputFailureKind(failure.kind) && failure.error.code == Error::Code::ResourceBusy;
     }
 
     bool shouldPostDefaultFailureNotification(PlaybackFailure const& failure) noexcept
@@ -1033,13 +1045,21 @@ namespace ao::rt
         };
       }
 
+      // `recoverable` decides whether succession may skip to the next track;
+      // it is not a statement about how long the condition lasts. A device held
+      // by another application is exactly the case where those two differ:
+      // Aobus must not silently skip the track, but the device can be released
+      // at any moment, so pinning the notification forever would leave a stale
+      // error on screen long after it stopped being true.
+      auto const persists = !failure.recoverable && !isTransientOutputFailure(failure);
+
       gsl_Expects(optLastPlaybackFailureReport);
       notifications.createOrUpdate(
         optLastPlaybackFailureReport->reportKey,
         NotificationRequest{
           .severity = NotificationSeverity::Error,
           .message = report,
-          .lifetime = failure.recoverable ? NotificationLifetime::history() : NotificationLifetime::pinned(),
+          .lifetime = persists ? NotificationLifetime::pinned() : NotificationLifetime::history(),
         });
     }
 
@@ -1697,7 +1717,7 @@ namespace ao::rt
       preparedImplPtr->request, preparedImplPtr->sourceListId, commitResult->itemId, commitResult->generation);
     impl->refreshState();
 
-    if (announce)
+    if (commitResult->playbackStarted && announce)
     {
       impl->enqueueOutbound(Impl::StartedEvent{});
       impl->announceNowPlaying(preparedImplPtr->request, preparedImplPtr->sourceListId);

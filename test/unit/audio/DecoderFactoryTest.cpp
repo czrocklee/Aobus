@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/DecoderFactory.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/media/mp4/TestAtoms.h"
 #include <ao/Error.h>
-#include <ao/audio/DecoderFactory.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -16,12 +17,11 @@ namespace ao::audio::test
 {
   TEST_CASE("DecoderFactory - creates sessions based on extension", "[audio][unit][decoder]")
   {
-    auto const format =
-      Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
+    auto const encoding = SampleEncoding::Signed16Le;
 
     SECTION("Creates FLAC runtime for .flac")
     {
-      auto runtime = createDecoderSession("song.flac", format);
+      auto runtime = createDecoderSession("song.flac", encoding);
       REQUIRE(runtime);
       CHECK(*runtime != nullptr);
     }
@@ -31,11 +31,11 @@ namespace ao::audio::test
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".m4a"};
       auto const mp4 = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".mp4"};
 
-      auto session1 = createDecoderSession(m4a.path, format);
+      auto session1 = createDecoderSession(m4a.path, encoding);
       REQUIRE(session1);
       CHECK(*session1 != nullptr);
 
-      auto session2 = createDecoderSession(mp4.path, format);
+      auto session2 = createDecoderSession(mp4.path, encoding);
       REQUIRE(session2);
       CHECK(*session2 != nullptr);
     }
@@ -52,7 +52,7 @@ namespace ao::audio::test
       ao::test::mp4::addAtom(data, "moov", moovBody);
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, format);
+      auto session = createDecoderSession(m4a.path, encoding);
       REQUIRE(session);
       CHECK(*session != nullptr);
     }
@@ -61,7 +61,7 @@ namespace ao::audio::test
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("mp4a"), ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, format);
+      auto session = createDecoderSession(m4a.path, encoding);
       REQUIRE(session);
       CHECK(*session != nullptr);
     }
@@ -73,7 +73,7 @@ namespace ao::audio::test
       data.insert(data.end(), mdat.begin(), mdat.end());
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, format);
+      auto session = createDecoderSession(m4a.path, encoding);
       REQUIRE(session);
       CHECK(*session != nullptr);
     }
@@ -85,21 +85,21 @@ namespace ao::audio::test
       data.insert(data.end(), movie.begin(), movie.end());
       auto const m4a = ao::test::TempFile{data, ".m4a"};
 
-      auto session = createDecoderSession(m4a.path, format);
+      auto session = createDecoderSession(m4a.path, encoding);
       REQUIRE(session);
       CHECK(*session != nullptr);
     }
 
     SECTION("Creates MP3 runtime for .mp3")
     {
-      auto session = createDecoderSession("song.mp3", format);
+      auto session = createDecoderSession("song.mp3", encoding);
       REQUIRE(session);
       CHECK(*session != nullptr);
     }
 
     SECTION("Creates WAV runtime for .wav")
     {
-      auto session = createDecoderSession("song.wav", format);
+      auto session = createDecoderSession("song.wav", encoding);
       REQUIRE(session);
       CHECK(*session != nullptr);
     }
@@ -108,7 +108,7 @@ namespace ao::audio::test
     {
       for (auto const* path : {"song.ogg"})
       {
-        auto const result = createDecoderSession(path, format);
+        auto const result = createDecoderSession(path, encoding);
         REQUIRE_FALSE(result);
         CHECK(result.error().code == Error::Code::NotSupported);
       }
@@ -118,7 +118,7 @@ namespace ao::audio::test
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("ec-3"), ".m4a"};
 
-      auto const result = createDecoderSession(m4a.path, format);
+      auto const result = createDecoderSession(m4a.path, encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
     }
@@ -127,7 +127,7 @@ namespace ao::audio::test
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeAtom("moov", {}), ".m4a"};
 
-      auto const result = createDecoderSession(m4a.path, format);
+      auto const result = createDecoderSession(m4a.path, encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::NotSupported);
     }
@@ -136,29 +136,29 @@ namespace ao::audio::test
     {
       auto const m4a = ao::test::TempFile{std::vector<std::uint8_t>{0, 1, 2}, ".m4a"};
 
-      auto const result = createDecoderSession(m4a.path, format);
+      auto const result = createDecoderSession(m4a.path, encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
     }
 
     SECTION("Reports IoError when an MP4 container cannot be read")
     {
-      auto const result = createDecoderSession("missing.m4a", format);
+      auto const result = createDecoderSession("missing.m4a", encoding);
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::IoError);
     }
 
     SECTION("Normalizes decoder extensions before dispatch")
     {
-      REQUIRE(createDecoderSession("song.FLAC", format));
-      REQUIRE(createDecoderSession("song.MP3", format));
-      REQUIRE(createDecoderSession("song.WAV", format));
+      REQUIRE(createDecoderSession("song.FLAC", encoding));
+      REQUIRE(createDecoderSession("song.MP3", encoding));
+      REQUIRE(createDecoderSession("song.WAV", encoding));
     }
 
     SECTION("Normalizes MP4 extensions before probing the container")
     {
       auto const m4a = ao::test::TempFile{ao::test::mp4::makeMinimalAudioMp4("alac"), ".M4A"};
-      auto session = createDecoderSession(m4a.path, format);
+      auto session = createDecoderSession(m4a.path, encoding);
 
       REQUIRE(session);
       CHECK(*session != nullptr);

@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/backend/WasapiProvider.h>
+
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
-#include <ao/audio/backend/WasapiProvider.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -34,7 +37,7 @@ namespace ao::audio::backend::test
     class SineRenderTarget final : public RenderTarget
     {
     public:
-      SineRenderTarget(Format const& format, std::uint32_t totalFrames)
+      SineRenderTarget(PcmFormat const& format, std::uint32_t totalFrames)
         : _format{format}, _totalFrames{totalFrames}
       {
       }
@@ -94,7 +97,7 @@ namespace ao::audio::backend::test
         _routeAnchor = std::string{routeAnchor};
       }
 
-      void handleFormatChanged(Format const& /*format*/) noexcept override {}
+      void handleFormatChanged(PcmFormat const& /*format*/) noexcept override {}
       void handlePropertyChanged(PropertySnapshot /*snapshot*/) noexcept override {}
 
       void handleBackendError(std::string_view message) noexcept override
@@ -129,7 +132,7 @@ namespace ao::audio::backend::test
       }
 
     private:
-      Format _format;
+      PcmFormat _format;
       std::uint32_t _totalFrames;
       std::uint32_t _renderedFrames = 0; // render-thread only
 
@@ -161,7 +164,6 @@ namespace ao::audio::backend::test
         CHECK_FALSE(device.id.raw().empty());
         CHECK_FALSE(device.displayName.empty());
         CHECK(device.backendId == kBackendWasapi);
-        CHECK_FALSE(device.capabilities.sampleFormats.empty());
       }
 
       auto const defaultCount = std::ranges::count(status.devices, true, &Device::isDefault);
@@ -171,7 +173,8 @@ namespace ao::audio::backend::test
 
     SECTION("Backend plays a short PCM burst to the default endpoint")
     {
-      auto const format = Format{.sampleRate = 48000, .channels = 2, .bitDepth = 16, .validBits = 16};
+      auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
+      auto const format = pcmFormat(sourceFormat, SampleEncoding::Signed16Le);
 
       // 250ms of audio keeps the test quick while still crossing several
       // device periods.
@@ -183,9 +186,13 @@ namespace ao::audio::backend::test
       CHECK(backendPtr->backendId() == kBackendWasapi);
       CHECK(backendPtr->profileId() == kProfileShared);
 
-      if (auto const openResult = backendPtr->open(format, &target); !openResult)
+      if (auto const openResult = backendPtr->open(sourceFormat, &target); !openResult)
       {
         FAIL("open failed: " << openResult.error().message);
+      }
+      else
+      {
+        CHECK(openResult->clientFormat == format);
       }
 
       CHECK_FALSE(target.routeAnchor().empty());

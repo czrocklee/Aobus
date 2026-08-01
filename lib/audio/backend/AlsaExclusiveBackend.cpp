@@ -1,20 +1,29 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/backend/AlsaExclusiveBackend.h>
+
+#include "backend/detail/AlsaModeSelector.h"
+#include "backend/detail/AlsaPcmFormat.h"
+#include "backend/detail/AlsaPrewarmCache.h"
+#include "detail/DecoderOutput.h"
 #include <ao/Error.h>
+#include <ao/audio/Backend.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
-#include <ao/audio/backend/AlsaExclusiveBackend.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/backend/detail/AlsaGraphRegistry.h>
 #include <ao/audio/backend/detail/AlsaPcmError.h>
 #include <ao/audio/backend/detail/AlsaPcmVolume.h>
-#include <ao/audio/backend/detail/AudioBackendFormatSupport.h>
 #include <ao/audio/backend/detail/AudioBackendRenderProgress.h>
 #include <ao/utility/ThreadName.h>
 
+#include <gsl-lite/gsl-lite.hpp>
 #include <poll.h>
 
 #include <cerrno>
@@ -30,6 +39,7 @@ extern "C"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <format>
 #include <limits>
 #include <memory>
@@ -101,53 +111,7 @@ namespace ao::audio::backend
       return static_cast<AlsaMixerLevel>(value);
     }
 
-    struct AlsaCurrentHwFormat final
-    {
-      Format format{};
-      ::snd_pcm_format_t alsaFormat = SND_PCM_FORMAT_UNKNOWN;
-    };
-
-    std::optional<Format> sampleFormatFromAlsa(::snd_pcm_format_t const alsaFormat) noexcept
-    {
-      switch (auto format = Format{.isInterleaved = true}; alsaFormat)
-      {
-        case SND_PCM_FORMAT_S16_LE:
-        case SND_PCM_FORMAT_S16_BE:
-          format.bitDepth = 16;
-          format.validBits = 16;
-          return format;
-        case SND_PCM_FORMAT_S24_3LE:
-        case SND_PCM_FORMAT_S24_3BE:
-          format.bitDepth = 24;
-          format.validBits = 24;
-          return format;
-        case SND_PCM_FORMAT_S24_LE:
-        case SND_PCM_FORMAT_S24_BE:
-          format.bitDepth = 32;
-          format.validBits = 24;
-          return format;
-        case SND_PCM_FORMAT_S32_LE:
-        case SND_PCM_FORMAT_S32_BE:
-          format.bitDepth = 32;
-          format.validBits = 32;
-          return format;
-        case SND_PCM_FORMAT_FLOAT_LE:
-        case SND_PCM_FORMAT_FLOAT_BE:
-          format.bitDepth = 32;
-          format.validBits = 32;
-          format.isFloat = true;
-          return format;
-        case SND_PCM_FORMAT_FLOAT64_LE:
-        case SND_PCM_FORMAT_FLOAT64_BE:
-          format.bitDepth = 64;
-          format.validBits = 64;
-          format.isFloat = true;
-          return format;
-        default: return std::nullopt;
-      }
-    }
-
-    std::optional<AlsaCurrentHwFormat> readCurrentHwFormat(::snd_pcm_t* const pcm)
+    std::optional<PcmFormat> readCurrentHwFormat(::snd_pcm_t* const pcm)
     {
       ::snd_pcm_hw_params_t* params = nullptr;
       snd_pcm_hw_params_alloca(&params);
@@ -164,9 +128,9 @@ namespace ao::audio::backend
         return std::nullopt;
       }
 
-      auto optFormat = sampleFormatFromAlsa(alsaFormat);
+      auto optEncoding = detail::sampleEncodingFromAlsaFormat(alsaFormat);
 
-      if (!optFormat)
+      if (!optEncoding)
       {
         return std::nullopt;
       }
@@ -181,15 +145,12 @@ namespace ao::audio::backend
         return std::nullopt;
       }
 
-      optFormat->sampleRate = rate;
-      optFormat->channels = static_cast<std::uint8_t>(channels);
-
-      return AlsaCurrentHwFormat{.format = *optFormat, .alsaFormat = alsaFormat};
+      return PcmFormat{.sampleRate = rate, .channels = static_cast<std::uint8_t>(channels), .encoding = *optEncoding};
     }
 
-    bool isConfiguredFormat(Format const& format) noexcept
+    bool isConfiguredFormat(PcmFormat const& format) noexcept
     {
-      return format.sampleRate != 0U && format.channels != 0U && format.bitDepth != 0U;
+      return format.sampleRate != 0U && format.channels != 0U && format.encoding != SampleEncoding::Unknown;
     }
 
     bool setPlaybackVolumeAll(::snd_mixer_elem_t* elem, std::ptrdiff_t value)
@@ -551,7 +512,14 @@ namespace ao::audio::backend
     using AlsaPcmPtr = std::unique_ptr<::snd_pcm_t, AlsaPcmDeleter>;
 
     std::string deviceName;
-    Format format;
+
+    // Single authority for the configured mode. Engine's open() result, the
+    // playback loop, the prewarm cache, and both graph nodes read this one
+    // value, so the endpoint Engine validated cannot diverge from the endpoint
+    // the quality panel shows.
+    std::optional<OpenedPcmMode> optOpenedMode;
+
+    detail::AlsaPrewarmCache prewarmCache;
     RenderTarget* renderTarget = nullptr;
 
     AlsaPcmPtr pcmPtr;
@@ -561,8 +529,6 @@ namespace ao::audio::backend
     bool canPause = false;
 
     AlsaMixerSession mixer;
-    ::snd_pcm_format_t alsaFormat = SND_PCM_FORMAT_S16_LE;
-    bool is3Byte24Bit = false;
 
     detail::AlsaGraphRegistry* graphRegistry = nullptr;
 
@@ -580,28 +546,35 @@ namespace ao::audio::backend
     Result<> setVolumeProperty(PropertyValue const& value);
     Result<> setMutedProperty(PropertyValue const& value);
 
-    Result<> configureHwParams(::snd_pcm_t* pcm,
-                               Format& format,
-                               ::snd_pcm_format_t& alsaFormat,
-                               ::snd_pcm_uframes_t& periodSize);
+    struct NegotiatedMode final
+    {
+      OpenedPcmMode mode;
+      ::snd_pcm_uframes_t periodSize = 0;
+    };
+
+    Result<NegotiatedMode> negotiateHwParams(::snd_pcm_t* pcm, SignalFormat const& sourceFormat);
     Result<> configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize);
 
     bool waitForFrames(::snd_pcm_uframes_t periodSize) const;
     void handleXrun(std::int32_t err) const;
     void commitFrames(::snd_pcm_uframes_t offset,
                       ::snd_pcm_uframes_t framesRead,
-                      RenderPcmResult const& renderResult) const;
+                      RenderPcmResult const& renderResult,
+                      ::snd_pcm_uframes_t bufferSize,
+                      ::snd_pcm_uframes_t startThreshold) const;
   };
 
   void AlsaExclusiveBackend::Impl::playbackLoop(std::stop_token const& stopToken) const
   {
     ::snd_pcm_uframes_t periodSize = 0;
+    ::snd_pcm_uframes_t bufferSize = 0;
     ::snd_pcm_hw_params_t* params = nullptr;
     snd_pcm_hw_params_alloca(&params);
 
     if (::snd_pcm_hw_params_current(pcmPtr.get(), params) == 0)
     {
       ::snd_pcm_hw_params_get_period_size(params, &periodSize, nullptr);
+      ::snd_pcm_hw_params_get_buffer_size(params, &bufferSize);
     }
 
     if (periodSize == 0)
@@ -609,7 +582,11 @@ namespace ao::audio::backend
       periodSize = kDefaultPeriodSize;
     }
 
-    std::size_t const bytesPerFrame = (static_cast<std::size_t>(format.bitDepth) / 8) * format.channels;
+    bufferSize = std::max(bufferSize, periodSize);
+
+    gsl_Expects(optOpenedMode);
+    auto const clientFormat = optOpenedMode->clientFormat;
+    std::size_t const bytesPerFrame = frameBytes(clientFormat);
 
     // Tracks the device-side pause state owned exclusively by this thread.
     // pause()/resume() only flip the `paused` atomic; the edge is applied here.
@@ -664,14 +641,11 @@ namespace ao::audio::backend
 
         if (mixer.volumeMode() == detail::AlsaVolumeControlMode::SoftwareGain)
         {
-          detail::applyAlsaSoftwareGain({dst, committedBytes},
-                                        format.bitDepth,
-                                        format.validBits,
-                                        is3Byte24Bit,
-                                        mixer.isSoftwareMuted() ? 0.0F : mixer.softwareVolume());
+          detail::applyAlsaSoftwareGain(
+            {dst, committedBytes}, clientFormat.encoding, mixer.isSoftwareMuted() ? 0.0F : mixer.softwareVolume());
         }
 
-        commitFrames(offset, framesRead, renderResult);
+        commitFrames(offset, framesRead, renderResult, bufferSize, periodSize);
       }
       else
       {
@@ -718,7 +692,9 @@ namespace ao::audio::backend
 
   void AlsaExclusiveBackend::Impl::commitFrames(::snd_pcm_uframes_t offset,
                                                 ::snd_pcm_uframes_t framesRead,
-                                                RenderPcmResult const& renderResult) const
+                                                RenderPcmResult const& renderResult,
+                                                ::snd_pcm_uframes_t bufferSize,
+                                                ::snd_pcm_uframes_t startThreshold) const
   {
     auto const committed = ::snd_pcm_mmap_commit(pcmPtr.get(), offset, framesRead);
 
@@ -728,12 +704,25 @@ namespace ao::audio::backend
     }
     else
     {
-      // XRUN recovery via snd_pcm_prepare leaves the device in
-      // PREPARED state. If the auto-start threshold has been met
-      // by now, explicitly kick the device into RUNNING.
-      if (auto const state = ::snd_pcm_state(pcmPtr.get()); state == SND_PCM_STATE_PREPARED)
+      if (::snd_pcm_state(pcmPtr.get()) == SND_PCM_STATE_PREPARED)
       {
-        ::snd_pcm_start(pcmPtr.get());
+        if (auto const available = ::snd_pcm_avail_update(pcmPtr.get()); available < 0)
+        {
+          handleXrun(static_cast<std::int32_t>(available));
+        }
+        else
+        {
+          auto const availableFrames = static_cast<::snd_pcm_uframes_t>(available);
+          auto const queuedFrames = availableFrames < bufferSize ? bufferSize - availableFrames : 0;
+
+          if (queuedFrames >= startThreshold)
+          {
+            if (auto const startStatus = ::snd_pcm_start(pcmPtr.get()); startStatus < 0)
+            {
+              handleXrun(startStatus);
+            }
+          }
+        }
       }
 
       auto const committedPositionFrames = detail::committedPositionFrames(
@@ -821,15 +810,15 @@ namespace ao::audio::backend
       muted = mixer.isSoftwareMuted();
     }
 
-    auto optFormat = std::optional<Format>{};
+    auto optMode = std::optional<OpenedPcmMode>{};
 
-    if (pcmPtr && isConfiguredFormat(format))
+    if (pcmPtr && optOpenedMode && isConfiguredFormat(optOpenedMode->clientFormat))
     {
-      optFormat = format;
+      optMode = optOpenedMode;
     }
 
     graphRegistry->publish(
-      {.routeAnchor = deviceName, .optFormat = optFormat, .volume = vol, .muted = muted, .volumeMode = mode});
+      {.routeAnchor = deviceName, .optMode = optMode, .volume = vol, .muted = muted, .volumeMode = mode});
   }
   Result<> AlsaExclusiveBackend::Impl::setVolumeProperty(PropertyValue const& value)
   {
@@ -845,104 +834,158 @@ namespace ao::audio::backend
     return {};
   }
 
-  Result<> AlsaExclusiveBackend::Impl::configureHwParams(::snd_pcm_t* pcm,
-                                                         Format& format,
-                                                         ::snd_pcm_format_t& alsaFormat,
-                                                         ::snd_pcm_uframes_t& periodSize)
+  Result<AlsaExclusiveBackend::Impl::NegotiatedMode> AlsaExclusiveBackend::Impl::negotiateHwParams(
+    ::snd_pcm_t* pcm,
+    SignalFormat const& sourceFormat)
   {
-    ::snd_pcm_hw_params_t* params = nullptr;
-    snd_pcm_hw_params_alloca(&params); // macro
+    ::snd_pcm_hw_params_t* base = nullptr;
+    snd_pcm_hw_params_alloca(&base); // macro
 
-    if (::snd_pcm_hw_params_any(pcm, params) < 0)
+    if (::snd_pcm_hw_params_any(pcm, base) < 0)
     {
       return makeError(Error::Code::InitFailed, "Failed to init ALSA hw params");
     }
 
-    if (::snd_pcm_hw_params_set_access(pcm, params, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
+    if (::snd_pcm_hw_params_set_access(pcm, base, SND_PCM_ACCESS_MMAP_INTERLEAVED) < 0)
     {
       return makeError(Error::Code::FormatRejected, "No MMAP interleaved support");
     }
 
-    alsaFormat = SND_PCM_FORMAT_S16_LE;
-
-    if (format.isFloat)
+    // Exact rate, never rate_near: the admissible format set is a joint
+    // constraint, so the mask below is only meaningful once the rate this track
+    // actually needs is pinned. It also fails here, with a rate diagnosis,
+    // instead of surfacing later as a misleading format rejection.
+    if (::snd_pcm_hw_params_set_rate(pcm, base, sourceFormat.sampleRate, 0) < 0)
     {
-      return makeError(Error::Code::FormatRejected, "ALSA float output is not supported");
-    }
-
-    if (format.bitDepth == 32)
-    {
-      alsaFormat = (format.validBits == 24) ? SND_PCM_FORMAT_S24_LE : SND_PCM_FORMAT_S32_LE;
-    }
-    else if (format.bitDepth == 24)
-    {
-      alsaFormat = SND_PCM_FORMAT_S24_3LE;
-    }
-
-    if (::snd_pcm_hw_params_set_format(pcm, params, alsaFormat) < 0)
-    {
-      if (format.bitDepth == 16)
-      {
-        alsaFormat = SND_PCM_FORMAT_S32_LE;
-
-        if (::snd_pcm_hw_params_set_format(pcm, params, alsaFormat) < 0)
-        {
-          return makeError(Error::Code::FormatRejected, "Hardware supports neither S16_LE nor S32_LE");
-        }
-      }
-      else
-      {
-        return makeError(Error::Code::FormatRejected, "Format not supported by hardware");
-      }
-    }
-
-    std::uint32_t rate = format.sampleRate;
-
-    if (::snd_pcm_hw_params_set_rate_near(pcm, params, &rate, nullptr) < 0)
-    {
-      return makeError(Error::Code::InitFailed, "Failed to set rate");
-    }
-
-    if (rate != format.sampleRate)
-    {
-      // Aobus has no resampler (FormatNegotiator/TrackSession reject any format that
-      // would need one), so accepting a substituted rate would play pitch-shifted
-      // audio. Negotiation already vetted this rate against the device capabilities,
-      // so a mismatch here is the rare "capabilities lied" case: fail honestly rather
-      // than degrade silently.
       return makeError(
         Error::Code::FormatRejected,
         std::format(
-          "Device substituted {}Hz for the requested {}Hz and Aobus has no resampler", rate, format.sampleRate));
+          "ALSA device '{}' does not support {} Hz and Aobus has no resampler", deviceName, sourceFormat.sampleRate));
     }
 
-    if (::snd_pcm_hw_params_set_channels(pcm, params, format.channels) < 0)
+    if (::snd_pcm_hw_params_set_channels(pcm, base, sourceFormat.channels) < 0)
     {
-      return makeError(Error::Code::FormatRejected, "Failed to set channels");
+      return makeError(Error::Code::FormatRejected,
+                       std::format("ALSA device '{}' does not support {} channels and Aobus has no channel remapper",
+                                   deviceName,
+                                   static_cast<std::uint32_t>(sourceFormat.channels)));
+    }
+
+    ::snd_pcm_format_mask_t* mask = nullptr;
+    snd_pcm_format_mask_alloca(&mask); // macro
+    ::snd_pcm_hw_params_get_format_mask(base, mask);
+
+    // Snapshot what this handle still admits at this rate and channel count.
+    // Constraining a params copy is what makes the driver report significant
+    // bits, so a 32-bit container in front of a 24-bit converter is visible
+    // before anything is committed.
+    auto evidence = std::vector<detail::AlsaModeEvidence>{};
+
+    // One reusable scratch block: snd_pcm_hw_params_alloca lives until this
+    // function returns, so allocating per iteration would grow the stack.
+    ::snd_pcm_hw_params_t* trial = nullptr;
+    snd_pcm_hw_params_alloca(&trial); // macro
+
+    for (auto const encoding : detail::kAlsaCandidateEncodings)
+    {
+      auto const optAlsaFormat = detail::alsaFormatFromSampleEncoding(encoding);
+
+      if (!optAlsaFormat || ::snd_pcm_format_mask_test(mask, *optAlsaFormat) == 0)
+      {
+        continue;
+      }
+
+      ::snd_pcm_hw_params_copy(trial, base);
+
+      if (::snd_pcm_hw_params_set_format(pcm, trial, *optAlsaFormat) < 0)
+      {
+        continue;
+      }
+
+      auto const sbits = ::snd_pcm_hw_params_get_sbits(trial);
+      evidence.push_back({.encoding = encoding,
+                          .optSignificantBits = sbits > 0
+                                                  ? std::optional{static_cast<std::uint8_t>(std::min(
+                                                      sbits, static_cast<std::int32_t>(encodingNominalBits(encoding))))}
+                                                  : std::nullopt});
+    }
+
+    auto const selected = detail::selectAlsaMode(sourceFormat, evidence);
+
+    if (!selected)
+    {
+      return std::unexpected{selected.error()};
+    }
+
+    auto const clientFormat = pcmFormat(sourceFormat, selected->encoding);
+    auto const optAlsaFormat = detail::alsaFormatFromSampleEncoding(selected->encoding);
+    gsl_Expects(optAlsaFormat);
+
+    ::snd_pcm_hw_params_t* applied = nullptr;
+    snd_pcm_hw_params_alloca(&applied); // macro
+    ::snd_pcm_hw_params_copy(applied, base);
+
+    if (::snd_pcm_hw_params_set_format(pcm, applied, *optAlsaFormat) < 0)
+    {
+      return makeError(Error::Code::InitFailed,
+                       std::format("ALSA rejected {} after admitting it", sampleEncodingName(selected->encoding)));
     }
 
     std::uint32_t periods = 4;
-    ::snd_pcm_hw_params_set_periods_near(pcm, params, &periods, nullptr);
+    ::snd_pcm_hw_params_set_periods_near(pcm, applied, &periods, nullptr);
 
-    periodSize = kDefaultPeriodSize;
-    ::snd_pcm_hw_params_set_period_size_near(pcm, params, &periodSize, nullptr);
+    auto periodSize = static_cast<::snd_pcm_uframes_t>(kDefaultPeriodSize);
+    ::snd_pcm_hw_params_set_period_size_near(pcm, applied, &periodSize, nullptr);
 
-    if (::snd_pcm_hw_params(pcm, params) < 0)
+    if (::snd_pcm_hw_params(pcm, applied) < 0)
     {
       return makeError(Error::Code::InitFailed, "Failed to apply hw params");
     }
 
-    auto optCurrentFormat = readCurrentHwFormat(pcm);
+    auto const optCurrentFormat = readCurrentHwFormat(pcm);
 
     if (!optCurrentFormat)
     {
       return makeError(Error::Code::InitFailed, "Failed to read ALSA current hw params");
     }
 
-    canPause = (::snd_pcm_hw_params_can_pause(params) == 1);
-    format = detail::preserveRequestedSignalPrecision(format, optCurrentFormat->format);
-    alsaFormat = optCurrentFormat->alsaFormat;
-    return {};
+    canPause = (::snd_pcm_hw_params_can_pause(applied) == 1);
+
+    if (!samePcmMode(clientFormat, *optCurrentFormat))
+    {
+      return makeError(Error::Code::FormatRejected, "ALSA applied a different PCM mode than requested");
+    }
+
+    // Take the endpoint width from the configuration that was actually
+    // applied. The selector read the same value from a trial copy, but only
+    // this one describes the stream that is about to run.
+    auto const appliedSbits = ::snd_pcm_hw_params_get_sbits(applied);
+
+    if (appliedSbits <= 0)
+    {
+      return makeError(Error::Code::FormatRejected, "ALSA could not confirm significant bits for the applied mode");
+    }
+
+    auto const endpointBits = static_cast<std::uint8_t>(
+      std::min(appliedSbits, static_cast<std::int32_t>(encodingNominalBits(selected->encoding))));
+
+    if (endpointBits < sourceFormat.precisionBits)
+    {
+      return makeError(Error::Code::FormatRejected,
+                       std::format("ALSA endpoint resolves {} bits but the track requires {} bits",
+                                   static_cast<std::uint32_t>(endpointBits),
+                                   static_cast<std::uint32_t>(sourceFormat.precisionBits)));
+    }
+
+    auto const endpointSignal =
+      SignalFormat{.sampleRate = clientFormat.sampleRate,
+                   .channels = clientFormat.channels,
+                   .precisionBits = endpointBits,
+                   .sampleKind = isFloatEncoding(selected->encoding) ? SampleKind::FloatingPoint : SampleKind::Integer};
+
+    return NegotiatedMode{.mode = OpenedPcmMode{.clientFormat = clientFormat,
+                                                .optEndpoint = ConfirmedEndpoint{.signalFormat = endpointSignal}},
+                          .periodSize = periodSize};
   }
 
   Result<> AlsaExclusiveBackend::Impl::configureSwParams(::snd_pcm_t* pcm, ::snd_pcm_uframes_t periodSize)
@@ -984,49 +1027,63 @@ namespace ao::audio::backend
     close();
   }
 
-  Result<> AlsaExclusiveBackend::open(Format const& format, RenderTarget* target)
+  std::optional<PcmFormat> AlsaExclusiveBackend::prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept
   {
-    _implPtr->format = format;
-    _implPtr->renderTarget = target;
+    if (auto optCached = _implPtr->prewarmCache.find(sourceFormat); optCached)
+    {
+      return optCached;
+    }
 
+    return Backend::prewarmFormatHint(sourceFormat);
+  }
+
+  Result<OpenedPcmMode> AlsaExclusiveBackend::open(SignalFormat const& sourceFormat, RenderTarget* target)
+  {
     close();
+
+    // Reject a signal this backend could never carry before taking a device
+    // away from whoever currently holds it.
+    if (::ao::audio::detail::losslessPcmEncodings(sourceFormat).empty())
+    {
+      return makeError(Error::Code::NotSupported, "No lossless PCM encoding is available for ALSA");
+    }
+
     _implPtr->fatalStreamError.store(false, std::memory_order_relaxed);
 
     ::snd_pcm_t* pcm = nullptr;
 
-    if (::snd_pcm_open(&pcm, _implPtr->deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0) < 0)
+    auto const openStatus = ::snd_pcm_open(&pcm, _implPtr->deviceName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+
+    if (openStatus < 0)
     {
       return makeError(
-        Error::Code::DeviceNotFound, std::format("Failed to open ALSA device: {}", _implPtr->deviceName));
+        detail::alsaPcmOpenErrorCode(openStatus),
+        std::format("Failed to open ALSA device '{}': {}", _implPtr->deviceName, ::snd_strerror(openStatus)));
     }
 
     auto safePcmPtr = Impl::AlsaPcmPtr{pcm};
-    auto currentFormat = Format{format};
-    auto alsaFormat = SND_PCM_FORMAT_S16_LE;
-    ::snd_pcm_uframes_t periodSize = 0;
 
-    if (auto const res = _implPtr->configureHwParams(safePcmPtr.get(), currentFormat, alsaFormat, periodSize); !res)
+    if (::snd_pcm_type(safePcmPtr.get()) != SND_PCM_TYPE_HW)
     {
-      return res;
+      return makeError(Error::Code::FormatRejected,
+                       std::format("ALSA exclusive output requires a direct hardware PCM: {}", _implPtr->deviceName));
     }
 
-    if (auto const res = _implPtr->configureSwParams(safePcmPtr.get(), periodSize); !res)
+    auto negotiated = _implPtr->negotiateHwParams(safePcmPtr.get(), sourceFormat);
+
+    if (!negotiated)
     {
-      return res;
+      return std::unexpected{negotiated.error()};
     }
 
-    bool const backendFormatChanged = !(currentFormat == format);
-
-    _implPtr->format = currentFormat;
-    _implPtr->alsaFormat = alsaFormat;
-    _implPtr->is3Byte24Bit = (alsaFormat == SND_PCM_FORMAT_S24_3LE);
-
-    if (backendFormatChanged)
+    if (auto const res = _implPtr->configureSwParams(safePcmPtr.get(), negotiated->periodSize); !res)
     {
-      _implPtr->renderTarget->handleFormatChanged(_implPtr->format);
+      return std::unexpected{res.error()};
     }
 
-    _implPtr->renderTarget->handleRouteReady(_implPtr->deviceName);
+    _implPtr->optOpenedMode = negotiated->mode;
+    _implPtr->prewarmCache.store(sourceFormat, negotiated->mode.clientFormat);
+    _implPtr->renderTarget = target;
 
     _implPtr->pcmPtr = std::move(safePcmPtr);
 
@@ -1034,7 +1091,12 @@ namespace ao::audio::backend
 
     _implPtr->publishGraphState();
 
-    return {};
+    if (_implPtr->renderTarget != nullptr)
+    {
+      _implPtr->renderTarget->handleRouteReady(_implPtr->deviceName);
+    }
+
+    return negotiated->mode;
   }
 
   void AlsaExclusiveBackend::start()
@@ -1053,9 +1115,9 @@ namespace ao::audio::backend
                                       }};
     }
 
-    // The device is started from the playback loop thread (commitFrames kicks a
-    // PREPARED device into RUNNING). snd_pcm_* is never touched here: the loop
-    // owns the handle and snd_pcm_t is not thread-safe.
+    // The playback loop fills the mmap buffer to the configured start
+    // threshold and starts the device there. snd_pcm_* is never touched here:
+    // the loop owns the handle and snd_pcm_t is not thread-safe.
   }
 
   void AlsaExclusiveBackend::pause()
@@ -1116,6 +1178,12 @@ namespace ao::audio::backend
     stop();
     _implPtr->pcmPtr.reset();
     _implPtr->mixer.close();
+    _implPtr->renderTarget = nullptr;
+
+    // Cleared only after stop() joined the playback loop that reads it. The
+    // prewarm cache deliberately survives: it describes the device, not this
+    // stream, and dies with the backend when the selected device changes.
+    _implPtr->optOpenedMode.reset();
   }
 
   Result<> AlsaExclusiveBackend::setProperty(PropertyId id, PropertyValue const& value)

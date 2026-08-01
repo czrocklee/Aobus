@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
-#include <ao/audio/Device.h>
 #include <ao/audio/backend/detail/PipeWireMonitorParsing.h>
+
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
+#include <ao/audio/backend/detail/PipeWireFormatParsing.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -23,7 +27,6 @@ extern "C"
 #include <spa/utils/type.h>
 }
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -114,67 +117,36 @@ namespace ao::audio::backend::detail::test
     }
   }
 
-  TEST_CASE("PipeWireMonitorParsing - format capabilities collect supported sample formats",
+  TEST_CASE("PipeWireMonitorParsing - SPA pods expose current format and properties",
             "[audio][unit][pipewire][monitor]")
-  {
-    SECTION("sampleFormatCapabilityFromSpaFormat")
-    {
-      auto optCap16 = sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_S16_LE);
-      REQUIRE(optCap16);
-      CHECK(optCap16->bitDepth == 16);
-      CHECK(optCap16->isFloat == false);
-
-      auto optCapF32 = sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_F32_LE);
-      REQUIRE(optCapF32);
-      CHECK(optCapF32->bitDepth == 32);
-      CHECK(optCapF32->isFloat == true);
-
-      CHECK_FALSE(sampleFormatCapabilityFromSpaFormat(SPA_AUDIO_FORMAT_UNKNOWN));
-    }
-  }
-
-  TEST_CASE("PipeWireMonitorParsing - SPA pods populate device capabilities", "[audio][unit][pipewire][monitor]")
   {
     auto buffer = std::array<std::byte, 1024>{};
     auto b = makePodBuilder(buffer);
 
-    SECTION("parseEnumFormat - Sample Rates and Channels")
+    SECTION("buildRawStreamFormatOffer - preferred encoding is also a valid enum alternative")
     {
-      auto f = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-      ::spa_pod_builder_add(&b,
-                            SPA_FORMAT_mediaType,
-                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                            SPA_FORMAT_mediaSubtype,
-                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                            SPA_FORMAT_AUDIO_format,
-                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
-                            SPA_FORMAT_AUDIO_channels,
-                            SPA_POD_Int(2),
-                            0);
+      auto offerBuffer = std::array<std::byte, 1024>{};
+      auto const encodings =
+        std::to_array({SampleEncoding::Signed24PackedLe, SampleEncoding::Signed24In32Le, SampleEncoding::Signed32Le});
+      auto const* pod = buildRawStreamFormatOffer(
+        offerBuffer, SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 24}, encodings);
+      REQUIRE(pod != nullptr);
 
-      // Add rate as a range
-      ::spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
-      auto f2 = ::spa_pod_frame{};
-      ::spa_pod_builder_push_choice(&b, &f2, SPA_CHOICE_Range, 0);
-      ::spa_pod_builder_int(&b, 48000);  // default
-      ::spa_pod_builder_int(&b, 44100);  // min
-      ::spa_pod_builder_int(&b, 192000); // max
-      ::spa_pod_builder_pop(&b, &f2);
+      auto const* property = ::spa_pod_find_prop(pod, nullptr, SPA_FORMAT_AUDIO_format);
+      REQUIRE(property != nullptr);
+      REQUIRE(::spa_pod_is_choice(&property->value) != 0);
 
-      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+      auto const valueBytes =
+        utility::bytes::view(static_cast<void const*>(&property->value), property->value.size + sizeof(::spa_pod));
+      auto const* choice = utility::layout::view<::spa_pod_choice>(valueBytes);
+      REQUIRE(SPA_POD_CHOICE_VALUE_TYPE(choice) == SPA_TYPE_Id);
+      REQUIRE(SPA_POD_CHOICE_N_VALUES(choice) == encodings.size() + 1U);
 
-      auto caps = DeviceFormatCapabilities{};
-      parseEnumFormat(pod, caps);
-
-      CHECK_FALSE(caps.sampleRates.empty());
-      CHECK(std::ranges::contains(caps.sampleRates, 48000U));
-      CHECK(std::ranges::contains(caps.sampleRates, 44100U));
-      CHECK(std::ranges::contains(caps.sampleRates, 192000U));
-      REQUIRE(caps.channelCounts.size() == 1);
-      CHECK(caps.channelCounts[0] == 2);
-      REQUIRE(caps.bitDepths.size() == 1);
-      CHECK(caps.bitDepths[0] == 16);
+      auto const* values = static_cast<std::uint32_t const*>(SPA_POD_CHOICE_VALUES(choice));
+      CHECK(values[0] == SPA_AUDIO_FORMAT_S24_LE);
+      CHECK(values[1] == SPA_AUDIO_FORMAT_S24_LE);
+      CHECK(values[2] == SPA_AUDIO_FORMAT_S24_32_LE);
+      CHECK(values[3] == SPA_AUDIO_FORMAT_S32_LE);
     }
 
     SECTION("currentFormatFromNodeParam - EnumFormat is not current format")
@@ -220,7 +192,28 @@ namespace ao::audio::backend::detail::test
       REQUIRE(optFormat);
       CHECK(optFormat->sampleRate == 44100);
       CHECK(optFormat->channels == 2);
-      CHECK(optFormat->bitDepth == 16);
+      CHECK(optFormat->encoding == SampleEncoding::Signed16Le);
+    }
+
+    SECTION("parseRawStreamFormat - an unsupported negotiated encoding is rejected")
+    {
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_Format);
+      ::spa_pod_builder_add(&b,
+                            SPA_FORMAT_mediaType,
+                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
+                            SPA_FORMAT_mediaSubtype,
+                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+                            SPA_FORMAT_AUDIO_format,
+                            SPA_POD_Id(SPA_AUDIO_FORMAT_U8),
+                            SPA_FORMAT_AUDIO_rate,
+                            SPA_POD_Int(48000),
+                            SPA_FORMAT_AUDIO_channels,
+                            SPA_POD_Int(2),
+                            0);
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      CHECK_FALSE(parseRawStreamFormat(pod));
     }
 
     SECTION("updateCurrentFormatFromNodeParam - failed current format clears stale cache")
@@ -241,47 +234,12 @@ namespace ao::audio::backend::detail::test
                             0);
       auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
 
-      auto cache = std::unordered_map<std::uint32_t, Format>{};
+      auto cache = std::unordered_map<std::uint32_t, PcmFormat>{};
       updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, pod);
       REQUIRE(cache.contains(42));
 
       updateCurrentFormatFromNodeParam(cache, 42, SPA_PARAM_Format, nullptr);
       CHECK_FALSE(cache.contains(42));
-    }
-
-    SECTION("parseEnumFormat - Discrete Sample Rates")
-    {
-      auto f = ::spa_pod_frame{};
-      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat);
-      ::spa_pod_builder_add(&b,
-                            SPA_FORMAT_mediaType,
-                            SPA_POD_Id(SPA_MEDIA_TYPE_audio),
-                            SPA_FORMAT_mediaSubtype,
-                            SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
-                            SPA_FORMAT_AUDIO_format,
-                            SPA_POD_Id(SPA_AUDIO_FORMAT_S16_LE),
-                            SPA_FORMAT_AUDIO_channels,
-                            SPA_POD_Int(2),
-                            0);
-
-      // Add rate as an enum
-      ::spa_pod_builder_prop(&b, SPA_FORMAT_AUDIO_rate, 0);
-      auto f2 = ::spa_pod_frame{};
-      ::spa_pod_builder_push_choice(&b, &f2, SPA_CHOICE_Enum, 0);
-      ::spa_pod_builder_int(&b, 44100); // default
-      ::spa_pod_builder_int(&b, 44100); // choice 1
-      ::spa_pod_builder_int(&b, 48000); // choice 2
-      ::spa_pod_builder_pop(&b, &f2);
-
-      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
-
-      auto caps = DeviceFormatCapabilities{};
-      parseEnumFormat(pod, caps);
-
-      CHECK(caps.sampleRates.size() == 2);
-      CHECK(std::ranges::contains(caps.sampleRates, 44100U));
-      CHECK(std::ranges::contains(caps.sampleRates, 44100U));
-      CHECK(std::ranges::contains(caps.sampleRates, 48000U));
     }
 
     SECTION("mergeSinkProps - volume and mute")
@@ -313,6 +271,26 @@ namespace ao::audio::backend::detail::test
       REQUIRE(props.channelVolumes.size() == 2);
       CHECK(props.channelVolumes[0] == 1.0F);
       CHECK(props.channelVolumes[1] == 0.8F);
+      CHECK(props.classifyVolume().unclassifiedNotUnity == true);
+    }
+
+    SECTION("mergeSinkProps - preserves channel volumes beyond sixteen channels")
+    {
+      auto vols = std::array<float, 20>{};
+      vols.fill(1.0F);
+      vols.back() = 0.5F;
+      auto f = ::spa_pod_frame{};
+      ::spa_pod_builder_push_object(&b, &f, SPA_TYPE_OBJECT_Props, SPA_PARAM_Props);
+      ::spa_pod_builder_prop(&b, SPA_PROP_channelVolumes, 0);
+      ::spa_pod_builder_array(
+        &b, sizeof(float), SPA_TYPE_Float, vols.size(), utility::layout::asLegacyPtr<float>(vols.data()));
+      auto* pod = static_cast<::spa_pod*>(::spa_pod_builder_pop(&b, &f));
+
+      auto props = SinkProps{};
+      mergeSinkProps(props, pod);
+
+      REQUIRE(props.channelVolumes.size() == vols.size());
+      CHECK(props.channelVolumes.back() == 0.5F);
       CHECK(props.classifyVolume().unclassifiedNotUnity == true);
     }
 

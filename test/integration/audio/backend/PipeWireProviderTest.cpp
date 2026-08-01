@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Device.h>
 #include <ao/audio/backend/PipeWireProvider.h>
+
+#include <ao/audio/BackendIds.h>
+#include <ao/audio/Device.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
+#include <ao/audio/backend/PipeWireBackend.h>
 #include <ao/audio/backend/detail/PipeWireRuntime.h>
 #include <ao/utility/Raii.h>
 
@@ -300,6 +305,24 @@ namespace ao::audio::backend::test
           contextPtr.reset();
         }
       }
+    }
+
+    SECTION("Shared backend negotiates the preferred source-native client format")
+    {
+      auto backend =
+        PipeWireBackend{Device{.id = DeviceId{""}, .isDefault = true, .backendId = kBackendPipeWire}, kProfileShared};
+      auto const sourceFormat = SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
+      auto const opened = backend.open(sourceFormat, nullptr);
+      auto const diagnostic = opened.has_value() ? std::string{} : opened.error().message;
+
+      INFO(diagnostic);
+      REQUIRE(opened);
+      CAPTURE(opened->clientFormat.sampleRate,
+              opened->clientFormat.channels,
+              static_cast<int>(opened->clientFormat.encoding));
+      CHECK(opened->clientFormat.sampleRate == 48000);
+      CHECK(opened->clientFormat.channels == 2);
+      CHECK(opened->clientFormat.encoding == SampleEncoding::Signed16Le);
     }
   }
 } // namespace ao::audio::backend::test

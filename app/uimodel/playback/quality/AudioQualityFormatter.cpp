@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Format.h>
+#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
+
+#include <ao/audio/NodeFormat.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
-#include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
 #include <algorithm>
 #include <cmath>
 #include <format>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace ao::uimodel
@@ -35,9 +40,11 @@ namespace ao::uimodel
       return text;
     }
 
-    std::string precisionLabel(audio::Format const& format)
+    std::string precisionLabel(audio::NodeFormat const& format)
     {
-      return std::format("{}{}", audio::effectiveBits(format), format.isFloat ? "f" : "b");
+      auto const signal = audio::signalFormat(format);
+      return std::format(
+        "{}{}", signal.precisionBits, signal.sampleKind == audio::SampleKind::FloatingPoint ? "f" : "b");
     }
 
     std::vector<audio::QualityFinding const*> visibleFindings(rt::QualityState const& state)
@@ -131,32 +138,33 @@ namespace ao::uimodel
     return "[Unknown]";
   }
 
-  std::string audioFormatLabel(audio::Format const& format, bool preferValidBits)
+  std::string audioFormatLabel(audio::NodeFormat const& format)
   {
     constexpr double kKhzMultiplier = 1000.0;
+    auto const signal = audio::signalFormat(format);
     auto const channelsText = [&] -> std::string
     {
-      if (format.channels == 1)
+      if (signal.channels == 1)
       {
         return "Mono";
       }
 
-      if (format.channels == 2)
+      if (signal.channels == 2)
       {
         return "Stereo";
       }
 
-      return std::format("{} ch", format.channels);
+      return std::format("{} ch", signal.channels);
     }();
 
-    // For the source node, report the meaningful precision (valid bits) rather
-    // than the storage container width: a 16/24-bit track padded into a 32-bit
-    // container has validBits 16/24 but bitDepth 32, and showing the container
-    // would misleadingly present a low-resolution source as 32-bit. Downstream
-    // nodes keep reporting the transport container width.
-    auto const bits = preferValidBits ? audio::effectiveBits(format) : format.bitDepth;
+    auto bits = signal.precisionBits;
 
-    return std::format("{:.1f} kHz · {}-bit · {}", format.sampleRate / kKhzMultiplier, bits, channelsText);
+    if (auto const* pcmFormat = std::get_if<audio::PcmFormat>(&format); pcmFormat != nullptr)
+    {
+      bits = audio::encodingContainerBits(pcmFormat->encoding);
+    }
+
+    return std::format("{:.1f} kHz · {}-bit · {}", signal.sampleRate / kKhzMultiplier, bits, channelsText);
   }
 
   std::string audioFindingLabel(audio::QualityFinding const& finding)
@@ -185,15 +193,18 @@ namespace ao::uimodel
       case audio::QualityFindingKind::Resampling:
         if (finding.optFromFormat && finding.optToFormat)
         {
-          return std::format(
-            "Resampling: {}Hz → {}Hz", finding.optFromFormat->sampleRate, finding.optToFormat->sampleRate);
+          return std::format("Resampling: {}Hz → {}Hz",
+                             audio::signalFormat(*finding.optFromFormat).sampleRate,
+                             audio::signalFormat(*finding.optToFormat).sampleRate);
         }
 
         return "Resampling";
       case audio::QualityFindingKind::ChannelMapping:
         if (finding.optFromFormat && finding.optToFormat)
         {
-          return std::format("Channels: {}ch → {}ch", finding.optFromFormat->channels, finding.optToFormat->channels);
+          return std::format("Channels: {}ch → {}ch",
+                             audio::signalFormat(*finding.optFromFormat).channels,
+                             audio::signalFormat(*finding.optToFormat).channels);
         }
 
         return "Channel mapping";
@@ -203,10 +214,14 @@ namespace ao::uimodel
       case audio::QualityFindingKind::Truncation:
         if (finding.optFromFormat && finding.optToFormat)
         {
-          if (finding.optFromFormat->isFloat != finding.optToFormat->isFloat)
+          auto const fromSignal = audio::signalFormat(*finding.optFromFormat);
+          auto const toSignal = audio::signalFormat(*finding.optToFormat);
+
+          if (fromSignal.sampleKind != toSignal.sampleKind)
           {
-            char const* const fromDomain = finding.optFromFormat->isFloat ? "Float" : "Integer";
-            char const* const toDomain = finding.optToFormat->isFloat ? "float" : "integer";
+            char const* const fromDomain =
+              fromSignal.sampleKind == audio::SampleKind::FloatingPoint ? "Float" : "Integer";
+            char const* const toDomain = toSignal.sampleKind == audio::SampleKind::FloatingPoint ? "float" : "integer";
             return std::format("{} → {} quantization: {} → {}",
                                fromDomain,
                                toDomain,

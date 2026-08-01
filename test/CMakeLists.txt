@@ -233,6 +233,9 @@ add_executable(ao_core_test
 
     # audio unit tests
     unit/audio/DecoderFactoryTest.cpp
+    unit/audio/DecoderOutputTest.cpp
+    unit/audio/OpenedModeValidationTest.cpp
+    unit/audio/detail/DecoderOutputAdapterTest.cpp
     unit/audio/NullBackendTest.cpp
     unit/audio/detail/AacConfigParserTest.cpp
     unit/audio/detail/MappedFileCursorTest.cpp
@@ -250,11 +253,9 @@ add_executable(ao_core_test
     unit/audio/WavDecoderSessionTest.cpp
     unit/audio/Mp3DecoderMalformedTest.cpp
     unit/audio/QualityAnalyzerTest.cpp
-    unit/audio/FormatNegotiatorTest.cpp
     unit/audio/FormatTest.cpp
     unit/audio/StreamingSourceTest.cpp
     unit/audio/PcmRingBufferTest.cpp
-    unit/audio/backend/detail/AudioBackendFormatSupportTest.cpp
     unit/audio/backend/detail/AudioBackendRenderProgressTest.cpp
     unit/audio/PcmConversionTest.cpp
     unit/audio/PlayerTest.cpp
@@ -453,9 +454,12 @@ if(LINUX)
   target_sources(ao_core_test PRIVATE
     unit/FilesystemTestSupportPosix.cpp
     unit/audio/backend/PipeWireMonitorTest.cpp
+    unit/audio/backend/AlsaExclusiveBackendTest.cpp
     unit/audio/backend/detail/PipeWireMonitorParsingTest.cpp
     unit/audio/backend/detail/AlsaGraphRegistryTest.cpp
+    unit/audio/backend/detail/AlsaModeSelectorTest.cpp
     unit/audio/backend/detail/AlsaPcmErrorTest.cpp
+    unit/audio/backend/detail/AlsaPcmFormatTest.cpp
     unit/audio/backend/detail/AlsaPcmVolumeTest.cpp
   )
 endif()

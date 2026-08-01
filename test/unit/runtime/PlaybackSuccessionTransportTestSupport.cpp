@@ -15,8 +15,12 @@
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/rt/TrackMutation.h>
+#include <ao/rt/TrackPresentation.h>
+#include <ao/rt/ViewState.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -30,6 +34,8 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -101,13 +107,16 @@ namespace ao::rt::test::playback_succession
     std::shared_ptr<audio::test::BlockingPreparationGate> blockingGatePtr,
     std::filesystem::path blockedFileName,
     bool const failBlockedPreparation,
-    bool const blockEveryLookahead)
+    bool const blockEveryLookahead,
+    std::filesystem::path finalOpenFailureFileName)
   {
     return [probePtr = std::move(probePtr),
             blockingGatePtr = std::move(blockingGatePtr),
             blockedFileName = std::move(blockedFileName),
             failBlockedPreparation,
-            blockEveryLookahead](std::filesystem::path const& path, audio::Format const&)
+            blockEveryLookahead,
+            finalOpenFailureFileName = std::move(finalOpenFailureFileName)](
+             std::filesystem::path const& path, std::optional<audio::SampleEncoding> optOutputEncoding)
     {
       auto const blocks =
         blockingGatePtr &&
@@ -119,15 +128,16 @@ namespace ao::rt::test::playback_succession
         blockingGatePtr->enterAndWait();
       }
 
-      auto const format = audio::Format{
+      auto const sourceFormat = audio::SignalFormat{
         .sampleRate = 44100,
         .channels = 2,
-        .bitDepth = 16,
-        .isInterleaved = true,
+        .precisionBits = 16,
       };
+      auto const outputFormat =
+        audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le));
       auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
-        .sourceFormat = format,
-        .outputFormat = format,
+        .sourceFormat = sourceFormat,
+        .outputFormat = outputFormat,
         .duration = std::chrono::seconds{2},
         .isLossy = false,
         .codec = AudioCodec::Flac,
@@ -138,6 +148,10 @@ namespace ao::rt::test::playback_succession
       if (blocks && failBlockedPreparation)
       {
         decoderPtr->setOpenResult(makeError(Error::Code::IoError, "Scripted lookahead preparation failure"));
+      }
+      else if (!finalOpenFailureFileName.empty() && path.filename() == finalOpenFailureFileName && optOutputEncoding)
+      {
+        decoderPtr->setOpenResult(makeError(Error::Code::IoError, "Scripted final decoder setup failure"));
       }
 
       decoderPtr->setReadObserver(
@@ -166,7 +180,8 @@ namespace ao::rt::test::playback_succession
                                                    std::move(config.blockingGatePtr),
                                                    std::move(config.blockedFileName),
                                                    config.failBlockedPreparation,
-                                                   config.blockEveryLookahead)}
+                                                   config.blockEveryLookahead,
+                                                   std::move(config.finalOpenFailureFileName))}
     , asyncRuntime{transport.executor, 1, {}, &sleeper}
     , changes{libraryChangesExecutor, 0}
     , writerFixture{transport.libraryFixture.library(), changes}
@@ -202,16 +217,19 @@ namespace ao::rt::test::playback_succession
     return trackId;
   }
 
-  void PlaybackSuccessionTransportFixture::buildThreeTrackManualView()
+  void PlaybackSuccessionTransportFixture::openManualView(std::span<TrackId const> const trackIds)
   {
-    firstTrackId = addPlayableTrack("First");
-    secondTrackId = addPlayableTrack("Second");
-    thirdTrackId = addPlayableTrack("Third");
+    auto const membershipTag = std::array{std::string{"transportorder"}};
+    REQUIRE(writerFixture.editTags(trackIds, membershipTag, {}));
     sources.reloadAllTracks();
     listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
       .name = "Transport order",
+      .expression = "#transportorder",
     }));
-    viewId = ao::test::requireValue(workspace.navigate({.target = listId}));
+    viewId = ao::test::requireValue(workspace.navigate(navigationRequest(TrackListViewConfig{
+      .listId = listId,
+      .optPresentation = TrackPresentationSpec{.id = std::string{kListOrderTrackPresentationId}},
+    })));
     successionPtr = std::make_unique<PlaybackSuccession>(transport.executor,
                                                          views,
                                                          sources,
@@ -221,22 +239,28 @@ namespace ao::rt::test::playback_succession
                                                          asyncRuntime);
   }
 
+  void PlaybackSuccessionTransportFixture::buildThreeTrackManualView()
+  {
+    firstTrackId = addPlayableTrack("First");
+    secondTrackId = addPlayableTrack("Second");
+    thirdTrackId = addPlayableTrack("Third");
+    openManualView(std::array{firstTrackId, secondTrackId, thirdTrackId});
+  }
+
   void PlaybackSuccessionTransportFixture::buildTwoTrackManualView()
   {
     firstTrackId = addPlayableTrack("First");
     secondTrackId = addPlayableTrack("Second");
-    sources.reloadAllTracks();
-    listId = ao::test::requireValue(writer().createList(LibraryWriter::ListDraft{
-      .name = "Transport order",
-    }));
-    viewId = ao::test::requireValue(workspace.navigate({.target = listId}));
-    successionPtr = std::make_unique<PlaybackSuccession>(transport.executor,
-                                                         views,
-                                                         sources,
-                                                         transport.libraryFixture.library(),
-                                                         transport.playbackTransport,
-                                                         transport.notificationService,
-                                                         asyncRuntime);
+    openManualView(std::array{firstTrackId, secondTrackId});
+  }
+
+  void PlaybackSuccessionTransportFixture::buildFourTrackManualView()
+  {
+    firstTrackId = addPlayableTrack("First");
+    secondTrackId = addPlayableTrack("Second");
+    thirdTrackId = addPlayableTrack("Third");
+    fourthTrackId = addPlayableTrack("Fourth");
+    openManualView(std::array{firstTrackId, secondTrackId, thirdTrackId, fourthTrackId});
   }
 
   void PlaybackSuccessionTransportFixture::queueNaturalAdvance()

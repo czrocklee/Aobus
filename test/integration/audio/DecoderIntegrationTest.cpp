@@ -3,11 +3,13 @@
 
 #include <ao/AudioCodec.h>
 #include <ao/audio/AlacDecoderSession.h>
+#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -16,6 +18,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -110,12 +113,11 @@ namespace ao::audio::test
       return durationToSamples(info.duration, info.sourceFormat.sampleRate);
     }
 
-    void checkPcmBlockLayout(PcmBlock const& block, Format const& outputFormat)
+    void checkPcmBlockLayout(PcmBlock const& block, PcmFormat const& outputFormat)
     {
       auto const bytesPerFrame = frameBytes(outputFormat);
 
       REQUIRE(bytesPerFrame > 0);
-      CHECK(block.bitDepth == outputFormat.bitDepth);
       CHECK(block.bytes.size() == static_cast<std::size_t>(block.frames) * bytesPerFrame);
     }
 
@@ -145,8 +147,7 @@ namespace ao::audio::test
       // 1. Acquire reference 16-bit samples
       auto samples16 = std::vector<std::int16_t>{};
       {
-        auto const format = Format{.bitDepth = 16, .isInterleaved = true};
-        auto decoder = FlacDecoderSession{format};
+        auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
         REQUIRE(decoder.open(testFile));
         CHECK(decoder.streamInfo().codec == AudioCodec::Flac);
         samples16 = extractSamples<std::int16_t>(decoder, 100);
@@ -155,8 +156,7 @@ namespace ao::audio::test
       // 2. Acquire target 32-bit padded samples
       auto samples32 = std::vector<std::int32_t>{};
       {
-        auto const format = Format{.bitDepth = 32, .isInterleaved = true};
-        auto decoder = FlacDecoderSession{format};
+        auto decoder = FlacDecoderSession{SampleEncoding::Signed32Le};
         REQUIRE(decoder.open(testFile));
         samples32 = extractSamples<std::int32_t>(decoder, 100);
       }
@@ -172,8 +172,7 @@ namespace ao::audio::test
       // 1. Acquire reference 24-bit (packed) samples
       auto samples24 = std::vector<std::int32_t>{};
       {
-        auto const format = Format{.bitDepth = 24, .isInterleaved = true};
-        auto decoder = AlacDecoderSession{format};
+        auto decoder = AlacDecoderSession{SampleEncoding::Signed24PackedLe};
         REQUIRE(decoder.open(testFile));
         CHECK(decoder.streamInfo().codec == AudioCodec::Alac);
         auto const block = decoder.readNextBlock();
@@ -185,8 +184,7 @@ namespace ao::audio::test
       // 2. Acquire target 32-bit padded samples
       auto samples32 = std::vector<std::int32_t>{};
       {
-        auto const format = Format{.bitDepth = 32, .isInterleaved = true};
-        auto decoder = AlacDecoderSession{format};
+        auto decoder = AlacDecoderSession{SampleEncoding::Signed32Le};
         REQUIRE(decoder.open(testFile));
         samples32 = extractSamples<std::int32_t>(decoder, samples24.size());
       }
@@ -202,21 +200,21 @@ namespace ao::audio::test
 
     SECTION("Metadata Extraction")
     {
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
       REQUIRE(decoder.open(testFile));
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 44100);
       CHECK(info.sourceFormat.channels == 2);
-      CHECK(info.sourceFormat.bitDepth == 16);
+      CHECK(info.sourceFormat.precisionBits == 16);
       CHECK(info.outputFormat.sampleRate == 44100);
       CHECK(info.outputFormat.channels == 2);
-      CHECK(info.outputFormat.bitDepth == 16);
+      CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
     }
 
     SECTION("Seek Consistency")
     {
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
       REQUIRE(decoder.open(testFile));
 
       auto const info = decoder.streamInfo();
@@ -241,13 +239,13 @@ namespace ao::audio::test
 
     SECTION("Hires Metadata")
     {
-      auto decoder = AlacDecoderSession{Format{}};
+      auto decoder = AlacDecoderSession{std::nullopt};
       REQUIRE(decoder.open(testFile));
 
       auto const info = decoder.streamInfo();
       CHECK(info.sourceFormat.sampleRate == 96000);
       CHECK(info.sourceFormat.channels == 2);
-      CHECK(info.sourceFormat.bitDepth == 24);
+      CHECK(info.sourceFormat.precisionBits == 24);
     }
   }
 
@@ -257,7 +255,7 @@ namespace ao::audio::test
 
     SECTION("Metadata Extraction")
     {
-      auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
+      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
       REQUIRE(decoder.open(testFile));
 
       auto const info = decoder.streamInfo();
@@ -273,7 +271,7 @@ namespace ao::audio::test
     {
       // Use this source file itself as a fake FLAC
       auto const testFile = std::filesystem::path{__FILE__};
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
       auto const res = decoder.open(testFile);
 
       CHECK_FALSE(res);
@@ -282,7 +280,7 @@ namespace ao::audio::test
     SECTION("MP3: Seek near EOF")
     {
       auto const testFile = requireAudioFixture("hires.mp3");
-      auto decoder = Mp3DecoderSession{Format{.bitDepth = 16}};
+      auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
       REQUIRE(decoder.open(testFile));
 
       auto const info = decoder.streamInfo();
@@ -316,7 +314,7 @@ namespace ao::audio::test
     SECTION("Seek near EOF")
     {
       auto const testFile = requireAudioFixture("basic_metadata.flac");
-      auto decoder = FlacDecoderSession{Format{.bitDepth = 16}};
+      auto decoder = FlacDecoderSession{SampleEncoding::Signed16Le};
       REQUIRE(decoder.open(testFile));
 
       auto const info = decoder.streamInfo();

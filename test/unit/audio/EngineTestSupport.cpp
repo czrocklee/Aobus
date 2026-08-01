@@ -4,15 +4,18 @@
 #include "EngineTestSupport.h"
 
 #include "ScriptedDecoderSession.h"
+#include "lib/audio/detail/DecoderOutput.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <atomic>
 #include <cstddef>
@@ -22,12 +25,28 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 namespace ao::audio::test
 {
+  namespace
+  {
+    SampleEncoding selectedTestEncoding(SignalFormat const& sourceFormat,
+                                        std::optional<SampleEncoding> const optOutputEncoding)
+    {
+      if (optOutputEncoding)
+      {
+        return *optOutputEncoding;
+      }
+
+      auto const encodings = detail::losslessPcmEncodings(sourceFormat);
+      return encodings.empty() ? SampleEncoding::Unknown : encodings.front();
+    }
+  } // namespace
+
   Device makeEngineTestDevice(std::string_view id)
   {
     return {.id = DeviceId{std::string{id}},
@@ -37,9 +56,14 @@ namespace ao::audio::test
             .backendId = kBackendNone};
   }
 
-  Format makeEngineTestFormat()
+  PcmFormat makeEngineTestFormat()
   {
-    return {.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    return {.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+  }
+
+  SignalFormat makeEngineTestSignalFormat()
+  {
+    return signalFormat(makeEngineTestFormat());
   }
 
   Engine::PlaybackItem makePlaybackItem(std::filesystem::path path)
@@ -60,12 +84,16 @@ namespace ao::audio::test
     };
   }
 
-  DecoderFactoryFn makeScriptedEngineDecoderFactory(Format fmt)
+  DecoderFactoryFn makeScriptedEngineDecoderFactory(PcmFormat fmt)
   {
-    return [fmt](std::filesystem::path const&, Format)
+    return [fmt](std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
+      auto const sourceFormat = signalFormat(fmt);
+      auto const outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding));
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{.sourceFormat = sourceFormat,
+                                                                               .outputFormat = outputFormat,
+                                                                               .duration = std::chrono::milliseconds{0},
+                                                                               .isLossy = false});
       auto data = std::vector(100, std::byte{0});
 
       decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
@@ -73,9 +101,9 @@ namespace ao::audio::test
     };
   }
 
-  DecodedStreamInfo makeScriptedStreamInfo(Format format, AudioCodec codec, bool isLossy)
+  DecodedStreamInfo makeScriptedStreamInfo(PcmFormat format, AudioCodec codec, bool isLossy)
   {
-    return {.sourceFormat = format,
+    return {.sourceFormat = signalFormat(format),
             .outputFormat = format,
             .duration = std::chrono::milliseconds{10},
             .isLossy = isLossy,
@@ -84,13 +112,16 @@ namespace ao::audio::test
 
   DecoderFactoryFn makePathScriptedDecoderFactory(std::vector<ScriptedTrack> tracks)
   {
-    return [tracks = std::move(tracks)](std::filesystem::path const& path, Format)
+    return
+      [tracks = std::move(tracks)](std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
       for (auto const& track : tracks)
       {
         if (track.path == path)
         {
-          auto decPtr = std::make_unique<ScriptedDecoderSession>(track.info);
+          auto info = track.info;
+          info.outputFormat = pcmFormat(info.sourceFormat, selectedTestEncoding(info.sourceFormat, optOutputEncoding));
+          auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
           decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.endOfStream = true}});
           return decPtr;
         }
@@ -124,8 +155,8 @@ namespace ao::audio::test
   DecoderFactoryFn makeBlockingPreparationDecoderFactory(std::shared_ptr<BlockingPreparationGate> gatePtr,
                                                          std::filesystem::path blockedPath)
   {
-    return
-      [gatePtr = std::move(gatePtr), blockedPath = std::move(blockedPath)](std::filesystem::path const& path, Format)
+    return [gatePtr = std::move(gatePtr), blockedPath = std::move(blockedPath)](
+             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
       auto const isBlockedPath =
         path == blockedPath || (!blockedPath.has_parent_path() && path.filename() == blockedPath);
@@ -136,9 +167,10 @@ namespace ao::audio::test
       }
 
       auto const format = makeEngineTestFormat();
+      auto const sourceFormat = signalFormat(format);
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = format,
-        .outputFormat = format,
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
         .duration = std::chrono::seconds{2},
         .isLossy = false,
         .codec = AudioCodec::Flac,
@@ -159,7 +191,8 @@ namespace ao::audio::test
   DecoderFactoryFn makeCountingDecoderFactory(std::vector<ScriptedTrack> tracks,
                                               std::shared_ptr<DecoderLifeCounters> countersPtr)
   {
-    return [tracks = std::move(tracks), countersPtr = std::move(countersPtr)](std::filesystem::path const& path, Format)
+    return [tracks = std::move(tracks), countersPtr = std::move(countersPtr)](
+             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
       for (auto const& track : tracks)
       {
@@ -167,7 +200,9 @@ namespace ao::audio::test
         {
           countersPtr->created.fetch_add(1, std::memory_order_relaxed);
           auto destroyCounterPtr = std::shared_ptr<std::atomic<std::size_t>>{countersPtr, &countersPtr->destroyed};
-          auto decPtr = std::make_unique<ScriptedDecoderSession>(track.info);
+          auto info = track.info;
+          info.outputFormat = pcmFormat(info.sourceFormat, selectedTestEncoding(info.sourceFormat, optOutputEncoding));
+          auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
           decPtr->setReadScript({{.data = track.data, .endOfStream = false}, {.endOfStream = true}});
           decPtr->setDestroyCounter(std::move(destroyCounterPtr));
           return decPtr;
@@ -182,13 +217,16 @@ namespace ao::audio::test
     std::vector<RegisteredTrack> tracks,
     std::shared_ptr<std::map<std::filesystem::path, ScriptedDecoderSession*>> registryPtr)
   {
-    return [tracks = std::move(tracks), registryPtr = std::move(registryPtr)](std::filesystem::path const& path, Format)
+    return [tracks = std::move(tracks), registryPtr = std::move(registryPtr)](
+             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
     {
       for (auto const& entry : tracks)
       {
         if (entry.track.path == path)
         {
-          auto decPtr = std::make_unique<ScriptedDecoderSession>(entry.track.info);
+          auto info = entry.track.info;
+          info.outputFormat = pcmFormat(info.sourceFormat, selectedTestEncoding(info.sourceFormat, optOutputEncoding));
+          auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
           decPtr->setReadScript({{.data = entry.track.data, .endOfStream = false}, {.endOfStream = true}});
 
           if (entry.optSeekScript)
@@ -244,8 +282,9 @@ namespace ao::audio::test
     _armed = false;
   }
 
-  StagedFailureDecoderSession::StagedFailureDecoderSession(StagedFailureGate* failureGate)
-    : _failureGate{failureGate}
+  StagedFailureDecoderSession::StagedFailureDecoderSession(StagedFailureGate* failureGate,
+                                                           std::optional<SampleEncoding> optOutputEncoding)
+    : _failureGate{failureGate}, _optOutputEncoding{optOutputEncoding}
   {
   }
 
@@ -276,7 +315,6 @@ namespace ao::audio::test
       _prerollReturned = true;
       return PcmBlock{
         .bytes = _prerollBytes,
-        .bitDepth = 16,
         .frames = kPrerollFrames,
         .firstFrameIndex = 0,
         .endOfStream = false,
@@ -291,15 +329,15 @@ namespace ao::audio::test
       return std::unexpected{Error{.code = Error::Code::IoError, .message = "gated staged decode failure"}};
     }
 
-    return PcmBlock{.bitDepth = 16, .endOfStream = true};
+    return PcmBlock{.endOfStream = true};
   }
 
   DecodedStreamInfo StagedFailureDecoderSession::streamInfo() const noexcept
   {
     auto const format = makeEngineTestFormat();
     return DecodedStreamInfo{
-      .sourceFormat = format,
-      .outputFormat = format,
+      .sourceFormat = signalFormat(format),
+      .outputFormat = pcmFormat(signalFormat(format), _optOutputEncoding.value_or(format.encoding)),
       .duration = std::chrono::seconds{3},
       .isLossy = false,
       .codec = AudioCodec::Flac,
@@ -308,8 +346,12 @@ namespace ao::audio::test
 
   DecoderFactoryFn makeStagedFailureDecoderFactory(std::filesystem::path failingPath, StagedFailureGate& failureGate)
   {
-    return [failingPath = std::move(failingPath), &failureGate](std::filesystem::path const& path, Format)
-    { return std::make_unique<StagedFailureDecoderSession>(path == failingPath ? &failureGate : nullptr); };
+    return [failingPath = std::move(failingPath), &failureGate](
+             std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      return std::make_unique<StagedFailureDecoderSession>(
+        path == failingPath ? &failureGate : nullptr, optOutputEncoding);
+    };
   }
 
   void CallbackLatch::notify()

@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/AacDecoderSession.h>
+
+#include "detail/DecoderOutputAdapter.h"
 #include "detail/Mp4PacketSource.h"
-#include "detail/OutputFormatValidation.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
-#include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
-#include <ao/audio/PcmConversion.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/detail/AacConfigParser.h>
 #include <ao/audio/detail/DecoderError.h>
 
@@ -25,6 +26,7 @@
 #include <expected>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <utility>
 #include <vector>
@@ -40,16 +42,15 @@ namespace ao::audio
 
   struct AacDecoderSession::Impl final
   {
-    Format requestedOutput;
+    detail::DecoderOutputAdapter outputAdapter;
     DecodedStreamInfo info;
     HANDLE_AACDECODER decoder = nullptr;
     detail::Mp4PacketSource packetSource;
     std::vector<UCHAR> inputBuffer;
     std::vector<INT_PCM> pcmBuffer;
-    std::vector<std::int32_t> targetPcmBuffer;
 
-    explicit Impl(Format const& output)
-      : requestedOutput{output}
+    explicit Impl(std::optional<SampleEncoding> optOutputEncoding)
+      : outputAdapter{optOutputEncoding}
     {
     }
 
@@ -137,40 +138,16 @@ namespace ao::audio
       }
     }
 
-    void validateRequestedOutput() const
-    {
-      if (auto const result = detail::validateFixedOutputRequest(requestedOutput, info.outputFormat, "AAC"); !result)
-      {
-        detail::throwDecoderError(result.error());
-      }
-
-      if (requestedOutput.isFloat)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "AAC float output is not supported");
-      }
-
-      if (requestedOutput.bitDepth != 0 && requestedOutput.bitDepth != kAacPcmBitDepth &&
-          requestedOutput.bitDepth != 32)
-      {
-        detail::throwDecoderError(
-          Error::Code::NotSupported, "AAC output is limited to 16-bit PCM or 32-bit padded PCM");
-      }
-
-      if (requestedOutput.validBits != 0 && requestedOutput.validBits != kAacPcmBitDepth)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "AAC output valid bits must be 16");
-      }
-    }
-
     void applyOutputFormat()
     {
-      info.outputFormat = info.sourceFormat;
+      auto const configured = outputAdapter.configure(info.sourceFormat, SampleEncoding::Signed16Le);
 
-      if (requestedOutput.bitDepth == 32)
+      if (!configured)
       {
-        info.outputFormat.bitDepth = 32;
-        info.outputFormat.validBits = kAacPcmBitDepth;
+        detail::throwDecoderError(configured.error());
       }
+
+      info.outputFormat = *configured;
     }
 
     void refreshStreamInfo()
@@ -192,17 +169,15 @@ namespace ao::audio
         info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo->numChannels);
       }
 
-      info.sourceFormat.bitDepth = kAacPcmBitDepth;
-      info.sourceFormat.validBits = kAacPcmBitDepth;
-      info.sourceFormat.isInterleaved = true;
-      applyOutputFormat();
+      info.sourceFormat.precisionBits = kAacPcmBitDepth;
+      info.sourceFormat.sampleKind = SampleKind::Integer;
       info.isLossy = true;
       info.codec = AudioCodec::Aac;
     }
   };
 
-  AacDecoderSession::AacDecoderSession(Format outputFormat)
-    : _implPtr{std::make_unique<Impl>(outputFormat)}
+  AacDecoderSession::AacDecoderSession(std::optional<SampleEncoding> optOutputEncoding)
+    : _implPtr{std::make_unique<Impl>(optOutputEncoding)}
   {
   }
 
@@ -230,8 +205,6 @@ namespace ao::audio
 
       _implPtr->info.duration = _implPtr->packetSource.duration();
 
-      _implPtr->validateRequestedOutput();
-
       return {};
     }
     catch (detail::DecoderException const& ex)
@@ -246,7 +219,7 @@ namespace ao::audio
     _implPtr->closeDecoder();
     _implPtr->inputBuffer.clear();
     _implPtr->pcmBuffer.clear();
-    _implPtr->targetPcmBuffer.clear();
+    _implPtr->outputAdapter.reset();
     _implPtr->info = {};
   }
 
@@ -338,13 +311,11 @@ namespace ao::audio
       auto const previousInfo = _implPtr->info;
       _implPtr->refreshStreamInfo();
 
-      if (!(_implPtr->info.outputFormat == previousInfo.outputFormat))
+      if (!(_implPtr->info.sourceFormat == previousInfo.sourceFormat))
       {
         _implPtr->info = previousInfo;
         detail::throwDecoderError(Error::Code::NotSupported, "AAC stream changed output format during playback");
       }
-
-      _implPtr->validateRequestedOutput();
 
       auto const* streamInfo = ::aacDecoder_GetStreamInfo(_implPtr->decoder);
 
@@ -369,27 +340,16 @@ namespace ao::audio
       _implPtr->pcmBuffer.resize(samples);
       _implPtr->packetSource.advance();
 
-      if (_implPtr->info.outputFormat.bitDepth == 32)
+      auto const nativeBytes = std::as_bytes(std::span{_implPtr->pcmBuffer});
+      auto converted = _implPtr->outputAdapter.convert(nativeBytes);
+
+      if (!converted)
       {
-        _implPtr->targetPcmBuffer.resize(samples);
-        padPcmSamples<INT_PCM, std::int32_t>(_implPtr->pcmBuffer, _implPtr->targetPcmBuffer, 16);
-
-        auto const bytes = std::as_bytes(std::span{_implPtr->targetPcmBuffer});
-
-        return PcmBlock{
-          .bytes = bytes,
-          .bitDepth = _implPtr->info.outputFormat.bitDepth,
-          .frames = frames,
-          .firstFrameIndex = firstFrameIndex,
-          .endOfStream = _implPtr->packetSource.isAtEnd(),
-        };
+        detail::throwDecoderError(converted.error());
       }
 
-      auto const bytes = std::as_bytes(std::span{_implPtr->pcmBuffer});
-
       return PcmBlock{
-        .bytes = bytes,
-        .bitDepth = _implPtr->info.outputFormat.bitDepth,
+        .bytes = *converted,
         .frames = frames,
         .firstFrameIndex = firstFrameIndex,
         .endOfStream = _implPtr->packetSource.isAtEnd(),

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
+
 #include <ao/audio/Device.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/Transport.h>
@@ -11,7 +13,6 @@
 #include <ao/rt/TrackField.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
-#include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
@@ -44,8 +45,7 @@ namespace ao::uimodel
 
       // The source node carries the track's native format, so show its true
       // resolution (valid bits) rather than a padded transport container width.
-      return (it != quality.assessments.end() && it->optFormat) ? audioFormatLabel(*it->optFormat, true)
-                                                                : std::string{};
+      return (it != quality.assessments.end() && it->optFormat) ? audioFormatLabel(*it->optFormat) : std::string{};
     }
 
     struct SelectedDevicePresentation final

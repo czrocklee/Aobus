@@ -56,7 +56,7 @@ The current analyzer does not produce `Clipped` from software-amplification meta
 | `ChannelMapping` | `LinearIntervention` | `optFromFormat`, `optToFormat` | `Channel mapping` |
 | `LosslessPadding` | `LosslessPadded` | `optFromFormat`, `optToFormat` | `Bit-transparent integer padding` |
 | `LosslessFloat` | `LosslessFloat` | `optFromFormat`, `optToFormat` | `Bit-transparent float mapping` |
-| `LosslessRoundTrip` | `LosslessFloat` | `optFromFormat`, `optToFormat` | `Bit-transparent round trip (float engine)` |
+| `LosslessRoundTrip` | `LosslessFloat` or `LosslessPadded` | `optFromFormat`, `optToFormat` | `Bit-transparent round trip (float engine)` |
 | `Truncation` | `LinearIntervention` | `optFromFormat`, `optToFormat` | `Precision truncated` |
 | `MixedSources` | `LinearIntervention` | `sharedApps` | `Mixed sources` |
 
@@ -73,7 +73,7 @@ Dynamic finding labels refine the base text:
 | Same-domain truncation | `Precision truncated: {from precision} → {to precision}` |
 | Named mixed sources | `Mixed with {comma-separated application names}` |
 
-Precision text uses `{effective bits}b` for integer and `{effective bits}f` for float.
+Precision text uses logical `precisionBits` as `{bits}b` for integer and `{bits}f` for float.
 Gain text is omitted when gain is non-positive or non-finite.
 
 ### Value fields
@@ -85,8 +85,8 @@ Gain text is omitted when gain is non-positive or non-finite.
 | `kind` | `QualityFindingKind` | `Unknown` |
 | `quality` | `Quality` | `Unknown` |
 | `gain` | `float` | `0.0F` |
-| `optFromFormat` | `optional<Format>` | empty |
-| `optToFormat` | `optional<Format>` | empty |
+| `optFromFormat` | `optional<NodeFormat>` | empty |
+| `optToFormat` | `optional<NodeFormat>` | empty |
 | `sharedApps` | `vector<string>` | empty |
 
 `NodeQualityAssessment` fields:
@@ -96,7 +96,7 @@ Gain text is omitted when gain is non-positive or non-finite.
 | `nodeId` | `string` | empty |
 | `nodeName` | `string` | empty |
 | `nodeType` | `flow::NodeType` | `Intermediary` |
-| `optFormat` | `optional<Format>` | empty |
+| `optFormat` | `optional<NodeFormat>` | empty |
 | `worstQuality` | `Quality` | `BitwisePerfect` |
 | `findings` | `vector<QualityFinding>` | empty |
 
@@ -117,7 +117,7 @@ Both values default all quality axes to `Unknown`, `fullyVerified` to true, and 
 
 `audioFormatLabel` produces `{sample rate in kHz with one decimal} · {bits}-bit · {channels}`.
 Channels are `Mono`, `Stereo`, or `{count} ch`.
-The optional `preferValidBits` flag uses effective precision and otherwise displays container bit depth.
+A `SignalFormat` label displays logical precision; a `PcmFormat` label displays `encodingContainerBits`, so a 16-bit signal widened into `Signed32Le` is labelled 32-bit at that PCM node.
 
 ### Structured headline precedence
 
@@ -188,9 +188,10 @@ Frontend adapters own clocks, frame registration, and rendering mechanics but do
 - Software amplification requires reported maximum software gain greater than `1.0F + 1e-4F`.
 - Software attenuation uses positive minimum gain when reported, otherwise maximum gain.
 - Transition findings require both source and destination formats.
-- A valid-bits-only change exists only when both `validBits` values are nonzero and unequal.
+- A precision transition compares source or encoding precision/domain plus concrete PCM representation width; it never infers PCM layout from `SignalFormat::precisionBits`.
 - Same-domain float widening is `LosslessFloat`; same-domain float narrowing is `Truncation`.
-- Integer-to-32-bit-float is lossless through 24 effective bits; integer-to-64-bit-float is lossless through 32 effective bits.
+- Integer-to-32-bit-float is lossless through 24 logical bits.
+- Integer narrowing is `LosslessRoundTrip` with `LosslessPadded` while the destination still holds the proven source precision, and `Truncation` once that proof is gone.
 - Shared application names are sorted and deduplicated; an unnamed external source still produces `MixedSources` with an empty list.
 - Every assessment with no other finding receives exactly one `BitPerfect` finding.
 - `fullyVerified` is false when the analyzed path lacks a terminal Sink or any path assessment lacks a format.
@@ -227,4 +228,5 @@ Consumers must not infer severity from enum declaration order or duplicate a fin
 - [Audio quality analysis specification](../../spec/playback/quality-analysis.md)
 - [Audio quality architecture](../../architecture/audio-quality.md)
 - [Playback architecture](../../architecture/playback.md)
+- [PCM format surface](pcm-format.md)
 - [Decoder session](../../spec/playback/decoder-session.md)

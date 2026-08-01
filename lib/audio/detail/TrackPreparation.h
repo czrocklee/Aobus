@@ -33,6 +33,8 @@ namespace ao::audio::detail
                                             std::chrono::milliseconds initialOffset,
                                             Purpose purpose);
 
+    Result<> inspect();
+    Result<> selectPrewarmFormat(Engine& engine);
     Result<> prepare();
     bool requiresWorker() const noexcept;
     Result<Engine::PreparedPlaybackStart> adoptStart(Engine& engine) &&;
@@ -46,6 +48,7 @@ namespace ao::audio::detail
                                                     Engine::PlaybackItem const& item,
                                                     std::chrono::milliseconds initialOffset,
                                                     Purpose purpose);
+    Result<> selectPrewarmFormatUnlocked(Engine& engine);
     Result<Engine::PreparedPlaybackStart> adoptStartUnlocked(Engine& engine) &&;
     Result<Engine::PreparedNextResult> adoptNextUnlocked(Engine& engine) &&;
     bool matchesControlContext(Engine const& engine, std::uint64_t currentGeneration) const;

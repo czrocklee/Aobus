@@ -5,14 +5,17 @@
 
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <concepts>
 #include <expected>
+#include <optional>
 
 namespace ao::audio
 {
-  struct Format;
   class RenderTarget;
 
   /**
@@ -50,7 +53,27 @@ namespace ao::audio
     Backend(Backend&&) = delete;
     Backend& operator=(Backend&&) = delete;
 
-    virtual Result<> open(Format const& format, RenderTarget* target) = 0;
+    /**
+     * @brief Returns a non-binding PCM format prediction for decoder prewarming.
+     *
+     * This method is non-blocking and performs no native open or negotiation.
+     * Implementations may use immutable policy or cached observations. Engine
+     * always treats open() as authoritative and discards a mismatched prewarm.
+     */
+    virtual std::optional<PcmFormat> prewarmFormatHint(SignalFormat const& sourceFormat) const noexcept;
+
+    /**
+     * @brief Opens one render target and returns the mode actually configured.
+     *
+     * `clientFormat` keeps the source sample rate and channel count and carries
+     * the exact byte layout handed to the native API. It must preserve the
+     * source precision. When a backend can confirm the physical endpoint, that
+     * endpoint must preserve the source precision as well. Endpoint evidence is
+     * route truth, not permission to reduce precision. A failed native open or
+     * the absence of a lossless mode is reported as an error and is never
+     * translated into an implicit lower-precision fallback.
+     */
+    virtual Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) = 0;
 
     virtual void start() = 0;
     virtual void pause() = 0;

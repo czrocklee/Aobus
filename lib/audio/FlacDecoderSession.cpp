@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/FlacDecoderSession.h>
+
+#include "detail/DecoderOutputAdapter.h"
 #include "detail/MappedFileCursor.h"
-#include "detail/OutputFormatValidation.h"
 #include "detail/TimeConversion.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
+#include <ao/audio/AudioTime.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/PcmConversion.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
@@ -18,7 +21,6 @@
 #include <FLAC/ordinals.h>
 #include <FLAC/stream_decoder.h>
 
-#include <algorithm>
 #include <bit>
 #include <chrono>
 #include <cstddef>
@@ -37,6 +39,21 @@ namespace ao::audio
   namespace
   {
     constexpr std::uint8_t kLowByteMask = 0xFF;
+
+    SampleEncoding nativeFlacEncoding(std::uint8_t const precisionBits) noexcept
+    {
+      if (precisionBits <= 16U)
+      {
+        return SampleEncoding::Signed16Le;
+      }
+
+      if (precisionBits <= 24U)
+      {
+        return SampleEncoding::Signed24PackedLe;
+      }
+
+      return SampleEncoding::Signed32Le;
+    }
 
     ::FLAC__StreamMetadata_StreamInfo const& streamInfoFor(::FLAC__StreamMetadata const* metadata)
     {
@@ -65,7 +82,7 @@ namespace ao::audio
 
   struct FlacDecoderSession::Impl final
   {
-    Format requestedOutput;
+    detail::DecoderOutputAdapter outputAdapter;
     ::FLAC__StreamDecoder* decoder = nullptr;
 
     detail::MappedFileCursor fileCursor;
@@ -74,6 +91,7 @@ namespace ao::audio
 
     // Buffer for decoded samples
     std::vector<std::byte> pcmBuffer;
+    std::span<std::byte const> outputBytes{};
     // Reused per-channel span scratch for interleaving (avoids a per-block heap
     // allocation in the write callback). Capacity persists across blocks.
     std::vector<std::span<std::int32_t const>> channelSpans;
@@ -81,10 +99,11 @@ namespace ao::audio
     std::uint64_t nextFrameIndex = 0;
     std::uint64_t totalFrames = 0;
     std::optional<::FLAC__StreamDecoderErrorStatus> optDecodeError;
+    std::optional<Error> optOutputError;
     bool eof = false;
 
-    Impl(Format const& output)
-      : requestedOutput{output}, decoder{::FLAC__stream_decoder_new()}
+    Impl(std::optional<SampleEncoding> optOutputEncoding)
+      : outputAdapter{optOutputEncoding}, decoder{::FLAC__stream_decoder_new()}
     {
     }
 
@@ -142,6 +161,11 @@ namespace ao::audio
           Error::Code::DecodeFailed,
           std::string{"FLAC decode error: "} + ::FLAC__StreamDecoderErrorStatusString[*optDecodeError]);
       }
+
+      if (optOutputError)
+      {
+        detail::throwDecoderError(*optOutputError);
+      }
     }
 
     void checkEndOfStream() const
@@ -153,8 +177,8 @@ namespace ao::audio
     }
   };
 
-  FlacDecoderSession::FlacDecoderSession(Format outputFormat)
-    : _implPtr{std::make_unique<Impl>(outputFormat)}
+  FlacDecoderSession::FlacDecoderSession(std::optional<SampleEncoding> optOutputEncoding)
+    : _implPtr{std::make_unique<Impl>(optOutputEncoding)}
   {
   }
 
@@ -196,22 +220,6 @@ namespace ao::audio
 
       _implPtr->checkDecodeError();
 
-      if (auto const result =
-            detail::validateFixedOutputRequest(_implPtr->requestedOutput, _implPtr->info.outputFormat, "FLAC");
-          !result)
-      {
-        detail::throwDecoderError(result.error());
-      }
-
-      auto const outputBitDepth = _implPtr->info.outputFormat.bitDepth;
-      auto const expectedValidBits = std::min(_implPtr->info.sourceFormat.validBits, outputBitDepth);
-
-      if (_implPtr->requestedOutput.isFloat || (outputBitDepth != 16 && outputBitDepth != 24 && outputBitDepth != 32) ||
-          _implPtr->info.outputFormat.validBits != expectedValidBits)
-      {
-        detail::throwDecoderError(Error::Code::NotSupported, "Unsupported FLAC output sample format");
-      }
-
       return {};
     }
     catch (detail::DecoderException const& ex)
@@ -229,10 +237,13 @@ namespace ao::audio
 
     _implPtr->fileCursor.close();
     _implPtr->pcmBuffer.clear();
+    _implPtr->outputBytes = {};
+    _implPtr->outputAdapter.reset();
     _implPtr->bufferedFrames = 0;
     _implPtr->nextFrameIndex = 0;
     _implPtr->totalFrames = 0;
     _implPtr->optDecodeError.reset();
+    _implPtr->optOutputError.reset();
     _implPtr->eof = false;
     _implPtr->info = {};
   }
@@ -244,8 +255,10 @@ namespace ao::audio
     try
     {
       _implPtr->pcmBuffer.clear();
+      _implPtr->outputBytes = {};
       _implPtr->bufferedFrames = 0;
       _implPtr->optDecodeError.reset();
+      _implPtr->optOutputError.reset();
       _implPtr->eof = false;
 
       auto const sampleRate = _implPtr->info.sourceFormat.sampleRate;
@@ -291,6 +304,7 @@ namespace ao::audio
     }
 
     _implPtr->pcmBuffer.clear();
+    _implPtr->outputBytes = {};
     _implPtr->bufferedFrames = 0;
   }
 
@@ -345,8 +359,7 @@ namespace ao::audio
       }
 
       auto block = PcmBlock{
-        .bytes = _implPtr->pcmBuffer,
-        .bitDepth = _implPtr->info.outputFormat.bitDepth,
+        .bytes = _implPtr->outputBytes,
         .frames = _implPtr->bufferedFrames,
         .firstFrameIndex = _implPtr->nextFrameIndex,
         .endOfStream = _implPtr->eof &&
@@ -443,10 +456,10 @@ namespace ao::audio
     auto const channels = frame->header.channels;
     auto const blockSize = frame->header.blocksize;
     std::uint8_t const sourceBitDepth = static_cast<std::uint8_t>(frame->header.bits_per_sample);
-    std::uint8_t const outputBitDepth =
-      (impl->requestedOutput.bitDepth != 0) ? impl->requestedOutput.bitDepth : sourceBitDepth;
+    auto const nativeEncoding = impl->outputAdapter.nativeFormat().encoding;
+    auto const outputBitDepth = encodingNominalBits(nativeEncoding);
 
-    if (outputBitDepth == 16)
+    if (nativeEncoding == SampleEncoding::Signed16Le)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 2);
       auto* out = utility::layout::asMutablePtr<std::int16_t>(impl->pcmBuffer);
@@ -459,7 +472,7 @@ namespace ao::audio
         }
       }
     }
-    else if (outputBitDepth == 24)
+    else if (nativeEncoding == SampleEncoding::Signed24PackedLe)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 3);
       auto* out = utility::layout::asMutablePtr<std::uint8_t>(impl->pcmBuffer);
@@ -475,7 +488,7 @@ namespace ao::audio
         }
       }
     }
-    else if (outputBitDepth == 32)
+    else if (nativeEncoding == SampleEncoding::Signed32Le)
     {
       impl->pcmBuffer.resize(static_cast<std::size_t>(blockSize) * channels * 4);
       auto const dst = utility::layout::viewArrayMutable<std::int32_t>(impl->pcmBuffer);
@@ -496,9 +509,15 @@ namespace ao::audio
     }
 
     impl->bufferedFrames = blockSize;
-    impl->info.outputFormat.bitDepth = outputBitDepth;
-    impl->info.outputFormat.channels = static_cast<std::uint8_t>(channels);
-    impl->info.outputFormat.sampleRate = frame->header.sample_rate;
+    auto converted = impl->outputAdapter.convert(impl->pcmBuffer);
+
+    if (!converted)
+    {
+      impl->optOutputError = converted.error();
+      return ::FLAC__STREAM_DECODER_WRITE_STATUS_ABORT;
+    }
+
+    impl->outputBytes = *converted;
 
     return ::FLAC__STREAM_DECODER_WRITE_STATUS_CONTINUE;
   }
@@ -514,22 +533,20 @@ namespace ao::audio
 
       impl->info.sourceFormat.channels = static_cast<std::uint8_t>(streamInfo.channels);
       impl->info.sourceFormat.sampleRate = streamInfo.sample_rate;
-      impl->info.sourceFormat.bitDepth = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
-      impl->info.sourceFormat.validBits = impl->info.sourceFormat.bitDepth;
-      impl->info.sourceFormat.isFloat = false;
-      impl->info.sourceFormat.isInterleaved = true;
+      impl->info.sourceFormat.precisionBits = static_cast<std::uint8_t>(streamInfo.bits_per_sample);
+      impl->info.sourceFormat.sampleKind = SampleKind::Integer;
 
-      impl->info.outputFormat = impl->info.sourceFormat;
-      impl->totalFrames = streamInfo.total_samples;
+      auto const configured = impl->outputAdapter.configure(
+        impl->info.sourceFormat, nativeFlacEncoding(impl->info.sourceFormat.precisionBits));
 
-      if (impl->requestedOutput.bitDepth != 0)
+      if (!configured)
       {
-        impl->info.outputFormat.bitDepth = impl->requestedOutput.bitDepth;
-        impl->info.outputFormat.validBits =
-          (impl->requestedOutput.validBits != 0)
-            ? impl->requestedOutput.validBits
-            : std::min(impl->info.sourceFormat.validBits, impl->requestedOutput.bitDepth);
+        impl->optOutputError = configured.error();
+        return;
       }
+
+      impl->info.outputFormat = *configured;
+      impl->totalFrames = streamInfo.total_samples;
 
       if (streamInfo.sample_rate > 0)
       {

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
-#include <ao/audio/Format.h>
 #include <ao/audio/backend/detail/WasapiGraphRegistry.h>
+
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/flow/Graph.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -47,8 +49,9 @@ namespace ao::audio::backend::detail::test
     auto registry = WasapiGraphRegistry{};
     auto received = flow::Graph{};
     std::int32_t callCount = 0;
-    auto const inputFormat = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 24, .validBits = 24};
-    auto const mixFormat = Format{.sampleRate = 48000, .channels = 2, .bitDepth = 32, .validBits = 32, .isFloat = true};
+    auto const inputFormat =
+      PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed24PackedLe};
+    auto const mixFormat = PcmFormat{.sampleRate = 48000, .channels = 2, .encoding = SampleEncoding::Float32Le};
     auto sub = registry.subscribe("endpoint-a",
                                   [&](flow::Graph const& graph)
                                   {
@@ -66,8 +69,8 @@ namespace ao::audio::backend::detail::test
     REQUIRE(received.nodes.size() == 2);
     REQUIRE(received.nodes[0].optFormat);
     REQUIRE(received.nodes[1].optFormat);
-    CHECK(*received.nodes[0].optFormat == inputFormat);
-    CHECK(*received.nodes[1].optFormat == mixFormat);
+    CHECK(std::get<PcmFormat>(*received.nodes[0].optFormat) == inputFormat);
+    CHECK(std::get<PcmFormat>(*received.nodes[1].optFormat) == mixFormat);
     CHECK(received.nodes[1].softwareVolumeNotUnity);
     CHECK(received.nodes[1].minSoftwareGain == 0.25F);
     CHECK(received.nodes[1].maxSoftwareGain == 0.25F);

@@ -9,9 +9,11 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <atomic>
 #include <chrono>
@@ -30,10 +32,11 @@
 namespace ao::audio::test
 {
   Device makeEngineTestDevice(std::string_view id = "test-device");
-  Format makeEngineTestFormat();
+  PcmFormat makeEngineTestFormat();
+  SignalFormat makeEngineTestSignalFormat();
   Engine::PlaybackItem makePlaybackItem(std::filesystem::path path);
   Engine::PlaybackItem makePlaybackItem(PlaybackInput input);
-  DecoderFactoryFn makeScriptedEngineDecoderFactory(Format fmt = makeEngineTestFormat());
+  DecoderFactoryFn makeScriptedEngineDecoderFactory(PcmFormat fmt = makeEngineTestFormat());
 
   struct ScriptedTrack final
   {
@@ -42,7 +45,7 @@ namespace ao::audio::test
     std::vector<std::byte> data;
   };
 
-  DecodedStreamInfo makeScriptedStreamInfo(Format format, AudioCodec codec = AudioCodec::Flac, bool isLossy = false);
+  DecodedStreamInfo makeScriptedStreamInfo(PcmFormat format, AudioCodec codec = AudioCodec::Flac, bool isLossy = false);
   DecoderFactoryFn makePathScriptedDecoderFactory(std::vector<ScriptedTrack> tracks);
 
   // Tracks how many decoder sessions are live. Track preparation opens a
@@ -130,7 +133,7 @@ namespace ao::audio::test
   class [[nodiscard]] StagedFailureDecoderSession final : public DecoderSession
   {
   public:
-    explicit StagedFailureDecoderSession(StagedFailureGate* failureGate);
+    StagedFailureDecoderSession(StagedFailureGate* failureGate, std::optional<SampleEncoding> optOutputEncoding);
 
     Result<> open(std::filesystem::path const& path) noexcept override;
     void close() noexcept override;
@@ -149,6 +152,7 @@ namespace ao::audio::test
     static constexpr std::uint32_t kPrerollFrames = 25000;
 
     StagedFailureGate* _failureGate = nullptr;
+    std::optional<SampleEncoding> _optOutputEncoding;
     std::vector<std::byte> _prerollBytes =
       std::vector<std::byte>(static_cast<std::size_t>(kPrerollFrames) * 4U, std::byte{0});
     bool _prerollReturned = false;

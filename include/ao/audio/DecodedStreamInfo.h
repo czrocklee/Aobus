@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <chrono>
 
@@ -15,8 +16,8 @@ namespace ao::audio
    */
   struct DecodedStreamInfo final
   {
-    Format sourceFormat;
-    Format outputFormat;
+    SignalFormat sourceFormat;
+    PcmFormat outputFormat;
     std::chrono::milliseconds duration{0};
     bool isLossy = false;
     AudioCodec codec = AudioCodec::Unknown;

@@ -4,6 +4,7 @@
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/audio/EngineTestSupport.h"
+#include "test/unit/audio/ScriptedDecoderSession.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/PlaybackTransportTestSupport.h"
@@ -17,11 +18,14 @@
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/NullBackend.h>
+#include <ao/audio/OpenedPcmMode.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Player.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
 #include <ao/rt/NotificationState.h>
@@ -96,8 +100,8 @@ namespace ao::rt::test
     class [[nodiscard]] GatedDecoderSession final : public audio::DecoderSession
     {
     public:
-      explicit GatedDecoderSession(std::binary_semaphore* failureRelease)
-        : _failureRelease{failureRelease}
+      GatedDecoderSession(std::binary_semaphore* failureRelease, std::optional<audio::SampleEncoding> optOutputEncoding)
+        : _failureRelease{failureRelease}, _optOutputEncoding{optOutputEncoding}
       {
       }
 
@@ -114,7 +118,6 @@ namespace ao::rt::test
           _prerollReturned = true;
           return audio::PcmBlock{
             .bytes = _prerollBytes,
-            .bitDepth = 16,
             .frames = kPrerollFrames,
             .firstFrameIndex = 0,
             .endOfStream = false,
@@ -128,20 +131,16 @@ namespace ao::rt::test
           return std::unexpected{Error{.code = Error::Code::IoError, .message = "gated prepared decode failure"}};
         }
 
-        return audio::PcmBlock{.bitDepth = 16, .endOfStream = true};
+        return audio::PcmBlock{.endOfStream = true};
       }
 
       audio::DecodedStreamInfo streamInfo() const noexcept override
       {
-        auto const format = audio::Format{
-          .sampleRate = 44100,
-          .channels = 2,
-          .bitDepth = 16,
-          .isInterleaved = true,
-        };
+        auto const sourceFormat = audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
         return audio::DecodedStreamInfo{
-          .sourceFormat = format,
-          .outputFormat = format,
+          .sourceFormat = sourceFormat,
+          .outputFormat =
+            audio::pcmFormat(sourceFormat, _optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le)),
           .duration = std::chrono::seconds{3},
           .isLossy = false,
           .codec = AudioCodec::Flac,
@@ -158,6 +157,7 @@ namespace ao::rt::test
       static constexpr std::uint32_t kPrerollFrames = 25000;
 
       std::binary_semaphore* _failureRelease = nullptr;
+      std::optional<audio::SampleEncoding> _optOutputEncoding;
       std::vector<std::byte> _prerollBytes =
         std::vector<std::byte>(static_cast<std::size_t>(kPrerollFrames) * 4U, std::byte{0});
       bool _prerollReturned = false;
@@ -194,10 +194,10 @@ namespace ao::rt::test
       {
       }
 
-      Result<> open(audio::Format const& /*format*/, audio::RenderTarget* target) override
+      Result<audio::OpenedPcmMode> open(audio::SignalFormat const& sourceFormat, audio::RenderTarget* target) override
       {
         _probePtr->publish(target);
-        return {};
+        return audio::NullBackend::open(sourceFormat, target);
       }
 
       void close() override { _probePtr->publish(nullptr); }
@@ -357,16 +357,35 @@ namespace ao::rt::test
     CHECK(fixture.playbackTransport.clearPreparedNext() == liveToken);
   }
 
-  TEST_CASE("PlaybackTransport token - staged decode error before commit reports once without publishing start",
+  TEST_CASE("PlaybackTransport token - final decoder setup failure settles the committed cancellation barrier",
             "[runtime][unit][playback][token]")
   {
-    auto failureGate = audio::test::StagedFailureGate{};
+    auto const format = audio::test::makeEngineTestFormat();
+    auto decoderFactory = [format](
+                            std::filesystem::path const& path, std::optional<audio::SampleEncoding> optOutputEncoding)
+    {
+      auto const sourceFormat = signalFormat(format);
+      auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
+        .duration = std::chrono::minutes{3},
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(4096, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+
+      if (path == "candidate-failure.flac" && optOutputEncoding)
+      {
+        decoderPtr->setOpenResult(makeError(Error::Code::IoError, "final decoder setup failed"));
+      }
+
+      return decoderPtr;
+    };
     auto executor = QueuedExecutor{};
     auto libraryFixture = MusicLibraryFixture{};
     auto runtime = async::Runtime{executor, 1};
     auto notifications = NotificationService{runtime};
-    auto playerPtr = std::make_unique<audio::Player>(
-      executor, audio::test::makeStagedFailureDecoderFactory("candidate-failure.flac", failureGate));
+    auto playerPtr = std::make_unique<audio::Player>(executor, std::move(decoderFactory));
     auto transportPtr =
       std::make_unique<PlaybackTransport>(executor, libraryFixture.library(), notifications, std::move(playerPtr));
     addReadyAudioProvider(*transportPtr);
@@ -382,8 +401,6 @@ namespace ao::rt::test
 
     auto staged = transportPtr->stagePlayback(candidate, ListId{8});
     REQUIRE(staged);
-    auto releaseGuard = audio::test::StagedFailureReleaseGuard{failureGate};
-    REQUIRE(failureGate.waitForRead());
 
     std::size_t startedCount = 0;
     auto nowPlaying = std::vector<PlaybackTransport::NowPlayingChanged>{};
@@ -400,26 +417,25 @@ namespace ao::rt::test
         }
       });
 
-    releaseGuard.release();
-    executor.checkQueued(std::chrono::seconds{5});
-    executor.drain();
-
     auto const committed = transportPtr->commitPlayback(std::move(*staged));
-    REQUIRE_FALSE(committed);
-    CHECK(committed.error().code == Error::Code::IoError);
-    CHECK(committed.error().message == "gated staged decode failure");
-    CHECK(transportPtr->state().transport == audio::Transport::Playing);
-    CHECK(transportPtr->state().nowPlaying.trackId == current.item.trackId);
-    CHECK(transportPtr->state().nowPlaying.sourceListId == kSourceListId);
-    CHECK(transportPtr->clearPreparedNext() == *preparedNext);
+    REQUIRE(committed);
+    CHECK(transportPtr->state().transport == audio::Transport::Error);
+    CHECK(transportPtr->state().nowPlaying.trackId == candidate.item.trackId);
+    CHECK(transportPtr->state().nowPlaying.sourceListId == ListId{8});
+    CHECK_FALSE(transportPtr->clearPreparedNext());
     CHECK(startedCount == 0);
     CHECK(nowPlaying.empty());
-    CHECK(notificationCount == 1);
+    CHECK(notificationCount == 0);
+    REQUIRE(executor.drainUntil([&] { return notificationCount == 1; }, std::chrono::seconds{5}));
     auto const feed = notifications.feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.front().severity == NotificationSeverity::Error);
+    CHECK(feed.entries.front().lifetime == NotificationLifetime::history());
     REQUIRE(std::holds_alternative<NotificationReport>(feed.entries.front().message));
-    CHECK(std::get<NotificationReport>(feed.entries.front().message).detail.contains("gated staged decode failure"));
+    auto const& report = std::get<NotificationReport>(feed.entries.front().message);
+    CHECK(report.templateId == NotificationReportTemplate::PlaybackTrackOpenFailed);
+    CHECK(report.trackId == candidate.item.trackId);
+    CHECK(report.detail.contains("final decoder setup failed"));
   }
 
   TEST_CASE("PlaybackTransport token - drain fallback returns exact disarm acknowledgement",
@@ -497,10 +513,10 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto runtime = async::Runtime{executor, 1};
     auto notifications = NotificationService{runtime};
-    auto decoderFactory = [&](std::filesystem::path const& path, audio::Format const&)
+    auto decoderFactory = [&](std::filesystem::path const& path, std::optional<audio::SampleEncoding> optOutputEncoding)
     {
-      return std::make_unique<GatedDecoderSession>(path == std::filesystem::path{"prepared-fail.flac"} ? &failureRelease
-                                                                                                       : nullptr);
+      return std::make_unique<GatedDecoderSession>(
+        path == std::filesystem::path{"prepared-fail.flac"} ? &failureRelease : nullptr, optOutputEncoding);
     };
     auto playerPtr = std::make_unique<audio::Player>(executor, std::move(decoderFactory));
     auto transportPtr =

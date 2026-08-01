@@ -8,7 +8,6 @@
 #include "Style.h"
 #include "TextCell.h"
 #include <ao/audio/QualityAnalyzer.h>
-#include <ao/audio/flow/Graph.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/playback/quality/AudioQualityFormatter.h>
 
@@ -66,9 +65,8 @@ namespace ao::tui
 
       if (assessment.optFormat)
       {
-        auto const preferValidBits = assessment.nodeType == audio::flow::NodeType::Source;
         nodeLine.append(" (");
-        nodeLine.append(uimodel::audioFormatLabel(*assessment.optFormat, preferValidBits));
+        nodeLine.append(uimodel::audioFormatLabel(*assessment.optFormat));
         nodeLine.push_back(')');
       }
 

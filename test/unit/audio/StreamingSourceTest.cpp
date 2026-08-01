@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/audio/StreamingSource.h>
+
 #include "ScriptedDecoderSession.h"
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PcmRingBuffer.h>
-#include <ao/audio/StreamingSource.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,9 +30,10 @@ namespace ao::audio::test
   {
     DecodedStreamInfo testStreamInfo()
     {
-      auto const format =
-        Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isFloat = false, .isInterleaved = true};
-      return DecodedStreamInfo{.sourceFormat = format, .outputFormat = format, .duration = std::chrono::seconds{1}};
+      auto const sourceFormat = SignalFormat{.sampleRate = 1000, .channels = 1, .precisionBits = 16};
+      return DecodedStreamInfo{.sourceFormat = sourceFormat,
+                               .outputFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le),
+                               .duration = std::chrono::seconds{1}};
     }
 
     std::vector<std::byte> silenceBlock(std::size_t byteCount)
@@ -37,6 +41,19 @@ namespace ao::audio::test
       return std::vector(byteCount, std::byte{0});
     }
   } // namespace
+
+  TEST_CASE("ScriptedDecoderSession - invalid output frame layout is rejected", "[audio][unit][test-support]")
+  {
+    auto info = testStreamInfo();
+    info.outputFormat.channels = 0;
+    auto decoder = ScriptedDecoderSession{info};
+    decoder.setReadScript({{{std::byte{0}}, true}});
+
+    auto const block = decoder.readNextBlock();
+
+    REQUIRE_FALSE(block);
+    CHECK(block.error().code == Error::Code::InvalidState);
+  }
 
   TEST_CASE("StreamingSource - initialize starts decode thread after successful preroll",
             "[audio][unit][streaming-source]")

@@ -15,8 +15,10 @@
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Engine.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Player.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -28,6 +30,7 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -44,21 +47,25 @@ namespace ao::rt::test::playback_succession
   {
     // A 48 kHz clock represents every whole millisecond exactly, including
     // the 3001 ms edge immediately above the strict restart threshold.
-    auto const format = audio::Format{.sampleRate = 48000, .channels = 2, .bitDepth = 16, .isInterleaved = true};
+    auto const sourceFormat = audio::SignalFormat{.sampleRate = 48000, .channels = 2, .precisionBits = 16};
     auto decoderFactory = audio::DecoderFactoryFn{};
 
     if (failureGate != nullptr)
     {
-      decoderFactory = [failureGate](std::filesystem::path const&, audio::Format const&)
-      { return std::make_unique<audio::test::StagedFailureDecoderSession>(failureGate); };
+      decoderFactory = [failureGate](
+                         std::filesystem::path const&, std::optional<audio::SampleEncoding> optOutputEncoding)
+      { return std::make_unique<audio::test::StagedFailureDecoderSession>(failureGate, optOutputEncoding); };
     }
     else
     {
-      decoderFactory = [format](std::filesystem::path const&, audio::Format const&)
+      decoderFactory = [sourceFormat](
+                         std::filesystem::path const&, std::optional<audio::SampleEncoding> optOutputEncoding)
       {
+        auto const outputFormat =
+          audio::pcmFormat(sourceFormat, optOutputEncoding.value_or(audio::SampleEncoding::Signed16Le));
         auto decoderPtr = std::make_unique<audio::test::ScriptedDecoderSession>(audio::DecodedStreamInfo{
-          .sourceFormat = format,
-          .outputFormat = format,
+          .sourceFormat = sourceFormat,
+          .outputFormat = outputFormat,
           .duration = std::chrono::seconds{10},
           .isLossy = false,
           .codec = AudioCodec::Flac,

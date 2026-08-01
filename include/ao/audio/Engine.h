@@ -7,9 +7,9 @@
 #include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RouteAnchor.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/Transport.h>
 
 #include <chrono>
@@ -23,10 +23,11 @@
 namespace ao::audio
 {
   class Backend;
-  class PcmSource;
   class DecoderSession;
+  class PcmSource;
   struct PlaybackInput;
-  using DecoderFactoryFn = std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, Format)>;
+  using DecoderFactoryFn =
+    std::function<std::unique_ptr<DecoderSession>(std::filesystem::path const&, std::optional<SampleEncoding>)>;
 
   namespace detail
   {
@@ -126,9 +127,11 @@ namespace ao::audio
     /**
      * @brief Move-only, non-published explicit-play candidate.
      *
-     * Staging opens and seeks the candidate source without changing the active
-     * playback generation, current item, or prepared lookahead. Only
-     * commitPlayback() may publish it.
+     * Staging inspects the candidate source and attempts to optimistically open,
+     * seek, and preroll a final decoder output without changing the active playback
+     * generation, current item, backend, or prepared lookahead. Only
+     * commitPlayback() may acquire the backend, validate or replace the
+     * optimistic decoder output, and publish playback.
      */
     class PreparedPlaybackStart final
     {
@@ -156,6 +159,7 @@ namespace ao::audio
       PlaybackItemId itemId;
       std::uint64_t generation = 0;
       PreparedCancellationBarrier cancellationBarrier;
+      bool playbackStarted = false;
 
       bool operator==(PlaybackStartReceipt const&) const = default;
     };
@@ -208,7 +212,10 @@ namespace ao::audio
     using OnTrackAdvanced = std::function<void(TrackAdvanced const&)>;
     using OnPlaybackFailure = std::function<void(PlaybackFailure const&)>;
 
-    Engine(std::unique_ptr<Backend> backendPtr, Device const& device, DecoderFactoryFn decoderFactory = nullptr);
+    // Device.h also owns DeviceId, which Status stores by value.
+    Engine(std::unique_ptr<Backend> backendPtr,
+           Device const& device, // NOLINT(aobus-strict-forward-declaration)
+           DecoderFactoryFn decoderFactory = nullptr);
     ~Engine();
 
     /// Stops worker threads and closes the backend while Engine remains addressable.
@@ -220,8 +227,9 @@ namespace ao::audio
     Engine(Engine&&) = delete;
     Engine& operator=(Engine&&) = delete;
 
-    void setBackend(std::unique_ptr<Backend> backendPtr, Device const& device);
-    void updateDevice(Device const& device);
+    void setBackend(std::unique_ptr<Backend> backendPtr,
+                    Device const& device);   // NOLINT(aobus-strict-forward-declaration)
+    void updateDevice(Device const& device); // NOLINT(aobus-strict-forward-declaration)
 
     void setOnTrackEnded(OnTrackEnded callback);
     void setOnTrackAdvanced(OnTrackAdvanced callback);

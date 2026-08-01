@@ -5,10 +5,11 @@
 
 #include <ao/Error.h>
 #include <ao/audio/DecoderSession.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 
 namespace ao::audio
 {
@@ -20,5 +21,5 @@ namespace ao::audio
    * structure preserves its media parser error.
    */
   Result<std::unique_ptr<DecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
-                                                               Format outputFormat);
+                                                               std::optional<SampleEncoding> optOutputEncoding);
 } // namespace ao::audio

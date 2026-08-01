@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/audio/NodeFormat.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/flow/Graph.h>
@@ -10,11 +11,6 @@
 
 #include <cstdint>
 #include <string>
-
-namespace ao::audio
-{
-  struct Format;
-}
 
 namespace ao::uimodel
 {
@@ -40,14 +36,10 @@ namespace ao::uimodel
   /**
    * @brief Formats a sample format as "kHz · bit · channels" for display.
    *
-   * @param preferValidBits When true and the format carries a non-zero valid-bit
-   * count, report the meaningful precision (validBits) instead of the storage
-   * container width (bitDepth). Used for the source node so a low-resolution
-   * track padded into a wider container (e.g. 16-bit into a 32-bit word) is shown
-   * at its true resolution, while downstream nodes still report the transport
+   * Signal nodes report logical precision; PCM nodes report their concrete
    * container width.
    */
-  std::string audioFormatLabel(audio::Format const& format, bool preferValidBits = false);
+  std::string audioFormatLabel(audio::NodeFormat const& format);
   std::string audioFindingLabel(audio::QualityFinding const& finding);
   AudioQualityCategory audioFindingCategory(audio::QualityFinding const& finding) noexcept;
   std::string audioQualityConclusion(audio::Quality quality);

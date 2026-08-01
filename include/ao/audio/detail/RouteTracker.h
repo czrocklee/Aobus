@@ -6,8 +6,9 @@
 #include <ao/AudioCodec.h>
 #include <ao/audio/AudioRouteFormatState.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/RouteAnchor.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <mutex>
 #include <optional>
@@ -22,8 +23,8 @@ namespace ao::audio::detail
   class RouteTracker final
   {
   public:
-    void setDecoder(Format sourceFormat, Format outputFormat, bool isLossy, AudioCodec codec);
-    void setEngineFormat(Format format);
+    void setDecoder(SignalFormat sourceFormat, PcmFormat outputFormat, bool isLossy, AudioCodec codec);
+    void setEngineFormat(PcmFormat format);
     void setAnchor(BackendId backend, std::string id);
     void clear();
 

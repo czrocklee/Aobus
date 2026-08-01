@@ -8,9 +8,9 @@
 #include "tui/QualityPanel.h"
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/Quality.h>
 #include <ao/audio/QualityAnalyzer.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 #include <ao/audio/flow/Graph.h>
 #include <ao/rt/PlaybackState.h>
@@ -98,9 +98,9 @@ namespace ao::tui::test
       return -1;
     }
 
-    audio::Format cdFormat()
+    audio::SignalFormat cdFormat()
     {
-      return audio::Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .validBits = 16};
+      return audio::SignalFormat{.sampleRate = 44100, .channels = 2, .precisionBits = 16};
     }
   } // namespace
 

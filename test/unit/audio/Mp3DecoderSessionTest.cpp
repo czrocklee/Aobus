@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/Mp3DecoderSession.h>
+
 #include "DecoderTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include <ao/AudioCodec.h>
-#include <ao/audio/Format.h>
-#include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SampleEncoding.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -16,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <optional>
 #include <vector>
 
 namespace ao::audio::test
@@ -24,7 +27,7 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
-    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
@@ -33,7 +36,7 @@ namespace ao::audio::test
     CHECK(info.sourceFormat.channels == 2);
     CHECK(info.outputFormat.sampleRate == info.sourceFormat.sampleRate);
     CHECK(info.outputFormat.channels == info.sourceFormat.channels);
-    CHECK(info.outputFormat.bitDepth == 16);
+    CHECK(encodingContainerBits(info.outputFormat.encoding) == 16);
     CHECK(info.duration > std::chrono::milliseconds{0});
 
     auto const firstBlock = decoder.readNextBlock();
@@ -55,19 +58,19 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
-    auto decoder = Mp3DecoderSession{Format{.isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{std::nullopt};
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
     CHECK(info.sourceFormat.sampleRate == 44100);
     CHECK(info.sourceFormat.channels == 2);
-    CHECK(info.sourceFormat.bitDepth == 16);
-    CHECK(info.outputFormat == info.sourceFormat);
+    CHECK(info.sourceFormat.precisionBits == 16);
+    CHECK(signalFormat(info.outputFormat) == info.sourceFormat);
+    CHECK(info.outputFormat.encoding == SampleEncoding::Signed16Le);
     CHECK(info.isLossy);
 
     auto const block = decoder.readNextBlock();
     REQUIRE(block);
-    CHECK(block->bitDepth == 16);
     CHECK(block->frames > 0);
     CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 2U);
   }
@@ -77,16 +80,15 @@ namespace ao::audio::test
     auto const testFile = requireAudioFixture("hires.mp3");
 
     // Aobus often uses 32-bit float for internal processing
-    auto decoder = Mp3DecoderSession{Format{.bitDepth = 32, .isFloat = true, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Float32Le};
     REQUIRE(decoder.open(testFile));
 
     auto const info = decoder.streamInfo();
-    CHECK(info.outputFormat.isFloat);
-    CHECK(info.outputFormat.bitDepth == 32);
+    CHECK(isFloatEncoding(info.outputFormat.encoding));
+    CHECK(encodingContainerBits(info.outputFormat.encoding) == 32);
 
     auto const block = decoder.readNextBlock();
     REQUIRE(block);
-    CHECK(block->bitDepth == 32);
     CHECK(block->bytes.size() == static_cast<std::size_t>(block->frames) * 2U * 4U);
   }
 
@@ -94,7 +96,7 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("hires.mp3");
 
-    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
 
     REQUIRE(decoder.open(testFile));
     CHECK(decoder.readNextBlock());
@@ -110,7 +112,7 @@ namespace ao::audio::test
   {
     auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
-    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
     REQUIRE(decoder.open(testFile));
 
     CHECK(readUntilStableEndOfStream(decoder, 512) == 44100);
@@ -120,7 +122,7 @@ namespace ao::audio::test
             "[audio][regression][mp3]")
   {
     auto const testFile = requireAudioFixture("vbr_no_seek_table.mp3");
-    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
 
     REQUIRE(decoder.open(testFile));
     auto const info = decoder.streamInfo();
@@ -147,7 +149,7 @@ namespace ao::audio::test
     data.insert(data.end(), secondData.begin(), secondData.end());
 
     auto const temp = ao::test::TempFile{data, ".mp3"};
-    auto decoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
     REQUIRE(decoder.open(temp.path));
     auto const initialInfo = decoder.streamInfo();
 
@@ -181,7 +183,7 @@ namespace ao::audio::test
 
   TEST_CASE("Mp3DecoderSession - reports error paths", "[audio][unit][mp3][error]")
   {
-    auto decoder = Mp3DecoderSession{Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true}};
+    auto decoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
 
     SECTION("Seek on unopened file")
     {
@@ -215,48 +217,27 @@ namespace ao::audio::test
       CHECK(!decoder.seek(std::chrono::hours{1}));
     }
 
-    SECTION("Unsupported 32-bit integer output")
+    SECTION("Supports lossless wider integer output")
     {
       auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      auto int32Decoder = Mp3DecoderSession{Format{
-        .sampleRate = 44100,
-        .channels = 2,
-        .bitDepth = 32,
-        .isFloat = false,
-        .isInterleaved = true,
-      }};
+      auto int32Decoder = Mp3DecoderSession{SampleEncoding::Signed32Le};
 
-      CHECK(!int32Decoder.open(testFile));
+      REQUIRE(int32Decoder.open(testFile));
+      CHECK(int32Decoder.streamInfo().outputFormat.encoding == SampleEncoding::Signed32Le);
     }
 
-    SECTION("Unsupported sample rate conversion")
-    {
-      auto const testFile = requireAudioFixture("hires.mp3");
-      auto resamplingDecoder = Mp3DecoderSession{Format{
-        .sampleRate = 44100,
-        .channels = 2,
-        .bitDepth = 16,
-        .isInterleaved = true,
-      }};
-
-      CHECK(!resamplingDecoder.open(testFile));
-    }
-
-    SECTION("Rejects planar output and channel remapping")
+    SECTION("Supports lossless packed and padded output")
     {
       auto const testFile = requireAudioFixture("basic_metadata.mp3");
 
-      CHECK((!Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = false}}.open(testFile)));
-      CHECK((!Mp3DecoderSession{Format{.channels = 1, .bitDepth = 16, .isInterleaved = true}}.open(testFile)));
-      CHECK((!Mp3DecoderSession{Format{.bitDepth = 16, .validBits = 8, .isInterleaved = true}}.open(testFile)));
-      CHECK((!Mp3DecoderSession{Format{.channels = 3, .bitDepth = 16, .isInterleaved = true}}.open(testFile)));
-      CHECK((!Mp3DecoderSession{Format{.bitDepth = 64, .isFloat = true, .isInterleaved = true}}.open(testFile)));
+      CHECK(Mp3DecoderSession{SampleEncoding::Signed24PackedLe}.open(testFile));
+      CHECK(Mp3DecoderSession{SampleEncoding::Signed24In32Le}.open(testFile));
     }
 
     SECTION("Close and failed reopen clear stream state")
     {
       auto const testFile = requireAudioFixture("basic_metadata.mp3");
-      auto lifecycleDecoder = Mp3DecoderSession{Format{.bitDepth = 16, .isInterleaved = true}};
+      auto lifecycleDecoder = Mp3DecoderSession{SampleEncoding::Signed16Le};
 
       REQUIRE(lifecycleDecoder.open(testFile));
       lifecycleDecoder.close();

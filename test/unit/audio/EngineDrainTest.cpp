@@ -9,9 +9,13 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -20,10 +24,12 @@
 #include <atomic>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
 #include <semaphore>
 #include <tuple>
 #include <utility>
@@ -39,11 +45,11 @@ namespace ao::audio::test
     class DrainOnStopBackend final : public Backend
     {
     public:
-      Result<> open(Format const& /*format*/, RenderTarget* target) override
+      Result<OpenedPcmMode> open(SignalFormat const& sourceFormat, RenderTarget* target) override
       {
         _target = target;
         ++_openCount;
-        return {};
+        return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
       }
 
       void start() override {}
@@ -100,11 +106,15 @@ namespace ao::audio::test
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
 
-    auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
+    auto const fmt = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const factory = [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
+      auto const sourceFormat = signalFormat(fmt);
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
+        DecodedStreamInfo{.sourceFormat = sourceFormat,
+                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
+                          .duration = std::chrono::milliseconds{0},
+                          .isLossy = false});
       auto data = std::vector(20, std::byte{0}); // 10ms
 
       decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
@@ -156,12 +166,53 @@ namespace ao::audio::test
     }
   }
 
+  TEST_CASE("Engine - an already drained prepared source completes without starting the backend",
+            "[audio][regression][engine][drain]")
+  {
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto const factory = [format](auto const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      auto const sourceFormat = signalFormat(format);
+      return std::make_unique<ScriptedDecoderSession>(
+        DecodedStreamInfo{.sourceFormat = sourceFormat,
+                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(format.encoding)),
+                          .duration = std::chrono::milliseconds{0},
+                          .isLossy = false});
+    };
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    auto* const backendRaw = backendPtr.get();
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), factory};
+    auto endedLatch = CallbackLatch{};
+    auto endedGeneration = std::atomic<std::uint64_t>{0};
+    engine.setOnTrackEnded(
+      [&](Engine::TrackEnded const& event)
+      {
+        endedGeneration.store(event.generation, std::memory_order_release);
+        endedLatch.notify();
+      });
+
+    auto staged = engine.stagePlayback(makePlaybackItem("empty.flac"));
+    REQUIRE(staged);
+    auto committed = engine.commitPlayback(std::move(*staged));
+
+    REQUIRE(committed);
+    CHECK_FALSE(committed->playbackStarted);
+    REQUIRE(endedLatch.waitForCount(1));
+    CHECK(endedGeneration.load(std::memory_order_acquire) == committed->generation);
+    CHECK(engine.status().transport == Transport::Idle);
+    auto const events = backendRaw->events();
+    REQUIRE(events.size() == 3);
+    CHECK(events[0].name == "open");
+    CHECK(events[1].name == "stop");
+    CHECK(events[2].name == "close");
+  }
+
   TEST_CASE("Engine - play ignores stale pending drain from retired session", "[audio][unit][engine-drain][window]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const firstData = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
     auto const secondData = std::vector{std::byte{0x21}, std::byte{0x22}, std::byte{0x23}, std::byte{0x24}};
 
@@ -227,7 +278,7 @@ namespace ao::audio::test
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const initialData = std::vector{std::byte{0x31}, std::byte{0x32}, std::byte{0x33}, std::byte{0x34}};
     auto const seekData = std::vector{std::byte{0x41}, std::byte{0x42}, std::byte{0x43}, std::byte{0x44}};
 
@@ -292,13 +343,13 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Playing);
   }
 
-  TEST_CASE("Engine - seek landing at end of stream retires the render session before quiescing",
+  TEST_CASE("Engine - seek landing at end of stream completes the track and retires the render session",
             "[audio][unit][engine-seek][drain]")
   {
     auto const device = makeEngineTestDevice();
     auto backendPtr = std::make_unique<DrainOnStopBackend>();
     auto* const backendRaw = backendPtr.get();
-    auto const format = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const format = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector{std::byte{0x11}, std::byte{0x12}, std::byte{0x13}, std::byte{0x14}};
 
     auto registryPtr = std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>();
@@ -336,9 +387,10 @@ namespace ao::audio::test
     CHECK(engine.status().transport == Transport::Idle);
 
     // The quiesce path retired the render session, so the in-flight drain
-    // signal is inert: no spurious track-end, no second quiesce of the closed
-    // backend.
-    CHECK_FALSE(endedLatch.waitForCount(1, std::chrono::milliseconds{200}));
+    // signal is inert: only the seek's synchronous natural-completion path may
+    // publish track end, and it quiesces the backend exactly once.
+    REQUIRE(endedLatch.waitForCount(1));
+    CHECK(endedLatch.count() == 1);
     CHECK(engine.status().transport == Transport::Idle);
     CHECK(backendRaw->closeCount() == closesAfterPlay + 1);
   }

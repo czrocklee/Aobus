@@ -6,6 +6,7 @@
 #include <ao/Error.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/PcmBlock.h>
+#include <ao/audio/PcmFormat.h>
 
 #include <atomic>
 #include <chrono>
@@ -105,7 +106,7 @@ namespace ao::audio::test
 
     if (_scriptIndex >= _script.size())
     {
-      return PcmBlock{.bitDepth = 16, .frames = 0, .firstFrameIndex = 0, .endOfStream = true};
+      return PcmBlock{.frames = 0, .firstFrameIndex = 0, .endOfStream = true};
     }
 
     auto const& entry = _script[_scriptIndex++];
@@ -115,9 +116,15 @@ namespace ao::audio::test
       return std::unexpected{entry.result.error()};
     }
 
+    auto const outputFrameBytes = frameBytes(_info.outputFormat);
+
+    if (outputFrameBytes == 0U)
+    {
+      return makeError(Error::Code::InvalidState, "Scripted decoder output format has no complete frame");
+    }
+
     return PcmBlock{.bytes = entry.data,
-                    .bitDepth = 16,
-                    .frames = static_cast<std::uint32_t>(entry.data.size() / std::size_t{4}),
+                    .frames = static_cast<std::uint32_t>(entry.data.size() / outputFrameBytes),
                     .firstFrameIndex = 0,
                     .endOfStream = entry.endOfStream};
   }

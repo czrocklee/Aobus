@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/Engine.h>
+
 #include "BackendTestSupport.h"
 #include "EngineTestSupport.h"
 #include "FakeCapturingBackend.h"
@@ -11,9 +13,12 @@
 #include <ao/audio/BackendIds.h>
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
-#include <ao/audio/Engine.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/RenderTarget.h>
+#include <ao/audio/SampleEncoding.h>
+#include <ao/audio/SignalFormat.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -22,6 +27,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -35,7 +41,7 @@ namespace ao::audio::test
 {
   using namespace fakeit;
 
-  TEST_CASE("Engine - stop closes backend and leaves transport idle", "[audio][unit][engine]")
+  TEST_CASE("Engine - stop while idle leaves an unopened backend untouched", "[audio][unit][engine]")
   {
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
@@ -48,14 +54,14 @@ namespace ao::audio::test
     auto engine = Engine{spy.makeProxy(), device};
 
     engine.stop();
-    Verify(Method(mockBackend, stop)).AtLeastOnce();
-    Verify(Method(mockBackend, close)).AtLeastOnce();
+    Verify(Method(mockBackend, stop)).Never();
+    Verify(Method(mockBackend, close)).Never();
 
     auto snap = engine.status();
     CHECK(snap.transport == Transport::Idle);
   }
 
-  TEST_CASE("Engine - setBackend while idle closes old backend and updates status", "[audio][unit][engine][hot-swap]")
+  TEST_CASE("Engine - setBackend while idle replaces an unopened backend", "[audio][unit][engine][hot-swap]")
   {
     auto spy1 = SpyBackend<>{};
     auto spy2 = SpyBackend<>{};
@@ -84,8 +90,8 @@ namespace ao::audio::test
                          .isDefault = false,
                          .backendId = kBackendAlsa});
 
-      Verify(Method(mockBackend1, stop)).Once();
-      Verify(Method(mockBackend1, close)).Once();
+      Verify(Method(mockBackend1, stop)).Never();
+      Verify(Method(mockBackend1, close)).Never();
 
       auto const snap = engine.status();
       CHECK(snap.backendId == kBackendAlsa);
@@ -116,7 +122,7 @@ namespace ao::audio::test
     {
       CHECK(snap.routeState.sourceFormat.sampleRate == 44100);
       CHECK(snap.routeState.sourceFormat.channels == 2);
-      CHECK(snap.routeState.sourceFormat.bitDepth == 16);
+      CHECK(snap.routeState.sourceFormat.precisionBits == 16);
     }
 
     SECTION("AudioRouteFormatState reports engine output format")
@@ -133,7 +139,7 @@ namespace ao::audio::test
     engine.stop();
   }
 
-  TEST_CASE("Engine - PipeWire shared mode keeps native sample rate", "[audio][unit][engine][pipewire]")
+  TEST_CASE("Engine - backend opens from the inspected native signal", "[audio][unit][engine][backend-open]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -143,20 +149,16 @@ namespace ao::audio::test
                                .displayName = "PipeWire",
                                .description = "PipeWire Shared",
                                .isDefault = false,
-                               .backendId = kBackendPipeWire,
-                               .capabilities = {.sampleRates = {48000},
-                                                .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
-                                                .bitDepths = {16},
-                                                .channelCounts = {2}}};
+                               .backendId = kBackendPipeWire};
 
-    auto openedFormats = std::vector<Format>{};
+    auto openedSignals = std::vector<SignalFormat>{};
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](Format const& format, RenderTarget*)
+        [&](SignalFormat const& sourceFormat, RenderTarget*&) -> Result<OpenedPcmMode>
         {
-          openedFormats.push_back(format);
-          return Result<>{};
+          openedSignals.push_back(sourceFormat);
+          return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed16Le)};
         });
     When(Method(mockBackend, backendId)).AlwaysReturn(kBackendPipeWire);
 
@@ -166,47 +168,45 @@ namespace ao::audio::test
 
     engine.play(makePlaybackItem(descriptor));
 
-    REQUIRE(!openedFormats.empty());
-    CHECK(openedFormats.back().sampleRate == 44100);
-    CHECK(openedFormats.back().channels == 2);
-    CHECK(openedFormats.back().bitDepth == 16);
+    REQUIRE(openedSignals.size() == 1U);
+    CHECK(openedSignals.back().sampleRate == 44100);
+    CHECK(openedSignals.back().channels == 2);
+    CHECK(openedSignals.back().precisionBits == 16);
     CHECK(engine.status().transport == Transport::Playing);
 
     engine.stop();
   }
 
-  TEST_CASE("Engine - WASAPI shared mode opens the decoder output format without device negotiation",
-            "[audio][regression][engine][wasapi]")
+  TEST_CASE("Engine - backend result selects the decoder PCM output", "[audio][regression][engine][backend-open]")
   {
-    auto const nativeFormat =
-      Format{.sampleRate = 96000, .channels = 2, .bitDepth = 16, .validBits = 16, .isInterleaved = true};
+    auto const nativeFormat = PcmFormat{.sampleRate = 96000, .channels = 2, .encoding = SampleEncoding::Signed16Le};
     auto const device = Device{.id = DeviceId{"wasapi-shared"},
                                .displayName = "WASAPI",
                                .description = "WASAPI Shared",
                                .isDefault = false,
-                               .backendId = kBackendWasapi,
-                               .capabilities = {.sampleRates = {48000},
-                                                .sampleFormats = {{.bitDepth = 24, .validBits = 24, .isFloat = false}},
-                                                .bitDepths = {24},
-                                                .channelCounts = {1}}};
-    auto openedFormats = std::vector<Format>{};
+                               .backendId = kBackendWasapi};
+    auto openedSignals = std::vector<SignalFormat>{};
+    auto decoderRequests = std::vector<std::optional<SampleEncoding>>{};
     auto spy = SpyBackend<>{};
     auto& mockBackend = spy.mock();
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](Format const& format, RenderTarget*)
+        [&](SignalFormat const& sourceFormat, RenderTarget*&) -> Result<OpenedPcmMode>
         {
-          openedFormats.push_back(format);
-          return Result<>{};
+          openedSignals.push_back(sourceFormat);
+          return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, SampleEncoding::Signed24In32Le)};
         });
     When(Method(mockBackend, backendId)).AlwaysReturn(kBackendWasapi);
     When(Method(mockBackend, profileId)).AlwaysReturn(kProfileShared);
 
-    auto decoderFactory = [nativeFormat](std::filesystem::path const&, Format const&)
+    auto decoderFactory = [nativeFormat, &decoderRequests](
+                            std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
     {
+      decoderRequests.push_back(optOutputEncoding);
+      auto const sourceFormat = signalFormat(nativeFormat);
       auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = nativeFormat,
-        .outputFormat = nativeFormat,
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
         .duration = std::chrono::milliseconds{10},
         .isLossy = false,
         .codec = AudioCodec::Flac,
@@ -219,13 +219,189 @@ namespace ao::audio::test
 
     engine.play(makePlaybackItem(PlaybackInput{.filePath = "native-96k.flac"}));
 
-    REQUIRE(openedFormats.size() == 1);
-    CHECK(openedFormats.front() == nativeFormat);
+    REQUIRE(openedSignals.size() == 1);
+    CHECK(openedSignals.front() == signalFormat(nativeFormat));
+    REQUIRE(decoderRequests.size() == 2);
+    CHECK_FALSE(decoderRequests.front());
+    CHECK(decoderRequests.back() == SampleEncoding::Signed24In32Le);
     auto const status = engine.status();
     CHECK(status.transport == Transport::Playing);
-    CHECK(status.routeState.sourceFormat == nativeFormat);
-    CHECK(status.routeState.decoderOutputFormat == nativeFormat);
-    CHECK(status.routeState.engineOutputFormat == nativeFormat);
+    CHECK(status.routeState.sourceFormat == signalFormat(nativeFormat));
+    auto const selectedFormat = pcmFormat(signalFormat(nativeFormat), SampleEncoding::Signed24In32Le);
+    CHECK(status.routeState.decoderOutputFormat == selectedFormat);
+    CHECK(status.routeState.engineOutputFormat == selectedFormat);
+    engine.stop();
+  }
+
+  TEST_CASE("Engine - commit reuses a staged decoder when the backend prewarm hint matches",
+            "[audio][regression][engine][staged]")
+  {
+    auto const nativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto decoderRequests = std::vector<std::optional<SampleEncoding>>{};
+    auto decoderFactory = [nativeFormat, &decoderRequests](
+                            std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      decoderRequests.push_back(optOutputEncoding);
+      auto const sourceFormat = signalFormat(nativeFormat);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
+        .duration = std::chrono::seconds{2},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(3000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+      return decoderPtr;
+    };
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    backendPtr->setPrewarmEncoding(SampleEncoding::Signed24In32Le);
+    backendPtr->setSelectedEncoding(SampleEncoding::Signed24In32Le);
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
+
+    auto staged = engine.stagePlayback(makePlaybackItem("native-24.flac"));
+
+    REQUIRE(staged);
+    REQUIRE(decoderRequests.size() == 2);
+    CHECK_FALSE(decoderRequests[0]);
+    CHECK(decoderRequests[1] == SampleEncoding::Signed24In32Le);
+
+    auto committed = engine.commitPlayback(std::move(*staged));
+
+    REQUIRE(committed);
+    CHECK(committed->playbackStarted);
+    CHECK(decoderRequests.size() == 2);
+    CHECK(engine.status().routeState.decoderOutputFormat ==
+          pcmFormat(signalFormat(nativeFormat), SampleEncoding::Signed24In32Le));
+    engine.stop();
+  }
+
+  TEST_CASE("Engine - a lossy prewarm hint is ignored", "[audio][regression][engine][staged]")
+  {
+    auto const nativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto decoderRequests = std::vector<std::optional<SampleEncoding>>{};
+    auto decoderFactory = [nativeFormat, &decoderRequests](
+                            std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      decoderRequests.push_back(optOutputEncoding);
+      auto const sourceFormat = signalFormat(nativeFormat);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
+        .duration = std::chrono::seconds{2},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(3000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+      return decoderPtr;
+    };
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    backendPtr->setPrewarmEncoding(SampleEncoding::Signed16Le);
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
+
+    auto staged = engine.stagePlayback(makePlaybackItem("native-24.flac"));
+
+    REQUIRE(staged);
+    REQUIRE(decoderRequests.size() == 1);
+    CHECK_FALSE(decoderRequests.front());
+
+    auto committed = engine.commitPlayback(std::move(*staged));
+
+    REQUIRE(committed);
+    CHECK(committed->playbackStarted);
+    REQUIRE(decoderRequests.size() == 2);
+    CHECK(decoderRequests.back() == SampleEncoding::Signed24PackedLe);
+    CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed24PackedLe);
+    engine.stop();
+  }
+
+  TEST_CASE("Engine - explicit staging follows the backend hint after a wider current PCM mode",
+            "[audio][regression][engine][staged]")
+  {
+    auto const currentNativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto const successorNativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
+    auto decoderRequests = std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>{};
+    auto decoderFactory = [currentNativeFormat, successorNativeFormat, &decoderRequests](
+                            std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      decoderRequests.emplace_back(path, optOutputEncoding);
+      auto const nativeFormat = path == "current-24.flac" ? currentNativeFormat : successorNativeFormat;
+      auto const sourceFormat = signalFormat(nativeFormat);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
+        .duration = std::chrono::seconds{2},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+      return decoderPtr;
+    };
+    auto engine = Engine{std::make_unique<FakeCapturingBackend>(), makeEngineTestDevice(), std::move(decoderFactory)};
+    engine.play(makePlaybackItem("current-24.flac"));
+    REQUIRE(engine.status().transport == Transport::Playing);
+    decoderRequests.clear();
+
+    auto staged = engine.stagePlayback(makePlaybackItem("successor-16.flac"));
+
+    REQUIRE(staged);
+    REQUIRE(decoderRequests.size() == 2);
+    CHECK_FALSE(decoderRequests[0].second);
+    CHECK(decoderRequests[1].second == SampleEncoding::Signed16Le);
+
+    auto committed = engine.commitPlayback(std::move(*staged));
+
+    REQUIRE(committed);
+    CHECK(committed->playbackStarted);
+    CHECK(decoderRequests.size() == 2);
+    CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed16Le);
+    engine.stop();
+  }
+
+  TEST_CASE("Engine - commit replaces a staged decoder when the backend selects another lossless mode",
+            "[audio][regression][engine][staged]")
+  {
+    auto const nativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto decoderRequests = std::vector<std::optional<SampleEncoding>>{};
+    auto decoderFactory = [nativeFormat, &decoderRequests](
+                            std::filesystem::path const&, std::optional<SampleEncoding> optOutputEncoding)
+    {
+      decoderRequests.push_back(optOutputEncoding);
+      auto const sourceFormat = signalFormat(nativeFormat);
+      auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+        .sourceFormat = sourceFormat,
+        .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
+        .duration = std::chrono::seconds{2},
+        .isLossy = false,
+        .codec = AudioCodec::Flac,
+      });
+      decoderPtr->setReadScript(
+        {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+      return decoderPtr;
+    };
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    backendPtr->setSelectedEncoding(SampleEncoding::Signed24In32Le);
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
+    auto staged = engine.stagePlayback(makePlaybackItem("fallback-24.flac"));
+    REQUIRE(staged);
+    REQUIRE(decoderRequests.size() == 2);
+    CHECK_FALSE(decoderRequests[0]);
+    CHECK(decoderRequests[1] == SampleEncoding::Signed24PackedLe);
+
+    auto committed = engine.commitPlayback(std::move(*staged));
+
+    REQUIRE(committed);
+    CHECK(committed->playbackStarted);
+    REQUIRE(decoderRequests.size() == 3);
+    CHECK(decoderRequests[2] == SampleEncoding::Signed24In32Le);
+    CHECK(engine.status().routeState.decoderOutputFormat.encoding == SampleEncoding::Signed24In32Le);
     engine.stop();
   }
 
@@ -239,8 +415,8 @@ namespace ao::audio::test
                                .displayName = "ALSA",
                                .description = "ALSA Exclusive",
                                .isDefault = false,
-                               .backendId = kBackendAlsa,
-                               .capabilities = {.sampleRates = {44100}, .bitDepths = {32}, .channelCounts = {2}}};
+                               .backendId = kBackendAlsa};
+    backendRaw->setSelectedEncoding(SampleEncoding::Signed32Le);
 
     auto engine = Engine{std::move(backendPtr), device};
     auto const descriptor = PlaybackInput{.filePath = testFile.string()};
@@ -252,7 +428,7 @@ namespace ao::audio::test
 
     auto const events = backendRaw->events();
     REQUIRE(!events.empty());
-    auto optOpenFormat = std::optional<Format>{};
+    auto optOpenFormat = std::optional<PcmFormat>{};
 
     for (auto const& event : events)
     {
@@ -264,14 +440,13 @@ namespace ao::audio::test
     }
 
     REQUIRE(optOpenFormat);
-    CHECK(optOpenFormat->bitDepth == 32);
-    CHECK(optOpenFormat->validBits == 16);
+    CHECK(optOpenFormat->encoding == SampleEncoding::Signed32Le);
     CHECK(optOpenFormat->sampleRate == 44100);
 
     engine.stop();
   }
 
-  TEST_CASE("Engine - unsupported backend sample rate fails without resampler", "[audio][unit][engine][format]")
+  TEST_CASE("Engine - backend format rejection is reported without fallback", "[audio][unit][engine][format]")
   {
     auto const testFile = requireAudioFixture("basic_metadata.flac");
 
@@ -281,20 +456,16 @@ namespace ao::audio::test
                                .displayName = "ALSA",
                                .description = "ALSA Exclusive",
                                .isDefault = false,
-                               .backendId = kBackendAlsa,
-                               .capabilities = {.sampleRates = {48000},
-                                                .sampleFormats = {{.bitDepth = 16, .validBits = 16, .isFloat = false}},
-                                                .bitDepths = {16},
-                                                .channelCounts = {2}}};
+                               .backendId = kBackendAlsa};
 
-    auto openedFormats = std::vector<Format>{};
+    auto openedSignals = std::vector<SignalFormat>{};
 
     When(Method(mockBackend, open))
       .AlwaysDo(
-        [&](Format const& format, RenderTarget*)
+        [&](SignalFormat const& sourceFormat, RenderTarget*&) -> Result<OpenedPcmMode>
         {
-          openedFormats.push_back(format);
-          return Result<>{};
+          openedSignals.push_back(sourceFormat);
+          return makeError(Error::Code::FormatRejected, "test backend rejected native sample rate");
         });
     When(Method(mockBackend, backendId)).AlwaysReturn(kBackendAlsa);
     When(Method(mockBackend, profileId)).AlwaysReturn(kProfileExclusive);
@@ -307,8 +478,9 @@ namespace ao::audio::test
 
     auto const snap = engine.status();
     CHECK(snap.transport == Transport::Error);
-    CHECK(snap.statusText.contains("no resampler yet"));
-    CHECK(openedFormats.empty());
+    CHECK(snap.statusText.contains("rejected native sample rate"));
+    REQUIRE(openedSignals.size() == 1U);
+    CHECK(openedSignals.front().sampleRate == 44100U);
   }
 
   TEST_CASE("Engine - pause and resume update backend transport", "[audio][unit][engine][transport]")
@@ -321,11 +493,15 @@ namespace ao::audio::test
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* const backendRaw = backendPtr.get();
 
-    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
+    auto const fmt = makeEngineTestFormat();
+    auto const factory = [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
+      auto const sourceFormat = signalFormat(fmt);
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
+        DecodedStreamInfo{.sourceFormat = sourceFormat,
+                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
+                          .duration = std::chrono::milliseconds{0},
+                          .isLossy = false});
 
       // provide some data for preroll
       auto data = std::vector(100, std::byte{0});
@@ -366,11 +542,16 @@ namespace ao::audio::test
                                .backendId = kBackendNone};
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
 
-    auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true}; // 2 bytes = 1ms
-    auto const factory = [fmt](auto const&, auto const&)
+    auto const fmt =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le}; // 2 bytes = 1ms
+    auto const factory = [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::milliseconds{0}, .isLossy = false});
+      auto const sourceFormat = signalFormat(fmt);
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
+        DecodedStreamInfo{.sourceFormat = sourceFormat,
+                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
+                          .duration = std::chrono::milliseconds{0},
+                          .isLossy = false});
       auto data = std::vector(200, std::byte{0}); // 100ms
 
       decPtr->setReadScript(
@@ -406,20 +587,22 @@ namespace ao::audio::test
     auto orderedEvents = std::vector<std::string>{};
     backendRaw->setEventObserver([&orderedEvents](std::string_view name) { orderedEvents.emplace_back(name); });
     auto registryPtr = std::make_shared<std::map<std::filesystem::path, ScriptedDecoderSession*>>();
-    auto const fmt = Format{.sampleRate = 1000, .channels = 1, .bitDepth = 16, .isInterleaved = true};
+    auto const fmt = PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed16Le};
     auto const data = std::vector(200, std::byte{0});
     auto const path = std::filesystem::path{"offset.flac"};
     auto info = makeScriptedStreamInfo(fmt);
     info.duration = std::chrono::milliseconds{100};
     auto factory = [info, data, path, registryPtr, &orderedEvents](
-                     std::filesystem::path const& requestedPath, Format const&)
+                     std::filesystem::path const& requestedPath, std::optional<SampleEncoding> optOutputEncoding)
     {
       if (requestedPath != path)
       {
         return std::unique_ptr<ScriptedDecoderSession>{};
       }
 
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(info);
+      auto requestedInfo = info;
+      requestedInfo.outputFormat = pcmFormat(info.sourceFormat, optOutputEncoding.value_or(info.outputFormat.encoding));
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(requestedInfo);
       decPtr->setReadScript({{.data = data, .endOfStream = false}, {.endOfStream = true}});
       decPtr->setSeekObserver([&orderedEvents](std::chrono::milliseconds) { orderedEvents.emplace_back("seek"); });
       (*registryPtr)[path] = decPtr.get();
@@ -448,7 +631,71 @@ namespace ao::audio::test
     REQUIRE(seekIt != orderedEvents.end());
     REQUIRE(openIt != orderedEvents.end());
     REQUIRE(startIt != orderedEvents.end());
-    CHECK(seekIt < openIt);
+    CHECK(openIt < seekIt);
     CHECK(seekIt < startIt);
+  }
+
+  namespace
+  {
+    // Two tracks whose native encodings can be chosen per path, so a lookahead
+    // can be pointed at a successor that either matches the current signal or
+    // deliberately does not.
+    auto makeTwoTrackFactory(
+      std::map<std::filesystem::path, PcmFormat> nativeFormats,
+      std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>& decoderRequests)
+    {
+      return [nativeFormats = std::move(nativeFormats), &decoderRequests](
+               std::filesystem::path const& path, std::optional<SampleEncoding> optOutputEncoding)
+      {
+        decoderRequests.emplace_back(path, optOutputEncoding);
+        auto const nativeFormat = nativeFormats.at(path);
+        auto const sourceFormat = signalFormat(nativeFormat);
+        auto decoderPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
+          .sourceFormat = sourceFormat,
+          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(nativeFormat.encoding)),
+          .duration = std::chrono::seconds{2},
+          .isLossy = false,
+          .codec = AudioCodec::Flac,
+        });
+        decoderPtr->setReadScript(
+          {{.data = std::vector<std::byte>(4000, std::byte{0}), .endOfStream = false}, {.endOfStream = true}});
+        return decoderPtr;
+      };
+    }
+  } // namespace
+
+  TEST_CASE("Engine - a confirmed endpoint does not admit a reduced client format", "[audio][regression][engine]")
+  {
+    auto const nativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto decoderRequests = std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>{};
+    auto decoderFactory = makeTwoTrackFactory({{"only-16.flac", nativeFormat}}, decoderRequests);
+
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    backendPtr->setSelectedEncoding(SampleEncoding::Signed16Le);
+    backendPtr->setConfirmedEndpointPrecision(std::uint8_t{16});
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
+
+    engine.play(makePlaybackItem("only-16.flac"));
+
+    CHECK(engine.status().transport == Transport::Error);
+    engine.stop();
+  }
+
+  TEST_CASE("Engine - a lossy format without endpoint evidence is refused", "[audio][regression][engine]")
+  {
+    auto const nativeFormat =
+      PcmFormat{.sampleRate = 1000, .channels = 1, .encoding = SampleEncoding::Signed24PackedLe};
+    auto decoderRequests = std::vector<std::pair<std::filesystem::path, std::optional<SampleEncoding>>>{};
+    auto decoderFactory = makeTwoTrackFactory({{"only-16.flac", nativeFormat}}, decoderRequests);
+
+    auto backendPtr = std::make_unique<FakeCapturingBackend>();
+    backendPtr->setSelectedEncoding(SampleEncoding::Signed16Le);
+    auto engine = Engine{std::move(backendPtr), makeEngineTestDevice(), std::move(decoderFactory)};
+
+    engine.play(makePlaybackItem("only-16.flac"));
+
+    CHECK(engine.status().transport == Transport::Error);
+    engine.stop();
   }
 } // namespace ao::audio::test

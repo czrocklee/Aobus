@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/NullBackend.h>
+
+#include "detail/DecoderOutput.h"
 #include <ao/Error.h>
 #include <ao/audio/BackendIds.h>
-#include <ao/audio/NullBackend.h>
+#include <ao/audio/OpenedPcmMode.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/SignalFormat.h>
 
 #include <expected>
 
@@ -13,9 +18,18 @@ namespace ao::audio
   NullBackend::NullBackend() noexcept = default;
   NullBackend::~NullBackend() = default;
 
-  Result<> NullBackend::open(Format const& /*format*/, RenderTarget* /*target*/)
+  Result<OpenedPcmMode> NullBackend::open(SignalFormat const& sourceFormat, RenderTarget* /*target*/)
   {
-    return {};
+    auto const encodings = detail::losslessPcmEncodings(sourceFormat);
+
+    if (encodings.empty())
+    {
+      return makeError(Error::Code::NotSupported, "No lossless PCM encoding is available");
+    }
+
+    // A sink that discards frames has no endpoint to confirm, so it stays on
+    // the lossless path and never authorizes a precision reduction.
+    return OpenedPcmMode{.clientFormat = pcmFormat(sourceFormat, encodings.front())};
   }
 
   void NullBackend::start()

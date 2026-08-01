@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/Player.h>
+
 #include "detail/TrackPreparation.h"
 #include <ao/AudioCodecText.h>
 #include <ao/Error.h>
@@ -12,7 +14,6 @@
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
 #include <ao/audio/NullBackend.h>
-#include <ao/audio/Player.h>
 #include <ao/audio/QualityAnalyzer.h>
 #include <ao/audio/Subscription.h>
 #include <ao/audio/Transport.h>
@@ -327,7 +328,28 @@ namespace ao::audio
                                             Adopter adopter,
                                             std::stop_token stopToken)
     {
-      auto prepared = preparation.prepare();
+      auto prepared = preparation.inspect();
+
+      if (prepared)
+      {
+        co_await runtime->resumeOnCallbackExecutor(stopToken);
+
+        if (!callbackGatePtr->canAcceptCallbacks())
+        {
+          co_return;
+        }
+
+        auto* const owner = callbackGatePtr->owner;
+        gsl_Expects(owner != nullptr);
+        prepared = preparation.selectPrewarmFormat(*owner->enginePtr);
+
+        if (prepared)
+        {
+          co_await runtime->resumeOnWorker(stopToken);
+          prepared = preparation.prepare();
+        }
+      }
+
       co_await runtime->resumeOnCallbackExecutor(stopToken);
       settlePreparation(callbackGatePtr,
                         taskSlot,
@@ -568,7 +590,7 @@ namespace ao::audio
       allDevices = std::move(allProviderDevices);
     }
 
-    // Keep the engine's current device capabilities up-to-date
+    // Keep the engine's current device identity and metadata up-to-date.
     auto const currentSnap = enginePtr->status();
     auto allDevicesCopy = std::vector<Device>{};
     {
@@ -1088,7 +1110,18 @@ namespace ao::audio
 
     if (!preparation->requiresWorker())
     {
-      auto prepared = preparation->prepare();
+      auto prepared = preparation->inspect();
+
+      if (prepared)
+      {
+        prepared = preparation->selectPrewarmFormat(*_implPtr->enginePtr);
+      }
+
+      if (prepared)
+      {
+        prepared = preparation->prepare();
+      }
+
       auto const callbackGatePtr = _implPtr->gatePtr;
       Impl::settlePreparation(callbackGatePtr,
                               nullptr,

@@ -10,8 +10,10 @@
 #include <ao/audio/DecodedStreamInfo.h>
 #include <ao/audio/Device.h>
 #include <ao/audio/Engine.h>
+#include <ao/audio/PcmFormat.h>
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/Property.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/Transport.h>
 
 #include <catch2/catch_approx.hpp>
@@ -21,6 +23,7 @@
 #include <chrono>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -78,11 +81,15 @@ namespace ao::audio::test
     auto backendPtr = std::make_unique<FakeCapturingBackend>();
     auto* backendRaw = backendPtr.get();
 
-    auto const fmt = Format{.sampleRate = 44100, .channels = 2, .bitDepth = 16, .isInterleaved = true};
-    auto const factory = [fmt](auto const&, auto const&)
+    auto const fmt = PcmFormat{.sampleRate = 44100, .channels = 2, .encoding = SampleEncoding::Signed16Le};
+    auto const factory = [fmt](auto const&, std::optional<SampleEncoding> optOutputEncoding)
     {
-      auto decPtr = std::make_unique<ScriptedDecoderSession>(DecodedStreamInfo{
-        .sourceFormat = fmt, .outputFormat = fmt, .duration = std::chrono::seconds{1}, .isLossy = false});
+      auto const sourceFormat = signalFormat(fmt);
+      auto decPtr = std::make_unique<ScriptedDecoderSession>(
+        DecodedStreamInfo{.sourceFormat = sourceFormat,
+                          .outputFormat = pcmFormat(sourceFormat, optOutputEncoding.value_or(fmt.encoding)),
+                          .duration = std::chrono::seconds{1},
+                          .isLossy = false});
       decPtr->setReadScript({{.data = std::vector<std::byte>(88200, std::byte{0}), .endOfStream = false}});
       return decPtr;
     };

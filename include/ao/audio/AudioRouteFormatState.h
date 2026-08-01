@@ -4,7 +4,8 @@
 #pragma once
 
 #include <ao/AudioCodec.h>
-#include <ao/audio/Format.h>
+#include <ao/audio/PcmFormat.h>
+#include <ao/audio/SignalFormat.h>
 
 namespace ao::audio
 {
@@ -16,9 +17,9 @@ namespace ao::audio
    */
   struct AudioRouteFormatState final
   {
-    Format sourceFormat;
-    Format decoderOutputFormat;
-    Format engineOutputFormat;
+    SignalFormat sourceFormat;
+    PcmFormat decoderOutputFormat;
+    PcmFormat engineOutputFormat;
     bool isLossySource = false;
     AudioCodec codec = AudioCodec::Unknown;
 

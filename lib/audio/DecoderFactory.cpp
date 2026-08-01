@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/audio/DecoderFactory.h>
+
 #include <ao/Error.h>
 #include <ao/audio/AacDecoderSession.h>
 #include <ao/audio/AlacDecoderSession.h>
-#include <ao/audio/DecoderFactory.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/FlacDecoderSession.h>
-#include <ao/audio/Format.h>
 #include <ao/audio/Mp3DecoderSession.h>
+#include <ao/audio/SampleEncoding.h>
 #include <ao/audio/WavDecoderSession.h>
 #include <ao/media/mp4/SampleDescription.h>
 #include <ao/utility/MappedFile.h>
@@ -19,19 +20,20 @@
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace ao::audio
 {
   Result<std::unique_ptr<DecoderSession>> createDecoderSession(std::filesystem::path const& filePath,
-                                                               Format outputFormat)
+                                                               std::optional<SampleEncoding> optOutputEncoding)
   {
     auto ext = filePath.extension().string();
     std::ranges::transform(ext, ext.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
 
     if (ext == ".flac")
     {
-      return std::make_unique<FlacDecoderSession>(outputFormat);
+      return std::make_unique<FlacDecoderSession>(optOutputEncoding);
     }
 
     if (ext == ".m4a" || ext == ".mp4")
@@ -61,12 +63,12 @@ namespace ao::audio
 
       if (sampleEntryType == "alac")
       {
-        return std::make_unique<AlacDecoderSession>(outputFormat);
+        return std::make_unique<AlacDecoderSession>(optOutputEncoding);
       }
 
       if (sampleEntryType == "mp4a")
       {
-        return std::make_unique<AacDecoderSession>(outputFormat);
+        return std::make_unique<AacDecoderSession>(optOutputEncoding);
       }
 
       return makeError(Error::Code::NotSupported,
@@ -75,12 +77,12 @@ namespace ao::audio
 
     if (ext == ".mp3")
     {
-      return std::make_unique<Mp3DecoderSession>(outputFormat);
+      return std::make_unique<Mp3DecoderSession>(optOutputEncoding);
     }
 
     if (ext == ".wav")
     {
-      return std::make_unique<WavDecoderSession>(outputFormat);
+      return std::make_unique<WavDecoderSession>(optOutputEncoding);
     }
 
     return makeError(Error::Code::NotSupported, std::format("Unsupported audio file extension '{}'", ext));
