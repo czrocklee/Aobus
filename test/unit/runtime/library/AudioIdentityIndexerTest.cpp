@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/AudioIdentityIndexer.h>
+
 #include "runtime/library/AudioIdentityBatchWriter.h"
 #include "runtime/library/ScanApplyOperation.h"
 #include "test/unit/FilesystemTestSupport.h"
@@ -12,16 +14,20 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
+#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
-#include <ao/rt/library/AudioIdentityIndexer.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
+#include <ao/utility/ByteView.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Xxh3.h>
 
@@ -191,8 +197,38 @@ namespace ao::rt::test
     CHECK(result->completedCount == 1);
     CHECK(result->skippedCount == 0);
     CHECK(result->failureCount == 0);
-    CHECK_FALSE(result->cancelled);
     CHECK(manifestHasIdentity(ml, "song.flac"));
+  }
+
+  TEST_CASE("AudioIdentityIndexer - corrupt manifest iteration returns an error",
+            "[runtime][regression][audio-identity][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    auto const databasePath = std::filesystem::path{temp.path()} / "db";
+    std::filesystem::create_directories(musicRoot);
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, databasePath);
+
+    {
+      auto environmentResult = lmdb::Environment::open(
+        databasePath.string(),
+        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
+      REQUIRE(environmentResult);
+      auto environment = std::move(*environmentResult);
+      auto transactionResult = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionResult);
+      auto transaction = std::move(*transactionResult);
+      auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestResult);
+      auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
+      auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
+      REQUIRE(manifestResult->writer(transaction).create(malformedKey, payload));
+      REQUIRE(transaction.commit());
+    }
+
+    auto const result = runIndexPending(ml);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
   }
 
   TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",
@@ -217,7 +253,6 @@ namespace ao::rt::test
     CHECK(std::cmp_equal(result->completedCount, kTrackCount));
     CHECK(result->skippedCount == 0);
     CHECK(result->failureCount == 0);
-    CHECK_FALSE(result->cancelled);
 
     for (std::size_t index = 0; index < kTrackCount; ++index)
     {
@@ -339,7 +374,6 @@ namespace ao::rt::test
     REQUIRE(result);
     CHECK(result->completedCount == 1);
     CHECK(result->failureCount == 1);
-    CHECK_FALSE(result->cancelled);
     CHECK(manifestHasIdentity(ml, "good.flac"));
     CHECK_FALSE(manifestHasIdentity(ml, "bad.flac"));
     REQUIRE(failures.size() == 1);
@@ -409,7 +443,6 @@ namespace ao::rt::test
     CHECK(result->completedCount == 0);
     CHECK(result->skippedCount == 1);
     CHECK(result->failureCount == 0);
-    CHECK_FALSE(result->cancelled);
     CHECK_FALSE(manifestHasIdentity(ml, "song.flac"));
   }
 
@@ -430,7 +463,6 @@ namespace ao::rt::test
     CHECK(result->completedCount == 0);
     CHECK(result->skippedCount == 0);
     CHECK(result->failureCount == 0);
-    CHECK_FALSE(result->cancelled);
     auto const afterIdentity = manifestIdentity(ml, "song.flac");
     CHECK(afterIdentity.audioPayloadLength == originalIdentity.audioPayloadLength);
     CHECK(afterIdentity.audioSignature == originalIdentity.audioSignature);
@@ -447,23 +479,19 @@ namespace ao::rt::test
     importWithPolicy(ml, AudioIdentityPolicy::DeferNew);
 
     auto stopSource = std::stop_source{};
-    auto result = runIndexPending(
-      ml,
-      {},
-      [&stopSource](AudioIdentityIndexProgress const& progress)
-      {
-        if (progress.itemFraction == 0.0)
-        {
-          stopSource.request_stop();
-        }
-      },
-      {},
-      stopSource.get_token());
-
-    REQUIRE(result);
-    CHECK(result->completedCount == 0);
-    CHECK(result->failureCount == 0);
-    CHECK(result->cancelled);
+    CHECK_THROWS_AS(std::ignore = runIndexPending(
+                      ml,
+                      {},
+                      [&stopSource](AudioIdentityIndexProgress const& progress)
+                      {
+                        if (progress.itemFraction == 0.0)
+                        {
+                          stopSource.request_stop();
+                        }
+                      },
+                      {},
+                      stopSource.get_token()),
+                    async::OperationCancelled);
     CHECK_FALSE(manifestHasIdentity(ml, "song.flac"));
   }
 
@@ -500,14 +528,13 @@ namespace ao::rt::test
     CHECK(result->completedCount == 1);
     CHECK(result->skippedCount == 1);
     CHECK(result->failureCount == 0);
-    CHECK_FALSE(result->cancelled);
     CHECK(manifestHasIdentity(ml, "a.flac"));
     auto const bIdentity = manifestIdentity(ml, "b.flac");
     CHECK(bIdentity.audioPayloadLength == 1);
     CHECK(bIdentity.audioSignature == utility::xxh3Hash128("test-identity"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - cancellation flushes rows hashed earlier in the batch",
+  TEST_CASE("AudioIdentityIndexer - cancellation preserves committed work and the next run resumes",
             "[runtime][unit][library][audio-identity]")
   {
     auto const temp = ao::test::TempDir{};
@@ -522,24 +549,28 @@ namespace ao::rt::test
     // One worker hashes a then b in URI order, so requesting stop when b
     // starts leaves exactly a's hash to flush.
     auto stopSource = std::stop_source{};
-    auto result = runIndexPending(
-      ml,
-      AudioIdentityIndexer::Options{.maxConcurrency = 1},
-      [&stopSource](AudioIdentityIndexProgress const& progress)
-      {
-        if (progress.path.filename() == "b.flac" && progress.itemFraction == 0.0)
-        {
-          stopSource.request_stop();
-        }
-      },
-      {},
-      stopSource.get_token());
+    CHECK_THROWS_AS(std::ignore = runIndexPending(
+                      ml,
+                      AudioIdentityIndexer::Options{.maxConcurrency = 1},
+                      [&stopSource](AudioIdentityIndexProgress const& progress)
+                      {
+                        if (progress.path.filename() == "b.flac" && progress.itemFraction == 0.0)
+                        {
+                          stopSource.request_stop();
+                        }
+                      },
+                      {},
+                      stopSource.get_token()),
+                    async::OperationCancelled);
 
-    REQUIRE(result);
-    CHECK(result->cancelled);
-    CHECK(result->completedCount == 1);
-    CHECK(result->failureCount == 0);
     CHECK(manifestHasIdentity(ml, "a.flac"));
     CHECK_FALSE(manifestHasIdentity(ml, "b.flac"));
+
+    auto resumed = runIndexPending(ml, AudioIdentityIndexer::Options{.maxConcurrency = 1});
+    REQUIRE(resumed);
+    CHECK(resumed->completedCount == 1);
+    CHECK(resumed->failureCount == 0);
+    CHECK(manifestHasIdentity(ml, "a.flac"));
+    CHECK(manifestHasIdentity(ml, "b.flac"));
   }
 } // namespace ao::rt::test

@@ -50,7 +50,7 @@ namespace ao::rt::test
         auto result = storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
         REQUIRE(result);
         REQUIRE(transaction.commit());
-        return result->first;
+        return *result;
       }
 
       Library& library()

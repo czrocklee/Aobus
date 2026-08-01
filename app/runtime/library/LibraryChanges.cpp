@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryChanges.h>
+
 #include <ao/Exception.h>
 #include <ao/ExceptionFormat.h>
 #include <ao/async/Executor.h>
 #include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
-#include <ao/rt/library/LibraryChanges.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -89,6 +90,11 @@ namespace ao::rt
           throwException<Exception>("Library changeset revision {} submitted during active publication", revision);
         }
 
+        if (closing)
+        {
+          throwException<Exception>("Library changeset revision {} submitted while closing", revision);
+        }
+
         optPendingPublication.emplace(
           PendingPublication{.changeSet = std::move(changeSet), .completion = std::move(completion)});
         publicationInProgress = true;
@@ -97,7 +103,7 @@ namespace ao::rt
       try
       {
         callbackExecutor.dispatch(
-          [weakImplPtr = weak_from_this()]
+          [weakImplPtr = weak_from_this()] noexcept
           {
             if (auto const lockedPtr = weakImplPtr.lock(); lockedPtr != nullptr)
             {
@@ -124,14 +130,19 @@ namespace ao::rt
       }
     }
 
-    void deliverPending()
+    void deliverPending() noexcept
     {
       auto optPending = std::optional<PendingPublication>{};
       auto pinnedReplicaPtr = std::shared_ptr<ReplicaSlot>{};
       {
         auto const lock = std::scoped_lock{mutex};
+
+        if (!optPendingPublication)
+        {
+          return;
+        }
+
         gsl_Assert(publicationInProgress);
-        gsl_Assert(optPendingPublication);
         optPending.emplace(std::move(*optPendingPublication));
         optPendingPublication.reset();
         // Pinned under the lock, applied outside it, so binding cannot race a
@@ -159,6 +170,18 @@ namespace ao::rt
       }
     }
 
+    void retire() noexcept
+    {
+      auto const lock = std::scoped_lock{mutex};
+      closing = true;
+
+      if (optPendingPublication)
+      {
+        optPendingPublication.reset();
+        publicationInProgress = false;
+      }
+    }
+
     async::Executor& callbackExecutor;
     std::shared_ptr<ReplicaSlot> replicaSlotPtr;
     async::Signal<LibraryChangeSet const&> changedSignal;
@@ -166,6 +189,7 @@ namespace ao::rt
     std::optional<PendingPublication> optPendingPublication;
     std::uint64_t expectedRevision = 1;
     bool publicationInProgress = false;
+    bool closing = false;
   };
 
   LibraryChanges::LibraryChanges(async::Executor& callbackExecutor, std::uint64_t lastPublishedRevision)
@@ -200,5 +224,10 @@ namespace ao::rt
                                               std::move_only_function<void() noexcept> completion)
   {
     _implPtr->publish(std::move(changeSet), std::move(completion));
+  }
+
+  void LibraryChanges::retireFromCoordinator() noexcept
+  {
+    _implPtr->retire();
   }
 } // namespace ao::rt

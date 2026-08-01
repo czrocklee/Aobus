@@ -355,7 +355,7 @@ namespace ao::winui
   {
     unbind();
 
-    _runtimePtr = dependencies.session.libraryRuntimePtr();
+    _runtimePtr = dependencies.session.runtimePtr();
     _coverArt = &dependencies.inspectorCoverArt;
     _coverArt->bind(_runtimePtr->async());
 

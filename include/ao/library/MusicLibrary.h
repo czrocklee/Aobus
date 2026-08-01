@@ -36,8 +36,6 @@ namespace ao::library
       std::size_t mapSize = 0;
     };
 
-    explicit MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath);
-    MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath, Options options);
     ~MusicLibrary();
 
     static Result<MusicLibrary> open(std::filesystem::path musicRoot, std::filesystem::path databasePath);

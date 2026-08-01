@@ -45,7 +45,7 @@ namespace ao::winui
   {
     unbind();
     _viewModelPtr = std::make_unique<uimodel::VolumeViewModel>(
-      dependencies.playbackRuntime.playback(), [this](uimodel::VolumeViewState const& state) { applyState(state); });
+      dependencies.runtime.playback(), [this](uimodel::VolumeViewState const& state) { applyState(state); });
   }
 
   void VolumeControl::unbind()

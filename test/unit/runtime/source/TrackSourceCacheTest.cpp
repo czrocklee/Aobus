@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/source/TrackSourceCache.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
@@ -19,7 +21,6 @@
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/source/SmartListEvaluator.h>
 #include <ao/rt/source/TrackSource.h>
-#include <ao/rt/source/TrackSourceCache.h>
 #include <ao/rt/source/TrackSourceDelta.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -61,10 +62,8 @@ namespace ao::rt::test
         auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("Saved List");
-        listId =
-          ao::test::requireValue(
-            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-            .first;
+        listId = ao::test::requireValue(
+          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
         REQUIRE(transaction.commit());
       }
 
@@ -86,10 +85,8 @@ namespace ao::rt::test
         auto builder = ListBuilder::makeEmpty();
         builder.name("SmartList");
         builder.filter("title == \"foo\"");
-        listId =
-          ao::test::requireValue(
-            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-            .first;
+        listId = ao::test::requireValue(
+          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
         REQUIRE(transaction.commit());
       }
 
@@ -148,10 +145,8 @@ namespace ao::rt::test
         auto transaction = library::test::writeTransaction(libraryFixture.library());
         auto builder = ListBuilder::makeEmpty();
         builder.name("ToErase");
-        listId =
-          ao::test::requireValue(
-            libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-            .first;
+        listId = ao::test::requireValue(
+          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
         REQUIRE(transaction.commit());
       }
 
@@ -182,10 +177,8 @@ namespace ao::rt::test
       auto builder = ListBuilder::makeEmpty();
       builder.name("Matching title");
       builder.filter("$title = \"After\"");
-      smartListId =
-        ao::test::requireValue(
-          libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())))
-          .first;
+      smartListId = ao::test::requireValue(
+        libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize())));
       REQUIRE(transaction.commit());
     }
 

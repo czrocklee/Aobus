@@ -40,18 +40,16 @@ namespace ao::winui
 
   /// Construction-scoped borrowed collaborators for WinUI controls.
   ///
-  /// Consumers must retain only the narrow references they need. The playback
-  /// and library runtimes are replaceable and this bundle must be requested
-  /// again after the corresponding LibrarySession callback.
+  /// Consumers must retain only the narrow references they need. The runtime
+  /// is replaceable and this bundle must be requested again after the
+  /// LibrarySession replacement callback.
   struct WinUiDependencies final
   {
     LibrarySession& session;
-    rt::AppRuntime& libraryRuntime;
-    rt::AppRuntime& playbackRuntime;
+    rt::AppRuntime& runtime;
     uimodel::PlaybackCommandSurface& playbackCommands;
     TrackListController& trackList;
     rt::ResourceByteLoader& resourceBytes;
-    rt::ResourceByteLoader& playbackResourceBytes;
     CoverArtPresenter& inspectorCoverArt;
     CoverArtPresenter& nowPlayingCoverArt;
     WindowsThemeCoordinator& theme;

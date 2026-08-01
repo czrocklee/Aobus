@@ -30,7 +30,8 @@
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
 #include <ao/CoreIds.h>
-#include <ao/async/Runtime.h>
+#include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -593,13 +594,21 @@ namespace ao::tui
     screen.TrackMouse(true);
     auto executorPtr = std::make_unique<Executor>(screen);
     auto* const executor = executorPtr.get();
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+    auto runtimeResult = rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = options.libraryRoot,
       .databasePath = options.databasePath,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(options.configPath),
       .asyncExceptionHandler = std::move(asyncExceptionHandler),
-    }};
+    });
+
+    if (!runtimeResult)
+    {
+      throwException<Exception>("Failed to open library: {}", runtimeResult.error().message);
+    }
+
+    auto runtimePtr = std::move(*runtimeResult);
+    auto& runtime = *runtimePtr;
 
     registerPlatformAudioBackends(runtime);
 
@@ -724,8 +733,7 @@ namespace ao::tui
 
     coverArt.cancel();
     playback.commands().stop();
-    runtime.async().requestStop();
-    runtime.async().join();
+    runtime.shutdown();
     frameTimer.flush();
     return 0;
   }

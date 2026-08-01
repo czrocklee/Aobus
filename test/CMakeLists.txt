@@ -216,6 +216,7 @@ add_executable(ao_core_test
     unit/library/TrackStoreTest.cpp
     unit/library/TrackWriteTest.cpp
     unit/library/TrackStoreRawLayoutTest.cpp
+    unit/library/TrackStoreIntegrityTest.cpp
     unit/library/ListBuilderTest.cpp
     unit/library/MusicLibraryTest.cpp
 

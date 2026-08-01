@@ -20,9 +20,7 @@ namespace ao::library
     std::uint64_t payloadLength = 0;
   };
 
-  // payloadLength == 0 is the "identity pending" sentinel: real encoded audio
-  // payloads are never empty. A parser reporting an empty payload for a
-  // decodable file is a corrupt-file fault, not a pending identity.
+  // payloadLength == 0 is the persisted "identity pending" sentinel.
   inline bool hasAudioIdentity(std::uint64_t payloadLength, utility::Hash128 signature) noexcept
   {
     return payloadLength != 0 && signature != utility::Hash128{};
@@ -33,9 +31,9 @@ namespace ao::library
   /**
    * Compute the identity of the file's encoded audio payload.
    *
-   * Cancellation returns an empty optional. A completed calculation returns
-   * an identity. File opening and encoded-payload parsing belong to the caller
-   * and retain their own Result channels.
+   * audioPayload must be non-empty. Cancellation returns an empty optional. A
+   * completed calculation returns an identity. File opening and encoded-payload
+   * parsing belong to the caller and retain their own Result channels.
    */
   std::optional<AudioIdentity> readAudioIdentity(std::span<std::byte const> audioPayload,
                                                  AudioIdentityProgressCallback progress = {},

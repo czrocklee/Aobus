@@ -84,7 +84,7 @@ namespace ao::gtk::test
       auto const optView =
         library.tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
-      auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
+      auto builder = library::TrackBuilder::fromHotView(*optView, library.dictionary());
       return std::ranges::contains(builder.tags().names(), tag);
     }
 

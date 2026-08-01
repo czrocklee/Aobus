@@ -37,12 +37,12 @@ namespace ao::rt::test
   void addReadyAudioProvider(AppRuntime& runtime);
   void addReadyAudioProvider(AppRuntime& runtime, audio::BackendProvider::Status status);
 
-  AppRuntime makeRuntime(ao::test::TempDir const& tempDir,
-                         std::unique_ptr<async::Executor> executorPtr,
-                         ConfigStore* playbackSessionConfigStore = nullptr,
-                         async::Sleeper* sleeper = nullptr);
+  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
+                                          std::unique_ptr<async::Executor> executorPtr,
+                                          ConfigStore* playbackSessionConfigStore = nullptr,
+                                          async::Sleeper* sleeper = nullptr);
 
-  AppRuntime makeRuntime(ao::test::TempDir const& tempDir,
-                         ConfigStore* playbackSessionConfigStore = nullptr,
-                         async::Sleeper* sleeper = nullptr);
+  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
+                                          ConfigStore* playbackSessionConfigStore = nullptr,
+                                          async::Sleeper* sleeper = nullptr);
 } // namespace ao::rt::test

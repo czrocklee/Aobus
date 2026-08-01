@@ -18,6 +18,7 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/query/Field.h>
 #include <ao/query/Parser.h>
 #include <ao/query/PlanEvaluator.h>
@@ -47,6 +48,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -61,6 +63,19 @@ namespace ao::rt
       Commit,
       Preview,
     };
+
+    template<typename Function, typename ResultType = std::invoke_result_t<Function>>
+    ResultType translateTransactionFailure(Function&& function)
+    {
+      try
+      {
+        return std::forward<Function>(function)();
+      }
+      catch (lmdb::TransactionFailure const& failure)
+      {
+        return std::unexpected{failure.error()};
+      }
+    }
 
     struct PatchResult final
     {
@@ -671,7 +686,7 @@ namespace ao::rt
           continue;
         }
 
-        auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
+        auto builder = library::TrackBuilder::fromCompleteView(*optView, library.dictionary());
         auto fieldChanges = std::vector<TrackFieldChange>{};
         auto const patchResult = applyMetadataPatch(builder, patch, fieldChanges);
 
@@ -680,38 +695,46 @@ namespace ao::rt
           continue;
         }
 
-        if (patchResult.changedHot)
+        auto updateResult = Result<>{};
+
+        if (patchResult.changedHot && patchResult.changedCold)
         {
-          auto hotDataResult = builder.serializeHot(transaction);
+          auto preparedResult = builder.prepare(transaction, library.resources());
 
-          if (!hotDataResult)
+          if (!preparedResult)
           {
-            return storageError("Failed to serialize hot track data", hotDataResult.error());
+            return storageError("Failed to serialize cold track data", preparedResult.error());
           }
 
-          if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
+          auto const& [preparedHot, preparedCold] = *preparedResult;
+          updateResult = library::updatePreparedTrackRecord(writer, trackId, preparedHot, preparedCold);
+        }
+        else if (patchResult.changedHot)
+        {
+          auto preparedResult = builder.prepareHot(transaction);
+
+          if (!preparedResult)
           {
-            return storageError("Failed to update hot track data", result.error());
+            return storageError("Failed to serialize hot track data", preparedResult.error());
           }
+
+          updateResult = library::updatePreparedHotTrackRecord(writer, trackId, *preparedResult);
+        }
+        else
+        {
+          auto preparedResult = builder.prepareCold(transaction, library.resources());
+
+          if (!preparedResult)
+          {
+            return storageError("Failed to serialize cold track data", preparedResult.error());
+          }
+
+          updateResult = library::updatePreparedColdTrackRecord(writer, trackId, *preparedResult);
         }
 
-        if (patchResult.changedCold)
+        if (!updateResult)
         {
-          auto coldDataResult = builder.serializeCold(transaction, library.resources());
-
-          if (!coldDataResult)
-          {
-            return storageError("Failed to serialize cold track data", coldDataResult.error());
-          }
-
-          if (auto result = writer.updateCold(trackId,
-                                              coldDataResult->size(),
-                                              [&](std::span<std::byte> buffer)
-                                              { std::ranges::copy(*coldDataResult, buffer.begin()); });
-              !result)
-          {
-            return storageError("Failed to update cold track data", result.error());
-          }
+          return storageError("Failed to update track data", updateResult.error());
         }
 
         changes.push_back(TrackChangeRecord{.trackId = trackId, .fields = std::move(fieldChanges)});
@@ -738,7 +761,7 @@ namespace ao::rt
           continue;
         }
 
-        auto builder = library::TrackBuilder::fromView(*optView, library.dictionary());
+        auto builder = library::TrackBuilder::fromHotView(*optView, library.dictionary());
         auto& tags = builder.tags();
         bool changed = false;
         auto addedTags = std::vector<std::string>{};
@@ -769,14 +792,14 @@ namespace ao::rt
           continue;
         }
 
-        auto hotDataResult = builder.serializeHot(transaction);
+        auto preparedResult = builder.prepareHot(transaction);
 
-        if (!hotDataResult)
+        if (!preparedResult)
         {
-          return storageError("Failed to serialize hot track data", hotDataResult.error());
+          return storageError("Failed to serialize hot track data", preparedResult.error());
         }
 
-        if (auto result = writer.updateHot(trackId, *hotDataResult); !result)
+        if (auto result = library::updatePreparedHotTrackRecord(writer, trackId, *preparedResult); !result)
         {
           return storageError("Failed to update hot track data", result.error());
         }
@@ -1279,79 +1302,83 @@ namespace ao::rt
   Result<LibraryWriter::MetadataAuthoringResult> LibraryWriter::updateMetadata(BoundTrackTargets const& targets,
                                                                                MetadataPatch const& patch)
   {
-    return _implPtr->applyUpdateMetadata(targets, patch);
+    return translateTransactionFailure([&] { return _implPtr->applyUpdateMetadata(targets, patch); });
   }
 
   Result<UpdateTrackMetadataReply> LibraryWriter::previewUpdateMetadata(std::span<TrackId const> trackIds,
                                                                         MetadataPatch const& patch)
   {
-    return _implPtr->previewUpdateMetadata(trackIds, patch);
+    return translateTransactionFailure([&] { return _implPtr->previewUpdateMetadata(trackIds, patch); });
   }
 
   Result<LibraryWriter::TagAuthoringResult> LibraryWriter::editTags(BoundTrackTargets const& targets,
                                                                     std::span<std::string const> tagsToAdd,
                                                                     std::span<std::string const> tagsToRemove)
   {
-    return _implPtr->applyEditTags(targets, tagsToAdd, tagsToRemove);
+    return translateTransactionFailure([&] { return _implPtr->applyEditTags(targets, tagsToAdd, tagsToRemove); });
   }
 
   Result<EditTrackTagsReply> LibraryWriter::previewEditTags(std::span<TrackId const> trackIds,
                                                             std::span<std::string const> tagsToAdd,
                                                             std::span<std::string const> tagsToRemove)
   {
-    return _implPtr->previewEditTags(trackIds, tagsToAdd, tagsToRemove);
+    return translateTransactionFailure([&] { return _implPtr->previewEditTags(trackIds, tagsToAdd, tagsToRemove); });
   }
 
   Result<LibraryWriter::AddToListAuthoringResult> LibraryWriter::addTracksToList(ListId const listId,
                                                                                  BoundTrackTargets const& targets)
   {
-    return _implPtr->applyAddTracksToList(listId, targets);
+    return translateTransactionFailure([&] { return _implPtr->applyAddTracksToList(listId, targets); });
   }
 
   Result<AddTracksToListReply> LibraryWriter::previewAddTracksToList(ListId const listId,
                                                                      std::span<TrackId const> const trackIds)
   {
-    return _implPtr->previewAddTracksToList(listId, trackIds);
+    return translateTransactionFailure([&] { return _implPtr->previewAddTracksToList(listId, trackIds); });
   }
 
   Result<LibraryWriter::RemoveFromListAuthoringResult> LibraryWriter::removeTracksFromList(
     ListId const listId,
     BoundTrackTargets const& targets)
   {
-    return _implPtr->applyRemoveTracksFromList(listId, targets);
+    return translateTransactionFailure([&] { return _implPtr->applyRemoveTracksFromList(listId, targets); });
   }
 
   Result<RemoveTracksFromListReply> LibraryWriter::previewRemoveTracksFromList(ListId const listId,
                                                                                std::span<TrackId const> const trackIds)
   {
-    return _implPtr->previewRemoveTracksFromList(listId, trackIds);
+    return translateTransactionFailure([&] { return _implPtr->previewRemoveTracksFromList(listId, trackIds); });
   }
 
   Result<ListId> LibraryWriter::createList(ListDraft const& draft)
   {
-    return _implPtr->applyCreateList(draft, MutationMode::Commit);
+    return translateTransactionFailure([&] { return _implPtr->applyCreateList(draft, MutationMode::Commit); });
   }
 
   Result<> LibraryWriter::previewCreateList(ListDraft const& draft)
   {
-    auto result = _implPtr->applyCreateList(draft, MutationMode::Preview);
+    return translateTransactionFailure(
+      [&] -> Result<>
+      {
+        auto result = _implPtr->applyCreateList(draft, MutationMode::Preview);
 
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
+        if (!result)
+        {
+          return std::unexpected{result.error()};
+        }
 
-    return {};
+        return {};
+      });
   }
 
   Result<UpdateListReply> LibraryWriter::updateList(ListDraft const& draft)
   {
-    return _implPtr->applyUpdateList(draft, MutationMode::Commit);
+    return translateTransactionFailure([&] { return _implPtr->applyUpdateList(draft, MutationMode::Commit); });
   }
 
   Result<UpdateListReply> LibraryWriter::previewUpdateList(ListDraft const& draft)
   {
-    return _implPtr->applyUpdateList(draft, MutationMode::Preview);
+    return translateTransactionFailure([&] { return _implPtr->applyUpdateList(draft, MutationMode::Preview); });
   }
 
   Result<LibraryWriter::MoveOrderAuthoringResult> LibraryWriter::moveListOrder(
@@ -1359,67 +1386,76 @@ namespace ao::rt
     std::span<TrackId const> const selectedTrackIds,
     std::optional<TrackId> const optBeforeTrackId)
   {
-    return _implPtr->applyMoveListOrder(order, selectedTrackIds, optBeforeTrackId);
+    return translateTransactionFailure(
+      [&] { return _implPtr->applyMoveListOrder(order, selectedTrackIds, optBeforeTrackId); });
   }
 
   Result<LibraryWriter::ResetOrderAuthoringResult> LibraryWriter::resetListOrder(BoundListOrder const& order)
   {
-    return _implPtr->applyResetListOrder(order);
+    return translateTransactionFailure([&] { return _implPtr->applyResetListOrder(order); });
   }
 
   Result<LibraryWriter::ForgetHiddenOrderAuthoringResult> LibraryWriter::forgetHiddenListOrder(
     BoundListOrder const& order)
   {
-    return _implPtr->applyForgetHiddenListOrder(order);
+    return translateTransactionFailure([&] { return _implPtr->applyForgetHiddenListOrder(order); });
   }
 
   Result<DeleteListReply> LibraryWriter::deleteList(ListId listId, DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteList(listId, options, MutationMode::Commit);
+    return translateTransactionFailure([&]
+                                       { return _implPtr->applyDeleteList(listId, options, MutationMode::Commit); });
   }
 
   Result<DeleteListReply> LibraryWriter::previewDeleteList(ListId listId, DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteList(listId, options, MutationMode::Preview);
+    return translateTransactionFailure([&]
+                                       { return _implPtr->applyDeleteList(listId, options, MutationMode::Preview); });
   }
 
   Result<DeleteListSubtreeReply> LibraryWriter::deleteListAndDescendants(ListId const listId,
                                                                          DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteListAndDescendants(listId, options, MutationMode::Commit);
+    return translateTransactionFailure(
+      [&] { return _implPtr->applyDeleteListAndDescendants(listId, options, MutationMode::Commit); });
   }
 
   Result<DeleteListSubtreeReply> LibraryWriter::previewDeleteListAndDescendants(ListId const listId,
                                                                                 DeleteListOptions const options)
   {
-    return _implPtr->applyDeleteListAndDescendants(listId, options, MutationMode::Preview);
+    return translateTransactionFailure(
+      [&] { return _implPtr->applyDeleteListAndDescendants(listId, options, MutationMode::Preview); });
   }
 
   Result<DeleteTrackReply> LibraryWriter::deleteTrack(TrackId trackId)
   {
-    return _implPtr->applyDeleteTrack(trackId, MutationMode::Commit);
+    return translateTransactionFailure([&] { return _implPtr->applyDeleteTrack(trackId, MutationMode::Commit); });
   }
 
   Result<DeleteTrackReply> LibraryWriter::previewDeleteTrack(TrackId trackId)
   {
-    return _implPtr->applyDeleteTrack(trackId, MutationMode::Preview);
+    return translateTransactionFailure([&] { return _implPtr->applyDeleteTrack(trackId, MutationMode::Preview); });
   }
 
   Result<CreateTrackReply> LibraryWriter::createTrackFromFile(std::filesystem::path const& path)
   {
-    return _implPtr->applyCreateTrackFromFile(path, MutationMode::Commit);
+    return translateTransactionFailure([&] { return _implPtr->applyCreateTrackFromFile(path, MutationMode::Commit); });
   }
 
   Result<PreviewCreateTrackReply> LibraryWriter::previewCreateTrackFromFile(std::filesystem::path const& path)
   {
-    auto result = _implPtr->applyCreateTrackFromFile(path, MutationMode::Preview);
+    return translateTransactionFailure(
+      [&] -> Result<PreviewCreateTrackReply>
+      {
+        auto result = _implPtr->applyCreateTrackFromFile(path, MutationMode::Preview);
 
-    if (!result)
-    {
-      return std::unexpected{result.error()};
-    }
+        if (!result)
+        {
+          return std::unexpected{result.error()};
+        }
 
-    return previewReply(std::move(*result));
+        return previewReply(std::move(*result));
+      });
   }
 
   Result<UpdateTrackMetadataReply> LibraryWriter::Impl::previewUpdateMetadata(std::span<TrackId const> trackIds,
@@ -1710,7 +1746,7 @@ namespace ao::rt
       return storageError("Failed to create list", createResult.error());
     }
 
-    auto const listId = createResult->first;
+    auto const listId = *createResult;
 
     if (mode == MutationMode::Preview)
     {
@@ -2401,7 +2437,7 @@ namespace ao::rt
       return storageError("Failed to create track data", createResult.error());
     }
 
-    auto const [id, trackView] = *createResult;
+    auto const id = *createResult;
 
     auto fileEc = std::error_code{};
     auto const fileSize = std::filesystem::file_size(target.fullPath, fileEc);

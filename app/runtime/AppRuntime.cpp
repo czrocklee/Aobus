@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/AppRuntime.h>
+
 #include "runtime/PlaybackSessionPersistence.h"
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
 #include <ao/async/Executor.h> // NOLINT(misc-include-cleaner): unique_ptr<Executor> destruction needs the complete type.
 #include <ao/async/Runtime.h>
 #include <ao/audio/BackendProvider.h>
 #include <ao/audio/Player.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/TrackPresentation.h>
@@ -31,19 +31,6 @@
 
 namespace ao::rt
 {
-  namespace
-  {
-    std::unique_ptr<ConfigStore> checkedWorkspaceConfigStore(std::unique_ptr<ConfigStore> storePtr)
-    {
-      if (storePtr == nullptr)
-      {
-        throwException<Exception>("AppRuntime requires a workspace config store");
-      }
-
-      return storePtr;
-    }
-  } // namespace
-
   struct AppRuntime::Impl final
   {
     ViewService viewService;
@@ -55,6 +42,7 @@ namespace ao::rt
     std::unique_ptr<ConfigStore> workspaceConfigStorePtr;
     ConfigStore* playbackSessionConfigStore = nullptr;
     std::unique_ptr<PlaybackSessionPersistence> playbackSessionPersistencePtr;
+    bool stopped = false;
 
     Impl(AppRuntime& runtime,
          std::unique_ptr<ConfigStore> workspaceConfigPtr,
@@ -91,8 +79,16 @@ namespace ao::rt
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    ~Impl()
+    ~Impl() { shutdown(); }
+
+    void shutdown() noexcept
     {
+      if (stopped)
+      {
+        return;
+      }
+
+      stopped = true;
       std::ignore = playbackSessionPersistencePtr->shutdown();
       // Join playback callback producers while every consumer is still alive.
       playbackPtr->shutdown();
@@ -100,20 +96,48 @@ namespace ao::rt
     }
   };
 
-  AppRuntime::AppRuntime(AppRuntimeDependencies dependencies)
-    : CoreRuntime{std::move(dependencies.executorPtr),
-                  std::move(dependencies.musicRoot),
-                  std::move(dependencies.databasePath),
-                  dependencies.musicLibraryMapSize,
-                  dependencies.sleeper,
-                  std::move(dependencies.asyncExceptionHandler)}
-    , _implPtr{std::make_unique<Impl>(*this,
-                                      checkedWorkspaceConfigStore(std::move(dependencies.workspaceConfigStorePtr)),
-                                      dependencies.playbackSessionConfigStore)}
+  Result<std::unique_ptr<AppRuntime>> AppRuntime::create(AppRuntimeDependencies dependencies)
   {
+    if (dependencies.executorPtr == nullptr)
+    {
+      return makeError(Error::Code::InvalidInput, "AppRuntime requires an executor");
+    }
+
+    if (dependencies.workspaceConfigStorePtr == nullptr)
+    {
+      return makeError(Error::Code::InvalidInput, "AppRuntime requires a workspace config store");
+    }
+
+    auto runtimePtr = std::unique_ptr<AppRuntime>{new AppRuntime{}};
+    auto initializeResult = runtimePtr->initialize(std::move(dependencies.executorPtr),
+                                                   std::move(dependencies.musicRoot),
+                                                   std::move(dependencies.databasePath),
+                                                   dependencies.musicLibraryMapSize,
+                                                   dependencies.sleeper,
+                                                   std::move(dependencies.asyncExceptionHandler));
+
+    if (!initializeResult)
+    {
+      return std::unexpected{initializeResult.error()};
+    }
+
+    runtimePtr->_implPtr = std::make_unique<Impl>(
+      *runtimePtr, std::move(dependencies.workspaceConfigStorePtr), dependencies.playbackSessionConfigStore);
+    return runtimePtr;
   }
 
+  AppRuntime::AppRuntime() = default;
   AppRuntime::~AppRuntime() = default;
+
+  void AppRuntime::shutdown() noexcept
+  {
+    if (_implPtr)
+    {
+      _implPtr->shutdown();
+    }
+
+    CoreRuntime::shutdown();
+  }
 
   PlaybackService& AppRuntime::playback() noexcept
   {

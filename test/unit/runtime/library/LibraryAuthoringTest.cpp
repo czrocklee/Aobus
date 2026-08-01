@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryAuthoring.h>
+
 #include "runtime/library/LibraryMutationService.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
@@ -12,12 +14,13 @@
 #include <ao/async/Runtime.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -29,6 +32,7 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -38,20 +42,6 @@ namespace ao::rt::test
 {
   namespace
   {
-    class RejectingExecutor final : public async::Executor
-    {
-    public:
-      bool isCurrent() const noexcept override { return true; }
-      void dispatch(std::move_only_function<void()> /*task*/) override
-      {
-        throwException<Exception>("Executor rejected dispatch");
-      }
-      void defer(std::move_only_function<void()> /*task*/) override
-      {
-        throwException<Exception>("Executor rejected defer");
-      }
-    };
-
     class AuthoringFixture final
     {
     public:
@@ -63,7 +53,7 @@ namespace ao::rt::test
         auto readTransaction = _musicLibrary.readTransaction();
         auto const revision = _musicLibrary.libraryRevision(readTransaction);
         _changesPtr = std::make_unique<LibraryChanges>(_executor, revision);
-        _libraryPtr = std::make_unique<Library>(_asyncRuntime, _musicLibrary, *_changesPtr);
+        _libraryPtr = ao::test::requireValue(Library::create(_asyncRuntime, _musicLibrary, *_changesPtr));
       }
 
       ~AuthoringFixture()
@@ -181,6 +171,39 @@ namespace ao::rt::test
     CHECK_THROWS_AS(listWriter.get(ListId{1}), Exception);
   }
 
+  TEST_CASE("Library authoring - storage mutation failure unwinds the mutation scope",
+            "[runtime][regression][library-authoring]")
+  {
+    constexpr std::size_t kMapSize = std::size_t{256} * 1024;
+    auto const temp = ao::test::TempDir{};
+    auto musicLibrary = ao::test::requireValue(library::MusicLibrary::open(
+      temp.path(), temp.path() / "db", library::MusicLibrary::Options{.mapSize = kMapSize}));
+    auto executor = InlineExecutor{};
+    auto readTransaction = musicLibrary.readTransaction();
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
+    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
+    auto optFailure = std::optional<Error>{};
+
+    {
+      try
+      {
+        auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+        auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
+
+        [[maybe_unused]] auto result = musicLibrary.resources().writer(mutation.transaction()).create(oversizedValue);
+        FAIL("an oversized resource write should throw");
+      }
+      catch (lmdb::TransactionFailure const& transactionFailure)
+      {
+        optFailure = transactionFailure.error();
+      }
+    }
+
+    REQUIRE(optFailure);
+    CHECK(optFailure->code == Error::Code::IoError);
+  }
+
   TEST_CASE("Library authoring - semantic no-op preserves the current binding", "[runtime][unit][library-authoring]")
   {
     auto fixture = AuthoringFixture{};
@@ -214,8 +237,18 @@ namespace ao::rt::test
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto observed = std::vector<LibraryAuthoringAvailability>{};
+    bool nestedMutationRejected = false;
     auto subscription = mutationService.onAvailabilityChanged(
-      [&observed](LibraryAuthoringAvailability const& availability) noexcept { observed.push_back(availability); });
+      [&](LibraryAuthoringAvailability const& availability) noexcept
+      {
+        observed.push_back(availability);
+
+        if (availability.state == LibraryAuthoringState::Available)
+        {
+          auto nestedResult = mutationService.beginInteractiveMutation();
+          nestedMutationRejected = !nestedResult && nestedResult.error().code == Error::Code::InvalidState;
+        }
+      });
 
     auto invalidResult = mutationService.beginMaintenance(LibraryMaintenanceKind::None);
     REQUIRE_FALSE(invalidResult);
@@ -240,6 +273,29 @@ namespace ao::rt::test
     REQUIRE(observed.size() == 2);
     CHECK(observed.front().maintenanceKind == LibraryMaintenanceKind::ScanApply);
     CHECK(observed.back().maintenanceKind == LibraryMaintenanceKind::None);
+    CHECK(nestedMutationRejected);
+  }
+
+  TEST_CASE("Library authoring - foreign maintenance admission is neutral",
+            "[runtime][unit][library-authoring][concurrency]")
+  {
+    auto temp = ao::test::TempDir{};
+    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto executor = QueuedExecutor{};
+    auto readTransaction = musicLibrary.readTransaction();
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
+    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
+    auto future =
+      std::async(std::launch::async,
+                 [&mutationService] { return mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply); });
+
+    auto result = future.get();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::InvalidState);
+    CHECK(mutationService.availability().state == LibraryAuthoringState::Available);
+    CHECK(mutationService.availability().maintenanceKind == LibraryMaintenanceKind::None);
   }
 
   TEST_CASE("Library authoring - foreign runtime binding is stale even during maintenance",
@@ -292,113 +348,5 @@ namespace ao::rt::test
     CHECK(authoringResult->status == TrackAuthoringStatus::Stale);
     CHECK(authoringResult->reply.changes.empty());
     CHECK(fixture.title() == "Before");
-  }
-
-  TEST_CASE("Library authoring - publication enqueue failure after commit faults the mutationService",
-            "[runtime][unit][library-authoring]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto initialRead = musicLibrary.readTransaction();
-    auto const initialRevision = musicLibrary.libraryRevision(initialRead);
-    auto executor = RejectingExecutor{};
-    auto changes = LibraryChanges{executor, initialRevision};
-    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-
-    CHECK_THROWS_AS(mutation.commit(LibraryChangeSet{}), Exception);
-
-    auto committedRead = musicLibrary.readTransaction();
-    CHECK(musicLibrary.libraryRevision(committedRead) == initialRevision + 1U);
-    CHECK(mutationService.availability().state == LibraryAuthoringState::Faulted);
-    CHECK_FALSE(mutationService.beginInteractiveMutation());
-  }
-
-  TEST_CASE("Library authoring - publication validation failure after commit faults the mutationService",
-            "[runtime][unit][library-authoring]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto initialRead = musicLibrary.readTransaction();
-    auto const initialRevision = musicLibrary.libraryRevision(initialRead);
-    auto executor = InlineExecutor{};
-    auto changes = LibraryChanges{executor, initialRevision + 1U};
-    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-
-    CHECK_THROWS_AS(mutation.commit(LibraryChangeSet{}), Exception);
-
-    auto committedRead = musicLibrary.readTransaction();
-    CHECK(musicLibrary.libraryRevision(committedRead) == initialRevision + 1U);
-    CHECK(mutationService.availability().state == LibraryAuthoringState::Faulted);
-    CHECK_FALSE(mutationService.beginInteractiveMutation());
-  }
-
-  TEST_CASE("Library authoring - worker publication failure reports availability on the callback executor",
-            "[runtime][unit][library-authoring][concurrency]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto initialRead = musicLibrary.readTransaction();
-    auto const initialRevision = musicLibrary.libraryRevision(initialRead);
-    auto executor = QueuedExecutor{};
-    auto changes = LibraryChanges{executor, initialRevision + 1U};
-    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-    auto observed = std::vector<LibraryAuthoringAvailability>{};
-    auto subscription = mutationService.onAvailabilityChanged(
-      [&observed](LibraryAuthoringAvailability const& availability) noexcept { observed.push_back(availability); });
-
-    auto commitFuture = std::async(std::launch::async,
-                                   [&mutationService]
-                                   {
-                                     auto mutationResult = mutationService.beginInteractiveMutation();
-
-                                     if (!mutationResult)
-                                     {
-                                       return false;
-                                     }
-
-                                     auto mutation = std::move(*mutationResult);
-
-                                     try
-                                     {
-                                       std::ignore = mutation.commit(LibraryChangeSet{});
-                                     }
-                                     catch (Exception const&)
-                                     {
-                                       return true;
-                                     }
-
-                                     return false;
-                                   });
-
-    CHECK(commitFuture.get());
-    CHECK(observed.empty());
-    CHECK(mutationService.availability().state == LibraryAuthoringState::Faulted);
-    CHECK(executor.queuedCount() == 1);
-
-    executor.drain();
-
-    REQUIRE(observed.size() == 1);
-    CHECK(observed.front().state == LibraryAuthoringState::Faulted);
-  }
-
-  TEST_CASE("Library authoring - maintenance dispatch failure faults the mutationService",
-            "[runtime][unit][library-authoring]")
-  {
-    auto temp = ao::test::TempDir{};
-    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
-    auto changes = makeInlineLibraryChanges();
-    auto executor = RejectingExecutor{};
-    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
-    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-
-    CHECK_THROWS_AS(mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply), Exception);
-    CHECK(mutationService.availability().state == LibraryAuthoringState::Faulted);
-    CHECK(mutationService.availability().maintenanceKind == LibraryMaintenanceKind::None);
-    CHECK_FALSE(mutationService.beginInteractiveMutation());
   }
 } // namespace ao::rt::test

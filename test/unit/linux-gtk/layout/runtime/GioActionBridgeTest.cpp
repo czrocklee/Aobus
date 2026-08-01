@@ -61,11 +61,11 @@ namespace ao::gtk::layout::test
   {
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test.gio");
     auto const tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto runtimePtr = makeRuntime(tempDir);
 
     auto window = Gtk::Window{};
     auto widget = Gtk::Box{};
-    auto contextProvider = FakeActionContextProvider{runtime, window, widget};
+    auto contextProvider = FakeActionContextProvider{*runtimePtr, window, widget};
 
     auto registry = ActionRegistry{};
     auto actionMapPtr = Gio::SimpleActionGroup::create();

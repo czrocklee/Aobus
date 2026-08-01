@@ -91,7 +91,7 @@ namespace ao::rt::test
       auto const optView =
         libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
       REQUIRE(optView);
-      auto builder = library::TrackBuilder::fromView(*optView, libraryFixture.library().dictionary());
+      auto builder = library::TrackBuilder::fromHotView(*optView, libraryFixture.library().dictionary());
       return std::ranges::contains(builder.tags().names(), tag);
     }
 
@@ -146,7 +146,7 @@ namespace ao::rt::test
         libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
       REQUIRE(createResult);
       REQUIRE(transaction.commit());
-      return createResult->first;
+      return *createResult;
     }
 
     std::filesystem::path copyFixtureAudio(MusicLibraryFixture const& libraryFixture, std::string const& name)

@@ -81,7 +81,7 @@ namespace ao::winui
   void TransportButton::bind(WinUiDependencies const& dependencies)
   {
     unbind();
-    _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(dependencies.playbackRuntime.playback(),
+    _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(dependencies.runtime.playback(),
                                                                   dependencies.playbackCommands,
                                                                   _command,
                                                                   _showLabel,

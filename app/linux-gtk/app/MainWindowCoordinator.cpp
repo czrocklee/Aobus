@@ -31,8 +31,6 @@
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryPaths.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/source/TrackSourceCache.h>
@@ -58,7 +56,7 @@ namespace ao::gtk
 {
   struct MainWindowCoordinator::Impl final
   {
-    Impl(MainWindowCoordinator* coordinator, Gtk::Window& window, rt::AppRuntime& runtime)
+    Impl(Gtk::Window& window, rt::AppRuntime& runtime)
       : layoutStateStore{rt::LibraryPaths{runtime.musicRoot()}.managedDataPath()}
       , trackRowCache{runtime.library()}
       , imageCache{100}
@@ -103,13 +101,6 @@ namespace ao::gtk
                                 runtime,
                                 portal::ImportExportCallbacks{
                                   .onOpenNewLibrary = [](std::filesystem::path const&, bool) {},
-                                  .onLibraryDataMutated =
-                                    [coordinator, &runtime, this]
-                                  {
-                                    trackRowCache.clearCache();
-                                    runtime.reloadAllTracks();
-                                    coordinator->rebuildListPages();
-                                  },
                                   .onTitleChanged = [&window](std::string const& title) { window.set_title(title); }},
                                 themeCoordinator}
     {
@@ -199,7 +190,7 @@ namespace ao::gtk
                                                std::shared_ptr<AppConfigStore> configStorePtr)
     : _window{window}, _runtime{runtime}, _configStorePtr{std::move(configStorePtr)}
   {
-    _implPtr = std::make_unique<Impl>(this, window, runtime);
+    _implPtr = std::make_unique<Impl>(window, runtime);
 
     _trackPresentationChangedSubscription = _implPtr->trackPresentationPreferences.signalChanged().connect(
       [this](ao::ListId /*listId*/) noexcept { saveColumnLayoutIfNotRestoring(); });
@@ -210,7 +201,6 @@ namespace ao::gtk
   MainWindowCoordinator::~MainWindowCoordinator()
   {
     _tracksMutatedSubscription.reset();
-    _libraryTaskCompletedSubscription.reset();
     _listsMutatedSubscription.reset();
     _trackPresentationChangedSubscription.reset();
     _trackColumnLayoutChangedSubscription.reset();
@@ -218,20 +208,6 @@ namespace ao::gtk
 
   void MainWindowCoordinator::prepareSession()
   {
-    _runtime.reloadAllTracks();
-
-    _libraryTaskCompletedSubscription = _runtime.library().taskService().onCompleted(
-      [this](rt::LibraryTaskCompleted const& event) noexcept
-      {
-        if (event.status == rt::LibraryTaskCompletionStatus::Failed ||
-            event.status == rt::LibraryTaskCompletionStatus::Cancelled)
-        {
-          return;
-        }
-
-        _implPtr->trackRowCache.clearCache();
-      });
-
     _tracksMutatedSubscription = _runtime.library().changes().onChanged(
       [this](rt::LibraryChangeSet const& changeSet) noexcept
       {

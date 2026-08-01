@@ -75,11 +75,12 @@ namespace ao::gtk::layout::test
     explicit State(std::string_view applicationId,
                    std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
       : appPtr{Gtk::Application::create(std::string{applicationId})}
-      , runtime{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary))}
-      , playbackCommandSurface{runtime.playback(), [this] { std::ignore = runtime.playSelectionInFocusedView(); }}
+      , runtimePtr{gtk::test::makeRuntime(tempDir, std::move(initializeLibrary))}
+      , playbackCommandSurface{runtimePtr->playback(),
+                               [this] { std::ignore = runtimePtr->playSelectionInFocusedView(); }}
       , context{.registry = components,
                 .actionRegistry = actions,
-                .runtime = runtime,
+                .runtime = *runtimePtr,
                 .parentWindow = window,
                 .runtimeState = runtimeState,
                 .buildState = LayoutBuildStateView{runtimeState},
@@ -111,7 +112,7 @@ namespace ao::gtk::layout::test
     // runtime state precede every GTK/runtime consumer and therefore outlive it.
     Glib::RefPtr<Gtk::Application> appPtr;
     ao::test::TempDir tempDir;
-    rt::AppRuntime runtime;
+    std::unique_ptr<rt::AppRuntime> runtimePtr;
     uimodel::PlaybackCommandSurface playbackCommandSurface;
     ComponentRegistry components;
     ActionRegistry actions;
@@ -133,7 +134,7 @@ namespace ao::gtk::layout::test
 
   rt::AppRuntime& LayoutRuntimeFixture::runtime()
   {
-    return _statePtr->runtime;
+    return *_statePtr->runtimePtr;
   }
 
   Gtk::Window& LayoutRuntimeFixture::window()
@@ -183,7 +184,7 @@ namespace ao::gtk::layout::test
   {
     auto context = LayoutBuildContext{.registry = _statePtr->components,
                                       .actionRegistry = _statePtr->actions,
-                                      .runtime = _statePtr->runtime,
+                                      .runtime = *_statePtr->runtimePtr,
                                       .parentWindow = _statePtr->window,
                                       .runtimeState = _statePtr->runtimeState,
                                       .buildState = LayoutBuildStateView{_statePtr->runtimeState},

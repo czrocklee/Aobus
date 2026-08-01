@@ -26,6 +26,7 @@ namespace ao::rt
 {
   class AppRuntime;
   class TrackListProjection;
+  struct TrackPresentationSpec;
   struct TrackListProjectionDeltaBatch;
 }
 
@@ -56,6 +57,7 @@ namespace ao::winui
     void publishSelection(std::span<TrackId const> trackIds);
     Result<> play(TrackId trackId, std::function<Result<>(rt::ViewId, TrackId)> const& playTrack);
     Result<> selectPresentation(std::string_view presentationId);
+    Result<> selectPresentation(rt::TrackPresentationSpec const& presentation);
     Result<> toggleSort(rt::TrackSortField field);
     Result<> navigateTo(ListId listId);
     Result<> resizeColumn(std::string_view fieldId, double horizontalChange);

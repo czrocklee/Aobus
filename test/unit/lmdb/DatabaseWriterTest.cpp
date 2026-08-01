@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
@@ -7,11 +7,13 @@
 #include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -156,6 +158,14 @@ namespace ao::lmdb::test
     auto const reserveResult = writer2.append(4);
     REQUIRE(!reserveResult);
     CHECK(reserveResult.error().code == Error::Code::ResourceExhausted);
+
+    REQUIRE(writer2.update(std::numeric_limits<std::uint32_t>::max(), createStringData("still active")));
+    REQUIRE(wtxn2.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const optData = db.reader(rtxn).get(std::numeric_limits<std::uint32_t>::max());
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "still active");
   }
 
   TEST_CASE("Database::Writer - update existing record", "[lmdb][unit][database][writer]")
@@ -232,6 +242,13 @@ namespace ao::lmdb::test
     auto writer = db.writer(wtxn);
 
     REQUIRE_FALSE(writer.del(123));
+    REQUIRE(writer.create(1, createStringData("after miss")));
+    REQUIRE(wtxn.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const optData = db.reader(rtxn).get(1);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "after miss");
   }
 
   TEST_CASE("Database::Writer - get within write transaction", "[lmdb][unit][database][writer]")
@@ -282,7 +299,17 @@ namespace ao::lmdb::test
     auto const result = writer.create(1, createStringData("duplicate"));
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::Conflict);
+    REQUIRE(writer.create(2, createStringData("after conflict")));
     REQUIRE(wtxn.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const reader = db.reader(rtxn);
+    auto const optFirst = reader.get(1);
+    auto const optSecond = reader.get(2);
+    REQUIRE(optFirst);
+    REQUIRE(optSecond);
+    CHECK(utility::bytes::stringView(*optFirst) == "first");
+    CHECK(utility::bytes::stringView(*optSecond) == "after conflict");
   }
 
   TEST_CASE("Database::Writer - create returns Conflict on duplicate id with size", "[lmdb][unit][database][writer]")
@@ -294,12 +321,103 @@ namespace ao::lmdb::test
     auto db = openDatabase(wtxn, "test");
     auto writer = db.writer(wtxn);
 
-    REQUIRE(writer.create(1, 10));
+    auto const initial = writer.create(1, 10);
+    REQUIRE(initial);
+    std::memset(initial->data(), 'i', initial->size());
 
     auto const result = writer.create(1, 5);
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::Conflict);
+    auto const afterConflict = writer.create(2, 6);
+    REQUIRE(afterConflict);
+    std::memset(afterConflict->data(), 'a', afterConflict->size());
     REQUIRE(wtxn.commit());
+
+    auto const rtxn = beginReadTransaction(env);
+    auto const optData = db.reader(rtxn).get(2);
+    REQUIRE(optData);
+    CHECK(utility::bytes::stringView(*optData) == "aaaaaa");
+  }
+
+  TEST_CASE("Database::Writer - non-conflict mutation failure unwinds and rolls back its transaction",
+            "[lmdb][regression][database][writer]")
+  {
+    constexpr std::size_t kMapSize = std::size_t{64} * 1024;
+    constexpr std::size_t kOversizedValue = kMapSize * 4;
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 20, .mapSize = kMapSize});
+
+    auto setupTransaction = beginWriteTransaction(env);
+    auto db = openDatabase(setupTransaction, "test");
+    auto setupWriter = db.writer(setupTransaction);
+    REQUIRE(setupWriter.create(1, createStringData("persisted")));
+    REQUIRE(setupTransaction.commit());
+
+    {
+      auto transaction = beginWriteTransaction(env);
+      auto writer = db.writer(transaction);
+      auto const oversized = createTestData(kOversizedValue);
+
+      SECTION("create with copied data")
+      {
+        try
+        {
+          std::ignore = writer.create(3, oversized);
+          FAIL("oversized create should throw");
+        }
+        catch (TransactionFailure const& failure)
+        {
+          CHECK(failure.error().code == Error::Code::IoError);
+        }
+      }
+
+      SECTION("create with reserved data")
+      {
+        try
+        {
+          std::ignore = writer.create(3, oversized.size());
+          FAIL("oversized reserved create should throw");
+        }
+        catch (TransactionFailure const& failure)
+        {
+          CHECK(failure.error().code == Error::Code::IoError);
+        }
+      }
+
+      SECTION("update with copied data")
+      {
+        try
+        {
+          std::ignore = writer.update(1, oversized);
+          FAIL("oversized update should throw");
+        }
+        catch (TransactionFailure const& failure)
+        {
+          CHECK(failure.error().code == Error::Code::IoError);
+        }
+      }
+
+      SECTION("update with reserved data")
+      {
+        try
+        {
+          std::ignore = writer.update(1, oversized.size());
+          FAIL("oversized reserved update should throw");
+        }
+        catch (TransactionFailure const& failure)
+        {
+          CHECK(failure.error().code == Error::Code::IoError);
+        }
+      }
+    }
+
+    auto const readTransaction = beginReadTransaction(env);
+    auto const reader = db.reader(readTransaction);
+    auto const optPersisted = reader.get(1);
+    REQUIRE(optPersisted);
+    CHECK(utility::bytes::stringView(*optPersisted) == "persisted");
+    CHECK_FALSE(reader.get(2));
+    CHECK_FALSE(reader.get(3));
   }
 
   TEST_CASE("Database::Writer - throws when used after commit", "[lmdb][unit][database][writer]")

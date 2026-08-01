@@ -733,7 +733,24 @@ namespace ao::winui
       return makeError(Error::Code::NotFound, formatResource("UnknownPresentationFormat", presentationId));
     }
 
-    return _runtime->views().setPresentation(_viewId, preset->spec);
+    return selectPresentation(preset->spec);
+  }
+
+  Result<> TrackListController::selectPresentation(rt::TrackPresentationSpec const& presentation)
+  {
+    if (_runtime == nullptr || _viewId == rt::kInvalidViewId)
+    {
+      return makeError(Error::Code::InvalidState, resourceString("NoTrackViewActive"));
+    }
+
+    auto const eligibility = uimodel::trackPresentationEligibility(activeListId(), presentation.id);
+
+    if (!eligibility.enabled)
+    {
+      return makeError(Error::Code::InvalidInput, eligibility.disabledReason);
+    }
+
+    return _runtime->views().setPresentation(_viewId, presentation);
   }
 
   Result<> TrackListController::navigateTo(ListId const listId)

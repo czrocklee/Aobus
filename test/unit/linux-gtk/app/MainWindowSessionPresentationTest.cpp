@@ -100,9 +100,9 @@ namespace ao::gtk::test
     auto otherListId = kInvalidListId;
 
     {
-      auto runtime = makeRuntime(tempDir);
-      otherListId = createList(runtime, "History destination");
-      REQUIRE(runtime.workspace().navigate({
+      auto runtimePtr = makeRuntime(tempDir);
+      otherListId = createList(*runtimePtr, "History destination");
+      REQUIRE(runtimePtr->workspace().navigate({
         .target = rt::kAllTracksListId,
         .optPresentation =
           rt::NavigationPresentation{
@@ -110,23 +110,23 @@ namespace ao::gtk::test
             .spec = presentation(rt::kListOrderTrackPresentationId),
           },
       }));
-      runtime.workspace().saveSession(runtime.workspaceConfigStore());
+      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       savePresentationPreference(tempDir, rt::kAllTracksListId, "albums");
     }
 
-    auto runtime = makeRuntime(tempDir);
-    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    auto runtimePtr = makeRuntime(tempDir);
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
-    auto state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    auto state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
     REQUIRE(state.listId == rt::kAllTracksListId);
     CHECK(state.presentation.id == rt::kListOrderTrackPresentationId);
 
-    REQUIRE(runtime.workspace().navigate({.target = otherListId}));
-    REQUIRE(runtime.workspace().goBack());
-    state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    REQUIRE(runtimePtr->workspace().navigate({.target = otherListId}));
+    REQUIRE(runtimePtr->workspace().goBack());
+    state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
     CHECK(state.listId == rt::kAllTracksListId);
     CHECK(state.presentation.id == rt::kListOrderTrackPresentationId);
   }
@@ -138,17 +138,17 @@ namespace ao::gtk::test
     auto tempDir = ao::test::TempDir{};
 
     {
-      auto runtime = makeRuntime(tempDir);
+      auto runtimePtr = makeRuntime(tempDir);
       savePresentationPreference(tempDir, rt::kAllTracksListId, "songs");
     }
 
-    auto runtime = makeRuntime(tempDir);
-    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    auto runtimePtr = makeRuntime(tempDir);
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
-    auto const state = runtime.views().trackListState(runtime.workspace().snapshot().activeViewId);
+    auto const state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
     CHECK(state.listId == rt::kAllTracksListId);
     CHECK(state.presentation.id == "songs");
   }
@@ -161,32 +161,32 @@ namespace ao::gtk::test
     auto listId = kInvalidListId;
 
     {
-      auto runtime = makeRuntime(tempDir);
-      listId = createList(runtime, "Preferred list");
+      auto runtimePtr = makeRuntime(tempDir);
+      listId = createList(*runtimePtr, "Preferred list");
       savePresentationPreference(tempDir, listId, "albums");
     }
 
-    auto runtime = makeRuntime(tempDir);
+    auto runtimePtr = makeRuntime(tempDir);
     auto configStorePtr = appConfigStore(tempDir);
     auto window = Gtk::Window{};
-    auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
+    auto coordinator = MainWindowCoordinator{window, *runtimePtr, configStorePtr};
     coordinator.loadSession();
     coordinator.prepareSession();
 
     coordinator.listNavigationController()->select(listId);
     drainGtkEvents();
-    auto const firstViewId = runtime.workspace().snapshot().activeViewId;
+    auto const firstViewId = runtimePtr->workspace().snapshot().activeViewId;
     REQUIRE(firstViewId != rt::kInvalidViewId);
-    CHECK(runtime.views().trackListState(firstViewId).presentation.id == "albums");
+    CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "albums");
 
-    REQUIRE(runtime.workspace().setActivePresentation(presentation("songs")));
+    REQUIRE(runtimePtr->workspace().setActivePresentation(presentation("songs")));
     coordinator.listNavigationController()->select(rt::kAllTracksListId);
     drainGtkEvents();
     coordinator.listNavigationController()->select(listId);
     drainGtkEvents();
 
-    CHECK(runtime.workspace().snapshot().activeViewId == firstViewId);
-    CHECK(runtime.views().trackListState(firstViewId).presentation.id == "songs");
+    CHECK(runtimePtr->workspace().snapshot().activeViewId == firstViewId);
+    CHECK(runtimePtr->views().trackListState(firstViewId).presentation.id == "songs");
   }
 
   TEST_CASE("MainWindowCoordinator - playback restore reuses a restored plain view without changing presentation",
@@ -198,11 +198,11 @@ namespace ao::gtk::test
     auto trackId = kInvalidTrackId;
 
     {
-      auto runtime = makeRuntime(tempDir);
-      rt::test::addReadyAudioProvider(runtime);
-      trackId = addPlayableTrack(runtime, "Restored plain track");
-      listId = createList(runtime, "Restored plain list");
-      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
+      auto runtimePtr = makeRuntime(tempDir);
+      rt::test::addReadyAudioProvider(*runtimePtr);
+      trackId = addPlayableTrack(*runtimePtr, "Restored plain track");
+      listId = createList(*runtimePtr, "Restored plain list");
+      auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({
         .target = listId,
         .optPresentation =
           rt::NavigationPresentation{
@@ -210,24 +210,24 @@ namespace ao::gtk::test
             .spec = presentation("songs"),
           },
       }));
-      REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
-      REQUIRE(runtime.savePlaybackSession());
-      runtime.workspace().saveSession(runtime.workspaceConfigStore());
+      REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(runtimePtr->savePlaybackSession());
+      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       savePresentationPreference(tempDir, listId, "albums");
-      runtime.playback().commands().stop();
+      runtimePtr->playback().commands().stop();
     }
 
-    auto runtime = makeRuntime(tempDir);
-    rt::test::addReadyAudioProvider(runtime);
-    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    auto runtimePtr = makeRuntime(tempDir);
+    rt::test::addReadyAudioProvider(*runtimePtr);
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
-    auto const listViews = viewsForList(runtime, listId);
+    auto const listViews = viewsForList(*runtimePtr, listId);
     REQUIRE(listViews.size() == 1);
-    auto const state = runtime.views().trackListState(listViews.front());
+    auto const state = runtimePtr->views().trackListState(listViews.front());
     CHECK(state.filterExpression.empty());
     CHECK(state.presentation.id == "songs");
     CHECK(state.selection == std::vector<TrackId>{trackId});
@@ -240,24 +240,24 @@ namespace ao::gtk::test
     auto tempDir = ao::test::TempDir{};
 
     {
-      auto runtime = makeRuntime(tempDir);
-      rt::test::addReadyAudioProvider(runtime);
-      auto const trackId = addPlayableTrack(runtime, "Old library playback");
-      runtime.reloadAllTracks();
-      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = rt::kAllTracksListId}));
-      REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
-      REQUIRE(runtime.savePlaybackSession());
-      runtime.playback().commands().stop();
+      auto runtimePtr = makeRuntime(tempDir);
+      rt::test::addReadyAudioProvider(*runtimePtr);
+      auto const trackId = addPlayableTrack(*runtimePtr, "Old library playback");
+      runtimePtr->reloadAllTracks();
+      auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = rt::kAllTracksListId}));
+      REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(runtimePtr->savePlaybackSession());
+      runtimePtr->playback().commands().stop();
     }
 
-    auto runtime = makeRuntime(tempDir);
-    rt::test::addReadyAudioProvider(runtime);
-    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    auto runtimePtr = makeRuntime(tempDir);
+    rt::test::addReadyAudioProvider(*runtimePtr);
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
 
-    auto const& snapshot = runtime.playback().snapshot();
+    auto const& snapshot = runtimePtr->playback().snapshot();
     CHECK(snapshot.transport.transport == audio::Transport::Idle);
     CHECK(snapshot.transport.nowPlaying.trackId == kInvalidTrackId);
     CHECK(snapshot.succession.currentTrackId == kInvalidTrackId);
@@ -271,11 +271,11 @@ namespace ao::gtk::test
     auto listId = kInvalidListId;
 
     {
-      auto runtime = makeRuntime(tempDir);
-      rt::test::addReadyAudioProvider(runtime);
-      auto const trackId = addPlayableTrack(runtime, "Restored filtered track");
-      listId = createList(runtime, "Restored filtered list");
-      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({
+      auto runtimePtr = makeRuntime(tempDir);
+      rt::test::addReadyAudioProvider(*runtimePtr);
+      auto const trackId = addPlayableTrack(*runtimePtr, "Restored filtered track");
+      listId = createList(*runtimePtr, "Restored filtered list");
+      auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({
         .target =
           rt::FilteredListTarget{
             .listId = listId,
@@ -288,29 +288,29 @@ namespace ao::gtk::test
           },
       }));
       drainGtkEvents();
-      REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
-      REQUIRE(runtime.savePlaybackSession());
-      runtime.workspace().saveSession(runtime.workspaceConfigStore());
+      REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(runtimePtr->savePlaybackSession());
+      runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       savePresentationPreference(tempDir, listId, "albums");
-      runtime.playback().commands().stop();
+      runtimePtr->playback().commands().stop();
     }
 
-    auto runtime = makeRuntime(tempDir);
-    rt::test::addReadyAudioProvider(runtime);
-    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    auto runtimePtr = makeRuntime(tempDir);
+    rt::test::addReadyAudioProvider(*runtimePtr);
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
-    auto const listViews = viewsForList(runtime, listId);
+    auto const listViews = viewsForList(*runtimePtr, listId);
     REQUIRE(listViews.size() == 2);
     std::int32_t filteredCount = 0;
     std::int32_t plainCount = 0;
 
     for (auto const viewId : listViews)
     {
-      if (auto const state = runtime.views().trackListState(viewId); state.filterExpression.empty())
+      if (auto const state = runtimePtr->views().trackListState(viewId); state.filterExpression.empty())
       {
         ++plainCount;
         CHECK(state.presentation.id == "albums");
@@ -336,28 +336,28 @@ namespace ao::gtk::test
     auto trackId = kInvalidTrackId;
 
     {
-      auto runtime = makeRuntime(tempDir);
-      rt::test::addReadyAudioProvider(runtime);
-      trackId = addPlayableTrack(runtime, "Restored new-view track");
-      listId = createList(runtime, "Restored new-view list");
-      auto const viewId = ao::test::requireValue(runtime.workspace().navigate({.target = listId}));
-      REQUIRE(runtime.playback().commands().startFromView(viewId, trackId));
-      REQUIRE(waitForPlaybackSettlement(runtime, trackId));
-      REQUIRE(runtime.savePlaybackSession());
+      auto runtimePtr = makeRuntime(tempDir);
+      rt::test::addReadyAudioProvider(*runtimePtr);
+      trackId = addPlayableTrack(*runtimePtr, "Restored new-view track");
+      listId = createList(*runtimePtr, "Restored new-view list");
+      auto const viewId = ao::test::requireValue(runtimePtr->workspace().navigate({.target = listId}));
+      REQUIRE(runtimePtr->playback().commands().startFromView(viewId, trackId));
+      REQUIRE(waitForPlaybackSettlement(*runtimePtr, trackId));
+      REQUIRE(runtimePtr->savePlaybackSession());
       savePresentationPreference(tempDir, listId, "albums");
-      runtime.playback().commands().stop();
+      runtimePtr->playback().commands().stop();
     }
 
-    auto runtime = makeRuntime(tempDir);
-    rt::test::addReadyAudioProvider(runtime);
-    auto window = MainWindow{runtime, appConfigStore(tempDir), nullptr};
+    auto runtimePtr = makeRuntime(tempDir);
+    rt::test::addReadyAudioProvider(*runtimePtr);
+    auto window = MainWindow{*runtimePtr, appConfigStore(tempDir), nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::Restore));
     drainGtkEvents();
 
-    auto const listViews = viewsForList(runtime, listId);
+    auto const listViews = viewsForList(*runtimePtr, listId);
     REQUIRE(listViews.size() == 1);
-    auto const state = runtime.views().trackListState(listViews.front());
+    auto const state = runtimePtr->views().trackListState(listViews.front());
     CHECK(state.filterExpression.empty());
     CHECK(state.presentation.id == "albums");
   }

@@ -16,6 +16,7 @@
 #include "TrackTable.h"
 #include "TuiHitRegions.h"
 #include <ao/rt/AppRuntime.h>
+#include <ao/rt/Log.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/TrackField.h>
@@ -168,7 +169,11 @@ namespace ao::tui
 
   void EventController::applyFilter()
   {
-    _library.applyFilter();
+    if (auto result = _library.applyFilter(); !result)
+    {
+      APP_LOG_ERROR("Failed to apply TUI filter: {}", result.error().message);
+      postActivityNotification(rt::NotificationSeverity::Error, "Filter failed: " + result.error().message);
+    }
   }
 
   void EventController::toggleListChooser()

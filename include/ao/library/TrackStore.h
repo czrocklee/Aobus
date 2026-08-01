@@ -11,13 +11,11 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <functional>
 #include <iterator>
 #include <optional>
 #include <ranges>
 #include <span>
-#include <string_view>
 #include <utility>
 
 namespace ao::library
@@ -29,17 +27,8 @@ namespace ao::library
   namespace detail
   {
     class LibraryIdentity;
-
-    bool isFourByteAligned(std::span<std::byte const> bytes) noexcept;
-
-    // Write-side gate only. The size%4 invariant is load-bearing: together
-    // with the 4-byte integer keys and LMDB's node layout it keeps every
-    // value in the track databases 4-byte aligned, so read paths can map
-    // records with typed views. Read paths do not re-check it; a record that
-    // fails TrackView's structural gate reads as an invalid view instead.
-    Result<> validateSerializedTrackSize(std::size_t size, std::string_view label);
-    Result<> validateSerializedTrackBytes(std::span<std::byte const> bytes, std::string_view label);
-  } // namespace detail
+    class TrackWriteAccess;
+  }
 
   /**
    * TrackStore - Binary storage for tracks using hot/cold separation.
@@ -110,9 +99,14 @@ namespace ao::library
      * Visit tracks selected by ID, preserving the requested order.
      *
      * Missing rows are skipped. Duplicate IDs therefore produce duplicate
-     * visits when the row exists. Views remain transaction-scoped, like get().
-     * Strictly ascending dense selections may use cursor traversal internally;
-     * sparse or arbitrarily ordered selections retain point-lookup behavior.
+     * visits when the row exists. A structurally malformed loaded side is
+     * delivered as a TrackView whose corresponding validity query is false;
+     * the visitor must check that query before using decoded accessors. Such a
+     * visitor-side contract failure is not converted into a missing row, and
+     * earlier visitor side effects are not rolled back. Views remain
+     * transaction-scoped, like get(). Strictly ascending dense selections may
+     * use cursor traversal internally; sparse or arbitrarily ordered
+     * selections retain point-lookup behavior.
      */
     template<typename Visitor>
       requires std::invocable<Visitor&, TrackId, TrackView const&>
@@ -161,7 +155,7 @@ namespace ao::library
              lmdb::Database::Reader::Iterator&& coldIter,
              Reader::LoadMode mode);
 
-    void alignBoth();
+    void validateBothPosition() const;
 
     lmdb::Database::Reader::Iterator _hotIter;
     lmdb::Database::Reader::Iterator _coldIter;
@@ -227,6 +221,11 @@ namespace ao::library
 
   /**
    * TrackStore::Writer - Write access to tracks.
+   *
+   * Record creation and replacement live in TrackWrite.h and take
+   * TrackBuilder::PreparedHot/PreparedCold: the record is serialized straight
+   * into storage-owned bytes and validated there, so no entry point here
+   * accepts caller-supplied record bytes.
    */
   class [[nodiscard]] TrackStore::Writer final
   {
@@ -236,56 +235,6 @@ namespace ao::library
      * @return TrackView, or std::nullopt if the track is missing.
      */
     std::optional<TrackView> get(TrackId id, Reader::LoadMode mode) const;
-
-    /**
-     * Create a new track with hot and cold data.
-     * @param hotData TrackHotHeader + payload
-     * @param coldData TrackColdHeader + optional cold payloads + uri
-     * @return Pair of (track ID, TrackView)
-     */
-    Result<std::pair<TrackId, TrackView>> createHotCold(std::span<std::byte const> hotData,
-                                                        std::span<std::byte const> coldData);
-
-    /**
-     * Zero-copy create: reserves space and calls fill callback to populate spans.
-     * @param hotSize Size of hot data (must be multiple of 4)
-     * @param coldSize Size of cold data (must be multiple of 4)
-     * @param fill Callback: fill(TrackId id, span<byte> hot, span<byte> cold) -> void
-     * @return Pair of (track ID, TrackView)
-     */
-    template<typename F>
-      requires std::invocable<F, TrackId, std::span<std::byte>, std::span<std::byte>>
-    Result<std::pair<TrackId, TrackView>> createHotCold(std::size_t hotSize, std::size_t coldSize, F&& fill);
-
-    /**
-     * Update hot track data.
-     */
-    Result<> updateHot(TrackId id, std::span<std::byte const> hotData);
-
-    /**
-     * Zero-copy updateHot: reserves space and calls fill callback to populate span.
-     * @param id Track ID to update
-     * @param size Size of hot data (must be multiple of 4)
-     * @param fill Callback: fill(span<byte> hot) -> void
-     */
-    template<typename F>
-      requires std::invocable<F, std::span<std::byte>>
-    Result<> updateHot(TrackId id, std::size_t size, F&& fill);
-
-    /**
-     * Update cold track data (direct span access).
-     */
-    Result<std::span<std::byte>> updateCold(TrackId id, std::size_t size);
-
-    /**
-     * Zero-copy updateCold: reserves space and calls fill callback to populate span.
-     * @param id Track ID to update
-     * @param size Size of cold data (must be multiple of 4)
-     * @param fill Callback: fill(span<byte> cold) -> void
-     */
-    template<typename F>
-      requires std::invocable<F, std::span<std::byte>>
-    Result<> updateCold(TrackId id, std::size_t size, F&& fill);
 
     /**
      * Delete both hot and cold track data.
@@ -299,118 +248,12 @@ namespace ao::library
     Result<> clear();
 
   private:
-    explicit Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter);
+    Writer(lmdb::Database::Writer hotWriter, lmdb::Database::Writer coldWriter);
 
     lmdb::Database::Writer _hotWriter;
     lmdb::Database::Writer _coldWriter;
+
     friend class TrackStore;
+    friend class detail::TrackWriteAccess;
   };
-
-  // Template implementations
-
-  template<typename F>
-    requires std::invocable<F, TrackId, std::span<std::byte>, std::span<std::byte>>
-  Result<std::pair<TrackId, TrackView>> TrackStore::Writer::createHotCold(std::size_t hotSize,
-                                                                          std::size_t coldSize,
-                                                                          F&& fill)
-  {
-    if (auto validation = detail::validateSerializedTrackSize(hotSize, "hot"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    if (auto validation = detail::validateSerializedTrackSize(coldSize, "cold"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    // Reserve hot span and get auto-increment ID
-    auto hotResult = _hotWriter.append(hotSize);
-
-    if (!hotResult)
-    {
-      return std::unexpected{hotResult.error()};
-    }
-
-    auto [id, hotSpan] = *hotResult;
-
-    if (auto validation = detail::validateSerializedTrackBytes(hotSpan, "hot"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    // Reserve cold at the SAME explicit ID (not append)
-    auto coldResult = _coldWriter.create(id, coldSize);
-
-    if (!coldResult)
-    {
-      return std::unexpected{coldResult.error()};
-    }
-
-    auto coldSpan = *coldResult;
-
-    if (auto validation = detail::validateSerializedTrackBytes(coldSpan, "cold"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    // Populate both spans via callback
-    std::invoke(std::forward<F>(fill), TrackId{id}, hotSpan, coldSpan);
-
-    return std::pair{TrackId{id}, TrackView{hotSpan, coldSpan}};
-  }
-
-  template<typename F>
-    requires std::invocable<F, std::span<std::byte>>
-  Result<> TrackStore::Writer::updateHot(TrackId id, std::size_t size, F&& fill)
-  {
-    if (auto validation = detail::validateSerializedTrackSize(size, "hot"); !validation)
-    {
-      return validation;
-    }
-
-    auto spanResult = _hotWriter.update(id.raw(), size);
-
-    if (!spanResult)
-    {
-      return std::unexpected{spanResult.error()};
-    }
-
-    auto span = *spanResult;
-
-    if (auto validation = detail::validateSerializedTrackBytes(span, "hot"); !validation)
-    {
-      return validation;
-    }
-
-    std::invoke(std::forward<F>(fill), span);
-    return {};
-  }
-
-  template<typename F>
-    requires std::invocable<F, std::span<std::byte>>
-  Result<> TrackStore::Writer::updateCold(TrackId id, std::size_t size, F&& fill)
-  {
-    if (auto validation = detail::validateSerializedTrackSize(size, "cold"); !validation)
-    {
-      return validation;
-    }
-
-    auto spanResult = _coldWriter.update(id.raw(), size);
-
-    if (!spanResult)
-    {
-      return std::unexpected{spanResult.error()};
-    }
-
-    auto span = *spanResult;
-
-    if (auto validation = detail::validateSerializedTrackBytes(span, "cold"); !validation)
-    {
-      return validation;
-    }
-
-    std::invoke(std::forward<F>(fill), span);
-    return {};
-  }
 } // namespace ao::library

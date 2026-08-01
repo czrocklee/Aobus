@@ -157,12 +157,12 @@ namespace ao::rt::test
     runtime.addAudioProvider(makeReadyAudioProvider(std::move(status)));
   }
 
-  AppRuntime makeRuntime(ao::test::TempDir const& tempDir,
-                         std::unique_ptr<async::Executor> executorPtr,
-                         ConfigStore* const playbackSessionConfigStore,
-                         async::Sleeper* const sleeper)
+  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
+                                          std::unique_ptr<async::Executor> executorPtr,
+                                          ConfigStore* const playbackSessionConfigStore,
+                                          async::Sleeper* const sleeper)
   {
-    return AppRuntime{AppRuntimeDependencies{
+    return ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
@@ -171,12 +171,12 @@ namespace ao::rt::test
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .playbackSessionConfigStore = playbackSessionConfigStore,
       .sleeper = sleeper,
-    }};
+    }));
   }
 
-  AppRuntime makeRuntime(ao::test::TempDir const& tempDir,
-                         ConfigStore* const playbackSessionConfigStore,
-                         async::Sleeper* const sleeper)
+  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
+                                          ConfigStore* const playbackSessionConfigStore,
+                                          async::Sleeper* const sleeper)
   {
     return makeRuntime(tempDir, std::make_unique<InlineExecutor>(), playbackSessionConfigStore, sleeper);
   }

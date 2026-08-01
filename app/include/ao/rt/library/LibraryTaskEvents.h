@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -22,19 +21,5 @@ namespace ao::rt
     LibraryTaskProgressKind kind = LibraryTaskProgressKind::Scanning;
     double fraction = 0.0;
     std::string subject{};
-  };
-
-  enum class LibraryTaskCompletionStatus : std::uint8_t
-  {
-    Succeeded,
-    CompletedWithIssues,
-    Failed,
-    Cancelled,
-  };
-
-  struct LibraryTaskCompleted final
-  {
-    LibraryTaskCompletionStatus status = LibraryTaskCompletionStatus::Succeeded;
-    std::size_t affectedCount = 0;
   };
 } // namespace ao::rt

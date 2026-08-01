@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryScan.h>
+
 #include <ao/Error.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
@@ -8,8 +10,8 @@
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
+#include <ao/library/detail/LibraryError.h>
 #include <ao/media/file/File.h>
-#include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
 #include <ao/utility/Path.h>
@@ -128,8 +130,7 @@ namespace ao::rt
           }
           else
           {
-            item.classification = ScanClassification::Error;
-            item.errorMessage = manifestResult.error().message;
+            library::detail::throwLibraryError(std::move(manifestResult.error()));
           }
         }
         else
@@ -148,6 +149,10 @@ namespace ao::rt
             item.classification = ScanClassification::Changed;
           }
         }
+      }
+      catch (library::detail::LibraryException const&)
+      {
+        throw;
       }
       catch (std::exception const& e)
       {
@@ -322,6 +327,18 @@ namespace ao::rt
   }
 
   Result<ScanPlan> LibraryScan::buildPlan(BuildProgressCallback progress)
+  {
+    try
+    {
+      return buildPlanUnchecked(std::move(progress));
+    }
+    catch (library::detail::LibraryException const& error)
+    {
+      return std::unexpected{error.error()};
+    }
+  }
+
+  Result<ScanPlan> LibraryScan::buildPlanUnchecked(BuildProgressCallback progress)
   {
     auto const root = _library.rootPath();
 

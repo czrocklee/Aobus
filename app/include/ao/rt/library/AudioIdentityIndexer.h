@@ -81,7 +81,7 @@ namespace ao::rt
     /// concurrently, then written back serially in one transaction per batch;
     /// every row is revalidated against the live manifest before its identity
     /// is committed. Cancellation flushes rows already hashed in the current
-    /// batch and returns a cancelled result.
+    /// batch and then propagates OperationCancelled.
     async::Task<Result<AudioIdentityIndexResult>> indexPending(CommitBatchCallback commitBatchCallback,
                                                                Options options = {},
                                                                AudioIdentityIndexProgressCallback progressCallback = {},

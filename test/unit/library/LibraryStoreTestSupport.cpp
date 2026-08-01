@@ -3,10 +3,12 @@
 
 #include "LibraryStoreTestSupport.h"
 
+#include "MusicLibraryTestSupport.h"
+
 namespace ao::library::test
 {
   LibraryStoreFixture::LibraryStoreFixture()
-    : temp{}, library{temp.path(), temp.path() / "db"}
+    : temp{}, library{makeTestMusicLibrary(temp.path(), temp.path() / "db")}
   {
   }
 } // namespace ao::library::test

@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/Library.h>
+
 #include "LibraryMutationService.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/Exception.h>
-#include <ao/ExceptionFormat.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Subscription.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/rt/ListMutation.h>
-#include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryWriter.h>
 
+#include <expected>
 #include <functional>
 #include <memory>
 #include <span>
@@ -26,21 +26,6 @@
 
 namespace ao::rt
 {
-  namespace
-  {
-    library::WritableMusicLibrary acquireWritableLibrary(library::MusicLibrary& storage)
-    {
-      auto result = library::WritableMusicLibrary::acquire(storage);
-
-      if (!result)
-      {
-        throwException<Exception>("Failed to acquire writable library session: {}", result.error().message);
-      }
-
-      return std::move(*result);
-    }
-  } // namespace
-
   struct Library::Impl final
   {
     library::MusicLibrary& storage;
@@ -49,22 +34,48 @@ namespace ao::rt
     LibraryWriter writer;
     LibraryTaskService taskService;
 
-    Impl(async::Runtime& asyncRuntime, library::MusicLibrary& libraryStorage, LibraryChanges& changes)
+    Impl(async::Runtime& asyncRuntime,
+         library::MusicLibrary& libraryStorage,
+         library::WritableMusicLibrary writableStorage,
+         LibraryChanges& changes)
       : storage{libraryStorage}
       , changeBus{changes}
-      , mutationService{asyncRuntime.callbackExecutor(), acquireWritableLibrary(libraryStorage), changes}
+      , mutationService{asyncRuntime.callbackExecutor(), std::move(writableStorage), changes}
       , writer{libraryStorage, mutationService}
       , taskService{asyncRuntime, libraryStorage, mutationService}
     {
     }
   };
 
-  Library::Library(async::Runtime& asyncRuntime, library::MusicLibrary& storage, LibraryChanges& changes)
-    : _implPtr{std::make_unique<Impl>(asyncRuntime, storage, changes)}
+  Result<std::unique_ptr<Library>> Library::create(async::Runtime& asyncRuntime,
+                                                   library::MusicLibrary& storage,
+                                                   LibraryChanges& changes)
+  {
+    auto writableStorage = library::WritableMusicLibrary::acquire(storage);
+
+    if (!writableStorage)
+    {
+      return std::unexpected{writableStorage.error()};
+    }
+
+    auto implPtr = std::make_unique<Impl>(asyncRuntime, storage, std::move(*writableStorage), changes);
+    return std::unique_ptr<Library>{new Library{std::move(implPtr)}};
+  }
+
+  Library::Library(std::unique_ptr<Impl> implPtr)
+    : _implPtr{std::move(implPtr)}
   {
   }
 
-  Library::~Library() = default;
+  Library::~Library()
+  {
+    beginClosing();
+  }
+
+  void Library::beginClosing() noexcept
+  {
+    _implPtr->mutationService.beginClosing();
+  }
 
   LibraryReader Library::reader() const
   {

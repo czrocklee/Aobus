@@ -79,7 +79,7 @@ namespace winrt::Aobus::implementation
 
     unbindPlayback();
     auto const dependencies = _coordinatorPtr->uiDependencies();
-    auto& playback = dependencies.playbackRuntime.playback();
+    auto& playback = dependencies.runtime.playback();
     auto& commands = dependencies.playbackCommands;
     _playbackControlsPtr->bind(dependencies);
     _nowPlayingPtr = std::make_unique<ao::uimodel::NowPlayingViewModel>(
@@ -97,7 +97,7 @@ namespace winrt::Aobus::implementation
     {
       _smtcPtr = std::make_unique<ao::winui::SmtcBridge>(
         nativeWindow(*this), Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread());
-      _smtcPtr->bind(_session->playbackRuntimePtr(), commands, dependencies.playbackResourceBytes);
+      _smtcPtr->bind(_session->runtimePtr(), commands, dependencies.resourceBytes);
     }
     catch (hresult_error const& error)
     {
@@ -185,7 +185,7 @@ namespace winrt::Aobus::implementation
 
     if (_session != nullptr)
     {
-      get_self<AobusSoulControl>(_fullscreenSoul)->bind(_session->playbackRuntime().playback());
+      get_self<AobusSoulControl>(_fullscreenSoul)->bind(_session->runtime().playback());
     }
 
     auto root = Microsoft::UI::Xaml::Controls::Grid{};

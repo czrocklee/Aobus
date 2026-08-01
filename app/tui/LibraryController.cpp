@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <format>
 #include <iterator>
 #include <optional>
@@ -362,7 +363,7 @@ namespace ao::tui
     return std::format("Reloaded {}", uimodel::formatTrackCount(_tracks.size()));
   }
 
-  std::string LibraryController::applyFilter()
+  Result<std::string> LibraryController::applyFilter()
   {
     if (_activeViewId == rt::kInvalidViewId)
     {
@@ -370,7 +371,13 @@ namespace ao::tui
     }
 
     auto const resolved = uimodel::resolveTrackFilterExpression(_filterDraft);
-    std::ignore = _runtime.views().setFilter(_activeViewId, resolved.expression);
+    auto filterResult = _runtime.views().setFilter(_activeViewId, resolved.expression);
+
+    if (!filterResult)
+    {
+      return std::unexpected{filterResult.error()};
+    }
+
     auto snapshot = loadTrackItemsFromView(_activeViewId);
     _tracks = std::move(snapshot.tracks);
     _sections = std::move(snapshot.sections);
@@ -479,7 +486,6 @@ namespace ao::tui
 
   LibraryController::TrackItemsSnapshot LibraryController::loadTrackItems(ListId const listId)
   {
-    _runtime.reloadAllTracks();
     auto navigationResult = Result<rt::ViewId>{};
 
     if (listId == rt::kAllTracksListId)

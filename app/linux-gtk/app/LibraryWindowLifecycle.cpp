@@ -11,6 +11,7 @@
 #include "platform/AudioBackendBootstrap.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/Log.h>
@@ -35,13 +36,20 @@ namespace ao::gtk
     auto const workspaceConfigPath = paths.databasePath / "workspace.yaml";
     auto workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(workspaceConfigPath);
 
-    auto appRuntimePtr = std::make_unique<rt::AppRuntime>(
+    auto runtimeResult = rt::AppRuntime::create(
       rt::AppRuntimeDependencies{.executorPtr = std::move(executorPtr),
                                  .musicRoot = std::move(paths.musicRoot),
                                  .databasePath = std::move(paths.databasePath),
                                  .workspaceConfigStorePtr = std::move(workspaceConfigStorePtr),
                                  .playbackSessionConfigStore = &appConfigStorePtr->playbackSessionStore(),
                                  .asyncExceptionHandler = std::move(asyncExceptionHandler)});
+
+    if (!runtimeResult)
+    {
+      throwException<Exception>("Failed to open library: {}", runtimeResult.error().message);
+    }
+
+    auto appRuntimePtr = std::move(*runtimeResult);
 
     registerPlatformAudioBackends(*appRuntimePtr);
 

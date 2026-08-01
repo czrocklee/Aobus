@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/ListStore.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/library/ListBuilder.h>
-#include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Environment.h>
@@ -30,7 +32,9 @@ namespace ao::library::test
     {
       auto result = writer.create(data);
       REQUIRE(result);
-      return *result;
+      auto optView = writer.get(*result);
+      REQUIRE(optView);
+      return {*result, *optView};
     }
 
     void seedCorruptList(std::filesystem::path const& path)
@@ -133,19 +137,19 @@ namespace ao::library::test
 
     auto created = writer.create(validPayload);
     REQUIRE(created);
-    auto const updateResult = writer.update(created->first, corruptPayload);
+    auto const updateResult = writer.update(*created, corruptPayload);
     REQUIRE_FALSE(updateResult);
     CHECK(updateResult.error().code == Error::Code::CorruptData);
     REQUIRE(transaction.commit());
 
     auto readTransaction = fixture.library.readTransaction();
     auto reader = fixture.library.lists().reader(readTransaction);
-    auto const optStored = reader.get(created->first);
+    auto const optStored = reader.get(*created);
     REQUIRE(optStored);
     CHECK(optStored->name() == "Original");
     auto iterator = reader.begin();
     REQUIRE(iterator != reader.end());
-    CHECK((*iterator).first == created->first);
+    CHECK((*iterator).first == *created);
     ++iterator;
     CHECK(iterator == reader.end());
   }
@@ -153,8 +157,16 @@ namespace ao::library::test
   TEST_CASE("ListStore - corrupt records fail closed for point reads and iteration", "[library][regression][list]")
   {
     auto const temp = ao::test::TempDir{};
+
+    // Establish a valid library header before injecting the malformed List.
+    // MusicLibrary::open() rejects a headerless non-empty environment as a
+    // corrupt partial initialization.
+    {
+      std::ignore = makeTestMusicLibrary(temp.path(), temp.path());
+    }
+
     seedCorruptList(temp.path());
-    auto library = MusicLibrary{temp.path(), temp.path()};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path());
 
     SECTION("reader get")
     {

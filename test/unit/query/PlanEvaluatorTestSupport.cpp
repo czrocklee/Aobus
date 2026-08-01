@@ -5,6 +5,7 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -105,7 +106,7 @@ namespace ao::query::test
   {
     // The library must be destroyed before its backing directory on Windows.
     ao::test::TempDir temp;
-    MusicLibrary library{temp.path(), temp.path() / "db"};
+    MusicLibrary library{library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db")};
   };
 
   DictionaryFixture::DictionaryFixture()
@@ -138,7 +139,7 @@ namespace ao::query::test
   struct TrackFixture::Impl final
   {
     explicit Impl(TrackSpec const& spec, DictionaryStore const* externalDictionary)
-      : library{temp.path(), temp.path() / "db"}
+      : library{library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db")}
       , transaction{library::test::writeTransaction(library)}
       , dictionary{externalDictionary != nullptr ? externalDictionary : &library.dictionary()}
     {

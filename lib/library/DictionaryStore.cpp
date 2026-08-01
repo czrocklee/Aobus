@@ -6,6 +6,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>
@@ -15,7 +16,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
+#include <format>
 #include <functional>
 #include <limits>
 #include <map>
@@ -41,11 +44,30 @@ namespace ao::library
     auto const reader = _database.reader(transaction);
     _stringToId.reserve(reader.entryCount());
 
-    for (auto const& [id, buf] : reader)
+    for (auto const& [rawKey, buf] : reader)
     {
-      auto const rawId = static_cast<std::uint32_t>(id);
+      if (rawKey.size() != sizeof(std::uint32_t))
+      {
+        detail::throwLibraryError(
+          Error::Code::CorruptData, std::format("Dictionary database contains a {}-byte integer key", rawKey.size()));
+      }
+
+      std::uint32_t rawId = 0;
+      std::memcpy(&rawId, rawKey.data(), sizeof(rawId));
+
+      if (auto const expectedId = _idToStringStorage.size() + 1U; static_cast<std::size_t>(rawId) != expectedId)
+      {
+        detail::throwLibraryError(
+          Error::Code::CorruptData,
+          std::format("Dictionary ids are not the dense range 1..N: expected {}, found {}", expectedId, rawId));
+      }
+
       _idToStringStorage.emplace_back(utility::bytes::stringView(buf));
-      _stringToId.insert(DictionaryId{rawId});
+
+      if (!_stringToId.insert(DictionaryId{rawId}).second)
+      {
+        detail::throwLibraryError(Error::Code::CorruptData, "Dictionary database contains duplicate text values");
+      }
     }
   }
 

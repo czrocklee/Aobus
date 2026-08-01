@@ -30,7 +30,7 @@ namespace ao::tui::test
     auto const firstId = fixture.addPlayableTrack("First");
     auto const secondId = fixture.addPlayableTrack("Second");
     auto const tracks = std::vector{trackEntry(firstId), trackEntry(secondId)};
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto& commands = playback.commands();
 
     CHECK(playSelected(commands, tracks, -4, fixture.viewId));
@@ -53,7 +53,7 @@ namespace ao::tui::test
   TEST_CASE("PlaybackActions - playSelected rejects an empty track list", "[tui][unit][playback]")
   {
     auto fixture = rt::test::PlaybackUiFixture{};
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
 
     CHECK_FALSE(playSelected(playback.commands(), {}, 0, fixture.viewId));
     auto const snapshot = playback.snapshot();

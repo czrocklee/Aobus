@@ -36,7 +36,7 @@ namespace ao::winui
   void SoulTransportButton::bind(WinUiDependencies const& dependencies)
   {
     unbind();
-    auto& playback = dependencies.playbackRuntime.playback();
+    auto& playback = dependencies.runtime.playback();
     auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
     winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->bind(playback);
     _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,

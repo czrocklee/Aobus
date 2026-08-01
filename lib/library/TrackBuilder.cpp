@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/library/TrackBuilder.h>
 
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
@@ -7,12 +9,13 @@
 #include <ao/Error.h>
 #include <ao/PictureType.h>
 #include <ao/library/DictionaryStore.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/library/detail/LibraryError.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/utility/ByteView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -80,7 +83,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        detail::throwLibraryError(idResult.error());
+        lmdb::throwTransactionFailure(std::move(idResult.error()));
       }
 
       return *idResult;
@@ -109,98 +112,104 @@ namespace ao::library
     return TrackBuilder{};
   }
 
-  TrackBuilder TrackBuilder::fromView(TrackView const& view, DictionaryStore const& dictionary)
+  TrackBuilder TrackBuilder::fromHotView(TrackView const& view, DictionaryStore const& dictionary)
   {
+    gsl_Expects(view.isHotValid());
+
     auto builder = TrackBuilder{};
+    builder._baselineKind = BaselineKind::HotOnly;
 
-    if (view.isHotValid())
+    auto metadata = view.metadata();
+    builder.metadata().title(metadata.title()).year(metadata.year());
+
+    auto prop = view.property();
+    builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
+
+    if (auto artistId = metadata.artistId(); artistId.raw() > 0)
     {
-      auto metadata = view.metadata();
-      builder.metadata().title(metadata.title()).year(metadata.year());
-
-      auto prop = view.property();
-      builder.property().sampleRate(prop.sampleRate()).codec(prop.codec()).bitDepth(prop.bitDepth());
-
-      if (auto artistId = metadata.artistId(); artistId.raw() > 0)
-      {
-        builder.metadata().artist(dictionary.get(artistId));
-      }
-
-      if (auto albumId = metadata.albumId(); albumId.raw() > 0)
-      {
-        builder.metadata().album(dictionary.get(albumId));
-      }
-
-      if (auto albumArtistId = metadata.albumArtistId(); albumArtistId.raw() > 0)
-      {
-        builder.metadata().albumArtist(dictionary.get(albumArtistId));
-      }
-
-      if (auto composerId = metadata.composerId(); composerId.raw() > 0)
-      {
-        builder.metadata().composer(dictionary.get(composerId));
-      }
-
-      if (auto genreId = metadata.genreId(); genreId.raw() > 0)
-      {
-        builder.metadata().genre(dictionary.get(genreId));
-      }
-
-      for (auto const tagId : view.tags())
-      {
-        builder.tags().add(dictionary.get(tagId));
-      }
+      builder.metadata().artist(dictionary.get(artistId));
     }
 
-    if (view.isColdValid())
+    if (auto albumId = metadata.albumId(); albumId.raw() > 0)
     {
-      auto prop = view.property();
-      builder.property().uri(prop.uri()).duration(prop.duration()).bitrate(prop.bitrate()).channels(prop.channels());
+      builder.metadata().album(dictionary.get(albumId));
+    }
 
-      auto metadata = view.metadata();
-      builder.metadata()
-        .trackNumber(metadata.trackNumber())
-        .trackTotal(metadata.trackTotal())
-        .discNumber(metadata.discNumber())
-        .discTotal(metadata.discTotal());
+    if (auto albumArtistId = metadata.albumArtistId(); albumArtistId.raw() > 0)
+    {
+      builder.metadata().albumArtist(dictionary.get(albumArtistId));
+    }
 
-      auto classical = view.classical();
-      builder.metadata().movementNumber(classical.movementNumber()).movementTotal(classical.movementTotal());
+    if (auto composerId = metadata.composerId(); composerId.raw() > 0)
+    {
+      builder.metadata().composer(dictionary.get(composerId));
+    }
 
-      for (auto const cover : view.coverArt())
-      {
-        builder.coverArt().add(cover.type, cover.resourceId);
-      }
+    if (auto genreId = metadata.genreId(); genreId.raw() > 0)
+    {
+      builder.metadata().genre(dictionary.get(genreId));
+    }
 
-      if (auto workId = classical.workId(); workId.raw() > 0)
-      {
-        builder.metadata().work(dictionary.get(workId));
-      }
+    for (auto const tagId : view.tags())
+    {
+      builder.tags().add(dictionary.get(tagId));
+    }
 
-      if (auto movementId = classical.movementId(); movementId.raw() > 0)
-      {
-        builder.metadata().movement(dictionary.get(movementId));
-      }
+    return builder;
+  }
 
-      if (auto conductorId = classical.conductorId(); conductorId.raw() > 0)
-      {
-        builder.metadata().conductor(dictionary.get(conductorId));
-      }
+  TrackBuilder TrackBuilder::fromCompleteView(TrackView const& view, DictionaryStore const& dictionary)
+  {
+    gsl_Expects(view.isHotValid());
+    gsl_Expects(view.isColdValid());
+    auto builder = fromHotView(view, dictionary);
+    builder._baselineKind = BaselineKind::Complete;
+    auto prop = view.property();
+    builder.property().uri(prop.uri()).duration(prop.duration()).bitrate(prop.bitrate()).channels(prop.channels());
 
-      if (auto ensembleId = classical.ensembleId(); ensembleId.raw() > 0)
-      {
-        builder.metadata().ensemble(dictionary.get(ensembleId));
-      }
+    auto metadata = view.metadata();
+    builder.metadata()
+      .trackNumber(metadata.trackNumber())
+      .trackTotal(metadata.trackTotal())
+      .discNumber(metadata.discNumber())
+      .discTotal(metadata.discTotal());
 
-      if (auto soloistId = classical.soloistId(); soloistId.raw() > 0)
-      {
-        builder.metadata().soloist(dictionary.get(soloistId));
-      }
+    auto classical = view.classical();
+    builder.metadata().movementNumber(classical.movementNumber()).movementTotal(classical.movementTotal());
 
-      for (auto const& [dictionaryId, value] : view.customMetadata())
-      {
-        builder.customMetadata().add(dictionary.get(dictionaryId), value);
-      }
+    for (auto const cover : view.coverArt())
+    {
+      builder.coverArt().add(cover.type, cover.resourceId);
+    }
+
+    if (auto workId = classical.workId(); workId.raw() > 0)
+    {
+      builder.metadata().work(dictionary.get(workId));
+    }
+
+    if (auto movementId = classical.movementId(); movementId.raw() > 0)
+    {
+      builder.metadata().movement(dictionary.get(movementId));
+    }
+
+    if (auto conductorId = classical.conductorId(); conductorId.raw() > 0)
+    {
+      builder.metadata().conductor(dictionary.get(conductorId));
+    }
+
+    if (auto ensembleId = classical.ensembleId(); ensembleId.raw() > 0)
+    {
+      builder.metadata().ensemble(dictionary.get(ensembleId));
+    }
+
+    if (auto soloistId = classical.soloistId(); soloistId.raw() > 0)
+    {
+      builder.metadata().soloist(dictionary.get(soloistId));
+    }
+
+    for (auto const& [dictionaryId, value] : view.customMetadata())
+    {
+      builder.customMetadata().add(dictionary.get(dictionaryId), value);
     }
 
     return builder;
@@ -512,8 +521,130 @@ namespace ao::library
     return bloom;
   }
 
+  Result<> TrackBuilder::validateHotSerializable() const
+  {
+    try
+    {
+      checkedUint16(_metadataBuilder._title.size(), "Hot title length");
+      checkedPayloadBytes(_tagsBuilder._tagNames.size(), sizeof(DictionaryId), "Hot tag payload length");
+      return {};
+    }
+    catch (detail::LibraryException const& error)
+    {
+      return std::unexpected{error.error()};
+    }
+  }
+
+  Result<> TrackBuilder::validateColdSerializable() const
+  {
+    if (_baselineKind == BaselineKind::HotOnly)
+    {
+      return makeError(Error::Code::InvalidState, "A hot-only TrackBuilder cannot serialize cold data");
+    }
+
+    auto uri = LibraryUri::parse(_propertyBuilder._uri);
+
+    if (!uri)
+    {
+      return std::unexpected{uri.error()};
+    }
+
+    if (uri->value() != _propertyBuilder._uri)
+    {
+      return makeError(Error::Code::InvalidInput, "Track URI is not canonical");
+    }
+
+    try
+    {
+      auto offset = sizeof(TrackColdHeader);
+      auto addBlock = [&offset](std::size_t const payloadSize)
+      {
+        checkedUint16(payloadSize, "Cold block payload length");
+        auto const alignedSize = align4(payloadSize);
+
+        if (alignedSize < payloadSize || alignedSize > kU16Max - offset)
+        {
+          detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold block length exceeds uint16_t");
+        }
+
+        offset += alignedSize;
+      };
+
+      if (!_coverArtBuilder._entries.empty())
+      {
+        addBlock(
+          checkedPayloadBytes(_coverArtBuilder._entries.size(), sizeof(CoverArtEntry), "Cover art payload length"));
+      }
+
+      auto const& metadata = _metadataBuilder;
+      auto const hasClassical = !metadata._work.empty() || !metadata._movement.empty() ||
+                                !metadata._conductor.empty() || !metadata._ensemble.empty() ||
+                                !metadata._soloist.empty() || metadata._movementNumber != 0 ||
+                                metadata._movementTotal != 0;
+
+      if (hasClassical)
+      {
+        addBlock(sizeof(TrackClassicalBlock));
+      }
+
+      if (!_customMetadataBuilder._customPairs.empty())
+      {
+        auto const entryCount = _customMetadataBuilder._customPairs.size();
+        auto const entryBytes =
+          checkedPayloadBytes(entryCount, sizeof(CustomMetadataEntry), "Custom metadata entry table length");
+        auto const valueOffset = sizeof(CustomMetadataBlockHeader) + entryBytes;
+        checkedUint16(entryCount, "Custom metadata count");
+        checkedUint16(valueOffset, "Custom metadata value offset");
+
+        std::size_t totalValueSize = 0;
+
+        for (auto const& pair : _customMetadataBuilder._customPairs)
+        {
+          checkedUint16(pair.second.size(), "Custom metadata value length");
+
+          if (pair.second.size() > kU16Max - totalValueSize)
+          {
+            detail::throwLibraryError(Error::Code::ValueTooLarge, "Custom metadata payload length exceeds uint16_t");
+          }
+
+          totalValueSize += pair.second.size();
+        }
+
+        auto const payloadSize = valueOffset + totalValueSize;
+        checkedUint16(payloadSize, "Custom metadata payload length");
+        addBlock(payloadSize);
+      }
+
+      checkedUint16(offset, "Cold record URI offset");
+      checkedUint16(_propertyBuilder._uri.size(), "URI length");
+
+      if (_propertyBuilder._uri.size() > kU16Max - offset)
+      {
+        detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold record size exceeds uint16_t");
+      }
+
+      auto const unalignedSize = offset + _propertyBuilder._uri.size();
+
+      if (auto const recordSize = align4(unalignedSize); recordSize < unalignedSize || recordSize > kU16Max)
+      {
+        detail::throwLibraryError(Error::Code::ValueTooLarge, "Cold record size exceeds uint16_t");
+      }
+
+      return {};
+    }
+    catch (detail::LibraryException const& error)
+    {
+      return std::unexpected{error.error()};
+    }
+  }
+
   Result<std::vector<std::byte>> TrackBuilder::serializeHot(WriteTransaction& transaction) const
   {
+    if (auto validation = validateHotSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     try
     {
       auto const prepared = PreparedHot::make(this, transaction);
@@ -524,13 +655,18 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      return std::unexpected{ex.error()};
+      lmdb::throwTransactionFailure(ex.error());
     }
   }
 
   Result<std::vector<std::byte>> TrackBuilder::serializeCold(WriteTransaction& transaction,
                                                              ResourceStore const& resources) const
   {
+    if (auto validation = validateColdSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     try
     {
       auto const prepared = PreparedCold::make(this, transaction, resources);
@@ -541,7 +677,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      return std::unexpected{ex.error()};
+      lmdb::throwTransactionFailure(ex.error());
     }
   }
 
@@ -549,6 +685,16 @@ namespace ao::library
     WriteTransaction& transaction,
     ResourceStore const& resources) const
   {
+    if (auto validation = validateHotSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
+    if (auto validation = validateColdSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     try
     {
       auto const hot = PreparedHot::make(this, transaction);
@@ -563,7 +709,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      return std::unexpected{ex.error()};
+      lmdb::throwTransactionFailure(ex.error());
     }
   }
 
@@ -584,7 +730,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        detail::throwLibraryError(idResult.error());
+        lmdb::throwTransactionFailure(std::move(idResult.error()));
       }
 
       prepared._tagIds.push_back(*idResult);
@@ -624,7 +770,7 @@ namespace ao::library
     return prepared;
   }
 
-  void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const
+  void TrackBuilder::PreparedHot::writeTo(std::span<std::byte> out) const noexcept
   {
     // Exact size validation and alignment check
     gsl_Expects(out.size() == _size);
@@ -709,7 +855,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        detail::throwLibraryError(idResult.error());
+        lmdb::throwTransactionFailure(std::move(idResult.error()));
       }
 
       resolvedPairs.emplace_back(*idResult, value);
@@ -739,7 +885,7 @@ namespace ao::library
 
       if (!resourceResult)
       {
-        detail::throwLibraryError(resourceResult.error());
+        lmdb::throwTransactionFailure(std::move(resourceResult.error()));
       }
 
       _coverArt.push_back({.resourceId = *resourceResult, .type = pending.type});
@@ -916,7 +1062,7 @@ namespace ao::library
     _channels = property._channels;
   }
 
-  void TrackBuilder::PreparedCold::writeTo(std::span<std::byte> out) const
+  void TrackBuilder::PreparedCold::writeTo(std::span<std::byte> out) const noexcept
   {
     // Exact size validation and alignment check
     gsl_Expects(out.size() == _size);
@@ -975,38 +1121,58 @@ namespace ao::library
     WriteTransaction& transaction,
     ResourceStore const& resources) const
   {
+    if (auto validation = validateHotSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
+    if (auto validation = validateColdSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     try
     {
       return std::pair{PreparedHot::make(this, transaction), PreparedCold::make(this, transaction, resources)};
     }
     catch (detail::LibraryException const& ex)
     {
-      return std::unexpected{ex.error()};
+      lmdb::throwTransactionFailure(ex.error());
     }
   }
 
   Result<TrackBuilder::PreparedHot> TrackBuilder::prepareHot(WriteTransaction& transaction) const
   {
+    if (auto validation = validateHotSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     try
     {
       return PreparedHot::make(this, transaction);
     }
     catch (detail::LibraryException const& ex)
     {
-      return std::unexpected{ex.error()};
+      lmdb::throwTransactionFailure(ex.error());
     }
   }
 
   Result<TrackBuilder::PreparedCold> TrackBuilder::prepareCold(WriteTransaction& transaction,
                                                                ResourceStore const& resources) const
   {
+    if (auto validation = validateColdSerializable(); !validation)
+    {
+      return std::unexpected{validation.error()};
+    }
+
     try
     {
       return PreparedCold::make(this, transaction, resources);
     }
     catch (detail::LibraryException const& ex)
     {
-      return std::unexpected{ex.error()};
+      lmdb::throwTransactionFailure(ex.error());
     }
   }
 } // namespace ao::library

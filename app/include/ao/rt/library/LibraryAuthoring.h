@@ -19,7 +19,6 @@ namespace ao::rt
   {
     Available,
     Maintenance,
-    Faulted,
   };
 
   enum class LibraryMaintenanceKind : std::uint8_t

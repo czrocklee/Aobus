@@ -11,6 +11,7 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewState.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/playback/PlaybackService.h>
@@ -25,24 +26,29 @@ namespace ao::rt::test
   PlaybackUiFixture::PlaybackUiFixture()
     : executorOwnerPtr{std::make_unique<QueuedExecutor>()}
     , executor{executorOwnerPtr.get()}
-    , runtime{makeRuntime(tempDir, std::move(executorOwnerPtr))}
-    , viewId{ao::test::requireValue(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}))}
+    , runtimePtr{makeRuntime(tempDir, std::move(executorOwnerPtr))}
+    , viewId{ao::test::requireValue(runtime().workspace().navigate({.target = GlobalViewKind::AllTracks}))}
   {
   }
 
-  void PlaybackUiFixture::makePlaybackReady()
+  AppRuntime& PlaybackUiFixture::runtime() const noexcept
   {
-    addReadyAudioProvider(runtime);
+    return *runtimePtr;
+  }
+
+  void PlaybackUiFixture::makePlaybackReady() const
+  {
+    addReadyAudioProvider(runtime());
     executor->drain();
   }
 
   TrackId PlaybackUiFixture::addPlayableTrack(std::string_view const title)
   {
     auto const uri =
-      audio::test::installAudioFixture(runtime.musicLibrary().rootPath(), "basic_metadata.flac", "ui-playable.flac");
+      audio::test::installAudioFixture(runtime().musicLibrary().rootPath(), "basic_metadata.flac", "ui-playable.flac");
     auto const trackId =
-      addRuntimeTrack(runtime, {.title = std::string{title}, .uri = uri}, [this] { executor->drain(); });
-    runtime.reloadAllTracks();
+      addRuntimeTrack(runtime(), {.title = std::string{title}, .uri = uri}, [this] { executor->drain(); });
+    runtime().reloadAllTracks();
     return trackId;
   }
 
@@ -50,12 +56,12 @@ namespace ao::rt::test
   {
     auto admitted = admitPlaybackAndWait(
       *executor,
-      [this, trackId] { return runtime.playback().commands().startFromView(viewId, trackId); },
-      [this] { return runtime.playback().snapshot().transport.positionRevision; });
+      [this, trackId] { return runtime().playback().commands().startFromView(viewId, trackId); },
+      [this] { return runtime().playback().snapshot().transport.positionRevision; });
 
     if (admitted)
     {
-      observedPositionRevision = runtime.playback().snapshot().transport.positionRevision;
+      observedPositionRevision = runtime().playback().snapshot().transport.positionRevision;
     }
 
     return admitted;
@@ -63,9 +69,11 @@ namespace ao::rt::test
 
   bool PlaybackUiFixture::waitForPlayback(TrackId const trackId)
   {
-    auto const settled = waitForPlaybackSettlement(
-      *executor, observedPositionRevision, [this] { return runtime.playback().snapshot().transport.positionRevision; });
-    observedPositionRevision = runtime.playback().snapshot().transport.positionRevision;
-    return settled && runtime.playback().snapshot().transport.nowPlaying.trackId == trackId;
+    auto const settled =
+      waitForPlaybackSettlement(*executor,
+                                observedPositionRevision,
+                                [this] { return runtime().playback().snapshot().transport.positionRevision; });
+    observedPositionRevision = runtime().playback().snapshot().transport.positionRevision;
+    return settled && runtime().playback().snapshot().transport.nowPlaying.trackId == trackId;
   }
 } // namespace ao::rt::test

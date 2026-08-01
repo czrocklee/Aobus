@@ -80,7 +80,7 @@ namespace ao::query::test
     std::string movement = {};
     std::string soloist = {};
     std::string genre = {};
-    std::string uri = "/path/to/track.flac";
+    std::string uri = "path/to/track.flac";
     std::uint16_t year = 2020;
     std::uint16_t trackNumber = 1;
     std::uint16_t trackTotal = 0;
@@ -118,7 +118,7 @@ namespace ao::query::test
     TrackFixture(std::string title,
                  std::string artist = "Test Artist",
                  std::string album = "Test Album",
-                 std::string uri = "/path/to/track.flac",
+                 std::string uri = "path/to/track.flac",
                  std::uint16_t year = 2020,
                  std::uint16_t trackNumber = 5,
                  std::uint32_t durationMillis = 180000,

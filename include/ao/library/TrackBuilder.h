@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -35,12 +35,15 @@ namespace ao::library
    * Stores strings as string_view pointing to external data (from std::string or mmap).
    * Sub-builders hold the actual data as member variables.
    *
+   * Records reach storage only as prepared values (see TrackWrite.h), which
+   * serialize directly into storage-owned bytes.
+   *
    * Usage:
    *   // Pattern A: from existing view, modify hot only
-   *   auto builder = TrackBuilder::fromView(view, dictionary);
+   *   auto builder = TrackBuilder::fromHotView(view, dictionary);
    *   builder.tags().add("rock").remove("jazz");
-   *   auto hotData = builder.serializeHot(transaction);
-   *   writer.updateHot(trackId, hotData);
+   *   auto hot = builder.prepareHot(transaction);
+   *   updatePreparedHotTrackRecord(writer, trackId, *hot);
    *
    *   // Pattern B: create new track
    *   auto builder = TrackBuilder::makeEmpty();
@@ -48,15 +51,16 @@ namespace ao::library
    *   builder.property().fileSize(fs).bitDepth(BitDepth{16});
    *   builder.tags().add("rock");
    *   builder.customMetadata().add("key", "value");
-   *   auto [hot, cold] = builder.serialize(transaction, resources);
-   *   writer.createHotCold(hot, cold);
+   *   auto prepared = builder.prepare(transaction, resources);
+   *   createPreparedTrackRecord(writer, prepared->first, prepared->second);
    */
   class TrackBuilder final
   {
   public:
     // Factory methods
     static TrackBuilder makeEmpty();
-    static TrackBuilder fromView(TrackView const& view, DictionaryStore const& dictionary);
+    static TrackBuilder fromCompleteView(TrackView const& view, DictionaryStore const& dictionary);
+    static TrackBuilder fromHotView(TrackView const& view, DictionaryStore const& dictionary);
 
     //=============================================================================
     // Sub-builders - own the data as string_view
@@ -267,7 +271,7 @@ namespace ao::library
     {
     public:
       std::size_t size() const noexcept { return _size; }
-      void writeTo(std::span<std::byte> out) const;
+      void writeTo(std::span<std::byte> out) const noexcept;
 
     private:
       PreparedHot() = default;
@@ -308,7 +312,7 @@ namespace ao::library
     {
     public:
       std::size_t size() const noexcept { return _size; }
-      void writeTo(std::span<std::byte> out) const;
+      void writeTo(std::span<std::byte> out) const noexcept;
 
     private:
       PreparedCold() = default;
@@ -366,8 +370,16 @@ namespace ao::library
     Result<PreparedCold> prepareCold(WriteTransaction& transaction, ResourceStore const& resources) const;
 
   private:
+    enum class BaselineKind : std::uint8_t
+    {
+      Complete,
+      HotOnly,
+    };
+
     // Private helper methods for serialization
     static std::uint32_t computeBloomFilter(std::span<DictionaryId const> tagIds);
+    Result<> validateHotSerializable() const;
+    Result<> validateColdSerializable() const;
 
     // Sub-builders stored as members
     MetadataBuilder _metadataBuilder{};
@@ -375,5 +387,6 @@ namespace ao::library
     TagsBuilder _tagsBuilder{};
     CoverArtBuilder _coverArtBuilder{};
     CustomMetadataBuilder _customMetadataBuilder{};
+    BaselineKind _baselineKind = BaselineKind::Complete;
   };
 } // namespace ao::library

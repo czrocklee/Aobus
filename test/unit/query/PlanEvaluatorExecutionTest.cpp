@@ -54,7 +54,7 @@ namespace ao::query::test
 
     CHECK(plan.accessProfile == AccessProfile::ColdOnly);
 
-    auto track = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+    auto track = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
     CHECK(evaluator.evaluateFull(plan, track.coldOnlyView()) == true);
   }
 
@@ -67,7 +67,7 @@ namespace ao::query::test
 
     CHECK(plan.accessProfile == AccessProfile::HotAndCold);
 
-    auto track = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+    auto track = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
     CHECK(evaluator.evaluateFull(plan, track.view()));
   }
 } // namespace ao::query::test

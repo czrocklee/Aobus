@@ -32,7 +32,7 @@ GTK, WinUI, or TUI composition root
 ```
 
 There is no current frontend-neutral lifecycle service.
-GTK coordinates a restorable, replaceable window/runtime pair. WinUI retains one window-independent `LibrarySession` and swaps a prepared library runtime while allowing the retiring runtime to finish playback. TUI creates one runtime for the selected root and does not run either desktop replacement sequence.
+GTK coordinates a restorable, replaceable window/runtime pair. WinUI retains one window-independent `LibrarySession` with exactly one active runtime and replaces it immediately after a new runtime opens successfully. TUI creates one runtime for the selected root and does not run either desktop replacement sequence.
 
 ## Responsibilities
 
@@ -40,10 +40,12 @@ GTK coordinates a restorable, replaceable window/runtime pair. WinUI retains one
 
 `AppRuntime` extends `CoreRuntime` with `ViewService`, `WorkspaceService`, playback transport and succession, the workspace `ConfigStore`, and playback-session persistence.
 It is the lifetime root for these services rather than a universal behavioral facade.
-Construction requires an owning workspace `ConfigStore` and rejects its absence before building the internal service graph.
+`AppRuntime::create()` requires an owning workspace `ConfigStore` and returns `InvalidInput` for its absence before building the internal service graph.
+It first completes `CoreRuntime` storage validation and initial All Tracks materialization, then constructs interactive services, and exposes ownership only after both stages succeed.
 An omitted playback-session store uses that workspace store; an explicit playback-session store remains a separate override.
 
 `CoreRuntime` remains the smaller composition used by CLI workflows and owns no interactive session lifecycle.
+Its public construction is also a `Result<std::unique_ptr<...>>` factory rather than a throwing constructor.
 
 ### GTK composition root
 
@@ -66,17 +68,20 @@ It currently does not restore and checkpoint workspace or playback sessions arou
 ### WinUI composition root
 
 WinUI `App` owns one dispatcher executor, stable `LibrarySession`, and main window.
-The session owns application-global settings and a replaceable library runtime.
-Opening a different root creates a separate candidate runtime.
-An existing canonical database is loaded without an implicit scan, while a new root completes its initial scan before commit.
-Rescan uses the active runtime's transactional scan workflow so the process never opens the same LMDB environment twice, then reloads the active projections after successful completion.
-Library-bound window controllers detach immediately before a root swap and bind the new runtime afterward.
+The session owns application-global settings and exactly one active runtime from which library reads, playback, resources, commands, and activity state derive.
+Opening a different root synchronously creates and validates the replacement through `AppRuntime::create()` while the current runtime remains active.
+An open failure leaves the runtime and persisted root unchanged.
+On success, one non-suspending dispatcher callback checkpoints the old workspace, detaches every runtime consumer, exchanges the active runtime, rebuilds runtime-bound session services, rebinds every consumer, records the selected root best-effort, and defers old-runtime release to the next dispatcher turn.
+Releasing the old runtime stops its playback; WinUI does not retain old-library playback after a switch.
+An existing canonical database needs no implicit scan.
+A new root becomes active first and then runs the ordinary active-runtime scan, so scan failure leaves that root active and retryable rather than rolling back.
+Explicit Rescan uses the same transactional workflow and relies on `LibraryChanges` for projection updates instead of manually reloading projections.
+While Open Library or Rescan is active, another request reports the current operation and starts nothing.
 Each constructed runtime reloads library-backed sources before restoring its
 per-library workspace. The session checkpoints that workspace with durable
 desktop-state changes, before replacing its library authority, and during
 teardown.
-
-Playback may retain the retiring runtime while transport is active. Once idle, the session binds the shared playback command surface to the active library runtime. Modern/Classic switching does not participate in this lifecycle.
+Modern/Classic switching does not participate in this lifecycle.
 
 ## Boundaries and dependency direction
 
@@ -124,7 +129,7 @@ validated root request
 The current implementation reuses the runtime for the same normalized root and replaces the complete pair for a different root.
 It does not retarget a live `MusicLibrary` in place.
 Candidate preparation does not add the window to the application, restore playback, start MPRIS, or write lifecycle checkpoints.
-Construction or post-construction configuration failure destroys only the candidate.
+Runtime-factory Error or post-construction configuration failure destroys only the candidate.
 The old pair becomes retired only after its checkpoint and playback-session discard succeed; after candidate activation the old frontend graph is released before its attached runtime.
 Selected-path persistence occurs only after the new pair is active and the old pair has been released, and its failure does not roll back the usable in-process pair.
 The [GTK active-library lifecycle specification](../spec/linux-gtk/active-library-lifecycle.md) owns exact current transitions and failure outcomes.
@@ -132,12 +137,13 @@ The [GTK active-library lifecycle specification](../spec/linux-gtk/active-librar
 ### Shutdown
 
 GTK requests a final checkpoint, removes the active window, and releases frontend controllers, widgets, platform adapters, and subscriptions before the associated runtime.
-`AppRuntime` then shuts down playback-session scheduling and audio callback producers before workspace, view, and Core dependencies are released.
-`CoreRuntime` stops and joins asynchronous workers while library-backed collaborators still exist.
+`AppRuntime::shutdown()` then shuts down playback-session scheduling and audio callback producers before delegating to the Core boundary.
+`CoreRuntime::shutdown()` seals library mutation and publication admission before callback resumption closes, then stops and joins asynchronous workers while library-backed collaborators still exist.
+Both boundaries are idempotent so explicit composition-root shutdown and destructor fallback preserve the same order.
 
-TUI exits its event loop, stops runtime work, and releases its single composition without the GTK checkpoint and replacement protocol.
+TUI exits its event loop, stops playback intent, calls the AppRuntime shutdown boundary, and releases its single composition without the GTK checkpoint and replacement protocol.
 
-WinUI closes the window, detaches session and native-media callbacks, releases XAML controllers, then destroys `LibrarySession`. The session cancels candidate work and releases playback observers and runtime graphs while its stores and dispatcher still exist.
+WinUI closes the window, detaches session and native-media callbacks, releases XAML controllers, then destroys `LibrarySession`. The session invalidates the active scan's guarded presentation closure, requests task stop, and releases its single runtime while stores and dispatcher still exist.
 
 ## Structural constraints
 
@@ -165,9 +171,11 @@ Replacing the pair destroys that coordinator; a completion delivered afterward c
 Native cancellation is requested during teardown but is not the lifetime proof.
 Application shutdown closes the outer callback scope and cancels its single pending idle registration before saving and releasing the active pair.
 
-WinUI candidate creation or loading failures, initial-scan and explicit-rescan planning, application, reload, and cancellation failures keep the current library runtime and durable selected path unchanged.
+WinUI replacement-runtime creation, open, validation, or initial-materialization failures keep the current runtime and durable selected path unchanged.
+After a successful install, initial-scan or explicit-rescan planning and application failures are presented against the active runtime; an initial-scan failure does not resurrect the previous root.
+WinUI exposes no public operation cancellation or supersession path.
 Its dispatcher executor is the only route by which runtime callbacks may update XAML.
-Old window controllers are unbound before the retiring library graph is released, and stale asynchronous artwork is rejected independently by request generation.
+Old window controllers are unbound before the retiring runtime is released, and stale asynchronous artwork is rejected independently by request generation and binding lifetime.
 
 ## Implementation map
 

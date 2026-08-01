@@ -6,7 +6,6 @@
 #include "common/UiWorkflow.h"
 #include "portal/ImportExportCallbacks.h"
 #include <ao/Error.h>
-#include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/AppRuntime.h>
@@ -22,6 +21,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -39,6 +40,23 @@ namespace ao::gtk::portal
     constexpr auto kImportExceptionContext = std::string_view{"library import workflow"};
     constexpr auto kExportExceptionContext = std::string_view{"library export workflow"};
     constexpr auto kAudioIdentityExceptionContext = std::string_view{"audio identity workflow"};
+
+    template<typename Callback, typename... Arguments>
+    void presentSafely(std::string_view operation, Callback& callback, Arguments&&... arguments) noexcept
+    {
+      try
+      {
+        callback(std::forward<Arguments>(arguments)...);
+      }
+      catch (std::exception const& error)
+      {
+        APP_LOG_ERROR("{} presentation failed: {}", operation, error.what());
+      }
+      catch (...)
+      {
+        APP_LOG_ERROR("{} presentation failed with a non-standard exception", operation);
+      }
+    }
 
     void logStructuredError(std::string_view action, Error const& error)
     {
@@ -101,7 +119,7 @@ namespace ao::gtk::portal
 
   LibraryImportExportWorkflow::~LibraryImportExportWorkflow()
   {
-    _confirmationCallbacks.close();
+    _presentationCallbacks.close();
     _tasks.cancelAll();
   }
 
@@ -147,154 +165,169 @@ namespace ao::gtk::portal
 
   async::Task<void> LibraryImportExportWorkflow::scanWorkflow(ScanRequestMode mode, std::stop_token const stopToken)
   {
-    auto result = co_await uimodel::runLibraryScanWorkflow(&_runtime.library().taskService(), mode, stopToken);
-
-    if (!result)
-    {
-      auto const& failure = result.error();
-
-      if (failure.optPlanSummary)
+    auto presentResult = _presentationCallbacks.guard(
+      [this](std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result) mutable
       {
-        logScanPlan(*failure.optPlanSummary);
-      }
+        if (!result)
+        {
+          auto const& failure = result.error();
 
-      auto const* const action =
-        failure.stage == uimodel::LibraryScanWorkflowStage::Applying ? "Scan apply failed" : "Scan failed";
-      presentFailure(action, "Scan failed", failure.error);
-      co_return;
-    }
+          if (failure.optPlanSummary)
+          {
+            logScanPlan(*failure.optPlanSummary);
+          }
 
-    presentScanResult(std::move(*result));
+          auto const* const action =
+            failure.stage == uimodel::LibraryScanWorkflowStage::Applying ? "Scan apply failed" : "Scan failed";
+          presentFailure(action, "Scan failed", failure.error);
+          return;
+        }
+
+        presentScanResult(std::move(*result));
+      });
+    auto* const taskService = &_runtime.library().taskService();
+    auto result = co_await uimodel::runLibraryScanWorkflow(taskService, mode, stopToken);
+    presentSafely("Scan", presentResult, std::move(result));
   }
 
   async::Task<void> LibraryImportExportWorkflow::backfillAudioIdentityWorkflow(std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().backfillAudioIdentityAsync(stopToken);
+    auto presentResult = _presentationCallbacks.guard(
+      [this](std::optional<Error> optError, std::int32_t completedCount, std::int32_t failureCount)
+      {
+        if (optError)
+        {
+          logStructuredError("Audio identity indexing failed", *optError);
+          _runtime.notifications().post(
+            rt::NotificationSeverity::Warning, "Audio identity indexing failed", rt::NotificationLifetime::history());
+          return;
+        }
+
+        if (failureCount > 0)
+        {
+          _runtime.notifications().post(rt::NotificationSeverity::Warning,
+                                        "Audio identity indexing completed with errors",
+                                        rt::NotificationLifetime::history());
+        }
+        else if (completedCount > 0)
+        {
+          _runtime.notifications().post(
+            rt::NotificationSeverity::Info, "Audio identity indexing complete", rt::NotificationLifetime::transient());
+        }
+      });
+    auto* const taskService = &_runtime.library().taskService();
+    auto result = co_await taskService->backfillAudioIdentityAsync(stopToken);
 
     if (!result)
     {
-      logStructuredError("Audio identity indexing failed", result.error());
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Warning, "Audio identity indexing failed", rt::NotificationLifetime::history());
+      presentSafely("Audio identity", presentResult, std::optional{result.error()}, 0, 0);
       co_return;
     }
 
-    if (result->cancelled)
-    {
-      co_return;
-    }
-
-    if (result->failureCount > 0)
-    {
-      _runtime.notifications().post(rt::NotificationSeverity::Warning,
-                                    "Audio identity indexing completed with errors",
-                                    rt::NotificationLifetime::history());
-    }
-    else if (result->completedCount > 0)
-    {
-      _runtime.notifications().post(
-        rt::NotificationSeverity::Info, "Audio identity indexing complete", rt::NotificationLifetime::transient());
-    }
+    presentSafely("Audio identity", presentResult, std::nullopt, result->completedCount, result->failureCount);
   }
 
   async::Task<void> LibraryImportExportWorkflow::exportWorkflow(std::filesystem::path exportPath,
                                                                 rt::ExportMode mode,
                                                                 std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().exportLibraryAsync(std::move(exportPath), mode, stopToken);
+    auto presentResult = _presentationCallbacks.guard(
+      [this](Result<> result)
+      {
+        if (!result)
+        {
+          presentFailure("Export failed", std::format("Export failed: {}", result.error().message), result.error());
+          return;
+        }
 
-    if (!result)
-    {
-      presentFailure("Export failed", std::format("Export failed: {}", result.error().message), result.error());
-      co_return;
-    }
-
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Info, "Library exported successfully", rt::NotificationLifetime::transient());
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Info, "Library exported successfully", rt::NotificationLifetime::transient());
+      });
+    auto* const taskService = &_runtime.library().taskService();
+    auto result = co_await taskService->exportLibraryAsync(std::move(exportPath), mode, stopToken);
+    presentSafely("Export", presentResult, std::move(result));
   }
 
   async::Task<void> LibraryImportExportWorkflow::prepareImportWorkflow(ImportExportCallbacks callbacks,
                                                                        std::filesystem::path importPath,
                                                                        std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().prepareLibraryImportAsync(
-      std::move(importPath), rt::ImportMode::Restore, stopToken);
+    auto presentResult = _presentationCallbacks.guard(
+      [this, callbacks = std::move(callbacks)](Result<rt::LibraryImportPlan> result) mutable
+      {
+        if (!result)
+        {
+          presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
+          return;
+        }
 
-    if (!result)
-    {
-      presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
-      co_return;
-    }
+        if (!callbacks.requestLibraryRestoreConfirmation)
+        {
+          auto const error =
+            Error{.code = Error::Code::InvalidState, .message = "Library restore confirmation is unavailable"};
+          presentFailure("Import failed", "Import failed: Confirmation is unavailable", error);
+          return;
+        }
 
-    if (!callbacks.requestLibraryRestoreConfirmation)
-    {
-      auto const error =
-        Error{.code = Error::Code::InvalidState, .message = "Library restore confirmation is unavailable"};
-      presentFailure("Import failed", "Import failed: Confirmation is unavailable", error);
-      co_return;
-    }
+        auto requestConfirmation = std::move(callbacks.requestLibraryRestoreConfirmation);
+        auto const report = result->report();
+        auto pendingPlanPtr = std::make_shared<std::optional<rt::LibraryImportPlan>>(std::move(*result));
+        requestConfirmation(report,
+                            _presentationCallbacks.guard(
+                              [this, pendingPlanPtr](bool const confirmed) mutable
+                              {
+                                if (!pendingPlanPtr->has_value())
+                                {
+                                  return;
+                                }
 
-    auto requestConfirmation = std::move(callbacks.requestLibraryRestoreConfirmation);
-    auto const report = result->report();
-    auto pendingPlanPtr = std::make_shared<std::optional<rt::LibraryImportPlan>>(std::move(*result));
-    requestConfirmation(report,
-                        _confirmationCallbacks.guard(
-                          [this, callbacks = std::move(callbacks), pendingPlanPtr](bool const confirmed) mutable
-                          {
-                            if (!pendingPlanPtr->has_value())
-                            {
-                              return;
-                            }
+                                if (!confirmed)
+                                {
+                                  *pendingPlanPtr = std::nullopt;
+                                  return;
+                                }
 
-                            if (!confirmed)
-                            {
-                              *pendingPlanPtr = std::nullopt;
-                              return;
-                            }
-
-                            auto plan = std::move(**pendingPlanPtr);
-                            *pendingPlanPtr = std::nullopt;
-                            applyPreparedImport(std::move(callbacks), std::move(plan));
-                          }));
+                                auto plan = std::move(**pendingPlanPtr);
+                                *pendingPlanPtr = std::nullopt;
+                                applyPreparedImport(std::move(plan));
+                              }));
+      });
+    auto* const taskService = &_runtime.library().taskService();
+    auto result =
+      co_await taskService->prepareLibraryImportAsync(std::move(importPath), rt::ImportMode::Restore, stopToken);
+    presentSafely("Import preview", presentResult, std::move(result));
   }
 
-  void LibraryImportExportWorkflow::applyPreparedImport(ImportExportCallbacks callbacks, rt::LibraryImportPlan plan)
+  void LibraryImportExportWorkflow::applyPreparedImport(rt::LibraryImportPlan plan)
   {
     spawnUiWorkflow(
       _runtime.async(),
       _tasks,
       *this,
       kImportExceptionContext,
-      [callbacks = std::move(callbacks), plan = std::move(plan)](
-        LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
-      { return self->applyImportWorkflow(std::move(callbacks), std::move(plan), stopToken); },
+      [plan = std::move(plan)](LibraryImportExportWorkflow* self, std::stop_token const stopToken) mutable
+      { return self->applyImportWorkflow(std::move(plan), stopToken); },
       [](LibraryImportExportWorkflow* self) { self->presentInternalFailure("Import failed: Internal error"); });
   }
 
-  async::Task<void> LibraryImportExportWorkflow::applyImportWorkflow(ImportExportCallbacks callbacks,
-                                                                     rt::LibraryImportPlan plan,
+  async::Task<void> LibraryImportExportWorkflow::applyImportWorkflow(rt::LibraryImportPlan plan,
                                                                      std::stop_token const stopToken)
   {
-    auto result = co_await _runtime.library().taskService().applyLibraryImportPlanAsync(std::move(plan), stopToken);
+    auto presentResult = _presentationCallbacks.guard(
+      [this](Result<rt::ImportReport> result)
+      {
+        if (!result)
+        {
+          presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
+          return;
+        }
 
-    // Apply deliberately reaches callback completion after a possible commit,
-    // even when cancellation races with the worker. Recheck the UI lifetime
-    // before accessing this workflow or its frontend callbacks.
-    async::throwIfStopRequested(stopToken);
-
-    if (!result)
-    {
-      presentFailure("Import failed", std::format("Import failed: {}", result.error().message), result.error());
-      co_return;
-    }
-
-    if (callbacks.onLibraryDataMutated)
-    {
-      callbacks.onLibraryDataMutated();
-    }
-
-    _runtime.notifications().post(
-      rt::NotificationSeverity::Info, "Library imported successfully", rt::NotificationLifetime::transient());
+        _runtime.notifications().post(
+          rt::NotificationSeverity::Info, "Library imported successfully", rt::NotificationLifetime::transient());
+      });
+    auto* const taskService = &_runtime.library().taskService();
+    auto result = co_await taskService->applyLibraryImportPlanAsync(std::move(plan), stopToken);
+    presentSafely("Import", presentResult, std::move(result));
   }
 
   void LibraryImportExportWorkflow::presentScanResult(uimodel::LibraryScanWorkflowResult result)
@@ -324,11 +357,6 @@ namespace ao::gtk::portal
     {
       presentInternalFailure("Scan failed: Internal error");
       return;
-    }
-
-    if (result.mutatedLibrary() && _callbacks.onLibraryDataMutated)
-    {
-      _callbacks.onLibraryDataMutated();
     }
 
     if (auto const& applied = *result.optApplyResult; applied.failureCount > 0)

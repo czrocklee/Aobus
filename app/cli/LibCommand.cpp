@@ -496,7 +496,6 @@ namespace ao::cli
     std::int32_t completed = 0;
     std::int32_t skipped = 0;
     std::int32_t failures = 0;
-    bool cancelled = false;
   };
 
   struct ResourceRecordDto final
@@ -953,12 +952,11 @@ namespace ao::cli
     {
       if (format != OutputFormat::Plain)
       {
-        emitDocument(os,
-                     format,
-                     FingerprintReportDto{.completed = result.completedCount,
-                                          .skipped = result.skippedCount,
-                                          .failures = result.failureCount,
-                                          .cancelled = result.cancelled});
+        emitDocument(
+          os,
+          format,
+          FingerprintReportDto{
+            .completed = result.completedCount, .skipped = result.skippedCount, .failures = result.failureCount});
         return;
       }
 

@@ -19,10 +19,9 @@ The [system architecture](../../architecture/system-overview.md) defines the run
 
 ## Terminology
 
-- **Library session**: the window-independent owner of the active library runtime, playback runtime, settings, and replacement workflow.
+- **Library session**: the window-independent owner of the single active runtime, settings, and serialized replacement workflow.
 - **Modern**: the default integrated-title-bar shell with navigation, track list, inspector, and persistent Now Playing area.
 - **Classic**: the system-title-bar, high-density shell with menus, toolbar, library tree, property panel, status bar, and GTK-compatible playback-strip order.
-- **Candidate runtime**: a fully separate runtime prepared before it may replace the active library runtime.
 
 ## Invariants
 
@@ -47,7 +46,7 @@ Below the wide tier the browser summary yields its space to the filter. At the
 narrow tier the Now Playing artwork and text yield their space to transport,
 time, volume, and overflow commands.
 
-The active library runtime and playback runtime normally refer to the same runtime. During a successful library replacement, current playback may retain the retiring runtime until transport becomes idle, then playback adopts the new library runtime.
+Library reads, playback, runtime resources, commands, and activity status always derive from the same active runtime.
 
 Soul frame updates run only while the control is loaded, its app window is
 visible and not minimized, and playback requires animation. Window focus alone
@@ -60,15 +59,14 @@ Classic renders a 32 by 32 glyph-free Soul with the shared default stroke width 
 Selecting Modern or Classic saves the selection and updates title-bar ownership before showing the selected shell. Existing list selection, library data, and playback continue.
 
 Open Library uses the Windows folder picker initialized from the current `AppWindow` id.
-When the selected root already contains the canonical database, a different root creates and loads a candidate runtime without an implicit scan, then swaps the library authority after successful preparation.
-When the selected root has no canonical database, the candidate completes its initial scan before the swap.
+When the selected root already contains the canonical database, a different root is opened without an implicit scan.
+Replacement construction uses `AppRuntime::create()` while the current runtime remains active; recoverable open or validation errors leave that runtime unchanged, while success already includes the validated database and initial All Tracks materialization.
+After successful construction, the window unbinds all runtime consumers, installs the new runtime and its command surfaces, rebinds all consumers, and retires the old runtime on the next dispatcher turn. Retiring it stops old-library playback.
+When the selected root has no canonical database, the new runtime becomes active before its ordinary initial scan starts.
+An initial-scan failure leaves the selected root active and permits a later Rescan.
 Selecting the already active indexed root is a no-op.
-Rescan runs the transactional scan workflow against the active runtime, then reloads its projections after success; it cannot open a second LMDB environment for the same database.
-Cancel and pre-commit failure retain the active authority.
-Superseding an operation invalidates its generation before requesting
-cancellation, so a late completion cannot publish status or replace the active
-runtime. Candidate roots remain registered until their runtime retires, which
-prevents rapid repeated requests from opening one LMDB environment twice.
+Rescan runs the transactional scan workflow against the active runtime; committed changes reach projections only through `LibraryChanges`.
+At most one Open Library or Rescan operation is active. A request while busy reports the current operation and starts nothing; there is no public cancellation or supersession command.
 
 Navigation exposes read-only Folders, Albums, Artists, Genres, and Playlists
 entries in both shells. Albums, Artists, and Genres apply their matching
@@ -92,8 +90,7 @@ Presentation grouping inserts non-playable group headers through a display-index
 The native item view reports the complete display count while materializing rows
 on demand; its row-model least-recently-used cache holds at most 2048 entries.
 Cover art is asynchronous and ignores results from superseded selections.
-One library-runtime loader coalesces group-heading and Inspector requests and holds at most 128 encoded-byte cache entries.
-Now Playing artwork uses the playback runtime, including while playback temporarily retains the retiring library runtime, and has an independent bounded cache.
+One active-runtime loader coalesces group-heading, Inspector, Now Playing, and SMTC requests and holds at most 128 encoded-byte cache entries.
 An invalid cover resource id displays `monogram` for a realized group heading, `vinyl` in Inspector, and `equalizer` in Now Playing.
 Now Playing continues to display `equalizer` before playback starts and after transport returns to idle.
 Windows exposes no placeholder preference in this version.
@@ -107,8 +104,9 @@ SMTC commands route through the shared playback command surface. Playback observ
 ## Failure and cancellation
 
 Folder-picker cancellation makes no change.
-Cancelling an initial scan destroys its candidate and reports cancellation without mutating the active session.
-Candidate creation or loading failures, and initial-scan or explicit-rescan planning, application, and reload failures, retain the active library and produce a visible diagnostic.
+Replacement creation or loading failure preserves the active runtime, playback, controllers, and persisted root and produces a visible diagnostic.
+After replacement succeeds, an initial-scan failure produces a visible diagnostic but retains the new active root; explicit-rescan planning or application failure likewise leaves the active runtime usable and retryable.
+Session teardown is the only path that requests scan cancellation, and its lifetime guard suppresses later presentation.
 
 Theme reload parses and validates a complete candidate before applying resources. A missing theme file uses built-in/system values. Any other read, syntax, token, type, or color failure keeps the last valid theme and displays the exact diagnostic.
 
@@ -125,6 +123,7 @@ Workspace owns the active view's current presentation and sorting.
 `LibrarySession` restores that per-library workspace before controllers bind,
 checkpoints it with Windows settings changes and at shutdown, and checkpoints
 the retiring workspace before a successful root replacement.
+The selected root is saved best-effort only after the replacement runtime and all consumers are active; save failure does not roll back the usable session.
 Exact paths, fields, defaults, validation, and versioning are defined by the [Windows desktop state reference](../../reference/windows/desktop-state.md).
 
 ## Frontend observations
@@ -136,7 +135,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 ## Implementation map
 
 - [`App`](../../../app/windows-winui/App.xaml.h) owns dispatcher, session, and window lifetime.
-- [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns prepare-then-swap and playback-runtime retention, using the shared [`LibraryScanWorkflow`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h).
+- [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns serialized single-runtime replacement and active-runtime scanning, using the shared [`LibraryScanWorkflow`](../../../app/include/ao/uimodel/library/task/LibraryScanWorkflow.h).
 - [`MainWindow`](../../../app/windows-winui/MainWindow.xaml) defines both native shells.
 - [`MainWindowShell.cpp`](../../../app/windows-winui/shell/MainWindowShell.cpp), [`MainWindowTrack.cpp`](../../../app/windows-winui/track/MainWindowTrack.cpp), and [`MainWindowPlayback.cpp`](../../../app/windows-winui/playback/MainWindowPlayback.cpp) partition code-behind behavior by owner; XAML and generated code-behind declarations remain at the target root because WinUI generated-file association requires them.
 - [`TrackListController`](../../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../../app/windows-winui/track/TrackItemView.h), [`TrackDisplayIndex`](../../../app/include/ao/uimodel/library/track/TrackDisplayIndex.h), and [`IndexedTrackRowCache`](../../../app/include/ao/uimodel/library/track/IndexedTrackRowCache.h) own the grouped lazy table.

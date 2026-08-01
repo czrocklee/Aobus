@@ -18,7 +18,6 @@ namespace ao::uimodel
   {
     Idle,
     Processing,
-    Success,
     Info,
     Warning,
     Error,

@@ -49,9 +49,9 @@ namespace ao::rt::test
       return *result;
     }
 
-    std::pair<TrackId, TrackView> createPreparedTrack(TrackStore::Writer& writer,
-                                                      TrackBuilder::PreparedHot const& preparedHot,
-                                                      TrackBuilder::PreparedCold const& preparedCold)
+    TrackId createPreparedTrack(TrackStore::Writer& writer,
+                                TrackBuilder::PreparedHot const& preparedHot,
+                                TrackBuilder::PreparedCold const& preparedCold)
     {
       auto result = createPreparedTrackRecord(writer, preparedHot, preparedCold);
       REQUIRE(result);
@@ -207,7 +207,7 @@ namespace ao::rt::test
       builder.coverArt().add(PictureType::BackCover, backId);
       auto const [hot, cold] = prepareTrack(builder, transaction, ml.resources());
       auto trackWriter = ml.tracks().writer(transaction);
-      auto const trackId = createPreparedTrack(trackWriter, hot, cold).first;
+      auto const trackId = createPreparedTrack(trackWriter, hot, cold);
 
       auto manifest = FileManifestBuilder::makeEmpty();
       manifest.trackId(trackId);

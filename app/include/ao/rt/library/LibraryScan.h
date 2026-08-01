@@ -32,6 +32,8 @@ namespace ao::rt
     Result<ScanPlan> buildPlan(BuildProgressCallback progress = {});
 
   private:
+    Result<ScanPlan> buildPlanUnchecked(BuildProgressCallback progress);
+
     library::MusicLibrary const& _library;
   };
 } // namespace ao::rt

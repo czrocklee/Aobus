@@ -83,11 +83,11 @@ Group-heading, Inspector, and Now Playing layout components expose style enums i
 
 ### WinUI image delivery
 
-WinUI composition owns two runtime `ResourceByteLoader` instances.
-Each loader uses the shared request coalescer for valid-resource reads and owns a bounded encoded-byte cache shared by presenters on the same bound runtime.
+WinUI composition owns one runtime `ResourceByteLoader` instance bound to the session's single active runtime.
+The loader uses the shared request coalescer for valid-resource reads and owns one bounded encoded-byte cache shared by all Windows presenters and SMTC.
 `CoverArtPresenter` owns one generation-fenced selection, renders the fixed slot placeholder through XAML for an invalid identity, supplies the current Windows theme accent to vinyl rendering, and decodes valid bytes through the native image source.
 It copies encoded bytes into native owning memory on a worker; the callback executor only wraps that prepared memory as a Windows random-access stream and updates XAML.
-The library-bound loader serves realized group headings and Inspector; a playback-runtime loader serves both Now Playing and SMTC artwork so retained playback can outlive library replacement.
+It serves realized group headings, Inspector, Now Playing, and SMTC artwork and is rebound with the rest of the runtime consumers during library replacement.
 No-entity state hides group-heading and Inspector cover surfaces, while the Now Playing surface retains its configured placeholder.
 Valid-resource loading or failure leaves the corresponding surface empty.
 

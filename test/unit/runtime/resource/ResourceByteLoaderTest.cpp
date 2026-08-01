@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/resource/ResourceByteLoader.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -18,7 +20,6 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/rt/resource/ResourceBytes.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -53,12 +54,13 @@ namespace ao::rt::test
       {
         auto executorPtr = std::make_unique<QueuedExecutor>();
         _executor = executorPtr.get();
-        _runtimePtr = std::make_shared<CoreRuntime>(std::move(executorPtr),
-                                                    _tempDir.path(),
-                                                    LibraryPaths{_tempDir.path()}.databasePath(),
-                                                    library::test::kTestMusicLibraryMapSize,
-                                                    nullptr,
-                                                    std::move(exceptionHandler));
+        _runtimePtr = std::shared_ptr<CoreRuntime>{
+          ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
+                                                     _tempDir.path(),
+                                                     LibraryPaths{_tempDir.path()}.databasePath(),
+                                                     library::test::kTestMusicLibraryMapSize,
+                                                     nullptr,
+                                                     std::move(exceptionHandler)))};
       }
 
       ~RuntimeOwner()
@@ -199,8 +201,8 @@ namespace ao::rt::test
     auto const resourceId = writeResource(tempDir.path(), paths.databasePath(), expected);
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtimePtr = std::make_shared<CoreRuntime>(
-      std::move(executorPtr), tempDir.path(), paths.databasePath(), library::test::kTestMusicLibraryMapSize);
+    auto runtimePtr = std::shared_ptr<CoreRuntime>{ao::test::requireValue(CoreRuntime::create(
+      std::move(executorPtr), tempDir.path(), paths.databasePath(), library::test::kTestMusicLibraryMapSize))};
     auto loader = ResourceByteLoader{};
     loader.bind(runtimePtr);
     auto received = std::vector<std::byte>{};

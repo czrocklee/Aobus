@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include "test/unit/uimodel/library/presentation/TrackPresentationTestSupport.h"
@@ -10,7 +12,6 @@
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceLifecycle.h>
-#include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackPresentationCatalog.h>
 #include <ao/uimodel/library/presentation/TrackPresentationRecommender.h>
 
@@ -71,8 +72,9 @@ namespace ao::uimodel::test
     CHECK(events[1] == rt::kAllTracksListId);
   }
 
-  TEST_CASE("ListPresentationPreferenceStore - resolves custom preferences and falls back for unknown ids",
-            "[uimodel][unit][library][presentation]")
+  TEST_CASE(
+    "ListPresentationPreferenceStore - resolves custom preferences and preserves unknown ids while falling back",
+    "[uimodel][unit][library][presentation]")
   {
     auto fixture = TrackPresentationFixture{};
     auto& store = fixture.preferences;
@@ -93,6 +95,7 @@ namespace ao::uimodel::test
 
     store.setPresentationIdForList(rt::kAllTracksListId, "missing-preset");
     CHECK(store.presentationForList(allTracksContext).id == "albums");
+    CHECK(store.presentationIdForList(rt::kAllTracksListId) == "missing-preset");
   }
 
   TEST_CASE("ListPresentationPreferenceStore - resolves saved-list defaults after preference lookup",

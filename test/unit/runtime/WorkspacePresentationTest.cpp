@@ -21,7 +21,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
 
@@ -41,7 +41,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const* songsPreset = builtinTrackPresentationPreset("songs");
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(songsPreset != nullptr);
@@ -75,7 +75,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const* songsPreset = builtinTrackPresentationPreset("songs");
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(songsPreset != nullptr);
@@ -115,7 +115,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
     auto const firstViewId = requireNavigation(runtime, fixture.firstListId);
@@ -138,7 +138,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
 
@@ -155,7 +155,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
@@ -168,7 +168,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
     REQUIRE(albumsPreset != nullptr);
@@ -188,7 +188,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
 
@@ -203,7 +203,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - setActivePresentation resolves preset ids", "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     auto const spec = ao::test::requireValue(runtime.workspace().setActivePresentation("albums"));
@@ -217,7 +217,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - setActivePresentation rejects unknown ids", "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     auto const result = runtime.workspace().setActivePresentation("nonexistent");
@@ -230,7 +230,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const result = runtime.workspace().setActivePresentation("non_existent_preset");
 
@@ -242,7 +242,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][presentation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     std::int32_t emitCount = 0;
     auto const sub = runtime.workspace().onChanged(

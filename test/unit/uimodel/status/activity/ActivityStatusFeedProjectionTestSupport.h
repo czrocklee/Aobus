@@ -7,7 +7,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 
-#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -35,13 +34,6 @@ namespace ao::uimodel::test
   rt::NotificationFeedUpdate postedUpdate(rt::NotificationFeedState snapshot, rt::NotificationId id);
 
   rt::NotificationFeedUpdate expiredUpdate(rt::NotificationFeedState snapshot, rt::NotificationId id);
-
-  inline rt::LibraryTaskCompleted libraryTaskCompletion(
-    std::size_t affectedCount,
-    rt::LibraryTaskCompletionStatus status = rt::LibraryTaskCompletionStatus::Succeeded)
-  {
-    return {.status = status, .affectedCount = affectedCount};
-  }
 
   inline rt::LibraryTaskProgressUpdated libraryTaskProgress(rt::LibraryTaskProgressKind kind,
                                                             std::string subject,

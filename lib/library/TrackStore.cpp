@@ -1,61 +1,28 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/TrackStore.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ReadTransaction.h>
-#include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
-#include <ao/utility/ByteView.h>
+#include <ao/lmdb/TransactionFailure.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <functional>
 #include <optional>
 #include <span>
-#include <string>
-#include <string_view>
 #include <utility>
 
 namespace ao::library
 {
-  namespace detail
-  {
-    bool isFourByteAligned(std::span<std::byte const> bytes) noexcept
-    {
-      return utility::bytes::isAligned(bytes.data(), 4U);
-    }
-
-    Result<> validateSerializedTrackSize(std::size_t size, std::string_view label)
-    {
-      if ((size % 4U) != 0)
-      {
-        return makeError(Error::Code::CorruptData, std::string{label} + " track record size is not 4-byte aligned");
-      }
-
-      return {};
-    }
-
-    Result<> validateSerializedTrackBytes(std::span<std::byte const> bytes, std::string_view label)
-    {
-      if (auto sizeResult = validateSerializedTrackSize(bytes.size(), label); !sizeResult)
-      {
-        return sizeResult;
-      }
-
-      if (!isFourByteAligned(bytes))
-      {
-        return makeError(Error::Code::CorruptData, std::string{label} + " track record pointer is not 4-byte aligned");
-      }
-
-      return {};
-    }
-  } // namespace detail
-
   // TrackStore implementation
   TrackStore::TrackStore(lmdb::Database hotDb, lmdb::Database coldDb, detail::LibraryIdentity const& identity)
     : _hotDb{std::move(hotDb)}, _coldDb{std::move(coldDb)}, _identity{&identity}
@@ -145,7 +112,13 @@ namespace ao::library
     {
       case LoadMode::Hot: return _hotReader.entryCount();
       case LoadMode::Cold: return _coldReader.entryCount();
-      case LoadMode::Both: return std::min(_hotReader.entryCount(), _coldReader.entryCount());
+      case LoadMode::Both:
+      {
+        auto const hotCount = _hotReader.entryCount();
+        auto const coldCount = _coldReader.entryCount();
+        gsl_Expects(hotCount == coldCount);
+        return hotCount;
+      }
     }
 
     return 0;
@@ -177,36 +150,28 @@ namespace ao::library
     }
     else
     {
-      alignBoth();
+      validateBothPosition();
     }
   }
 
-  void TrackStore::Reader::Iterator::alignBoth()
+  void TrackStore::Reader::Iterator::validateBothPosition() const
   {
-    auto const end = lmdb::Database::Reader::Iterator{};
+    if (_mode != LoadMode::Both)
+    {
+      return;
+    }
 
-    while (_hotIter != end && _coldIter != end)
+    auto const end = lmdb::Database::Reader::Iterator{};
+    auto const hotAtEnd = _hotIter == end;
+    auto const coldAtEnd = _coldIter == end;
+    gsl_Expects(hotAtEnd == coldAtEnd);
+
+    if (!hotAtEnd)
     {
       auto const hotId = static_cast<std::uint32_t>((*_hotIter).first);
       auto const coldId = static_cast<std::uint32_t>((*_coldIter).first);
-
-      if (hotId == coldId)
-      {
-        return;
-      }
-
-      if (hotId < coldId)
-      {
-        ++_hotIter;
-      }
-      else
-      {
-        ++_coldIter;
-      }
+      gsl_Expects(hotId == coldId);
     }
-
-    _hotIter = lmdb::Database::Reader::Iterator{};
-    _coldIter = lmdb::Database::Reader::Iterator{};
   }
 
   bool TrackStore::Reader::Iterator::operator==(Iterator const& other) const
@@ -243,7 +208,8 @@ namespace ao::library
       return _coldIter == end;
     }
 
-    return _hotIter == end && _coldIter == end;
+    validateBothPosition();
+    return _hotIter == end;
   }
 
   TrackStore::Reader::Iterator& TrackStore::Reader::Iterator::operator++()
@@ -252,7 +218,7 @@ namespace ao::library
     {
       ++_hotIter;
       ++_coldIter;
-      alignBoth();
+      validateBothPosition();
       return *this;
     }
 
@@ -270,6 +236,8 @@ namespace ao::library
 
   TrackStore::Reader::Iterator::value_type TrackStore::Reader::Iterator::operator*() const
   {
+    validateBothPosition();
+
     auto trackId = TrackId{};
     auto hotBuffer = std::span<std::byte const>{};
     auto coldBuffer = std::span<std::byte const>{};
@@ -299,7 +267,7 @@ namespace ao::library
   }
 
   // TrackStore::Writer implementation
-  TrackStore::Writer::Writer(lmdb::Database::Writer&& hotWriter, lmdb::Database::Writer&& coldWriter)
+  TrackStore::Writer::Writer(lmdb::Database::Writer hotWriter, lmdb::Database::Writer coldWriter)
     : _hotWriter{std::move(hotWriter)}, _coldWriter{std::move(coldWriter)}
   {
   }
@@ -336,74 +304,10 @@ namespace ao::library
     return TrackView{hotBuffer, coldBuffer};
   }
 
-  // Hot/Cold split methods
-  Result<std::pair<TrackId, TrackView>> TrackStore::Writer::createHotCold(std::span<std::byte const> hotData,
-                                                                          std::span<std::byte const> coldData)
-  {
-    if (auto validation = detail::validateSerializedTrackBytes(hotData, "hot"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    if (auto validation = detail::validateSerializedTrackBytes(coldData, "cold"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    auto idResult = _hotWriter.append(hotData);
-
-    if (!idResult)
-    {
-      return std::unexpected{idResult.error()};
-    }
-
-    auto id = *idResult;
-
-    if (auto result = _coldWriter.create(id, coldData); !result)
-    {
-      return std::unexpected{result.error()};
-    }
-
-    return std::pair{TrackId{id}, TrackView{hotData, coldData}};
-  }
-
-  Result<> TrackStore::Writer::updateHot(TrackId id, std::span<std::byte const> hotData)
-  {
-    if (auto validation = detail::validateSerializedTrackBytes(hotData, "hot"); !validation)
-    {
-      return validation;
-    }
-
-    return _hotWriter.update(id.raw(), hotData);
-  }
-
-  Result<std::span<std::byte>> TrackStore::Writer::updateCold(TrackId id, std::size_t size)
-  {
-    if (auto validation = detail::validateSerializedTrackSize(size, "cold"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    auto spanResult = _coldWriter.update(id.raw(), size);
-
-    if (!spanResult)
-    {
-      return spanResult;
-    }
-
-    if (auto validation = detail::validateSerializedTrackBytes(*spanResult, "cold"); !validation)
-    {
-      return std::unexpected{validation.error()};
-    }
-
-    return spanResult;
-  }
-
   bool TrackStore::Writer::remove(TrackId id)
   {
-    bool const hotRemoved = _hotWriter.del(id.raw());
-    bool const coldRemoved = _coldWriter.del(id.raw());
-
+    auto const hotRemoved = _hotWriter.del(id.raw());
+    auto const coldRemoved = _coldWriter.del(id.raw());
     return hotRemoved || coldRemoved;
   }
 
@@ -411,9 +315,14 @@ namespace ao::library
   {
     if (auto result = _hotWriter.clear(); !result)
     {
-      return result;
+      lmdb::throwTransactionFailure(std::move(result.error()));
     }
 
-    return _coldWriter.clear();
+    if (auto result = _coldWriter.clear(); !result)
+    {
+      lmdb::throwTransactionFailure(std::move(result.error()));
+    }
+
+    return {};
   }
 } // namespace ao::library

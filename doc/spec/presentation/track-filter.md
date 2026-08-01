@@ -146,6 +146,7 @@ The clear action submits empty text.
 The create action emits the resolved expression.
 
 TUI routes bare filter drafts and `/filter` arguments through the same completer and resolves submitted text through the same UIModel helper before calling `ViewService`.
+If that runtime call returns Error, TUI retains its draft, active source and view, rows, sections, and selection, and presents the Error through the shared notification surface.
 Frontend-specific debounce, focus styling, popover rendering, and command syntax remain adapter concerns.
 
 ## Implementation map

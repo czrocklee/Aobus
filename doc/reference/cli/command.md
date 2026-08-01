@@ -125,7 +125,7 @@ Mutation/administrative shapes:
 | `lib verify` | `ok, issues[{type,uri,message?}]` |
 | `lib relink` list | `missing, newFiles, candidates[{oldUri,newUri,trackId,audioPayloadLength}]` |
 | `lib relink` apply | `dryRun, oldUri, newUri, trackId` |
-| `lib fingerprint` | `completed, skipped, failures, cancelled` |
+| `lib fingerprint` | `completed, skipped, failures` |
 | `lib import` | `action, path, mode, payloadVersion, payloadMode, targetScope, dryRun, tracksCreated, tracksUpdated, tracksDeleted, listsCreated, listsDeleted, danglingReferencesIgnored` |
 | `lib export` | `action, path, mode` |
 | `lib resource list` | `resources[{id,size}]` |

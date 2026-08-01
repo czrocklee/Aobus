@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
-#include <ao/Error.h>
 #include <ao/library/LibraryUri.h>
+
+#include "LibraryUriValidation.h"
+#include <ao/Error.h>
 #include <ao/utility/Path.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <format>
@@ -25,6 +28,11 @@ namespace ao::library
     bool hasWindowsRootName(std::string_view text) noexcept
     {
       return text.size() >= 2U && std::isalpha(static_cast<unsigned char>(text[0])) != 0 && text[1] == ':';
+    }
+
+    bool isNonCanonicalComponent(std::string_view const component) noexcept
+    {
+      return component.empty() || component == "." || component == "..";
     }
 
     bool escapesRoot(std::filesystem::path const& relative) noexcept
@@ -83,6 +91,41 @@ namespace ao::library
       return {};
     }
   } // namespace
+
+  bool detail::isCanonicalLibraryUri(std::string_view const text) noexcept
+  {
+    if (text.empty() || text.size() > LibraryUri::kMaxLength || hasWindowsRootName(text))
+    {
+      return false;
+    }
+
+    std::size_t componentStart = 0;
+
+    for (std::size_t index = 0; index < text.size(); ++index)
+    {
+      auto const value = text[index];
+
+      if (auto const byte = static_cast<unsigned char>(value);
+          byte < kC0ControlLimit || byte == kDeleteControl || value == '\\')
+      {
+        return false;
+      }
+
+      if (value != '/')
+      {
+        continue;
+      }
+
+      if (isNonCanonicalComponent(text.substr(componentStart, index - componentStart)))
+      {
+        return false;
+      }
+
+      componentStart = index + 1U;
+    }
+
+    return !isNonCanonicalComponent(text.substr(componentStart));
+  }
 
   Result<LibraryUri> LibraryUri::parse(std::string_view text)
   {

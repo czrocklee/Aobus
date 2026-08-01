@@ -74,7 +74,7 @@ The underlying grouped store provides fail-closed one-shot replacement without g
 
 `App` owns the dispatcher, `LibrarySession`, and `MainWindow` in destruction-safe order. `LibrarySession` remains alive across shell switches and owns active-library replacement, playback-command binding, and Windows settings. `MainWindow` owns both XAML trees for its lifetime and switches only presentation visibility and title-bar mode.
 
-`WindowsUiCoordinator` is the one window-scoped owner of the exclusive `LibrarySession` callback registration. It owns the stable track-list, cover-art, and theme collaborators and retires that registration before releasing them. `WinUiDependencies` is a construction-scoped aggregate of borrowed references: a consumer unpacks only the narrow references it retains and requests a fresh aggregate after a library or playback runtime replacement.
+`WindowsUiCoordinator` is the one window-scoped owner of the exclusive `LibrarySession` callback registration. It owns the stable track-list, cover-art, and theme collaborators and retires that registration before releasing them. `WinUiDependencies` is a construction-scoped aggregate of borrowed references: a consumer unpacks only the narrow references it retains and requests a fresh aggregate after the single active runtime is replaced.
 
 Playback buttons, Soul transport, seek, time, and volume adapters are leaf controls. Each leaf owns every XAML event token it registers and its corresponding UIModel ViewModel, starts every bind with an idempotent unbind, and reconciles the native control from the ViewModel's initial callback. Modern and Classic use separate native adapters even when they render the same semantic command.
 
@@ -115,7 +115,7 @@ GTK translates those chords to native accelerator syntax and applies eligible wi
 - Gio export and shortcut application stop at the GTK boundary.
 - TUI may reuse action, keymap, or layout values deliberately, but the current GTK document cannot be described as the TUI shell authority.
 - WinUI does not parse or adapt the GTK layout document. Its fixed native shells consume shared semantic policy without introducing a second runtime authority.
-- `WinUiDependencies` may be passed during construction or binding but cannot be retained as a service locator. Replaceable runtime and command references are reacquired after the corresponding `LibrarySession` callback.
+- `WinUiDependencies` may be passed during construction or binding but cannot be retained as a service locator. Runtime and command references are reacquired after the paired `LibrarySession` replacement callback.
 - A WinUI leaf adapter owns only its native controls, native event registrations, and narrow UIModel bindings. It does not reach through `MainWindow` for ordinary playback state or commands.
 - Presentation owners define the semantic values a component renders; shell owns placement, construction, binding, and component lifetime.
 
@@ -168,10 +168,10 @@ Panel-size promotion moves eligible splitter size values into authored defaults 
 ### WinUI runtime replacement
 
 ```text
-LibrarySession announces library/playback changing
+LibrarySession announces runtime changing
   -> WindowsUiCoordinator and MainWindow unbind observers of the old source
-  -> LibrarySession commits the prepared replacement
-  -> LibrarySession announces changed
+  -> LibrarySession exchanges its single active runtime and command surface
+  -> LibrarySession announces runtime changed
   -> MainWindow requests fresh WinUiDependencies
   -> stable controllers and leaf controls bind and reconcile immediately
 ```
@@ -220,10 +220,10 @@ Editor theme and callback tokens are released before the controller's collaborat
 
 WinUI unregisters XAML, runtime, playback, SMTC, and cover-art observations before its window releases the shared session. `WindowsUiCoordinator::retire()` first clears the session callback registration, then unbinds its owned collaborators. Playback leaf destructors unbind their ViewModels before revoking native event tokens, while the main window's XAML tree is still alive.
 
-Library replacement prepares a candidate runtime while the active runtime remains usable.
-The candidate loads an existing canonical database directly, or completes an initial scan when the selected root is new.
-The session then unbinds library observers immediately before committing the candidate.
-Cancellation or failure destroys only the candidate.
+Library replacement creates and validates a new runtime while the active runtime remains usable.
+Creation failure destroys only the unopened replacement.
+After success, the session unbinds every runtime consumer, exchanges its single active runtime, rebinds consumers, and defers old-runtime retirement to the next dispatcher turn.
+A new root's initial scan runs after installation; failure leaves that root active and retryable.
 
 ## Implementation map
 

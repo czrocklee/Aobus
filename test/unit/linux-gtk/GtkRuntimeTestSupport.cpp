@@ -56,13 +56,13 @@ namespace ao::gtk::test
 
       auto configStorePtr = std::make_unique<rt::ConfigStore>(configPath);
       auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-      runtimePtr = std::make_unique<rt::AppRuntime>(rt::AppRuntimeDependencies{
+      runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
         .executorPtr = std::move(executorPtr),
         .musicRoot = musicRoot,
         .databasePath = databasePath,
         .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
         .workspaceConfigStorePtr = std::move(configStorePtr),
-      });
+      }));
     }
 
     ao::test::TempDir tempDir;
@@ -86,8 +86,8 @@ namespace ao::gtk::test
     return _statePtr->tempDir;
   }
 
-  rt::AppRuntime makeRuntime(ao::test::TempDir const& tempDir,
-                             std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
+  std::unique_ptr<rt::AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
+                                              std::move_only_function<void(library::MusicLibrary&)> initializeLibrary)
   {
     auto const databasePath = rt::LibraryPaths{tempDir.path()}.databasePath();
 
@@ -98,13 +98,13 @@ namespace ao::gtk::test
     }
 
     auto executorPtr = std::make_unique<GtkMainContextExecutor>();
-    return rt::AppRuntime{rt::AppRuntimeDependencies{
+    return ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
-    }};
+    }));
   }
 
   bool waitForPlaybackSettlement(rt::AppRuntime& runtime,

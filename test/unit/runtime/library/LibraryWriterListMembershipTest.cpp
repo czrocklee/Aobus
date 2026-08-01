@@ -54,7 +54,7 @@ namespace ao::rt::test
         auto result = storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
         REQUIRE(result);
         REQUIRE(transaction.commit());
-        return result->first;
+        return *result;
       }
 
       Library& library()
@@ -88,7 +88,7 @@ namespace ao::rt::test
         auto const optView =
           storage.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
         REQUIRE(optView);
-        auto builder = library::TrackBuilder::fromView(*optView, storage.library().dictionary());
+        auto builder = library::TrackBuilder::fromHotView(*optView, storage.library().dictionary());
         return std::ranges::contains(builder.tags().names(), tag);
       }
 

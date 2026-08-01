@@ -84,7 +84,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto const trackId = fixture.addPlayableTrack("Paused Soul");
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto log = ao::test::RenderLog<AobusSoulViewState>{};
     auto const viewModel = AobusSoulViewModel{playback, [&log](auto const& view) { log.render(view); }};
     REQUIRE(fixture.playFromView(trackId));

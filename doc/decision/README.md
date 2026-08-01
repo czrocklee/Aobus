@@ -20,3 +20,5 @@ Use the [decision template](../template/decision.md).
 ## Accepted decisions
 
 - [Decision 0001: unify saved Lists with an independent order overlay](0001-unified-list-ordering.md)
+- [Decision 0002: fail closed at the library integrity boundary](0002-fail-closed-library-integrity.md)
+- [Decision 0003: terminate on live library publication fault](0003-terminate-on-library-publication-fault.md)

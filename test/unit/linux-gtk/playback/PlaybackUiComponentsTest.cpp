@@ -24,6 +24,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <memory>
 
 namespace ao::gtk::test
 {
@@ -32,10 +33,10 @@ namespace ao::gtk::test
     struct PlaybackUiComponentsFixture final
     {
       ao::test::TempDir tempDir{};
-      rt::AppRuntime runtime;
+      std::unique_ptr<rt::AppRuntime> runtimePtr;
 
       PlaybackUiComponentsFixture()
-        : runtime{makeRuntime(tempDir)}
+        : runtimePtr{makeRuntime(tempDir)}
       {
       }
     };
@@ -61,8 +62,8 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtime.playback();
-    rt::test::addReadyAudioProvider(env.runtime);
+    auto& playback = env.runtimePtr->playback();
+    rt::test::addReadyAudioProvider(*env.runtimePtr);
     drainGtkEvents();
 
     SECTION("SeekControlWidget renders a disabled seek scale before playback starts")
@@ -93,7 +94,7 @@ namespace ao::gtk::test
       auto timeLabel = TimeLabel{playback, TimeLabel::Mode::Default};
       CHECK_FALSE(timeLabel.isTickActive());
 
-      startPlayback(env.runtime);
+      startPlayback(*env.runtimePtr);
       CHECK_FALSE(timeLabel.isTickActive());
 
       auto windowFixture = GtkWindowFixture{};
@@ -111,7 +112,7 @@ namespace ao::gtk::test
       auto seekControl = SeekControlWidget{playback};
       CHECK_FALSE(seekControl.isTickActive());
 
-      startPlayback(env.runtime);
+      startPlayback(*env.runtimePtr);
       CHECK_FALSE(seekControl.isTickActive());
 
       auto windowFixture = GtkWindowFixture{};
@@ -133,11 +134,11 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtime.playback();
-    rt::test::addReadyAudioProvider(env.runtime);
+    auto& playback = env.runtimePtr->playback();
+    rt::test::addReadyAudioProvider(*env.runtimePtr);
     drainGtkEvents();
 
-    startPlayback(env.runtime);
+    startPlayback(*env.runtimePtr);
 
     auto const transport = playback.snapshot().transport;
     REQUIRE(transport.duration > std::chrono::milliseconds{0});
@@ -178,8 +179,8 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto env = PlaybackUiComponentsFixture{};
-    auto& playback = env.runtime.playback();
-    rt::test::addReadyAudioProvider(env.runtime);
+    auto& playback = env.runtimePtr->playback();
+    rt::test::addReadyAudioProvider(*env.runtimePtr);
     drainGtkEvents();
 
     SECTION("TimeLabel renders the template")

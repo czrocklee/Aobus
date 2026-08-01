@@ -29,7 +29,7 @@ frontend view state and no GTK or FTXUI type crosses this boundary.
 
 - Projection is synchronous and frontend-neutral.
 - Every accepted feed update is projected from its immutable snapshot and triggers at most one render callback.
-- Active library-task progress owns compact status until completion.
+- Active library-task progress owns compact status until its status-free finished pulse.
 - Without an active task, error notifications outrank warnings. Entries at the selected severity are grouped.
 - A newly posted info notification may use compact status only when no warning or error owns it.
 - Detail contains warnings, errors, pinned notifications, and active library-task progress.
@@ -73,13 +73,10 @@ Hiding a detail row also removes it from compact grouping when applicable.
 `LibraryTaskProgressUpdated` supplies a typed operation kind, subject, and fraction.
 Projection produces `Processing` compact state and one task detail row without parsing display text.
 
-Completion clears task progress and restores the current notification projection.
-When completion is `Succeeded` and no warning or error owns compact status, UIModel shows a temporary success summary:
-
-- zero affected tracks: `Library is up to date`;
-- nonzero affected tracks: `Scan complete: <count> added`, using the shared track-count formatter.
-
-Other completion statuses do not synthesize success state.
+`LibraryTaskService::onProgressFinished()` clears task progress and restores the current notification projection.
+The pulse carries no task outcome, count, or message and never synthesizes success state.
+The awaited workflow caller owns success, warning, Error, and cancellation presentation.
+If a warning or error arrived while progress was active, finishing progress makes that retained notification eligible for compact status.
 
 ## Local compact dismissal
 
@@ -87,7 +84,7 @@ Other completion statuses do not synthesize success state.
 Later notifications with different ids may surface normally.
 
 History and pinned info compact states use the presentation-only `kActivityStatusDefaultAutoDismissTimeout`, currently `5000ms`.
-The view model records a steady-clock deadline for such compact state and for synthetic task success.
+The view model records a steady-clock deadline for such compact state.
 `autoDismissCompact()` clears that temporary presentation and reprojects warning/error state.
 `autoDismissCompactIfDue()` performs the same transition only after the deadline.
 

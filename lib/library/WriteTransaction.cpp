@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/library/WriteTransaction.h>
+
 #include "LibraryIdentity.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
-#include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
 
@@ -120,8 +121,16 @@ namespace ao::library
 
   Result<> WriteTransaction::commit()
   {
-    if (_implPtr == nullptr || !_implPtr->transaction.isActive())
+    if (_implPtr == nullptr)
     {
+      return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
+    }
+
+    if (!_implPtr->transaction.isActive())
+    {
+      // Explicit abort or a moved-from native transaction has already ended
+      // the LMDB scope; finish the outer dictionary and writer lifetime.
+      _implPtr->finishFailure();
       return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
     }
 
@@ -162,7 +171,7 @@ namespace ao::library
 
   void WriteTransaction::abort() noexcept
   {
-    if (_implPtr != nullptr && _implPtr->transaction.isActive())
+    if (_implPtr != nullptr)
     {
       _implPtr->finishFailure();
     }

@@ -151,7 +151,7 @@ namespace ao::gtk::test
     CHECK(*optPresentation == "albums");
   }
 
-  TEST_CASE("MainWindowCoordinator - import mutation refreshes cached track rows", "[gtk][unit][main-window]")
+  TEST_CASE("MainWindowCoordinator - library changes invalidate cached track rows", "[gtk][unit][main-window]")
   {
     auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
@@ -161,6 +161,7 @@ namespace ao::gtk::test
 
     auto window = Gtk::Window{};
     auto coordinator = MainWindowCoordinator{window, runtime, configStorePtr};
+    coordinator.prepareSession();
 
     auto const trackId = addTrackWithTitle(runtime, "Before Import");
     auto const rowBeforePtr = coordinator.trackRowCache()->trackRow(trackId);
@@ -170,13 +171,6 @@ namespace ao::gtk::test
     CHECK(titleBefore == "Before Import");
 
     updateTrackTitle(runtime, trackId, "After Import");
-    auto const cachedRowPtr = coordinator.trackRowCache()->trackRow(trackId);
-    REQUIRE(cachedRowPtr);
-    TrackRowObject const& cachedRow = *cachedRowPtr;
-    auto const cachedTitle = cachedRow.fieldText(rt::TrackField::Title);
-    CHECK(cachedTitle == "Before Import");
-
-    coordinator.importExport().callbacks().onLibraryDataMutated();
 
     auto const rowAfterPtr = coordinator.trackRowCache()->trackRow(trackId);
     REQUIRE(rowAfterPtr);

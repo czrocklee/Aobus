@@ -43,6 +43,9 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - One `LibraryMutationService` exclusively owns live-runtime write authority; public runtime consumers cannot create a committing transaction.
 - One writer command owns at most one write transaction and is independently atomic.
 - A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
+- Item neutrality is relative to transaction state at item entry: a rejected item adds no staged mutation of its own, while the revision bump already staged by `WriteTransaction` is outside that delta.
+- A recoverable item rejection that permits later work completes all pure hot/cold size, URI, record-integrity, and reconstruction validation before dictionary, resource, or record mutation.
+- A failure after an item's first staged mutation exits the complete lexical transaction-owner scope through `lmdb::TransactionFailure`; no catch inside that scope may continue writing or commit, and library code does not use nested transactions as savepoints.
 - An effective command commits one revision and publishes exactly one matching changeset through the coordinator before authoring becomes available at that revision.
 - Interactive commands are rejected throughout import, scan-apply, and audio-identity maintenance.
 - Metadata and tag commits require a current target binding and revalidate runtime identity, availability, revision, and every target while holding coordinator writer ownership.
@@ -64,6 +67,9 @@ Pure misses use the value channel selected by the method: `false`, an empty valu
 Selection-tag intersection treats a stale selected track id as contributing no tags, so the result becomes empty.
 The all-tags query returns distinct tag text and usage counts ordered by descending frequency and then ascending name.
 
+Runtime construction receives only a `MusicLibrary` whose persisted dictionary, paired Track records, dictionary references, and manifest rows passed the open-time integrity gate.
+Safely detected corruption at a later point-read or iterator boundary is never collapsed to a miss or partial result; the enclosing operation returns `CorruptData` where it has a typed boundary.
+
 ## Track commands
 
 ### Metadata and tags
@@ -73,7 +79,7 @@ Binding from inside the matching `Available` notification is valid, but committi
 
 Metadata updates apply one patch to the complete bound target sequence.
 Binding first validates every requested id and returns `NotFound` when a target is absent.
-Submission then uses this precedence: a foreign runtime binding is `Stale`; maintenance or fault is `Unavailable`; and a superseded revision is `Stale`.
+Submission then uses this precedence: a foreign runtime binding is `Stale`; maintenance is `Unavailable`; and a superseded revision is `Stale`.
 Because the coordinator serializes mutation and publication, disappearance under an accepted exact-revision binding is an invariant violation rather than a recoverable authoring outcome.
 None of these outcomes commits a subset.
 Fields whose current value already equals the patch produce a semantic `NoOp`; no-op preserves the current binding and publishes nothing.
@@ -172,13 +178,18 @@ A missing list returns `NotFound`.
 Synchronous commands are not cooperatively cancellable.
 All recoverable input and persistence failures use `Result`; malformed internal edit coordinates and impossible invariants remain programmer errors.
 
+Pre-effect validation errors may return directly while their item is neutral.
+Once dictionary, resource, or record state has been staged, a storage or canonical postcondition failure unwinds the transaction owner before it is translated to `Result`.
+For a single-item command, a direct `Result` return is valid only when that return also destroys the mutation owner and therefore aborts; a multi-item owner never catches and continues after a post-effect failure.
+
 No command publishes a change for a failed, previewed, or no-op transaction.
 When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
 The deterministic commit-result test seam is data-only: it terminates the native transaction and supplies an error without invoking application callbacks while writer and dictionary locks are held.
 
 `Stale`, `Unavailable`, `NoOp`, and `Applied` are semantic metadata/tag authoring outcomes.
 Input, validation, serialization, and pre-commit storage failures remain `Result` errors.
-After durable commit, revision-admission or publication-enqueue failure faults the coordinator and propagates as a committed-publication failure; it is never reported as an ordinary pre-commit error, and the runtime rejects every later mutation.
+After durable commit, a revision invariant or mandatory-publication admission/delivery failure in a live runtime terminates the process; it is never reported as an ordinary pre-commit error or exposed as a public authoring outcome.
+Coordinated Closing privately seals later mutation admission before callback work is retired.
 
 ## Persistence and versioning
 
@@ -202,7 +213,7 @@ Exact records and identifier allocation belong to the [library database referenc
 
 - [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
 - `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
-- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, no-op binding retention, and post-commit fault closure.
+- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, no-op binding retention, and publication reentrancy closure.
 
 ## Related documents
 

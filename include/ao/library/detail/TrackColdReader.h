@@ -16,12 +16,12 @@ namespace ao::library::detail
   /**
    * TrackColdReader - Deep structural verifier for cold track records.
    *
-   * This is the diagnostic counterpart to TrackView's O(1) read gate: it
+   * This is the deep counterpart to TrackView's O(1) read gate: it
    * re-checks every write-side invariant (no inter-block gaps, zeroed
    * padding and reserved fields, exact block sizes, sorted custom keys,
    * contiguous value ranges). It is intentionally O(record) and belongs in
-   * verification paths only - CLI record dumps and serialization tests -
-   * never in the row read path.
+   * write validation, diagnostics, and serialization tests, never in the
+   * ordinary row read path.
    */
   class TrackColdReader final
   {

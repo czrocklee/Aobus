@@ -20,7 +20,6 @@
 #include <memory>
 #include <optional>
 #include <stop_token>
-#include <string>
 #include <vector>
 
 namespace ao::library
@@ -75,7 +74,12 @@ namespace ao::rt
     async::Task<Result<std::optional<std::vector<std::byte>>>> loadResourceAsync(ResourceId resourceId,
                                                                                  std::stop_token stopToken = {});
 
-    async::Subscription onCompleted(std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const;
+    // A progress conversation begins only after successful cancellable
+    // callback-executor admission. Once admitted, this status-free
+    // presentation pulse occurs exactly once on every ordinary terminal path
+    // while the owner remains live. Task values, errors, and cancellation
+    // remain exclusively on the awaited task channel.
+    async::Subscription onProgressFinished(std::move_only_function<void() noexcept> handler) const;
     async::Subscription onProgress(
       std::move_only_function<void(LibraryTaskProgressUpdated const&) noexcept> handler) const;
 

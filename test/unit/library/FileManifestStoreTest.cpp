@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/FileManifestStore.h>
+
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
-#include <ao/library/FileManifestStore.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_message.hpp>
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
@@ -201,7 +203,7 @@ namespace ao::library::test
     CHECK(viewResult.error().code == Error::Code::NotFound);
   }
 
-  TEST_CASE("FileManifestStore - read returns CorruptData for corrupt entries", "[library][unit][manifest]")
+  TEST_CASE("FileManifestStore - rejects corrupt payloads before mutation", "[library][unit][manifest]")
   {
     auto fixture = LibraryStoreFixture{};
     auto& library = fixture.library;
@@ -209,12 +211,77 @@ namespace ao::library::test
     auto wtxn = writeTransaction(library);
     auto invalidPayload = std::vector{std::byte{0x42}};
 
-    REQUIRE(store.writer(wtxn).put("song.flac", invalidPayload));
+    auto const putResult = store.writer(wtxn).put("song.flac", invalidPayload);
+    REQUIRE_FALSE(putResult);
+    CHECK(putResult.error().code == Error::Code::CorruptData);
     REQUIRE(wtxn.commit());
 
     auto rtxn = library.readTransaction();
     auto const result = store.reader(rtxn).get("song.flac");
     REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    CHECK(result.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("FileManifestStore - exact payload validation is item-relative atomic",
+            "[library][unit][manifest][integrity]")
+  {
+    auto const serialize = [](FileManifestHeader const& header)
+    {
+      auto bytes = std::vector<std::byte>(sizeof(header));
+      std::memcpy(bytes.data(), &header, sizeof(header));
+      return bytes;
+    };
+    auto validHeader = FileManifestHeader{.trackId = TrackId{1}};
+    auto invalidStatus = validHeader;
+    invalidStatus.status = static_cast<FileStatus>(0xff);
+    auto nonzeroPadding = validHeader;
+    nonzeroPadding.padding[1] = std::byte{1};
+    auto lengthWithoutSignature = validHeader;
+    lengthWithoutSignature.audioPayloadLength(1);
+    auto signatureWithoutLength = validHeader;
+    signatureWithoutLength.audioSignatureBytes[0] = std::byte{1};
+
+    struct InvalidCase final
+    {
+      std::string name;
+      std::vector<std::byte> payload;
+    };
+
+    auto const cases = std::array{
+      InvalidCase{.name = "short", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) - 1)},
+      InvalidCase{.name = "long", .payload = std::vector<std::byte>(sizeof(FileManifestHeader) + 1)},
+      InvalidCase{.name = "zero-track", .payload = FileManifestBuilder::makeEmpty().serialize()},
+      InvalidCase{.name = "status", .payload = serialize(invalidStatus)},
+      InvalidCase{.name = "padding", .payload = serialize(nonzeroPadding)},
+      InvalidCase{.name = "length", .payload = serialize(lengthWithoutSignature)},
+      InvalidCase{.name = "signature", .payload = serialize(signatureWithoutLength)},
+    };
+
+    auto fixture = LibraryStoreFixture{};
+    auto transaction = writeTransaction(fixture.library);
+    auto writer = fixture.library.manifest().writer(transaction);
+
+    for (auto const& invalid : cases)
+    {
+      auto const uri = invalid.name + ".flac";
+      CAPTURE(invalid.name);
+      auto const putResult = writer.put(uri, invalid.payload);
+      REQUIRE_FALSE(putResult);
+      CHECK(putResult.error().code == Error::Code::CorruptData);
+      auto const stagedRead = writer.get(uri);
+      REQUIRE_FALSE(stagedRead);
+      CHECK(stagedRead.error().code == Error::Code::NotFound);
+    }
+
+    REQUIRE(transaction.commit());
+    auto readTransaction = fixture.library.readTransaction();
+    auto reader = fixture.library.manifest().reader(readTransaction);
+
+    for (auto const& invalid : cases)
+    {
+      auto const result = reader.get(invalid.name + ".flac");
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::NotFound);
+    }
   }
 } // namespace ao::library::test

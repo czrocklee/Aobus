@@ -45,7 +45,7 @@ namespace ao::rt::test
     auto const optTrackView =
       libraryFixture.library().tracks().reader(transaction).get(trackId, library::TrackStore::Reader::LoadMode::Hot);
     REQUIRE(optTrackView);
-    auto builder = library::TrackBuilder::fromView(*optTrackView, libraryFixture.library().dictionary());
+    auto builder = library::TrackBuilder::fromHotView(*optTrackView, libraryFixture.library().dictionary());
     CHECK(std::ranges::contains(builder.tags().names(), std::string_view{"Favorite"}));
   }
 

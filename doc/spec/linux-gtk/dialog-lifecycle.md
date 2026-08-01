@@ -42,6 +42,8 @@ No dialog directly replaces `AppRuntime` or mutates a shell layout store outside
 - The Open Library dialog does not create an additional independent main-window/library pair.
 - A new library root starts bootstrap scan after successful activation when the open policy requests it.
 - Long-running scan/import progress uses activity and notification surfaces, not a modal progress dialog.
+- A scan, backfill, import, export, or preview coroutine captures its stable task-service input and creates one `MainContextCallbackScope`-guarded presentation or confirmation closure before suspension.
+- After awaiting the task, the coroutine invokes only that pre-created closure: it does not dereference the workflow owner, add another executor hop, or refresh committed data outside `LibraryChanges`.
 
 ## State model
 
@@ -86,6 +88,9 @@ Object-editor cancellation is explicit draft abandonment, not runtime cancellati
 Destroying `ImportExportCoordinator` first invalidates its callback scope and then requests cancellation through its shared `Gio::Cancellable`.
 A custom export-mode response or native completion delivered after invalidation is a no-op and cannot launch, finish, or hand a selected path through the destroyed coordinator.
 Cancellation is best-effort cleanup rather than the memory-safety proof.
+Destroying `LibraryImportExportWorkflow` closes its presentation scope before cancelling spawned tasks.
+An awaited task may still finish its runtime cleanup, but its guarded presentation closure becomes a no-op and cannot touch the destroyed workflow.
+Optional progress, item-failure, and presentation callbacks contain and log their own exceptions without changing the task Result.
 
 ## Persistence and versioning
 
@@ -103,6 +108,7 @@ Messages and confirmations may use `AppDialog::presentMessage` or a native GTK d
 - [`AppDialog.cpp`](../../../app/linux-gtk/app/AppDialog.cpp) owns custom-dialog chrome, actions, and parent-bound destruction.
 - [`PreferencesWindow.cpp`](../../../app/linux-gtk/preference/PreferencesWindow.cpp) owns the non-modal preferences surface.
 - [`ImportExportCoordinator.cpp`](../../../app/linux-gtk/portal/ImportExportCoordinator.cpp) owns native chooser handoff.
+- [`LibraryImportExportWorkflow.cpp`](../../../app/linux-gtk/portal/LibraryImportExportWorkflow.cpp) owns guarded post-await task presentation and delegates committed refresh to `LibraryChanges`.
 - [`MainContextCallbackScope.h`](../../../app/linux-gtk/common/MainContextCallbackScope.h) owns main-context callback-lifetime validation; `ImportExportCoordinator` supplies native cancellation as its close action.
 - [`main.cpp`](../../../app/linux-gtk/main.cpp) owns active-library replacement.
 - [`LayoutEditorDialog.cpp`](../../../app/linux-gtk/layout/editor/LayoutEditorDialog.cpp) owns editor preview and commit interaction.

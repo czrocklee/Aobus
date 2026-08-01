@@ -158,16 +158,16 @@ namespace ao::gtk::test
     std::filesystem::create_directories(databasePath);
     std::filesystem::create_directories(invalidPlaybackStorePath);
     auto invalidPlaybackStore = rt::ConfigStore{invalidPlaybackStorePath};
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::make_unique<GtkMainContextExecutor>(),
       .musicRoot = musicRoot,
       .databasePath = databasePath,
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "workspace.yaml"),
       .playbackSessionConfigStore = &invalidPlaybackStore,
-    }};
+    }));
     auto configStorePtr = std::make_shared<AppConfigStore>(tempDir.path() / "app-config.yaml");
-    auto window = MainWindow{runtime, configStorePtr, nullptr};
+    auto window = MainWindow{*runtimePtr, configStorePtr, nullptr};
     REQUIRE(window.prepareSession());
     REQUIRE(window.activateSession(MainWindow::PlaybackRestoreMode::StartIdle));
     window.applyTheme(uimodel::ThemePreset::Modern);
@@ -177,13 +177,13 @@ namespace ao::gtk::test
     REQUIRE_FALSE(retired);
     CHECK(retired.error().code == Error::Code::IoError);
     CHECK(window.sessionPhase() == MainWindow::SessionPhase::Active);
-    CHECK(window.musicRoot() == runtime.musicRoot());
+    CHECK(window.musicRoot() == runtimePtr->musicRoot());
     CHECK_NOTHROW(window.playback());
 
     window.saveSession();
     auto persistedSession = rt::AppSessionState{};
     configStorePtr->loadAppSession(persistedSession);
-    CHECK(persistedSession.lastLibraryPath == runtime.musicRoot().string());
+    CHECK(persistedSession.lastLibraryPath == runtimePtr->musicRoot().string());
     AppDialog* errorDialog = nullptr;
 
     for (auto* const topLevel : Gtk::Window::list_toplevels())

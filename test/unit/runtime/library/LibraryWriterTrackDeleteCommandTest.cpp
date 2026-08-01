@@ -44,8 +44,7 @@ namespace ao::rt::test
         listIds.push_back(ao::test::requireValue(libraryFixture.library()
                                                    .lists()
                                                    .writer(transaction)
-                                                   .create(ao::test::requireValue(listBuilder.serialize())))
-                            .first);
+                                                   .create(ao::test::requireValue(listBuilder.serialize()))));
       }
 
       REQUIRE(transaction.commit());

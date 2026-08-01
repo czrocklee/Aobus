@@ -14,6 +14,7 @@
 #include "TrackCommand.h"
 #include <ao/AppVersion.h>
 #include <ao/Exception.h>
+#include <ao/library/detail/LibraryError.h>
 
 #include <CLI/CLI.hpp>
 
@@ -51,6 +52,18 @@ namespace ao::cli
       {
         out << "\n\n";
         writeHelpTree(*subcommand, commandPath + " " + subcommand->get_name(), out);
+      }
+    }
+
+    void parseCommand(CLI::App& app, std::int32_t argc, char const* const* argv)
+    {
+      try
+      {
+        app.parse(argc, argv);
+      }
+      catch (library::detail::LibraryException const& error)
+      {
+        throwCommandError(error.error());
       }
     }
   } // namespace
@@ -92,7 +105,7 @@ namespace ao::cli
         return 0;
       }
 
-      app.parse(argc, argv);
+      parseCommand(app, argc, argv);
       return 0;
     }
     catch (CLI::ParseError const& e)

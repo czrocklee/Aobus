@@ -3,6 +3,7 @@
 
 #include "CliRuntime.h"
 
+#include "CommandError.h"
 #include <ao/async/Executor.h>
 #include <ao/async/LoopExecutor.h>
 #include <ao/async/Runtime.h>
@@ -52,8 +53,7 @@ namespace ao::cli
     }
 
     auto& asyncRuntime = _runtimePtr->async();
-    asyncRuntime.requestStop();
-    asyncRuntime.join();
+    _runtimePtr->shutdown();
 
     while (true)
     {
@@ -82,11 +82,16 @@ namespace ao::cli
       // loop executor to the thread that enters the first command callback.
       auto executorPtr = std::make_unique<async::LoopExecutor>();
       auto* const loopExecutor = executorPtr.get();
-      auto runtimePtr = std::make_unique<rt::CoreRuntime>(
+      auto runtimeResult = rt::CoreRuntime::create(
         std::move(executorPtr), _options.root, rt::LibraryPaths{_options.root}.databasePath(), _musicLibraryMapSize);
 
+      if (!runtimeResult)
+      {
+        throwCommandError(runtimeResult.error(), "failed to open library: {}", runtimeResult.error().message);
+      }
+
       _loopExecutor = loopExecutor;
-      _runtimePtr = std::move(runtimePtr);
+      _runtimePtr = std::move(*runtimeResult);
     }
 
     return *_runtimePtr;

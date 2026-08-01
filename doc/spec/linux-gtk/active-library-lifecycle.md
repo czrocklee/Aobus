@@ -77,6 +77,8 @@ The empty fallback is an application bootstrap workspace, not a persisted replac
 ### Pair construction and restoration
 
 GTK creates a main-context executor, a per-library workspace `ConfigStore`, and `AppRuntime` with the selected root and database.
+It calls `AppRuntime::create()` and receives no runtime until the database has passed its persisted-integrity gate and the initial All Tracks source has been materialized.
+An Error is translated at this composition root and candidate ownership is discarded without a throwing-constructor compatibility path.
 It injects the application-global playback-session store separately, registers platform audio providers, constructs `MainWindow`, and attaches runtime ownership to the window.
 
 Window construction loads window, output, theme, layout preference, action, and controller state needed before runtime session preparation.
@@ -135,7 +137,7 @@ Selecting the active root can still request a scan; scan failure and progress be
 
 Playback-session discard failure aborts replacement and keeps the old pair active.
 The old window presents the discard diagnostic in a parent-bound transient message and returns the same failure to the replacement callback.
-Candidate preparation/configuration exceptions destroy the candidate during stack unwinding and reach the existing GLib signal exception boundary, which presents the error against the still-active old window.
+Runtime-factory Errors and later candidate preparation/configuration exceptions destroy the candidate and reach the existing GLib signal boundary, which presents the diagnostic against the still-active old window.
 Current global, workspace, layout, and several other save wrappers contain void or best-effort paths, so their failure does not currently abort replacement or shutdown.
 Playback checkpoint failure is logged by the coordinator.
 After retirement succeeds, playback restore and MPRIS activation retain their expected log-and-continue behavior and cannot roll the lifecycle back.

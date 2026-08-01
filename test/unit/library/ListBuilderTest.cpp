@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/ListBuilder.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryStoreTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
-#include <ao/library/ListBuilder.h>
 #include <ao/library/ListLayout.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
@@ -29,7 +30,9 @@ namespace ao::library::test
     {
       auto result = writer.create(data);
       REQUIRE(result);
-      return *result;
+      auto optView = writer.get(*result);
+      REQUIRE(optView);
+      return {*result, *optView};
     }
 
     std::vector<std::byte> duplicateOrderPayload(std::span<TrackId const> trackIds)

@@ -11,6 +11,7 @@
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
+#include <ao/CoreIds.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -19,16 +20,17 @@
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
+#include <ao/rt/source/TrackSourceCache.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <unistd.h>
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -69,10 +71,9 @@ namespace ao::gtk::test
         { return entry.severity == severity && std::get<std::string>(entry.message).contains(messageFragment); });
     }
 
-    portal::ImportExportCallbacks callbacksWithMutationCounter(std::int32_t& mutationCallbackCount)
+    portal::ImportExportCallbacks confirmingCallbacks()
     {
       return portal::ImportExportCallbacks{
-        .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
         .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
         { completion(true); },
       };
@@ -139,29 +140,20 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
-    auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
-    auto completedSub = fixture.runtime().library().taskService().onCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
-      {
-        optCompletionStatus = event.status;
-        optCompletedCount = event.affectedCount;
-      });
+    std::int32_t progressFinishedCount = 0;
+    auto progressFinishedSub = fixture.runtime().library().taskService().onProgressFinished(
+      [&progressFinishedCount] noexcept { ++progressFinishedCount; });
 
     workflow.scan();
 
-    REQUIRE(
-      pumpGtkEventsUntil([&fixture, &optCompletedCount]
-                         { return optCompletedCount && !fixture.runtime().notifications().feed().entries.empty(); }));
+    REQUIRE(pumpGtkEventsUntil(
+      [&fixture, &progressFinishedCount]
+      { return progressFinishedCount == 1 && !fixture.runtime().notifications().feed().entries.empty(); }));
 
-    REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
-    CHECK(optCompletedCount == 0U);
-    CHECK(mutationCallbackCount == 0);
+    CHECK(progressFinishedCount == 1);
     auto const feed = fixture.runtime().notifications().feed();
     REQUIRE(feed.entries.size() == 1);
     CHECK(feed.entries.back().severity == rt::NotificationSeverity::Info);
@@ -172,35 +164,26 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     copyMetadataFixtureToLibrary(fixture);
 
-    auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
+    std::int32_t progressFinishedCount = 0;
     auto progressEvents = std::vector<rt::LibraryTaskProgressUpdated>{};
-    auto completedSub = fixture.runtime().library().taskService().onCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
-      {
-        optCompletionStatus = event.status;
-        optCompletedCount = event.affectedCount;
-      });
+    auto progressFinishedSub = fixture.runtime().library().taskService().onProgressFinished(
+      [&progressFinishedCount] noexcept { ++progressFinishedCount; });
     auto progressSub = fixture.runtime().library().taskService().onProgress(
       [&progressEvents](auto const& event) noexcept { progressEvents.push_back(event); });
 
     workflow.scan();
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &mutationCallbackCount, &optCompletedCount, &progressEvents]
+      [&fixture, &progressFinishedCount, &progressEvents]
       {
-        return progressEvents.size() == 4 && optCompletedCount && mutationCallbackCount == 1 &&
+        return progressEvents.size() == 4 && progressFinishedCount == 2 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete");
       }));
-    REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
-    CHECK(optCompletedCount == 1U);
-    CHECK(mutationCallbackCount == 1);
+    CHECK(progressFinishedCount == 2);
     REQUIRE(progressEvents.size() == 4);
     CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
@@ -216,23 +199,19 @@ namespace ao::gtk::test
     CHECK(progressEvents[3].fraction == 1.0);
     CHECK(trackTitles(fixture) == std::vector<std::string>{"Test Title"});
 
-    optCompletedCount.reset();
-    optCompletionStatus.reset();
+    progressFinishedCount = 0;
     progressEvents.clear();
 
     workflow.scan();
 
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &optCompletedCount, &progressEvents]
+      [&fixture, &progressFinishedCount, &progressEvents]
       {
-        return progressEvents.size() == 1 && optCompletedCount &&
+        return progressEvents.size() == 1 && progressFinishedCount == 1 &&
                hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date");
       }));
 
-    REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
-    CHECK(optCompletedCount == 0U);
-    CHECK(mutationCallbackCount == 1);
+    CHECK(progressFinishedCount == 1);
     REQUIRE(progressEvents.size() == 1);
     CHECK(progressEvents[0].kind == rt::LibraryTaskProgressKind::Scanning);
     CHECK(progressEvents[0].subject == "song.flac");
@@ -244,8 +223,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     copyMetadataFixtureToLibrary(fixture);
@@ -253,11 +231,8 @@ namespace ao::gtk::test
     workflow.scan(portal::ScanRequestMode::FastBootstrap);
 
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &mutationCallbackCount]
-      {
-        return mutationCallbackCount == 1 &&
-               hasNotification(fixture, rt::NotificationSeverity::Info, "Audio identity indexing complete");
-      }));
+      [&fixture]
+      { return hasNotification(fixture, rt::NotificationSeverity::Info, "Audio identity indexing complete"); }));
 
     CHECK(
       hasNotification(fixture, rt::NotificationSeverity::Info, "Library ready; indexing audio identity in background"));
@@ -268,23 +243,13 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     copyMetadataFixtureToLibrary(fixture);
     workflow.scan();
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
-
-    auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
-    auto completedSub = fixture.runtime().library().taskService().onCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
-      {
-        optCompletionStatus = event.status;
-        optCompletedCount = event.affectedCount;
-      });
 
     auto const movedPath = fixture.runtime().musicRoot() / "renamed.flac";
     std::filesystem::rename(fixture.runtime().musicRoot() / "song.flac", movedPath);
@@ -292,15 +257,8 @@ namespace ao::gtk::test
     workflow.scan();
 
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &optCompletedCount]
-      {
-        return optCompletedCount == 1U &&
-               hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file");
-      }));
+      [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Relinked 1 moved file"); }));
 
-    REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
-    CHECK(mutationCallbackCount == 2);
     CHECK(trackUris(fixture) == std::vector<std::string>{"renamed.flac"});
   }
 
@@ -308,8 +266,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     copyMetadataFixtureToLibrary(fixture);
@@ -317,29 +274,13 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
 
-    auto optCompletedCount = std::optional<std::size_t>{};
-    auto optCompletionStatus = std::optional<rt::LibraryTaskCompletionStatus>{};
-    auto completedSub = fixture.runtime().library().taskService().onCompleted(
-      [&optCompletedCount, &optCompletionStatus](rt::LibraryTaskCompleted const& event) noexcept
-      {
-        optCompletionStatus = event.status;
-        optCompletedCount = event.affectedCount;
-      });
-
     std::filesystem::remove(fixture.runtime().musicRoot() / "song.flac");
 
     workflow.scan();
 
     REQUIRE(pumpGtkEventsUntil(
-      [&fixture, &optCompletedCount]
-      {
-        return optCompletedCount == 0U &&
-               hasNotification(fixture, rt::NotificationSeverity::Warning, "1 missing file needs review");
-      }));
-
-    REQUIRE(optCompletionStatus);
-    CHECK(*optCompletionStatus == rt::LibraryTaskCompletionStatus::Succeeded);
-    CHECK(mutationCallbackCount == 1);
+      [&fixture]
+      { return hasNotification(fixture, rt::NotificationSeverity::Warning, "1 missing file needs review"); }));
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports missing files even when errors occur",
@@ -347,8 +288,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     copyMetadataFixtureToLibrary(fixture);
@@ -370,8 +310,6 @@ namespace ao::gtk::test
         return hasNotification(
           fixture, rt::NotificationSeverity::Warning, "Scan completed with errors; 1 missing file needs review");
       }));
-
-    CHECK(mutationCallbackCount == 1);
   }
 
   TEST_CASE("LibraryImportExportWorkflow - scan reports error-only plans without up-to-date success",
@@ -379,8 +317,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     auto const restrictedDir = fixture.runtime().musicRoot() / "restricted_dir";
@@ -399,7 +336,6 @@ namespace ao::gtk::test
 
     std::filesystem::permissions(restrictedDir, std::filesystem::perms::owner_all);
 
-    CHECK(mutationCallbackCount == 0);
     CHECK_FALSE(hasNotification(fixture, rt::NotificationSeverity::Info, "Library is up to date"));
   }
 
@@ -407,8 +343,7 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
     auto const target = fixture.tempDir().path() / "library_backup.yaml";
 
@@ -417,8 +352,6 @@ namespace ao::gtk::test
     REQUIRE(pumpGtkEventsUntil(
       [&fixture] { return hasNotification(fixture, rt::NotificationSeverity::Info, "Library scan complete"); }));
     REQUIRE(libraryHasTrackTitle(fixture, "Test Title"));
-    mutationCallbackCount = 0;
-
     workflow.exportTo(target, rt::ExportMode::Full);
 
     REQUIRE(pumpGtkEventsUntil(
@@ -431,17 +364,15 @@ namespace ao::gtk::test
     auto const exportedYaml = readTextFile(target);
     CHECK(std::string_view{exportedYaml}.contains("Test Title"));
     CHECK(std::string_view{exportedYaml}.contains("Test Artist"));
-    CHECK(mutationCallbackCount == 0);
   }
 
-  TEST_CASE("LibraryImportExportWorkflow - import restores track metadata and posts mutation callback",
+  TEST_CASE("LibraryImportExportWorkflow - import restores track metadata through runtime changes",
             "[gtk][unit][workflow][yaml]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto sourceFixture = GtkRuntimeFixture{};
     auto targetFixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto sourceWorkflow = portal::LibraryImportExportWorkflow{sourceFixture.runtime(), callbacks};
     auto targetWorkflow = portal::LibraryImportExportWorkflow{targetFixture.runtime(), callbacks};
     auto const target = sourceFixture.tempDir().path() / "roundtrip.yaml";
@@ -465,14 +396,12 @@ namespace ao::gtk::test
     targetWorkflow.importFrom(target);
 
     REQUIRE(pumpGtkEventsUntil(
-      [&targetFixture, &mutationCallbackCount]
-      {
-        return mutationCallbackCount == 2 &&
-               hasNotification(targetFixture, rt::NotificationSeverity::Info, "Library imported successfully");
-      }));
+      [&targetFixture]
+      { return hasNotification(targetFixture, rt::NotificationSeverity::Info, "Library imported successfully"); }));
 
-    CHECK(mutationCallbackCount == 2);
     CHECK(trackTitles(targetFixture) == std::vector<std::string>{"Test Title"});
+    auto allTracks = ao::test::requireValue(targetFixture.runtime().sources().acquire(rt::kAllTracksListId));
+    CHECK(allTracks->size() == 1);
   }
 
   TEST_CASE("LibraryImportExportWorkflow - restore waits for explicit preview confirmation",
@@ -480,11 +409,9 @@ namespace ao::gtk::test
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
     auto confirmation = std::function<void(bool)>{};
     auto optPreview = std::optional<rt::ImportReport>{};
     auto callbacks = portal::ImportExportCallbacks{
-      .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
       .requestLibraryRestoreConfirmation =
         [&confirmation, &optPreview](rt::ImportReport const& report, std::function<void(bool)> completion)
       {
@@ -511,13 +438,11 @@ library:
     REQUIRE(pumpGtkEventsUntil([&confirmation] { return static_cast<bool>(confirmation); }));
     REQUIRE(optPreview);
     CHECK(optPreview->tracksCreated == 1);
-    CHECK(mutationCallbackCount == 0);
     CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
 
     confirmation(false);
     drainGtkEvents();
 
-    CHECK(mutationCallbackCount == 0);
     CHECK_FALSE(libraryHasTrackTitle(fixture, "Restored"));
   }
 
@@ -564,17 +489,15 @@ library:
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path() / "music",
       .databasePath = tempDir.path() / "db",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
-    }};
+    }));
     auto confirmation = std::function<void(bool)>{};
-    std::int32_t mutationCallbackCount = 0;
     auto callbacks = portal::ImportExportCallbacks{
-      .onLibraryDataMutated = [&mutationCallbackCount] { ++mutationCallbackCount; },
       .requestLibraryRestoreConfirmation = [&confirmation](
                                              rt::ImportReport const&, std::function<void(bool)> completion)
       { confirmation = std::move(completion); },
@@ -592,7 +515,7 @@ library:
 )";
     }
 
-    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime, callbacks);
+    auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(*runtimePtr, callbacks);
     workflowPtr->importFrom(importPath);
 
     while (!confirmation)
@@ -612,8 +535,8 @@ library:
     {
       executor->checkQueued();
       {
-        auto transaction = runtime.musicLibrary().readTransaction();
-        auto reader = runtime.musicLibrary().tracks().reader(transaction);
+        auto transaction = runtimePtr->musicLibrary().readTransaction();
+        auto reader = runtimePtr->musicLibrary().tracks().reader(transaction);
 
         for (auto const& [trackId, view] : reader)
         {
@@ -631,9 +554,8 @@ library:
     workflowPtr.reset();
     executor->runUntilIdle();
 
-    CHECK(mutationCallbackCount == 0);
     CHECK_FALSE(std::ranges::any_of(
-      runtime.notifications().feed().entries,
+      runtimePtr->notifications().feed().entries,
       [](auto const& entry) { return std::get<std::string>(entry.message) == "Library imported successfully"; }));
   }
 
@@ -641,8 +563,7 @@ library:
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto fixture = GtkRuntimeFixture{};
-    std::int32_t mutationCallbackCount = 0;
-    auto callbacks = callbacksWithMutationCounter(mutationCallbackCount);
+    auto callbacks = confirmingCallbacks();
     auto workflow = portal::LibraryImportExportWorkflow{fixture.runtime(), callbacks};
 
     workflow.importFrom(fixture.tempDir().path() / "missing.yaml");
@@ -653,7 +574,6 @@ library:
         return hasNotificationContaining(fixture, rt::NotificationSeverity::Error, "Import failed: Failed to read");
       }));
 
-    CHECK(mutationCallbackCount == 0);
     CHECK_FALSE(hasNotification(fixture, rt::NotificationSeverity::Error, "Import failed: Internal error"));
   }
 
@@ -663,19 +583,19 @@ library:
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<rt::test::ManualExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtime = rt::AppRuntime{rt::AppRuntimeDependencies{
+    auto runtimePtr = ao::test::requireValue(rt::AppRuntime::create(rt::AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path() / "music",
       .databasePath = tempDir.path() / "db",
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr = std::make_unique<rt::ConfigStore>(tempDir.path() / "config.yaml"),
-    }};
+    }));
 
     auto callbacks = portal::ImportExportCallbacks{};
     auto const importPath = tempDir.path() / "missing-import.yaml";
 
     {
-      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(runtime, callbacks);
+      auto workflowPtr = std::make_unique<portal::LibraryImportExportWorkflow>(*runtimePtr, callbacks);
       workflowPtr->importFrom(importPath);
 
       executor->checkQueued();
@@ -687,6 +607,6 @@ library:
 
     executor->runUntilIdle();
 
-    CHECK(runtime.notifications().feed().entries.empty());
+    CHECK(runtimePtr->notifications().feed().entries.empty());
   }
 } // namespace ao::gtk::test

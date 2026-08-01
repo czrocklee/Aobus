@@ -11,14 +11,12 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
+#include <ao/library/TrackWrite.h>
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <span>
 #include <string_view>
 #include <utility>
 
@@ -150,12 +148,11 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     applyTrackSpec(builder, spec);
 
-    auto data = builder.serialize(transaction, library.resources());
-    REQUIRE(data);
-    auto createResult = writer.createHotCold(data->first, data->second);
+    auto prepared = builder.prepare(transaction, library.resources());
+    REQUIRE(prepared);
+    auto createResult = createPreparedTrackRecord(writer, prepared->first, prepared->second);
     REQUIRE(createResult);
-    auto const [id, _] = *createResult;
-    return id;
+    return *createResult;
   }
 
   TrackId addTrack(MusicLibrary& library, TrackSpec const& spec)
@@ -174,16 +171,12 @@ namespace ao::library::test
     auto optView = reader.get(id, TrackStore::Reader::LoadMode::Both);
     REQUIRE(optView);
 
-    auto builder = TrackBuilder::fromView(*optView, library.dictionary());
+    auto builder = TrackBuilder::fromCompleteView(*optView, library.dictionary());
     mutate(builder);
 
-    auto hotData = builder.serializeHot(transaction);
-    REQUIRE(hotData);
-    auto coldData = builder.serializeCold(transaction, library.resources());
-    REQUIRE(coldData);
-    REQUIRE(writer.updateHot(id, *hotData));
-    REQUIRE(writer.updateCold(
-      id, coldData->size(), [&](std::span<std::byte> buf) { std::ranges::copy(*coldData, buf.begin()); }));
+    auto prepared = builder.prepare(transaction, library.resources());
+    REQUIRE(prepared);
+    REQUIRE(updatePreparedTrackRecord(writer, id, prepared->first, prepared->second));
     REQUIRE(transaction.commit());
   }
 

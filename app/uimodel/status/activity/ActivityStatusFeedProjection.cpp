@@ -6,7 +6,6 @@
 #include <ao/rt/NotificationIds.h>
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/uimodel/library/track/TrackCountFormatter.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -166,8 +165,7 @@ namespace ao::uimodel
       return;
     }
 
-    if (auto previousCompact = _state.compact;
-        previousCompact.kind == ActivityStatusKind::Info || previousCompact.kind == ActivityStatusKind::Success)
+    if (auto previousCompact = _state.compact; previousCompact.kind == ActivityStatusKind::Info)
     {
       auto previousSourceIds = _compactSourceNotificationIds;
       projectPersistentCompact(feed);
@@ -246,19 +244,12 @@ namespace ao::uimodel
     };
   }
 
-  void ActivityStatusFeedProjection::handleLibraryTaskCompleted(rt::LibraryTaskCompleted const& event,
-                                                                rt::NotificationFeedState const& feed)
+  void ActivityStatusFeedProjection::handleLibraryProgressFinished(rt::NotificationFeedState const& feed)
   {
     _taskActive = false;
     _optLibraryProgress.reset();
     projectDetail(feed);
-
     projectPersistentCompact(feed);
-
-    if (_state.compact.kind == ActivityStatusKind::Idle && event.status == rt::LibraryTaskCompletionStatus::Succeeded)
-    {
-      projectCompletionCompact(event.affectedCount);
-    }
   }
 
   void ActivityStatusFeedProjection::dismissCompact(rt::NotificationFeedState const& feed)
@@ -414,16 +405,6 @@ namespace ao::uimodel
             : std::optional{kActivityStatusDefaultAutoDismissTimeout},
       },
       {entry.id});
-  }
-
-  void ActivityStatusFeedProjection::projectCompletionCompact(std::size_t const count)
-  {
-    setCompact(ActivityCompactState{
-      .kind = ActivityStatusKind::Success,
-      .text = count == 0 ? std::string{"Library is up to date"}
-                         : std::format("Scan complete: {} added", formatTrackCount(count)),
-      .optAutoDismissTimeout = kActivityStatusDefaultAutoDismissTimeout,
-    });
   }
 
   void ActivityStatusFeedProjection::setCompact(ActivityCompactState compact, std::vector<rt::NotificationId> sourceIds)

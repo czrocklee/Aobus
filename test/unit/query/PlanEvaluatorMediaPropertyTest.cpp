@@ -20,11 +20,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 256000};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 256000};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -36,11 +36,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 48000};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 48000};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -53,15 +53,15 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 192000, 44100};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 192000, 44100};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
 
-    auto track3 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 32000};
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000, 320000, 32000};
     result = evaluator.evaluateFull(plan, track3.view());
     CHECK(result == false);
   }

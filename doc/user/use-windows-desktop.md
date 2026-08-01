@@ -22,9 +22,10 @@ You will open an indexed music folder in the native Windows application, browse 
 1. Start `Aobus.exe`. Modern mode opens by default and an empty first-run library is harmless.
 2. Choose **Open Library...** and select the root of your music library.
    Aobus opens an existing index directly.
-   For a folder without an Aobus index, it keeps the current library available
-   while it performs the initial scan, then replaces the view when preparation
-   succeeds.
+   Opening a different library stops playback from the previous library.
+   For a folder without an Aobus index, it activates the folder and then runs
+   the initial scan. If scanning fails, that folder stays open so **Rescan** can
+   retry it.
 3. Use **Folders**, **Albums**, **Artists**, **Genres**, or a list below
    **Playlists** in the navigation pane. Use the presentation button above the
    table to switch between songs, albums, artists, genres, years, classical
@@ -45,7 +46,7 @@ You will open an indexed music folder in the native Windows application, browse 
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Classic mode, click Soul for output devices, right-click it for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline.
-9. Choose **Rescan** after files change. Cancelling or a failed scan leaves the current library intact.
+9. Choose **Rescan** after files change. A failed scan leaves the active library open and retryable. While Open Library or Rescan is already active, another request starts nothing.
 10. To apply a custom theme, create `%LOCALAPPDATA%\Aobus\windows-theme.yaml` using the exact reference schema, then choose **Reload Theme**. Omit or remove the file to follow built-in and system appearance.
 
 ## Verify the result

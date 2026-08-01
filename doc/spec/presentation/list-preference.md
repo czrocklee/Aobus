@@ -89,6 +89,10 @@ Playback restoration submits the same `NewViewDefault` request as ordinary GTK n
 Changing the presentation through a normal user-selection path installs the new runtime spec and may update the base list's saved preference.
 When a committed `LibraryChangeSet` deletes Lists, the shared preference lifecycle erases every corresponding key before a frontend persists its next state.
 
+WinUI resolves every saved id through `ListPresentationPreferenceStore::presentationForList()` before applying it to a newly bound or navigated view.
+An unavailable id therefore applies the source-aware recommendation without deleting or rewriting the opaque saved id.
+If applying the resolved `TrackPresentationSpec` returns an Error, WinUI presents the Error and retains both the current active presentation and the saved preference.
+
 Applying a quick filter changes only `filterExpression` and active source/projection resources.
 It does not create a new preference or rerun list recommendation.
 If the list was displayed as albums before filtering, it remains displayed as albums unless a separate presentation command changes it.
@@ -110,11 +114,12 @@ Bulk installation during GTK restore suppresses persistence callbacks, so loadin
 ## Persistence and versioning
 
 GTK persists the preference map with other per-library track-view layout state through `GtkLayoutStateStore` in the library-specific `gtk_layout.yaml` store.
+WinUI persists the same semantic group in its platform application settings, keeps opaque ids across runtime replacement, and rebinds the shared committed-List deletion lifecycle to the new active runtime.
 The `trackView.presentations` group carries required `version: 1` and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
 The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 
 The persisted value is a presentation id, so changing or removing a built-in id requires a compatibility path.
-Unknown custom ids remain tolerated because custom presentations may be removed independently.
+Unknown custom ids remain tolerated because custom presentations may be removed independently; fallback resolution never rewrites that opaque value.
 Unversioned legacy preference maps and unsupported future versions are rejected without migration or automatic rewrite.
 The explicit schema returns `NotSupported` for a future version before interpreting its preferences.
 
@@ -136,7 +141,7 @@ Quick-filter controls and List editors may display the current presentation, but
 - [`TrackPresentationCatalog`](../../../app/include/ao/uimodel/library/presentation/TrackPresentationCatalog.h) resolves built-in and custom ids.
 - [`ViewService`](../../../app/include/ao/rt/ViewService.h) owns active presentation state.
 - [`WorkspaceService`](../../../app/include/ao/rt/WorkspaceService.h) owns view navigation snapshots and replay under the [workspace navigation specification](../workspace/navigation.md).
-- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization.
+- [`GtkLayoutStateStore`](../../../app/linux-gtk/app/GtkLayoutStateStore.h) owns GTK per-library serialization; WinUI [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.h) owns its platform settings copy and shared resolution boundary.
 
 ## Test map
 

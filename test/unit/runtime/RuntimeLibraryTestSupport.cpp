@@ -251,7 +251,7 @@ namespace ao::rt::test
     {
       if (!libraryPtr)
       {
-        libraryPtr = std::make_unique<Library>(asyncRuntime, storage, changes);
+        libraryPtr = ao::test::requireValue(Library::create(asyncRuntime, storage, changes));
       }
 
       return *libraryPtr;

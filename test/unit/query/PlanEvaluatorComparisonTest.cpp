@@ -17,11 +17,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -33,11 +33,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 170000};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 170000};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -49,15 +49,15 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == false);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2021, 5, 180000};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2021, 5, 180000};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == true);
 
-    auto track3 = TestTrack{"Test", "Artist", "Album", "/path", 2019, 5, 180000};
+    auto track3 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5, 180000};
     result = evaluator.evaluateFull(plan, track3.view());
     CHECK(result == true);
   }
@@ -69,11 +69,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 180000};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 180000};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5, 179999};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5, 179999};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -85,11 +85,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2021};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2021};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -102,11 +102,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Test", "Artist", "Album", "/path", 2020, 5};
+    auto track1 = TestTrack{"Test", "Artist", "Album", "path", 2020, 5};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Test", "Artist", "Album", "/path", 2019, 5};
+    auto track2 = TestTrack{"Test", "Artist", "Album", "path", 2019, 5};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }
@@ -119,7 +119,7 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track = TestTrack{"Title", "Artist", "Album", "/path", 1980};
+    auto track = TestTrack{"Title", "Artist", "Album", "path", 1980};
     auto result = evaluator.evaluateFull(plan, track.view());
     CHECK(result == false);
   }
@@ -132,11 +132,11 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track1 = TestTrack{"Title", "Artist", "Album", "/path", 2021};
+    auto track1 = TestTrack{"Title", "Artist", "Album", "path", 2021};
     auto result = evaluator.evaluateFull(plan, track1.view());
     CHECK(result == true);
 
-    auto track2 = TestTrack{"Title", "Artist", "Album", "/path", 1990};
+    auto track2 = TestTrack{"Title", "Artist", "Album", "path", 1990};
     result = evaluator.evaluateFull(plan, track2.view());
     CHECK(result == false);
   }

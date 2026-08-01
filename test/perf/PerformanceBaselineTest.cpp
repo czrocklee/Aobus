@@ -12,6 +12,7 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/query/Field.h>
 #include <ao/query/PlanEvaluator.h>
 #include <ao/query/detail/Bytecode.h>
@@ -1379,11 +1380,11 @@ namespace ao::rt::test
       {
         auto builder = library::TrackBuilder::makeEmpty();
         library::test::applyTrackSpec(builder, pipelineTrackSpec(firstIndex + offset));
-        auto data = builder.serialize(transaction, library.resources());
-        REQUIRE(data);
-        auto created = writer.createHotCold(data->first, data->second);
+        auto prepared = builder.prepare(transaction, library.resources());
+        REQUIRE(prepared);
+        auto created = library::createPreparedTrackRecord(writer, prepared->first, prepared->second);
         REQUIRE(created);
-        ids.push_back(created->first);
+        ids.push_back(*created);
       }
 
       auto const start = std::chrono::steady_clock::now();
@@ -1444,7 +1445,7 @@ namespace ao::rt::test
         auto result =
           _libraryFixture.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
         REQUIRE(result);
-        _orderedListId = result->first;
+        _orderedListId = *result;
         REQUIRE(transaction.commit());
       }
 
@@ -1520,9 +1521,9 @@ namespace ao::rt::test
           auto const index = startIndex + offset;
           auto builder = library::TrackBuilder::makeEmpty();
           library::test::applyTrackSpec(builder, pipelineTrackSpec(index, true));
-          auto data = builder.serializeHot(transaction);
-          REQUIRE(data);
-          REQUIRE(writer.updateHot(_ids[index], *data));
+          auto prepared = builder.prepareHot(transaction);
+          REQUIRE(prepared);
+          REQUIRE(library::updatePreparedHotTrackRecord(writer, _ids[index], *prepared));
         }
 
         auto const start = std::chrono::steady_clock::now();

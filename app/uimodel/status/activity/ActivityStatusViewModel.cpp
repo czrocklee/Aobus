@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
+
 #include "ActivityStatusFeedProjection.h"
 #include <ao/async/Subscription.h>
 #include <ao/rt/NotificationIds.h>
@@ -8,7 +10,6 @@
 #include <ao/rt/NotificationState.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
 #include <ao/rt/library/LibraryTaskService.h>
-#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <chrono>
@@ -45,7 +46,7 @@ namespace ao::uimodel
 
     async::Subscription feedUpdatedSub;
     async::Subscription libraryProgressSub;
-    async::Subscription libraryCompletedSub;
+    async::Subscription libraryProgressFinishedSub;
 
     Impl(rt::NotificationService& notificationService,
          std::function<void(ActivityStatusViewState const&)> renderCallback,
@@ -76,8 +77,8 @@ namespace ao::uimodel
       {
         libraryProgressSub = options.libraryTasks->onProgress(
           [this](rt::LibraryTaskProgressUpdated const& event) noexcept { handleLibraryTaskProgress(event); });
-        libraryCompletedSub = options.libraryTasks->onCompleted([this](rt::LibraryTaskCompleted const& event) noexcept
-                                                                { handleLibraryTaskCompleted(event); });
+        libraryProgressFinishedSub =
+          options.libraryTasks->onProgressFinished([this] noexcept { handleLibraryProgressFinished(); });
       }
 
       syncAutoDismissDeadline();
@@ -145,9 +146,9 @@ namespace ao::uimodel
       publish();
     }
 
-    void handleLibraryTaskCompleted(rt::LibraryTaskCompleted const& event)
+    void handleLibraryProgressFinished()
     {
-      feedProjection.handleLibraryTaskCompleted(event, notifications.feed());
+      feedProjection.handleLibraryProgressFinished(notifications.feed());
       publish();
     }
   };

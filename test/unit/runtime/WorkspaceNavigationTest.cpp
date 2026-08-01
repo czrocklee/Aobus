@@ -37,7 +37,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - first navigate opens the target list", "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
 
@@ -50,7 +50,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - navigate AllTracks opens the global list", "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
@@ -63,7 +63,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     REQUIRE(runtime.workspace().navigate({
       .target =
@@ -81,7 +81,7 @@ namespace ao::rt::test
   TEST_CASE("AppRuntime - jumpToAlbum rejects invalid tracks", "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto const result = runtime.jumpToAlbum(kInvalidTrackId);
@@ -95,7 +95,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - onChanged includes the committed focus", "[runtime][unit][workspace][focus]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto focusedViewId = kInvalidViewId;
     auto const sub = runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept
@@ -109,7 +109,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - deleting a list closes its open views", "[runtime][unit][workspace][lifecycle]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto listId =
       ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Test List"}));
@@ -128,7 +128,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][lifecycle]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     requireNavigation(runtime, FilteredListTarget{.listId = fixture.firstListId, .filterExpression = "$title ~ \"A\""});
     requireNavigation(runtime, FilteredListTarget{.listId = fixture.firstListId, .filterExpression = "$title ~ \"B\""});
     auto const before = runtime.workspace().snapshot();
@@ -149,7 +149,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const trackId =
       TrackId{100}; // jumpToAlbum doesn't validate if track exists in library, it just passes the ID to playback
@@ -187,7 +187,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - invalid navigation targets return an error", "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const result = runtime.workspace().navigate({.target = static_cast<GlobalViewKind>(999)});
 
@@ -200,7 +200,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const result = runtime.workspace().navigate({});
 
@@ -214,7 +214,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][navigation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     REQUIRE(runtime.workspace().navigate({.target = fixture.firstListId}));
     auto const beforeLayout = runtime.workspace().snapshot();
 
@@ -233,7 +233,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][validation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const activeViewId = requireNavigation(runtime, fixture.firstListId);
     auto const before = runtime.workspace().snapshot();
 
@@ -251,8 +251,8 @@ namespace ao::rt::test
             "[runtime][unit][workspace][observation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& workspace = fixture.runtime.workspace();
-    auto const activeViewId = requireNavigation(fixture.runtime, fixture.firstListId);
+    auto& workspace = fixture.runtime().workspace();
+    auto const activeViewId = requireNavigation(fixture.runtime(), fixture.firstListId);
     auto const before = workspace.snapshot();
     std::int32_t changeCount = 0;
     auto const sub = workspace.onChanged([&](WorkspaceChanged const&) noexcept { ++changeCount; });
@@ -268,9 +268,9 @@ namespace ao::rt::test
             "[runtime][unit][workspace][observation]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& workspace = fixture.runtime.workspace();
-    auto const firstViewId = requireNavigation(fixture.runtime, fixture.firstListId);
-    requireNavigation(fixture.runtime, fixture.secondListId);
+    auto& workspace = fixture.runtime().workspace();
+    auto const firstViewId = requireNavigation(fixture.runtime(), fixture.firstListId);
+    requireNavigation(fixture.runtime(), fixture.secondListId);
     auto const before = workspace.snapshot();
     auto changed = WorkspaceChanged{};
     auto const sub = workspace.onChanged([&](WorkspaceChanged const& value) noexcept { changed = value; });
@@ -297,21 +297,21 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtime = makeRuntime(tempDir, std::move(executorPtr));
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
     auto received = std::vector<WorkspaceChanged>{};
     bool leadingObserverEntered = false;
     auto const leadingSub =
-      runtime.workspace().onChanged([&](WorkspaceChanged const&) noexcept { leadingObserverEntered = true; });
+      runtimePtr->workspace().onChanged([&](WorkspaceChanged const&) noexcept { leadingObserverEntered = true; });
     auto const receivingSub =
-      runtime.workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { received.push_back(changed); });
+      runtimePtr->workspace().onChanged([&](WorkspaceChanged const& changed) noexcept { received.push_back(changed); });
 
-    REQUIRE(runtime.workspace().navigate({.target = GlobalViewKind::AllTracks}));
+    REQUIRE(runtimePtr->workspace().navigate({.target = GlobalViewKind::AllTracks}));
 
     CHECK(received.empty());
     CHECK_NOTHROW(executor->drain());
     CHECK(leadingObserverEntered);
     REQUIRE(received.size() == 1);
-    CHECK(received.front().snapshot == runtime.workspace().snapshot());
+    CHECK(received.front().snapshot == runtimePtr->workspace().snapshot());
   }
 
   TEST_CASE("WorkspaceService - reentrant changes cannot mutate the observation being delivered",
@@ -320,38 +320,38 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto runtime = makeRuntime(tempDir, std::move(executorPtr));
-    auto const firstListId =
-      ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "First observed"}));
+    auto runtimePtr = makeRuntime(tempDir, std::move(executorPtr));
+    auto const firstListId = ao::test::requireValue(
+      runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First observed"}));
     executor->drain();
     auto const secondListId = ao::test::requireValue(
-      runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "Second observed"}));
+      runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Second observed"}));
     executor->drain();
     auto received = std::vector<WorkspaceChanged>{};
     bool reentrantNavigateSucceeded = false;
-    auto const sub = runtime.workspace().onChanged(
+    auto const sub = runtimePtr->workspace().onChanged(
       [&](WorkspaceChanged const& changed) noexcept
       {
         received.push_back(changed);
 
         if (received.size() == 1)
         {
-          reentrantNavigateSucceeded = static_cast<bool>(runtime.workspace().navigate({.target = secondListId}));
+          reentrantNavigateSucceeded = static_cast<bool>(runtimePtr->workspace().navigate({.target = secondListId}));
         }
       });
 
-    REQUIRE(runtime.workspace().navigate({.target = firstListId}));
-    auto const firstRevision = runtime.workspace().snapshot().revision;
+    REQUIRE(runtimePtr->workspace().navigate({.target = firstListId}));
+    auto const firstRevision = runtimePtr->workspace().snapshot().revision;
     REQUIRE(executor->drainUntil([&] { return received.size() == 1; }));
 
     REQUIRE(received.size() == 1);
     CHECK(reentrantNavigateSucceeded);
     auto const firstObservation = received.front();
     CHECK(firstObservation.snapshot.revision == firstRevision);
-    CHECK(runtime.workspace().snapshot().revision == firstRevision + 1);
+    CHECK(runtimePtr->workspace().snapshot().revision == firstRevision + 1);
     CHECK(received.front() == firstObservation);
 
     REQUIRE(executor->drainUntil([&] { return received.size() == 2; }));
-    CHECK(received.back().snapshot == runtime.workspace().snapshot());
+    CHECK(received.back().snapshot == runtimePtr->workspace().snapshot());
   }
 } // namespace ao::rt::test

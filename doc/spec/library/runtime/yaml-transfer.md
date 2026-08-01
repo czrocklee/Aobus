@@ -48,6 +48,9 @@ The explicit `LibraryYamlImporter::*Offline` methods instead own an isolated wri
 - A payload has at most one track record for each canonical URI; merge matches tracks only by canonical manifest URI, and payload track IDs exist only for intra-payload references.
 - Lists in the payload are recreated with new target IDs and then have parents remapped.
 - A List filter and saved order are independent: the filter determines local membership, while order references preserve rank only.
+- Complete Track preparation validates both hot and cold record size/canonicality before interning dictionary text or creating cover resources; no rejected Track leaves an item-relative staged delta.
+- A post-effect Track, manifest, List, identifier, or storage failure exits the complete import transaction owner and aborts the whole import; import never catches it to continue with another payload item.
+- Only manifest `NotFound` means an absent merge baseline or dangling URI reference; malformed persisted manifest data fails the enclosing preparation or apply operation with `CorruptData`.
 
 ## State model
 
@@ -186,8 +189,9 @@ Every apply attempt consumes the plan, including an attempt that returns a pre-c
 
 Any failure before commit leaves target content, metadata identity, and revision unchanged and publishes no content change.
 Commit failure likewise publishes no change set.
+The import transaction is one lexical owner with no nested item transactions: pre-effect validation may return a typed error, while a failure after any item has staged state unwinds that owner before translation.
 
-After a durable live-runtime commit, revision-admission or publication-enqueue failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and the live runtime enters terminal `Faulted`.
+After a durable live-runtime commit, revision-admission, publication-admission, or delivery failure follows [library change publication](change-publication.md#failure-and-lifetime): durable state is not rolled back or reported as a retryable import failure, and a live runtime terminates rather than exposing a recovery state.
 Offline import has no runtime publication phase; its transaction commit result is its terminal outcome.
 
 `LibraryTaskService` honors cancellation on executor transitions.

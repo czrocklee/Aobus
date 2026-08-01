@@ -2,6 +2,7 @@
 add_library(ao_lmdb STATIC
     Environment.cpp
     Transaction.cpp
+    TransactionFailure.cpp
     Database.cpp
     detail/ResultError.cpp
     detail/ThrowError.cpp

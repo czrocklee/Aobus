@@ -52,7 +52,7 @@ namespace ao::rt::test
     {
       auto result = writer.create(payload);
       REQUIRE(result);
-      return result->first;
+      return *result;
     }
 
     std::size_t trackCount(MusicLibrary& ml)
@@ -685,7 +685,7 @@ library:
 
     for (auto const& [id, view] : trackReader)
     {
-      auto builder = TrackBuilder::fromView(view, ml.dictionary());
+      auto builder = TrackBuilder::fromCompleteView(view, ml.dictionary());
       CHECK_FALSE(builder.property().uri().contains("./"));
       CHECK_FALSE(builder.property().uri().contains('\\'));
       CHECK_FALSE(builder.property().uri().contains(".."));

@@ -21,7 +21,9 @@ namespace ao::rt::test
   {
     PlaybackUiFixture();
 
-    void makePlaybackReady();
+    AppRuntime& runtime() const noexcept;
+
+    void makePlaybackReady() const;
 
     TrackId addPlayableTrack(std::string_view title);
 
@@ -33,7 +35,7 @@ namespace ao::rt::test
     ao::test::TempDir tempDir;
     std::unique_ptr<QueuedExecutor> executorOwnerPtr;
     QueuedExecutor* executor = nullptr;
-    AppRuntime runtime;
+    std::unique_ptr<AppRuntime> runtimePtr;
     ViewId viewId{kInvalidViewId};
     PlaybackPositionRevision observedPositionRevision{};
   };

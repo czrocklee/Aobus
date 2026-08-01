@@ -113,6 +113,8 @@ Short terminals keep the dock to one row before reducing track-table height furt
 
 Unavailable actions post warning notifications rather than inventing terminal-only error state; the idempotent Idle Stop exception remains silent.
 Stale section/output rows are rejected and reported.
+Submitting a filter calls the typed runtime view boundary before replacing terminal rows.
+On Error, `LibraryController` preserves the draft, active source/view, rows, sections, and selection; `EventController` logs the failure and posts an Error notification instead of reloading.
 Command/overlay entry cancels an active seek preview by committing the current runtime elapsed value as the final stabilization point, then resets the gesture.
 
 Signal exit requests leave through the TUI's exit watcher and normal runtime teardown.

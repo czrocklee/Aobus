@@ -55,8 +55,9 @@ namespace ao::gtk::test
     std::unique_ptr<State> _statePtr;
   };
 
-  rt::AppRuntime makeRuntime(ao::test::TempDir const& tempDir,
-                             std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {});
+  std::unique_ptr<rt::AppRuntime> makeRuntime(
+    ao::test::TempDir const& tempDir,
+    std::move_only_function<void(library::MusicLibrary&)> initializeLibrary = {});
 
   bool waitForPlaybackSettlement(rt::AppRuntime& runtime,
                                  TrackId trackId,

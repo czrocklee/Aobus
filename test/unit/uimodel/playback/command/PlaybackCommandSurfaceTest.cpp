@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
+
 #include "test/unit/runtime/PlaybackUiTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/audio/Device.h>
@@ -9,7 +11,6 @@
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
-#include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -26,7 +27,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto const trackId = fixture.addPlayableTrack("Command Track");
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
 
     std::int32_t playSelectionCount = 0;
     auto commands = PlaybackCommandSurface{playback, [&playSelectionCount] { ++playSelectionCount; }};
@@ -70,9 +71,9 @@ namespace ao::uimodel::test
     SECTION("PlayPause resumes a restored sequence track")
     {
       REQUIRE(fixture.playFromView(trackId));
-      REQUIRE(fixture.runtime.savePlaybackSession());
+      REQUIRE(fixture.runtime().savePlaybackSession());
       playback.commands().stop();
-      auto const restored = fixture.runtime.restorePlaybackSession();
+      auto const restored = fixture.runtime().restorePlaybackSession();
 
       REQUIRE(restored);
       REQUIRE(restored->restored);
@@ -88,9 +89,9 @@ namespace ao::uimodel::test
     SECTION("PlayPause starts the selection for an idle track outside the sequence")
     {
       REQUIRE(fixture.playFromView(trackId));
-      REQUIRE(fixture.runtime.savePlaybackSession());
+      REQUIRE(fixture.runtime().savePlaybackSession());
       playback.commands().stop();
-      auto const restored = fixture.runtime.restorePlaybackSession();
+      auto const restored = fixture.runtime().restorePlaybackSession();
 
       REQUIRE(restored);
       REQUIRE(restored->restored);
@@ -127,7 +128,7 @@ namespace ao::uimodel::test
     fixture.makePlaybackReady();
     auto const firstTrack = fixture.addPlayableTrack("Sequence First");
     auto const secondTrack = fixture.addPlayableTrack("Sequence Second");
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     SECTION("Next and Previous enablement follows live sequence targets")
@@ -183,7 +184,7 @@ namespace ao::uimodel::test
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
     auto const trackId = fixture.addPlayableTrack("Capability Track");
-    auto commands = PlaybackCommandSurface{fixture.runtime.playback(), [] {}};
+    auto commands = PlaybackCommandSurface{fixture.runtime().playback(), [] {}};
 
     REQUIRE(fixture.playFromView(trackId));
 
@@ -197,7 +198,8 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     std::int32_t playSelectionCount = 0;
-    auto commands = PlaybackCommandSurface{fixture.runtime.playback(), [&playSelectionCount] { ++playSelectionCount; }};
+    auto commands =
+      PlaybackCommandSurface{fixture.runtime().playback(), [&playSelectionCount] { ++playSelectionCount; }};
 
     std::int32_t playCount = 0;
     auto sub = commands.onAvailabilityChanged(PlaybackCommand::Play, [&playCount] noexcept { ++playCount; });
@@ -221,7 +223,7 @@ namespace ao::uimodel::test
     fixture.makePlaybackReady();
     auto const firstTrack = fixture.addPlayableTrack("Event First");
     auto const secondTrack = fixture.addPlayableTrack("Event Second");
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     std::int32_t count = 0;

@@ -55,8 +55,8 @@ namespace ao::library
 
     DictionaryStore::Writer& dictionary();
     Result<> commit();
-    // Explicitly terminates an active transaction while retaining the wrapper
-    // that transaction-derived store objects borrow until their destruction.
+    // Explicitly terminates an active transaction. The destructor performs the
+    // same rollback when an operation unwinds without committing.
     void abort() noexcept;
 
   private:

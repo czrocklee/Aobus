@@ -1,34 +1,45 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/MusicLibrary.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
+#include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
+#include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -48,6 +59,55 @@ namespace ao::library::test
                                    .createdTime = std::chrono::sys_time{std::chrono::milliseconds{1}}};
       REQUIRE(metadataDatabase.writer(transaction).create(kMetadataHeaderRecordId, utility::bytes::view(header)));
       REQUIRE(transaction.commit());
+    }
+
+    void initializeLibrary(std::filesystem::path const& path)
+    {
+      auto const library = openTestMusicLibrary(path, path);
+      REQUIRE(library);
+    }
+
+    void createRawIntegerRow(std::filesystem::path const& path,
+                             std::string const& databaseName,
+                             std::uint32_t const id,
+                             std::span<std::byte const> const payload)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      auto database = openDatabase(transaction, databaseName);
+      REQUIRE(database.writer(transaction).create(id, payload));
+      REQUIRE(transaction.commit());
+    }
+
+    void createRawIntegerKeyRow(std::filesystem::path const& path,
+                                std::string const& databaseName,
+                                std::span<std::byte const> const key,
+                                std::span<std::byte const> const payload)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      auto database = openDatabase(transaction, databaseName);
+      REQUIRE(database.writer(transaction).create(key, payload));
+      REQUIRE(transaction.commit());
+    }
+
+    void createRawBlobRow(std::filesystem::path const& path,
+                          std::string const& databaseName,
+                          std::span<std::byte const> const key,
+                          std::span<std::byte const> const payload)
+    {
+      auto environment = openEnvironment(path, {.flags = MDB_NOTLS, .maxDatabases = 8});
+      auto transaction = beginWriteTransaction(environment);
+      auto database = openDatabase(transaction, databaseName, Database::KeyKind::Blob);
+      REQUIRE(database.writer(transaction).create(key, payload));
+      REQUIRE(transaction.commit());
+    }
+
+    void requireCorruptLibrary(std::filesystem::path const& path)
+    {
+      auto const result = openTestMusicLibrary(path, path);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::CorruptData);
     }
   } // namespace
 
@@ -70,6 +130,14 @@ namespace ao::library::test
     auto const& reopened = *reopenedResult;
     CHECK(reopened.metadataHeader().libraryId == firstHeader.libraryId);
     CHECK(reopened.metadataHeader().createdTime == firstHeader.createdTime);
+  }
+
+  TEST_CASE("MusicLibrary - rejects persisted data without metadata", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("orphaned"));
+
+    requireCorruptLibrary(temp.path());
   }
 
   TEST_CASE("MusicLibrary - reports unsupported library versions as CorruptData", "[library][unit][music-library]")
@@ -116,6 +184,97 @@ namespace ao::library::test
       auto const result = openTestMusicLibrary(temp.path(), temp.path());
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::CorruptData);
+    }
+  }
+
+  TEST_CASE("MusicLibrary - open reports a storage fault as a Result", "[library][regression][music-library]")
+  {
+    // open() is the sole public recoverable constructor. Storage mutations
+    // inside it raise TransactionFailure to leave the initialization
+    // transaction; that lexical unwind marker must never reach the caller.
+    auto const temp = ao::test::TempDir{};
+    constexpr std::size_t kUnusableMapSize = std::size_t{8} * 1024;
+
+    auto const result =
+      MusicLibrary::open(temp.path(), temp.path() / "tiny-db", MusicLibrary::Options{.mapSize = kUnusableMapSize});
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::IoError);
+  }
+
+  TEST_CASE("MusicLibrary - rejects invalid persisted dictionary state", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("dictionary ids must be dense from one")
+    {
+      createRawIntegerRow(temp.path(), "dictionary", 2, createStringData("gap"));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("dictionary keys must have the native 32-bit width")
+    {
+      auto const shortKey = std::array{std::byte{1}, std::byte{0}};
+      createRawIntegerKeyRow(temp.path(), "dictionary", shortKey, createStringData("short"));
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("dictionary text must be unique")
+    {
+      createRawIntegerRow(temp.path(), "dictionary", 1, createStringData("duplicate"));
+      createRawIntegerRow(temp.path(), "dictionary", 2, createStringData("duplicate"));
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - rejects invalid persisted Track state", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("Track keys must be nonzero")
+    {
+      createRawIntegerRow(temp.path(), "tracks_hot", 0, makeHotData());
+      createRawIntegerRow(temp.path(), "tracks_cold", 0, makeColdData());
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("Track payloads must be canonical")
+    {
+      auto const invalidHot = std::array{std::byte{0x42}};
+      createRawIntegerRow(temp.path(), "tracks_hot", 1, invalidHot);
+      createRawIntegerRow(temp.path(), "tracks_cold", 1, makeColdData());
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("Track dictionary references must resolve")
+    {
+      createRawIntegerRow(temp.path(), "tracks_hot", 1, makeHotData(TrackHotHeader{.artistId = DictionaryId{1}}));
+      createRawIntegerRow(temp.path(), "tracks_cold", 1, makeColdData());
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
+  TEST_CASE("MusicLibrary - rejects invalid persisted manifest state", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("manifest keys must be canonical library URIs")
+    {
+      auto const invalidKey = utility::bytes::view(std::string_view{"../x"});
+      auto const validPayload = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
+      createRawBlobRow(temp.path(), "file_manifest", invalidKey, validPayload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("manifest payloads must have the exact canonical layout")
+    {
+      auto const validKey = utility::bytes::view(std::string_view{"song"});
+      auto const invalidPayload = std::array{std::byte{0x42}};
+      createRawBlobRow(temp.path(), "file_manifest", validKey, invalidPayload);
+      requireCorruptLibrary(temp.path());
     }
   }
 
@@ -249,6 +408,36 @@ namespace ao::library::test
       CHECK(commitResult.error().code == Error::Code::IoError);
       REQUIRE(WritableMusicLibrary::acquire(secondLibrary));
     }
+
+    SECTION("storage mutation failure unwinds and rolls back")
+    {
+      constexpr std::size_t kMapSize = std::size_t{256} * 1024;
+      auto smallLibrary = ao::test::requireValue(
+        MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
+      auto secondSmallLibrary = ao::test::requireValue(
+        MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
+      auto optFailure = std::optional<Error>{};
+      {
+        auto writerResult = WritableMusicLibrary::acquire(smallLibrary);
+        REQUIRE(writerResult);
+
+        try
+        {
+          auto transaction = writerResult->writeTransaction();
+          auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
+          std::ignore = smallLibrary.resources().writer(transaction).create(oversizedValue);
+          FAIL("an oversized resource write should fail the transaction");
+        }
+        catch (lmdb::TransactionFailure const& transactionFailure)
+        {
+          optFailure = transactionFailure.error();
+        }
+      }
+
+      REQUIRE(optFailure);
+      CHECK(optFailure->code == Error::Code::IoError);
+      REQUIRE(WritableMusicLibrary::acquire(secondSmallLibrary));
+    }
   }
 
   TEST_CASE("MusicLibrary - moved-from write transactions are inactive", "[library][unit][music-library]")
@@ -296,8 +485,8 @@ namespace ao::library::test
   TEST_CASE("MusicLibrary - rejects transactions from another library", "[library][unit][music-library]")
   {
     auto const temp = ao::test::TempDir{};
-    auto libraryA = MusicLibrary{temp.path() / "music-a", temp.path() / "db-a"};
-    auto libraryB = MusicLibrary{temp.path() / "music-b", temp.path() / "db-b"};
+    auto libraryA = makeTestMusicLibrary(temp.path() / "music-a", temp.path() / "db-a");
+    auto libraryB = makeTestMusicLibrary(temp.path() / "music-b", temp.path() / "db-b");
     auto const libraryBHeader = libraryB.metadataHeader();
 
     {

@@ -43,7 +43,7 @@ namespace ao::uimodel::test
       auto readTransaction = musicLibrary.readTransaction();
       auto const revision = musicLibrary.libraryRevision(readTransaction);
       changesPtr = std::make_unique<rt::LibraryChanges>(executor, revision);
-      libraryPtr = std::make_unique<rt::Library>(asyncRuntime, musicLibrary, *changesPtr);
+      libraryPtr = ao::test::requireValue(rt::Library::create(asyncRuntime, musicLibrary, *changesPtr));
     }
 
     ~Impl()

@@ -33,7 +33,6 @@ namespace ao::gtk
       {
         case uimodel::ActivityStatusKind::Idle: return "ao-activity-status-idle";
         case uimodel::ActivityStatusKind::Processing: return "ao-activity-status-processing";
-        case uimodel::ActivityStatusKind::Success: return "ao-activity-status-success";
         case uimodel::ActivityStatusKind::Info: return "ao-activity-status-info";
         case uimodel::ActivityStatusKind::Warning: return "ao-activity-status-warning";
         case uimodel::ActivityStatusKind::Error: return "ao-activity-status-error";
@@ -314,7 +313,6 @@ namespace ao::gtk
   {
     constexpr auto kKinds = std::array{uimodel::ActivityStatusKind::Idle,
                                        uimodel::ActivityStatusKind::Processing,
-                                       uimodel::ActivityStatusKind::Success,
                                        uimodel::ActivityStatusKind::Info,
                                        uimodel::ActivityStatusKind::Warning,
                                        uimodel::ActivityStatusKind::Error};

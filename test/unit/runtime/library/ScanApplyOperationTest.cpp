@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <runtime/library/ScanApplyOperation.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
+#include "test/unit/library/TrackStoreTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/OperationCancelled.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListBuilder.h>
@@ -17,10 +22,10 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/lmdb/Environment.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
-#include <runtime/library/ScanApplyOperation.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -32,6 +37,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <stop_token>
 #include <string_view>
@@ -172,6 +178,119 @@ namespace ao::rt::test
     CHECK(manifestResult->mtime() == fileMtime(targetFile));
     CHECK(manifestResult->audioPayloadLength() == 0);
     CHECK(manifestResult->audioSignature() == utility::Hash128{});
+  }
+
+  TEST_CASE("ScanApplyOperation - exhausted Track ids abort later scan work", "[runtime][regression][scan][atomicity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    auto const databasePath = std::filesystem::path{temp.path()} / "db";
+    std::filesystem::create_directories(musicRoot);
+
+    // Establish the schema, then seed the largest valid Track id through the
+    // raw storage test boundary so the next append deterministically exhausts
+    // the integer key space.
+    {
+      std::ignore = library::test::makeTestMusicLibrary(musicRoot, databasePath);
+    }
+    {
+      auto environment = lmdb::test::openEnvironment(
+        databasePath,
+        {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
+      auto transaction = lmdb::test::beginWriteTransaction(environment);
+      auto hotDatabase = lmdb::test::openDatabase(transaction, "tracks_hot");
+      auto coldDatabase = lmdb::test::openDatabase(transaction, "tracks_cold");
+      constexpr auto kLastTrackId = std::numeric_limits<std::uint32_t>::max();
+      REQUIRE(hotDatabase.writer(transaction).create(kLastTrackId, library::test::makeHotData({}, "Last Track")));
+      REQUIRE(coldDatabase.writer(transaction).create(kLastTrackId, library::test::makeColdData({}, "missing.flac")));
+      REQUIRE(transaction.commit());
+    }
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, databasePath);
+    constexpr auto kLastTrackId = std::numeric_limits<std::uint32_t>::max();
+    {
+      auto transaction = library::test::writeTransaction(ml);
+      auto manifest = library::FileManifestBuilder::makeEmpty();
+      manifest.trackId(TrackId{kLastTrackId}).status(library::FileStatus::Available).fileSize(1).mtime(1);
+      REQUIRE(ml.manifest().writer(transaction).put("missing.flac", manifest.serialize()));
+      REQUIRE(transaction.commit());
+    }
+
+    std::filesystem::copy_file(audio::test::requireAudioFixture("basic_metadata.flac"), musicRoot / "new.flac");
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.count(ScanClassification::New) == 1);
+    REQUIRE(plan.count(ScanClassification::Missing) == 1);
+    auto const revisionBefore = ml.libraryRevision(ml.readTransaction());
+
+    auto counts = FailureCounts{};
+    auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, counts.callback()};
+    auto result = operation.run();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::ResourceExhausted);
+    CHECK(counts.failed == 0);
+
+    auto transaction = ml.readTransaction();
+    CHECK(ml.libraryRevision(transaction) == revisionBefore);
+    CHECK_FALSE(ml.dictionary().findId("Test Artist"));
+    REQUIRE(ml.tracks().reader(transaction).get(TrackId{kLastTrackId}));
+    auto missingManifest = ml.manifest().reader(transaction).get("missing.flac");
+    REQUIRE(missingManifest);
+    CHECK(missingManifest->status() == library::FileStatus::Available);
+    auto newManifest = ml.manifest().reader(transaction).get("new.flac");
+    REQUIRE_FALSE(newManifest);
+    CHECK(newManifest.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("ScanApplyOperation - missing persisted Track evidence aborts every planned item",
+            "[runtime][regression][scan][atomicity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto const musicRoot = std::filesystem::path{temp.path()} / "music";
+    std::filesystem::create_directories(musicRoot);
+
+    auto const sourceFile = audio::test::requireAudioFixture("basic_metadata.flac");
+    auto const existingFile = musicRoot / "existing.flac";
+    auto const newFile = musicRoot / "later-new.flac";
+    std::filesystem::copy_file(sourceFile, existingFile);
+
+    auto ml = library::test::makeTestMusicLibrary(musicRoot, std::filesystem::path{temp.path()} / "db");
+    auto initialPlan = LibraryScan{ml}.buildPlan().value();
+    auto initialOperation = ScanApplyOperation{ml, std::move(initialPlan), nullptr, nullptr};
+    auto initialResult = initialOperation.run();
+    REQUIRE(initialResult);
+    REQUIRE(initialResult->insertedIds.size() == 1);
+    auto const existingTrackId = initialResult->insertedIds.front();
+
+    {
+      auto writableResult = library::WritableMusicLibrary::acquire(ml);
+      REQUIRE(writableResult);
+      auto transaction = writableResult->writeTransaction();
+      REQUIRE(ml.tracks().writer(transaction).remove(existingTrackId));
+      REQUIRE(transaction.commit());
+    }
+
+    std::filesystem::last_write_time(
+      existingFile, std::filesystem::last_write_time(existingFile) + std::chrono::seconds{10});
+    std::filesystem::copy_file(sourceFile, newFile);
+
+    auto plan = LibraryScan{ml}.buildPlan().value();
+    REQUIRE(plan.count(ScanClassification::Changed) == 1);
+    REQUIRE(plan.count(ScanClassification::New) == 1);
+    auto const revisionBefore = ml.libraryRevision(ml.readTransaction());
+    auto operation = ScanApplyOperation{ml, std::move(plan), nullptr, nullptr};
+    auto result = operation.run();
+
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
+
+    auto transaction = ml.readTransaction();
+    CHECK(ml.libraryRevision(transaction) == revisionBefore);
+    CHECK_FALSE(ml.tracks().reader(transaction).get(existingTrackId));
+    CHECK(ml.manifest().reader(transaction).get("existing.flac"));
+    auto newManifest = ml.manifest().reader(transaction).get("later-new.flac");
+    REQUIRE_FALSE(newManifest);
+    CHECK(newManifest.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("ScanApplyOperation - apply requires prepared-file revalidation", "[runtime][unit][library][scan]")
@@ -660,7 +779,7 @@ namespace ao::rt::test
       listBuilder.name("Ordered").orderTrackIds().add(originalTrackId);
       auto createResult = ml.lists().writer(transaction).create(ao::test::requireValue(listBuilder.serialize()));
       REQUIRE(createResult);
-      orderedListId = createResult->first;
+      orderedListId = *createResult;
       REQUIRE(transaction.commit());
     }
 

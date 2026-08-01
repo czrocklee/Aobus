@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/rt/library/LibraryYamlImporter.h>
 
@@ -23,6 +23,7 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
 #include <ao/library/WritableMusicLibrary.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/TrackField.h>
@@ -805,20 +806,27 @@ namespace ao::rt
       return std::unexpected{writableResult.error()};
     }
 
-    auto transaction = writableResult->writeTransaction();
-    auto reportResult = operation.apply(*preparedResult, transaction);
-
-    if (!reportResult)
+    try
     {
+      auto transaction = writableResult->writeTransaction();
+      auto reportResult = operation.apply(*preparedResult, transaction);
+
+      if (!reportResult)
+      {
+        return reportResult;
+      }
+
+      if (auto commitResult = transaction.commit(); !commitResult)
+      {
+        return std::unexpected{commitResult.error()};
+      }
+
       return reportResult;
     }
-
-    if (auto commitResult = transaction.commit(); !commitResult)
+    catch (lmdb::TransactionFailure const& failure)
     {
-      return std::unexpected{commitResult.error()};
+      return std::unexpected{failure.error()};
     }
-
-    return reportResult;
   }
 
   Result<ImportReport> LibraryYamlImporter::previewImportFromYamlOffline(std::filesystem::path const& path,
@@ -839,8 +847,15 @@ namespace ao::rt
       return std::unexpected{writableResult.error()};
     }
 
-    auto transaction = writableResult->writeTransaction();
-    return operation.preview(*preparedResult, transaction);
+    try
+    {
+      auto transaction = writableResult->writeTransaction();
+      return operation.preview(*preparedResult, transaction);
+    }
+    catch (lmdb::TransactionFailure const& failure)
+    {
+      return std::unexpected{failure.error()};
+    }
   }
 
   Result<LibraryYamlImportOperation::PreparedImport>
@@ -1765,8 +1780,7 @@ namespace ao::rt
       return std::unexpected{createResult.error()};
     }
 
-    auto const [newTrackId, view] = *createResult;
-    return newTrackId;
+    return *createResult;
   }
 
   Result<> LibraryYamlImporter::Impl::loadTrackBaseline(std::string_view uriStr,
@@ -1780,7 +1794,7 @@ namespace ao::rt
     {
       if (auto optView = trackReader.get(*optExistingTrackId, library::TrackStore::Reader::LoadMode::Both); optView)
       {
-        optBuilder = library::TrackBuilder::fromView(*optView, ml.dictionary());
+        optBuilder = library::TrackBuilder::fromCompleteView(*optView, ml.dictionary());
       }
     }
 
@@ -2152,8 +2166,7 @@ namespace ao::rt
         return std::unexpected{createResult.error()};
       }
 
-      auto const [newListId, view] = *createResult;
-      yamlListIdToNewListId[importedList.yamlId] = newListId;
+      yamlListIdToNewListId[importedList.yamlId] = *createResult;
       ++report.listsCreated;
     }
 

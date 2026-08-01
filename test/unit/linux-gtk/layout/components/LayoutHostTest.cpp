@@ -51,7 +51,7 @@ namespace ao::gtk::layout::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.layout_test");
 
     auto const tempDir = ao::test::TempDir{};
-    rt::AppRuntime runtime = makeRuntime(tempDir);
+    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     registerContainerComponents(registry);
@@ -63,7 +63,7 @@ namespace ao::gtk::layout::test
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = runtime,
+                                  .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
                                   .buildState = LayoutBuildStateView{runtimeState},
@@ -179,13 +179,13 @@ namespace ao::gtk::layout::test
 
       auto window2 = Gtk::Window{};
       auto const tempDir2 = ao::test::TempDir{};
-      rt::AppRuntime runtime2 = makeRuntime(tempDir2);
+      std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
       auto const actionRegistry2 = ActionRegistry{};
       auto runtimeState2 = LayoutRuntimeState{};
       auto dependencies2 = GtkUiDependencies{};
       auto ctx2 = LayoutBuildContext{.registry = registry2,
                                      .actionRegistry = actionRegistry2,
-                                     .runtime = runtime2,
+                                     .runtime = *runtime2Ptr,
                                      .parentWindow = window2,
                                      .runtimeState = runtimeState2,
                                      .buildState = LayoutBuildStateView{runtimeState2},

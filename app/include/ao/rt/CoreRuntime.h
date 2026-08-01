@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/Error.h>
 #include <ao/async/AsyncExceptionHandler.h>
 
 #include <cstddef>
@@ -35,13 +36,17 @@ namespace ao::rt
   class CoreRuntime
   {
   public:
-    CoreRuntime(std::unique_ptr<async::Executor> executorPtr,
-                std::filesystem::path musicRoot,
-                std::filesystem::path databasePath,
-                std::size_t musicLibraryMapSize = 0,
-                async::Sleeper* sleeper = nullptr,
-                async::AsyncExceptionHandler asyncExceptionHandler = {});
+    static Result<std::unique_ptr<CoreRuntime>> create(std::unique_ptr<async::Executor> executorPtr,
+                                                       std::filesystem::path musicRoot,
+                                                       std::filesystem::path databasePath,
+                                                       std::size_t musicLibraryMapSize = 0,
+                                                       async::Sleeper* sleeper = nullptr,
+                                                       async::AsyncExceptionHandler asyncExceptionHandler = {});
     virtual ~CoreRuntime();
+
+    // Composition-root teardown must not run from a synchronous runtime
+    // observer. Defer shutdown to a later callback-executor turn instead.
+    virtual void shutdown() noexcept;
 
     CoreRuntime(CoreRuntime const&) = delete;
     CoreRuntime& operator=(CoreRuntime const&) = delete;
@@ -60,6 +65,16 @@ namespace ao::rt
     NotificationService& notifications() noexcept;
 
     async::Runtime& async() noexcept;
+
+  protected:
+    CoreRuntime();
+
+    Result<> initialize(std::unique_ptr<async::Executor> executorPtr,
+                        std::filesystem::path musicRoot,
+                        std::filesystem::path databasePath,
+                        std::size_t musicLibraryMapSize,
+                        async::Sleeper* sleeper,
+                        async::AsyncExceptionHandler asyncExceptionHandler);
 
   private:
     struct Impl;

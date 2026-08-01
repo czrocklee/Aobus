@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/ListStore.h>
+
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
-#include <ao/library/ListStore.h>
 #include <ao/library/ListView.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
@@ -134,13 +135,11 @@ namespace ao::library
   {
   }
 
-  Result<std::pair<ListId, ListView>> ListStore::Writer::create(std::span<std::byte const> data)
+  Result<ListId> ListStore::Writer::create(std::span<std::byte const> data)
   {
-    auto viewResult = validateListPayload(data, "create");
-
-    if (!viewResult)
+    if (auto validation = validateListPayload(data, "create"); !validation)
     {
-      return std::unexpected{viewResult.error()};
+      return std::unexpected{validation.error()};
     }
 
     auto idResult = _writer.append(data);
@@ -150,8 +149,7 @@ namespace ao::library
       return std::unexpected{idResult.error()};
     }
 
-    auto id = *idResult;
-    return std::pair{ListId{id}, *viewResult};
+    return ListId{*idResult};
   }
 
   Result<> ListStore::Writer::update(ListId id, std::span<std::byte const> data)

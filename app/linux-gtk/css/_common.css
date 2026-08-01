@@ -23,10 +23,6 @@
   font-size: var(--ao-font-size-sm);
 }
 
-.ao-activity-status-success {
-  color: var(--ao-quality-positive);
-}
-
 .ao-activity-status-info {
   color: @theme_text_color;
 }

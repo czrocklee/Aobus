@@ -13,6 +13,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -80,6 +81,8 @@ namespace ao::rt
       MaintenanceGuard(MaintenanceGuard&& other) noexcept;
       MaintenanceGuard& operator=(MaintenanceGuard&&) = delete;
 
+      void finish() noexcept;
+
     private:
       struct LifetimeState;
 
@@ -117,6 +120,8 @@ namespace ao::rt
     // Availability is a notification: it reports a state the coordinator has
     // already reached, so handlers are noexcept. Publication faults come from
     // revision admission or executor task admission, not from observers.
+    // Handlers must defer owner destruction or runtime shutdown to a later
+    // callback-executor turn instead of tearing down the active emitter.
     async::Subscription onAvailabilityChanged(
       std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
@@ -131,12 +136,55 @@ namespace ao::rt
     Result<Mutation> beginMaintenanceMutation(MaintenanceGuard const& guard);
 
   private:
+    // Submission return and publication completion rendezvous in either order;
+    // writer admission reopens only after both have completed.
+    class PublicationBarrier final
+    {
+    public:
+      constexpr void beginSubmission(bool const fromOwner) noexcept
+      {
+        _publicationInProgress = true;
+        _submissionInProgress = true;
+        _submissionFromOwner = fromOwner;
+      }
+
+      constexpr void completeSubmission() noexcept
+      {
+        _submissionInProgress = false;
+        _submissionFromOwner = false;
+      }
+
+      constexpr void completePublication() noexcept { _publicationInProgress = false; }
+      constexpr void retire() noexcept { _publicationInProgress = false; }
+
+      constexpr bool blocksWriter() const noexcept { return _publicationInProgress || _submissionInProgress; }
+
+      constexpr bool publicationInProgress() const noexcept { return _publicationInProgress; }
+      constexpr bool submissionInProgress() const noexcept { return _submissionInProgress; }
+      constexpr bool ownerSubmissionInProgress() const noexcept
+      {
+        return _submissionInProgress && _submissionFromOwner;
+      }
+
+    private:
+      bool _publicationInProgress = false;
+      bool _submissionInProgress = false;
+      bool _submissionFromOwner = false;
+    };
+
+    void beginClosing() noexcept;
     Result<std::unique_lock<std::mutex>> acquireWriter(LibraryAuthoringState requiredState, std::string_view operation);
     Result<CommitInfo> commit(Mutation& mutation, LibraryChangeSet changeSet);
+    void dispatchMaintenanceFinish(std::uint64_t generation) noexcept;
+    void handleFinalizationAdmissionFailure(std::exception_ptr exceptionPtr) noexcept;
     void finishMaintenance(std::uint64_t generation) noexcept;
-    void finishPublication(std::uint64_t revision, bool failed) noexcept;
-    void dispatchAvailability(LibraryAuthoringAvailability expected);
+    void finishPublication(std::uint64_t revision) noexcept;
+    bool beginAvailabilityNotification(LibraryAuthoringAvailability const& expected) noexcept;
+    void completeAvailabilityNotification() noexcept;
     void emitAvailability(LibraryAuthoringAvailability const& expected) noexcept;
+    void emitAvailability(LibraryAuthoringAvailability const& expected,
+                          std::unique_lock<std::mutex>& writerLock) noexcept;
+    bool writerAdmissionBlockedLocked() const noexcept;
     LibraryAuthoringAvailability availabilityLocked() const noexcept;
 
     async::Executor& _callbackExecutor;
@@ -148,13 +196,18 @@ namespace ao::rt
 
     mutable std::mutex _stateMutex;
     std::mutex _writerMutex;
-    std::condition_variable _publicationCompleted;
+    std::condition_variable _writerAdmissionChanged;
     LibraryAuthoringState _state = LibraryAuthoringState::Available;
     std::uint64_t _lastCommittedRevision = 0;
     std::uint64_t _availableRevision = 0;
     std::uint64_t _maintenanceGeneration = 0;
     LibraryMaintenanceKind _maintenanceKind = LibraryMaintenanceKind::None;
-    bool _publicationInProgress = false;
+    PublicationBarrier _publicationBarrier;
+    bool _availabilityNotificationInProgress = false;
+    bool _closing = false;
     mutable async::Signal<LibraryAuthoringAvailability const&> _availabilityChanged;
+
+    friend class Library;
+    friend class LibraryTaskService;
   };
 } // namespace ao::rt

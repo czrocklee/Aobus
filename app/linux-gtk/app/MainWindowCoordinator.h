@@ -80,7 +80,6 @@ namespace ao::gtk
     bool _restoringLayoutState = false;
 
     async::Subscription _tracksMutatedSubscription;
-    async::Subscription _libraryTaskCompletedSubscription;
     async::Subscription _listsMutatedSubscription;
     async::Subscription _trackPresentationChangedSubscription;
     async::Subscription _trackColumnLayoutChangedSubscription;

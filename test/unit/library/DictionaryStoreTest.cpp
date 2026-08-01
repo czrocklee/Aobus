@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/library/DictionaryStore.h>
+
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MusicLibrary.h>
@@ -36,7 +38,7 @@ namespace ao::library::test
   {
     MusicLibrary openTestLibrary(ao::test::TempDir const& temp)
     {
-      return MusicLibrary{temp.path(), temp.path() / "db"};
+      return makeTestMusicLibrary(temp.path(), temp.path() / "db");
     }
 
     DictionaryId requireIntern(WriteTransaction& transaction, std::string_view value)
@@ -169,13 +171,13 @@ namespace ao::library::test
     auto id = kInvalidDictionaryId;
 
     {
-      auto library = MusicLibrary{temp.path(), databasePath};
+      auto library = makeTestMusicLibrary(temp.path(), databasePath);
       auto transaction = writeTransaction(library);
       id = requireIntern(transaction, "persistent");
       REQUIRE(transaction.commit());
     }
 
-    auto reopened = MusicLibrary{temp.path(), databasePath};
+    auto reopened = makeTestMusicLibrary(temp.path(), databasePath);
     CHECK(reopened.dictionary().get(id) == "persistent");
     CHECK(reopened.dictionary().lookupId("persistent") == id);
   }

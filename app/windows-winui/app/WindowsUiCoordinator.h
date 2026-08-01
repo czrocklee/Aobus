@@ -17,10 +17,8 @@ namespace ao::winui
   struct WindowsUiCoordinatorCallbacks final
   {
     std::function<void()> onTrackListChanged;
-    std::function<void()> onLibraryChanging;
-    std::function<void()> onLibraryChanged;
-    std::function<void()> onPlaybackChanging;
-    std::function<void()> onPlaybackChanged;
+    std::move_only_function<void() noexcept> onRuntimeChanging;
+    std::move_only_function<void() noexcept> onRuntimeChanged;
     std::function<void(std::string)> onStatus;
     std::function<void(Error const&)> onFailure;
   };

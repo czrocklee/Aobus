@@ -598,9 +598,7 @@ namespace ao::gtk::layout::test
       auto const firstPaintablePtr = coverArt->imagePaintable();
       REQUIRE(firstPaintablePtr);
 
-      std::int32_t importCount = 0;
       auto callbacks = portal::ImportExportCallbacks{
-        .onLibraryDataMutated = [&importCount] { ++importCount; },
         .requestLibraryRestoreConfirmation = [](rt::ImportReport const&, std::function<void(bool)> completion)
         { completion(true); },
       };
@@ -609,7 +607,12 @@ namespace ao::gtk::layout::test
       auto const secondCover = encodedPng(ao::gtk::test::makePixbuf(96, 96));
       writeCoverImport(importPath, secondCover);
       workflow.importFrom(importPath);
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&importCount] { return importCount == 1; }));
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil(
+        [&]
+        {
+          auto const currentPaintablePtr = coverArt->imagePaintable();
+          return currentPaintablePtr && currentPaintablePtr != firstPaintablePtr;
+        }));
 
       REQUIRE(button->get_visible());
       auto const secondPaintablePtr = coverArt->imagePaintable();
@@ -618,7 +621,7 @@ namespace ao::gtk::layout::test
 
       writeCoverImport(importPath, std::nullopt);
       workflow.importFrom(importPath);
-      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&importCount] { return importCount == 2; }));
+      REQUIRE(ao::gtk::test::pumpGtkEventsUntil([&] { return coverArt->showingPlaceholder(); }));
 
       CHECK(button->get_visible());
       CHECK(coverArt->showingPlaceholder());

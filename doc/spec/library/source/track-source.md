@@ -47,6 +47,8 @@ Its public boundary is `app/include/ao/rt/source/`, its implementation is `app/r
 
 The all-tracks source contains every stored track id in its canonical source order.
 It consumes committed track insertions, deletions, and metadata updates and publishes one sequential batch per changeset.
+Runtime factories construct it only after `MusicLibrary::open()` has validated every persisted Track pair and required dictionary reference.
+They complete one initial full reload before exposing `CoreRuntime` or `AppRuntime`, so consumers never observe an empty or partial bootstrap followed by repair.
 
 ### Saved Lists
 

@@ -3,6 +3,7 @@
 
 #include "runtime/library/MediaTrack.h"
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/PictureType.h>
@@ -248,10 +249,12 @@ namespace ao::media::file::test
 
     auto loaded = loadTrack(path);
     auto& builder = loaded.builder();
+    auto const libraryUri = path.filename().generic_string();
+    builder.property().uri(libraryUri);
 
     // Create temp LMDB environment to test cover art serialization
     auto const tempDir = ao::test::TempDir{};
-    auto musicLibrary = library::MusicLibrary{tempDir.path(), tempDir.path() / "db"};
+    auto musicLibrary = library::test::makeTestMusicLibrary(tempDir.path(), tempDir.path() / "db");
     auto transaction = library::test::writeTransaction(musicLibrary);
     auto serializeResult = builder.serialize(transaction, musicLibrary.resources());
     REQUIRE(serializeResult);

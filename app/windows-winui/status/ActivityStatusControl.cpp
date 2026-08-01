@@ -59,7 +59,6 @@ namespace ao::winui
     constexpr double kNotificationColumnSpacing = 8.0;
     constexpr double kNotificationIconSize = 12.0;
     constexpr double kNotificationIconTopMargin = 4.0;
-    constexpr std::wstring_view kSuccessGlyph = L"\uE73E";
     constexpr std::wstring_view kInfoGlyph = L"\uE946";
     constexpr std::wstring_view kWarningGlyph = L"\uE7BA";
     constexpr std::wstring_view kErrorGlyph = L"\uEA39";
@@ -87,7 +86,6 @@ namespace ao::winui
     {
       switch (kind)
       {
-        case uimodel::ActivityStatusKind::Success: return kSuccessGlyph;
         case uimodel::ActivityStatusKind::Info: return kInfoGlyph;
         case uimodel::ActivityStatusKind::Warning: return kWarningGlyph;
         case uimodel::ActivityStatusKind::Error: return kErrorGlyph;

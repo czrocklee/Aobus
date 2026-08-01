@@ -37,27 +37,20 @@ namespace ao::uimodel::test
       CHECK(!compact.optAutoDismissTimeout);
     }
 
-    SECTION("library completion is a transient success")
+    SECTION("progress finish clears the task without synthesizing an outcome")
     {
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryTaskProgressKind::Updating, "track.flac", 0.8));
-      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(17), feed({}));
+      feedProjection.handleLibraryProgressFinished(feed({}));
 
       auto const& compact = feedProjection.viewState().compact;
-      CHECK(compact.kind == ActivityStatusKind::Success);
-      CHECK(compact.text == "Scan complete: 17 tracks added");
-      CHECK(compact.optAutoDismissTimeout == kActivityStatusDefaultAutoDismissTimeout);
+      CHECK(compact.kind == ActivityStatusKind::Idle);
+      CHECK(compact.text.empty());
+      CHECK_FALSE(compact.optAutoDismissTimeout);
+      CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
     }
 
-    SECTION("single-track library completion uses singular count text")
-    {
-      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(1), feed({}));
-
-      CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Success);
-      CHECK(feedProjection.viewState().compact.text == "Scan complete: 1 track added");
-    }
-
-    SECTION("notification during task is deferred and errors beat completion")
+    SECTION("notification during task is deferred and errors appear when progress finishes")
     {
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
@@ -68,7 +61,7 @@ namespace ao::uimodel::test
       feedProjection.handleFeedUpdated(postedUpdate(currentFeed, rt::NotificationId{4}));
       CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Processing);
 
-      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), currentFeed);
+      feedProjection.handleLibraryProgressFinished(currentFeed);
 
       auto const& compact = feedProjection.viewState().compact;
       CHECK(compact.kind == ActivityStatusKind::Error);
@@ -76,7 +69,7 @@ namespace ao::uimodel::test
       CHECK(!compact.optAutoDismissTimeout);
     }
 
-    SECTION("deferred persistent notification is ignored when removed before task completion")
+    SECTION("deferred persistent notification is ignored when removed before progress finishes")
     {
       feedProjection.handleLibraryTaskProgress(
         libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
@@ -85,29 +78,23 @@ namespace ao::uimodel::test
         rt::NotificationId{15}, rt::NotificationSeverity::Error, "Import failed", rt::NotificationLifetime::pinned());
       feedProjection.handleFeedUpdated(postedUpdate(feed({error}), rt::NotificationId{15}));
 
-      feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(9), feed({}));
+      feedProjection.handleLibraryProgressFinished(feed({}));
 
-      CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Success);
-      CHECK(feedProjection.viewState().compact.text == "Scan complete: 9 tracks added");
+      CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
       CHECK(feedProjection.viewState().detail.items.empty());
     }
 
-    SECTION("cancelled and failed tasks clear progress without projecting success")
+    SECTION("finished pulse carries no terminal status")
     {
-      for (auto const status : {rt::LibraryTaskCompletionStatus::CompletedWithIssues,
-                                rt::LibraryTaskCompletionStatus::Cancelled,
-                                rt::LibraryTaskCompletionStatus::Failed})
-      {
-        feedProjection.handleLibraryTaskProgress(
-          libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
-        feedProjection.handleLibraryTaskCompleted(libraryTaskCompletion(0, status), feed({}));
+      feedProjection.handleLibraryTaskProgress(
+        libraryTaskProgress(rt::LibraryTaskProgressKind::Scanning, "album.flac", 0.4));
+      feedProjection.handleLibraryProgressFinished(feed({}));
 
-        CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
-        CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
-      }
+      CHECK(feedProjection.viewState().compact.kind == ActivityStatusKind::Idle);
+      CHECK_FALSE(feedProjection.viewState().detail.optLibraryTask);
     }
 
-    SECTION("success and info do not override persistent warnings")
+    SECTION("info does not override persistent warnings")
     {
       auto warningFeed = feed({entry(rt::NotificationId{2}, rt::NotificationSeverity::Warning, "Partial import")});
       feedProjection.handleFeedUpdated(postedUpdate(warningFeed, rt::NotificationId{2}));

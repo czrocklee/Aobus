@@ -9,7 +9,6 @@
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
-#include <cstddef>
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,7 +21,7 @@ namespace ao::uimodel
     void initialize(rt::NotificationFeedState const& feed);
     void handleFeedUpdated(rt::NotificationFeedUpdate const& update);
     void handleLibraryTaskProgress(rt::LibraryTaskProgressUpdated const& event);
-    void handleLibraryTaskCompleted(rt::LibraryTaskCompleted const& event, rt::NotificationFeedState const& feed);
+    void handleLibraryProgressFinished(rt::NotificationFeedState const& feed);
     void dismissCompact(rt::NotificationFeedState const& feed);
     void hideDetailNotification(rt::NotificationId id, rt::NotificationFeedState const& feed);
     void autoDismissCompact(rt::NotificationFeedState const& feed);
@@ -43,7 +42,6 @@ namespace ao::uimodel
     void projectDetail(rt::NotificationFeedState const& feed);
     void projectPersistentCompact(rt::NotificationFeedState const& feed);
     void projectNotificationCompact(rt::NotificationEntry const& entry);
-    void projectCompletionCompact(std::size_t count);
     void setCompact(ActivityCompactState compact, std::vector<rt::NotificationId> sourceIds = {});
     bool hasPresentedCompactSource(std::vector<rt::NotificationId> const& sourceIds,
                                    rt::NotificationFeedState const& feed) const;

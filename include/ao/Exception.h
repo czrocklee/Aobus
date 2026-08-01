@@ -9,6 +9,7 @@
 #include <source_location>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace ao
 {
@@ -39,5 +40,13 @@ namespace ao
   [[noreturn]] void throwException(std::string_view what, std::source_location loc = std::source_location::current())
   {
     throw ExceptionType{std::string{what}, loc};
+  }
+
+  template<typename ExceptionType, typename Argument>
+    requires std::derived_from<ExceptionType, std::exception> && std::constructible_from<ExceptionType, Argument&&> &&
+             (!std::convertible_to<Argument &&, std::string_view>)
+  [[noreturn]] void throwException(Argument&& argument)
+  {
+    throw ExceptionType{std::forward<Argument>(argument)};
   }
 } // namespace ao

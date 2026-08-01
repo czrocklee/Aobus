@@ -43,6 +43,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace winrt::Aobus::implementation
 {
@@ -158,138 +159,97 @@ namespace winrt::Aobus::implementation
     });
 
     auto weak = get_weak();
+    auto views = ao::winui::WindowsUiViewDependencies{
+      .quickFilterInput = ModernFilter(),
+      .inspectorCoverImage = InspectorCoverImage(),
+      .inspectorCoverPlaceholder = InspectorCoverPlaceholder(),
+      .trackDetail =
+        {
+          .fieldScroll = InspectorFieldScroll(),
+          .detailContent = InspectorDetailContent(),
+          .metadataHeaderButton = InspectorMetadataHeaderButton(),
+          .metadataHeader = InspectorMetadataHeader(),
+          .metadataChevron = InspectorMetadataChevron(),
+          .metadataRows = InspectorMetadataRows(),
+          .showEmptyButton = InspectorShowEmpty(),
+          .technicalHeaderButton = InspectorTechnicalHeaderButton(),
+          .technicalHeader = InspectorTechnicalHeader(),
+          .technicalChevron = InspectorTechnicalChevron(),
+          .technicalRows = InspectorTechnicalRows(),
+          .classicFieldScroll = ClassicDetailScroll(),
+          .classicDetailContent = ClassicDetailContent(),
+          .classicMetadataSection = ClassicMetadataSection(),
+          .classicMetadataHeaderButton = ClassicMetadataHeaderButton(),
+          .classicMetadataHeader = ClassicMetadataHeader(),
+          .classicMetadataChevron = ClassicMetadataChevron(),
+          .classicMetadataRows = ClassicMetadataRows(),
+          .classicShowEmptyButton = ClassicShowEmpty(),
+          .classicTechnicalSection = ClassicTechnicalSection(),
+          .classicTechnicalHeaderButton = ClassicTechnicalHeaderButton(),
+          .classicTechnicalHeader = ClassicTechnicalHeader(),
+          .classicTechnicalChevron = ClassicTechnicalChevron(),
+          .classicTechnicalRows = ClassicTechnicalRows(),
+        },
+      .activityStatus =
+        {
+          .root = ModernActivityStatus(),
+          .detailButton = ModernActivityDetailButton(),
+          .spinner = ModernActivitySpinner(),
+          .statusIcon = ModernActivityStatusIcon(),
+          .label = ModernActivityLabel(),
+          .progress = ModernActivityProgress(),
+          .dismissButton = ModernActivityDismissButton(),
+          .reserveIdle = true,
+        },
+      .nowPlayingCoverImage = NowPlayingCoverImage(),
+      .nowPlayingCoverPlaceholder = NowPlayingCoverPlaceholder(),
+    };
+    auto callbacks = ao::winui::WindowsUiCoordinatorCallbacks{
+      .onTrackListChanged =
+        [weak]
+      {
+        if (auto self = weak.get(); self)
+        {
+          self->updateBrowserHeader();
+        }
+      },
+      .onRuntimeChanging =
+        [weak] noexcept
+      {
+        if (auto self = weak.get(); self)
+        {
+          self->clearGroupCoverPresenters();
+          self->unbindPlayback();
+        }
+      },
+      .onRuntimeChanged =
+        [weak] noexcept
+      {
+        if (auto self = weak.get(); self)
+        {
+          self->reconcileLibrary();
+          self->bindPlayback();
+        }
+      },
+      .onStatus =
+        [weak](std::string status)
+      {
+        if (auto self = weak.get(); self)
+        {
+          self->updateStatus(status);
+        }
+      },
+      .onFailure =
+        [weak](ao::Error const& error)
+      {
+        if (auto self = weak.get(); self)
+        {
+          self->updateStatus(ao::winui::formatResource("ErrorFormat", error.message));
+        }
+      },
+    };
     _coordinatorPtr =
-      std::make_unique<ao::winui::WindowsUiCoordinator>(session,
-                                                        ao::winui::WindowsUiViewDependencies{
-                                                          .quickFilterInput = ModernFilter(),
-                                                          .inspectorCoverImage = InspectorCoverImage(),
-                                                          .inspectorCoverPlaceholder = InspectorCoverPlaceholder(),
-                                                          .trackDetail =
-                                                            {
-                                                              .fieldScroll = InspectorFieldScroll(),
-                                                              .detailContent = InspectorDetailContent(),
-                                                              .metadataHeaderButton = InspectorMetadataHeaderButton(),
-                                                              .metadataHeader = InspectorMetadataHeader(),
-                                                              .metadataChevron = InspectorMetadataChevron(),
-                                                              .metadataRows = InspectorMetadataRows(),
-                                                              .showEmptyButton = InspectorShowEmpty(),
-                                                              .technicalHeaderButton = InspectorTechnicalHeaderButton(),
-                                                              .technicalHeader = InspectorTechnicalHeader(),
-                                                              .technicalChevron = InspectorTechnicalChevron(),
-                                                              .technicalRows = InspectorTechnicalRows(),
-                                                              .classicFieldScroll = ClassicDetailScroll(),
-                                                              .classicDetailContent = ClassicDetailContent(),
-                                                              .classicMetadataSection = ClassicMetadataSection(),
-                                                              .classicMetadataHeaderButton =
-                                                                ClassicMetadataHeaderButton(),
-                                                              .classicMetadataHeader = ClassicMetadataHeader(),
-                                                              .classicMetadataChevron = ClassicMetadataChevron(),
-                                                              .classicMetadataRows = ClassicMetadataRows(),
-                                                              .classicShowEmptyButton = ClassicShowEmpty(),
-                                                              .classicTechnicalSection = ClassicTechnicalSection(),
-                                                              .classicTechnicalHeaderButton =
-                                                                ClassicTechnicalHeaderButton(),
-                                                              .classicTechnicalHeader = ClassicTechnicalHeader(),
-                                                              .classicTechnicalChevron = ClassicTechnicalChevron(),
-                                                              .classicTechnicalRows = ClassicTechnicalRows(),
-                                                            },
-                                                          .activityStatus =
-                                                            {
-                                                              .root = ModernActivityStatus(),
-                                                              .detailButton = ModernActivityDetailButton(),
-                                                              .spinner = ModernActivitySpinner(),
-                                                              .statusIcon = ModernActivityStatusIcon(),
-                                                              .label = ModernActivityLabel(),
-                                                              .progress = ModernActivityProgress(),
-                                                              .dismissButton = ModernActivityDismissButton(),
-                                                              .reserveIdle = true,
-                                                            },
-                                                          .nowPlayingCoverImage = NowPlayingCoverImage(),
-                                                          .nowPlayingCoverPlaceholder = NowPlayingCoverPlaceholder(),
-                                                        },
-                                                        ao::
-                                                          winui::WindowsUiCoordinatorCallbacks{.onTrackListChanged =
-                                                                                                 [weak]
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self
-                                                                                                     ->updateBrowserHeader();
-                                                                                                 }
-                                                                                               },
-                                                                                               .onLibraryChanging =
-                                                                                                 [weak]
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self
-                                                                                                     ->clearGroupCoverPresenters();
-                                                                                                 }
-                                                                                               },
-                                                                                               .onLibraryChanged =
-                                                                                                 [weak]
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self
-                                                                                                     ->reconcileLibrary();
-                                                                                                 }
-                                                                                               },
-                                                                                               .onPlaybackChanging =
-                                                                                                 [weak]
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self
-                                                                                                     ->unbindPlayback();
-                                                                                                 }
-                                                                                               },
-                                                                                               .onPlaybackChanged =
-                                                                                                 [weak]
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self->bindPlayback();
-                                                                                                 }
-                                                                                               },
-                                                                                               .onStatus =
-                                                                                                 [weak](
-                                                                                                   std::string status)
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self->updateStatus(
-                                                                                                     status);
-                                                                                                 }
-                                                                                               },
-                                                                                               .onFailure =
-                                                                                                 [weak](ao::Error const&
-                                                                                                          error)
-                                                                                               {
-                                                                                                 if (auto self =
-                                                                                                       weak.get();
-                                                                                                     self)
-                                                                                                 {
-                                                                                                   self->updateStatus(
-                                                                                                     ao::winui::
-                                                                                                       formatResource(
-                                                                                                         "ErrorFormat",
-                                                                                                         error
-                                                                                                           .message));
-                                                                                                 }
-                                                                                               }});
+      std::make_unique<ao::winui::WindowsUiCoordinator>(session, std::move(views), std::move(callbacks));
     auto const dependencies = _coordinatorPtr->uiDependencies();
     _trackListPtr = &dependencies.trackList;
     _resourceBytes = &dependencies.resourceBytes;
@@ -305,7 +265,7 @@ namespace winrt::Aobus::implementation
     bindPlayback();
     restoreWindowPlacement();
     applyShellState(RootGrid().ActualWidth());
-    ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(session.libraryRuntime().musicRoot())));
+    ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(session.runtime().musicRoot())));
     updateStatus(ao::winui::resourceString("Ready"));
   }
 

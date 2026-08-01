@@ -2,7 +2,10 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/library/AudioIdentity.h>
+
 #include <ao/utility/Xxh3.h>
+
+#include <gsl-lite/gsl-lite.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -22,6 +25,8 @@ namespace ao::library
                                                  AudioIdentityProgressCallback progress,
                                                  std::stop_token stopToken)
   {
+    gsl_Expects(!audioPayload.empty());
+
     auto accumulator = utility::Xxh3Accumulator128{};
     std::size_t processed = 0;
 
@@ -44,8 +49,7 @@ namespace ao::library
 
       if (progress)
       {
-        auto const fraction =
-          audioPayload.empty() ? 1.0 : static_cast<double>(processed) / static_cast<double>(audioPayload.size());
+        auto const fraction = static_cast<double>(processed) / static_cast<double>(audioPayload.size());
         progress(fraction);
       }
 
@@ -53,11 +57,6 @@ namespace ao::library
       {
         return {};
       }
-    }
-
-    if (audioPayload.empty() && progress)
-    {
-      progress(1.0);
     }
 
     return AudioIdentity{

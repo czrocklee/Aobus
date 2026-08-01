@@ -63,9 +63,10 @@ Only a callback carrying the current notification id and lifetime generation may
 GTK supplies `GtkMainContextExecutor`, which wakes and drains work through `Glib::Dispatcher` on the GTK main context.
 TUI supplies its `Executor`, which posts work into the FTXUI screen loop.
 CLI supplies `LoopExecutor`, which uses the invocation thread as owner and exposes explicit blocking and non-blocking turn operations.
+WinUI supplies `DispatcherQueueExecutor`, which wakes its owner through the XAML dispatcher queue.
 `CliRuntime::runTask()` drives those turns until a terminal marker returns through the callback executor, so a worker continuation never becomes a second CLI state owner.
 
-The GTK, TUI, and loop adapters share `QueuedExecutorBase`.
+The GTK, TUI, CLI loop, and WinUI adapters share `QueuedExecutorBase`.
 Producer threads admit foreign dispatches and deferred tasks into one mutex-protected FIFO, while only the constructing owner thread drains and executes it.
 Returning from `defer()` means the executor accepted the task; if admission throws, the executor retained nothing and will not execute that task.
 After queue admission, event-loop wake is a `noexcept` infrastructure boundary: a wake failure is fatal rather than a recoverable rejection because concurrent producers make rollback unsafe.
@@ -102,8 +103,12 @@ The old playback session remains authoritative during this round trip.
 Mutating library tasks enter coordinator maintenance on the callback executor before slow preparation begins.
 The maintenance guard may accompany worker preparation, but it carries no LMDB transaction and no writer mutex.
 Worker code acquires a coordinator-owned mutation only for its apply/commit phase; the committed revision is then dispatched back through the callback executor and synchronously reduced before maintenance exit can advertise authoring availability.
+For a foreign commit, mandatory publication `P` is admitted before the same operation admits callback-owner finalization `C`; their shared `QueuedExecutorBase` FIFO therefore runs `P` before `C`.
+An owner-thread commit executes `P` inline.
+These two cases make an ordinary maintenance-task return a materialization barrier without a ticket, acknowledgement object, or callback-thread wait.
 Identity backfill already commits bounded batches, while scan apply currently commits its complete prepared plan at once.
 Read-only export and scan-plan construction need no maintenance admission.
+For progress-capable library tasks, successful cancellable callback-executor admission is the observer-side-effect boundary; the [library task execution specification](../spec/library/runtime/task-execution.md#progress-and-outcome) owns the exact conversation and terminal-pulse behavior.
 
 ### Dedicated subsystem threads
 
@@ -154,8 +159,9 @@ A mutating library task refines the round trip:
 callback executor: enter Maintenance(operationKind)
   -> worker pool: parse, walk, hash, or otherwise prepare without writer ownership
   -> coordinator mutation: revalidate, apply, commit revision R
-  -> callback executor: publish LibraryChangeSet R and run synchronous reducers
-  -> exit maintenance and publish Available(runtimeInstanceId, R)
+  -> admit callback publication P(R) while writer admission remains closed
+  -> callback executor: P(R) applies the replica and emits observers
+  -> callback executor: later finalization C exits maintenance and publishes Available(runtimeInstanceId, R)
 ```
 
 Cancellation before commit releases maintenance without advancing the library revision.
@@ -185,7 +191,7 @@ The current Engine non-realtime queue and Player-to-executor task stream have no
 - Background work carries values, stop tokens, and narrow thread-safe collaborators across the boundary, not references to frontend widgets or executor-affine view state.
 - A maintenance guard closes interactive admission across slow preparation but never grants storage write access by itself.
 - A callback from a lower subsystem is observational until it has been marshalled to the owning executor and accepted by the runtime service.
-- Synchronous observer delivery cannot destroy the emitting owner on the same callback stack; teardown is deferred to a later executor turn.
+- A synchronous observer must not destroy the emitting owner or invoke composition-root shutdown on the same callback stack; it defers teardown to a later executor turn.
 - Reentrant notification mutations queue another immutable update, so every contract-fulfilling observer finishes the current snapshot before delivery moves to the next one.
 - Notification expiry tasks never mutate feed state on a worker; a stale, cancelled, or owner-retired expiry callback is rejected on the callback executor.
 - A dedicated audio or device thread cannot become a general application worker.
@@ -205,7 +211,9 @@ If the callback gate remains open, an acceptance veto produces exactly one
 `Conflict` completion. Cancellation, replacement, or teardown can end the task
 path earlier and suppress completion.
 Player closes its callback gate and cancels both handles before Engine teardown; a worker that returns after Player teardown then owns and destroys only its detached preparation value.
-`Runtime::requestStop()` closes callback admission before stopping the worker
+`CoreRuntime::shutdown()` first seals library writer/task admission and retires not-yet-running publication/finalization callbacks.
+It is an outer composition boundary, not an operation permitted from a synchronous runtime observer; an observer that requests teardown defers it to a later callback-executor turn.
+It then calls `Runtime::requestStop()`, which closes callback admission before stopping the worker
 pool, and teardown then joins it. A callback-executor resumption queued before that boundary is
 discarded instead of resuming application code; destroying its Asio handler
 unwinds the suspended coroutine frame, while shared callback state keeps the
@@ -227,9 +235,10 @@ Runtime shutdown proceeds from producers toward dependencies:
 
 1. Interactive runtime owners stop playback-session scheduling and quiesce audio callback producers.
 2. Frontend subscriptions and adapters release their observations.
-3. `CoreRuntime` requests worker-pool stop and joins it while storage-backed and notification collaborators still exist.
-4. Library, source, completion, and notification collaborators are destroyed.
-5. The callback executor is released last within `CoreRuntime` ownership.
+3. `CoreRuntime` seals library mutation/publication admission, retires queued library callbacks, and wakes publication waiters.
+4. `CoreRuntime` closes callback resumption, requests worker-pool stop, and joins it while storage-backed and notification collaborators still exist.
+5. Library, source, completion, and notification collaborators are destroyed.
+6. The callback executor is released last within `CoreRuntime` ownership.
 
 The application logger and its captured async-exception adapter outlive step 3 and are shut down only after worker completion handlers have quiesced.
 CLI follows the same producer-first order, then drains already-ready loop turns while `CoreRuntime` callback targets remain alive before releasing that runtime and executor.
@@ -252,7 +261,7 @@ Unexpected coroutine exceptions are reported by the async runtime; expected canc
 - [`NotificationService.cpp`](../../app/runtime/NotificationService.cpp) enforces reporting-feed affinity and deterministic reentrant publication on that executor.
 - [`Log.cpp`](../../app/runtime/Log.cpp) adapts terminal exceptions to the retained application logger.
 - [`AppRuntime.cpp`](../../app/runtime/AppRuntime.cpp) orders playback-session and player shutdown ahead of base-runtime teardown.
-- [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), and [`CliRuntime`](../../app/cli/CliRuntime.cpp) adapt the three frontend execution models.
+- [`GtkMainContextExecutor`](../../app/linux-gtk/app/GtkMainContextExecutor.cpp), [`tui::Executor`](../../app/tui/Executor.cpp), [`CliRuntime`](../../app/cli/CliRuntime.cpp), and [`DispatcherQueueExecutor`](../../app/windows-winui/app/DispatcherQueueExecutor.cpp) adapt the frontend execution models.
 - [`Engine.cpp`](../../lib/audio/Engine.cpp) and [`StreamingSource.cpp`](../../lib/audio/StreamingSource.cpp) contain the principal dedicated audio-thread boundaries.
 
 ## Test map

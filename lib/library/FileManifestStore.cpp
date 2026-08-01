@@ -3,12 +3,13 @@
 
 #include <ao/library/FileManifestStore.h>
 
+#include "FileManifestValidation.h"
 #include <ao/Error.h>
-#include <ao/library/FileManifestLayout.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/library/detail/LibraryError.h>
 #include <ao/utility/ByteView.h>
 
 #include <array>
@@ -105,12 +106,19 @@ namespace ao::library
       return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
     }
 
-    if (optData->size() < sizeof(FileManifestHeader))
+    if (auto const validation = validateFileManifestEntry(key.view(), *optData); !validation)
     {
-      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is corrupt", uri));
+      return std::unexpected{validation.error()};
     }
 
-    return FileManifestView{*optData};
+    auto view = FileManifestView{*optData};
+
+    if (!view.isValid())
+    {
+      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is misaligned", uri));
+    }
+
+    return view;
   }
 
   FileManifestStore::Reader::Iterator& FileManifestStore::Reader::Iterator::operator++()
@@ -122,11 +130,21 @@ namespace ao::library
   std::pair<std::string_view, FileManifestView> FileManifestStore::Reader::Iterator::operator*() const
   {
     auto const pair = *_it;
-    auto const keyView = utility::bytes::stringView(pair.first);
-    auto const actualLength = keyView.find('\0');
-    auto const uri = actualLength == std::string_view::npos ? keyView : keyView.substr(0, actualLength);
+    auto validation = validateFileManifestEntry(pair.first, pair.second);
 
-    return {uri, FileManifestView{pair.second}};
+    if (!validation)
+    {
+      detail::throwLibraryError(std::move(validation.error()));
+    }
+
+    auto view = FileManifestView{pair.second};
+
+    if (!view.isValid())
+    {
+      detail::throwLibraryError(Error::Code::CorruptData, "File manifest payload is misaligned");
+    }
+
+    return {validation->uri, view};
   }
 
   FileManifestStore::Reader::Iterator FileManifestStore::Reader::begin() const
@@ -150,12 +168,19 @@ namespace ao::library
       return makeError(Error::Code::NotFound, std::format("File manifest entry for URI '{}' was not found", uri));
     }
 
-    if (optData->size() < sizeof(FileManifestHeader))
+    if (auto const validation = validateFileManifestEntry(key.view(), *optData); !validation)
     {
-      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is corrupt", uri));
+      return std::unexpected{validation.error()};
     }
 
-    return FileManifestView{*optData};
+    auto view = FileManifestView{*optData};
+
+    if (!view.isValid())
+    {
+      return makeError(Error::Code::CorruptData, std::format("File manifest entry for URI '{}' is misaligned", uri));
+    }
+
+    return view;
   }
 
   Result<> FileManifestStore::Writer::put(std::string_view uri, std::span<std::byte const> payload)
@@ -166,6 +191,11 @@ namespace ao::library
     }
 
     auto const key = PaddedUriKey{uri};
+
+    if (auto const result = validateFileManifestEntry(key.view(), payload); !result)
+    {
+      return std::unexpected{result.error()};
+    }
 
     return _writer.update(key.view(), payload);
   }

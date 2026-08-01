@@ -3,12 +3,17 @@
 
 #include "ThrowError.h"
 
+#include "ResultError.h"
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/ExceptionFormat.h>
+#include <ao/lmdb/TransactionFailure.h>
 
 #include <lmdb.h>
 
 #include <cstdint>
+#include <format>
+#include <source_location>
 
 namespace ao::lmdb
 {
@@ -18,5 +23,12 @@ namespace ao::lmdb
     {
       throwException<Exception>("{}: {}", origin, ::mdb_strerror(code));
     }
+  }
+
+  [[noreturn]] void throwOnMutationError(char const* origin, std::int32_t code, std::source_location location)
+  {
+    throw TransactionFailure{Error{.code = errorCodeFor(code),
+                                   .message = std::format("{}: {}", origin, ::mdb_strerror(code)),
+                                   .location = location}};
   }
 } // namespace ao::lmdb

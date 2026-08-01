@@ -42,6 +42,8 @@ This contract belongs to the **application runtime** layer in the [system archit
 - A callback observes the complete committed library state described by its changeset, including every dictionary mapping referenced by changed records.
 - Authoring becomes available at revision `R` only after publication completion for `R`.
 - Releasing a subscription prevents later delivery to that subscriber.
+- `LibraryChanges` is the only authoritative path from a committed library fact to runtime replicas, sources, projections, and frontend cache invalidation.
+- Task-progress finalization and workflow callbacks never infer or trigger a second data refresh.
 
 ## Changeset surface
 
@@ -58,6 +60,7 @@ Raw-order coordinates may include hidden ranks and are never projection row coor
 `ListOrderSource` is the only consumer that translates a raw-order change into an effective source delta.
 One semantic Remove-from-Playlist command may carry `tracksMutated`, `listsUpserted`, and `listOrderChanges` together at one revision.
 One committed transaction produces at most one changeset.
+An identity-only manifest batch may publish an otherwise empty changeset so revision and publication ordering advance without claiming a Track or List mutation.
 
 ## Ordering and delivery
 
@@ -68,6 +71,8 @@ A submission with any other revision, or a second submission while that revision
 The coordinator's publication barrier makes the single in-flight submission the normal production topology.
 
 Handlers run on the configured callback executor.
+The coordinator holds no writer or state mutex while invoking the replica, phase-two observers, or the resulting availability observers.
+Logical publication, submission-admission, and availability-notification gates preserve serialization across those external callbacks.
 
 Publication delivers one revision in two phases.
 Phase one hands the changeset to the bound replica through a `noexcept` callable; failure is fatal rather than converted into a publication result.
@@ -84,19 +89,28 @@ An `Available(R)` handler may bind targets at `R` because projections are alread
 A callback-thread attempt to mutate through the same coordinator while publication is active is rejected as reentrant.
 A foreign worker waits for publication completion before acquiring writer ownership.
 
+The coordinator holds physical writer ownership through native commit, establishes publication and submission-admission gates, and then releases the writer mutex before submitting the mandatory publication task `P(R)`.
+The submission-admission gate blocks another writer or Closing until that submission call has either completed `P(R)` inline or returned after the callback executor accepted it.
+The publication gate remains closed until `P(R)` completes or coordinated Closing retires a not-yet-running submission.
+An owner-thread submission executes `P(R)` inline before commit returns.
+For a foreign submission, `P(R)` is accepted before the same maintenance operation admits its non-cancellable callback-owner finalization `C`.
+The callback executor may complete `P(R)` before the foreign submission call returns; writer admission remains closed until submission and completion have both rendezvoused in either order.
+The production GTK, TUI, CLI, and WinUI executors derive from `QueuedExecutorBase`, so those two foreign admissions execute in FIFO order: `P(R)` completes before `C` can release maintenance or return the task result.
+This is a causal guarantee for those admissions by one operation, not a global order across unrelated producers or owner-inline work.
+
 ## Failure and lifetime
 
-A failed or aborted pre-commit mutation submits nothing.
-After durable commit, revision-admission or executor enqueue failure propagates synchronously to the coordinator call site, moves authoring to terminal `Faulted`, and rejects later live-runtime mutations.
-Replica and notification handlers are `noexcept`; an exception terminates instead of being translated into recovery, refusal, or branch-local availability.
-The committed revision is not reported as an ordinary failed transaction and is not rolled back or followed by an inferred reset.
-The direct caller or callback-executor boundary surfaces the failure after the coordinator has entered `Faulted`; the notification framework does not reinterpret it.
-Reopening the runtime rebuilds consumers from durable storage.
+A failed or aborted pre-commit mutation submits nothing and keeps its ordinary typed failure channel.
+From native commit through completion of mandatory publication, a revision invariant, task-admission failure, or delivery failure in a live runtime terminates the process after best-effort logging.
+Replica, notification, and publication-completion entry points are `noexcept`; they do not create a recovery branch.
+The committed revision is not reported as an ordinary failed transaction, rolled back, followed by an inferred reset, or exposed through a committed-but-unpublished outcome.
+The next process open rebuilds consumers from durable storage.
 
-The bus outlives its subscriptions and its coordinator producer.
-Runtime teardown stops and joins library tasks before destroying the library facade and `LibraryChanges`.
-Queued delivery retains only weak bus state, and coordinator acknowledgements retain
-only weak coordinator lifetime state, so a retired owner is never re-entered.
+Coordinated Closing is the sole retirement exception.
+It waits for an in-flight submission call to leave its admission gate, takes physical writer ownership, seals new writer/task admission, retires any not-yet-running publication and maintenance-finalization callbacks, wakes publication waiters, and only then closes callback resumption and joins workers.
+An observer must not invoke Closing on the same synchronous publication stack and must defer teardown to a later callback-executor turn.
+An already-running publication completes under its `noexcept` contract.
+Queued delivery retains only weak bus state, and coordinator acknowledgements retain only weak coordinator lifetime state, so discarded callbacks never re-enter a retired owner.
 
 ## Persistence and versioning
 
@@ -116,9 +130,9 @@ Changesets are in-process values and have no persisted or compatibility format.
 
 ## Test map
 
-- [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves exact-successor admission, in-band revisions, abort behavior, single-replica binding, and unbound publication.
+- [`LibraryChangesTest.cpp`](../../../../test/unit/runtime/library/LibraryChangesTest.cpp) proves in-band revisions, abort behavior, single-replica binding, unbound publication, both foreign submission/completion orders, publication-before-finalization ordering, and queued-callback retirement.
 - [`TrackSourceCacheTest.cpp`](../../../../test/unit/runtime/source/TrackSourceCacheTest.cpp) proves source-state application.
-- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves replica-before-notification-before-availability ordering, reentrancy closure, and enqueue fault behavior.
+- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves replica-before-notification-before-availability ordering and publication/availability reentrancy closure.
 - Writer, scan, and transfer tests under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) prove changeset contents and post-commit visibility.
 - [`SourcePipelineOracleTest.cpp`](../../../../test/unit/runtime/source/SourcePipelineOracleTest.cpp) proves downstream state matches recomputation across mutation sequences.
 

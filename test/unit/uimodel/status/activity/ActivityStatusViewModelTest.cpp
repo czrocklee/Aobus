@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
+
+#include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
@@ -13,7 +16,6 @@
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/ScanPlan.h>
-#include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -188,8 +190,8 @@ namespace ao::uimodel::test
     auto notifications = rt::NotificationService{runtime};
     auto changes = rt::test::makeInlineLibraryChanges();
     auto libraryFixture = rt::test::MusicLibraryFixture{};
-    auto runtimeLibrary = rt::Library{runtime, libraryFixture.library(), changes};
-    auto& taskService = runtimeLibrary.taskService();
+    auto runtimeLibraryPtr = ao::test::requireValue(rt::Library::create(runtime, libraryFixture.library(), changes));
+    auto& taskService = runtimeLibraryPtr->taskService();
     auto latest = ActivityStatusViewState{};
     auto rendered = std::vector<ActivityStatusViewState>{};
     auto viewModel = ActivityStatusViewModel{

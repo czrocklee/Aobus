@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryWriter.h>
+
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
@@ -15,7 +18,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -44,6 +46,10 @@ namespace ao::rt::test
 
     void seedRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
     {
+      {
+        [[maybe_unused]] auto library = library::test::makeTestMusicLibrary(path, path);
+      }
+
       auto environment = lmdb::test::openEnvironment(path, {.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
       auto transaction = lmdb::test::beginWriteTransaction(environment);
       auto database = lmdb::test::openDatabase(transaction, "lists");
@@ -530,7 +536,7 @@ namespace ao::rt::test
     seedRawListRecords(temp.path(),
                        std::array{RawListRecord{.listId = 1, .payload = firstPayload},
                                   RawListRecord{.listId = 2, .payload = secondPayload}});
-    auto musicLibrary = library::MusicLibrary{temp.path(), temp.path()};
+    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto changes = makeInlineLibraryChanges(musicLibrary);
     auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
     auto events = std::vector<LibraryChangeSet>{};
@@ -561,7 +567,7 @@ namespace ao::rt::test
                        std::array{RawListRecord{.listId = 1, .payload = rootPayload},
                                   RawListRecord{.listId = 2, .payload = childPayload},
                                   RawListRecord{.listId = 3, .payload = corruptPayload}});
-    auto musicLibrary = library::MusicLibrary{temp.path(), temp.path()};
+    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
     auto changes = makeInlineLibraryChanges(musicLibrary);
     auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
     auto events = std::vector<LibraryChangeSet>{};

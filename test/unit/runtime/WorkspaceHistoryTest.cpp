@@ -24,7 +24,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - navigate deduplicates the current list", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -38,7 +38,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - navigate request can skip recording history", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, NavigationRequest{.target = fixture.secondListId, .recordHistory = false});
@@ -51,7 +51,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - navigate filtered target records filter history", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, FilteredListTarget{.listId = kAllTracksListId, .filterExpression = "genre == \"Rock\""});
@@ -68,7 +68,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goBack restores the previous list", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -82,7 +82,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - repeated goBack restores the first list", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -99,7 +99,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goForward after back restores the newer list", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -115,7 +115,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goBack at the first entry returns false", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     CHECK_FALSE(runtime.workspace().goBack());
@@ -124,7 +124,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goForward at the newest entry returns false", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     CHECK_FALSE(runtime.workspace().goForward());
@@ -134,7 +134,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -154,7 +154,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goBack restores presentation state", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     auto const* albumsPreset = builtinTrackPresentationPreset("albums");
@@ -169,7 +169,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goBack works after closing the active view", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -185,7 +185,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
 
@@ -199,7 +199,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goBack and goForward do not grow history", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -217,7 +217,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     requireNavigation(runtime, fixture.firstListId);
     requireNavigation(runtime, fixture.secondListId);
@@ -232,7 +232,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - goBack recreates destroyed views", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
 
     auto const listA =
       ao::test::requireValue(runtime.library().writer().createList(LibraryWriter::ListDraft{.name = "A"}));
@@ -259,7 +259,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - failed goBack leaves workspace state unchanged", "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     REQUIRE(runtime.workspace().closeView(viewA));
@@ -281,7 +281,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][history]")
   {
     auto fixture = WorkspaceRuntimeFixture{};
-    auto& runtime = fixture.runtime;
+    auto& runtime = fixture.runtime();
     auto const viewA = requireNavigation(runtime, fixture.firstListId);
     auto const viewB = requireNavigation(runtime, fixture.secondListId);
     requireBackNavigation(runtime);

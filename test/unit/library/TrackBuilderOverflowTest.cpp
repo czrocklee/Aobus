@@ -85,6 +85,7 @@ namespace ao::library::test
     {
       auto builder = TrackBuilder::makeEmpty();
       auto const value = std::string(kUint16Overflow, 'v');
+      builder.property().uri("track.flac");
       builder.customMetadata().add("key", value);
 
       auto const result = context.trySerializeCold(builder);
@@ -97,6 +98,7 @@ namespace ao::library::test
       constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CoverArtEntry)) + 1;
 
       auto builder = TrackBuilder::makeEmpty();
+      builder.property().uri("track.flac");
 
       for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
@@ -111,6 +113,7 @@ namespace ao::library::test
     SECTION("Custom metadata count")
     {
       auto builder = TrackBuilder::makeEmpty();
+      builder.property().uri("track.flac");
 
       for (std::size_t i = 0; i < kUint16Overflow; ++i)
       {
@@ -127,6 +130,7 @@ namespace ao::library::test
       constexpr std::size_t kOverflowCount = (kUint16Max / sizeof(CustomMetadataEntry)) + 1;
 
       auto builder = TrackBuilder::makeEmpty();
+      builder.property().uri("track.flac");
 
       for (std::size_t i = 0; i < kOverflowCount; ++i)
       {
@@ -144,6 +148,7 @@ namespace ao::library::test
 
       auto builder = TrackBuilder::makeEmpty();
       auto const value = std::string(kValueSize, 'v');
+      builder.property().uri("track.flac");
       builder.customMetadata().add("key", value);
 
       auto const result = context.trySerializeCold(builder);
@@ -160,6 +165,7 @@ namespace ao::library::test
       auto builder = TrackBuilder::makeEmpty();
       auto const value = std::string(kValueSize, 'v');
 
+      builder.property().uri("track.flac");
       builder.customMetadata().add("first", value).add("second", value);
 
       auto const result = context.trySerializeCold(builder);
@@ -172,6 +178,7 @@ namespace ao::library::test
       constexpr std::size_t kCoverCount = kUint16Max / sizeof(CoverArtEntry);
 
       auto builder = TrackBuilder::makeEmpty();
+      builder.property().uri("track.flac");
       builder.metadata().movementNumber(1);
 
       for (std::size_t i = 0; i < kCoverCount; ++i)
@@ -183,5 +190,32 @@ namespace ao::library::test
       REQUIRE_FALSE(result);
       CHECK(result.error().code == Error::Code::ValueTooLarge);
     }
+  }
+
+  TEST_CASE("TrackBuilder - complete preflight keeps rejected cold data from staging shared dictionary rows",
+            "[library][regression][track-builder][atomicity]")
+  {
+    constexpr auto kUint16Overflow = static_cast<std::size_t>(std::numeric_limits<std::uint16_t>::max()) + 1U;
+    auto context = TrackSerializationFixture{};
+    auto oversizedValue = std::string(kUint16Overflow, 'v');
+    auto rejected = TrackBuilder::makeEmpty();
+    rejected.metadata().artist("rejected-artist");
+    rejected.property().uri("rejected.flac");
+    rejected.customMetadata().add("oversized-key", oversizedValue);
+
+    auto rejectedResult = rejected.serialize(context.transaction(), context.resources());
+    REQUIRE_FALSE(rejectedResult);
+    CHECK(rejectedResult.error().code == Error::Code::ValueTooLarge);
+
+    auto accepted = TrackBuilder::makeEmpty();
+    accepted.metadata().artist("accepted-artist");
+    accepted.property().uri("accepted.flac");
+    auto acceptedResult = accepted.serialize(context.transaction(), context.resources());
+    REQUIRE(acceptedResult);
+    REQUIRE(context.transaction().commit());
+
+    CHECK_FALSE(context.dictionary().findId("rejected-artist"));
+    CHECK_FALSE(context.dictionary().findId("oversized-key"));
+    CHECK(context.dictionary().findId("accepted-artist"));
   }
 } // namespace ao::library::test

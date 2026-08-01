@@ -10,6 +10,7 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
 
+#include <memory>
 #include <string>
 
 namespace ao::rt::test
@@ -18,11 +19,13 @@ namespace ao::rt::test
   {
     WorkspaceRuntimeFixture();
 
-    ListId createList(std::string name);
+    AppRuntime& runtime() const noexcept;
+
+    ListId createList(std::string name) const;
 
     // These fixture values are intentionally public as the tests' assertion surface.
     ao::test::TempDir tempDir;
-    AppRuntime runtime;
+    std::unique_ptr<AppRuntime> runtimePtr;
     ListId firstListId;
     ListId secondListId;
     ListId thirdListId;

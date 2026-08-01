@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
@@ -53,7 +53,7 @@ namespace ao::rt::test
     {
       auto result = writer.create(payload);
       REQUIRE(result);
-      return result->first;
+      return *result;
     }
 
     std::optional<std::vector<std::string>> listOrderUris(library::MusicLibrary& ml, std::string_view listName)
@@ -145,15 +145,12 @@ namespace ao::rt::test
     }();
     REQUIRE(targetLibraryId != sourceLibraryId);
 
+    // Create a valid junk track first to ensure IDs don't match.
+    auto const junkTrackId =
+      library::test::addTrack(ml2, library::test::makeEmptyTrackSpec("library-export-import-junk.flac"));
+    REQUIRE(junkTrackId != kInvalidTrackId);
+
     auto targetTrackId = kInvalidTrackId;
-    {
-      auto transaction = library::test::writeTransaction(ml2);
-
-      // Create junk track first to ensure IDs don't match
-      REQUIRE(ml2.tracks().writer(transaction).createHotCold(0, 0, [](auto, auto, auto) {}));
-      REQUIRE(transaction.commit());
-    }
-
     {
       targetTrackId = library::test::addTrack(ml2, library::test::makeEmptyTrackSpec(uri));
       auto transaction = library::test::writeTransaction(ml2);

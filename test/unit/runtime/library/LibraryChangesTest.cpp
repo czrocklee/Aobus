@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryChanges.h>
+
 #include "runtime/library/LibraryMutationService.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
@@ -13,7 +15,6 @@
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -61,27 +62,48 @@ namespace ao::rt::test
       QueuedExecutor _delegate;
       AsyncTestState<bool> _foreignAffinityObserved = AsyncTestState<bool>::create(false);
     };
+
+    class CompletionBeforeForeignDispatchReturnsExecutor final : public async::Executor
+    {
+    public:
+      bool isCurrent() const noexcept override { return _delegate.isCurrent(); }
+
+      void dispatch(std::move_only_function<void()> task) override
+      {
+        if (isCurrent())
+        {
+          task();
+          return;
+        }
+
+        auto completed = AsyncTestState<bool>::create(false);
+        // Keep the submitting thread inside dispatch until the owner has run
+        // the publication, forcing completion to win the rendezvous.
+        _delegate.dispatch(
+          [task = std::move(task), completed] mutable
+          {
+            task();
+            completed.set(true);
+          });
+
+        if (!completed.waitUntil(true))
+        {
+          throwException<Exception>("Timed out waiting for controlled foreign dispatch completion");
+        }
+
+        _foreignDispatchReturned.set(true);
+      }
+
+      void defer(std::move_only_function<void()> task) override { _delegate.defer(std::move(task)); }
+      void drain() { _delegate.drain(); }
+      bool waitUntilQueued() const { return _delegate.waitUntilQueued(); }
+      bool foreignDispatchReturned() const { return _foreignDispatchReturned.load(); }
+
+    private:
+      QueuedExecutor _delegate;
+      AsyncTestState<bool> _foreignDispatchReturned = AsyncTestState<bool>::create(false);
+    };
   } // namespace
-
-  TEST_CASE("LibraryChanges - rejects a committed revision other than the exact successor",
-            "[runtime][unit][library][changeset]")
-  {
-    auto libraryFixture = MusicLibraryFixture{};
-    auto executor = ManualExecutor{};
-    // The storage is at revision zero, but this deliberately claims revision
-    // one was already published. The next commit is therefore not revision two.
-    auto changes = LibraryChanges{executor, 1};
-    auto mutationService = LibraryMutationService{
-      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
-    auto mutationResult = mutationService.beginInteractiveMutation();
-    REQUIRE(mutationResult);
-
-    CHECK_THROWS_WITH(
-      mutationResult->commit(LibraryChangeSet{}),
-      Catch::Matchers::ContainsSubstring("Out-of-sequence library changeset revision: expected 2, got 1"));
-    CHECK(mutationService.availability().state == LibraryAuthoringState::Faulted);
-    CHECK(executor.queuedCount() == 0);
-  }
 
   TEST_CASE("LibraryChanges - publication completes when no replica is bound", "[runtime][unit][library][changeset]")
   {
@@ -181,27 +203,33 @@ namespace ao::rt::test
     CHECK(executor.queuedCount() == 0);
   }
 
-  TEST_CASE("LibraryChanges - queued maintenance notification expires with its coordinator",
+  TEST_CASE("LibraryChanges - queued maintenance finalization expires with its coordinator",
             "[runtime][regression][library][changeset]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto executor = ManualExecutor{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto executor = AffinityProbeExecutor{};
+    auto changes = LibraryChanges{executor, 0};
+    auto mutationServicePtr = std::make_unique<LibraryMutationService>(
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes);
+    auto maintenanceResult = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::ScanApply);
+    REQUIRE(maintenanceResult);
+    auto maintenance = std::move(*maintenanceResult);
 
-    {
-      auto mutationServicePtr = std::make_unique<LibraryMutationService>(
-        executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes);
-      auto maintenanceResult = mutationServicePtr->beginMaintenance(LibraryMaintenanceKind::ScanApply);
-      REQUIRE(maintenanceResult);
-      CHECK(executor.queuedCount() == 1);
-      mutationServicePtr.reset();
-    }
+    auto completion = std::async(
+      std::launch::async,
+      [optMaintenance = std::optional<LibraryMutationService::MaintenanceGuard>{std::move(maintenance)}] mutable
+      { optMaintenance.reset(); });
+    REQUIRE(executor.waitForForeignAffinityCheck());
+    completion.get();
+    CHECK(executor.queuedCount() == 1);
 
-    CHECK_NOTHROW(executor.runUntilIdle());
+    mutationServicePtr.reset();
+
+    CHECK_NOTHROW(executor.drain());
     CHECK(executor.queuedCount() == 0);
   }
 
-  TEST_CASE("LibraryChanges - maintenance guard completion does not block publication completion",
+  TEST_CASE("LibraryChanges - foreign publication precedes maintenance finalization",
             "[runtime][regression][changeset][concurrency]")
   {
     auto libraryFixture = MusicLibraryFixture{};
@@ -211,7 +239,17 @@ namespace ao::rt::test
       executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
     auto maintenanceResult = mutationService.beginMaintenance(LibraryMaintenanceKind::ScanApply);
     REQUIRE(maintenanceResult);
-    executor.drain();
+    auto phases = std::vector<std::string_view>{};
+    auto changedSubscription =
+      changes.onChanged([&phases](LibraryChangeSet const&) noexcept { phases.emplace_back("publication"); });
+    auto availabilitySubscription = mutationService.onAvailabilityChanged(
+      [&phases](LibraryAuthoringAvailability const& availability) noexcept
+      {
+        if (availability.state == LibraryAuthoringState::Available)
+        {
+          phases.emplace_back("maintenance-finalization");
+        }
+      });
 
     auto mutationResult = mutationService.beginMaintenanceMutation(*maintenanceResult);
     REQUIRE(mutationResult);
@@ -224,13 +262,76 @@ namespace ao::rt::test
       [optMaintenance = std::optional<LibraryMutationService::MaintenanceGuard>{std::move(maintenance)}] mutable
       { optMaintenance.reset(); });
     REQUIRE(executor.waitForForeignAffinityCheck());
-
-    executor.drain();
     REQUIRE(completion.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
     completion.get();
+    REQUIRE(executor.queuedCount() == 2);
     executor.drain();
 
+    CHECK(phases == std::vector<std::string_view>{"publication", "maintenance-finalization"});
     CHECK(mutationService.availability().state == LibraryAuthoringState::Available);
+  }
+
+  TEST_CASE("LibraryChanges - foreign publication may complete before its submission call returns",
+            "[runtime][regression][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = CompletionBeforeForeignDispatchReturnsExecutor{};
+    auto changes = LibraryChanges{executor, 0};
+    auto mutationService = LibraryMutationService{
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
+    bool notified = false;
+    bool notifiedBeforeSubmissionReturned = false;
+    auto changedSubscription = changes.onChanged(
+      [&executor, &notified, &notifiedBeforeSubmissionReturned](LibraryChangeSet const&) noexcept
+      {
+        notified = true;
+        notifiedBeforeSubmissionReturned = !executor.foreignDispatchReturned();
+      });
+    auto committed = std::async(std::launch::async,
+                                [&mutationService]
+                                {
+                                  auto mutationResult = mutationService.beginInteractiveMutation();
+                                  return mutationResult && mutationResult->commit(LibraryChangeSet{}).has_value();
+                                });
+
+    REQUIRE(executor.waitUntilQueued());
+    executor.drain();
+
+    REQUIRE(committed.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    CHECK(committed.get());
+    CHECK(notified);
+    CHECK(notifiedBeforeSubmissionReturned);
+    CHECK(mutationService.availability().libraryRevision == 1);
+    CHECK(mutationService.beginInteractiveMutation());
+  }
+
+  TEST_CASE("LibraryChanges - next foreign writer waits for publication completion",
+            "[runtime][regression][changeset][concurrency]")
+  {
+    auto libraryFixture = MusicLibraryFixture{};
+    auto executor = QueuedExecutor{};
+    auto changes = LibraryChanges{executor, 0};
+    auto mutationService = LibraryMutationService{
+      executor, ao::test::requireValue(library::WritableMusicLibrary::acquire(libraryFixture.library())), changes};
+    auto firstMutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    REQUIRE(firstMutation.commit(LibraryChangeSet{}));
+    REQUIRE(executor.queuedCount() == 1);
+
+    auto started = AsyncTestState<bool>::create(false);
+    auto nextWriter = std::async(std::launch::async,
+                                 [&mutationService, started]
+                                 {
+                                   started.set(true);
+                                   auto mutationResult = mutationService.beginInteractiveMutation();
+                                   return mutationResult.has_value();
+                                 });
+    REQUIRE(started.waitUntil(true));
+    CHECK(nextWriter.wait_for(std::chrono::milliseconds{20}) == std::future_status::timeout);
+
+    executor.drain();
+
+    REQUIRE(nextWriter.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    REQUIRE(nextWriter.get());
   }
 
   TEST_CASE("LibraryChanges - writer commits publish once with the in-band revision",

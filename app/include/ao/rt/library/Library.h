@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/ListMutation.h>
@@ -39,7 +40,9 @@ namespace ao::rt
   class Library final
   {
   public:
-    Library(async::Runtime& asyncRuntime, library::MusicLibrary& storage, LibraryChanges& changes);
+    static Result<std::unique_ptr<Library>> create(async::Runtime& asyncRuntime,
+                                                   library::MusicLibrary& storage,
+                                                   LibraryChanges& changes);
     ~Library();
 
     Library(Library const&) = delete;
@@ -62,6 +65,8 @@ namespace ao::rt
     Result<DeleteListSubtreeReply> previewDeleteListAndDescendants(ListId listId, DeleteListOptions options = {});
 
     LibraryAuthoringAvailability authoringAvailability() const;
+    // Synchronous callback-executor notification. A handler must defer
+    // Library destruction or CoreRuntime shutdown to a later executor turn.
     async::Subscription onAuthoringAvailabilityChanged(
       std::move_only_function<void(LibraryAuthoringAvailability const&) noexcept> handler) const;
     Result<BoundTrackTargets> bindTrackTargets(std::span<TrackId const> trackIds) const;
@@ -69,7 +74,12 @@ namespace ao::rt
     Result<BoundListOrder> bindListOrder(ListId listId, std::vector<TrackId>&& effectiveTrackIds) const;
 
   private:
+    void beginClosing() noexcept;
+
     struct Impl;
+    explicit Library(std::unique_ptr<Impl> implPtr);
     std::unique_ptr<Impl> _implPtr;
+
+    friend class CoreRuntime;
   };
 } // namespace ao::rt

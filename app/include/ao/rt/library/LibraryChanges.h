@@ -7,7 +7,6 @@
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackEditScript.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -63,6 +62,9 @@ namespace ao::rt
     LibraryChanges& operator=(LibraryChanges&&) = delete;
 
     // Publication runs in two phases (doc/spec/library/runtime/change-publication.md).
+    // Both phases run synchronously on the callback executor without
+    // coordinator mutex ownership. Callables must defer runtime shutdown or
+    // owner destruction to a later executor turn.
     //
     // Phase one delivers the revision to the single bound replica -- the one
     // consumer that keeps derived state the rest of the runtime reads from.
@@ -83,6 +85,7 @@ namespace ao::rt
     friend class LibraryMutationService;
 
     void publishFromCoordinator(LibraryChangeSet changeSet, std::move_only_function<void() noexcept> completion);
+    void retireFromCoordinator() noexcept;
 
     struct Impl;
     std::shared_ptr<Impl> _implPtr;

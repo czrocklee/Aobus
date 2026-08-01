@@ -6,6 +6,7 @@
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
@@ -19,7 +20,7 @@
 namespace ao::rt::test
 {
   WorkspaceRuntimeFixture::WorkspaceRuntimeFixture()
-    : runtime{makeRuntime(tempDir)}
+    : runtimePtr{makeRuntime(tempDir)}
     , firstListId{createList("First")}
     , secondListId{createList("Second")}
     , thirdListId{createList("Third")}
@@ -27,10 +28,15 @@ namespace ao::rt::test
   {
   }
 
-  ListId WorkspaceRuntimeFixture::createList(std::string name)
+  AppRuntime& WorkspaceRuntimeFixture::runtime() const noexcept
+  {
+    return *runtimePtr;
+  }
+
+  ListId WorkspaceRuntimeFixture::createList(std::string name) const
   {
     return ao::test::requireValue(
-      runtime.library().writer().createList(LibraryWriter::ListDraft{.name = std::move(name)}));
+      runtime().library().writer().createList(LibraryWriter::ListDraft{.name = std::move(name)}));
   }
 
   ViewId requireNavigation(AppRuntime& runtime, NavigationRequest const& request)

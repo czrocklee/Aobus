@@ -129,14 +129,15 @@ namespace winrt::Aobus::implementation
     ClassicTrackList().ItemsSource(_trackListPtr->items());
     ModernColumnHeaders().ItemsSource(_trackListPtr->headers());
     ClassicColumnHeaders().ItemsSource(_trackListPtr->headers());
-    ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(_session->libraryRuntime().musicRoot())));
+    ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(_session->runtime().musicRoot())));
 
-    auto const listId = _trackListPtr->activeListId();
-
-    if (auto const it = _session->presentationPreferences().presentations.find(listId);
-        it != _session->presentationPreferences().presentations.end())
+    if (auto const listId = _trackListPtr->activeListId();
+        _session->presentationPreferences().presentations.contains(listId))
     {
-      std::ignore = _trackListPtr->selectPresentation(it->second);
+      if (auto const selected = _trackListPtr->selectPresentation(_session->presentationForList(listId)); !selected)
+      {
+        updateStatus(ao::winui::formatResource("PresentationFailedFormat", selected.error().message));
+      }
     }
 
     rebuildNavigation();
@@ -151,7 +152,7 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    auto const lists = _session->libraryRuntime().library().reader().lists();
+    auto const lists = _session->runtime().library().reader().lists();
     auto const projection = ao::uimodel::buildListTreeProjection(lists);
     auto const activeListId = _trackListPtr->activeListId();
     [[maybe_unused]] auto const applyingNavigation = ao::winui::ScopedBooleanFlag{_applyingNavigation};
@@ -242,23 +243,17 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    auto presentationId = std::string{};
-
     if (_session != nullptr)
     {
-      if (auto const preference = _session->presentationPreferences().presentations.find(entry.listId);
-          preference != _session->presentationPreferences().presentations.end())
+      if (_session->presentationPreferences().presentations.contains(entry.listId))
       {
-        presentationId = preference->second;
-      }
-    }
+        auto const presentation = _session->presentationForList(entry.listId);
 
-    if (!presentationId.empty())
-    {
-      if (auto const selected = _trackListPtr->selectPresentation(presentationId); !selected)
-      {
-        updateStatus(ao::winui::formatResource("PresentationFailedFormat", selected.error().message));
-        return;
+        if (auto const selected = _trackListPtr->selectPresentation(presentation); !selected)
+        {
+          updateStatus(ao::winui::formatResource("PresentationFailedFormat", selected.error().message));
+          return;
+        }
       }
     }
 
@@ -370,7 +365,7 @@ namespace winrt::Aobus::implementation
         *_resourceBytes,
         *_themePtr,
         ao::uimodel::defaultCoverArtPlaceholderStyle(ao::uimodel::CoverArtPlaceholderSlot::GroupHeading));
-      presenterPtr->bind(_session->libraryRuntime().async());
+      presenterPtr->bind(_session->runtime().async());
       presenterIt = _groupCoverPresenters
                       .emplace(key,
                                GroupCoverPresenterEntry{

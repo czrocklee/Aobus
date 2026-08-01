@@ -30,7 +30,6 @@ namespace ao::rt
     std::int32_t completedCount = 0;
     std::int32_t skippedCount = 0;
     std::int32_t failureCount = 0;
-    bool cancelled = false;
   };
 
   struct AudioIdentityIndexFailure final

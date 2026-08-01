@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
@@ -10,7 +12,6 @@
 #include <ao/rt/ListNode.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/library/list/ListMembershipAuthoringSession.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -48,7 +49,7 @@ namespace ao::uimodel::test
     auto createResult =
       storage.library().lists().writer(transaction).create(ao::test::requireValue(builder.serialize()));
     REQUIRE(createResult);
-    auto const listId = createResult->first;
+    auto const listId = *createResult;
     REQUIRE(transaction.commit());
 
     auto changes = rt::test::makeInlineLibraryChanges(storage.library());

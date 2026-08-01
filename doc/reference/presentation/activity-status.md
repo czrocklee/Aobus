@@ -24,7 +24,7 @@ notification ids and task events, but contains no GTK or FTXUI types.
 
 ## Kind and timeout
 
-`ActivityStatusKind` is a `std::uint8_t` enum with values `Idle`, `Processing`, `Success`, `Info`, `Warning`, and `Error`.
+`ActivityStatusKind` is a `std::uint8_t` enum with values `Idle`, `Processing`, `Info`, `Warning`, and `Error`.
 
 `kActivityStatusDefaultAutoDismissTimeout` is currently `5000ms`.
 It applies to temporary UIModel compact presentation, not runtime `Transient` lifetime.
@@ -60,7 +60,7 @@ It applies to temporary UIModel compact presentation, not runtime `Transient` li
 | `emitInitialState` | `bool` | `true` |
 
 The constructor requires `rt::NotificationService&`, an `onRender(ActivityStatusViewState const&)` callback, and optional options.
-When `libraryTasks` is present, it subscribes to that service's task progress and completion.
+When `libraryTasks` is present, it subscribes to that service's task progress and status-free finished pulse.
 
 ## View-model members
 
@@ -86,8 +86,6 @@ Neither command mutates the runtime notification feed.
 | Library task `Updating` | `Updating library` |
 | Library task `Fingerprinting` | `Fingerprinting` plus optional subject |
 | Library task `IndexingAudioIdentity` | `Indexing audio identity` plus optional subject |
-| Successful completion with zero affected tracks | `Library is up to date` |
-| Successful completion with affected tracks | `Scan complete: <formatted track count> added` |
 
 Notification and library-task text is resolved through the [presentation text catalog](text-catalog.md).
 Progress subjects do not select behavior by prefix.

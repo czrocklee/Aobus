@@ -5,18 +5,22 @@
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
+#include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <string>
 #include <string_view>
@@ -61,8 +65,15 @@ namespace ao::library::test
                                                std::vector<std::pair<std::string, std::string>> const& customPairs,
                                                std::string_view uri)
   {
+    auto serializedUri = std::string{uri};
+
+    if (!LibraryUri::parse(uri))
+    {
+      serializedUri.assign(std::max<std::size_t>(uri.size(), 1), 'x');
+    }
+
     auto builder = TrackBuilder::makeEmpty();
-    builder.property().uri(uri);
+    builder.property().uri(serializedUri);
     builder.metadata().trackNumber(header.trackNumber);
     builder.metadata().trackTotal(header.trackTotal);
     builder.metadata().discNumber(header.discNumber);
@@ -77,11 +88,33 @@ namespace ao::library::test
     }
 
     auto temp = ao::test::TempDir{};
-    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
     auto result = builder.serializeCold(transaction, library.resources());
     REQUIRE(result);
-    return *result;
+
+    auto data = std::move(*result);
+
+    // TrackView is also responsible for safely inspecting legacy or corrupt
+    // bytes. Build those parser fixtures through a valid writer record, then
+    // replace only the raw URI field requested by the individual view test.
+    if (serializedUri != uri)
+    {
+      auto storedHeader = TrackColdHeader{};
+      std::memcpy(&storedHeader, data.data(), sizeof(storedHeader));
+      storedHeader.uriLength = static_cast<std::uint16_t>(uri.size());
+      data.resize((static_cast<std::size_t>(storedHeader.uriOffset) + uri.size() + 3U) & ~std::size_t{3U});
+      std::fill(data.begin() + storedHeader.uriOffset, data.end(), std::byte{0});
+
+      if (!uri.empty())
+      {
+        std::memcpy(data.data() + storedHeader.uriOffset, uri.data(), uri.size());
+      }
+
+      std::memcpy(data.data(), &storedHeader, sizeof(storedHeader));
+    }
+
+    return data;
   }
 
   TrackView makeColdTrackView(std::vector<std::byte> const& data)

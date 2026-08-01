@@ -27,9 +27,9 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches work metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
   {
     auto trackWithWork = TestTrack{
-      "Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
+      "Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", "Symphony No. 5"};
     auto trackWithoutWork =
-      TestTrack{"Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", ""};
+      TestTrack{"Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "", ""};
     auto evaluator = PlanEvaluator{};
 
     SECTION("$work Equality")
@@ -107,7 +107,7 @@ namespace ao::query::test
   TEST_CASE("PlanEvaluator - matches composer metadata equality and LIKE expressions", "[query][unit][plan-evaluator]")
   {
     auto trackWithComposer = TestTrack{
-      "Title", "Artist", "Album", "/path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
+      "Title", "Artist", "Album", "path", 2020, 5, 180000, 320000, 44100, 2, 16, 1, 2, 3, {}, "Beethoven", ""};
     auto evaluator = PlanEvaluator{};
 
     SECTION("$composer Equality")
@@ -255,7 +255,7 @@ namespace ao::query::test
     SECTION("Uri")
     {
       auto plan = ExecutionPlan{};
-      plan.stringConstants.emplace_back("/path/to/track.flac");
+      plan.stringConstants.emplace_back("path/to/track.flac");
       plan.instructions.push_back(
         {.op = OpCode::LoadField, .field = static_cast<std::uint8_t>(Field::Uri), .operand = 0});
       plan.instructions.push_back({.op = OpCode::LoadConstant, .operand = 1, .constValue = 0});

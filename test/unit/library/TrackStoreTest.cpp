@@ -1,34 +1,57 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/TrackStore.h>
+
 #include "test/unit/library/TrackStoreTestSupport.h"
+#include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
-#include <ao/library/TrackLayout.h>
+#include <ao/CoreIds.h>
+#include <ao/library/TrackBuilder.h>
+#include <ao/library/TrackWrite.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
 #include <cstdint>
+#include <format>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ao::library::test
 {
+  namespace
+  {
+    TrackBuilder makeBuilder(TrackSpec const& spec)
+    {
+      auto builder = TrackBuilder::makeEmpty();
+      applyTrackSpec(builder, spec);
+      return builder;
+    }
+
+    TrackId addCommittedTrack(MusicLibrary& library, TrackSpec const& spec)
+    {
+      return createCommittedTrack(library, makeBuilder(spec));
+    }
+
+    std::string dictionaryText(MusicLibrary const& library, DictionaryId id)
+    {
+      return std::string{library.dictionary().getOrDefault(id)};
+    }
+  } // namespace
+
   TEST_CASE("TrackStore - create and read", "[library][unit][track-store]")
   {
     auto fixture = TrackStoreFixture{};
-    auto hotHeader = TrackHotHeader{.artistId = DictionaryId{7}, .albumId = DictionaryId{9}, .year = 2024};
-    auto hotData = makeHotData(hotHeader, "First track");
-
-    auto coldHeader = TrackColdHeader{.duration = std::chrono::minutes{3}, .trackNumber = 2, .trackTotal = 11};
-    auto coldData = makeColdData(coldHeader);
-
-    auto wtxn = writeTransaction(fixture.library);
-    auto [id, view] = requireCreate(fixture.store.writer(wtxn), hotData, coldData);
-    REQUIRE(wtxn.commit());
-
-    CHECK(view.metadata().title() == "First track");
-    CHECK(view.metadata().artistId() == DictionaryId{7});
-    CHECK(view.property().duration() == std::chrono::minutes{3});
+    auto const id = addCommittedTrack(fixture.library,
+                                      TrackSpec{.title = "First track",
+                                                .artist = "First artist",
+                                                .album = "First album",
+                                                .year = 2024,
+                                                .trackNumber = 2,
+                                                .trackTotal = 11,
+                                                .duration = std::chrono::minutes{3}});
 
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
@@ -39,8 +62,8 @@ namespace ao::library::test
     CHECK(readView.isHotValid());
     CHECK(readView.isColdValid());
     CHECK(readView.metadata().title() == "First track");
-    CHECK(readView.metadata().artistId() == DictionaryId{7});
-    CHECK(readView.metadata().albumId() == DictionaryId{9});
+    CHECK(dictionaryText(fixture.library, readView.metadata().artistId()) == "First artist");
+    CHECK(dictionaryText(fixture.library, readView.metadata().albumId()) == "First album");
     CHECK(readView.metadata().year() == 2024);
     CHECK(readView.property().duration() == std::chrono::minutes{3});
     CHECK(readView.metadata().trackNumber() == 2);
@@ -52,11 +75,12 @@ namespace ao::library::test
   TEST_CASE("TrackStore - read by id", "[library][unit][track-store]")
   {
     auto fixture = TrackStoreFixture{};
-    auto hotHeader = TrackHotHeader{.artistId = DictionaryId{12}, .year = 1999};
-    auto hotData = makeHotData(hotHeader, "Lookup track");
-    auto coldHeader = TrackColdHeader{.duration = std::chrono::minutes{4}, .trackNumber = 5};
-    auto coldData = makeColdData(coldHeader);
-    auto id = createCommittedTrack(fixture.store, fixture.library, hotData, coldData);
+    auto const id = addCommittedTrack(fixture.library,
+                                      TrackSpec{.title = "Lookup track",
+                                                .artist = "Lookup artist",
+                                                .year = 1999,
+                                                .trackNumber = 5,
+                                                .duration = std::chrono::minutes{4}});
 
     auto rtxn = fixture.library.readTransaction();
     auto optFound = fixture.store.reader(rtxn).get(id);
@@ -64,7 +88,7 @@ namespace ao::library::test
     CHECK(optFound->isHotValid());
     CHECK(optFound->isColdValid());
     CHECK(optFound->metadata().title() == "Lookup track");
-    CHECK(optFound->metadata().artistId() == DictionaryId{12});
+    CHECK(dictionaryText(fixture.library, optFound->metadata().artistId()) == "Lookup artist");
     CHECK(optFound->metadata().year() == 1999);
     CHECK(optFound->property().duration() == std::chrono::minutes{4});
     CHECK(optFound->metadata().trackNumber() == 5);
@@ -73,30 +97,34 @@ namespace ao::library::test
   TEST_CASE("TrackStore - update", "[library][unit][track-store]")
   {
     auto fixture = TrackStoreFixture{};
-    auto hotData = makeHotData(TrackHotHeader{.artistId = DictionaryId{1}}, "Before");
-    auto coldData = makeColdData(TrackColdHeader{.duration = std::chrono::minutes{3}});
-    auto id = createCommittedTrack(fixture.store, fixture.library, hotData, coldData);
+    auto const id = addCommittedTrack(
+      fixture.library, TrackSpec{.title = "Before", .artist = "Before artist", .duration = std::chrono::minutes{3}});
 
-    auto hotData2 = makeHotData(TrackHotHeader{.artistId = DictionaryId{2}, .albumId = DictionaryId{3}}, "After");
-    auto wtxn = writeTransaction(fixture.library);
-    REQUIRE(fixture.store.writer(wtxn).updateHot(id, hotData2));
-    REQUIRE(wtxn.commit());
+    {
+      auto wtxn = writeTransaction(fixture.library);
+      auto const replacement = TrackSpec{.title = "After", .artist = "After artist", .album = "After album"};
+      auto builder = makeBuilder(replacement);
+      auto prepared = builder.prepareHot(wtxn);
+      REQUIRE(prepared);
+      auto writer = fixture.store.writer(wtxn);
+      REQUIRE(updatePreparedHotTrackRecord(writer, id, *prepared));
+      REQUIRE(wtxn.commit());
+    }
 
     auto rtxn = fixture.library.readTransaction();
     auto optView = fixture.store.reader(rtxn).get(id);
     REQUIRE(optView);
     CHECK(optView->metadata().title() == "After");
-    CHECK(optView->metadata().artistId() == DictionaryId{2});
-    CHECK(optView->metadata().albumId() == DictionaryId{3});
+    CHECK(dictionaryText(fixture.library, optView->metadata().artistId()) == "After artist");
+    CHECK(dictionaryText(fixture.library, optView->metadata().albumId()) == "After album");
     CHECK(optView->property().duration() == std::chrono::minutes{3});
   }
 
   TEST_CASE("TrackStore - delete", "[library][unit][track-store]")
   {
     auto fixture = TrackStoreFixture{};
-    auto hotData = makeHotData(TrackHotHeader{.artistId = DictionaryId{4}}, "Removed");
-    auto coldData = makeColdData(TrackColdHeader{.duration = std::chrono::minutes{2}});
-    auto id = createCommittedTrack(fixture.store, fixture.library, hotData, coldData);
+    auto const id = addCommittedTrack(
+      fixture.library, TrackSpec{.title = "Removed", .artist = "Removed artist", .duration = std::chrono::minutes{2}});
 
     auto wtxn = writeTransaction(fixture.library);
     REQUIRE(fixture.store.writer(wtxn).remove(id));
@@ -112,17 +140,13 @@ namespace ao::library::test
   TEST_CASE("TrackStore - create multiple tracks unique IDs", "[library][unit][track-store]")
   {
     auto fixture = TrackStoreFixture{};
-    auto hotData1 = makeHotData(TrackHotHeader{.artistId = DictionaryId{1}}, "One");
-    auto hotData2 = makeHotData(TrackHotHeader{.artistId = DictionaryId{2}}, "Two");
-    auto hotData3 = makeHotData(TrackHotHeader{.artistId = DictionaryId{3}}, "Three");
-    auto coldData1 = makeColdData(TrackColdHeader{.trackNumber = 1});
-    auto coldData2 = makeColdData(TrackColdHeader{.trackNumber = 2});
-    auto coldData3 = makeColdData(TrackColdHeader{.trackNumber = 3});
-
     auto wtxn = writeTransaction(fixture.library);
-    auto id1 = requireCreate(fixture.store.writer(wtxn), hotData1, coldData1).first;
-    auto id2 = requireCreate(fixture.store.writer(wtxn), hotData2, coldData2).first;
-    auto id3 = requireCreate(fixture.store.writer(wtxn), hotData3, coldData3).first;
+    auto const id1 =
+      requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "One", .uri = "one.flac", .trackNumber = 1}));
+    auto const id2 =
+      requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "Two", .uri = "two.flac", .trackNumber = 2}));
+    auto const id3 = requireCreate(
+      fixture.library, wtxn, makeBuilder(TrackSpec{.title = "Three", .uri = "three.flac", .trackNumber = 3}));
     REQUIRE(wtxn.commit());
 
     CHECK(id1 != id2);
@@ -148,35 +172,35 @@ namespace ao::library::test
   TEST_CASE("TrackStore - unified TrackView iteration", "[library][unit][track-store]")
   {
     auto fixture = TrackStoreFixture{};
-
     auto ids = std::vector<TrackId>{};
+    auto expectedArtists = std::vector<std::string>{};
 
     for (std::int32_t i = 0; i < 3; ++i)
     {
-      auto hotData = makeHotData(TrackHotHeader{.artistId = DictionaryId{static_cast<std::uint32_t>(10 + i)}});
-      auto coldData = makeColdData(TrackColdHeader{.trackNumber = static_cast<std::uint16_t>(i + 1)});
-
-      auto wtxn2 = writeTransaction(fixture.library);
-      ids.push_back(requireCreate(fixture.store.writer(wtxn2), hotData, coldData).first);
-      REQUIRE(wtxn2.commit());
+      auto const artist = std::format("Artist {}", 10 + i);
+      expectedArtists.push_back(artist);
+      ids.push_back(addCommittedTrack(
+        fixture.library,
+        TrackSpec{
+          .artist = artist, .uri = std::format("track_{}.flac", i), .trackNumber = static_cast<std::uint16_t>(i + 1)}));
     }
 
     auto rtxn = fixture.library.readTransaction();
     auto reader = fixture.store.reader(rtxn);
     auto collectedIds = std::vector<TrackId>{};
-    auto collectedArtistIds = std::vector<DictionaryId>{};
+    auto collectedArtists = std::vector<std::string>{};
     auto collectedTrackNumbers = std::vector<std::uint16_t>{};
 
     for (auto it = reader.begin(); it != reader.end(); ++it)
     {
       auto&& [trackId, trackView] = *it;
       collectedIds.push_back(trackId);
-      collectedArtistIds.push_back(trackView.metadata().artistId());
+      collectedArtists.push_back(dictionaryText(fixture.library, trackView.metadata().artistId()));
       collectedTrackNumbers.push_back(trackView.metadata().trackNumber());
     }
 
     CHECK(collectedIds == ids);
-    CHECK(collectedArtistIds == std::vector<DictionaryId>{DictionaryId{10}, DictionaryId{11}, DictionaryId{12}});
+    CHECK(collectedArtists == expectedArtists);
     CHECK(collectedTrackNumbers == std::vector<std::uint16_t>{1, 2, 3});
   }
 
@@ -184,10 +208,10 @@ namespace ao::library::test
   {
     auto fixture = TrackStoreFixture{};
     auto wtxn = writeTransaction(fixture.library);
-    auto writer = fixture.store.writer(wtxn);
-    auto const id1 = requireCreate(writer, makeHotData({}, "One"), makeColdData()).first;
-    auto const id2 = requireCreate(writer, makeHotData({}, "Two"), makeColdData()).first;
-    auto const id3 = requireCreate(writer, makeHotData({}, "Three"), makeColdData()).first;
+    auto const id1 = requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "One", .uri = "one.flac"}));
+    auto const id2 = requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "Two", .uri = "two.flac"}));
+    auto const id3 =
+      requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "Three", .uri = "three.flac"}));
     REQUIRE(wtxn.commit());
 
     auto const missingId = TrackId{id3.raw() + 1};
@@ -212,10 +236,10 @@ namespace ao::library::test
   {
     auto fixture = TrackStoreFixture{};
     auto wtxn = writeTransaction(fixture.library);
-    auto writer = fixture.store.writer(wtxn);
-    auto const id1 = requireCreate(writer, makeHotData({}, "One"), makeColdData()).first;
-    auto const id2 = requireCreate(writer, makeHotData({}, "Two"), makeColdData()).first;
-    auto const id3 = requireCreate(writer, makeHotData({}, "Three"), makeColdData()).first;
+    auto const id1 = requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "One", .uri = "one.flac"}));
+    auto const id2 = requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "Two", .uri = "two.flac"}));
+    auto const id3 =
+      requireCreate(fixture.library, wtxn, makeBuilder(TrackSpec{.title = "Three", .uri = "three.flac"}));
     REQUIRE(wtxn.commit());
 
     auto const missingId = TrackId{id3.raw() + 1};

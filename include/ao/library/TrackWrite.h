@@ -7,15 +7,12 @@
 #include <ao/Error.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-
-#include <utility>
 
 namespace ao::library
 {
-  Result<std::pair<TrackId, TrackView>> createPreparedTrackRecord(TrackStore::Writer& writer,
-                                                                  TrackBuilder::PreparedHot const& preparedHot,
-                                                                  TrackBuilder::PreparedCold const& preparedCold);
+  Result<TrackId> createPreparedTrackRecord(TrackStore::Writer& writer,
+                                            TrackBuilder::PreparedHot const& preparedHot,
+                                            TrackBuilder::PreparedCold const& preparedCold);
 
   Result<> updatePreparedHotTrackRecord(TrackStore::Writer& writer,
                                         TrackId trackId,

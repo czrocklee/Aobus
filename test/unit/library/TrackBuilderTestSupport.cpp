@@ -3,6 +3,7 @@
 
 #include "TrackBuilderTestSupport.h"
 
+#include "MusicLibraryTestSupport.h"
 #include "WritableLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
@@ -19,7 +20,7 @@
 namespace ao::library::test
 {
   TrackSerializationFixture::TrackSerializationFixture()
-    : _library{_temp.path(), _temp.path() / "db"}, _transaction{writeTransaction(_library)}
+    : _library{makeTestMusicLibrary(_temp.path(), _temp.path() / "db")}, _transaction{writeTransaction(_library)}
   {
   }
 

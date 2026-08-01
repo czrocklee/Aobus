@@ -39,12 +39,14 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - Only the runtime planner can construct an applicable plan; consumers may inspect its immutable items but cannot insert or rewrite them.
 - Plan application accepts only the library id and revision captured by the planner, so a foreign, superseded, or already-consumed snapshot cannot mutate storage.
 - One applied plan commits all successful content changes and the revision atomically.
-- Runtime scan apply closes interactive admission before slow preparation and keeps it closed through publication and completion.
+- Runtime scan apply closes interactive admission before slow preparation and keeps it closed through publication and callback-owner finalization.
 - Filesystem reads, media parsing, and fingerprinting hold no coordinator writer ownership or LMDB write transaction.
 - Cancellation before commit leaves all track, manifest, identity, and relink state unchanged.
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
 - Identity backfill never commits a hash for a row or file whose live size or modification time changed after snapshot.
+- Persisted manifest corruption stops plan construction or backfill with `CorruptData`; it is not a per-file `Error` item and no partial plan or later manifest row is delivered.
+- Before scan apply mutates any item, every plan item that names an existing Track must still have valid hot and cold records; missing evidence is `CorruptData` and is never reinterpreted as a new Track.
 
 ## Plan classification
 
@@ -61,6 +63,8 @@ The planner recursively walks the configured music root, skips unsupported and n
 
 A missing root or root-level walk failure is a plan-building error.
 Per-entry problems may appear as error items without erasing other classifications.
+These item errors describe external filesystem, path-resolution, or media inspection failures.
+Malformed persisted manifest keys or values instead fail the complete `buildPlan()` result at the first bad row, because continuing would make corrupt storage look like an ordinary missing file.
 An entry that is present but cannot be resolved or inspected safely is `Error`, not also `Missing`; its existing manifest row remains unchanged when the plan is applied.
 The planner reads the persisted library id, committed revision, and manifest from the same LMDB snapshot and stores that binding in the returned plan.
 
@@ -84,7 +88,9 @@ There is no nullable or mode-switching transaction branch inside `apply()`.
 
 After maintenance closes interactive admission, application validates the plan binding before reporting item progress, opening media, or fingerprinting.
 The write transaction validates the same library id again and requires its newly allocated revision to immediately follow the plan revision before it touches track or manifest rows.
+A single pre-mutation pass also validates the hot/cold evidence for every nonzero planned Track id.
 A foreign binding returns `InvalidInput`; a superseded or replayed binding returns `Conflict`; both paths abort without a durable revision or content change.
+Missing or invalid Track evidence returns `CorruptData` and aborts the staged revision plus every planned item; the `Changed` branch cannot fall through to `New`.
 
 The transaction currently covers the complete prepared plan and has no item or byte bound.
 This preserves whole-plan all-or-nothing behavior; writer hold time and rollback cost scale with the prepared plan.
@@ -125,9 +131,12 @@ Aobus never writes a guessed identity.
 3. Acquire one bounded coordinator mutation per serial write-back batch, re-read every row, and commit identities for rows still available, pending, and stat-equal.
 
 Per-file failures are reported and counted without aborting the run; database failures fail the operation.
+Manifest iteration validates each persisted row and returns `CorruptData` at the existing task boundary rather than skipping it or treating it as pending work.
 Progress callbacks are serialized but may run on worker-pool threads.
 
-Cancellation stops hashing at chunk boundaries, commits valid rows already completed in the current batch, leaves unfinished rows pending, and returns `cancelled = true`.
+Cancellation stops hashing at chunk boundaries, commits valid rows already completed in the current batch, leaves unfinished rows pending, and propagates `OperationCancelled` after callback-owner maintenance cleanup.
+The successful result contains only completed, skipped, and per-item-failure counts; it never also represents cancellation.
+Earlier committed batches remain durable, and the next run resumes from the pending manifest rows rather than reconstructing partial counts for the cancelled run.
 Backfill changes only manifest identity; each effective batch publishes its committed revision with no track/list category rather than claiming a metadata mutation.
 
 ## Signature behavior
@@ -139,11 +148,14 @@ Pairing the 128-bit signature with payload length is the complete equality key.
 ## Failure and cancellation
 
 Filesystem, mapping, tag parsing, media corruption, database, and resource-limit failures use `Result` or the per-item failure channel according to whether useful plan/application work can continue.
+Safely detected malformed persisted manifest or Track evidence is operation-level `CorruptData`, not an external-item failure that permits continuation.
+Any post-effect storage failure exits the complete scan transaction owner through `lmdb::TransactionFailure`; the outer boundary translates it only after the transaction has aborted.
 Cancellation is cooperative during payload hashing and before commit.
 The shared UIModel workflow distinguishes an up-to-date plan, an errors-only
 plan, and an actionable plan before application. Frontends remain responsible
-only for presenting issues, publishing frontend-specific refreshes, and
-scheduling optional identity backfill after a fast-bootstrap scan.
+only for presenting issues and scheduling optional identity backfill after a
+fast-bootstrap scan. Committed data reaches runtime replicas and projections
+through `LibraryChanges`; workflow completion performs no independent refresh.
 
 ## Implementation map
 

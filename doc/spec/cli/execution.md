@@ -46,6 +46,8 @@ They do not reimplement list membership, scan planning, query evaluation, mutati
 
 Global CLI options select one normalized music root and one output format for the command invocation.
 `CliRuntime` owns one `CoreRuntime`/library environment for that invocation.
+It constructs that graph lazily through `CoreRuntime::create()`.
+The factory validates the persisted library and completes initial All Tracks materialization before the command receives the runtime; an Error becomes `CommandError` before command payload is emitted.
 The invocation thread owns its callback executor and remains the only CLI application-control thread.
 There is no workspace, interactive playback session, or persistent frontend state.
 
@@ -78,6 +80,8 @@ Library import dry-run decodes and applies through the import transaction, then 
 `lib fingerprint --pending` is bounded maintenance with no dry-run mode because completed identity batches are its unit of progress.
 It runs worker work through `CliRuntime::runTask()` so callback-executor continuations and terminal completion return through the invocation-thread executor without deadlocking a future wait.
 Its current progress and item-failure callbacks remain worker-produced and are serialized by the indexer.
+Successful structured output contains completed, skipped, and per-item-failure counts only.
+Cancellation propagates through the task cancellation channel and emits no successful partial-count document; already published batches remain durable and a later invocation resumes pending rows.
 
 ### Scan and verify
 
@@ -97,6 +101,7 @@ Callers parse JSON rather than relying on byte-exact whitespace from the ryml em
 ## Failure and cancellation
 
 Query/format compilation, unknown ids, invalid list ancestry, unsupported operation, storage, import/export, resource IO, scan, and verification failures become `CommandError`, print one diagnostic, and exit `1`.
+Safely detected malformed dictionary, Track, or manifest state rejects runtime construction or the enclosing operation as `CorruptData`; it is not skipped by stats, dump, scan, or identity commands, and the invocation exits nonzero.
 Unexpected Aobus invariant exceptions are labeled internal errors; other exceptions use the generic CLI error leaf.
 
 The CLI command invocation is synchronous at its adapter boundary.

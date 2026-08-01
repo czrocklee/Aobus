@@ -20,6 +20,7 @@ namespace ao::audio
 namespace ao::async
 {
   class Runtime;
+  class Sleeper;
 }
 
 namespace ao::rt
@@ -52,8 +53,10 @@ namespace ao::rt
   class AppRuntime final : public CoreRuntime
   {
   public:
-    explicit AppRuntime(AppRuntimeDependencies dependencies);
+    static Result<std::unique_ptr<AppRuntime>> create(AppRuntimeDependencies dependencies);
     ~AppRuntime() override;
+
+    void shutdown() noexcept override;
 
     AppRuntime(AppRuntime const&) = delete;
     AppRuntime& operator=(AppRuntime const&) = delete;
@@ -77,6 +80,8 @@ namespace ao::rt
     void addAudioProvider(std::unique_ptr<audio::BackendProvider> providerPtr);
 
   private:
+    AppRuntime();
+
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };

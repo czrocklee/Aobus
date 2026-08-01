@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/AppRuntime.h>
+
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
 #include "test/unit/TestFixtureSupport.h"
@@ -24,11 +26,11 @@
 #include <ao/audio/NullBackend.h>
 #include <ao/audio/RenderTarget.h>
 #include <ao/audio/Subscription.h>
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/ConfigStore.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ViewService.h>
 #include <ao/rt/ViewState.h>
+#include <ao/rt/VirtualListIds.h>
 #include <ao/rt/WorkspaceService.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
@@ -118,26 +120,81 @@ namespace ao::rt::test
       co_await runtime->resumeOnWorker();
       throwException<Exception>("AppRuntime composition failure");
     }
+
+    async::Task<void> attemptWriterDuringQueuedPublication(CoreRuntime* runtime,
+                                                           AsyncTestState<bool> started,
+                                                           AsyncTestState<bool> rejectedByClosing)
+    {
+      started.set(true);
+      auto const result = runtime->library().createList(LibraryWriter::ListDraft{.name = "Closing writer"});
+      rejectedByClosing.set(!result && result.error().code == Error::Code::InvalidState);
+      co_return;
+    }
   } // namespace
 
   TEST_CASE("AppRuntime - missing workspace config store is rejected", "[runtime][unit][app-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
 
-    try
+    auto const runtime = AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::make_unique<InlineExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+    });
+
+    REQUIRE_FALSE(runtime);
+    CHECK(runtime.error().code == Error::Code::InvalidInput);
+    CHECK(runtime.error().message == "AppRuntime requires a workspace config store");
+  }
+
+  TEST_CASE("runtime factories preserve storage construction errors", "[runtime][unit][app-runtime][factory]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const databaseFile = ao::test::TempFile{".mdb"};
+
+    SECTION("CoreRuntime")
     {
-      auto runtime = AppRuntime{AppRuntimeDependencies{
+      auto const result = CoreRuntime::create(
+        std::make_unique<InlineExecutor>(), tempDir.path(), databaseFile.path, library::test::kTestMusicLibraryMapSize);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::IoError);
+    }
+
+    SECTION("AppRuntime")
+    {
+      auto const result = AppRuntime::create(AppRuntimeDependencies{
         .executorPtr = std::make_unique<InlineExecutor>(),
         .musicRoot = tempDir.path(),
-        .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
+        .databasePath = databaseFile.path,
         .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
-      }};
-      FAIL("AppRuntime construction should reject a missing workspace config store");
+        .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+      });
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::IoError);
     }
-    catch (Exception const& error)
+  }
+
+  TEST_CASE("AppRuntime - factory materializes All Tracks before exposure", "[runtime][unit][app-runtime][factory]")
+  {
+    auto const tempDir = ao::test::TempDir{};
+    auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
     {
-      CHECK(std::string_view{error.what()} == "AppRuntime requires a workspace config store");
+      auto library = library::test::makeTestMusicLibrary(tempDir.path(), databasePath);
+      [[maybe_unused]] auto const trackId = library::test::addTrack(
+        library, library::test::TrackSpec{.title = "Already persisted", .uri = "persisted.flac"});
     }
+
+    auto runtimePtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
+      .executorPtr = std::make_unique<InlineExecutor>(),
+      .musicRoot = tempDir.path(),
+      .databasePath = databasePath,
+      .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
+      .workspaceConfigStorePtr = std::make_unique<ConfigStore>(tempDir.path() / "workspace.yaml"),
+    }));
+    auto allTracks = ao::test::requireValue(runtimePtr->sources().acquire(kAllTracksListId));
+
+    CHECK(allTracks->size() == 1);
   }
 
   TEST_CASE("AppRuntime - playback session store uses fallback and explicit override", "[runtime][unit][app-runtime]")
@@ -147,15 +204,15 @@ namespace ao::rt::test
 
     SECTION("null override uses the workspace store")
     {
-      auto runtime = makeRuntime(tempDir);
-      CHECK(&runtime.playbackSessionConfigStore() == &runtime.workspaceConfigStore());
+      auto runtimePtr = makeRuntime(tempDir);
+      CHECK(&runtimePtr->playbackSessionConfigStore() == &runtimePtr->workspaceConfigStore());
     }
 
     SECTION("explicit override is preserved")
     {
-      auto runtime = makeRuntime(tempDir, &overrideStore);
-      CHECK(&runtime.playbackSessionConfigStore() == &overrideStore);
-      CHECK(&runtime.playbackSessionConfigStore() != &runtime.workspaceConfigStore());
+      auto runtimePtr = makeRuntime(tempDir, &overrideStore);
+      CHECK(&runtimePtr->playbackSessionConfigStore() == &overrideStore);
+      CHECK(&runtimePtr->playbackSessionConfigStore() != &runtimePtr->workspaceConfigStore());
     }
   }
 
@@ -164,14 +221,14 @@ namespace ao::rt::test
     auto tempDir = ao::test::TempDir{};
     auto const databasePath = LibraryPaths{tempDir.path()}.databasePath();
 
-    auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
+    auto appPtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = databasePath,
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-    });
+    }));
 
     CHECK(appPtr->musicRoot() == std::filesystem::path{tempDir.path()});
     CHECK(appPtr->databasePath() == databasePath);
@@ -208,7 +265,7 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto exceptionRecorder = AsyncExceptionRecorder{};
-    auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
+    auto appPtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::make_unique<InlineExecutor>(),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
@@ -216,7 +273,7 @@ namespace ao::rt::test
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
       .asyncExceptionHandler = exceptionRecorder.handler(),
-    });
+    }));
 
     appPtr->async().spawnLogged(failingAppRuntimeTask(&appPtr->async()));
 
@@ -226,6 +283,34 @@ namespace ao::rt::test
     requireSingleRecordedException<Exception>(exceptionRecorder, "root coroutine");
   }
 
+  TEST_CASE("CoreRuntime - shutdown wakes a writer behind queued publication",
+            "[runtime][regression][core-runtime][concurrency]")
+  {
+    auto tempDir = ao::test::TempDir{};
+    auto executorPtr = std::make_unique<QueuedExecutor>();
+    auto* const executor = executorPtr.get();
+    auto runtimePtr = ao::test::requireValue(CoreRuntime::create(std::move(executorPtr),
+                                                                 tempDir.path(),
+                                                                 LibraryPaths{tempDir.path()}.databasePath(),
+                                                                 library::test::kTestMusicLibraryMapSize));
+
+    REQUIRE(runtimePtr->library().createList(LibraryWriter::ListDraft{.name = "Committed before close"}));
+    REQUIRE(executor->queuedCount() == 1);
+
+    auto started = AsyncTestState<bool>::create(false);
+    auto rejectedByClosing = AsyncTestState<bool>::create(false);
+    auto future =
+      runtimePtr->async().spawn(attemptWriterDuringQueuedPublication(runtimePtr.get(), started, rejectedByClosing));
+    REQUIRE(started.waitUntil(true));
+    CHECK_FALSE(rejectedByClosing.load());
+
+    runtimePtr->shutdown();
+
+    CHECK(rejectedByClosing.load());
+    CHECK_NOTHROW(future.get());
+    CHECK_NOTHROW(executor->drain());
+  }
+
   TEST_CASE("AppRuntime - teardown is deferred until playback callbacks quiesce",
             "[runtime][regression][app-runtime][concurrency]")
   {
@@ -233,14 +318,14 @@ namespace ao::rt::test
     auto audioStatePtr = std::make_shared<AppRuntimeAudioState>();
     auto executorPtr = std::make_unique<QueuedExecutor>();
     auto* const executor = executorPtr.get();
-    auto appPtr = std::make_unique<AppRuntime>(AppRuntimeDependencies{
+    auto appPtr = ao::test::requireValue(AppRuntime::create(AppRuntimeDependencies{
       .executorPtr = std::move(executorPtr),
       .musicRoot = tempDir.path(),
       .databasePath = LibraryPaths{tempDir.path()}.databasePath(),
       .musicLibraryMapSize = library::test::kTestMusicLibraryMapSize,
       .workspaceConfigStorePtr =
         std::make_unique<ConfigStore>(std::filesystem::path{tempDir.path()} / "workspace.yaml"),
-    });
+    }));
 
     appPtr->addAudioProvider(std::make_unique<AppRuntimeProvider>(audioStatePtr));
     REQUIRE(audioStatePtr->onDevicesChanged);

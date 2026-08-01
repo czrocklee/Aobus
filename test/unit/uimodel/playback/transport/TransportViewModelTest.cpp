@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/playback/transport/TransportViewModel.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/runtime/PlaybackUiTestSupport.h"
 #include <ao/CoreIds.h>
@@ -9,7 +11,6 @@
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
-#include <ao/uimodel/playback/transport/TransportViewModel.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,7 +24,7 @@ namespace ao::uimodel::test
   TEST_CASE("TransportViewModel - renders presentation for actions", "[uimodel][unit][playback]")
   {
     auto fixture = PlaybackUiFixture{};
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     SECTION("Play action uses play icon and disabled command state")
@@ -80,7 +81,7 @@ namespace ao::uimodel::test
     fixture.makePlaybackReady();
     auto const firstTrack = fixture.addPlayableTrack("First");
     fixture.addPlayableTrack("Second");
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
     REQUIRE(fixture.playFromView(firstTrack));
 
@@ -99,7 +100,7 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     auto playLog = ao::test::RenderLog<TransportViewState>{};
@@ -128,7 +129,7 @@ namespace ao::uimodel::test
     fixture.makePlaybackReady();
     auto const firstTrack = fixture.addPlayableTrack("First");
     auto const secondTrack = fixture.addPlayableTrack("Second");
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     SECTION("PlayPause resumes paused playback")
@@ -175,7 +176,7 @@ namespace ao::uimodel::test
   {
     auto fixture = PlaybackUiFixture{};
     fixture.makePlaybackReady();
-    auto& playback = fixture.runtime.playback();
+    auto& playback = fixture.runtime().playback();
     auto commands = PlaybackCommandSurface{playback, [] {}};
 
     auto log = ao::test::RenderLog<TransportViewState>{};

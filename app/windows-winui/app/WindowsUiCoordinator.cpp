@@ -41,14 +41,14 @@ namespace ao::winui
       , theme{session.stateRoot() / "windows-theme.yaml"}
       , inspectorCoverArt{std::move(views.inspectorCoverImage),
                           std::move(views.inspectorCoverPlaceholder),
-                          libraryResourceBytes,
+                          resourceBytes,
                           theme,
                           uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::Inspector)}
       , trackDetail{std::move(views.trackDetail)}
       , activityStatus{std::move(views.activityStatus)}
       , nowPlayingCoverArt{std::move(views.nowPlayingCoverImage),
                            std::move(views.nowPlayingCoverPlaceholder),
-                           playbackResourceBytes,
+                           resourceBytes,
                            theme,
                            uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::NowPlaying)}
     {
@@ -60,53 +60,23 @@ namespace ao::winui
             callbacks.onTrackListChanged();
           }
         });
-      bindLibrary();
-      bindPlayback();
-      session.setCallbacks({.onLibraryChanging =
-                              [this]
+      bindRuntime();
+      session.setCallbacks({.onRuntimeChanging =
+                              [this] noexcept
                             {
+                              callbacks.onRuntimeChanging();
                               trackDetail.unbind();
+                              activityStatus.unbind();
                               quickFilter.unbind();
                               trackList.unbind();
-                              libraryResourceBytes.unbind();
-
-                              if (callbacks.onLibraryChanging)
-                              {
-                                callbacks.onLibraryChanging();
-                              }
-                            },
-                            .onLibraryChanged =
-                              [this]
-                            {
-                              bindLibrary();
-
-                              if (callbacks.onLibraryChanged)
-                              {
-                                callbacks.onLibraryChanged();
-                              }
-                            },
-                            .onLibraryTaskRuntimeChanged = [this](std::shared_ptr<rt::AppRuntime> runtimePtr)
-                            { activityStatus.bind(std::move(runtimePtr)); },
-                            .onPlaybackChanging =
-                              [this]
-                            {
                               nowPlayingCoverArt.unbind();
-                              playbackResourceBytes.unbind();
-
-                              if (callbacks.onPlaybackChanging)
-                              {
-                                callbacks.onPlaybackChanging();
-                              }
+                              resourceBytes.unbind();
                             },
-                            .onPlaybackChanged =
-                              [this]
+                            .onRuntimeChanged =
+                              [this] noexcept
                             {
-                              bindPlayback();
-
-                              if (callbacks.onPlaybackChanged)
-                              {
-                                callbacks.onPlaybackChanged();
-                              }
+                              bindRuntime();
+                              callbacks.onRuntimeChanged();
                             },
                             .onStatus =
                               [this](std::string status)
@@ -126,19 +96,14 @@ namespace ao::winui
                             }});
     }
 
-    void bindLibrary()
+    void bindRuntime()
     {
-      libraryResourceBytes.bind(session.libraryRuntimePtr());
-      trackList.bind(session.libraryRuntimePtr(), session.columnLayouts());
-      quickFilter.bind(session.libraryRuntimePtr());
+      resourceBytes.bind(session.runtimePtr());
+      trackList.bind(session.runtimePtr(), session.columnLayouts());
+      quickFilter.bind(session.runtimePtr());
       trackDetail.bind(dependencies());
-      activityStatus.bind(session.libraryRuntimePtr());
-    }
-
-    void bindPlayback()
-    {
-      playbackResourceBytes.bind(session.playbackRuntimePtr());
-      nowPlayingCoverArt.bind(session.playbackRuntime().async());
+      activityStatus.bind(session.runtimePtr());
+      nowPlayingCoverArt.bind(session.runtime().async());
     }
 
     void retire()
@@ -156,8 +121,7 @@ namespace ao::winui
       quickFilter.unbind();
       trackList.unbind();
       nowPlayingCoverArt.unbind();
-      libraryResourceBytes.unbind();
-      playbackResourceBytes.unbind();
+      resourceBytes.unbind();
       callbacks = {};
     }
 
@@ -165,12 +129,10 @@ namespace ao::winui
     {
       return WinUiDependencies{
         .session = session,
-        .libraryRuntime = session.libraryRuntime(),
-        .playbackRuntime = session.playbackRuntime(),
+        .runtime = session.runtime(),
         .playbackCommands = session.playbackCommands(),
         .trackList = trackList,
-        .resourceBytes = libraryResourceBytes,
-        .playbackResourceBytes = playbackResourceBytes,
+        .resourceBytes = resourceBytes,
         .inspectorCoverArt = inspectorCoverArt,
         .nowPlayingCoverArt = nowPlayingCoverArt,
         .theme = theme,
@@ -182,11 +144,10 @@ namespace ao::winui
     TrackListController trackList;
     TrackQuickFilterControl quickFilter;
     WindowsThemeCoordinator theme;
-    rt::ResourceByteLoader libraryResourceBytes;
+    rt::ResourceByteLoader resourceBytes;
     CoverArtPresenter inspectorCoverArt;
     TrackDetailControl trackDetail;
     ActivityStatusControl activityStatus;
-    rt::ResourceByteLoader playbackResourceBytes;
     CoverArtPresenter nowPlayingCoverArt;
     bool active = true;
   };

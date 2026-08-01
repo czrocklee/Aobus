@@ -84,6 +84,7 @@ namespace ao::rt
     };
 
     Result<> validatePlan() const;
+    Result<> validatePersistedTrackEvidence(library::TrackStore::Writer const& trackWriter) const;
     Result<std::filesystem::path> resolveItemPath(ScanItem const& item) const;
 
     void applyScanItem(std::size_t itemIndex,
@@ -103,13 +104,13 @@ namespace ao::rt
                           library::WriteTransaction& transaction,
                           library::FileManifestStore::Writer& manifestWriter);
 
-    bool tryApplyChangedItem(ScanItem const& item,
-                             library::WriteTransaction& transaction,
-                             library::TrackStore::Writer& trackWriter,
-                             library::FileManifestStore::Writer& manifestWriter,
-                             library::DictionaryStore const& dictionary,
-                             library::TrackBuilder& builder,
-                             library::AudioIdentity const& identity);
+    void applyChangedItem(ScanItem const& item,
+                          library::WriteTransaction& transaction,
+                          library::TrackStore::Writer& trackWriter,
+                          library::FileManifestStore::Writer& manifestWriter,
+                          library::DictionaryStore const& dictionary,
+                          library::TrackBuilder& builder,
+                          library::AudioIdentity const& identity);
 
     bool applyMovedItem(ScanItem const& item,
                         library::WriteTransaction& transaction,
@@ -147,20 +148,28 @@ namespace ao::rt
                                                               TrackId trackId,
                                                               std::optional<library::AudioIdentity> const& optIdentity);
 
+    // Reports a rejection as an item failure and returns false. Use it only
+    // where a false return is item-neutral, or where the caller has already
+    // armed _abortTransaction for the complete item, as the Moved path does.
     bool writeManifest(library::FileManifestStore::Writer& writer,
                        std::string const& uri,
                        library::FileManifestBuilder& builder);
 
+    // Post-effect manifest write for a path whose caller keeps applying items.
+    // The item's Track record is already staged, so a rejection cannot be
+    // skipped without committing a Track that no manifest row references. It
+    // leaves the complete transaction owner instead.
+    static void writeManifestForStagedTrack(library::FileManifestStore::Writer& writer,
+                                            std::string const& uri,
+                                            library::FileManifestBuilder& builder);
+
+    // The Moved path pre-arms whole-transaction abort before it stages data, so
+    // its item-local reporting helpers cannot permit a later commit.
     bool updateTrack(library::TrackStore::Writer& trackWriter,
                      TrackId trackId,
                      std::string const& uri,
                      library::TrackBuilder::PreparedHot const& hot,
                      library::TrackBuilder::PreparedCold const& cold);
-
-    std::optional<TrackId> createTrack(library::TrackStore::Writer& trackWriter,
-                                       std::string const& uri,
-                                       library::TrackBuilder::PreparedHot const& hot,
-                                       library::TrackBuilder::PreparedCold const& cold);
 
     library::MusicLibrary& _ml;
     ScanPlan _plan;

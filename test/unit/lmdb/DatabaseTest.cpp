@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
+
+#include <ao/lmdb/Database.h>
 
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
+#include <ao/lmdb/TransactionFailure.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
 
+#include <optional>
 #include <utility>
 
 namespace ao::lmdb::test
@@ -64,6 +67,33 @@ namespace ao::lmdb::test
 
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::InvalidState);
+  }
+
+  TEST_CASE("Database - failed write open unwinds and rolls back database creation", "[lmdb][regression][database]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto env = openEnvironment(temp.path(), {.flags = MDB_CREATE, .maxDatabases = 1});
+    auto optFailure = std::optional<Error>{};
+
+    try
+    {
+      auto transaction = beginWriteTransaction(env);
+      REQUIRE(Database::open(transaction, "first"));
+      std::ignore = Database::open(transaction, "second");
+      FAIL("opening a database beyond maxdbs should throw");
+    }
+    catch (TransactionFailure const& transactionFailure)
+    {
+      optFailure = transactionFailure.error();
+    }
+
+    REQUIRE(optFailure);
+    CHECK(optFailure->code == Error::Code::IoError);
+
+    auto readTransaction = beginReadTransaction(env);
+    auto first = Database::open(readTransaction, "first");
+    REQUIRE_FALSE(first);
+    CHECK(first.error().code == Error::Code::NotFound);
   }
 
   TEST_CASE("Database - read-only open rejects a moved-from transaction", "[lmdb][unit][database]")

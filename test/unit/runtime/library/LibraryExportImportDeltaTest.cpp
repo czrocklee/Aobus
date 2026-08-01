@@ -60,15 +60,15 @@ namespace ao::rt::test
     {
       auto executor = InlineExecutor{};
       auto runtime = async::Runtime{executor};
-      auto runtimeLibrary = Library{runtime, library, changes};
-      auto planResult = runtime.spawn(runtimeLibrary.taskService().prepareLibraryImportAsync(path, mode)).get();
+      auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, library, changes));
+      auto planResult = runtime.spawn(runtimeLibraryPtr->taskService().prepareLibraryImportAsync(path, mode)).get();
 
       if (!planResult)
       {
         return std::unexpected{planResult.error()};
       }
 
-      return runtime.spawn(runtimeLibrary.taskService().applyLibraryImportPlanAsync(std::move(*planResult))).get();
+      return runtime.spawn(runtimeLibraryPtr->taskService().applyLibraryImportPlanAsync(std::move(*planResult))).get();
     }
   } // namespace
 

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryReader.h>
+
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
@@ -22,13 +24,13 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/rt/CoreRuntime.h>
 #include <ao/rt/ListNode.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackRow.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryPaths.h>
-#include <ao/rt/library/LibraryReader.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -67,12 +69,12 @@ namespace ao::rt::test
       ListId filteredListId{};
     };
 
-    CoreRuntime makeCoreRuntime(ao::test::TempDir const& tempDir)
+    std::unique_ptr<CoreRuntime> makeCoreRuntime(ao::test::TempDir const& tempDir)
     {
-      return CoreRuntime{std::make_unique<InlineExecutor>(),
-                         tempDir.path(),
-                         LibraryPaths{tempDir.path()}.databasePath(),
-                         library::test::kTestMusicLibraryMapSize};
+      return ao::test::requireValue(CoreRuntime::create(std::make_unique<InlineExecutor>(),
+                                                        tempDir.path(),
+                                                        LibraryPaths{tempDir.path()}.databasePath(),
+                                                        library::test::kTestMusicLibraryMapSize));
     }
 
     SeededReadModelLibrary seedLibrary(ao::test::TempDir const& tempDir)
@@ -118,22 +120,20 @@ namespace ao::rt::test
       trackBuilder.tags().add("Favorite").add("Live");
       trackBuilder.coverArt().add(PictureType::FrontCover, resourceId);
 
-      auto hotData = trackBuilder.serializeHot(transaction);
-      REQUIRE(hotData);
-      auto coldData = trackBuilder.serializeCold(transaction, musicLibrary.resources());
-      REQUIRE(coldData);
+      auto prepared = trackBuilder.prepare(transaction, musicLibrary.resources());
+      REQUIRE(prepared);
       auto trackWriter = musicLibrary.tracks().writer(transaction);
-      [[maybe_unused]] auto [trackId, trackView] =
-        ao::test::requireValue(trackWriter.createHotCold(*hotData, *coldData));
+      auto const trackId =
+        ao::test::requireValue(library::createPreparedTrackRecord(trackWriter, prepared->first, prepared->second));
 
       auto otherTrackBuilder = library::TrackBuilder::makeEmpty();
       otherTrackBuilder.metadata().title("Another Song");
+      otherTrackBuilder.property().uri("other.flac");
       otherTrackBuilder.tags().add("Favorite").add("Jazz");
-      auto otherSerializeResult = otherTrackBuilder.serialize(transaction, musicLibrary.resources());
-      REQUIRE(otherSerializeResult);
-      auto const [otherHot, otherCold] = *otherSerializeResult;
-      [[maybe_unused]] auto [otherTrackId, otherTrackView] =
-        ao::test::requireValue(trackWriter.createHotCold(otherHot, otherCold));
+      auto otherPrepared = otherTrackBuilder.prepare(transaction, musicLibrary.resources());
+      REQUIRE(otherPrepared);
+      auto const otherTrackId = ao::test::requireValue(
+        library::createPreparedTrackRecord(trackWriter, otherPrepared->first, otherPrepared->second));
 
       auto manifestPayload = library::FileManifestBuilder::makeEmpty()
                                .trackId(trackId)
@@ -145,12 +145,12 @@ namespace ao::rt::test
 
       auto orderedListBuilder = library::ListBuilder::makeEmpty();
       orderedListBuilder.name("Ordered List").description("Pinned songs").orderTrackIds().add(trackId);
-      [[maybe_unused]] auto [orderedListId, orderedListView] = ao::test::requireValue(
+      auto const orderedListId = ao::test::requireValue(
         musicLibrary.lists().writer(transaction).create(ao::test::requireValue(orderedListBuilder.serialize())));
 
       auto filteredListBuilder = library::ListBuilder::makeEmpty();
       filteredListBuilder.name("Filtered List").parentId(orderedListId).filter("@artist = \"An Artist\"");
-      [[maybe_unused]] auto [filteredListId, filteredListView] = ao::test::requireValue(
+      auto const filteredListId = ao::test::requireValue(
         musicLibrary.lists().writer(transaction).create(ao::test::requireValue(filteredListBuilder.serialize())));
 
       REQUIRE(transaction.commit());
@@ -171,8 +171,8 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
-    auto runtime = makeCoreRuntime(tempDir);
-    auto const& reads = runtime.library();
+    auto runtimePtr = makeCoreRuntime(tempDir);
+    auto const& reads = runtimePtr->library();
 
     auto scope = reads.reader();
 
@@ -251,8 +251,8 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};
     auto changes = makeInlineLibraryChanges(ml);
-    auto runtimeLibrary = Library{asyncRuntime, ml, changes};
-    auto reader = runtimeLibrary.reader();
+    auto runtimeLibraryPtr = ao::test::requireValue(Library::create(asyncRuntime, ml, changes));
+    auto reader = runtimeLibraryPtr->reader();
     auto const optRow = reader.trackRow(trackId);
     REQUIRE(optRow);
     CHECK_FALSE(optRow->optUriPath);
@@ -262,9 +262,9 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
-    auto runtime = makeCoreRuntime(tempDir);
+    auto runtimePtr = makeCoreRuntime(tempDir);
 
-    auto scope = runtime.library().reader();
+    auto scope = runtimePtr->library().reader();
     auto const nodes = scope.lists();
 
     auto const orderedIt =
@@ -296,9 +296,9 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
-    auto runtime = makeCoreRuntime(tempDir);
+    auto runtimePtr = makeCoreRuntime(tempDir);
 
-    auto scope = runtime.library().reader();
+    auto scope = runtimePtr->library().reader();
 
     CHECK(scope.listOrderTrackIds(seeded.orderedListId) == std::vector<TrackId>{seeded.trackId});
     CHECK(scope.listOrderTrackIds(seeded.filteredListId).empty());
@@ -309,8 +309,8 @@ namespace ao::rt::test
   {
     auto tempDir = ao::test::TempDir{};
     auto const seeded = seedLibrary(tempDir);
-    auto runtime = makeCoreRuntime(tempDir);
-    auto const& reads = runtime.library();
+    auto runtimePtr = makeCoreRuntime(tempDir);
+    auto const& reads = runtimePtr->library();
 
     auto scope = reads.reader();
     auto const selectedIds = std::array{seeded.trackId, seeded.otherTrackId};

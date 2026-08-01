@@ -24,6 +24,7 @@
 #include <gtkmm/window.h>
 
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 namespace ao::gtk::layout::editor::test
@@ -36,7 +37,7 @@ namespace ao::gtk::layout::editor::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_test");
 
     auto const tempDir = ao::test::TempDir{};
-    rt::AppRuntime runtime = makeRuntime(tempDir);
+    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -47,7 +48,7 @@ namespace ao::gtk::layout::editor::test
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = runtime,
+                                  .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
                                   .buildState = LayoutBuildStateView{runtimeState},
@@ -101,7 +102,7 @@ namespace ao::gtk::layout::editor::test
     auto const appPtr = Gtk::Application::create("io.github.aobus.canvas_geometry_test");
 
     auto const tempDir = ao::test::TempDir{};
-    rt::AppRuntime runtime = makeRuntime(tempDir);
+    std::unique_ptr<rt::AppRuntime> runtimePtr = makeRuntime(tempDir);
 
     auto registry = ComponentRegistry{};
     LayoutRuntime::registerStandardComponents(registry);
@@ -112,7 +113,7 @@ namespace ao::gtk::layout::editor::test
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
-                                  .runtime = runtime,
+                                  .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
                                   .buildState = LayoutBuildStateView{runtimeState},

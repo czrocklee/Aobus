@@ -8,15 +8,19 @@
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/TrackView.h>
-
-#include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string_view>
-#include <utility>
 #include <vector>
+
+namespace ao::library
+{
+  class TrackBuilder;
+  class WriteTransaction;
+}
 
 namespace ao::library::test
 {
@@ -34,21 +38,38 @@ namespace ao::library::test
     TrackStoreFixture();
   };
 
+  /**
+   * Canonical raw record bytes for direct LMDB seeding.
+   *
+   * TrackStore no longer accepts caller-supplied record bytes, so these exist
+   * only for tests that plant rows in "tracks_hot"/"tracks_cold" behind the
+   * store, which is how persisted-corruption cases reach MusicLibrary::open().
+   * Tests that just need a track to exist go through TrackBuilder instead.
+   */
   std::vector<std::byte> makeHotData(TrackHotHeader header = {}, std::string_view title = {});
-  std::vector<std::byte> makeColdData(TrackColdHeader header = {});
+  std::vector<std::byte> makeColdData(TrackColdHeader header = {}, std::string_view uri = "track.flac");
 
-  template<typename Writer>
-  std::pair<TrackId, TrackView> requireCreate(Writer&& writer,
-                                              std::span<std::byte const> hotData,
-                                              std::span<std::byte const> coldData)
-  {
-    auto result = std::forward<Writer>(writer).createHotCold(hotData, coldData);
-    REQUIRE(result);
-    return *result;
-  }
+  /** Creates an empty library so seeded rows are swept against a real metadata header. */
+  void initializeLibraryStorage(std::filesystem::path const& path);
 
-  TrackId createCommittedTrack(TrackStore const& store,
-                               MusicLibrary& library,
-                               std::span<std::byte const> hotData,
-                               std::span<std::byte const> coldData);
+  /**
+   * Plants raw Track rows straight into "tracks_hot"/"tracks_cold", behind the
+   * store, on a library that is not open. An empty span omits that side, which
+   * is how orphan pairs are produced. Both databases are always created so an
+   * omitted side reads as empty rather than missing.
+   *
+   * Call initializeLibraryStorage first: without a metadata header the sweep
+   * rejects the library before it ever validates a Track record.
+   */
+  void seedRawTrackRow(std::filesystem::path const& path,
+                       std::uint32_t rawTrackId,
+                       std::span<std::byte const> hotData,
+                       std::span<std::byte const> coldData);
+
+  /** Requires that opening the library at path fails its fail-closed integrity sweep. */
+  void requireCorruptOpen(std::filesystem::path const& path);
+
+  TrackId requireCreate(MusicLibrary& library, WriteTransaction& transaction, TrackBuilder const& builder);
+
+  TrackId createCommittedTrack(MusicLibrary& library, TrackBuilder const& builder);
 } // namespace ao::library::test

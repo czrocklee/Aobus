@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/library/LibraryUri.h>
+
+#include "lib/library/LibraryUriValidation.h"
 #include "test/unit/FilesystemTestSupport.h"
 #include "test/unit/TestFixtureSupport.h"
 #include <ao/Error.h>
-#include <ao/library/LibraryUri.h>
 #include <ao/utility/Path.h>
 
 #include <catch2/catch_message.hpp>
@@ -13,6 +15,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace ao::library::test
 {
@@ -37,6 +40,49 @@ namespace ao::library::test
     auto const literalPercentEncoding = LibraryUri::parse("literal/%2e%2e/song.flac");
     REQUIRE(literalPercentEncoding);
     CHECK(literalPercentEncoding->value() == "literal/%2e%2e/song.flac");
+  }
+
+  TEST_CASE("LibraryUri - persisted canonical check agrees with parse normalization", "[library][unit][uri]")
+  {
+    STATIC_REQUIRE(noexcept(detail::isCanonicalLibraryUri(std::string_view{})));
+
+    for (auto const text : {std::string_view{"song.flac"},
+                            std::string_view{"artist/album/song.flac"},
+                            std::string_view{"literal/%2e%2e/song.flac"},
+                            std::string_view{"Dvo\xC5\x99\xC3\xA1k/song.flac"}})
+    {
+      CAPTURE(text);
+      auto const parsed = LibraryUri::parse(text);
+      REQUIRE(parsed);
+      CHECK(parsed->value() == text);
+      CHECK(detail::isCanonicalLibraryUri(text));
+    }
+
+    auto const maximum = std::string(LibraryUri::kMaxLength, 'a');
+    REQUIRE(LibraryUri::parse(maximum));
+    CHECK(detail::isCanonicalLibraryUri(maximum));
+
+    auto nonCanonical = std::vector<std::string>{"",
+                                                 ".",
+                                                 "album/",
+                                                 "./song.flac",
+                                                 "album//song.flac",
+                                                 "album/./song.flac",
+                                                 "album/live/../song.flac",
+                                                 R"(album\song.flac)",
+                                                 "/song.flac",
+                                                 "C:music/song.flac",
+                                                 "line\nbreak.flac",
+                                                 std::string(LibraryUri::kMaxLength + 1U, 'a')};
+    nonCanonical.emplace_back("nul\0byte.flac", 13U);
+
+    for (auto const& text : nonCanonical)
+    {
+      CAPTURE(text);
+      auto const parsed = LibraryUri::parse(text);
+      CHECK_FALSE((parsed && parsed->value() == text));
+      CHECK_FALSE(detail::isCanonicalLibraryUri(text));
+    }
   }
 
   TEST_CASE("LibraryUri - parsing owns the storage length limit", "[library][unit][uri]")

@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/MusicLibrary.h>
+
+#include "FileManifestValidation.h"
 #include "LibraryIdentity.h"
+#include "TrackRecordValidation.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/ExceptionFormat.h>
@@ -10,13 +14,14 @@
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
-#include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
+#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
+#include <ao/lmdb/TransactionFailure.h>
 
 #include <algorithm>
 #include <array>
@@ -24,13 +29,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <exception>
 #include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
 #include <random>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 namespace ao::library
@@ -49,22 +55,37 @@ namespace ao::library
       return std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now());
     }
 
-    std::array<std::byte, kLibraryIdBytes> generateLibraryId()
+    Result<std::array<std::byte, kLibraryIdBytes>> generateLibraryId()
     {
-      auto bytes = std::array<std::byte, kLibraryIdBytes>{};
-      auto random = std::random_device{};
-      std::ranges::generate(bytes, [&random] { return static_cast<std::byte>(random()); });
-      return bytes;
+      try
+      {
+        auto bytes = std::array<std::byte, kLibraryIdBytes>{};
+        auto random = std::random_device{};
+        std::ranges::generate(bytes, [&random] { return static_cast<std::byte>(random()); });
+        return bytes;
+      }
+      catch (std::runtime_error const& error)
+      {
+        return makeError(
+          Error::Code::IoError, std::format("Failed to obtain library identity entropy: {}", error.what()));
+      }
     }
 
-    MetadataHeader makeMetadataHeader()
+    Result<MetadataHeader> makeMetadataHeader()
     {
       auto const timestamp = currentTimestamp();
+      auto libraryId = generateLibraryId();
+
+      if (!libraryId)
+      {
+        return std::unexpected{libraryId.error()};
+      }
+
       return MetadataHeader{.magic = kMetadataMagic,
                             .libraryVersion = kLibraryVersion,
                             .flags = 0,
                             .createdTime = timestamp,
-                            .libraryId = generateLibraryId()};
+                            .libraryId = *libraryId};
     }
 
     Result<> validateMetadataHeader(MetadataHeader const& header)
@@ -81,6 +102,110 @@ namespace ao::library
         return makeError(
           Error::Code::CorruptData,
           std::format("Unsupported library version {} (current {})", header.libraryVersion, kLibraryVersion));
+      }
+
+      return {};
+    }
+
+    Result<MetadataHeader> loadMetadataHeader(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    {
+      auto const optBytes = database.reader(transaction).get(kMetadataHeaderRecordId);
+
+      if (!optBytes)
+      {
+        return makeError(Error::Code::NotFound, "Library metadata header was not found");
+      }
+
+      if (optBytes->size() != sizeof(MetadataHeader))
+      {
+        return makeError(
+          Error::Code::CorruptData,
+          std::format(
+            "Invalid library metadata header size {} (expected {})", optBytes->size(), sizeof(MetadataHeader)));
+      }
+
+      auto header = MetadataHeader{};
+      std::memcpy(&header, optBytes->data(), sizeof(header));
+      return header;
+    }
+
+    Result<std::uint32_t> decodePersistedId(lmdb::Database::Reader::KeyView const key, std::string_view const database)
+    {
+      if (key.size() != sizeof(std::uint32_t))
+      {
+        return makeError(
+          Error::Code::CorruptData, std::format("{} contains a {}-byte integer key", database, key.size()));
+      }
+
+      std::uint32_t value = 0;
+      std::memcpy(&value, key.data(), sizeof(value));
+      return value;
+    }
+
+    Result<> validateTrackDatabases(lmdb::Database const& hotDatabase,
+                                    lmdb::Database const& coldDatabase,
+                                    lmdb::ReadTransaction const& transaction,
+                                    std::size_t const dictionarySize)
+    {
+      auto const hotReader = hotDatabase.reader(transaction);
+      auto const coldReader = coldDatabase.reader(transaction);
+      auto hot = hotReader.begin();
+      auto cold = coldReader.begin();
+      auto const hotEnd = hotReader.end();
+      auto const coldEnd = coldReader.end();
+
+      while (hot != hotEnd && cold != coldEnd)
+      {
+        auto const& [hotKey, hotPayload] = *hot;
+        auto const& [coldKey, coldPayload] = *cold;
+        auto hotId = decodePersistedId(hotKey, "Hot Track database");
+        auto coldId = decodePersistedId(coldKey, "Cold Track database");
+
+        if (!hotId)
+        {
+          return std::unexpected{hotId.error()};
+        }
+
+        if (!coldId)
+        {
+          return std::unexpected{coldId.error()};
+        }
+
+        if (*hotId == 0 || *coldId == 0 || *hotId != *coldId)
+        {
+          return makeError(
+            Error::Code::CorruptData,
+            std::format("Hot and cold Track keys do not form matching nonzero pairs: {} and {}", *hotId, *coldId));
+        }
+
+        if (auto validation = validateSerializedTrackReferences(hotPayload, coldPayload, dictionarySize); !validation)
+        {
+          return makeError(Error::Code::CorruptData,
+                           std::format("Track {} failed persisted validation: {}", *hotId, validation.error().message));
+        }
+
+        ++hot;
+        ++cold;
+      }
+
+      if (hot != hotEnd || cold != coldEnd)
+      {
+        return makeError(Error::Code::CorruptData, "Hot and cold Track databases contain different key sets");
+      }
+
+      return {};
+    }
+
+    Result<> validateManifestDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    {
+      auto const reader = database.reader(transaction);
+
+      for (auto const& [key, payload] : reader)
+      {
+        if (auto validation = validateFileManifestEntry(key, payload); !validation)
+        {
+          return std::unexpected{validation.error()};
+        }
       }
 
       return {};
@@ -195,6 +320,44 @@ namespace ao::library
         return std::unexpected{manifestDb.error()};
       }
 
+      auto const persistedHeader = loadMetadataHeader(*metadataDb, *initializationTransaction);
+
+      if (persistedHeader)
+      {
+        if (auto validation = validateMetadataHeader(*persistedHeader); !validation)
+        {
+          return std::unexpected{validation.error()};
+        }
+      }
+      else if (persistedHeader.error().code != Error::Code::NotFound)
+      {
+        return std::unexpected{persistedHeader.error()};
+      }
+      else if (metadataDb->reader(*initializationTransaction).entryCount() != 0 ||
+               tracksHotDb->reader(*initializationTransaction).entryCount() != 0 ||
+               tracksColdDb->reader(*initializationTransaction).entryCount() != 0 ||
+               listsDb->reader(*initializationTransaction).entryCount() != 0 ||
+               resourcesDb->reader(*initializationTransaction).entryCount() != 0 ||
+               dictionaryDb->reader(*initializationTransaction).entryCount() != 0 ||
+               manifestDb->reader(*initializationTransaction).entryCount() != 0)
+      {
+        return makeError(Error::Code::CorruptData, "Library data exists without a metadata header");
+      }
+
+      auto const dictionarySize = dictionaryDb->reader(*initializationTransaction).entryCount();
+
+      if (auto validation =
+            validateTrackDatabases(*tracksHotDb, *tracksColdDb, *initializationTransaction, dictionarySize);
+          !validation)
+      {
+        return std::unexpected{validation.error()};
+      }
+
+      if (auto validation = validateManifestDatabase(*manifestDb, *initializationTransaction); !validation)
+      {
+        return std::unexpected{validation.error()};
+      }
+
       return std::make_unique<Impl>(std::move(musicRoot),
                                     std::move(databasePath),
                                     std::move(*env),
@@ -208,19 +371,6 @@ namespace ao::library
                                     std::move(*manifestDb));
     }
   };
-
-  MusicLibrary::MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath)
-    : MusicLibrary{std::move(musicRoot), std::move(databasePath), Options{}}
-  {
-  }
-
-  MusicLibrary::MusicLibrary(std::filesystem::path musicRoot, std::filesystem::path databasePath, Options options)
-  {
-    if (auto result = initialize(std::move(musicRoot), std::move(databasePath), options); !result)
-    {
-      throwException<Exception>("Failed to open music library: {}", result.error().message);
-    }
-  }
 
   MusicLibrary::~MusicLibrary() = default;
   MusicLibrary::MusicLibrary(MusicLibrary&&) noexcept = default;
@@ -259,9 +409,9 @@ namespace ao::library
         return std::unexpected{impl.error()};
       }
 
-      _implPtr = std::move(*impl);
+      auto implPtr = std::move(*impl);
 
-      auto headerResult = _implPtr->metadataStore.load(_implPtr->initializationTransaction);
+      auto headerResult = implPtr->metadataStore.load(implPtr->initializationTransaction);
 
       if (!headerResult && headerResult.error().code != Error::Code::NotFound)
       {
@@ -277,30 +427,39 @@ namespace ao::library
       }
       else
       {
-        auto const header = makeMetadataHeader();
+        auto header = makeMetadataHeader();
 
-        if (auto result = _implPtr->metadataStore.create(_implPtr->initializationTransaction, header); !result)
+        if (!header)
+        {
+          return std::unexpected{header.error()};
+        }
+
+        if (auto result = implPtr->metadataStore.create(implPtr->initializationTransaction, *header); !result)
         {
           return result;
         }
       }
 
-      if (auto result = _implPtr->initializationTransaction.commit(); !result)
+      if (auto result = implPtr->initializationTransaction.commit(); !result)
       {
         return std::unexpected{result.error()};
       }
 
+      _implPtr = std::move(implPtr);
       return {};
     }
-    catch (Exception const& ex)
+    catch (lmdb::TransactionFailure const& failure)
     {
-      return makeError(Error::Code::IoError, ex.what());
+      // open() is the sole public recoverable constructor and must not leak the
+      // lexical transaction-unwind marker to its caller. The local Impl candidate
+      // has already been destroyed, aborting its initialization transaction.
+      return std::unexpected{failure.error()};
+    }
+    catch (detail::LibraryException const& failure)
+    {
+      return std::unexpected{failure.error()};
     }
     catch (std::filesystem::filesystem_error const& ex)
-    {
-      return makeError(Error::Code::IoError, ex.what());
-    }
-    catch (std::exception const& ex)
     {
       return makeError(Error::Code::IoError, ex.what());
     }

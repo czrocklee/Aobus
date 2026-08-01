@@ -58,9 +58,11 @@ Frontend-scoped runtime components may own reusable application delivery behavio
 
 `CoreRuntime` is the minimum composition used by non-interactive library clients such as the CLI.
 It owns storage, asynchronous execution, the library facade and change bus, source caching, completion, and notifications.
+`CoreRuntime::create()` is a typed-result factory: it opens and validates storage, acquires the runtime library facade, and completes the initial All Tracks source reload before returning ownership.
 
 `AppRuntime` extends that composition for interactive applications.
 It adds view and workspace services, playback transport and succession, audio-player ownership, and playback-session persistence.
+`AppRuntime::create()` is likewise the sole public construction boundary and returns no interactive graph until core initialization and the required workspace-store composition have succeeded.
 It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.
 The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns construction, restoration order, active-library replacement, and teardown coordination.
@@ -74,6 +76,7 @@ It consumes runtime services and stable value types but does not become a second
 
 Each frontend is a composition root and platform adapter.
 It selects the music root, explicit overrides, and platform application directories; constructs the appropriate executor and runtime; registers platform audio providers; binds user events to commands; and owns toolkit or terminal lifecycle.
+Composition roots translate recoverable runtime-factory errors into their existing startup or replacement presentation; no public throwing runtime constructor is retained as an adapter.
 Frontends use the runtime path contract for standard per-library locations while retaining frontend-specific filenames and override policy.
 
 GTK additionally owns widgets, CSS, dialogs, portals, GLib integration, and GTK-specific layout construction.

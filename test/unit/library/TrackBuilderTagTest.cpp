@@ -36,7 +36,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
-    builder.property().uri("/test");
+    builder.property().uri("test.flac");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
@@ -49,7 +49,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
-    builder.property().uri("/test");
+    builder.property().uri("test.flac");
     builder.tags().add("tag1").add("tag2").add("tag3");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);
@@ -63,7 +63,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
-    builder.property().uri("/test");
+    builder.property().uri("test.flac");
     builder.tags().add("tag42");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);
@@ -76,7 +76,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
-    builder.property().uri("/test");
+    builder.property().uri("test.flac");
     builder.tags().add("tag1").add("tag2").add("tag3").add("tag4").add("tag5");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);

@@ -8,6 +8,7 @@
 #include "TrackPresentationNavigation.h"
 #include "TrackSection.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/VirtualListIds.h>
@@ -72,7 +73,7 @@ namespace ao::tui
     std::string selectSelectedPresentation();
     ListOpenResult openSelectedList();
     std::string reloadActiveList();
-    std::string applyFilter();
+    Result<std::string> applyFilter();
 
   private:
     bool setSelectedTrackById(TrackId trackId);

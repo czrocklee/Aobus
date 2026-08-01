@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/MetadataStore.h>
+
 #include "test/unit/TestFixtureSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/MetadataLayout.h>
-#include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/lmdb/Database.h>
@@ -48,7 +50,7 @@ namespace ao::library::test
             "[library][unit][metadata-store]")
   {
     auto const temp = ao::test::TempDir{};
-    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = library.readTransaction();
     auto const loadedResult = library.metadata().load(transaction);
 
@@ -63,7 +65,7 @@ namespace ao::library::test
   TEST_CASE("MetadataStore - update overwrites previous header values", "[library][unit][metadata-store]")
   {
     auto const temp = ao::test::TempDir{};
-    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto header = library.metadataHeader();
     auto transaction = writeTransaction(library);
     header.flags = 42;

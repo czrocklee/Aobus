@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "test/unit/library/TrackBuilderTestSupport.h"
 #include <ao/AudioScalars.h>
@@ -68,6 +68,7 @@ namespace ao::library::test
   TEST_CASE("TrackBuilder - serializes empty builders", "[library][unit][track-builder][serialization]")
   {
     auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("track.flac");
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
     CHECK(hotData.size() >= sizeof(TrackHotHeader));
@@ -82,14 +83,9 @@ namespace ao::library::test
     SECTION("empty URI")
     {
       auto builder = TrackBuilder::makeEmpty();
-      auto const coldData = context.serializeCold(builder);
-      auto const& header = coldHeader(coldData);
-
-      CHECK(coldData.size() == sizeof(TrackColdHeader));
-      CHECK(header.blockOffsets == std::array<std::uint16_t, kTrackColdBlockSlotCount>{});
-      CHECK(header.uriOffset == sizeof(TrackColdHeader));
-      CHECK(header.uriLength == 0);
-      CHECK(detail::TrackColdReader{coldData}.isValid());
+      auto const result = context.trySerializeCold(builder);
+      REQUIRE_FALSE(result);
+      CHECK(result.error().code == Error::Code::InvalidInput);
     }
 
     SECTION("non-empty URI")
@@ -113,7 +109,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Hello World").year(2021);
-    builder.property().uri("/music/test.flac");
+    builder.property().uri("music/test.flac");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
@@ -132,7 +128,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().year(1999);
-    builder.property().bitDepth(BitDepth{24});
+    builder.property().bitDepth(BitDepth{24}).uri("track.flac");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);
     auto const* header = reinterpret_cast<TrackHotHeader const*>(hotData.data());
@@ -147,6 +143,7 @@ namespace ao::library::test
     auto builder = TrackBuilder::makeEmpty();
     auto const* title = "Test: \"Quotes\" & 'Apostrophes'";
     builder.metadata().title(title);
+    builder.property().uri("track.flac");
 
     auto const [hotData, coldData] = serializeTestTrack(builder);
 
@@ -159,7 +156,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().title("Test");
-    builder.property().uri("/test");
+    builder.property().uri("test.flac");
 
     auto const [hotData1, coldData1] = serializeTestTrack(builder);
     auto const [hotData2, coldData2] = serializeTestTrack(builder);
@@ -180,7 +177,7 @@ namespace ao::library::test
       .conductor("Carlos Kleiber")
       .ensemble("Vienna Philharmonic")
       .soloist("Yo-Yo Ma");
-    builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{3});
+    builder.property().uri("path/to/file.flac").duration(std::chrono::minutes{3});
 
     auto const [hotData, coldData] = context.serialize(builder);
 
@@ -204,6 +201,7 @@ namespace ao::library::test
   {
     auto context = TrackSerializationFixture{};
     auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("track.flac");
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.metadata().work("Work");
     builder.customMetadata().add("key", "value");
@@ -277,6 +275,7 @@ namespace ao::library::test
       auto context = TrackSerializationFixture{};
       auto builder = TrackBuilder::makeEmpty();
       configure(builder);
+      builder.property().uri("track.flac");
 
       auto const coldData = context.serializeCold(builder);
       auto const& header = coldHeader(coldData);
@@ -315,7 +314,7 @@ namespace ao::library::test
   {
     auto builder = TrackBuilder::makeEmpty();
     builder.metadata().trackNumber(3);
-    builder.property().uri("/path/to/file.flac").duration(std::chrono::minutes{4});
+    builder.property().uri("path/to/file.flac").duration(std::chrono::minutes{4});
     builder.customMetadata().add("key1", "value1").add("key2", "value2");
 
     auto context = TrackSerializationFixture{};
@@ -326,7 +325,8 @@ namespace ao::library::test
     CHECK(view.metadata().trackNumber() == 3);
   }
 
-  TEST_CASE("TrackBuilder - fromView reconstructs builder fields", "[library][unit][track-builder][serialization]")
+  TEST_CASE("TrackBuilder - fromCompleteView reconstructs builder fields",
+            "[library][unit][track-builder][serialization]")
   {
     auto context = TrackSerializationFixture{};
 
@@ -338,23 +338,55 @@ namespace ao::library::test
       .conductor("Test Conductor")
       .ensemble("Test Ensemble")
       .soloist("Test Soloist");
-    original.property().uri("/path.flac");
+    original.property().uri("path.flac");
 
     auto const [hotData, coldData] = context.serialize(original);
     auto view = TrackView{hotData, coldData};
 
-    auto reconstructed = TrackBuilder::fromView(view, context.dictionary());
+    auto reconstructed = TrackBuilder::fromCompleteView(view, context.dictionary());
     CHECK(reconstructed.metadata().title() == "Title");
     CHECK(reconstructed.metadata().albumArtist() == "Test Album Artist");
     CHECK(reconstructed.metadata().composer() == "Test Composer");
     CHECK(reconstructed.metadata().conductor() == "Test Conductor");
     CHECK(reconstructed.metadata().ensemble() == "Test Ensemble");
     CHECK(reconstructed.metadata().soloist() == "Test Soloist");
-    CHECK(reconstructed.property().uri() == "/path.flac");
+    CHECK(reconstructed.property().uri() == "path.flac");
 
     auto const& constBuilder = reconstructed;
-    CHECK(constBuilder.property().uri() == "/path.flac");
+    CHECK(constBuilder.property().uri() == "path.flac");
     CHECK(constBuilder.tags().names().empty());
+  }
+
+  TEST_CASE("TrackBuilder - hot-only baselines cannot write default cold data",
+            "[library][regression][track-builder][serialization]")
+  {
+    auto context = TrackSerializationFixture{};
+    auto original = TrackBuilder::makeEmpty();
+    original.metadata().title("Hot baseline");
+    auto hotData = context.trySerializeHot(original);
+    REQUIRE(hotData);
+    auto const hotView = TrackView{*hotData, {}};
+
+    auto builder = TrackBuilder::fromHotView(hotView, context.dictionary());
+    auto serializedHot = builder.serializeHot(context.transaction());
+    REQUIRE(serializedHot);
+    CHECK(TrackView{*serializedHot, {}}.metadata().title() == "Hot baseline");
+
+    auto serializedCold = builder.serializeCold(context.transaction(), context.resources());
+    REQUIRE_FALSE(serializedCold);
+    CHECK(serializedCold.error().code == Error::Code::InvalidState);
+
+    auto serializedComplete = builder.serialize(context.transaction(), context.resources());
+    REQUIRE_FALSE(serializedComplete);
+    CHECK(serializedComplete.error().code == Error::Code::InvalidState);
+
+    auto preparedCold = builder.prepareCold(context.transaction(), context.resources());
+    REQUIRE_FALSE(preparedCold);
+    CHECK(preparedCold.error().code == Error::Code::InvalidState);
+
+    auto preparedComplete = builder.prepare(context.transaction(), context.resources());
+    REQUIRE_FALSE(preparedComplete);
+    CHECK(preparedComplete.error().code == Error::Code::InvalidState);
   }
 
   TEST_CASE("TrackBuilder - serialized views expose property and metadata fields",
@@ -376,6 +408,7 @@ namespace ao::library::test
       .soloist("Soloist");
     builder.coverArt().add(PictureType::FrontCover, ResourceId{42});
     builder.tags().add("tag1").add("tag2");
+    builder.property().uri("track.flac");
 
     auto const [hotData, coldData] = context.serialize(builder);
     auto view = TrackView{hotData, coldData};

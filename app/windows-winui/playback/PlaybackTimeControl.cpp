@@ -66,8 +66,7 @@ namespace ao::winui
   {
     unbind();
     _viewModelPtr = std::make_unique<uimodel::PlaybackPositionViewModel>(
-      dependencies.playbackRuntime.playback(),
-      [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
+      dependencies.runtime.playback(), [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
   }
 
   void PlaybackTimeControl::unbind()

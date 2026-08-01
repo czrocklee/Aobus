@@ -43,6 +43,11 @@ Use `MainContextCallbackScope` for void callbacks retained outside a GTK-main-co
 Use `sigc::track_object` for one-shot idle callbacks tied to a `Glib::ObjectBase` lifetime.
 Neither mechanism replaces synchronization when callbacks can cross threads.
 
+For an owner-member coroutine that awaits a runtime task, capture stable service input and create the one `MainContextCallbackScope`-guarded presentation closure before suspension.
+Store that closure in the coroutine frame, and after the await invoke only the closure; do not dereference `this`, read another owner member, or add a second main-context hop.
+Closing the scope must make the closure a no-op even if task cleanup still resumes the coroutine.
+Task completion is a presentation boundary, not a data-refresh signal: committed library data continues through `LibraryChanges`.
+
 ### Replaceable dependencies
 
 When a GTK property or host slot can replace an observed object, use an outer watcher plus an inner connection scope:
@@ -114,7 +119,7 @@ GTK lifecycle changes require a focused regression test at the lowest GTK surfac
 
 For a replaceable source, prove that the replacement drives updates and the retired source no longer does.
 For a transient attachment, open or close it and then retire its anchor or generation; assert the semantic result and run without GTK finalization warnings or sanitizer failures.
-For delayed callbacks, destroy the owner before completion and prove the callback becomes harmless.
+For delayed callbacks or awaited workflows, destroy the owner before completion and prove the guarded presentation becomes harmless while runtime cleanup still completes.
 
 Run the focused GTK test only while diagnosing the lifecycle path, then run the repository's normal `./ao check` completion gate.
 Use the sanitizer workflow from the testing policy when the defect can dereference retired storage or a finalized GObject.

@@ -9,6 +9,7 @@
 #include <ao/CoreIds.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
+#include <ao/library/TrackWrite.h>
 #include <ao/rt/PlaybackLaunchSpec.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
@@ -57,11 +58,11 @@ namespace ao::rt::test
         auto const spec = makeSpec(index);
         library::test::applyTrackSpec(builder, spec);
 
-        auto data = builder.serialize(transaction, lib.resources());
-        REQUIRE(data);
-        auto createResult = writer.createHotCold(data->first, data->second);
+        auto prepared = builder.prepare(transaction, lib.resources());
+        REQUIRE(prepared);
+        auto createResult = library::createPreparedTrackRecord(writer, prepared->first, prepared->second);
         REQUIRE(createResult);
-        result.push_back(createResult->first);
+        result.push_back(*createResult);
       }
 
       REQUIRE(transaction.commit());

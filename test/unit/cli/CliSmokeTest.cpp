@@ -3,24 +3,24 @@
 
 #include "CliTestSupport.h"
 #include "ListCommand.h"
-#include "Run.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/audio/AudioFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
-#include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AppVersion.h>
-#include <ao/CoreIds.h>
 #include <ao/library/AudioIdentity.h>
+#include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/ResourceStore.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
 #include <ao/rt/library/LibraryAuthoring.h>
 #include <ao/rt/library/LibraryPaths.h>
+#include <ao/utility/ByteView.h>
 #include <ao/utility/Path.h>
 #include <ao/yaml/RymlAdapter.h>
 
-#include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
@@ -30,11 +30,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <initializer_list>
 #include <ios>
 #include <iterator>
-#include <span>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -47,27 +44,6 @@ namespace ao::cli::test
   namespace
   {
     namespace fs = std::filesystem;
-
-    struct CliResult final
-    {
-      std::int32_t status = 0;
-      std::string out;
-      std::string err;
-    };
-
-    bool contains(std::string_view text, std::string_view expected)
-    {
-      return text.contains(expected);
-    }
-
-    CliResult runArgs(std::vector<std::string> args)
-    {
-      auto out = std::ostringstream{};
-      auto err = std::ostringstream{};
-      auto const status =
-        run(args, out, err, CliRunOptions{.musicLibraryMapSize = library::test::kTestMusicLibraryMapSize});
-      return {.status = status, .out = out.str(), .err = err.str()};
-    }
 
     void requireJsonLineParses(std::string_view line)
     {
@@ -103,27 +79,6 @@ namespace ao::cli::test
         }
 
         lineStart = end + 1;
-      }
-
-      return count;
-    }
-
-    void checkDomainFailure(CliResult const& result, std::string_view expectedError)
-    {
-      CHECK(result.status == 1);
-      CHECK(result.out.empty());
-      CHECK(contains(result.err, expectedError));
-    }
-
-    std::size_t countOccurrences(std::string_view text, std::string_view needle)
-    {
-      std::size_t count = 0;
-      std::size_t searchPosition = 0;
-
-      while ((searchPosition = text.find(needle, searchPosition)) != std::string_view::npos)
-      {
-        ++count;
-        searchPosition += needle.size();
       }
 
       return count;
@@ -239,57 +194,6 @@ namespace ao::cli::test
       fs::path _previous;
     };
 
-    class CliFixture final
-    {
-    public:
-      fs::path const& root() const { return _temp.path(); }
-
-      void copyAudio(std::string_view sourceName, std::string_view targetName) const
-      {
-        fs::copy_file(
-          fs::path{AUDIO_TEST_DATA_DIR} / sourceName, root() / targetName, fs::copy_options::overwrite_existing);
-      }
-
-      TrackId addTrack(library::test::TrackSpec const& spec) const
-      {
-        auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
-        return library::test::addTrack(musicLibrary, spec);
-      }
-
-      ResourceId addResource(std::span<std::byte const> bytes) const
-      {
-        auto musicLibrary = library::test::makeTestMusicLibrary(root(), rt::LibraryPaths{root()}.databasePath());
-        auto transaction = library::test::writeTransaction(musicLibrary);
-        auto idResult = musicLibrary.resources().writer(transaction).create(bytes);
-        REQUIRE(idResult);
-        REQUIRE(transaction.commit());
-        return *idResult;
-      }
-
-      CliResult run(std::initializer_list<std::string_view> args) const
-      {
-        auto argv = std::vector<std::string>{"aobus", "-C", root().string()};
-        argv.reserve(argv.size() + args.size());
-
-        for (auto argument : args)
-        {
-          argv.emplace_back(argument);
-        }
-
-        auto result = runArgs(argv);
-
-        if (result.status != 0)
-        {
-          UNSCOPED_INFO("CLI stderr: " << result.err);
-        }
-
-        return result;
-      }
-
-    private:
-      ao::test::TempDir _temp;
-    };
-
     bool manifestHasAudioIdentity(CliFixture const& fixture, std::string_view uri)
     {
       auto musicLibrary =
@@ -402,6 +306,39 @@ namespace ao::cli::test
     auto jsonTree = parseYaml(result.out);
     REQUIRE(jsonTree.rootref().is_map());
     CHECK(jsonTree.rootref()["manifest"].is_seq());
+  }
+
+  TEST_CASE("CLI - corrupt persisted manifest rejects the command before payload output",
+            "[cli][regression][library][integrity]")
+  {
+    auto fixture = CliFixture{};
+    auto const databasePath = rt::LibraryPaths{fixture.root()}.databasePath();
+
+    {
+      std::ignore = library::test::makeTestMusicLibrary(fixture.root(), databasePath);
+    }
+
+    auto environmentResult = lmdb::Environment::open(
+      databasePath.string(),
+      {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = library::test::kTestMusicLibraryMapSize});
+    REQUIRE(environmentResult);
+    auto environment = std::move(*environmentResult);
+    auto transactionResult = lmdb::WriteTransaction::begin(environment);
+    REQUIRE(transactionResult);
+    auto transaction = std::move(*transactionResult);
+    auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+    REQUIRE(manifestResult);
+    auto manifest = std::move(*manifestResult);
+    auto const malformedKey = utility::bytes::view(std::string_view{"bad"});
+    auto const payload = library::FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
+    REQUIRE(manifest.writer(transaction).create(malformedKey, payload));
+    REQUIRE(transaction.commit());
+
+    auto const result = fixture.run({"lib", "dump", "--manifest"});
+    CHECK(result.status == 1);
+    CHECK(result.out.empty());
+    CHECK(contains(result.err, "failed to open library"));
+    CHECK(contains(result.err, "File manifest key has an invalid size"));
   }
 
   TEST_CASE("CLI - track show format expression streams formatted rows", "[cli][workflow][track][format]")
@@ -852,6 +789,7 @@ namespace ao::cli::test
     CHECK(yaml::scalarView(tree.rootref()["completed"]) == "0");
     CHECK(yaml::scalarView(tree.rootref()["skipped"]) == "0");
     CHECK(yaml::scalarView(tree.rootref()["failures"]) == "0");
+    CHECK_FALSE(tree.rootref().has_child("cancelled"));
 
     checkDomainFailure(fixture.run({"lib", "fingerprint"}), "lib fingerprint requires --pending");
   }

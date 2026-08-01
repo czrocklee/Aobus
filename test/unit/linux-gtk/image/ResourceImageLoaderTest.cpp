@@ -479,7 +479,7 @@ namespace ao::gtk::test
             "[gtk][unit][resource-byte][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
-    auto executor = rt::test::InlineExecutor{};
+    auto executor = rt::test::QueuedExecutor{};
     auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
     auto runtime = async::Runtime{executor, 4, exceptionRecorder.handler()};
     auto release = rt::test::AsyncBarrier{};
@@ -505,7 +505,7 @@ namespace ao::gtk::test
                                                urlCallbackCount.increment();
                                              });
     REQUIRE(urlRequest);
-    REQUIRE(loadCount.waitUntil(1));
+    REQUIRE(executor.drainUntil([&] { return loadCount.load() == 1; }));
 
     auto imageCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto nonEmptyImageCount = rt::test::AsyncTestState<std::size_t>::create(0);
@@ -531,8 +531,7 @@ namespace ao::gtk::test
     CHECK(loadCount.load() == 1);
 
     release.release();
-    REQUIRE(urlCallbackCount.waitUntil(1));
-    REQUIRE(imageCallbackCount.waitUntil(2));
+    REQUIRE(executor.drainUntil([&] { return urlCallbackCount.load() == 1 && imageCallbackCount.load() == 2; }));
     CHECK(nonEmptyUrlCount.load() == 1);
     CHECK(nonEmptyImageCount.load() == 2);
     CHECK(loadCount.load() == 1);

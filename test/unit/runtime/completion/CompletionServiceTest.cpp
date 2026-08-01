@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/completion/CompletionService.h>
+
 #include "runtime/library/LibraryMutationService.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
@@ -10,7 +12,6 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
-#include <ao/rt/completion/CompletionService.h>
 #include <ao/rt/library/LibraryChanges.h>
 #include <ao/rt/library/LibraryWriter.h>
 
@@ -558,8 +559,8 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - starts empty when owned by CoreRuntime", "[runtime][unit][completion][core-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtime = makeRuntime(tempDir);
+    auto runtimePtr = makeRuntime(tempDir);
 
-    CHECK(runtime.completion().tags().empty());
+    CHECK(runtimePtr->completion().tags().empty());
   }
 } // namespace ao::rt::test

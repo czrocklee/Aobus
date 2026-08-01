@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/uimodel/library/list/ListOrderPolicy.h>
+
 #include <ao/CoreIds.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/LibraryAuthoring.h>
-#include <ao/uimodel/library/list/ListOrderPolicy.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -108,14 +109,6 @@ namespace ao::uimodel::test
       auto const state = describeListOrderCapabilities(input);
       CHECK_FALSE(state.canAuthorOrder);
       CHECK(state.disabledReason.contains("Library is busy"));
-    }
-
-    SECTION("faulted")
-    {
-      input.authoring.state = rt::LibraryAuthoringState::Faulted;
-      auto const state = describeListOrderCapabilities(input);
-      CHECK_FALSE(state.canAuthorOrder);
-      CHECK(state.disabledReason == "Library authoring is unavailable.");
     }
 
     SECTION("source gone")

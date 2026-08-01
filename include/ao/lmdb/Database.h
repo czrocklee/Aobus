@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #pragma once
 
@@ -106,7 +106,7 @@ namespace ao::lmdb
     KeyKind kind() const noexcept { return _kind; }
 
   private:
-    Reader(DbiHandle dbi, MDB_txn* txn, KeyKind kind);
+    Reader(DbiHandle dbi, MDB_txn* txn, ReadTransaction const& owner, KeyKind kind);
 
     struct MdbCursorDeleter final
     {
@@ -115,9 +115,11 @@ namespace ao::lmdb
 
     using CursorPtr = std::unique_ptr<MDB_cursor, MdbCursorDeleter>;
     static CursorPtr create(MDB_txn* txn, DbiHandle dbi);
+    void ensureActive() const;
 
     DbiHandle _dbi;
     MDB_txn* _txn;
+    ReadTransaction const* _owner;
     KeyKind _kind;
 
     friend class Database;
@@ -148,9 +150,9 @@ namespace ao::lmdb
     using reference = value_type const&;
 
     Iterator() = default;
-    ~Iterator() = default;
-    Iterator(Iterator&&) noexcept = default;
-    Iterator& operator=(Iterator&&) noexcept = default;
+    ~Iterator() noexcept;
+    Iterator(Iterator&& other) noexcept;
+    Iterator& operator=(Iterator&& other) noexcept;
 
     // Not copyable because of the cursor
     Iterator(Iterator const&) = delete;
@@ -165,12 +167,15 @@ namespace ao::lmdb
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
 
   private:
-    Iterator(MDB_txn* txn, DbiHandle dbi, bool end);
+    Iterator(MDB_txn* txn, ReadTransaction const& owner, DbiHandle dbi, bool end);
 
+    void ensureActive() const;
+    void releaseFinishedCursor() noexcept;
     void next();
 
     Reader::CursorPtr _cursorPtr;
     Reader::Value _value;
+    ReadTransaction const* _owner = nullptr;
 
     friend class Reader;
   };
@@ -194,6 +199,9 @@ namespace ao::lmdb
     Result<> create(std::uint32_t id, std::span<std::byte const> data);
     Result<> create(std::span<std::byte const> key, std::span<std::byte const> data);
 
+    // MDB_RESERVE writes. The returned span must be filled completely before
+    // any subsequent LMDB update in the transaction and must not be read or
+    // written after that update or after the transaction finishes.
     Result<std::span<std::byte>> create(std::uint32_t id, std::size_t size);
     Result<std::span<std::byte>> create(std::span<std::byte const> key, std::size_t size);
 
@@ -204,6 +212,7 @@ namespace ao::lmdb
     Result<> update(std::uint32_t id, std::span<std::byte const> data);
     Result<> update(std::span<std::byte const> key, std::span<std::byte const> data);
 
+    // The same MDB_RESERVE lifetime and complete-fill contract applies here.
     Result<std::span<std::byte>> update(std::uint32_t id, std::size_t size);
     Result<std::span<std::byte>> update(std::span<std::byte const> key, std::size_t size);
 

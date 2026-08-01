@@ -26,7 +26,6 @@ namespace ao::tui
     switch (kind)
     {
       case uimodel::ActivityStatusKind::Processing: return "work";
-      case uimodel::ActivityStatusKind::Success: return "done";
       case uimodel::ActivityStatusKind::Info: return "info";
       case uimodel::ActivityStatusKind::Warning: return "warn";
       case uimodel::ActivityStatusKind::Error: return "error";
@@ -42,7 +41,6 @@ namespace ao::tui
     {
       case uimodel::ActivityStatusKind::Processing:
       case uimodel::ActivityStatusKind::Info: return style::accent();
-      case uimodel::ActivityStatusKind::Success: return style::success();
       case uimodel::ActivityStatusKind::Warning: return style::warning();
       case uimodel::ActivityStatusKind::Error: return style::danger();
       case uimodel::ActivityStatusKind::Idle: return ftxui::nothing;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/library/LibraryTaskService.h>
+
 #include "AudioIdentityBatchWriter.h"
 #include "LibraryMutationService.h"
 #include "LibraryYamlImportOperation.h"
@@ -17,6 +19,7 @@
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
+#include <ao/lmdb/TransactionFailure.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
@@ -25,7 +28,6 @@
 #include <ao/rt/library/LibraryImportPlan.h>
 #include <ao/rt/library/LibraryScan.h>
 #include <ao/rt/library/LibraryTaskEvents.h>
-#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/library/LibraryYamlExporter.h>
 #include <ao/rt/library/LibraryYamlImporter.h>
 #include <ao/rt/library/ScanPlan.h>
@@ -166,43 +168,50 @@ namespace ao::rt
         return CoordinatedScanResult{.result = std::move(*revalidationResult)};
       }
 
-      auto mutationResult = mutationService.beginMaintenanceMutation(maintenance);
-
-      if (!mutationResult)
+      try
       {
-        return std::unexpected{mutationResult.error()};
-      }
+        auto mutationResult = mutationService.beginMaintenanceMutation(maintenance);
 
-      auto mutation = std::move(*mutationResult);
-      auto applyResult = operation.apply(mutation.transaction(), stopToken);
+        if (!mutationResult)
+        {
+          return std::unexpected{mutationResult.error()};
+        }
 
-      if (!applyResult)
-      {
-        return std::unexpected{applyResult.error()};
-      }
+        auto mutation = std::move(*mutationResult);
+        auto applyResult = operation.apply(mutation.transaction(), stopToken);
 
-      if (operation.cancelled())
-      {
-        return CoordinatedScanResult{.result = std::move(*applyResult), .cancelled = true};
-      }
+        if (!applyResult)
+        {
+          return std::unexpected{applyResult.error()};
+        }
 
-      if (!operation.transactionShouldCommit())
-      {
+        if (operation.cancelled())
+        {
+          return CoordinatedScanResult{.result = std::move(*applyResult), .cancelled = true};
+        }
+
+        if (!operation.transactionShouldCommit())
+        {
+          return CoordinatedScanResult{.result = std::move(*applyResult)};
+        }
+
+        auto mutatedIds = applyResult->mutatedIds;
+        mutatedIds.append_range(applyResult->relinkedIds);
+        auto commitResult = mutation.commit(
+          LibraryChangeSet{.tracksInserted = applyResult->insertedIds, .tracksMutated = std::move(mutatedIds)});
+
+        if (!commitResult)
+        {
+          return std::unexpected{commitResult.error()};
+        }
+
+        applyResult->libraryRevision = commitResult->libraryRevision;
         return CoordinatedScanResult{.result = std::move(*applyResult)};
       }
-
-      auto mutatedIds = applyResult->mutatedIds;
-      mutatedIds.append_range(applyResult->relinkedIds);
-      auto commitResult = mutation.commit(
-        LibraryChangeSet{.tracksInserted = applyResult->insertedIds, .tracksMutated = std::move(mutatedIds)});
-
-      if (!commitResult)
+      catch (lmdb::TransactionFailure const& failure)
       {
-        return std::unexpected{commitResult.error()};
+        return std::unexpected{failure.error()};
       }
-
-      applyResult->libraryRevision = commitResult->libraryRevision;
-      return CoordinatedScanResult{.result = std::move(*applyResult)};
     }
 
     void logLibraryTaskFailure(std::string_view stage, std::string_view uri, std::string_view message)
@@ -230,7 +239,18 @@ namespace ao::rt
 
         if (callback)
         {
-          callback(progress);
+          try
+          {
+            callback(progress);
+          }
+          catch (std::exception const& error)
+          {
+            APP_LOG_ERROR("Library scan progress callback failed: {}", error.what());
+          }
+          catch (...)
+          {
+            APP_LOG_ERROR("Library scan progress callback failed with a non-standard exception");
+          }
         }
       };
     }
@@ -245,7 +265,18 @@ namespace ao::rt
 
         if (callback)
         {
-          callback(failure);
+          try
+          {
+            callback(failure);
+          }
+          catch (std::exception const& error)
+          {
+            APP_LOG_ERROR("Library scan failure callback failed: {}", error.what());
+          }
+          catch (...)
+          {
+            APP_LOG_ERROR("Library scan failure callback failed with a non-standard exception");
+          }
         }
       };
     }
@@ -258,27 +289,34 @@ namespace ao::rt
       return [mutationServiceRaw = &mutationService, maintenanceRaw = &maintenance, libraryRaw = &library](
                std::span<AudioIdentityWriteCandidate const> candidates) -> Result<AudioIdentityBatchCommitResult>
       {
-        auto mutationResult = mutationServiceRaw->beginMaintenanceMutation(*maintenanceRaw);
-
-        if (!mutationResult)
+        try
         {
-          return std::unexpected{mutationResult.error()};
-        }
+          auto mutationResult = mutationServiceRaw->beginMaintenanceMutation(*maintenanceRaw);
 
-        auto mutation = std::move(*mutationResult);
-        auto result = applyAudioIdentityBatch(*libraryRaw, mutation.transaction(), candidates);
+          if (!mutationResult)
+          {
+            return std::unexpected{mutationResult.error()};
+          }
 
-        if (!result || result->completedCount == 0)
-        {
+          auto mutation = std::move(*mutationResult);
+          auto result = applyAudioIdentityBatch(*libraryRaw, mutation.transaction(), candidates);
+
+          if (!result || result->completedCount == 0)
+          {
+            return result;
+          }
+
+          if (auto commitResult = mutation.commit(LibraryChangeSet{}); !commitResult)
+          {
+            return std::unexpected{commitResult.error()};
+          }
+
           return result;
         }
-
-        if (auto commitResult = mutation.commit(LibraryChangeSet{}); !commitResult)
+        catch (lmdb::TransactionFailure const& failure)
         {
-          return std::unexpected{commitResult.error()};
+          return std::unexpected{failure.error()};
         }
-
-        return result;
       };
     }
 
@@ -297,7 +335,18 @@ namespace ao::rt
 
         if (callback)
         {
-          callback(progress);
+          try
+          {
+            callback(progress);
+          }
+          catch (std::exception const& error)
+          {
+            APP_LOG_ERROR("Audio identity progress callback failed: {}", error.what());
+          }
+          catch (...)
+          {
+            APP_LOG_ERROR("Audio identity progress callback failed with a non-standard exception");
+          }
         }
       };
     }
@@ -310,24 +359,20 @@ namespace ao::rt
 
         if (callback)
         {
-          callback(failure);
+          try
+          {
+            callback(failure);
+          }
+          catch (std::exception const& error)
+          {
+            APP_LOG_ERROR("Audio identity failure callback failed: {}", error.what());
+          }
+          catch (...)
+          {
+            APP_LOG_ERROR("Audio identity failure callback failed with a non-standard exception");
+          }
         }
       };
-    }
-
-    LibraryTaskCompletionStatus completionStatus(AudioIdentityIndexResult const& result)
-    {
-      if (result.cancelled)
-      {
-        return LibraryTaskCompletionStatus::Cancelled;
-      }
-
-      if (result.failureCount == 0)
-      {
-        return LibraryTaskCompletionStatus::Succeeded;
-      }
-
-      return LibraryTaskCompletionStatus::CompletedWithIssues;
     }
   } // namespace
 
@@ -335,7 +380,7 @@ namespace ao::rt
   {
     struct Signals final
     {
-      async::Signal<LibraryTaskCompleted const&> completed;
+      async::Signal<> progressFinished;
       async::Signal<LibraryTaskProgressUpdated const&> progress;
     };
 
@@ -349,55 +394,36 @@ namespace ao::rt
       auto* const executorRaw = &asyncRuntime.callbackExecutor();
       auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
 
-      return [executorRaw, weakSignalsPtr](LibraryTaskProgressKind kind, double fraction, std::string subject)
+      return [executorRaw, weakSignalsPtr](LibraryTaskProgressKind kind, double fraction, std::string subject) noexcept
       {
-        executorRaw->dispatch(
-          [weakSignalsPtr, kind, fraction, subject = std::move(subject)]
-          {
-            if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
+        try
+        {
+          executorRaw->dispatch(
+            [weakSignalsPtr, kind, fraction, subject = std::move(subject)]
             {
-              auto const event = LibraryTaskProgressUpdated{
-                .kind = kind,
-                .fraction = fraction,
-                .subject = std::move(subject),
-              };
-              signalsPtr->progress.emit(event);
-            }
-          });
+              if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
+              {
+                auto const event = LibraryTaskProgressUpdated{
+                  .kind = kind,
+                  .fraction = fraction,
+                  .subject = std::move(subject),
+                };
+                signalsPtr->progress.emit(event);
+              }
+            });
+        }
+        catch (std::exception const& error)
+        {
+          APP_LOG_ERROR("Library task progress dispatch failed: {}", error.what());
+        }
+        catch (...)
+        {
+          APP_LOG_ERROR("Library task progress dispatch failed with a non-standard exception");
+        }
       };
     }
 
-    void dispatchCompletion(LibraryTaskCompletionStatus const status)
-    {
-      auto const weakSignalsPtr = std::weak_ptr<Signals>{signalsPtr};
-      asyncRuntime.callbackExecutor().dispatch(
-        [weakSignalsPtr, status]
-        {
-          if (auto const signalsPtr = weakSignalsPtr.lock(); signalsPtr != nullptr)
-          {
-            auto const event = LibraryTaskCompleted{.status = status};
-            signalsPtr->completed.emit(event);
-          }
-        });
-    }
-
-    [[noreturn]] void dispatchFailureCompletionAndRethrow(std::exception_ptr const& exceptionPtr)
-    {
-      dispatchCompletion(LibraryTaskCompletionStatus::Failed);
-      std::rethrow_exception(exceptionPtr);
-    }
-
-    [[noreturn]] void dispatchCancellationCompletionAndRethrow()
-    {
-      dispatchCompletion(LibraryTaskCompletionStatus::Cancelled);
-      async::throwOperationCancelled();
-    }
-
-    void notifyCompleted(LibraryTaskCompletionStatus const status, std::size_t const affectedCount = 0) const
-    {
-      auto const event = LibraryTaskCompleted{.status = status, .affectedCount = affectedCount};
-      signalsPtr->completed.emit(event);
-    }
+    void notifyProgressFinished() const noexcept { signalsPtr->progressFinished.emit(); }
 
     async::Runtime& asyncRuntime;
     library::MusicLibrary& library;
@@ -414,10 +440,9 @@ namespace ao::rt
 
   LibraryTaskService::~LibraryTaskService() = default;
 
-  async::Subscription LibraryTaskService::onCompleted(
-    std::move_only_function<void(LibraryTaskCompleted const&) noexcept> handler) const
+  async::Subscription LibraryTaskService::onProgressFinished(std::move_only_function<void() noexcept> handler) const
   {
-    return _implPtr->signalsPtr->completed.connect(std::move(handler));
+    return _implPtr->signalsPtr->progressFinished.connect(std::move(handler));
   }
 
   async::Subscription LibraryTaskService::onProgress(
@@ -476,57 +501,115 @@ namespace ao::rt
 
     auto maintenance = std::move(*maintenanceResult);
     auto const availability = _implPtr->mutationService.availability();
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("LibraryImportPreview");
+    auto optResult = std::optional<Result<LibraryImportPlan>>{};
+    auto exceptionPtr = std::exception_ptr{};
+    bool cancelledByException = false;
 
-    auto result = [&] -> Result<LibraryImportPlan>
+    try
     {
-      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-      auto importOperation = LibraryYamlImportOperation{importer};
-      auto preparedResult = importOperation.prepare(path, mode, true);
-
-      if (!preparedResult)
-      {
-        return std::unexpected{preparedResult.error()};
-      }
-
-      auto targetLibraryId = std::array<std::byte, 16>{};
-      std::uint64_t targetRevision = 0;
-
-      {
-        auto readTransaction = _implPtr->library.readTransaction();
-        auto const headerResult = _implPtr->library.metadata().load(readTransaction);
-
-        if (!headerResult)
+      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      setCurrentThreadName("LibraryImportPreview");
+      optResult.emplace(
+        [&] -> Result<LibraryImportPlan>
         {
-          return std::unexpected{headerResult.error()};
-        }
+          auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+          auto importOperation = LibraryYamlImportOperation{importer};
+          auto preparedResult = importOperation.prepare(path, mode, true);
 
-        targetLibraryId = headerResult->libraryId;
-        targetRevision = _implPtr->library.libraryRevision(readTransaction);
-      }
+          if (!preparedResult)
+          {
+            return std::unexpected{preparedResult.error()};
+          }
 
-      auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
+          auto targetLibraryId = std::array<std::byte, 16>{};
+          std::uint64_t targetRevision = 0;
 
-      if (!mutationResult)
+          {
+            auto readTransaction = _implPtr->library.readTransaction();
+            auto const headerResult = _implPtr->library.metadata().load(readTransaction);
+
+            if (!headerResult)
+            {
+              return std::unexpected{headerResult.error()};
+            }
+
+            targetLibraryId = headerResult->libraryId;
+            targetRevision = _implPtr->library.libraryRevision(readTransaction);
+          }
+
+          auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
+
+          if (!mutationResult)
+          {
+            return std::unexpected{mutationResult.error()};
+          }
+
+          auto mutation = std::move(*mutationResult);
+          auto reportResult = importOperation.preview(*preparedResult, mutation.transaction());
+
+          if (!reportResult)
+          {
+            return std::unexpected{reportResult.error()};
+          }
+
+          return LibraryImportPlan{std::make_unique<LibraryImportPlan::Impl>(std::move(*preparedResult),
+                                                                             *reportResult,
+                                                                             targetLibraryId,
+                                                                             availability.runtimeInstanceId,
+                                                                             targetRevision)};
+        }());
+    }
+    catch (lmdb::TransactionFailure const& failure)
+    {
+      optResult.emplace(std::unexpected{failure.error()});
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
       {
-        return std::unexpected{mutationResult.error()};
+        cancelledByException = true;
       }
-
-      auto mutation = std::move(*mutationResult);
-      auto reportResult = importOperation.preview(*preparedResult, mutation.transaction());
-
-      if (!reportResult)
+      else
       {
-        return std::unexpected{reportResult.error()};
+        exceptionPtr = std::current_exception();
       }
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      exceptionPtr = std::current_exception();
+    }
 
-      return LibraryImportPlan{std::make_unique<LibraryImportPlan::Impl>(
-        std::move(*preparedResult), *reportResult, targetLibraryId, availability.runtimeInstanceId, targetRevision)};
-    }();
+    try
+    {
+      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    }
+    // NOLINTNEXTLINE(aobus-async-cancellation-guard): This no-stop admission treats every live rejection as fatal.
+    catch (...)
+    {
+      _implPtr->mutationService.handleFinalizationAdmissionFailure(std::current_exception());
+      async::throwOperationCancelled();
+    }
 
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
-    co_return std::move(result);
+    maintenance.finish();
+
+    if (cancelledByException)
+    {
+      async::throwOperationCancelled();
+    }
+
+    if (exceptionPtr)
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
+
+    if (stopToken.stop_requested())
+    {
+      async::throwOperationCancelled();
+    }
+
+    gsl_Assert(optResult);
+    co_return std::move(*optResult);
   }
 
   async::Task<Result<ImportReport>> LibraryTaskService::applyLibraryImportPlanAsync(LibraryImportPlan plan,
@@ -548,71 +631,121 @@ namespace ao::rt
 
     auto maintenance = std::move(*maintenanceResult);
     auto const availability = _implPtr->mutationService.availability();
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("LibraryImport");
+    auto optResult = std::optional<Result<ImportReport>>{};
+    auto exceptionPtr = std::exception_ptr{};
+    bool cancelledByException = false;
 
-    auto result = [&] -> Result<ImportReport>
+    try
     {
-      auto const& binding = *plan._implPtr;
-
-      if (availability.runtimeInstanceId != binding.runtimeInstanceId)
-      {
-        return makeError(Error::Code::Conflict, "Import plan belongs to a different library runtime");
-      }
-
-      {
-        auto readTransaction = _implPtr->library.readTransaction();
-        auto const headerResult = _implPtr->library.metadata().load(readTransaction);
-
-        if (!headerResult)
+      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      setCurrentThreadName("LibraryImport");
+      optResult.emplace(
+        [&] -> Result<ImportReport>
         {
-          return std::unexpected{headerResult.error()};
-        }
+          auto const& binding = *plan._implPtr;
 
-        if (headerResult->libraryId != binding.targetLibraryId ||
-            _implPtr->library.libraryRevision(readTransaction) != binding.targetRevision)
-        {
-          return makeError(Error::Code::Conflict, "Target library changed after the import preview");
-        }
-      }
+          if (availability.runtimeInstanceId != binding.runtimeInstanceId)
+          {
+            return makeError(Error::Code::Conflict, "Import plan belongs to a different library runtime");
+          }
 
-      auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
-      auto importOperation = LibraryYamlImportOperation{importer};
+          {
+            auto readTransaction = _implPtr->library.readTransaction();
+            auto const headerResult = _implPtr->library.metadata().load(readTransaction);
 
-      if (auto sourceResult = importOperation.revalidateSource(binding.prepared); !sourceResult)
+            if (!headerResult)
+            {
+              return std::unexpected{headerResult.error()};
+            }
+
+            if (headerResult->libraryId != binding.targetLibraryId ||
+                _implPtr->library.libraryRevision(readTransaction) != binding.targetRevision)
+            {
+              return makeError(Error::Code::Conflict, "Target library changed after the import preview");
+            }
+          }
+
+          auto importer = ao::rt::LibraryYamlImporter{_implPtr->library};
+          auto importOperation = LibraryYamlImportOperation{importer};
+
+          if (auto sourceResult = importOperation.revalidateSource(binding.prepared); !sourceResult)
+          {
+            return std::unexpected{sourceResult.error()};
+          }
+
+          auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
+
+          if (!mutationResult)
+          {
+            return std::unexpected{mutationResult.error()};
+          }
+
+          auto mutation = std::move(*mutationResult);
+          auto importResult = importOperation.apply(binding.prepared, mutation.transaction());
+
+          if (!importResult)
+          {
+            return std::unexpected{importResult.error()};
+          }
+
+          auto changeSet = importOperation.buildChangeSet(binding.prepared, mutation.transaction());
+
+          if (auto commitResult = mutation.commit(std::move(changeSet)); !commitResult)
+          {
+            return std::unexpected{commitResult.error()};
+          }
+
+          return *importResult;
+        }());
+    }
+    catch (lmdb::TransactionFailure const& failure)
+    {
+      optResult.emplace(std::unexpected{failure.error()});
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
       {
-        return std::unexpected{sourceResult.error()};
+        cancelledByException = true;
       }
-
-      auto mutationResult = _implPtr->mutationService.beginMaintenanceMutation(maintenance);
-
-      if (!mutationResult)
+      else
       {
-        return std::unexpected{mutationResult.error()};
+        exceptionPtr = std::current_exception();
       }
-
-      auto mutation = std::move(*mutationResult);
-      auto importResult = importOperation.apply(binding.prepared, mutation.transaction());
-
-      if (!importResult)
-      {
-        return std::unexpected{importResult.error()};
-      }
-
-      auto changeSet = importOperation.buildChangeSet(binding.prepared, mutation.transaction());
-
-      if (auto commitResult = mutation.commit(std::move(changeSet)); !commitResult)
-      {
-        return std::unexpected{commitResult.error()};
-      }
-
-      return *importResult;
-    }();
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      exceptionPtr = std::current_exception();
+    }
 
     // Once a maintenance transaction may have committed, callback completion
     // is mandatory even if the caller requested cancellation in the meantime.
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
-    co_return result;
+    try
+    {
+      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    }
+    // NOLINTNEXTLINE(aobus-async-cancellation-guard): This no-stop admission treats every live rejection as fatal.
+    catch (...)
+    {
+      _implPtr->mutationService.handleFinalizationAdmissionFailure(std::current_exception());
+      async::throwOperationCancelled();
+    }
+
+    maintenance.finish();
+
+    if (cancelledByException)
+    {
+      async::throwOperationCancelled();
+    }
+
+    if (exceptionPtr)
+    {
+      std::rethrow_exception(exceptionPtr);
+    }
+
+    gsl_Assert(optResult);
+    co_return std::move(*optResult);
   }
 
   async::Task<Result<>> LibraryTaskService::exportLibraryAsync(std::filesystem::path path,
@@ -636,43 +769,62 @@ namespace ao::rt
 
   async::Task<Result<ScanPlan>> LibraryTaskService::buildScanPlanAsync(std::stop_token const stopToken)
   {
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("LibraryScan");
+    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    auto optPlanResult = std::optional<Result<ScanPlan>>{};
+    auto exceptionPtr = std::exception_ptr{};
+    bool cancelledByException = false;
 
-    // Plan building only opens a read transaction; the LMDB snapshot is
-    // consistent on its own, and holding the mutation mutex here would not
-    // keep the plan fresh anyway (the lock is released before apply).
-    auto scanService = LibraryScan{_implPtr->library};
-    auto publishProgress = _implPtr->makeProgressPublisher();
-    auto planResult = scanService.buildPlan(
-      [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
-      { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, utility::pathToUtf8(path.filename())); });
+    try
+    {
+      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      setCurrentThreadName("LibraryScan");
+
+      // Plan building only opens a read transaction; the LMDB snapshot is
+      // consistent on its own, and holding the mutation mutex here would not
+      // keep the plan fresh anyway (the lock is released before apply).
+      auto scanService = LibraryScan{_implPtr->library};
+      auto publishProgress = _implPtr->makeProgressPublisher();
+      optPlanResult.emplace(scanService.buildPlan(
+        [publishProgress = std::move(publishProgress)](std::filesystem::path const& path) mutable
+        { publishProgress(LibraryTaskProgressKind::Scanning, 0.0, utility::pathToUtf8(path.filename())); }));
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
+      {
+        cancelledByException = true;
+      }
+      else
+      {
+        exceptionPtr = std::current_exception();
+      }
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      exceptionPtr = std::current_exception();
+    }
 
     co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    _implPtr->notifyProgressFinished();
 
-    if (stopToken.stop_requested())
+    if (cancelledByException)
     {
-      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Cancelled);
       async::throwOperationCancelled();
     }
 
-    if (!planResult)
+    if (exceptionPtr)
     {
-      // A scan that could not even begin (missing root, failed walk) is fatal to
-      // the whole task. Clear any in-flight progress and report it as a failure.
-      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Failed);
-      co_return std::unexpected{planResult.error()};
+      std::rethrow_exception(exceptionPtr);
     }
 
-    if (planResult->count(ScanClassification::New) == 0 && planResult->count(ScanClassification::Changed) == 0 &&
-        planResult->count(ScanClassification::Moved) == 0 && planResult->count(ScanClassification::Missing) == 0)
+    if (stopToken.stop_requested())
     {
-      _implPtr->notifyCompleted(planResult->count(ScanClassification::Error) == 0
-                                  ? LibraryTaskCompletionStatus::Succeeded
-                                  : LibraryTaskCompletionStatus::CompletedWithIssues);
+      async::throwOperationCancelled();
     }
 
-    co_return std::move(planResult);
+    gsl_Assert(optPlanResult);
+    co_return std::move(*optPlanResult);
   }
 
   async::Task<Result<ScanApplyResult>> LibraryTaskService::applyScanPlanAsync(ScanPlan plan,
@@ -686,13 +838,11 @@ namespace ao::rt
 
     if (!maintenanceResult)
     {
+      _implPtr->notifyProgressFinished();
       co_return std::unexpected{maintenanceResult.error()};
     }
 
     auto maintenance = std::move(*maintenanceResult);
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("ApplyScanPlan");
-
     auto coordinatedScan = Result<CoordinatedScanResult>{};
     auto const totalItems = plan.size();
     auto exceptionPtr = std::exception_ptr{};
@@ -700,6 +850,8 @@ namespace ao::rt
 
     try
     {
+      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      setCurrentThreadName("ApplyScanPlan");
       auto progress =
         makeScanProgressReporter(totalItems, _implPtr->makeProgressPublisher(), std::move(progressCallback));
       auto failure = makeScanFailureReporter(std::move(failureCallback));
@@ -726,42 +878,43 @@ namespace ao::rt
     }
     catch (...)
     {
-      // Known cancellation exceptions derive from std::exception and are
-      // classified above; keep the broad-catch guard for non-standard throws.
       async::rethrowIfOperationCancelled();
       exceptionPtr = std::current_exception();
     }
 
+    try
+    {
+      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    }
+    // NOLINTNEXTLINE(aobus-async-cancellation-guard): This no-stop admission treats every live rejection as fatal.
+    catch (...)
+    {
+      _implPtr->mutationService.handleFinalizationAdmissionFailure(std::current_exception());
+      async::throwOperationCancelled();
+    }
+
+    maintenance.finish();
+    _implPtr->notifyProgressFinished();
+
     if (cancelledByException)
     {
-      _implPtr->dispatchCancellationCompletionAndRethrow();
+      async::throwOperationCancelled();
     }
 
     if (exceptionPtr)
     {
-      _implPtr->dispatchFailureCompletionAndRethrow(exceptionPtr);
+      std::rethrow_exception(exceptionPtr);
     }
-
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
     if (!coordinatedScan)
     {
-      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Failed);
       co_return std::unexpected{coordinatedScan.error()};
     }
 
-    auto const& result = coordinatedScan->result;
-    auto const processedCount = result.insertedIds.size() + result.mutatedIds.size() + result.relinkedIds.size();
-
     if (coordinatedScan->cancelled)
     {
-      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Cancelled);
       async::throwOperationCancelled();
     }
-
-    _implPtr->notifyCompleted(result.failureCount == 0 ? LibraryTaskCompletionStatus::Succeeded
-                                                       : LibraryTaskCompletionStatus::CompletedWithIssues,
-                              processedCount);
 
     co_return Result<ScanApplyResult>{std::move(coordinatedScan->result)};
   }
@@ -776,18 +929,19 @@ namespace ao::rt
 
     if (!maintenanceResult)
     {
+      _implPtr->notifyProgressFinished();
       co_return std::unexpected{maintenanceResult.error()};
     }
 
     auto maintenance = std::move(*maintenanceResult);
-    co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
-    setCurrentThreadName("AudioBackfill");
-
     auto backfillResult = Result<AudioIdentityIndexResult>{};
     auto exceptionPtr = std::exception_ptr{};
     bool cancelledByException = false;
 
+    try
     {
+      co_await _implPtr->asyncRuntime.resumeOnWorker(stopToken);
+      setCurrentThreadName("AudioBackfill");
       auto commitBatch = makeAudioIdentityCommitBatch(_implPtr->mutationService, maintenance, _implPtr->library);
       auto progress = makeAudioIdentityProgressReporter(_implPtr->makeProgressPublisher(), std::move(progressCallback));
       auto failure = makeAudioIdentityFailureReporter(std::move(failureCallback));
@@ -795,52 +949,55 @@ namespace ao::rt
       // Fingerprinting runs without mutationService writer ownership; each
       // bounded write-back acquires its own maintenance mutation.
       auto indexer = AudioIdentityIndexer{_implPtr->asyncRuntime, _implPtr->library};
-
-      try
+      backfillResult =
+        co_await indexer.indexPending(std::move(commitBatch), {}, std::move(progress), std::move(failure), stopToken);
+    }
+    catch (std::exception const& error)
+    {
+      if (async::isOperationCancelled(error))
       {
-        backfillResult =
-          co_await indexer.indexPending(std::move(commitBatch), {}, std::move(progress), std::move(failure), stopToken);
+        cancelledByException = true;
       }
-      catch (std::exception const& error)
+      else
       {
-        if (async::isOperationCancelled(error))
-        {
-          cancelledByException = true;
-        }
-        else
-        {
-          exceptionPtr = std::current_exception();
-        }
-      }
-      catch (...)
-      {
-        // Known cancellation exceptions derive from std::exception and are
-        // classified above; keep the broad-catch guard for non-standard throws.
-        async::rethrowIfOperationCancelled();
         exceptionPtr = std::current_exception();
       }
     }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      exceptionPtr = std::current_exception();
+    }
+
+    try
+    {
+      co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
+    }
+    // NOLINTNEXTLINE(aobus-async-cancellation-guard): This no-stop admission treats every live rejection as fatal.
+    catch (...)
+    {
+      _implPtr->mutationService.handleFinalizationAdmissionFailure(std::current_exception());
+      async::throwOperationCancelled();
+    }
+
+    maintenance.finish();
+    _implPtr->notifyProgressFinished();
 
     if (cancelledByException)
     {
-      _implPtr->dispatchCancellationCompletionAndRethrow();
+      async::throwOperationCancelled();
     }
 
     if (exceptionPtr)
     {
-      _implPtr->dispatchFailureCompletionAndRethrow(exceptionPtr);
+      std::rethrow_exception(exceptionPtr);
     }
-
-    co_await _implPtr->asyncRuntime.resumeOnCallbackExecutor();
 
     if (!backfillResult)
     {
-      _implPtr->notifyCompleted(LibraryTaskCompletionStatus::Failed);
       co_return std::unexpected{backfillResult.error()};
     }
 
-    _implPtr->notifyCompleted(
-      completionStatus(*backfillResult), static_cast<std::size_t>(backfillResult->completedCount));
     co_return backfillResult;
   }
 } // namespace ao::rt

@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/library/TrackView.h>
+
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/LibraryBinaryTestSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackViewTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/AudioCodec.h>
@@ -13,7 +16,6 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackLayout.h>
-#include <ao/library/TrackView.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -86,6 +88,7 @@ namespace ao::library::test
   TEST_CASE("TrackView - returns work and movement IDs from cold data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("classical.flac");
     builder.metadata()
       .work("Symphony No. 9 in D minor, Op. 125")
       .movement("II. Molto vivace")
@@ -96,7 +99,7 @@ namespace ao::library::test
       .movementTotal(4);
 
     auto temp = ao::test::TempDir{};
-    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
     auto coldDataResult = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldDataResult);
@@ -118,10 +121,11 @@ namespace ao::library::test
   TEST_CASE("TrackView - returns cover art entries from cold data", "[library][unit][track]")
   {
     auto builder = TrackBuilder::makeEmpty();
+    builder.property().uri("cover.flac");
     builder.coverArt().add(PictureType::BackCover, ResourceId{42});
 
     auto temp = ao::test::TempDir{};
-    auto library = MusicLibrary{temp.path(), temp.path() / "db"};
+    auto library = makeTestMusicLibrary(temp.path(), temp.path() / "db");
     auto transaction = writeTransaction(library);
     auto coldDataResult = builder.serializeCold(transaction, library.resources());
     REQUIRE(coldDataResult);

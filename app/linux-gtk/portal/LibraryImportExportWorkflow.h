@@ -55,10 +55,8 @@ namespace ao::gtk::portal
     async::Task<void> prepareImportWorkflow(ImportExportCallbacks callbacks,
                                             std::filesystem::path importPath,
                                             std::stop_token stopToken);
-    async::Task<void> applyImportWorkflow(ImportExportCallbacks callbacks,
-                                          rt::LibraryImportPlan plan,
-                                          std::stop_token stopToken);
-    void applyPreparedImport(ImportExportCallbacks callbacks, rt::LibraryImportPlan plan);
+    async::Task<void> applyImportWorkflow(rt::LibraryImportPlan plan, std::stop_token stopToken);
+    void applyPreparedImport(rt::LibraryImportPlan plan);
     async::Task<void> exportWorkflow(std::filesystem::path exportPath, rt::ExportMode mode, std::stop_token stopToken);
 
     void startAudioIdentityIndexing();
@@ -73,6 +71,6 @@ namespace ao::gtk::portal
     ImportExportCallbacks const& _callbacks;
 
     async::LifetimeScope _tasks;
-    MainContextCallbackScope _confirmationCallbacks;
+    MainContextCallbackScope _presentationCallbacks;
   };
 } // namespace ao::gtk::portal

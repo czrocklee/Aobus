@@ -45,9 +45,8 @@ namespace ao::winui
   void OutputDeviceControl::bind(WinUiDependencies const& dependencies)
   {
     unbind();
-    _viewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(dependencies.playbackRuntime.playback(),
-                                                                     [this](uimodel::OutputDeviceViewState const& state)
-                                                                     { applyState(state); });
+    _viewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
+      dependencies.runtime.playback(), [this](uimodel::OutputDeviceViewState const& state) { applyState(state); });
     _viewModelPtr->refresh();
   }
 

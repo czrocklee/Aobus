@@ -48,7 +48,7 @@ Movement is a leaf value inside the classical block; application grouping and so
 
 ## Tags and custom metadata
 
-Tags are a set persisted as hot dictionary ids plus a 32-bit bloom filter.
+Tags are a set of shared-dictionary ids persisted in the hot record, plus a 32-bit bloom filter.
 The builder suppresses duplicate names, while serialization records resolved ids; tag order has no public semantic meaning.
 The serialized tag-id array contains complete membership, and the bloom filter is only an acceleration aid.
 

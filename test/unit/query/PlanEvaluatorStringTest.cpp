@@ -134,7 +134,7 @@ namespace ao::query::test
     auto plan = compileOk(compiler, expr);
     auto evaluator = PlanEvaluator{};
 
-    auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "/path", 2021};
+    auto track = TestTrack{"Bach Greatest Hits", "Artist", "Album", "path", 2021};
     auto result = evaluator.evaluateFull(plan, track.view());
     CHECK(result == true);
   }
