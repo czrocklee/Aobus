@@ -174,10 +174,9 @@ namespace ao::rt::test
     }));
   }
 
-  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
-                                          ConfigStore* const playbackSessionConfigStore,
-                                          async::Sleeper* const sleeper)
+  std::unique_ptr<AppRuntime> makeStateOnlyRuntime(ao::test::TempDir const& tempDir,
+                                                   ConfigStore* const playbackSessionConfigStore)
   {
-    return makeRuntime(tempDir, std::make_unique<InlineExecutor>(), playbackSessionConfigStore, sleeper);
+    return makeRuntime(tempDir, std::make_unique<InlineExecutor>(), playbackSessionConfigStore);
   }
 } // namespace ao::rt::test

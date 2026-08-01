@@ -6,6 +6,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
+#include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/AudioScalars.h>
@@ -55,20 +56,22 @@ namespace ao::rt::test
 
     Result<ImportReport> importThroughRuntime(library::MusicLibrary& library,
                                               LibraryChanges& changes,
+                                              QueuedExecutor& executor,
                                               std::filesystem::path const& path,
                                               ImportMode mode)
     {
-      auto executor = InlineExecutor{};
       auto runtime = async::Runtime{executor};
       auto runtimeLibraryPtr = ao::test::requireValue(Library::create(runtime, library, changes));
-      auto planResult = runtime.spawn(runtimeLibraryPtr->taskService().prepareLibraryImportAsync(path, mode)).get();
+      auto planResult =
+        runQueuedTask(runtime, executor, runtimeLibraryPtr->taskService().prepareLibraryImportAsync(path, mode));
 
       if (!planResult)
       {
         return std::unexpected{planResult.error()};
       }
 
-      return runtime.spawn(runtimeLibraryPtr->taskService().applyLibraryImportPlanAsync(std::move(*planResult))).get();
+      return runQueuedTask(
+        runtime, executor, runtimeLibraryPtr->taskService().applyLibraryImportPlanAsync(std::move(*planResult)));
     }
   } // namespace
 
@@ -275,11 +278,12 @@ library:
 )";
     }
 
-    auto changes = makeInlineLibraryChanges(ml);
+    auto executor = QueuedExecutor{};
+    auto changes = makeLibraryChanges(executor, ml);
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
-    REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Merge));
+    REQUIRE(importThroughRuntime(ml, changes, executor, yamlPath, ImportMode::Merge));
 
     REQUIRE(observed.size() == 1);
     REQUIRE(observed.front().tracksInserted.size() == 1);
@@ -300,11 +304,12 @@ library:
       yaml << "version: 3\nexport_mode: full\nlibrary:\n  tracks: []\n  lists: []\n";
     }
 
-    auto changes = makeInlineLibraryChanges(ml);
+    auto executor = QueuedExecutor{};
+    auto changes = makeLibraryChanges(executor, ml);
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
-    REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Restore));
+    REQUIRE(importThroughRuntime(ml, changes, executor, yamlPath, ImportMode::Restore));
 
     REQUIRE(observed.size() == 1);
     CHECK(observed.front().libraryReset);
@@ -328,11 +333,12 @@ library:
            << "  lists: []\n";
     }
 
-    auto changes = makeInlineLibraryChanges(ml);
+    auto executor = QueuedExecutor{};
+    auto changes = makeLibraryChanges(executor, ml);
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&observed](LibraryChangeSet const& value) noexcept { observed.push_back(value); });
-    REQUIRE(importThroughRuntime(ml, changes, yamlPath, ImportMode::Restore));
+    REQUIRE(importThroughRuntime(ml, changes, executor, yamlPath, ImportMode::Restore));
 
     CHECK(utility::formatUuid(ml.metadataHeader().libraryId) == "123e4567-e89b-12d3-a456-426614174000");
     REQUIRE(observed.size() == 1);

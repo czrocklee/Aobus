@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/uimodel/library/track/TrackFilterCompleter.h>
+
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/query/Expression.h>
@@ -9,7 +11,6 @@
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionResult.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/uimodel/library/track/TrackFilterCompleter.h>
 #include <ao/uimodel/library/track/TrackFilterResolver.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -58,7 +59,7 @@ namespace ao::uimodel::test
                                                      .conductor = "Conductor Match",
                                                      .work = "Work Match",
                                                      .tags = {"Tag Match"}});
-    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
 
@@ -92,7 +93,7 @@ namespace ao::uimodel::test
     library::test::addTrack(
       libraryFixture.library(), library::test::TrackSpec{.title = "Second", .artist = "Alpha", .album = ""});
     library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "Third", .album = "Albatross"});
-    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
 
@@ -114,7 +115,7 @@ namespace ao::uimodel::test
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrack(
       libraryFixture.library(), library::test::TrackSpec{.title = "Track", .artist = "Alpha", .album = ""});
-    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
     auto const text = std::string{"road Alzz trip"};
@@ -132,7 +133,7 @@ namespace ao::uimodel::test
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto const value = std::string{R"(C:\Music "Live")"};
     library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = value});
-    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
     auto const optResult = completer.complete("C:", 2);
@@ -152,7 +153,7 @@ namespace ao::uimodel::test
   {
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "P!nk Live", .artist = "P!nk"});
-    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto vocabulary = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = TrackFilterCompleter{vocabulary};
 

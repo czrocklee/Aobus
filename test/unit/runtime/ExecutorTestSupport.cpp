@@ -3,6 +3,7 @@
 
 #include "test/unit/runtime/ExecutorTestSupport.h"
 
+#include <ao/Exception.h>
 #include <ao/async/LoopExecutor.h>
 
 #include <catch2/catch_message.hpp>
@@ -25,6 +26,7 @@ namespace ao::rt::test
     mutable std::mutex mutex;
     std::deque<std::move_only_function<void()>> tasks;
     mutable std::condition_variable cv;
+    std::thread::id ownerThread = std::this_thread::get_id();
   };
 
   ManualExecutor::ManualExecutor()
@@ -36,7 +38,7 @@ namespace ao::rt::test
 
   bool ManualExecutor::isCurrent() const noexcept
   {
-    return true;
+    return std::this_thread::get_id() == _implPtr->ownerThread;
   }
 
   void ManualExecutor::dispatch(std::move_only_function<void()> task)
@@ -56,6 +58,11 @@ namespace ao::rt::test
 
   bool ManualExecutor::runOne()
   {
+    if (!isCurrent())
+    {
+      throwException<Exception>("ManualExecutor can only be drained on its owner thread");
+    }
+
     auto task = std::move_only_function<void()>{};
 
     {
@@ -99,18 +106,38 @@ namespace ao::rt::test
     REQUIRE(waitUntilQueued(timeout));
   }
 
+  InlineExecutor::InlineExecutor() noexcept
+    : _ownerThread{std::this_thread::get_id()}
+  {
+  }
+
   bool InlineExecutor::isCurrent() const noexcept
   {
-    return true;
+    return std::this_thread::get_id() == _ownerThread;
   }
 
   void InlineExecutor::dispatch(std::move_only_function<void()> task)
   {
-    task();
+    execute(std::move(task));
   }
 
   void InlineExecutor::defer(std::move_only_function<void()> task)
   {
+    execute(std::move(task));
+  }
+
+  void InlineExecutor::execute(std::move_only_function<void()> task) const
+  {
+    if (!task)
+    {
+      return;
+    }
+
+    if (!isCurrent())
+    {
+      throwException<Exception>("InlineExecutor can only execute work on its owner thread");
+    }
+
     task();
   }
 

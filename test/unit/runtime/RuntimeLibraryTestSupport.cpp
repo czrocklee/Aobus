@@ -200,16 +200,27 @@ namespace ao::rt::test
     return addTrack(library::test::TrackSpec{.title = std::string{title}});
   }
 
-  LibraryChanges makeInlineLibraryChanges(std::uint64_t const lastPublishedRevision)
+  LibraryChanges makeStateOnlyLibraryChanges(std::uint64_t const lastPublishedRevision)
   {
     static thread_local auto executor = InlineExecutor{};
     return LibraryChanges{executor, lastPublishedRevision};
   }
 
-  LibraryChanges makeInlineLibraryChanges(library::MusicLibrary const& storage)
+  LibraryChanges makeStateOnlyLibraryChanges(library::MusicLibrary const& storage)
   {
     auto const transaction = storage.readTransaction();
-    return makeInlineLibraryChanges(storage.libraryRevision(transaction));
+    return makeStateOnlyLibraryChanges(storage.libraryRevision(transaction));
+  }
+
+  LibraryChanges makeLibraryChanges(async::Executor& executor, std::uint64_t const lastPublishedRevision)
+  {
+    return LibraryChanges{executor, lastPublishedRevision};
+  }
+
+  LibraryChanges makeLibraryChanges(async::Executor& executor, library::MusicLibrary const& storage)
+  {
+    auto const transaction = storage.readTransaction();
+    return makeLibraryChanges(executor, storage.libraryRevision(transaction));
   }
 
   TrackId addTrackAndPublish(library::MusicLibrary& storage,

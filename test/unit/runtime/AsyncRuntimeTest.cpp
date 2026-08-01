@@ -19,6 +19,7 @@
 #endif
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -347,21 +348,26 @@ namespace ao::rt::test
     auto const weakLifetimePtr = std::weak_ptr<void>{lifetimePtr};
     auto diagnosticLifetimePtr = std::make_shared<std::uint8_t>(0);
     auto const weakDiagnosticLifetimePtr = std::weak_ptr<void>{diagnosticLifetimePtr};
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
 
     {
       auto runtimePtr = std::make_unique<Runtime>(executor, 1, DiagnosticLifetimeHandler{diagnosticLifetimePtr});
       diagnosticLifetimePtr.reset();
-      runtimePtr->spawnLogged(callbackAfterRuntimeShutdown(runtimePtr.get(), resumed, lifetimePtr));
+      runtimePtr->spawnLogged(
+        flagCompletion(completedPtr, callbackAfterRuntimeShutdown(runtimePtr.get(), resumed, lifetimePtr)));
       lifetimePtr.reset();
       executor.checkQueued();
       CHECK_FALSE(weakLifetimePtr.expired());
       CHECK_FALSE(weakDiagnosticLifetimePtr.expired());
+      CHECK_FALSE(completedPtr->load());
     }
 
     CHECK_FALSE(weakLifetimePtr.expired());
     CHECK_FALSE(weakDiagnosticLifetimePtr.expired());
+    CHECK_FALSE(completedPtr->load());
     executor.drain();
     CHECK_FALSE(resumed.load());
+    CHECK(completedPtr->load());
     CHECK(weakLifetimePtr.expired());
     CHECK(weakDiagnosticLifetimePtr.expired());
   }

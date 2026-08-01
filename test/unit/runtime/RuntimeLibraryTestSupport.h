@@ -26,6 +26,11 @@ namespace ao::rt
   class Library;
 }
 
+namespace ao::async
+{
+  class Executor;
+}
+
 namespace ao::rt::test
 {
   MetadataPatch metadataPatch(library::test::TrackSpec const& spec);
@@ -61,8 +66,12 @@ namespace ao::rt::test
     std::unique_ptr<Impl> _implPtr;
   };
 
-  LibraryChanges makeInlineLibraryChanges(std::uint64_t lastPublishedRevision = 0);
-  LibraryChanges makeInlineLibraryChanges(library::MusicLibrary const& storage);
+  // State-only helper. Tests whose publication path can cross an executor
+  // boundary must use makeLibraryChanges with an explicitly driven executor.
+  LibraryChanges makeStateOnlyLibraryChanges(std::uint64_t lastPublishedRevision = 0);
+  LibraryChanges makeStateOnlyLibraryChanges(library::MusicLibrary const& storage);
+  LibraryChanges makeLibraryChanges(async::Executor& executor, std::uint64_t lastPublishedRevision = 0);
+  LibraryChanges makeLibraryChanges(async::Executor& executor, library::MusicLibrary const& storage);
 
   TrackId addTrackAndPublish(library::MusicLibrary& storage,
                              LibraryChanges& changes,

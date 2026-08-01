@@ -204,13 +204,13 @@ namespace ao::rt::test
 
     SECTION("null override uses the workspace store")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       CHECK(&runtimePtr->playbackSessionConfigStore() == &runtimePtr->workspaceConfigStore());
     }
 
     SECTION("explicit override is preserved")
     {
-      auto runtimePtr = makeRuntime(tempDir, &overrideStore);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir, &overrideStore);
       CHECK(&runtimePtr->playbackSessionConfigStore() == &overrideStore);
       CHECK(&runtimePtr->playbackSessionConfigStore() != &runtimePtr->workspaceConfigStore());
     }

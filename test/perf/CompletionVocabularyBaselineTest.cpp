@@ -229,7 +229,7 @@ namespace ao::rt::test
       });
     }
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto executor = InlineExecutor{};
     auto mutationService =
       LibraryMutationService{executor, library::test::requireWritableLibrary(libraryFixture.library()), changes};

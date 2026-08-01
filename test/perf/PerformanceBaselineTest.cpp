@@ -1556,7 +1556,7 @@ namespace ao::rt::test
 
       std::chrono::microseconds measureDenseOrderBindDuration()
       {
-        auto changes = makeInlineLibraryChanges(_libraryFixture.library());
+        auto changes = makeStateOnlyLibraryChanges(_libraryFixture.library());
         auto writerFixture = LibraryWriterFixture{_libraryFixture.library(), changes};
         auto effectiveTrackIds = _ids;
         auto const start = std::chrono::steady_clock::now();

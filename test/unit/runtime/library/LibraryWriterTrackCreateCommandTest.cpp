@@ -51,7 +51,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 
@@ -92,7 +92,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - createTrackFromFile accepts root-relative paths", "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 
@@ -121,7 +121,7 @@ namespace ao::rt::test
     auto const expected = std::string{"\xE8\xAA\xB0\xE3\x81\x8B\xE3\x80\x81\xE6\xB5\xB7\xE3\x82\x92\xE3\x80\x82/"
                                       "Dvo\xC5\x99\xC3\xA1k.flac"};
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const mediaPath = copyFixtureAudio(libraryFixture, utility::pathFromUtf8(expected));
@@ -149,7 +149,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 
@@ -168,7 +168,7 @@ namespace ao::rt::test
             "[runtime][unit][library][track-create]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 

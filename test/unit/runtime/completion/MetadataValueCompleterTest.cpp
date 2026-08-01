@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/rt/completion/MetadataValueCompleter.h>
+
 #include "test/unit/library/TrackTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/completion/CompletionItem.h>
 #include <ao/rt/completion/CompletionService.h>
-#include <ao/rt/completion/MetadataValueCompleter.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -49,7 +50,7 @@ namespace ao::rt::test
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Protection");
     addMetadataValueTrack(libraryFixture, "Mazzy Star", "So Tonight That I Might See");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     auto artistCompleter = MetadataValueCompleter{service, TrackField::Artist};
@@ -72,7 +73,7 @@ namespace ao::rt::test
     addMetadataValueTrack(libraryFixture, "Artist A", "Album A");
     addMetadataValueTrack(libraryFixture, "Artist B", "Album B");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     auto titleCompleter = MetadataValueCompleter{service, TrackField::Title};
@@ -90,7 +91,7 @@ namespace ao::rt::test
     addMetadataValueTrack(libraryFixture, "Massive Attack", "Mezzanine");
     addMetadataValueTrack(libraryFixture, "Mazzy Star", "She Hangs Brightly");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     auto provider = MetadataValueCompleter{service, TrackField::Artist}.asProvider();

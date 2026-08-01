@@ -185,10 +185,10 @@ namespace ao::uimodel::test
   TEST_CASE("ActivityStatusViewModel - projects events from LibraryTaskService",
             "[uimodel][regression][status][activity]")
   {
-    auto executor = rt::test::InlineExecutor{};
+    auto executor = rt::test::QueuedExecutor{};
     auto runtime = async::Runtime{executor, 1};
     auto notifications = rt::NotificationService{runtime};
-    auto changes = rt::test::makeInlineLibraryChanges();
+    auto changes = rt::test::makeLibraryChanges(executor);
     auto libraryFixture = rt::test::MusicLibraryFixture{};
     auto runtimeLibraryPtr = ao::test::requireValue(rt::Library::create(runtime, libraryFixture.library(), changes));
     auto& taskService = runtimeLibraryPtr->taskService();
@@ -210,7 +210,7 @@ namespace ao::uimodel::test
     auto plan = rt::LibraryScan{libraryFixture.library()}.buildPlan().value();
     std::filesystem::remove(targetFile);
 
-    auto const result = runtime.spawn(taskService.applyScanPlanAsync(std::move(plan))).get();
+    auto const result = rt::test::runQueuedTask(runtime, executor, taskService.applyScanPlanAsync(std::move(plan)));
 
     REQUIRE(result);
     CHECK(result->failureCount == 1);

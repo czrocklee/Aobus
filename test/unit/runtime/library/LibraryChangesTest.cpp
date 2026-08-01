@@ -109,7 +109,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     std::size_t appliedCount = 0;
     std::size_t notifiedCount = 0;
@@ -132,7 +132,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto phases = std::array<std::string_view, 2>{};
     std::size_t phaseCount = 0;
@@ -150,7 +150,7 @@ namespace ao::rt::test
 
   TEST_CASE("LibraryChanges - only one replica may be bound at a time", "[runtime][unit][library][changeset]")
   {
-    auto changes = makeInlineLibraryChanges();
+    auto changes = makeStateOnlyLibraryChanges();
     CHECK_THROWS_AS(changes.bindReplica("EmptyReplica", {}), Exception);
     auto binding = changes.bindReplica("FirstReplica", [](LibraryChangeSet const&) noexcept {});
 
@@ -339,7 +339,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto observed = std::vector<LibraryChangeSet>{};
     auto subscription =

@@ -42,7 +42,8 @@ namespace ao::rt::test
                                           ConfigStore* playbackSessionConfigStore = nullptr,
                                           async::Sleeper* sleeper = nullptr);
 
-  std::unique_ptr<AppRuntime> makeRuntime(ao::test::TempDir const& tempDir,
-                                          ConfigStore* playbackSessionConfigStore = nullptr,
-                                          async::Sleeper* sleeper = nullptr);
+  // State-only helper. Tests that can produce asynchronous callbacks must use
+  // makeRuntime and provide an executor with the required scheduling model.
+  std::unique_ptr<AppRuntime> makeStateOnlyRuntime(ao::test::TempDir const& tempDir,
+                                                   ConfigStore* playbackSessionConfigStore = nullptr);
 } // namespace ao::rt::test

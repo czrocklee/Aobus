@@ -169,7 +169,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Before");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
@@ -199,7 +199,7 @@ namespace ao::rt::test
     auto const& dictionary = libraryFixture.library().dictionary();
     auto const initialSize = dictionary.size();
     auto const initialGeneration = dictionary.generation();
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     bool callbackSawDictionary = false;
@@ -231,7 +231,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
@@ -264,7 +264,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - dry-run previews list creation without committing", "[runtime][unit][library][dry-run]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
@@ -287,7 +287,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
     auto const listId = createListWithOrder(libraryFixture, "Before", {trackId});
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
@@ -315,7 +315,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
     auto const listId = createListWithOrder(libraryFixture, "Delete Me", {trackId});
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
@@ -340,7 +340,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Delete Track");
     auto const listId = createListWithOrder(libraryFixture, "Ordered", {trackId});
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};
@@ -370,7 +370,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - dry-run previews track creation without committing", "[runtime][unit][library][dry-run]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto recorder = ChangeRecorder{changes};

@@ -20,7 +20,7 @@
 namespace ao::rt::test
 {
   WorkspaceRuntimeFixture::WorkspaceRuntimeFixture()
-    : runtimePtr{makeRuntime(tempDir)}
+    : runtimePtr{makeStateOnlyRuntime(tempDir)}
     , firstListId{createList("First")}
     , secondListId{createList("Second")}
     , thirdListId{createList("Third")}

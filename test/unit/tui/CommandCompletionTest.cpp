@@ -95,7 +95,7 @@ namespace ao::tui::test
                                                      .artist = "Aimer",
                                                      .uri = "tui-expression-completion.flac",
                                                      .duration = std::chrono::seconds{120}});
-    auto changes = rt::test::makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = rt::CompletionService{libraryFixture.library(), changes};
     auto completer = uimodel::TrackFilterCompleter{service};
     auto context = CommandCompletionContext{

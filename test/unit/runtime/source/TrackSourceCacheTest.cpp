@@ -42,7 +42,7 @@ namespace ao::rt::test
 
     SECTION("acquire resolves only the explicit All Tracks virtual id")
     {
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto const allTracksResult = cache.acquire(kAllTracksListId);
       REQUIRE(allTracksResult);
@@ -67,7 +67,7 @@ namespace ao::rt::test
         REQUIRE(transaction.commit());
       }
 
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto firstLease = ao::test::requireValue(cache.acquire(listId));
       auto& source = firstLease.source();
@@ -90,7 +90,7 @@ namespace ao::rt::test
         REQUIRE(transaction.commit());
       }
 
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto lease = ao::test::requireValue(cache.acquire(listId));
       CHECK(lease->state() == TrackSourceState::Live);
@@ -98,7 +98,7 @@ namespace ao::rt::test
 
     SECTION("acquire rejects a missing list without an All Tracks fallback")
     {
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto const result = cache.acquire(ListId{999});
       REQUIRE_FALSE(result);
@@ -110,7 +110,7 @@ namespace ao::rt::test
       libraryFixture.addTrack("Track 1");
       libraryFixture.addTrack("Track 2");
 
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       cache.reloadAllTracks();
@@ -120,7 +120,7 @@ namespace ao::rt::test
     SECTION("track delete notifications remove allTracks membership")
     {
       auto const trackId = libraryFixture.addTrack("Track 1");
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto allTracks = ao::test::requireValue(cache.acquire(kAllTracksListId));
       cache.reloadAllTracks();
@@ -150,7 +150,7 @@ namespace ao::rt::test
         REQUIRE(transaction.commit());
       }
 
-      auto changes = makeInlineLibraryChanges(libraryFixture.library());
+      auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
       auto cache = TrackSourceCache{libraryFixture.library(), changes};
       auto lease = ao::test::requireValue(cache.acquire(listId));
       auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
@@ -182,7 +182,7 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
@@ -221,7 +221,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Pinned across cache shutdown");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto optLease = std::optional<TrackSourceLease>{};
     auto batches = std::vector<TrackSourceDelta>{};
     auto subscription = async::Subscription{};
@@ -251,7 +251,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Inserted after acquisition");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -295,7 +295,7 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -329,7 +329,7 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -378,7 +378,7 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -430,7 +430,7 @@ namespace ao::rt::test
             "[runtime][unit][source][track-source-cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto draft = LibraryWriter::ListDraft{
@@ -464,7 +464,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack("First");
     auto const second = libraryFixture.addTrack("Second");
     auto const third = libraryFixture.addTrack("Third");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -504,7 +504,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const inserted = libraryFixture.addTrack("Inserted");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -566,7 +566,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const inserted = libraryFixture.addTrack("Inserted");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -662,7 +662,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack("First");
     auto const second = libraryFixture.addTrack("Second");
     auto const third = libraryFixture.addTrack("Third");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const oldParentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -767,7 +767,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const visible = libraryFixture.addTrack("Visible");
     auto const hidden = libraryFixture.addTrack("Parent hidden");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const membershipTag = std::array{std::string{"parentmember"}};
@@ -822,7 +822,7 @@ namespace ao::rt::test
     auto const first = libraryFixture.addTrack("First");
     auto const deleted = libraryFixture.addTrack("Deleted");
     auto const third = libraryFixture.addTrack("Third");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const listId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{
@@ -860,7 +860,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const first = libraryFixture.addTrack("First");
     auto const removed = libraryFixture.addTrack("Removed");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const membershipTag = std::array{std::string{"roadtrip"}};
@@ -903,7 +903,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     libraryFixture.addTrack("First");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto cache = TrackSourceCache{libraryFixture.library(), changes};
     cache.reloadAllTracks();
     auto const spec = SourceSpec{.baseListId = kAllTracksListId, .filterExpression = "true"};
@@ -923,7 +923,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const kept = libraryFixture.addTrack("Keep");
     libraryFixture.addTrack("Drop");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto const listId = ao::test::requireValue(writerFixture.writer().createList(LibraryWriter::ListDraft{
       .parentId = kInvalidListId,

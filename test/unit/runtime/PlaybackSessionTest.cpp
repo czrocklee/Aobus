@@ -976,7 +976,7 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][restore]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const trackId = addPlayableTrack(*runtimePtr, "Restored offset");
     runtimePtr->reloadAllTracks();
@@ -1006,7 +1006,7 @@ namespace ao::rt::test
             "[runtime][unit][playback-session][error]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->reloadAllTracks();
     auto payload = PlaybackSessionState{
@@ -1089,7 +1089,7 @@ namespace ao::rt::test
             "[runtime][regression][playback-session][schema]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const trackId = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->reloadAllTracks();
     auto schemaLine = std::string_view{"  schemaVersion: 3\n"};
@@ -1128,7 +1128,7 @@ namespace ao::rt::test
             "[runtime][unit][playback-session][restore-matrix]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const first = addPlayableTrack(*runtimePtr, "First", 1990);
     auto const second = addPlayableTrack(*runtimePtr, "Second", 2022);
@@ -1207,7 +1207,7 @@ namespace ao::rt::test
             "[runtime][unit][playback-session][restore-matrix]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const current = addPlayableTrack(*runtimePtr, "Current", 1990);
     runtimePtr->reloadAllTracks();
@@ -1245,7 +1245,7 @@ namespace ao::rt::test
   TEST_CASE("PlaybackSession - duration clamping restores zero", "[runtime][unit][playback-session][restore-matrix]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     addReadyAudioProvider(*runtimePtr);
     auto const current = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->reloadAllTracks();
@@ -1271,7 +1271,7 @@ namespace ao::rt::test
     // valid for the runtime's whole lifetime.
     auto arm = PropertyFailArm{};
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     runtimePtr->addAudioProvider(std::make_unique<PropertyFailProvider>(arm));
     auto const current = addPlayableTrack(*runtimePtr, "Current");
     runtimePtr->reloadAllTracks();
@@ -1739,7 +1739,7 @@ namespace ao::rt::test
     {
       auto tempDir = ao::test::TempDir{};
       std::ofstream{tempDir.path() / "workspace.yaml"} << "playback-session: [not, a, map]\n";
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const restored = runtimePtr->restorePlaybackSession();
       REQUIRE_FALSE(restored);
       CHECK(restored.error().code == Error::Code::FormatRejected);

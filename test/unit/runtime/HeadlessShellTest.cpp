@@ -29,7 +29,7 @@ namespace ao::rt::test
 
     SECTION("Initial layout is empty")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const layout = runtimePtr->workspace().snapshot();
       CHECK(layout.openViews.empty());
       CHECK(layout.activeViewId == kInvalidViewId);
@@ -37,7 +37,7 @@ namespace ao::rt::test
 
     SECTION("Navigate to list ID creates a view and marks it active")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const listId =
         ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Headless"}));
       REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
@@ -53,7 +53,7 @@ namespace ao::rt::test
 
     SECTION("Navigate to All Tracks does not reuse a filtered All Tracks view")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const filteredViewId = ao::test::requireValue(runtimePtr->workspace().navigate({
         .target =
           FilteredListTarget{
@@ -74,7 +74,7 @@ namespace ao::rt::test
 
     SECTION("Closing a view updates the layout")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const firstListId =
         ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First"}));
       auto const secondListId =
@@ -98,7 +98,7 @@ namespace ao::rt::test
     SECTION("Session persistence works across instances")
     {
       {
-        auto runtimePtr = makeRuntime(tempDir);
+        auto runtimePtr = makeStateOnlyRuntime(tempDir);
         auto const firstListId = ao::test::requireValue(
           runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First saved"}));
         auto const secondListId = ao::test::requireValue(
@@ -115,7 +115,7 @@ namespace ao::rt::test
       }
 
       // Create new runtime with same persistence
-      auto session2Ptr = makeRuntime(tempDir);
+      auto session2Ptr = makeStateOnlyRuntime(tempDir);
 
       REQUIRE(session2Ptr->workspace().restoreSession(session2Ptr->workspaceConfigStore()));
 
@@ -127,7 +127,7 @@ namespace ao::rt::test
     SECTION("Session persistence preserves groupBy across instances")
     {
       {
-        auto runtimePtr = makeRuntime(tempDir);
+        auto runtimePtr = makeStateOnlyRuntime(tempDir);
         auto const listId = ao::test::requireValue(
           runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Grouped saved"}));
         REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
@@ -148,7 +148,7 @@ namespace ao::rt::test
       }
 
       // Restore in new runtime
-      auto session2Ptr = makeRuntime(tempDir);
+      auto session2Ptr = makeStateOnlyRuntime(tempDir);
 
       REQUIRE(session2Ptr->workspace().restoreSession(session2Ptr->workspaceConfigStore()));
 
@@ -162,14 +162,14 @@ namespace ao::rt::test
     SECTION("Session persistence preserves groupBy=None")
     {
       {
-        auto runtimePtr = makeRuntime(tempDir);
+        auto runtimePtr = makeStateOnlyRuntime(tempDir);
         auto const listId = ao::test::requireValue(
           runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Flat saved"}));
         REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
         runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
       }
 
-      auto session2Ptr = makeRuntime(tempDir);
+      auto session2Ptr = makeStateOnlyRuntime(tempDir);
 
       REQUIRE(session2Ptr->workspace().restoreSession(session2Ptr->workspaceConfigStore()));
 

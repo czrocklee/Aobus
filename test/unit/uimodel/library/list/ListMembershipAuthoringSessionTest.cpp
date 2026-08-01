@@ -52,7 +52,7 @@ namespace ao::uimodel::test
     auto const listId = *createResult;
     REQUIRE(transaction.commit());
 
-    auto changes = rt::test::makeInlineLibraryChanges(storage.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto const tag = std::array{std::string{"road-trip"}};
     REQUIRE(writerFixture.editTags(std::array{trackId}, tag, {}));

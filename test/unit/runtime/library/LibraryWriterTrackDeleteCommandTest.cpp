@@ -50,7 +50,7 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto sub = changes.onChanged([&](LibraryChangeSet const& event) noexcept { mutated = event.tracksMutated; });
     auto collectionSub =
       changes.onChanged([&](LibraryChangeSet const& ev) noexcept { deletedTracks = ev.tracksDeleted; });
@@ -87,7 +87,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     [[maybe_unused]] auto const trackId = libraryFixture.addTrack("Test Track");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
 

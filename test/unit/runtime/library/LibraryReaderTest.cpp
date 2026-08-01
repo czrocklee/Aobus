@@ -250,7 +250,7 @@ namespace ao::rt::test
 
     auto executor = InlineExecutor{};
     auto asyncRuntime = async::Runtime{executor};
-    auto changes = makeInlineLibraryChanges(ml);
+    auto changes = makeStateOnlyLibraryChanges(ml);
     auto runtimeLibraryPtr = ao::test::requireValue(Library::create(asyncRuntime, ml, changes));
     auto reader = runtimeLibraryPtr->reader();
     auto const optRow = reader.trackRow(trackId);

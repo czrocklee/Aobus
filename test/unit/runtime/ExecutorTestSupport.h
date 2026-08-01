@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <thread>
 #include <tuple>
 #include <utility>
 
@@ -68,14 +69,28 @@ namespace ao::rt::test
     std::unique_ptr<Impl> _implPtr;
   };
 
-  // Test-only executor that collapses dispatch and defer onto the calling
-  // stack. Use it only when turn and cross-thread behavior are out of scope.
+  // Test-only executor that collapses dispatch and defer onto its construction
+  // thread's stack and rejects work from foreign threads. Its defer is
+  // deliberately reentrant and does not model Executor's later-turn contract.
   class InlineExecutor final : public async::Executor
   {
   public:
+    InlineExecutor() noexcept;
+    ~InlineExecutor() override = default;
+
+    InlineExecutor(InlineExecutor const&) = delete;
+    InlineExecutor& operator=(InlineExecutor const&) = delete;
+    InlineExecutor(InlineExecutor&&) = delete;
+    InlineExecutor& operator=(InlineExecutor&&) = delete;
+
     bool isCurrent() const noexcept override;
     void dispatch(std::move_only_function<void()> task) override;
     void defer(std::move_only_function<void()> task) override;
+
+  private:
+    void execute(std::move_only_function<void()> task) const;
+
+    std::thread::id _ownerThread;
   };
 
   // Deterministic test adapter over the production loop executor. Dispatch is

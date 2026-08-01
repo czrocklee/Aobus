@@ -24,6 +24,7 @@
 #include <thread>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace ao::rt::test
@@ -236,4 +237,64 @@ namespace ao::rt::test
     struct Impl;
     std::unique_ptr<Impl> _implPtr;
   };
+
+  namespace detail
+  {
+    class TaskCompletionFlag final
+    {
+    public:
+      explicit TaskCompletionFlag(std::shared_ptr<std::atomic_bool> completedPtr)
+        : _completedPtr{std::move(completedPtr)}
+      {
+      }
+
+      ~TaskCompletionFlag() noexcept { _completedPtr->store(true); }
+
+      TaskCompletionFlag(TaskCompletionFlag const&) = delete;
+      TaskCompletionFlag& operator=(TaskCompletionFlag const&) = delete;
+      TaskCompletionFlag(TaskCompletionFlag&&) = delete;
+      TaskCompletionFlag& operator=(TaskCompletionFlag&&) = delete;
+
+    private:
+      std::shared_ptr<std::atomic_bool> _completedPtr;
+    };
+  } // namespace detail
+
+  // The RAII flag also completes when Runtime teardown destroys a suspended
+  // coroutine frame instead of resuming it through its normal return path.
+  template<typename T>
+  async::Task<T> flagCompletion(std::shared_ptr<std::atomic_bool> completedPtr, async::Task<T> task)
+  {
+    [[maybe_unused]] auto completionFlag = detail::TaskCompletionFlag{std::move(completedPtr)};
+
+    if constexpr (std::is_void_v<T>)
+    {
+      co_await std::move(task);
+      co_return;
+    }
+    else
+    {
+      co_return co_await std::move(task);
+    }
+  }
+
+  template<typename RuntimeType, typename ExecutorType, typename T>
+  T runQueuedTask(RuntimeType& runtime, ExecutorType& executor, async::Task<T> task)
+  {
+    auto completedPtr = std::make_shared<std::atomic_bool>(false);
+    auto future = runtime.spawn(flagCompletion(completedPtr, std::move(task)));
+    REQUIRE(executor.drainUntil([&completedPtr] { return completedPtr->load(); }));
+
+    if constexpr (std::is_void_v<T>)
+    {
+      future.get();
+      executor.drain();
+    }
+    else
+    {
+      auto result = future.get();
+      executor.drain();
+      return result;
+    }
+  }
 } // namespace ao::rt::test

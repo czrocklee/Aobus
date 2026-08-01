@@ -60,7 +60,7 @@ namespace ao::rt::test
       libraryFixture.library(),
       library::test::TrackSpec{.title = "Two", .tags = {"Rock", "Live"}, .customMetadata = {{"Mood", "Dark"}}});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -115,7 +115,7 @@ namespace ao::rt::test
                                                      .movement = "Opening",
                                                      .soloist = "Philip Glass"});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -181,7 +181,7 @@ namespace ao::rt::test
                                                      .work = "Selected Work",
                                                      .tags = {"Tag Only"}});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kFields = std::to_array({TrackField::Work, TrackField::Artist, TrackField::Title});
 
@@ -291,7 +291,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const originalId = library::test::addTrack(
       libraryFixture.library(), library::test::TrackSpec{.title = "Original", .artist = "Original Artist"});
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kFields = std::to_array({TrackField::Title, TrackField::Artist});
     auto vocabulary = [&] { return sortedPairs(service.aggregateValues({.fields = kFields})); };
@@ -353,7 +353,7 @@ namespace ao::rt::test
     auto const trackId =
       library::test::addTrack(libraryFixture.library(), library::test::TrackSpec{.title = "One", .tags = {"Rock"}});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.tags()) == std::vector<std::pair<std::string, std::uint32_t>>{{"Rock", 1}});
@@ -379,7 +379,7 @@ namespace ao::rt::test
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .conductor = "Carlos Kleiber", .work = "Variations"});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -439,7 +439,7 @@ namespace ao::rt::test
                                                                           .tags = {"Only Tag"},
                                                                           .customMetadata = {{"Only Key", "Value"}}});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto service = CompletionService{libraryFixture.library(), changes};
     constexpr auto kValueFields = std::to_array({TrackField::Artist,
@@ -476,7 +476,7 @@ namespace ao::rt::test
             "[runtime][unit][completion-vocabulary][cache]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     REQUIRE(service.tags().empty());
@@ -522,7 +522,7 @@ namespace ao::rt::test
       library::test::TrackSpec{
         .title = "One", .artist = "Bach", .album = "Goldberg", .genre = "Classical", .work = "Variations"});
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto service = CompletionService{libraryFixture.library(), changes};
 
     CHECK(pairs(service.valuesFor(TrackField::Artist)) == std::vector<std::pair<std::string, std::uint32_t>>{
@@ -559,7 +559,7 @@ namespace ao::rt::test
   TEST_CASE("CompletionService - starts empty when owned by CoreRuntime", "[runtime][unit][completion][core-runtime]")
   {
     auto tempDir = ao::test::TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
     CHECK(runtimePtr->completion().tags().empty());
   }

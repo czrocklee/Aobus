@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/playback/PlaybackService.h>
+
 #include "runtime/playback/PlaybackBootstrap.h"
 #include "runtime/playback/PlaybackSuccession.h"
 #include "runtime/playback/PlaybackTransport.h"
@@ -29,7 +31,6 @@
 #include <ao/rt/library/LibraryWriter.h>
 #include <ao/rt/playback/PlaybackCommands.h>
 #include <ao/rt/playback/PlaybackEvents.h>
-#include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/rt/source/TrackSourceCache.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
@@ -369,7 +370,7 @@ namespace ao::rt::test
             "[runtime][regression][playback][snapshot]")
   {
     auto fixture = PlaybackTransportFixture<QueuedExecutor>{};
-    auto changes = makeInlineLibraryChanges();
+    auto changes = makeStateOnlyLibraryChanges();
     auto sources = TrackSourceCache{fixture.libraryFixture.library(), changes};
     auto views = ViewService{fixture.executor, fixture.libraryFixture.library(), sources};
     auto succession = PlaybackSuccession{fixture.executor,

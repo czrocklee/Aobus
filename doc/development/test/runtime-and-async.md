@@ -13,12 +13,23 @@ Async tests must be deterministic.
 
 Prefer:
 
-- `InlineExecutor` only when callback turns and cross-thread behavior are explicitly out of scope.
+- `InlineExecutor` only for fully synchronous, owner-thread state tests.
+  It captures its construction thread, reports `isCurrent()` truthfully, and rejects non-empty work submitted from another thread.
+  Its `defer()` runs inline and reentrantly, so it does not model the later-turn ordering required of production executors.
+  Direct foreign-thread submissions throw, but the same violation through a `noexcept` boundary such as `Signal::post()` terminates the process.
 - Production `LoopExecutor` when owner affinity and real turn semantics are the behavior under test.
-- `ManualExecutor` or the Loop-backed test `QueuedExecutor` when a test needs one-step control, forced queuing, bounded waiting, or queue observations.
+- `ManualExecutor` when a test needs one-task control. Producers may submit from any thread, but only its construction
+  thread may call `runOne()` or `runUntilIdle()`.
+- The Loop-backed `QueuedExecutor` when a test needs production-like owner affinity, forced queuing, bounded waiting,
+  or queue observations.
 - Explicit `runOne()` / `runUntilIdle()` or `runOneTurn()` / `runReadyTurn()` progression.
 - Barriers or captured callbacks to create known ordering points.
 - `AsyncTestState` only as a bounded observation aid, not as the primary scheduler.
+
+Do not use `InlineExecutor` as a Runtime callback executor when the exercised path can hop to a worker, timer, audio
+provider, or another producer thread and then return to the callback executor. Use `QueuedExecutor` and drain it from
+the owner thread. In particular, drain until task completion before calling `TaskFuture::get()` when callback-executor
+work is required to make that future ready.
 
 Avoid or minimize:
 
@@ -61,11 +72,14 @@ and after every suspension point that can outlive the owner.
 Controlled test executors expose operations like:
 
 ```cpp
-executor.expectQueued();
+executor.checkQueued();
 executor.runOne();
 executor.runUntilIdle();
 CHECK(executor.queuedCount() == 0);
 ```
+
+`AppRuntimeTestSupport::makeStateOnlyRuntime()` and `RuntimeLibraryTestSupport::makeStateOnlyLibraryChanges()` are the named opt-ins for tests that exercise only synchronous state.
+A test that can start asynchronous work must construct the corresponding runtime state with an explicit executor and drive that executor according to the tested scheduling contract.
 
 ## Runtime service tests
 

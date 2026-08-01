@@ -36,6 +36,7 @@
 #include <span>
 #include <stop_token>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -404,7 +405,7 @@ namespace ao::gtk::test
   TEST_CASE("ResourceImageLoader - exceptional resource loads terminate their request flight",
             "[gtk][unit][resource-image][concurrency]")
   {
-    auto executor = rt::test::InlineExecutor{};
+    auto executor = rt::test::QueuedExecutor{};
     auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
     auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
     auto cache = ImageCache{200};
@@ -429,7 +430,7 @@ namespace ao::gtk::test
                                                callbackCount.increment();
                                              });
       REQUIRE(request);
-      REQUIRE(callbackCount.waitUntil(1));
+      REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 1; }));
       CHECK_FALSE(receivedImage.load());
       REQUIRE(exceptionRecorder.waitForCount(1));
       rt::test::requireSingleRecordedException<InjectedResourceLoadFailure>(
@@ -445,7 +446,7 @@ namespace ao::gtk::test
                                   callbackCount.increment();
                                 });
       REQUIRE(retry);
-      REQUIRE(callbackCount.waitUntil(2));
+      REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 2; }));
       CHECK(loadCount.load() == 2);
       CHECK_FALSE(retryReceivedImage.load());
       CHECK(exceptionRecorder.snapshot().size() == 1);
@@ -475,13 +476,14 @@ namespace ao::gtk::test
     }
   }
 
-  TEST_CASE("ResourceByteLoader - GTK derivatives share one raw resource read",
-            "[gtk][unit][resource-byte][concurrency]")
+  TEST_CASE("ResourceByteLoader - GTK derivatives share one owner-affine raw resource flight",
+            "[gtk][regression][resource-byte][concurrency]")
   {
     [[maybe_unused]] auto const appPtr = ensureGtkApplication();
     auto executor = rt::test::QueuedExecutor{};
     auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
     auto runtime = async::Runtime{executor, 4, exceptionRecorder.handler()};
+    auto const ownerThread = std::this_thread::get_id();
     auto release = rt::test::AsyncBarrier{};
     auto loadCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto const pngBytes = encodePng(makePixbuf(256));
@@ -494,16 +496,23 @@ namespace ao::gtk::test
     constexpr auto kResourceId = ResourceId{8181};
     auto urlCallbackCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto nonEmptyUrlCount = rt::test::AsyncTestState<std::size_t>::create(0);
-    auto urlRequest = artUrlCache.requestUrl(kResourceId,
-                                             [urlCallbackCount, nonEmptyUrlCount](std::string url)
-                                             {
-                                               if (!url.empty())
-                                               {
-                                                 nonEmptyUrlCount.increment();
-                                               }
+    auto callbacksOnOwner = rt::test::AsyncTestState<bool>::create(true);
+    auto urlRequest =
+      artUrlCache.requestUrl(kResourceId,
+                             [ownerThread, callbacksOnOwner, urlCallbackCount, nonEmptyUrlCount](std::string result)
+                             {
+                               if (std::this_thread::get_id() != ownerThread)
+                               {
+                                 callbacksOnOwner.set(false);
+                               }
 
-                                               urlCallbackCount.increment();
-                                             });
+                               if (!result.empty())
+                               {
+                                 nonEmptyUrlCount.increment();
+                               }
+
+                               urlCallbackCount.increment();
+                             });
     REQUIRE(urlRequest);
     REQUIRE(executor.drainUntil([&] { return loadCount.load() == 1; }));
 
@@ -511,18 +520,23 @@ namespace ao::gtk::test
     auto nonEmptyImageCount = rt::test::AsyncTestState<std::size_t>::create(0);
     auto const requestImage = [&](std::int32_t const physicalPixelSize)
     {
-      return imageLoader.requestThumbnail(
-        kResourceId,
-        physicalPixelSize,
-        [imageCallbackCount, nonEmptyImageCount](Glib::RefPtr<Gdk::Pixbuf> const& imagePtr)
-        {
-          if (imagePtr)
-          {
-            nonEmptyImageCount.increment();
-          }
+      return imageLoader.requestThumbnail(kResourceId,
+                                          physicalPixelSize,
+                                          [ownerThread, callbacksOnOwner, imageCallbackCount, nonEmptyImageCount](
+                                            Glib::RefPtr<Gdk::Pixbuf> const& imagePtr)
+                                          {
+                                            if (std::this_thread::get_id() != ownerThread)
+                                            {
+                                              callbacksOnOwner.set(false);
+                                            }
 
-          imageCallbackCount.increment();
-        });
+                                            if (imagePtr)
+                                            {
+                                              nonEmptyImageCount.increment();
+                                            }
+
+                                            imageCallbackCount.increment();
+                                          });
     };
     auto smallRequest = requestImage(48);
     auto largeRequest = requestImage(96);
@@ -532,12 +546,20 @@ namespace ao::gtk::test
 
     release.release();
     REQUIRE(executor.drainUntil([&] { return urlCallbackCount.load() == 1 && imageCallbackCount.load() == 2; }));
+    CHECK(imageLoader.getThumbnail(kResourceId, 48));
+    CHECK(imageLoader.getThumbnail(kResourceId, 96));
+
+    runtime.requestStop();
+    runtime.join();
+    executor.drain();
+
+    CHECK(callbacksOnOwner.load());
+    CHECK(urlCallbackCount.load() == 1);
+    CHECK(imageCallbackCount.load() == 2);
     CHECK(nonEmptyUrlCount.load() == 1);
     CHECK(nonEmptyImageCount.load() == 2);
     CHECK(loadCount.load() == 1);
     CHECK(exceptionRecorder.snapshot().empty());
-
-    runtime.requestStop();
-    runtime.join();
+    CHECK(executor.queuedCount() == 0);
   }
 } // namespace ao::gtk::test

@@ -28,7 +28,7 @@ namespace ao::tui::test
     struct LibraryControllerFixture final
     {
       ao::test::TempDir tempDir{};
-      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeRuntime(tempDir)};
+      std::unique_ptr<rt::AppRuntime> runtimePtr{rt::test::makeStateOnlyRuntime(tempDir)};
 
       TrackId addTrack(std::string_view title) const
       {

@@ -444,7 +444,7 @@ namespace ao::gtk::platform::test
   TEST_CASE("MprisArtUrlCache - exceptional resource loads terminate their request flight",
             "[gtk][unit][mpris][concurrency]")
   {
-    auto executor = rt::test::InlineExecutor{};
+    auto executor = rt::test::QueuedExecutor{};
     auto exceptionRecorder = rt::test::AsyncExceptionRecorder{};
     auto runtime = async::Runtime{executor, 1, exceptionRecorder.handler()};
     auto tempDir = ao::test::TempDir{};
@@ -467,7 +467,7 @@ namespace ao::gtk::platform::test
                                         callbackCount.increment();
                                       });
       REQUIRE(request);
-      REQUIRE(callbackCount.waitUntil(1));
+      REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 1; }));
       CHECK_FALSE(receivedNonEmptyUrl.load());
       REQUIRE(exceptionRecorder.waitForCount(1));
       rt::test::requireSingleRecordedException<InjectedMprisResourceLoadFailure>(
@@ -481,7 +481,7 @@ namespace ao::gtk::platform::test
                                       callbackCount.increment();
                                     });
       REQUIRE(retry);
-      REQUIRE(callbackCount.waitUntil(2));
+      REQUIRE(executor.drainUntil([&] { return callbackCount.load() == 2; }));
       CHECK(loadCount.load() == 2);
       CHECK_FALSE(retryReceivedNonEmptyUrl.load());
       CHECK(exceptionRecorder.snapshot().size() == 1);
@@ -499,7 +499,7 @@ namespace ao::gtk::platform::test
 
       auto request = cache.requestUrl(kMissingResourceId, [callbackCount](std::string) { callbackCount.increment(); });
       REQUIRE(request);
-      REQUIRE(loadCount.waitUntil(1));
+      REQUIRE(executor.drainUntil([&] { return loadCount.load() == 1; }));
 
       runtime.requestStop();
       runtime.join();

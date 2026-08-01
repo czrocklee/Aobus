@@ -153,7 +153,7 @@ namespace ao::rt::test
       }));
     }
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const orderedListId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{

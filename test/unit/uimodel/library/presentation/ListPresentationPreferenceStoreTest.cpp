@@ -150,7 +150,7 @@ namespace ao::uimodel::test
             "[uimodel][unit][presentation][delete-subtree]")
   {
     auto storage = rt::test::MusicLibraryFixture{};
-    auto changes = rt::test::makeInlineLibraryChanges(storage.library());
+    auto changes = rt::test::makeStateOnlyLibraryChanges(storage.library());
     auto writerFixture = rt::test::LibraryWriterFixture{storage.library(), changes};
     auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(rt::LibraryWriter::ListDraft{.name = "Parent"}));

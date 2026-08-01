@@ -74,7 +74,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
     auto const result = runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore());
 
@@ -87,7 +87,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const listId =
       ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Existing"}));
     REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
@@ -109,7 +109,7 @@ namespace ao::rt::test
     auto listId = kInvalidListId;
 
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       listId =
         ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Restored"}));
       REQUIRE(runtimePtr->workspace().navigate({.target = listId}));
@@ -117,7 +117,7 @@ namespace ao::rt::test
     }
 
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
 
       auto const state = runtimePtr->views().trackListState(runtimePtr->workspace().snapshot().activeViewId);
@@ -133,7 +133,7 @@ namespace ao::rt::test
     auto secondListId = kInvalidListId;
 
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       firstListId = ao::test::requireValue(
         runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First restored"}));
       secondListId = ao::test::requireValue(
@@ -142,7 +142,7 @@ namespace ao::rt::test
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
     }
 
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
     REQUIRE(runtimePtr->workspace().navigate({.target = secondListId}));
 
@@ -173,7 +173,7 @@ namespace ao::rt::test
     auto secondPresentation = TrackPresentationSpec{};
 
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       listId = ao::test::requireValue(
         runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Shared list"}));
       nextListId = ao::test::requireValue(
@@ -207,7 +207,7 @@ namespace ao::rt::test
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
     }
 
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     REQUIRE(runtimePtr->workspace().restoreSession(runtimePtr->workspaceConfigStore()));
     auto const restored = runtimePtr->workspace().snapshot();
     REQUIRE(restored.openViews.size() == 2);
@@ -235,7 +235,7 @@ namespace ao::rt::test
     auto tempDir = TempDir{};
 
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const firstListId = ao::test::requireValue(
         runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First snapshot"}));
       auto const secondListId = ao::test::requireValue(
@@ -245,7 +245,7 @@ namespace ao::rt::test
       runtimePtr->workspace().saveSession(runtimePtr->workspaceConfigStore());
     }
 
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     std::int32_t changeCount = 0;
     auto changed = WorkspaceChanged{};
     auto const sub = runtimePtr->workspace().onChanged(
@@ -267,7 +267,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - saveSession tolerates flush failures", "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
     auto badConfigStorePtr = std::make_shared<ConfigStore>(tempDir.path());
     CHECK_NOTHROW(runtimePtr->workspace().saveSession(*badConfigStorePtr));
@@ -276,7 +276,7 @@ namespace ao::rt::test
   TEST_CASE("WorkspaceService - restoreSession tolerates malformed config", "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
     auto const configPath = tempDir.path() / "bad.yaml";
     std::ofstream{configPath} << "workspace: \"not a map\"";
@@ -291,7 +291,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
 
     auto const existingListId =
       ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Existing"}));
@@ -337,7 +337,7 @@ namespace ao::rt::test
 
     SECTION("Empty workspace remains unfocused")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       REQUIRE(runtimePtr->workspace().restoreSession(store));
       CHECK(runtimePtr->workspace().snapshot().openViews.empty());
       CHECK(runtimePtr->workspace().snapshot().activeViewId == kInvalidViewId);
@@ -346,7 +346,7 @@ namespace ao::rt::test
 
     SECTION("Existing workspace selects its first view")
     {
-      auto runtimePtr = makeRuntime(tempDir);
+      auto runtimePtr = makeStateOnlyRuntime(tempDir);
       auto const firstListId = ao::test::requireValue(
         runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "First existing"}));
       auto const secondListId = ao::test::requireValue(
@@ -365,7 +365,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const listId =
       ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
     auto const configPath = tempDir.path() / "partial.yaml";
@@ -388,7 +388,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const listId =
       ao::test::requireValue(runtimePtr->library().writer().createList(LibraryWriter::ListDraft{.name = "Valid"}));
     auto const configPath = tempDir.path() / "versioned.yaml";
@@ -424,7 +424,7 @@ namespace ao::rt::test
             "[runtime][unit][workspace][session]")
   {
     auto tempDir = TempDir{};
-    auto runtimePtr = makeRuntime(tempDir);
+    auto runtimePtr = makeStateOnlyRuntime(tempDir);
     auto const configPath = tempDir.path() / "unversioned.yaml";
     std::ofstream{configPath} << "workspace:\n"
                                  "  openViews: []\n"

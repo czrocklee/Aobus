@@ -69,7 +69,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
@@ -89,7 +89,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     std::size_t observedMutationCount = 0;
@@ -125,7 +125,7 @@ namespace ao::rt::test
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
 
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
@@ -143,7 +143,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Original Title");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const targetIds = std::array{trackId};
@@ -183,7 +183,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const targetIds = std::array{trackId};
@@ -234,7 +234,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto mutated = std::vector<TrackId>{};
@@ -263,7 +263,7 @@ namespace ao::rt::test
   {
     auto libraryFixture = MusicLibraryFixture{};
     auto const trackId = libraryFixture.addTrack("Track");
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const trackIdsArr = std::array{trackId};
@@ -278,7 +278,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - editTags rejects missing targets before mutation", "[runtime][unit][library][tag]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
 
     auto const trackIdsArr = std::array{TrackId{999}};
@@ -291,7 +291,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - lists can be created and updated", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
@@ -318,7 +318,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - updateList publishes ListsMutated", "[runtime][unit][library][mutation]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
@@ -342,7 +342,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - rejects invalid list drafts", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
@@ -427,7 +427,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - updateList skips unchanged drafts", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
@@ -447,7 +447,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - updateList reports missing lists as NotFound", "[runtime][unit][library][list]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
@@ -464,7 +464,7 @@ namespace ao::rt::test
   TEST_CASE("LibraryWriter - deleteList publishes ListsMutated", "[runtime][unit][library][mutation]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& service = writerFixture.writer();
 
@@ -485,7 +485,7 @@ namespace ao::rt::test
             "[runtime][unit][list-delete][delete-subtree]")
   {
     auto libraryFixture = MusicLibraryFixture{};
-    auto changes = makeInlineLibraryChanges(libraryFixture.library());
+    auto changes = makeStateOnlyLibraryChanges(libraryFixture.library());
     auto writerFixture = LibraryWriterFixture{libraryFixture.library(), changes};
     auto& writer = writerFixture.writer();
     auto const parentId = ao::test::requireValue(writer.createList(LibraryWriter::ListDraft{.name = "Parent"}));
@@ -537,7 +537,7 @@ namespace ao::rt::test
                        std::array{RawListRecord{.listId = 1, .payload = firstPayload},
                                   RawListRecord{.listId = 2, .payload = secondPayload}});
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto changes = makeInlineLibraryChanges(musicLibrary);
+    auto changes = makeStateOnlyLibraryChanges(musicLibrary);
     auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
     auto events = std::vector<LibraryChangeSet>{};
     auto subscription =
@@ -568,7 +568,7 @@ namespace ao::rt::test
                                   RawListRecord{.listId = 2, .payload = childPayload},
                                   RawListRecord{.listId = 3, .payload = corruptPayload}});
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
-    auto changes = makeInlineLibraryChanges(musicLibrary);
+    auto changes = makeStateOnlyLibraryChanges(musicLibrary);
     auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
     auto events = std::vector<LibraryChangeSet>{};
     auto subscription =

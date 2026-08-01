@@ -349,6 +349,7 @@ add_executable(ao_core_test
     # app unit tests (no platform deps)
     unit/runtime/AsyncParallelTest.cpp
     unit/runtime/AsyncRuntimeTest.cpp
+    unit/runtime/ExecutorTestSupportTest.cpp
     unit/runtime/library/LibraryPathsTest.cpp
     unit/runtime/library/LibraryReaderTest.cpp
     unit/runtime/library/MediaTrackTest.cpp
