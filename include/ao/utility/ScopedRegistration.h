@@ -7,7 +7,7 @@
 
 namespace ao::utility
 {
-  class ScopedRegistration final
+  class [[nodiscard]] ScopedRegistration final
   {
   public:
     ScopedRegistration() = default;

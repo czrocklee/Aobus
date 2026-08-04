@@ -48,6 +48,18 @@ public:
   GoodRaii(GoodRaii const&) = delete;
 };
 
+// POSITIVE: FIX-TO: class [[nodiscard]] ScopedRegistration
+class ScopedRegistration
+{
+public:
+  ~ScopedRegistration() {}
+  ScopedRegistration(ScopedRegistration const&) = delete;
+};
+
+// NEGATIVE
+class Registration
+{};
+
 // NEGATIVE
 class [[nodiscard]] ExplicitlyDefaultedOwner
 {

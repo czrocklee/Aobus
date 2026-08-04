@@ -160,6 +160,19 @@ namespace ao::gtk::test
             static_cast<uimodel::LayoutComponentStateStore*>(componentStateStorePtr.get()));
     }
 
+    SECTION("loadLayout accepts the modern built-in preset")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "modern";
+      configStorePtr->saveAppPrefs(prefs);
+
+      controller.loadLayout();
+      REQUIRE(pumpGtkEventsUntil([&controller] { return controller.runtimeState().activePresetId == "modern"; }));
+
+      CHECK(controller.activeLayout().root.type == "box");
+      CHECK(findNodeById(controller.activeLayout().root, "modern-bar") != nullptr);
+    }
+
     SECTION("loadLayout falls back from an oversized custom layout without changing its file")
     {
       auto prefs = rt::AppPrefsState{};

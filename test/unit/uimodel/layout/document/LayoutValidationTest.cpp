@@ -144,6 +144,25 @@ namespace ao::uimodel::test
     CHECK(describeLayoutRejection(fakeDialect(), unknown).contains("Fake catalog"));
   }
 
+  TEST_CASE("validateLayout - a parent layout field is accepted on its direct child",
+            "[uimodel][unit][layout][validation]")
+  {
+    auto child = readout("child");
+    child.layout["weight"] = LayoutValue{1.5};
+
+    auto const optAccepted = validate(LayoutNode{.type = "frame", .children = {std::move(child)}}, fakeDialect());
+    CHECK_FALSE(optAccepted);
+
+    auto invalidChild = readout("child");
+    invalidChild.layout["weight"] = LayoutValue{true};
+
+    auto const rejection =
+      rejectionOf(LayoutNode{.type = "frame", .children = {std::move(invalidChild)}}, fakeDialect());
+    CHECK(rejection.reason == LayoutRejectionReason::InvalidLayoutFieldValue);
+    CHECK(rejection.nodeId == "child");
+    CHECK(rejection.detail == "weight");
+  }
+
   TEST_CASE("validateLayout - a dialect rules on a layout field before the descriptor does",
             "[uimodel][unit][layout][validation]")
   {

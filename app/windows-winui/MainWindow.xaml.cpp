@@ -63,13 +63,13 @@ namespace winrt::Aobus::implementation
     shutdown();
   }
 
-  ao::utility::ScopedRegistration MainWindow::subscribeAppWindowChanges(
-    Microsoft::UI::Windowing::AppWindow window, void (MainWindow::*const updateActivity)())
+  ao::utility::ScopedRegistration MainWindow::subscribeAppWindowChanges(Microsoft::UI::Windowing::AppWindow window,
+                                                                        void (MainWindow::* const updateActivity)())
   {
     auto const weak = get_weak();
     auto const token = window.Changed(
-      [weak, updateActivity](Microsoft::UI::Windowing::AppWindow const&,
-                             Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
+      [weak, updateActivity](
+        Microsoft::UI::Windowing::AppWindow const&, Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
       {
         if (args.DidVisibilityChange() || args.DidPresenterChange())
         {
@@ -83,8 +83,7 @@ namespace winrt::Aobus::implementation
     // AppWindow does not implement IWeakReferenceSource, so its auto_revoke
     // overload crashes while constructing the revoker. Keep the source alive
     // in the cleanup closure and use its noexcept event removal overload.
-    return ao::utility::ScopedRegistration{
-      [window = std::move(window), token] noexcept { window.Changed(token); }};
+    return ao::utility::ScopedRegistration{[window = std::move(window), token] noexcept { window.Changed(token); }};
   }
 
   void MainWindow::initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart)

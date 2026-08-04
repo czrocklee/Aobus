@@ -54,8 +54,18 @@ namespace ao::uimodel
       return {.reason = reason, .nodeId = nodeLabel(node), .detail = std::move(detail), .message = std::move(message)};
     }
 
+    bool matchesPropertyKind(LayoutPropertyDescriptor const& propDesc, LayoutValue const& value);
+
+    LayoutPropertyDescriptor const* findLayoutProperty(LayoutComponentDescriptor const& descriptor,
+                                                       std::string const& name)
+    {
+      auto const it = std::ranges::find(descriptor.layoutProps, name, &LayoutPropertyDescriptor::name);
+      return it == descriptor.layoutProps.end() ? nullptr : &*it;
+    }
+
     std::optional<LayoutRejection> validateLayoutField(LayoutNode const& node,
                                                        LayoutComponentDescriptor const& descriptor,
+                                                       LayoutComponentDescriptor const* const parentDescriptor,
                                                        LayoutDialect const& dialect,
                                                        std::string const& name,
                                                        LayoutValue const& value)
@@ -111,8 +121,37 @@ namespace ao::uimodel
         return std::nullopt;
       }
 
-      if (std::ranges::contains(descriptor.layoutProps, name, &LayoutPropertyDescriptor::name))
+      // A container may declare layout fields that are authored on each of
+      // its direct children (for example, CenterBox's `slot`). The child is
+      // still validated against its own descriptor first, but the parent is
+      // the owner of these placement fields and must get a chance to accept
+      // them as well.
+      auto const* layoutProp = findLayoutProperty(descriptor, name);
+
+      if (layoutProp == nullptr && parentDescriptor != nullptr)
       {
+        layoutProp = findLayoutProperty(*parentDescriptor, name);
+      }
+
+      if (layoutProp != nullptr)
+      {
+        if (!matchesPropertyKind(*layoutProp, value))
+        {
+          return reject(LayoutRejectionReason::InvalidLayoutFieldValue,
+                        node,
+                        name,
+                        std::format("Layout field '{}' has the wrong value type", name));
+        }
+
+        if (layoutProp->kind == LayoutPropertyKind::Enum && !layoutProp->enumValues.empty() &&
+            !std::ranges::contains(layoutProp->enumValues, value.asString()))
+        {
+          return reject(LayoutRejectionReason::InvalidLayoutFieldValue,
+                        node,
+                        name,
+                        std::format("Layout field '{}' does not accept '{}'", name, value.asString()));
+        }
+
         return std::nullopt;
       }
 
@@ -296,7 +335,8 @@ namespace ao::uimodel
                                                 LayoutActionCatalog const& actions,
                                                 LayoutDialect const& dialect,
                                                 LayoutSurface const surface,
-                                                NodeIdSet& seenIds)
+                                                NodeIdSet& seenIds,
+                                                LayoutComponentDescriptor const* const parentDescriptor = nullptr)
     {
       auto const optDescriptor = components.descriptor(node.type);
 
@@ -368,7 +408,8 @@ namespace ao::uimodel
 
       for (auto const& [name, value] : node.layout)
       {
-        if (auto optRejection = validateLayoutField(node, *optDescriptor, dialect, name, value); optRejection)
+        if (auto optRejection = validateLayoutField(node, *optDescriptor, parentDescriptor, dialect, name, value);
+            optRejection)
         {
           return optRejection;
         }
@@ -381,7 +422,8 @@ namespace ao::uimodel
 
       for (auto const& child : node.children)
       {
-        if (auto optRejection = validateNode(child, components, actions, dialect, surface, seenIds); optRejection)
+        if (auto optRejection = validateNode(child, components, actions, dialect, surface, seenIds, &*optDescriptor);
+            optRejection)
         {
           return optRejection;
         }

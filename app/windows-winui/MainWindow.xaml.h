@@ -107,8 +107,8 @@ namespace winrt::Aobus::implementation
     void applySystemTheme();
     void rebuildForTheme();
     void updateStatus(std::string const& status);
-    [[nodiscard]] ao::utility::ScopedRegistration subscribeAppWindowChanges(
-      Microsoft::UI::Windowing::AppWindow window, void (MainWindow::*updateActivity)());
+    ao::utility::ScopedRegistration subscribeAppWindowChanges(Microsoft::UI::Windowing::AppWindow window,
+                                                              void (MainWindow::*updateActivity)());
     void updateSoulWindowActivity();
     void updateFullscreenSoulWindowActivity();
     void showFullscreenSoul();
