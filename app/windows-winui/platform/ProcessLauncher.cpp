@@ -47,16 +47,15 @@ namespace ao::winui
       }
 
       std::int32_t const inputLength = static_cast<std::int32_t>(value.size());
-      auto const required = ::WideCharToMultiByte(
-        CP_UTF8,
-        WC_ERR_INVALID_CHARS,
-        value
-          .data(), // NOLINT(bugprone-suspicious-stringview-data-usage): The explicit UTF-16 length is passed to Win32.
-        inputLength,
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
+      // WideCharToMultiByte consumes exactly inputLength UTF-16 code units; null termination is not required.
+      auto const required = ::WideCharToMultiByte(CP_UTF8,
+                                                  WC_ERR_INVALID_CHARS,
+                                                  value.data(), // NOLINT(bugprone-suspicious-stringview-data-usage)
+                                                  inputLength,
+                                                  nullptr,
+                                                  0,
+                                                  nullptr,
+                                                  nullptr);
 
       if (required == 0)
       {
@@ -67,16 +66,15 @@ namespace ao::winui
 
       auto output = std::string(static_cast<std::size_t>(required), '\0');
 
+      // The conversion call uses the same counted-input contract as the sizing call above.
       if (::WideCharToMultiByte(CP_UTF8,
                                 WC_ERR_INVALID_CHARS,
-                                value.data(), // NOLINT(bugprone-suspicious-stringview-data-usage): The explicit UTF-16
-                                              // length is passed to Win32.
+                                value.data(), // NOLINT(bugprone-suspicious-stringview-data-usage)
                                 inputLength,
                                 output.data(),
                                 required,
                                 nullptr,
-                                nullptr) ==
-          0) // NOLINT(bugprone-suspicious-stringview-data-usage): The explicit UTF-16 length is passed to Win32.
+                                nullptr) == 0)
       {
         auto const code = ::GetLastError();
         return makeError(Error::Code::InvalidInput,

@@ -68,23 +68,8 @@ namespace ao::winui
     _statePtr->active = false;
     ++_statePtr->generation;
 
-    try
-    {
-      _request.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Request cancellation is best-effort after the presenter is retired.
-    catch (...)
-    {
-    }
-
-    try
-    {
-      _streamTask.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Stream-task cancellation is best-effort during presenter teardown.
-    catch (...)
-    {
-    }
+    _request.reset();
+    _streamTask.reset();
   }
 
   void CoverArtPresenter::resetPresentation()

@@ -52,17 +52,10 @@ namespace ao::winui
   {
     _viewModelPtr.reset();
 
-    try
+    if (_soul)
     {
-      if (_soul)
-      {
-        auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
-        winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->unbind();
-      }
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): The projected soul may already be retired with its native window.
-    catch (...)
-    {
+      auto soul = _soul.as<winrt::Aobus::AobusSoulControl>();
+      winrt::get_self<winrt::Aobus::implementation::AobusSoulControl>(soul)->unbind();
     }
   }
 

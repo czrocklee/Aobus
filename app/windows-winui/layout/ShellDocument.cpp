@@ -4,8 +4,6 @@
 #include <ao/winui/layout/ShellDocument.h>
 
 #include <ao/Error.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h>       // NOLINT(misc-include-cleaner)
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/layout/document/LayoutDocumentLoader.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/winui/layout/LayoutCatalog.h>

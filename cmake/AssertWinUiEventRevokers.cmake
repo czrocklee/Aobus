@@ -10,10 +10,9 @@
 # obtained from `winrt::auto_revoke` revokes in its own destructor, and its
 # `revoke()` is `noexcept`, so none of that apparatus has anything to do.
 #
-# clang-tidy cannot see this. `bugprone-empty-catch` is satisfied by writing a
-# comment inside the catch, so "swallow the revoke failure and explain why"
-# passes every check the project already runs. The defect is the raw token, not
-# the catch it forces.
+# This guard keeps that ownership contract structural. A local catch around a
+# raw-token revoke would still duplicate teardown state and could skip later
+# revocations after the first failure; it is not an acceptable substitute.
 
 if(NOT ROOT)
   message(FATAL_ERROR "AssertWinUiEventRevokers: ROOT not specified")

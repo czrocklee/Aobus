@@ -45,24 +45,17 @@ namespace ao::winui
   {
     _viewModelPtr.reset();
 
-    try
+    if (!_anchor)
     {
-      using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
-      using winrt::Microsoft::UI::Xaml::Controls::ToolTipService;
-
-      if (!_anchor)
-      {
-        return;
-      }
-
-      _toolTip.IsOpen(false);
-      ToolTipService::SetToolTip(_anchor, winrt::Windows::Foundation::IInspectable{nullptr});
-      AutomationProperties::SetHelpText(_anchor, winrt::hstring{});
+      return;
     }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Tooltip teardown is best-effort after the owner is retired.
-    catch (...)
-    {
-    }
+
+    using winrt::Microsoft::UI::Xaml::Automation::AutomationProperties;
+    using winrt::Microsoft::UI::Xaml::Controls::ToolTipService;
+
+    _toolTip.IsOpen(false);
+    ToolTipService::SetToolTip(_anchor, winrt::Windows::Foundation::IInspectable{nullptr});
+    AutomationProperties::SetHelpText(_anchor, winrt::hstring{});
   }
 
   void AudioPipelineToolTip::bind(ao::rt::PlaybackService& playback)

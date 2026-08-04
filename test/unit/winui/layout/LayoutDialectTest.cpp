@@ -4,8 +4,6 @@
 #include <ao/winui/layout/LayoutDialect.h>
 
 #include <ao/Error.h>
-#include <ao/uimodel/layout/action/LayoutActionCatalog.h> // NOLINT(misc-include-cleaner): The factory returns this incomplete type by value.
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h> // NOLINT(misc-include-cleaner): The factory returns this incomplete type by value.
 #include <ao/uimodel/layout/document/LayoutDialect.h>
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>

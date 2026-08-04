@@ -137,27 +137,9 @@ namespace ao::winui
     auto window = std::move(_window);
     _windowClosedRevoker.revoke();
 
-    try
-    {
-      auto* const implementation = winrt::get_self<MainWindow>(window.as<winrt::Aobus::MainWindow>());
-      implementation->retire();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Closing a projected window is best-effort during teardown.
-    catch (...)
-    {
-      // MainWindow retirement is progressive and no-throw. Keep releasing the
-      // native owner if an unexpected C++/WinRT boundary still fails.
-    }
-
-    try
-    {
-      window.Close();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): The closed event cannot make retirement fail.
-    catch (...)
-    {
-      // Releasing the projected owner below remains mandatory.
-    }
+    auto* const implementation = winrt::get_self<MainWindow>(window.as<winrt::Aobus::MainWindow>());
+    implementation->retire();
+    window.Close();
 
     window = nullptr;
   }
@@ -187,15 +169,8 @@ namespace ao::winui
     _windowClosedRevoker.revoke();
     auto closedWindow = std::move(_window);
 
-    try
-    {
-      auto* const implementation = winrt::get_self<MainWindow>(closedWindow.as<winrt::Aobus::MainWindow>());
-      implementation->retire();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): A closed window must not block release of the remaining session owners.
-    catch (...)
-    {
-    }
+    auto* const implementation = winrt::get_self<MainWindow>(closedWindow.as<winrt::Aobus::MainWindow>());
+    implementation->retire();
 
     closedWindow = nullptr;
     releaseSession();

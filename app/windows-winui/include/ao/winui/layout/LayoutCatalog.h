@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <ao/uimodel/layout/action/LayoutActionCatalog.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/winui/layout/ElementKind.h>
 
 #include <cstddef>
@@ -11,8 +13,6 @@
 
 namespace ao::uimodel
 {
-  class LayoutActionCatalog;
-  class LayoutComponentCatalog;
   struct LayoutNode;
 }
 

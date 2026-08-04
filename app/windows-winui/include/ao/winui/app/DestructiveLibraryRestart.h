@@ -19,10 +19,10 @@ namespace ao::winui
   /**
    * @brief Operations supplied by the platform owner of a destructive restart.
    *
-   * None of these is declared no-throw. Containing failure is this function's
-   * job rather than each operation's, because an operation that must not throw
-   * has to re-establish that guarantee around every native call it makes, which
-   * is how a teardown acquires one catch per step.
+   * Releasing the active graph and launching the successor may fail, so this
+   * boundary contains and classifies them. Failure reporting and process-exit
+   * adapters are terminal operations and must establish their own no-throw
+   * guarantees at the platform calls they own.
    */
   struct DestructiveLibraryRestartOperations final
   {
@@ -36,8 +36,8 @@ namespace ao::winui
      */
     std::move_only_function<void()> releaseActiveGraph;
     std::move_only_function<Result<>()> launchSuccessor;
-    std::move_only_function<void(Error const&)> reportLaunchFailure;
-    std::move_only_function<void()> exitProcess;
+    std::move_only_function<void(Error const&) noexcept> reportLaunchFailure;
+    std::move_only_function<void() noexcept> exitProcess;
   };
 
   /**

@@ -225,23 +225,8 @@ namespace ao::winui
     // projection owner. Their closures borrow the runtime directly.
     _bindingLifetimePtr.reset();
 
-    try
-    {
-      _projectionSub.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Projection unsubscription is best-effort after callbacks are invalidated.
-    catch (...)
-    {
-    }
-
-    try
-    {
-      _viewProjectionSub.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): View unsubscription is best-effort after callbacks are invalidated.
-    catch (...)
-    {
-    }
+    _projectionSub.reset();
+    _viewProjectionSub.reset();
 
     _projectionPtr.reset();
     _projectionInvalidated = false;

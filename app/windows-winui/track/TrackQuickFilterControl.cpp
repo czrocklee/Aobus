@@ -60,14 +60,7 @@ namespace ao::winui
 
     if (_debounceTimer)
     {
-      try
-      {
-        _debounceTimer.Stop();
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): The debounce timer may already be stopped during teardown.
-      catch (...)
-      {
-      }
+      _debounceTimer.Stop();
     }
   }
 

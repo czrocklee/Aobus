@@ -52,7 +52,6 @@ namespace ao::winui::layout
                                         std::string_view const component,
                                         Handler handler)
   {
-    // NOLINTNEXTLINE(aobus-modernize-lambda-params): The parameter pack must stay explicit for non-empty signals.
     return signal.connect([component = std::string{component}, handler = std::move(handler)](
                             Args... args) mutable noexcept { applyUiUpdate(component, handler, std::move(args)...); });
   }

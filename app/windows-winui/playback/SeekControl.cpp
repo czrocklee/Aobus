@@ -25,6 +25,16 @@
 
 namespace ao::winui
 {
+  struct SeekControl::PointerCallbackState final
+  {
+    explicit PointerCallbackState(SeekControl* const ownerValue)
+      : owner{ownerValue}
+    {
+    }
+
+    SeekControl* owner;
+  };
+
   namespace
   {
     constexpr double kDefaultMaxRange = 100.0;
@@ -72,6 +82,7 @@ namespace ao::winui
     , _thumbTemplate{std::move(config.thumbTemplate)}
     , _modernOverlay{config.modernOverlay}
     , _finalSeekTimer{_slider.DispatcherQueue().CreateTimer()}
+    , _pointerCallbackStatePtr{std::make_shared<PointerCallbackState>(this)}
     , _loaded{_slider.IsLoaded()}
     , _presentationActive{config.presentationActive}
   {
@@ -94,28 +105,67 @@ namespace ao::winui
         }
       });
 
+    auto const pointerCallbackStatePtr = std::weak_ptr{_pointerCallbackStatePtr};
     _pointerPressedHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [this](winrt::Windows::Foundation::IInspectable const&,
-             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
       {
-        setPointerOver(true);
-        beginPointerInteraction();
+        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+        {
+          auto* const owner = statePtr->owner;
+          owner->setPointerOver(true);
+
+          if (statePtr->owner == owner)
+          {
+            owner->beginPointerInteraction();
+          }
+        }
       }});
     _pointerReleasedHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [this](winrt::Windows::Foundation::IInspectable const&,
-             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&) { endPointerInteraction(); }});
+      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+      {
+        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+        {
+          statePtr->owner->endPointerInteraction();
+        }
+      }});
     _pointerCaptureLostHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [this](winrt::Windows::Foundation::IInspectable const&,
-             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&) { endPointerInteraction(); }});
+      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+      {
+        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+        {
+          statePtr->owner->endPointerInteraction();
+        }
+      }});
     _pointerEnteredHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [this](winrt::Windows::Foundation::IInspectable const&,
-             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&) { setPointerOver(true); }});
+      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+      {
+        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+        {
+          statePtr->owner->setPointerOver(true);
+        }
+      }});
     _pointerMovedHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [this](winrt::Windows::Foundation::IInspectable const&,
-             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&) { setPointerOver(true); }});
+      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+      {
+        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+        {
+          statePtr->owner->setPointerOver(true);
+        }
+      }});
     _pointerExitedHandler = winrt::box_value(winrt::Microsoft::UI::Xaml::Input::PointerEventHandler{
-      [this](winrt::Windows::Foundation::IInspectable const&,
-             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&) { setPointerOver(false); }});
+      [pointerCallbackStatePtr](winrt::Windows::Foundation::IInspectable const&,
+                                winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const&)
+      {
+        if (auto statePtr = pointerCallbackStatePtr.lock(); statePtr && statePtr->owner != nullptr)
+        {
+          statePtr->owner->setPointerOver(false);
+        }
+      }});
 
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler, true);
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler, true);
@@ -159,38 +209,19 @@ namespace ao::winui
 
   SeekControl::~SeekControl()
   {
+    _pointerCallbackStatePtr->owner = nullptr;
+    _pointerCallbackStatePtr.reset();
     unbind();
 
-    try
+    if (_slider)
     {
-      if (_slider)
-      {
-        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler);
-        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler);
-        _slider.RemoveHandler(
-          winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerCaptureLostHandler);
-        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerEnteredEvent(), _pointerEnteredHandler);
-        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler);
-        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler);
-      }
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Routed-event removal is best-effort while the control is retiring.
-    catch (...)
-    {
-      // Routed-event handlers are registered by AddHandler, which has no
-      // revoker. The revoker members below release every real WinRT event.
-    }
-
-    try
-    {
-      if (_finalSeekTimer)
-      {
-        _finalSeekTimer.Stop();
-      }
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): The final seek timer may already be stopped during teardown.
-    catch (...)
-    {
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler);
+      _slider.RemoveHandler(
+        winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerCaptureLostHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerEnteredEvent(), _pointerEnteredHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler);
+      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler);
     }
   }
 
@@ -382,14 +413,7 @@ namespace ao::winui
 
     if (_finalSeekTimer)
     {
-      try
-      {
-        _finalSeekTimer.Stop();
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): A stale timer cannot prevent control teardown.
-      catch (...)
-      {
-      }
+      _finalSeekTimer.Stop();
     }
   }
 

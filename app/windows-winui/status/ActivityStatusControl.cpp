@@ -395,16 +395,9 @@ namespace ao::winui
   {
     _detailDismissRevokers.clear();
 
-    try
+    if (_detailRows)
     {
-      if (_detailRows)
-      {
-        _detailRows.Children().Clear();
-      }
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Detail-row cleanup is best-effort after the native surface is retired.
-    catch (...)
-    {
+      _detailRows.Children().Clear();
     }
   }
 
@@ -452,26 +445,12 @@ namespace ao::winui
   {
     if (_autoDismissTimer)
     {
-      try
-      {
-        _autoDismissTimer.Stop();
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): The auto-dismiss timer may already be stopped during teardown.
-      catch (...)
-      {
-      }
+      _autoDismissTimer.Stop();
     }
 
     ++_autoDismissGeneration;
 
-    try
-    {
-      _autoDismissTickRevoker.revoke();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Revoking a native event may already have happened during teardown.
-    catch (...)
-    {
-    }
+    _autoDismissTickRevoker.revoke();
 
     _optScheduledCompact.reset();
   }

@@ -35,8 +35,8 @@ namespace ao::winui::test
         events.add("launch");
         return {};
       },
-      .reportLaunchFailure = [&events](Error const&) { events.add("report"); },
-      .exitProcess = [&events] { events.add("exit"); },
+      .reportLaunchFailure = [&events](Error const&) noexcept { events.add("report"); },
+      .exitProcess = [&events] noexcept { events.add("exit"); },
     });
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::Launched);
@@ -56,12 +56,12 @@ namespace ao::winui::test
         return makeError(Error::Code::IoError, "CreateProcessW failed");
       },
       .reportLaunchFailure =
-        [&events, &reportedCode](Error const& error)
+        [&events, &reportedCode](Error const& error) noexcept
       {
         events.add("report");
         reportedCode = error.code;
       },
-      .exitProcess = [&events] { events.add("exit"); },
+      .exitProcess = [&events] noexcept { events.add("exit"); },
     });
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::LaunchFailed);
@@ -82,12 +82,12 @@ namespace ao::winui::test
         throwException<Exception>("native launcher failure");
       },
       .reportLaunchFailure =
-        [&events, &reportedCode](Error const& error)
+        [&events, &reportedCode](Error const& error) noexcept
       {
         events.add("report");
         reportedCode = error.code;
       },
-      .exitProcess = [&events] { events.add("exit"); },
+      .exitProcess = [&events] noexcept { events.add("exit"); },
     });
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::LaunchFailed);
@@ -112,8 +112,8 @@ namespace ao::winui::test
         events.add("launch");
         return {};
       },
-      .reportLaunchFailure = [&events](Error const&) { events.add("report"); },
-      .exitProcess = [&events] { events.add("exit"); },
+      .reportLaunchFailure = [&events](Error const&) noexcept { events.add("report"); },
+      .exitProcess = [&events] noexcept { events.add("exit"); },
     });
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::Launched);
@@ -130,13 +130,13 @@ namespace ao::winui::test
       .releaseActiveGraph = [&events] { events.add("release"); },
       .launchSuccessor = {},
       .reportLaunchFailure =
-        [&events, &reportedCode, &reportedMessage](Error const& error)
+        [&events, &reportedCode, &reportedMessage](Error const& error) noexcept
       {
         events.add("report");
         reportedCode = error.code;
         reportedMessage = error.message;
       },
-      .exitProcess = [&events] { events.add("exit"); },
+      .exitProcess = [&events] noexcept { events.add("exit"); },
     });
 
     CHECK(outcome == DestructiveLibraryRestartOutcome::LaunchFailed);

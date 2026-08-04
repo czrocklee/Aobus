@@ -7,6 +7,7 @@
 #include "theme/ThemeCoordinator.h"
 #include "track/TrackListController.h"
 #include <ao/Error.h>
+// ResourceByteLoader::bind converts AppRuntime to its CoreRuntime base, which requires a complete derived type.
 #include <ao/rt/AppRuntime.h> // NOLINT(misc-include-cleaner)
 #include <ao/rt/resource/ResourceByteLoader.h>
 

@@ -129,14 +129,7 @@ namespace ao::winui
 
     if (_flyout)
     {
-      try
-      {
-        _flyout.Hide();
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): Hiding a projected flyout cannot block its owner release.
-      catch (...)
-      {
-      }
+      _flyout.Hide();
 
       _flyout = nullptr;
     }

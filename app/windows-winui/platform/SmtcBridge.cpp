@@ -17,6 +17,7 @@
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/winui/MemoryRandomAccessStream.h>
+#include <ao/winui/WinUiErrorBoundary.h>
 
 #include <systemmediatransportcontrolsinterop.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
@@ -145,55 +146,21 @@ namespace ao::winui
     _resourceBytes = nullptr;
     _runtime = nullptr;
 
-    try
-    {
-      _artworkRequest.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Artwork cancellation is best-effort during SMTC teardown.
-    catch (...)
-    {
-    }
-
-    try
-    {
-      _artworkTask.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Artwork-task cancellation is best-effort during SMTC teardown.
-    catch (...)
-    {
-    }
-
-    try
-    {
-      _snapshotSub.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Snapshot unsubscription is best-effort during SMTC teardown.
-    catch (...)
-    {
-    }
+    _artworkRequest.reset();
+    _artworkTask.reset();
+    _snapshotSub.reset();
 
     // Unlike an in-window widget, the system transport overlay outlives this
     // window. Leaving it enabled with a stale thumbnail is visible to the user,
     // so this reset is owed on teardown rather than only on rebind.
-    try
-    {
-      auto updater = _statePtr->controls.DisplayUpdater();
-      updater.Thumbnail(nullptr);
-      updater.Update();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Clearing the system thumbnail cannot block native teardown.
-    catch (...)
-    {
-    }
-
-    try
-    {
-      _statePtr->controls.IsEnabled(false);
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Disabling the system transport controls is best-effort at teardown.
-    catch (...)
-    {
-    }
+    runOptionalWinRt("clearing the SMTC thumbnail",
+                     [this]
+                     {
+                       auto updater = _statePtr->controls.DisplayUpdater();
+                       updater.Thumbnail(nullptr);
+                       updater.Update();
+                     });
+    runOptionalWinRt("disabling SMTC controls", [this] { _statePtr->controls.IsEnabled(false); });
   }
 
   void SmtcBridge::handleSnapshot(rt::PlaybackSnapshot const& snapshot)

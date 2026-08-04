@@ -55,6 +55,8 @@ namespace ao::winui
     void setPresentationActive(bool active);
 
   private:
+    struct PointerCallbackState;
+
     /// Blank the widget between bindings. Only a rebind has anything to show.
     void resetPresentation();
 
@@ -87,6 +89,7 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::FrameworkElement _decreaseTrackElement{nullptr};
     winrt::Microsoft::UI::Xaml::FrameworkElement _thumbElement{nullptr};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _finalSeekTimer{nullptr};
+    std::shared_ptr<PointerCallbackState> _pointerCallbackStatePtr;
     winrt::Windows::Foundation::IInspectable _pointerPressedHandler{nullptr};
     winrt::Windows::Foundation::IInspectable _pointerReleasedHandler{nullptr};
     winrt::Windows::Foundation::IInspectable _pointerCaptureLostHandler{nullptr};

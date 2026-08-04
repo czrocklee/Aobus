@@ -9,6 +9,7 @@
 #include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
 #include "layout/ShellBuilder.h"
 #include "pch.h"
+// MainWindow's out-of-line destructor destroys the retained SMTC bridge.
 #include "platform/SmtcBridge.h" // NOLINT(misc-include-cleaner)
 #include "platform/StringResources.h"
 #include "playback/OutputDeviceControl.h"
@@ -21,6 +22,7 @@
 #include <ao/Error.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
+#include <ao/winui/WinUiErrorBoundary.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
@@ -49,17 +51,8 @@ namespace winrt::Aobus::implementation
     InitializeComponent();
     Title(ao::winui::resourceHstring(L"AppTitleValue"));
 
-    try
-    {
-      SystemBackdrop(Microsoft::UI::Xaml::Media::MicaBackdrop{});
-    }
-    // Mica is optional on remote or composition-disabled desktops.
-    // NOLINTNEXTLINE(bugprone-empty-catch)
-    catch (hresult_error const&)
-    {
-      // Solid theme resources remain the supported fallback on remote or
-      // composition-disabled desktops.
-    }
+    ao::winui::runOptionalWinRt(
+      "enabling the Mica backdrop", [this] { SystemBackdrop(Microsoft::UI::Xaml::Media::MicaBackdrop{}); });
 
     auto const weak = get_weak();
     _appWindowChangedRevoker =
@@ -246,15 +239,7 @@ namespace winrt::Aobus::implementation
 
     if (_soulWindow)
     {
-      try
-      {
-        _soulWindow.Close();
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): The native soul window may already be closed during teardown.
-      catch (...)
-      {
-        // Releasing the native wrapper below still retires the owner graph.
-      }
+      _soulWindow.Close();
 
       _soulWindow = nullptr;
     }

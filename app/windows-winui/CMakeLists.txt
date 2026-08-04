@@ -101,6 +101,8 @@ set(AOBUS_WINUI_LIBRARY_SOURCES
   platform/SmtcBridge.h
   platform/StringResources.cpp
   platform/StringResources.h
+  platform/WinUiErrorBoundary.cpp
+  include/ao/winui/WinUiErrorBoundary.h
   playback/AobusSoulControl.cpp
   playback/AobusSoulControl.h
   playback/AudioPipelineToolTip.cpp

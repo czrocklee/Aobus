@@ -21,7 +21,6 @@
 #include <ao/rt/ViewIds.h>
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/layout/component/LayoutComponentCatalog.h> // NOLINT(misc-include-cleaner)
 #include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/library/list/ListTreeProjection.h>
 #include <ao/winui/DesktopSettingsYamlSchema.h>

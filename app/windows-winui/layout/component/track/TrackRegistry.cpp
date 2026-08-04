@@ -167,15 +167,7 @@ namespace ao::winui::layout
           return;
         }
 
-        try
-        {
-          _flyout.Hide();
-        }
-        // NOLINTNEXTLINE(bugprone-empty-catch): Hiding a projected flyout is best-effort during generation teardown.
-        catch (...)
-        {
-          // Releasing the projected flyout below still retires its native handlers.
-        }
+        _flyout.Hide();
 
         _flyout = nullptr;
       }

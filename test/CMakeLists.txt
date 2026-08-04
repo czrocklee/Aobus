@@ -484,6 +484,7 @@ if(WIN32)
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/LibraryStartupPlan.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/StartupOptions.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/app/CommandLine.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/platform/WinUiErrorBoundary.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
     ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
@@ -501,6 +502,7 @@ if(WIN32)
     unit/winui/FrameResourceTest.cpp
     unit/winui/StringResourceTest.cpp
     unit/winui/ThemeTest.cpp
+    unit/winui/WinUiErrorBoundaryTest.cpp
     unit/winui/layout/ElementKindTest.cpp
     unit/winui/layout/LayoutCatalogTest.cpp
     unit/winui/layout/LayoutDialectTest.cpp

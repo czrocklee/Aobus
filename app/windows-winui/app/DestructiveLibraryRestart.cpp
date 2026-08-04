@@ -66,40 +66,24 @@ namespace ao::winui
       }
     }
 
-    void report(std::move_only_function<void(Error const&)>& reportFailure, Error const& error) noexcept
+    void report(std::move_only_function<void(Error const&) noexcept>& reportFailure, Error const& error) noexcept
     {
       if (!reportFailure)
       {
         return;
       }
 
-      try
-      {
-        reportFailure(error);
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): Failure reporting is best-effort after the operation already failed.
-      catch (...)
-      {
-        // The caller is already being told about a failure it cannot act on.
-      }
+      reportFailure(error);
     }
 
-    void exitProcess(std::move_only_function<void()>& exitOperation) noexcept
+    void exitProcess(std::move_only_function<void() noexcept>& exitOperation) noexcept
     {
       if (!exitOperation)
       {
         return;
       }
 
-      try
-      {
-        exitOperation();
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): Process exit is the final teardown step and cannot propagate.
-      catch (...)
-      {
-        // Exit is the last step either way.
-      }
+      exitOperation();
     }
   } // namespace
 

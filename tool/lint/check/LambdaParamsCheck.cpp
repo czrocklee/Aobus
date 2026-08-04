@@ -18,7 +18,7 @@ namespace clang::tidy::readability
 {
   void LambdaParamsCheck::registerMatchers(MatchFinder* finder)
   {
-    finder->addMatcher(lambdaExpr().bind("lambda"), this);
+    finder->addMatcher(lambdaExpr(unless(isInTemplateInstantiation())).bind("lambda"), this);
   }
 
   void LambdaParamsCheck::check(MatchFinder::MatchResult const& result)

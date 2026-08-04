@@ -169,14 +169,7 @@ namespace ao::winui
     _operationActive = false;
     _operationStatusKey = {};
 
-    try
-    {
-      _libraryTask.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Task destruction is best-effort after callbacks are already disabled.
-    catch (...)
-    {
-    }
+    _libraryTask.reset();
 
     if (_runtimePtr != nullptr)
     {

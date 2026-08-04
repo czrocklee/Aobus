@@ -152,15 +152,8 @@ namespace ao::winui::layout
        */
       ~InspectorPaneComponent() override
       {
-        try
-        {
-          _overlay.IsOpen(false);
-          _overlay.Child(nullptr);
-        }
-        // NOLINTNEXTLINE(bugprone-empty-catch): Popup teardown is best-effort after the generation is already retiring.
-        catch (...)
-        {
-        }
+        _overlay.IsOpen(false);
+        _overlay.Child(nullptr);
       }
 
       FrameworkElement element() const override { return _root; }

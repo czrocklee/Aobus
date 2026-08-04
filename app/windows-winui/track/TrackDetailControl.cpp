@@ -259,26 +259,19 @@ namespace ao::winui
   {
     unbind();
 
-    try
+    if (_technicalHeaderButton)
     {
-      if (_technicalHeaderButton)
-      {
-        _technicalHeaderClickRevoker.revoke();
-      }
-
-      if (_showEmptyButton)
-      {
-        _showEmptyClickRevoker.revoke();
-      }
-
-      if (_metadataHeaderButton)
-      {
-        _metadataHeaderClickRevoker.revoke();
-      }
+      _technicalHeaderClickRevoker.revoke();
     }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Native revocation is best-effort after the detail surface is retired.
-    catch (...)
+
+    if (_showEmptyButton)
     {
+      _showEmptyClickRevoker.revoke();
+    }
+
+    if (_metadataHeaderButton)
+    {
+      _metadataHeaderClickRevoker.revoke();
     }
   }
 
@@ -304,14 +297,7 @@ namespace ao::winui
   {
     // TrackDetailProjection borrows services owned by this window's runtime.
     // Stop publication before destroying the projection.
-    try
-    {
-      _subscription.reset();
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): Subscription cancellation is best-effort during detail teardown.
-    catch (...)
-    {
-    }
+    _subscription.reset();
 
     _projectionPtr.reset();
     _snapshot = {};

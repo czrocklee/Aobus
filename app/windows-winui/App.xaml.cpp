@@ -9,6 +9,7 @@
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/rt/Log.h>
+#include <ao/winui/WinUiErrorBoundary.h>
 #include <ao/winui/app/DestructiveLibraryRestart.h>
 
 #include <windows.h>
@@ -46,32 +47,24 @@ namespace winrt::Aobus::implementation
      */
     [[noreturn]] void reportTerminate() noexcept
     {
-      try
+      if (auto const exceptionPtr = std::current_exception(); exceptionPtr)
       {
-        if (std::current_exception())
+        try
         {
-          try
-          {
-            std::rethrow_exception(std::current_exception());
-          }
-          catch (std::exception const& error)
-          {
-            APP_LOG_CRITICAL("WinUI terminating on an escaped exception: {}", error.what());
-          }
-          catch (...)
-          {
-            APP_LOG_CRITICAL("WinUI terminating on an escaped unknown exception");
-          }
+          std::rethrow_exception(exceptionPtr);
         }
-        else
+        catch (std::exception const& error)
         {
-          APP_LOG_CRITICAL("WinUI terminating without an active exception");
+          ao::winui::logWinUiCritical("WinUI terminating on an escaped exception", error.what());
+        }
+        catch (...)
+        {
+          ao::winui::logWinUiCritical("WinUI terminating", "escaped unknown exception");
         }
       }
-      // NOLINTNEXTLINE(bugprone-empty-catch): Reporting is the only thing left to fail, and it already did.
-      catch (...)
+      else
       {
-        // Reporting is the only thing left to fail, and it just did.
+        ao::winui::logWinUiCritical("WinUI terminating", "no active exception");
       }
 
       // Quit without unwinding: whatever invariant broke, running more
@@ -140,7 +133,19 @@ namespace winrt::Aobus::implementation
     InitializeComponent();
   }
 
-  App::~App() = default;
+  App::~App()
+  {
+    _windowSessionPtr.reset();
+
+    try
+    {
+      ao::rt::Log::shutdown();
+    }
+    catch (...)
+    {
+      ::OutputDebugStringA("Aobus could not shut down WinUI logging cleanly.\n");
+    }
+  }
 
   void App::exitApplication() noexcept
   {
@@ -158,14 +163,7 @@ namespace winrt::Aobus::implementation
 
   void App::reportRestartLaunchFailure(ao::Error const& error) noexcept
   {
-    try
-    {
-      APP_LOG_CRITICAL("WinUI successor launch failed: {}", error.message);
-    }
-    // NOLINTNEXTLINE(bugprone-empty-catch): The failure callback must not prevent the startup error dialog.
-    catch (...)
-    {
-    }
+    ao::winui::logWinUiCritical("WinUI successor launch failed", error.message);
 
     showStartupFailure(error.message);
   }
@@ -245,8 +243,8 @@ namespace winrt::Aobus::implementation
     std::ignore = ao::winui::executeDestructiveLibraryRestart({
       .releaseActiveGraph = [this] { _windowSessionPtr.reset(); },
       .launchSuccessor = [root = std::move(root)] { return ao::winui::launchLibraryProcess(root); },
-      .reportLaunchFailure = [this](ao::Error const& error) { reportRestartLaunchFailure(error); },
-      .exitProcess = [this] { exitApplication(); },
+      .reportLaunchFailure = [this](ao::Error const& error) noexcept { reportRestartLaunchFailure(error); },
+      .exitProcess = [this] noexcept { exitApplication(); },
     });
   }
 
@@ -268,15 +266,7 @@ namespace winrt::Aobus::implementation
     auto const failLaunch = [this](std::string detail) noexcept
     {
       _processPhase = ProcessPhase::Exiting;
-
-      try
-      {
-        APP_LOG_CRITICAL("WinUI startup failed: {}", detail);
-      }
-      // NOLINTNEXTLINE(bugprone-empty-catch): Logging cannot be allowed to mask the startup failure path.
-      catch (...)
-      {
-      }
+      ao::winui::logWinUiCritical("WinUI startup failed", detail);
 
       if (_windowSessionPtr)
       {
@@ -291,6 +281,8 @@ namespace winrt::Aobus::implementation
     try
     {
       _dispatcher = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
+      auto const appStateRoot = stateRoot();
+      ao::rt::Log::initialize(ao::rt::LogLevel::Info, appStateRoot / "logs", ao::rt::LogConsoleMode::Disabled);
       auto startupOptions = ao::winui::readStartupOptions();
 
       if (!startupOptions)
@@ -298,7 +290,7 @@ namespace winrt::Aobus::implementation
         ao::throwException<ao::Exception>(startupOptions.error().message);
       }
 
-      _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(stateRoot(), _dispatcher);
+      _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(appStateRoot, _dispatcher);
       auto const weak = get_weak();
       auto started = _windowSessionPtr->start(
         std::move(*startupOptions),

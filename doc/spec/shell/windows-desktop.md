@@ -122,12 +122,21 @@ SMTC commands route through the shared playback command surface. Playback observ
 
 Folder-picker cancellation makes no change.
 Once a different-root restart is queued, the old process is not a rollback target.
-A failure while releasing the parent graph does not cancel the successor launch: the parent is exiting either way, so a half-released dying parent is not observable while a successor that never starts costs the user their session.
+The restart coordinator attempts the successor launch after an explicit release operation either completes or throws an ordinary exception: the parent is exiting either way, so a half-released dying parent is not observable while a successor that never starts costs the user their session.
+An exception that violates a destructor or other no-throw teardown boundary is instead an invariant fault and enters the process terminate boundary before successor launch; it is not a recoverable release result.
 Native process-creation failure is reported by the already-retired parent, which then exits.
 Target validation, open, and window-activation failures are reported by the successor, which exits without changing the prior durable root.
 A later ordinary launch may therefore reopen that prior root.
 After successor activation, an initial-scan failure produces a visible diagnostic but retains the new active root; explicit-rescan planning or application failure likewise leaves the active session usable and retryable.
 Session teardown requests scan cancellation, and its lifetime guard suppresses later presentation.
+
+WinUI lifecycle cleanup calls window close, timer stop, routed-handler removal, popup or flyout retirement, and property detachment directly on the owning dispatcher thread.
+The frontend does not catch those calls merely because teardown is in progress: a failed HRESULT after the owners have met their thread and lifetime contracts is an invariant or native-runtime fault, and continuing through a partially retired graph is not a supported recovery path.
+
+An optional WinRT operation may degrade only when its fallback is already complete and the failed operation leaves no callback or lifetime obligation behind.
+That boundary catches `winrt::hresult_error`, records its message and HRESULT in the application log, and preserves the fallback; allocation failure and non-WinRT C++ exceptions continue to the ordinary exception boundary.
+Mica uses the solid theme as its fallback, while final SMTC metadata disablement may be abandoned after command admission, subscriptions, and artwork work have already been retired.
+If application logging itself is unavailable, the diagnostic boundary writes a debugger fallback; terminal application exit separately falls back to posting the native quit message.
 
 Theme reload parses and validates a complete candidate before applying resources. A missing theme file uses built-in/system values. Any other read, syntax, token, type, or color failure keeps the last valid theme and displays the exact diagnostic.
 
@@ -165,6 +174,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`AobusSoulControl`](../../../app/windows-winui/playback/AobusSoulControl.h) adapts the shared [`AobusSoulViewModel`](../../../app/include/ao/uimodel/playback/soul/AobusSoulViewModel.h).
 - [`SmtcBridge`](../../../app/windows-winui/platform/SmtcBridge.h) and [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.h) own Windows media and theme adapters.
 - [`StringResources`](../../../app/windows-winui/platform/StringResources.h) resolves dynamic authored copy from the same PRI resource system used by XAML `x:Uid`.
+- [`WinUiErrorBoundary`](../../../app/windows-winui/include/ao/winui/WinUiErrorBoundary.h) owns optional-WinRT degradation and terminal diagnostic fallbacks; ordinary UI teardown does not use it.
 
 ## Test map
 
@@ -174,6 +184,7 @@ UIModel supplies style, monogram, and deterministic monogram foreground-color va
 - [`AobusSoulViewModelTest.cpp`](../../../test/unit/uimodel/playback/soul/AobusSoulViewModelTest.cpp) protects shared geometry, colors, aura, periods, and frame gating.
 - [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp) and [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp) protect strict persistence and fallback.
 - [`StartupOptionsTest.cpp`](../../../test/unit/winui/app/StartupOptionsTest.cpp), [`LibraryStartupPlanTest.cpp`](../../../test/unit/winui/app/LibraryStartupPlanTest.cpp), [`DestructiveLibraryRestartTest.cpp`](../../../test/unit/winui/app/DestructiveLibraryRestartTest.cpp), and [`CommandLineTest.cpp`](../../../test/unit/winui/app/CommandLineTest.cpp) protect successor arguments, strict root planning, deferred commit, release-before-launch ordering, and quoting.
+- [`WinUiErrorBoundaryTest.cpp`](../../../test/unit/winui/WinUiErrorBoundaryTest.cpp) proves that the optional boundary contains WinRT HRESULT failures without hiding ordinary C++ exceptions.
 - The tests under [`test/unit/winui/`](../../../test/unit/winui/) are compiled into `ao_core_test` only by the native Windows profile; the Linux gate does not compile WinUI-owned rules.
 - Native Debug and Release `winui` builds protect `aobus-winui-lib`, generated C++/WinRT, XAML, process launch, PRI resources, WASAPI, picker, and SMTC integration.
 
