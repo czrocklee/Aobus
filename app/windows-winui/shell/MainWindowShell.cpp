@@ -3,18 +3,16 @@
 
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
+#include "layout/ShellBuilder.h"
 #include "pch.h"
-#include "platform/ScopedBooleanFlag.h"
-#include "platform/WindowsStringResources.h"
-#include "playback/AobusSoulControl.h"
-#include "playback/PlaybackControls.h"
-#include "theme/WindowsThemeCoordinator.h"
+#include "platform/StringResources.h"
+#include "theme/SurfaceBrushes.h"
+#include "theme/ThemeCoordinator.h"
 #include <ao/Error.h>
 #include <ao/rt/Log.h>
-#include <ao/uimodel/layout/shell/DesktopShellPolicy.h>
-#include <ao/uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.h>
-#include <ao/uimodel/preference/WindowsTheme.h>
 #include <ao/utility/Path.h>
+#include <ao/winui/Theme.h>
+#include <ao/winui/layout/ShellStatePolicy.h>
 
 #include <errhandlingapi.h>
 #include <microsoft.ui.xaml.window.h>
@@ -27,29 +25,19 @@
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>
 
-#include <algorithm>
 #include <array>
-#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <limits>
 #include <string>
 #include <string_view>
-#include <vector>
 
 namespace winrt::Aobus::implementation
 {
   namespace
   {
-    using Microsoft::UI::Xaml::Visibility;
-
-    constexpr std::size_t kArgbColorLength = 9;
-    constexpr std::uint8_t kOpaqueAlpha = 0xFF;
-    constexpr double kModernTitleBarHeight = 40.0;
-    constexpr std::int32_t kOverlayInspectorZIndex = 10;
-    constexpr double kWideFilterWidth = 420.0;
-    constexpr double kNowPlayingColumnWeight = 2.0;
-    constexpr double kClassicCornerRadius = 4.0;
+    constexpr double kClassicChromeCornerRadius = 4.0;
 
     HWND nativeWindow(Microsoft::UI::Xaml::Window const& window)
     {
@@ -59,65 +47,9 @@ namespace winrt::Aobus::implementation
       return handle;
     }
 
-    std::vector<Windows::Foundation::IInspectable> selectionSnapshot(
-      Microsoft::UI::Xaml::Controls::ListView const& list)
-    {
-      auto result = std::vector<Windows::Foundation::IInspectable>{};
-      auto const selectedItems = list.SelectedItems();
-      result.reserve(selectedItems.Size());
-
-      for (auto const& item : selectedItems)
-      {
-        result.push_back(item);
-      }
-
-      return result;
-    }
-
-    void restoreSelection(Microsoft::UI::Xaml::Controls::ListView const& list,
-                          std::vector<Windows::Foundation::IInspectable> const& selectedItems)
-    {
-      auto const target = list.SelectedItems();
-      target.Clear();
-
-      for (auto const& item : selectedItems)
-      {
-        target.Append(item);
-      }
-    }
-
-    Microsoft::UI::Xaml::GridLength pixels(double const value) noexcept
-    {
-      return {
-        .Value = value,
-        .GridUnitType = Microsoft::UI::Xaml::GridUnitType::Pixel,
-      };
-    }
-
-    Microsoft::UI::Xaml::GridLength stars(double const value = 1.0) noexcept
-    {
-      return {
-        .Value = value,
-        .GridUnitType = Microsoft::UI::Xaml::GridUnitType::Star,
-      };
-    }
-
-    Windows::UI::Color parseColor(std::string_view const value)
-    {
-      auto const offset = value.size() == kArgbColorLength ? 3U : 1U;
-      auto const component = [value](std::size_t const at)
-      { return static_cast<std::uint8_t>(std::stoul(std::string{value.substr(at, 2)}, nullptr, 16)); };
-      return {
-        .A = value.size() == kArgbColorLength ? component(1) : kOpaqueAlpha,
-        .R = component(offset),
-        .G = component(offset + 2),
-        .B = component(offset + 4),
-      };
-    }
-
     Microsoft::UI::Xaml::Media::SolidColorBrush colorBrush(std::string_view const value)
     {
-      return Microsoft::UI::Xaml::Media::SolidColorBrush{parseColor(value)};
+      return ao::winui::themeColorBrush(value);
     }
 
     constexpr auto kThemeResourceKeys = std::to_array<wchar_t const*>({
@@ -142,6 +74,20 @@ namespace winrt::Aobus::implementation
       resources.Insert(box_value(key), value);
     }
 
+    /**
+     * @brief Replace the rounding the Classic chrome styles resolve.
+     *
+     * The key is declared in the window resources rather than removed and
+     * restored: a `ThemeResource` that resolves to nothing throws when the
+     * style is applied, and every rebuild applies these styles again.
+     */
+    void setClassicChromeCornerRadius(Microsoft::UI::Xaml::ResourceDictionary const& resources, double const radius)
+    {
+      resources.Insert(box_value(L"ClassicChromeCornerRadius"),
+                       box_value(Microsoft::UI::Xaml::CornerRadius{
+                         .TopLeft = radius, .TopRight = radius, .BottomRight = radius, .BottomLeft = radius}));
+    }
+
     void clearThemeResources(Microsoft::UI::Xaml::ResourceDictionary const& resources)
     {
       for (auto const* key : kThemeResourceKeys)
@@ -159,176 +105,27 @@ namespace winrt::Aobus::implementation
 
   void MainWindow::applyShellState(double const width)
   {
-    auto const mode = _session != nullptr ? _session->settings().shellMode : ao::uimodel::DesktopShellMode::Modern;
-    auto const state = ao::uimodel::DesktopShellPolicy::resolve(mode, width);
-    auto const modern = state.mode == ao::uimodel::DesktopShellMode::Modern;
-    auto const wasModern = ModernShell().Visibility() == Visibility::Visible;
-    auto const presentationChanged = wasModern != modern;
-    auto const selectedItems = presentationChanged
-                                 ? selectionSnapshot(wasModern ? ModernTrackList() : ClassicTrackList())
-                                 : std::vector<Windows::Foundation::IInspectable>{};
-    auto const selectionChange = ao::winui::ScopedBooleanFlag{_applyingTrackSelection, presentationChanged};
-    auto const navigationWidth =
-      _session != nullptr ? _session->settings().navigationPaneWidth : ao::uimodel::kDefaultWindowsNavigationPaneWidth;
-    auto const inspectorWidth =
-      _session != nullptr ? _session->settings().inspectorPaneWidth : ao::uimodel::kDefaultWindowsInspectorPaneWidth;
-    applyShellModePresentation(state, modern, presentationChanged, selectedItems);
-    applyNavigationPresentation(state, modern, navigationWidth);
-    applyInspectorPresentation(state, modern, inspectorWidth);
-    applyResponsiveLayout(state, navigationWidth, inspectorWidth);
-  }
-
-  void MainWindow::applyShellModePresentation(ao::uimodel::DesktopShellViewState const& state,
-                                              bool const modern,
-                                              bool const presentationChanged,
-                                              std::vector<Windows::Foundation::IInspectable> const& selectedItems)
-  {
-    ModernShell().Visibility(modern ? Visibility::Visible : Visibility::Collapsed);
-    TitleBarGrid().Visibility(modern ? Visibility::Visible : Visibility::Collapsed);
-    ClassicShell().Visibility(modern ? Visibility::Collapsed : Visibility::Visible);
-
-    if (presentationChanged)
+    // The window is sized before it has a session to build a shell from, so the
+    // first resolved policy is the one `initialize` asks for.
+    if (!_shellBuilderPtr)
     {
-      restoreSelection(ModernTrackList(), selectedItems);
-      restoreSelection(ClassicTrackList(), selectedItems);
+      return;
     }
 
-    get_self<AobusSoulControl>(ModernSoul())->setPresentationActive(modern);
-    get_self<AobusSoulControl>(ClassicSoul())->setPresentationActive(!modern);
+    auto const mode = _session != nullptr ? _session->settings().shellMode : ao::winui::ShellMode::Modern;
+    auto applied = _shellBuilderPtr->applyShellState(mode, width, _optInspectorRequest);
 
-    if (_playbackControlsPtr)
+    if (!applied)
     {
-      _playbackControlsPtr->setPresentationActive(modern);
+      // The generation that was already live stays live, which is the whole
+      // point of building the candidate before publishing it.
+      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", applied.error().message));
+      return;
     }
 
-    TitleBarRow().Height(pixels(modern ? kModernTitleBarHeight : 0.0));
+    auto const& state = *applied;
     ExtendsContentIntoTitleBar(state.integratedTitleBar);
-    SetTitleBar(state.integratedTitleBar ? TitleBarGrid() : Microsoft::UI::Xaml::UIElement{nullptr});
-  }
-
-  void MainWindow::applyNavigationPresentation(ao::uimodel::DesktopShellViewState const& state,
-                                               bool const modern,
-                                               double const navigationWidth)
-  {
-    using Navigation = ao::uimodel::DesktopNavigationPresentation;
-    ModernNavigation().OpenPaneLength(navigationWidth);
-
-    if (state.navigation == Navigation::Expanded)
-    {
-      ModernNavigation().PaneDisplayMode(Microsoft::UI::Xaml::Controls::NavigationViewPaneDisplayMode::Left);
-      ModernNavigation().IsPaneOpen(true);
-    }
-    else if (state.navigation == Navigation::Compact)
-    {
-      ModernNavigation().PaneDisplayMode(Microsoft::UI::Xaml::Controls::NavigationViewPaneDisplayMode::LeftCompact);
-      ModernNavigation().IsPaneOpen(false);
-    }
-    else
-    {
-      ModernNavigation().PaneDisplayMode(Microsoft::UI::Xaml::Controls::NavigationViewPaneDisplayMode::LeftMinimal);
-      ModernNavigation().IsPaneOpen(false);
-    }
-
-    ModernNavigationSplitter().Visibility(modern && state.navigation == Navigation::Expanded ? Visibility::Visible
-                                                                                             : Visibility::Collapsed);
-  }
-
-  void MainWindow::applyInspectorPresentation(ao::uimodel::DesktopShellViewState const& state,
-                                              bool const modern,
-                                              double const inspectorWidth)
-  {
-    using Inspector = ao::uimodel::DesktopInspectorPresentation;
-    auto const inlineInspector = state.inspector == Inspector::Inline;
-    Microsoft::UI::Xaml::Controls::Grid::SetColumn(ModernInspector(), inlineInspector ? 1 : 0);
-    Microsoft::UI::Xaml::Controls::Canvas::SetZIndex(ModernInspector(), inlineInspector ? 0 : kOverlayInspectorZIndex);
-    ModernInspector().HorizontalAlignment(inlineInspector ? Microsoft::UI::Xaml::HorizontalAlignment::Stretch
-                                                          : Microsoft::UI::Xaml::HorizontalAlignment::Right);
-    auto const inspectorCardWidth = std::max(0.0, inspectorWidth - 12.0);
-    auto const inspectorCoverSide = std::clamp(inspectorCardWidth - 34.0, 0.0, 320.0);
-    ModernInspectorColumn().Width(pixels(inlineInspector ? inspectorWidth : 0.0));
-    ModernInspector().Width(inspectorCardWidth);
-    InspectorCoverSlot().Width(inspectorCoverSide);
-    InspectorCoverSlot().Height(inspectorCoverSide);
-    ModernInspector().Visibility(inlineInspector || _inspectorRequested ? Visibility::Visible : Visibility::Collapsed);
-    ModernInspectorSplitter().Visibility(modern && inlineInspector ? Visibility::Visible : Visibility::Collapsed);
-  }
-
-  void MainWindow::applyResponsiveLayout(ao::uimodel::DesktopShellViewState const& state,
-                                         double const navigationWidth,
-                                         double const inspectorWidth)
-  {
-    using Inspector = ao::uimodel::DesktopInspectorPresentation;
-    auto const modern = state.mode == ao::uimodel::DesktopShellMode::Modern;
-    auto const inlineInspector = state.inspector == Inspector::Inline;
-    auto const wide = state.widthClass == ao::uimodel::DesktopShellWidthClass::Wide;
-    auto const narrow = state.widthClass == ao::uimodel::DesktopShellWidthClass::Narrow;
-    ModernFilterColumn().Width(wide ? pixels(kWideFilterWidth) : stars());
-    ModernSummaryColumn().Width(wide ? stars() : pixels(0.0));
-    ModernBrowserSummary().Visibility(wide ? Visibility::Visible : Visibility::Collapsed);
-    ModernNowPlayingInfoColumn().Width(narrow ? pixels(0.0) : stars(kNowPlayingColumnWeight));
-    ModernNowPlayingInfo().Visibility(narrow ? Visibility::Collapsed : Visibility::Visible);
-    ModernNowPlayingRightColumn().Width(stars(narrow ? 1.0 : kNowPlayingColumnWeight));
-
-    auto const classicSidebars = state.widthClass != ao::uimodel::DesktopShellWidthClass::Narrow;
-    ClassicNavigationColumn().Width(pixels(classicSidebars ? navigationWidth : 0.0));
-    ClassicLibraryTree().Visibility(classicSidebars ? Visibility::Visible : Visibility::Collapsed);
-    ClassicInspectorColumn().Width(pixels(state.inspector == Inspector::Inline ? inspectorWidth : 0.0));
-    ClassicInspector().Visibility(state.inspector == Inspector::Inline ? Visibility::Visible : Visibility::Collapsed);
-    ClassicNavigationSplitter().Visibility(!modern && classicSidebars ? Visibility::Visible : Visibility::Collapsed);
-    ClassicInspectorSplitter().Visibility(!modern && inlineInspector ? Visibility::Visible : Visibility::Collapsed);
-  }
-
-  void MainWindow::OnPaneResizeDelta(Windows::Foundation::IInspectable const& sender,
-                                     Microsoft::UI::Xaml::Controls::Primitives::DragDeltaEventArgs const& args)
-  {
-    if (_session == nullptr)
-    {
-      return;
-    }
-
-    auto const element = sender.try_as<Microsoft::UI::Xaml::FrameworkElement>();
-
-    if (!element)
-    {
-      return;
-    }
-
-    auto const kind = to_string(unbox_value_or<hstring>(element.Tag(), L""));
-
-    if (kind == "navigation")
-    {
-      auto& settings = _session->settings();
-      settings.navigationPaneWidth = std::clamp(settings.navigationPaneWidth + args.HorizontalChange(),
-                                                ao::uimodel::kMinimumWindowsNavigationPaneWidth,
-                                                ao::uimodel::kMaximumWindowsNavigationPaneWidth);
-    }
-    else if (kind == "inspector")
-    {
-      auto& settings = _session->settings();
-      settings.inspectorPaneWidth = std::clamp(settings.inspectorPaneWidth - args.HorizontalChange(),
-                                               ao::uimodel::kMinimumWindowsInspectorPaneWidth,
-                                               ao::uimodel::kMaximumWindowsInspectorPaneWidth);
-    }
-    else
-    {
-      return;
-    }
-
-    _paneResizeDirty = true;
-    applyShellState(RootGrid().ActualWidth());
-  }
-
-  void MainWindow::OnPaneResizeCompleted(
-    Windows::Foundation::IInspectable const& /*sender*/,
-    Microsoft::UI::Xaml::Controls::Primitives::DragCompletedEventArgs const& /*args*/)
-  {
-    if (!_paneResizeDirty)
-    {
-      return;
-    }
-
-    _paneResizeDirty = false;
-    saveWindowState();
+    SetTitleBar(state.integratedTitleBar ? _shellBuilderPtr->titleBar() : Microsoft::UI::Xaml::UIElement{nullptr});
   }
 
   void MainWindow::restoreWindowPlacement()
@@ -361,35 +158,64 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::saveWindowState()
+  void MainWindow::saveWindowState() noexcept
   {
     if (_session == nullptr)
     {
       return;
     }
 
-    auto& placement = _session->settings().window;
-    auto nativePlacement = WINDOWPLACEMENT{};
-    nativePlacement.length = sizeof(nativePlacement);
+    try
+    {
+      auto& placement = _session->settings().window;
+      auto nativePlacement = WINDOWPLACEMENT{};
+      nativePlacement.length = sizeof(nativePlacement);
 
-    if (::GetWindowPlacement(nativeWindow(*this), &nativePlacement) != FALSE)
-    {
-      auto const& normal = nativePlacement.rcNormalPosition;
-      placement.x = normal.left;
-      placement.y = normal.top;
-      placement.width = normal.right - normal.left;
-      placement.height = normal.bottom - normal.top;
-      placement.maximized =
-        nativePlacement.showCmd == SW_SHOWMAXIMIZED || (nativePlacement.flags & WPF_RESTORETOMAXIMIZED) != 0;
+      if (::GetWindowPlacement(nativeWindow(*this), &nativePlacement) != FALSE)
+      {
+        auto const& normal = nativePlacement.rcNormalPosition;
+        placement.x = normal.left;
+        placement.y = normal.top;
+        placement.width = normal.right - normal.left;
+        placement.height = normal.bottom - normal.top;
+        placement.maximized =
+          nativePlacement.showCmd == SW_SHOWMAXIMIZED || (nativePlacement.flags & WPF_RESTORETOMAXIMIZED) != 0;
+      }
+      else
+      {
+        APP_LOG_WARN("MainWindow: failed to read native window placement: {}", ::GetLastError());
+      }
     }
-    else
+    catch (std::exception const& error)
     {
-      APP_LOG_WARN("MainWindow: failed to read native window placement: {}", ::GetLastError());
+      APP_LOG_WARN("MainWindow: failed to capture native window placement: {}", error.what());
+    }
+    catch (...)
+    {
+      APP_LOG_WARN("MainWindow: failed to capture native window placement: unknown exception");
     }
 
-    if (auto const saved = _session->saveSettings(); !saved)
+    try
     {
-      updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", saved.error().message));
+      if (auto const saved = _session->saveSettings(); !saved)
+      {
+        try
+        {
+          updateStatus(ao::winui::formatResource("SaveSettingsFailedFormat", saved.error().message));
+        }
+        catch (...)
+        {
+          APP_LOG_WARN("MainWindow: failed to report settings checkpoint failure");
+        }
+      }
+    }
+    catch (std::exception const& error)
+    {
+      APP_LOG_WARN("MainWindow: settings checkpoint failed: {}", error.what());
+    }
+    catch (...)
+    {
+      APP_LOG_WARN("MainWindow: settings checkpoint failed: unknown exception");
     }
   }
 
@@ -404,9 +230,15 @@ namespace winrt::Aobus::implementation
       picker.CommitButtonText(ao::winui::resourceHstring(L"OpenLibraryPickerButton"));
 
       if (auto result = co_await picker.PickSingleFolderAsync();
-          result && !result.Path().empty() && _session != nullptr)
+          result && !result.Path().empty() && _session != nullptr &&
+          (_sessionPhase == SessionPhase::Prepared || _sessionPhase == SessionPhase::Active) && _requestRestart)
       {
-        _session->openLibrary(std::filesystem::path{result.Path().c_str()});
+        // The callback only queues an App-owned restart. Its dispatcher turn
+        // runs after this coroutine returns and releases its strong window ref.
+        if (auto const requested = _requestRestart(std::filesystem::path{result.Path().c_str()}); !requested)
+        {
+          updateStatus(ao::winui::formatResource("ErrorFormat", requested.error().message));
+        }
       }
     }
     catch (hresult_error const& error)
@@ -415,14 +247,7 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnOpenLibraryClicked(Windows::Foundation::IInspectable const& /*sender*/,
-                                        Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
-  {
-    pickLibrary();
-  }
-
-  void MainWindow::OnRescanClicked(Windows::Foundation::IInspectable const& /*sender*/,
-                                   Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::rescanLibrary()
   {
     if (_session != nullptr)
     {
@@ -430,8 +255,7 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnToggleModeClicked(Windows::Foundation::IInspectable const& /*sender*/,
-                                       Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::toggleShellMode()
   {
     if (_session == nullptr)
     {
@@ -439,15 +263,13 @@ namespace winrt::Aobus::implementation
     }
 
     auto& settings = _session->settings();
-    settings.shellMode = settings.shellMode == ao::uimodel::DesktopShellMode::Modern
-                           ? ao::uimodel::DesktopShellMode::Classic
-                           : ao::uimodel::DesktopShellMode::Modern;
+    settings.shellMode =
+      settings.shellMode == ao::winui::ShellMode::Modern ? ao::winui::ShellMode::Classic : ao::winui::ShellMode::Modern;
     applyShellState(RootGrid().ActualWidth());
     saveWindowState();
   }
 
-  void MainWindow::OnReloadThemeClicked(Windows::Foundation::IInspectable const& /*sender*/,
-                                        Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::reloadTheme()
   {
     if (_themePtr == nullptr)
     {
@@ -473,8 +295,30 @@ namespace winrt::Aobus::implementation
     updateStatus(ao::winui::formatResource("ThemeReloadedFormat", ao::utility::pathToUtf8(_themePtr->path())));
   }
 
-  void MainWindow::applyTheme(ao::uimodel::WindowsTheme const& theme)
+  /**
+   * @brief Rebuild the document-built shell against the theme now in force.
+   *
+   * A preset's `surface` slots are painted from the override at construction,
+   * so unlike a `ThemeResource` they do not re-resolve on their own. The whole
+   * generation is rebuilt rather than repainted: that is the one path a preset
+   * change is already known to survive.
+   */
+  void MainWindow::rebuildForTheme()
   {
+    if (!_shellBuilderPtr)
+    {
+      return;
+    }
+
+    if (auto rebuilt = _shellBuilderPtr->rebuild(); !rebuilt)
+    {
+      updateStatus(ao::winui::formatResource("ShellLayoutFailedFormat", rebuilt.error().message));
+    }
+  }
+
+  void MainWindow::applyTheme(ao::winui::Theme const& theme)
+  {
+    _themeOverride = theme;
     auto const resources = RootGrid().Resources();
     clearThemeResources(resources);
     auto const primary = colorBrush(theme.shared.textPrimary);
@@ -499,78 +343,31 @@ namespace winrt::Aobus::implementation
     setResource(resources, L"ListViewItemForegroundSelected", primary);
 
     RootGrid().Background(colorBrush(theme.shared.windowBackground));
-    ModernNavigation().Background(colorBrush(theme.modern.navigationBackground));
-    ModernInspector().Background(colorBrush(theme.modern.inspectorBackground));
-    ModernNowPlaying().Background(colorBrush(theme.modern.nowPlayingBackground));
-    ModernTrackSurface().Background(surface);
-    ModernTrackList().Background(surface);
-    ModernColumnHeaders().Background(surface);
-    ClassicShell().Background(surface);
-    ClassicTrackSurface().Background(surface);
-    ClassicTrackList().Background(surface);
-    ClassicToolbar().Background(colorBrush(theme.classic.toolbarBackground));
-    ClassicLibraryTree().Background(colorBrush(theme.classic.treeBackground));
-    ClassicInspector().Background(colorBrush(theme.classic.treeBackground));
-    ClassicColumnHeaders().Background(colorBrush(theme.classic.toolbarBackground));
-    ClassicStatusBar().Background(colorBrush(theme.classic.statusBackground));
 
-    auto const retro = theme.classic.chrome == ao::uimodel::WindowsClassicChrome::Retro;
-    auto const cornerRadius = retro ? 0.0 : kClassicCornerRadius;
-    ClassicToolbar().CornerRadius({
-      .TopLeft = cornerRadius,
-      .TopRight = cornerRadius,
-      .BottomRight = cornerRadius,
-      .BottomLeft = cornerRadius,
-    });
-    ClassicStatusBar().CornerRadius({
-      .TopLeft = cornerRadius,
-      .TopRight = cornerRadius,
-      .BottomRight = cornerRadius,
-      .BottomLeft = cornerRadius,
-    });
+    // A preset's own chrome takes its rounding from the window resources, so a
+    // retro theme squares the Classic bars off without the frame knowing which
+    // elements those bars are.
+    auto const retro = theme.classic.chrome == ao::winui::ClassicChrome::Retro;
+    setClassicChromeCornerRadius(resources, retro ? 0.0 : kClassicChromeCornerRadius);
+    rebuildForTheme();
   }
 
   void MainWindow::applySystemTheme()
   {
-    using Microsoft::UI::Xaml::Application;
-    using Microsoft::UI::Xaml::Media::Brush;
-
-    clearThemeResources(RootGrid().Resources());
-    auto const applicationResources = Application::Current().Resources();
-    auto const brush = [&applicationResources](wchar_t const* key)
-    { return applicationResources.Lookup(box_value(key)).as<Brush>(); };
-
+    _themeOverride.reset();
+    auto const resources = RootGrid().Resources();
+    clearThemeResources(resources);
     RootGrid().Background(nullptr);
-    ModernNavigation().ClearValue(Microsoft::UI::Xaml::Controls::Control::BackgroundProperty());
-    ModernInspector().Background(brush(L"CardBackgroundFillColorDefaultBrush"));
-    ModernNowPlaying().Background(brush(L"CardBackgroundFillColorDefaultBrush"));
-    ModernTrackSurface().Background(nullptr);
-    ModernTrackList().ClearValue(Microsoft::UI::Xaml::Controls::Control::BackgroundProperty());
-    ModernColumnHeaders().ClearValue(Microsoft::UI::Xaml::Controls::Control::BackgroundProperty());
-    ClassicShell().Background(nullptr);
-    ClassicTrackSurface().Background(nullptr);
-    ClassicTrackList().ClearValue(Microsoft::UI::Xaml::Controls::Control::BackgroundProperty());
-    ClassicToolbar().Background(brush(L"CardBackgroundFillColorDefaultBrush"));
-    ClassicLibraryTree().Background(brush(L"ApplicationPageBackgroundThemeBrush"));
-    ClassicInspector().Background(brush(L"ApplicationPageBackgroundThemeBrush"));
-    ClassicColumnHeaders().ClearValue(Microsoft::UI::Xaml::Controls::Control::BackgroundProperty());
-    ClassicStatusBar().Background(brush(L"CardBackgroundFillColorDefaultBrush"));
-    ClassicToolbar().CornerRadius({
-      .TopLeft = kClassicCornerRadius,
-      .TopRight = kClassicCornerRadius,
-      .BottomRight = kClassicCornerRadius,
-      .BottomLeft = kClassicCornerRadius,
-    });
-    ClassicStatusBar().CornerRadius({
-      .TopLeft = kClassicCornerRadius,
-      .TopRight = kClassicCornerRadius,
-      .BottomRight = kClassicCornerRadius,
-      .BottomLeft = kClassicCornerRadius,
-    });
+    setClassicChromeCornerRadius(resources, kClassicChromeCornerRadius);
+    rebuildForTheme();
   }
 
   void MainWindow::updateStatus(std::string const& status)
   {
-    StatusText().Text(to_hstring(status));
+    // The shell retains the message, so a generation built later still shows it.
+    if (_shellBuilderPtr)
+    {
+      _shellBuilderPtr->reportStatus(status);
+    }
   }
 } // namespace winrt::Aobus::implementation

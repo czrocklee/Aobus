@@ -3,7 +3,7 @@
 
 #include "track/TrackListController.h"
 
-#include "platform/WindowsStringResources.h"
+#include "platform/StringResources.h"
 #include "track/TrackCellItem.h"
 #include "track/TrackItemView.h"
 #include "track/TrackRowItem.h"
@@ -64,31 +64,41 @@ namespace ao::winui
     class TrackItemMaterializer final
     {
     public:
-      TrackItemMaterializer(std::shared_ptr<rt::AppRuntime> inputRuntimePtr,
-                            std::shared_ptr<rt::TrackListProjection> inputProjectionPtr,
+      TrackItemMaterializer(rt::AppRuntime& inputRuntime,
+                            rt::TrackListProjection& inputProjection,
                             uimodel::TrackDisplayIndex displayIndex,
-                            std::vector<TrackColumnCellSpec> columns)
-        : _runtimePtr{std::move(inputRuntimePtr)}
-        , _projectionPtr{std::move(inputProjectionPtr)}
+                            std::vector<TrackColumnCellSpec> columns,
+                            std::weak_ptr<void> lifetimePtr)
+        : _runtime{&inputRuntime}
+        , _projection{&inputProjection}
         , _displayIndex{std::move(displayIndex)}
         , _columns{std::move(columns)}
+        , _lifetimePtr{std::move(lifetimePtr)}
       {
-        auto const projectionPtr = _projectionPtr;
-        auto const runtimePtr = _runtimePtr;
-        _rows.reset(projectionPtr->size(),
-                    [projectionPtr, runtimePtr](std::size_t const index) -> std::optional<rt::TrackRow>
+        auto const* const projection = _projection;
+        auto* const runtime = _runtime;
+        auto const bindingPtr = _lifetimePtr;
+        _rows.reset(projection->size(),
+                    [projection, runtime, bindingPtr](std::size_t const index) -> std::optional<rt::TrackRow>
                     {
-                      if (index >= projectionPtr->size())
+                      if (bindingPtr.expired() || index >= projection->size())
                       {
                         return std::nullopt;
                       }
 
-                      return runtimePtr->library().reader().trackRow(projectionPtr->trackIdAt(index));
+                      return runtime->library().reader().trackRow(projection->trackIdAt(index));
                     });
       }
 
       winrt::Windows::Foundation::IInspectable itemAt(std::size_t const displayIndex)
       {
+        auto const bindingPtr = _lifetimePtr.lock();
+
+        if (!bindingPtr)
+        {
+          return nullptr;
+        }
+
         auto const optItem = _displayIndex.itemAt(displayIndex);
 
         if (!optItem)
@@ -98,7 +108,7 @@ namespace ao::winui
 
         if (optItem->kind == uimodel::TrackDisplayItemKind::GroupHeader)
         {
-          auto const group = _projectionPtr->groupAt(optItem->groupIndex);
+          auto const group = _projection->groupAt(optItem->groupIndex);
           auto heading = uimodel::formatTrackGroupHeading(kHeadingText, group.heading);
           auto optMonogram = uimodel::trackGroupCoverArtMonogram(group.heading);
           return winrt::make<winrt::Aobus::implementation::TrackRowItem>(
@@ -125,11 +135,12 @@ namespace ao::winui
       }
 
     private:
-      std::shared_ptr<rt::AppRuntime> _runtimePtr;
-      std::shared_ptr<rt::TrackListProjection> _projectionPtr;
+      rt::AppRuntime* _runtime = nullptr;
+      rt::TrackListProjection* _projection = nullptr;
       uimodel::TrackDisplayIndex _displayIndex;
       std::vector<TrackColumnCellSpec> _columns;
       uimodel::IndexedTrackRowCache _rows;
+      std::weak_ptr<void> _lifetimePtr;
     };
 
     bool materializeStoredColumns(std::vector<uimodel::TrackColumnState>& stored,
@@ -191,12 +202,11 @@ namespace ao::winui
     unbind();
   }
 
-  void TrackListController::bind(std::shared_ptr<rt::AppRuntime> runtimePtr,
-                                 uimodel::TrackColumnLayoutState& columnLayouts)
+  void TrackListController::bind(rt::AppRuntime& runtime, uimodel::TrackColumnLayoutState& columnLayouts)
   {
     unbind();
-    _runtimePtr = std::move(runtimePtr);
-    _runtime = _runtimePtr.get();
+    resetPresentation();
+    _runtime = &runtime;
     _columnLayouts = &columnLayouts;
     _viewProjectionSub = _runtime->views().onProjectionChanged(
       [this](rt::TrackListProjectionChanged const& changed) noexcept
@@ -209,24 +219,47 @@ namespace ao::winui
     reload();
   }
 
-  void TrackListController::unbind()
+  void TrackListController::unbind() noexcept
   {
-    _projectionSub.reset();
-    _viewProjectionSub.reset();
+    // Invalidate materializers and subscriptions before releasing the last
+    // projection owner. Their closures borrow the runtime directly.
+    _bindingLifetimePtr.reset();
+
+    try
+    {
+      _projectionSub.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Projection unsubscription is best-effort after callbacks are invalidated.
+    catch (...)
+    {
+    }
+
+    try
+    {
+      _viewProjectionSub.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): View unsubscription is best-effort after callbacks are invalidated.
+    catch (...)
+    {
+    }
+
     _projectionPtr.reset();
     _projectionInvalidated = false;
     _columns.clear();
-    _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
-    _headers.Clear();
     _viewId = rt::kInvalidViewId;
     _columnLayouts = nullptr;
     _runtime = nullptr;
-    _runtimePtr.reset();
 
-    if (_onChanged)
-    {
-      _onChanged();
-    }
+    // Drop the old item view before the runtime owner can disappear. Rebuilding
+    // the empty native vectors is a rebind's concern, not a teardown's.
+    _items = nullptr;
+    _headers = nullptr;
+  }
+
+  void TrackListController::resetPresentation()
+  {
+    _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
+    _headers = winrt::single_threaded_observable_vector<winrt::Windows::Foundation::IInspectable>();
   }
 
   void TrackListController::reload()
@@ -252,12 +285,7 @@ namespace ao::winui
     if (!view)
     {
       _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
-
-      if (_onChanged)
-      {
-        _onChanged();
-      }
-
+      _changed.emit();
       return;
     }
 
@@ -293,6 +321,7 @@ namespace ao::winui
 
   void TrackListController::resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr)
   {
+    _bindingLifetimePtr.reset();
     _projectionSub.reset();
     _projectionPtr = std::move(projectionPtr);
     _projectionInvalidated = false;
@@ -302,15 +331,11 @@ namespace ao::winui
     {
       _columns.clear();
       _headers.Clear();
-
-      if (_onChanged)
-      {
-        _onChanged();
-      }
-
+      _changed.emit();
       return;
     }
 
+    _bindingLifetimePtr = std::make_shared<int>(0);
     _projectionSub = _projectionPtr->subscribe([this](rt::TrackListProjectionDeltaBatch const& batch) noexcept
                                                { handleProjectionBatch(batch); });
   }
@@ -328,13 +353,9 @@ namespace ao::winui
       // run synchronously from subscribe(), so releasing the last owner here would
       // destroy the projection while one of its member functions is still active.
       _projectionInvalidated = true;
+      _bindingLifetimePtr.reset();
       _items = makeTrackItemView(0, {}, uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
-
-      if (_onChanged)
-      {
-        _onChanged();
-      }
-
+      _changed.emit();
       return;
     }
 
@@ -367,18 +388,15 @@ namespace ao::winui
     }
 
     auto const displayCount = displayIndex.displayCount();
-    auto materializerPtr =
-      std::make_shared<TrackItemMaterializer>(_runtimePtr, _projectionPtr, std::move(displayIndex), _columns);
+    auto materializerPtr = std::make_shared<TrackItemMaterializer>(
+      *_runtime, *_projectionPtr, std::move(displayIndex), _columns, std::weak_ptr<void>{_bindingLifetimePtr});
     _items = makeTrackItemView(
       displayCount,
       [materializerPtr = std::move(materializerPtr)](std::size_t const index)
       { return materializerPtr->itemAt(index); },
       uimodel::IndexedTrackRowCache::kDefaultMaximumEntries);
 
-    if (_onChanged)
-    {
-      _onChanged();
-    }
+    _changed.emit();
   }
 
   void TrackListController::refreshColumns()

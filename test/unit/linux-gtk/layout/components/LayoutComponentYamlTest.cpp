@@ -6,7 +6,6 @@
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
@@ -17,6 +16,8 @@
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
 #include <ao/uimodel/layout/document/LayoutYaml.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/yaml/RymlAdapter.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -42,14 +43,14 @@ namespace ao::gtk::layout::test
     SECTION("app.actionButton builds from YAML and binds actions")
     {
       auto actionRegistry = ActionRegistry{};
-      auto runtimeState = LayoutRuntimeState{};
+      auto runtimeState = uimodel::LayoutRuntimeState{};
       auto dependencies = GtkUiDependencies{};
       auto actionCtx = LayoutBuildContext{.registry = registry,
                                           .actionRegistry = actionRegistry,
                                           .runtime = fixture.runtime(),
                                           .parentWindow = fixture.window(),
                                           .runtimeState = runtimeState,
-                                          .buildState = LayoutBuildStateView{runtimeState},
+                                          .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                           .dependencies = dependencies};
       auto const* const yaml = R"(
       type: app.actionButton

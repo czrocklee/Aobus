@@ -345,9 +345,9 @@ Nuance beyond the table:
   backend resource wrappers or domain services.
 - `*Coordinator` orchestrates a multi-object workflow where no single
   controller or service should own the sequence.
-- `*Component` is reserved for the declarative layout runtime's composable
-  units. Ordinary GTK widgets are not components unless they implement the
-  layout component contract.
+- `*Component` is reserved for a frontend layout runtime's composable units.
+  Ordinary GTK widgets or WinUI controls are not components unless they
+  implement their frontend's layout component contract.
 - `*Host` owns and embeds a surface, page, layout runtime, or component tree.
 - `*Actions` names a cohesive command set over a subsystem, expressed as a
   command interface (`ImportExportActions`) or a free-function command module

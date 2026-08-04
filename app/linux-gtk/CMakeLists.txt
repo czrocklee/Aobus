@@ -110,10 +110,9 @@ add_library(aobus-gtk-lib STATIC
     portal/ImportExportCoordinatorPolicy.cpp
     portal/LibraryImportExportWorkflow.cpp
 
+    layout/document/LayoutDialect.cpp
     layout/document/LayoutPresets.cpp
-    layout/runtime/LayoutBuildContext.cpp
     layout/runtime/LayoutRuntime.cpp
-    layout/runtime/StatefulComponentState.cpp
     layout/runtime/ComponentRegistry.cpp
     layout/runtime/ComponentInteractionController.cpp
     layout/runtime/ComponentTooltipController.cpp

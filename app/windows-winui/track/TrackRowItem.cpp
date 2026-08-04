@@ -4,7 +4,7 @@
 #include "track/TrackRowItem.h"
 
 #include "pch.h"
-#include "platform/WindowsStringResources.h"
+#include "platform/StringResources.h"
 #include "track/TrackCellItem.h"
 
 #if __has_include("TrackRowItem.g.cpp")

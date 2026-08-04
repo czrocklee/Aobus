@@ -3,8 +3,6 @@
 
 #include "playback/PlaybackTimeControl.h"
 
-#include "app/WinUiDependencies.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
@@ -36,14 +34,16 @@ namespace ao::winui
     , _loaded{_text.IsLoaded()}
     , _presentationActive{config.presentationActive}
   {
-    _loadedToken = _text.Loaded(
+    _loadedRevoker = _text.Loaded(
+      winrt::auto_revoke,
       [this](winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
       {
         _loaded = true;
         renderCurrentState();
         updateRenderingRegistration();
       });
-    _unloadedToken = _text.Unloaded(
+    _unloadedRevoker = _text.Unloaded(
+      winrt::auto_revoke,
       [this](winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
       {
         _loaded = false;
@@ -54,32 +54,30 @@ namespace ao::winui
   PlaybackTimeControl::~PlaybackTimeControl()
   {
     unbind();
-
-    if (_text)
-    {
-      _text.Loaded(_loadedToken);
-      _text.Unloaded(_unloadedToken);
-    }
   }
 
-  void PlaybackTimeControl::bind(WinUiDependencies const& dependencies)
+  void PlaybackTimeControl::bind(ao::rt::PlaybackService& playback)
   {
     unbind();
+    resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::PlaybackPositionViewModel>(
-      dependencies.runtime.playback(), [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
+      playback, [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
   }
 
-  void PlaybackTimeControl::unbind()
+  void PlaybackTimeControl::unbind() noexcept
   {
-    stopRendering();
     _viewModelPtr.reset();
+    stopRendering();
     _interpolator.reset();
     _state = {};
     _hasState = false;
     _dirty = true;
     _lastElapsed = std::chrono::seconds{0};
     _lastDuration = std::chrono::seconds{0};
+  }
 
+  void PlaybackTimeControl::resetPresentation()
+  {
     if (_text && _presentationActive)
     {
       _text.Text(winrt::to_hstring(uimodel::describeTimeTemplate(_mode)));
@@ -148,7 +146,8 @@ namespace ao::winui
 
     if (shouldRender && !_rendering)
     {
-      _renderingToken = winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
+      _renderingRevoker = winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
+        winrt::auto_revoke,
         [this](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&)
         { renderFrame(); });
       _rendering = true;
@@ -159,14 +158,14 @@ namespace ao::winui
     }
   }
 
-  void PlaybackTimeControl::stopRendering()
+  void PlaybackTimeControl::stopRendering() noexcept
   {
     if (!_rendering)
     {
       return;
     }
 
-    winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(_renderingToken);
+    _renderingRevoker.revoke();
     _rendering = false;
   }
 

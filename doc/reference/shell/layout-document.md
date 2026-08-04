@@ -123,6 +123,7 @@ layout:
 - A stateful node needs a non-empty unique id after expansion to persist runtime state.
 - Editor save rejects duplicate stateful ids; anonymous stateful nodes are warnings and remain non-persistent.
 - Component type, property, child-count, surface, and action-binding validation uses the live catalog from the [catalog reference](layout-catalog.md).
+- `widthRequest` and `heightRequest` must be finite numbers no greater than `2,147,483,647`; any negative value explicitly requests no minimum, while omission preserves the frontend default.
 - Preset ids used as file names reject empty values, `/`, `\`, and `..`.
 
 ## Resource limits
@@ -173,6 +174,7 @@ There is no automatic migration, quarantine, or normalization policy.
 - [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) defines explicit YAML mapping and validation.
 - [`LayoutPreparation.h`](../../../app/include/ao/uimodel/layout/document/LayoutPreparation.h) defines the limits and prepared proof type.
 - [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) defines authored metering and bounded template expansion.
+- [`LayoutValidation.cpp`](../../../app/uimodel/layout/document/LayoutValidation.cpp) defines whole-candidate catalog, surface, action, and common-field validation.
 - [`LayoutPresets.cpp`](../../../app/linux-gtk/layout/document/LayoutPresets.cpp) and GTK layout YAML resources own built-in presets.
 
 ## Test authority
@@ -180,6 +182,7 @@ There is no automatic migration, quarantine, or normalization policy.
 - [`LayoutModelTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutModelTest.cpp) protects fields, value classification, tooltips, strict node/list validation, version dispatch, unknown-key rejection, and round trip.
 - [`LayoutTemplateExpansionTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp) protects template success and error nodes.
 - [`LayoutPreparationTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutPreparationTest.cpp) protects tree-limit boundaries and expansion multiplication.
+- [`LayoutValidationTest.cpp`](../../../test/unit/uimodel/layout/document/LayoutValidationTest.cpp) protects catalog, surface, action, and common-field rejection.
 - [`ShellLayoutStoreTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutStoreTest.cpp) protects the group, file ceiling, and rejected-file preservation boundary.
 
 ## Related documents

@@ -4,118 +4,31 @@
 #include "MainWindow.xaml.h"
 #include "app/LibrarySession.h"
 #include "image/CoverArtPresenter.h"
+#include "layout/ShellBuilder.h"
 #include "pch.h"
-#include "platform/ScopedBooleanFlag.h"
-#include "platform/WindowsStringResources.h"
+#include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include <ao/CoreIds.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
-#include <ao/rt/TrackPresentation.h>
-#include <ao/rt/ViewIds.h>
-#include <ao/rt/VirtualListIds.h>
-#include <ao/rt/library/Library.h>
-#include <ao/rt/library/LibraryReader.h>
-#include <ao/uimodel/library/list/ListTreeProjection.h>
-#include <ao/uimodel/library/presentation/TrackPresentationPickerViewModel.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 #include <ao/uimodel/presentation/PresentationTextCatalog.h>
-#include <ao/utility/Path.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
-#include <winrt/Microsoft.UI.Xaml.Input.h>
-#include <winrt/Microsoft.UI.Xaml.Media.h>
 #include <winrt/Windows.Foundation.h>
 
 #include <cmath>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 namespace winrt::Aobus::implementation
 {
-  using Microsoft::UI::Xaml::Visibility;
-
   namespace
   {
     using ProjectedTrackRowItem = ::winrt::Aobus::TrackRowItem;
-
-    constexpr double kNavigationItemSpacing = 6.0;
-    constexpr double kNavigationFilterOpacity = 0.55;
-
-    Microsoft::UI::Xaml::Controls::Symbol navigationSymbol(ao::uimodel::ListTreeProjectionRow const& row) noexcept
-    {
-      if (row.id == ao::rt::kAllTracksListId)
-      {
-        return Microsoft::UI::Xaml::Controls::Symbol::MusicInfo;
-      }
-
-      return Microsoft::UI::Xaml::Controls::Symbol::Find;
-    }
-
-    hstring navigationLabel(ao::uimodel::ListTreeProjectionRow const& row)
-    {
-      return row.id == ao::rt::kAllTracksListId ? ao::winui::resourceHstring(L"AllTracks") : to_hstring(row.name);
-    }
-
-    Microsoft::UI::Xaml::FrameworkElement navigationContent(ao::uimodel::ListTreeProjectionRow const& row,
-                                                            bool const includeIcon)
-    {
-      auto content = Microsoft::UI::Xaml::Controls::StackPanel{};
-      content.Orientation(Microsoft::UI::Xaml::Controls::Orientation::Horizontal);
-      content.Spacing(kNavigationItemSpacing);
-      content.Tag(box_value(row.id.raw()));
-
-      if (includeIcon)
-      {
-        auto icon = Microsoft::UI::Xaml::Controls::SymbolIcon{navigationSymbol(row)};
-        content.Children().Append(icon);
-      }
-
-      auto label = Microsoft::UI::Xaml::Controls::TextBlock{};
-      label.Text(navigationLabel(row));
-      label.TextTrimming(Microsoft::UI::Xaml::TextTrimming::CharacterEllipsis);
-      content.Children().Append(label);
-
-      if (!row.localExpression.empty())
-      {
-        auto filterText = std::string{"["};
-        filterText += row.localExpression;
-        filterText += ']';
-
-        auto filter = Microsoft::UI::Xaml::Controls::TextBlock{};
-        filter.Text(to_hstring(filterText));
-        filter.Opacity(kNavigationFilterOpacity);
-        filter.TextTrimming(Microsoft::UI::Xaml::TextTrimming::CharacterEllipsis);
-        content.Children().Append(filter);
-      }
-
-      return content;
-    }
-
-    ProjectedTrackRowItem trackRowFromEventSource(Windows::Foundation::IInspectable const& source)
-    {
-      auto current = source.try_as<Microsoft::UI::Xaml::DependencyObject>();
-
-      while (current)
-      {
-        if (auto const element = current.try_as<Microsoft::UI::Xaml::FrameworkElement>(); element)
-        {
-          if (auto const row = element.DataContext().try_as<ProjectedTrackRowItem>(); row)
-          {
-            return row;
-          }
-        }
-
-        current = Microsoft::UI::Xaml::Media::VisualTreeHelper::GetParent(current);
-      }
-
-      return nullptr;
-    }
   } // namespace
 
   void MainWindow::reconcileLibrary()
@@ -125,12 +38,6 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    ModernTrackList().ItemsSource(_trackListPtr->items());
-    ClassicTrackList().ItemsSource(_trackListPtr->items());
-    ModernColumnHeaders().ItemsSource(_trackListPtr->headers());
-    ClassicColumnHeaders().ItemsSource(_trackListPtr->headers());
-    ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(_session->runtime().musicRoot())));
-
     if (auto const listId = _trackListPtr->activeListId();
         _session->presentationPreferences().presentations.contains(listId))
     {
@@ -139,160 +46,6 @@ namespace winrt::Aobus::implementation
         updateStatus(ao::winui::formatResource("PresentationFailedFormat", selected.error().message));
       }
     }
-
-    rebuildNavigation();
-    updateBrowserHeader();
-    updateTrackSurfaceWidth();
-  }
-
-  void MainWindow::rebuildNavigation()
-  {
-    if (_session == nullptr || _trackListPtr == nullptr)
-    {
-      return;
-    }
-
-    auto const lists = _session->runtime().library().reader().lists();
-    auto const projection = ao::uimodel::buildListTreeProjection(lists);
-    auto const activeListId = _trackListPtr->activeListId();
-    [[maybe_unused]] auto const applyingNavigation = ao::winui::ScopedBooleanFlag{_applyingNavigation};
-    ModernNavigation().MenuItems().Clear();
-    ClassicLibraryTree().RootNodes().Clear();
-    _navigationEntriesById.clear();
-
-    auto modernItems = std::map<ao::ListId, Microsoft::UI::Xaml::Controls::NavigationViewItem>{};
-    auto classicItems = std::map<ao::ListId, Microsoft::UI::Xaml::Controls::TreeViewNode>{};
-
-    for (auto const& [id, row] : projection.rowsById)
-    {
-      auto modernItem = Microsoft::UI::Xaml::Controls::NavigationViewItem{};
-      modernItem.Content(navigationContent(row, false));
-      modernItem.Icon(Microsoft::UI::Xaml::Controls::SymbolIcon{navigationSymbol(row)});
-      modernItem.Tag(box_value(id.raw()));
-      auto const entry = NavigationEntry{
-        .listId = id,
-        .label = to_string(navigationLabel(row)),
-      };
-      _navigationEntriesById.emplace(id, entry);
-      modernItems.emplace(id, modernItem);
-
-      auto classicItem = Microsoft::UI::Xaml::Controls::TreeViewNode{};
-      classicItem.Content(navigationContent(row, true));
-      classicItems.emplace(id, classicItem);
-    }
-
-    for (auto const& [id, row] : projection.rowsById)
-    {
-      auto& modernItem = modernItems.at(id);
-      auto& classicItem = classicItems.at(id);
-
-      for (auto const childId : row.childIds)
-      {
-        if (auto const child = modernItems.find(childId); child != modernItems.end())
-        {
-          modernItem.MenuItems().Append(child->second);
-          classicItem.Children().Append(classicItems.at(childId));
-        }
-      }
-
-      auto const hasChildren = !row.childIds.empty();
-      modernItem.IsExpanded(hasChildren);
-      classicItem.IsExpanded(hasChildren);
-    }
-
-    for (auto const rootId : projection.rootIds)
-    {
-      if (auto const root = modernItems.find(rootId); root != modernItems.end())
-      {
-        ModernNavigation().MenuItems().Append(root->second);
-        ClassicLibraryTree().RootNodes().Append(classicItems.at(rootId));
-      }
-    }
-
-    auto const defaultModern = modernItems.find(ao::rt::kAllTracksListId);
-    auto const defaultClassic = classicItems.find(ao::rt::kAllTracksListId);
-
-    if (defaultModern != modernItems.end() && defaultClassic != classicItems.end())
-    {
-      auto selectedModern = defaultModern->second;
-      auto selectedClassic = defaultClassic->second;
-
-      if (auto const modern = modernItems.find(activeListId); modern != modernItems.end())
-      {
-        selectedModern = modern->second;
-        selectedClassic = classicItems.at(activeListId);
-      }
-
-      ModernNavigation().SelectedItem(selectedModern);
-      ClassicLibraryTree().SelectedNode(selectedClassic);
-    }
-  }
-
-  void MainWindow::navigateTo(NavigationEntry const& entry)
-  {
-    if (_trackListPtr == nullptr || entry.listId == ao::kInvalidListId)
-    {
-      return;
-    }
-
-    auto const navigated = _trackListPtr->navigateTo(entry.listId);
-
-    if (!navigated)
-    {
-      updateStatus(ao::winui::formatResource("NavigationFailedFormat", navigated.error().message));
-      return;
-    }
-
-    if (_session != nullptr)
-    {
-      if (_session->presentationPreferences().presentations.contains(entry.listId))
-      {
-        auto const presentation = _session->presentationForList(entry.listId);
-
-        if (auto const selected = _trackListPtr->selectPresentation(presentation); !selected)
-        {
-          updateStatus(ao::winui::formatResource("PresentationFailedFormat", selected.error().message));
-          return;
-        }
-      }
-    }
-
-    updateBrowserHeader();
-    updateStatus(ao::winui::formatResource("ListStatusFormat", entry.label));
-  }
-
-  void MainWindow::updateBrowserHeader()
-  {
-    if (_trackListPtr == nullptr)
-    {
-      return;
-    }
-
-    auto const count = _trackListPtr->rowCount();
-    ModernTrackList().ItemsSource(_trackListPtr->items());
-    ClassicTrackList().ItemsSource(_trackListPtr->items());
-    auto const countText = count == 1 ? ao::winui::resourceString("TrackCountOne")
-                                      : ao::winui::formatResource("TrackCountManyFormat", count);
-    ModernTrackCount().Text(to_hstring(countText));
-    ClassicTrackCount().Text(to_hstring(countText));
-
-    auto const presentationId = _trackListPtr->activePresentationId();
-    auto const optText = ao::uimodel::PresentationTextCatalog{}.builtinTrackPresentation(presentationId);
-    ModernPresentationButton().Content(box_value(to_hstring(ao::winui::stableResourceString(
-      "Presentation_", presentationId, optText ? optText->label : std::string_view{presentationId}))));
-    updateTrackSurfaceWidth();
-  }
-
-  void MainWindow::updateTrackSurfaceWidth()
-  {
-    if (_trackListPtr == nullptr)
-    {
-      return;
-    }
-
-    auto const width = _trackListPtr->contentWidth();
-    ModernTrackSurface().Width(width);
-    ClassicTrackSurface().Width(width);
   }
 
   void MainWindow::OnGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
@@ -396,208 +149,25 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::clearGroupCoverPresenters()
+  void MainWindow::clearGroupCoverPresenters() noexcept
   {
     _groupCoverPresenters.clear();
   }
 
-  void MainWindow::OnTrackViewportSizeChanged(Windows::Foundation::IInspectable const& sender,
-                                              Microsoft::UI::Xaml::SizeChangedEventArgs const& args)
+  void MainWindow::toggleInspector()
   {
-    if (_trackListPtr != nullptr && args.NewSize().Width > 0.0)
-    {
-      auto const viewport = sender.try_as<Microsoft::UI::Xaml::FrameworkElement>();
-      auto const trailingChromeWidth = viewport ? unbox_value_or<double>(viewport.Tag(), 12.0) : 12.0;
-      _trackListPtr->setViewportWidth(args.NewSize().Width, trailingChromeWidth);
-      updateTrackSurfaceWidth();
-    }
-  }
-
-  void MainWindow::OnNavigationSelectionChanged(
-    Windows::Foundation::IInspectable const& /*sender*/,
-    Microsoft::UI::Xaml::Controls::NavigationViewSelectionChangedEventArgs const& args)
-  {
-    if (_applyingNavigation || _trackListPtr == nullptr)
+    // Asked against what the user can see rather than against the last request,
+    // so the command reads the same at every width: the first press on a shell
+    // nobody has asked anything of hides an inline inspector and reveals an
+    // overlay, which is what each of them is showing at that moment.
+    if (!_shellBuilderPtr)
     {
       return;
     }
 
-    if (auto item = args.SelectedItemContainer(); item)
-    {
-      auto const listId = ao::ListId{unbox_value_or<std::uint32_t>(item.Tag(), 0U)};
-
-      if (auto const entry = _navigationEntriesById.find(listId); entry != _navigationEntriesById.end())
-      {
-        navigateTo(entry->second);
-      }
-    }
-  }
-
-  void MainWindow::OnClassicTreeSelectionChanged(
-    Microsoft::UI::Xaml::Controls::TreeView const& sender,
-    Microsoft::UI::Xaml::Controls::TreeViewSelectionChangedEventArgs const& /*args*/)
-  {
-    if (_applyingNavigation || _trackListPtr == nullptr)
-    {
-      return;
-    }
-
-    if (auto node = sender.SelectedNode(); node)
-    {
-      auto const content = node.Content().try_as<Microsoft::UI::Xaml::FrameworkElement>();
-
-      if (!content)
-      {
-        return;
-      }
-
-      auto const listId = ao::ListId{unbox_value_or<std::uint32_t>(content.Tag(), 0U)};
-
-      if (auto const entry = _navigationEntriesById.find(listId); entry != _navigationEntriesById.end())
-      {
-        navigateTo(entry->second);
-      }
-    }
-  }
-
-  void MainWindow::OnPresentationClicked(Windows::Foundation::IInspectable const& sender,
-                                         Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
-  {
-    if (_trackListPtr == nullptr)
-    {
-      return;
-    }
-
-    auto flyout = Microsoft::UI::Xaml::Controls::MenuFlyout{};
-    auto const textCatalog = ao::uimodel::PresentationTextCatalog{};
-    auto weak = get_weak();
-
-    for (auto const& preset : ao::rt::builtinTrackPresentationPresets())
-    {
-      auto item = Microsoft::UI::Xaml::Controls::MenuFlyoutItem{};
-      auto const eligibility = ao::uimodel::trackPresentationEligibility(_trackListPtr->activeListId(), preset.spec.id);
-      auto const optText = textCatalog.builtinTrackPresentation(preset.spec.id);
-      item.Text(to_hstring(ao::winui::stableResourceString(
-        "Presentation_", preset.spec.id, optText ? optText->label : std::string_view{preset.spec.id})));
-      item.IsEnabled(eligibility.enabled);
-
-      if (!eligibility.enabled)
-      {
-        Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-          item, box_value(to_hstring(eligibility.disabledReason)));
-      }
-
-      item.Click(
-        [weak, presentationId = preset.spec.id](
-          Windows::Foundation::IInspectable const& /*sender*/, Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
-        {
-          if (auto self = weak.get(); self && self->_trackListPtr)
-          {
-            auto selected = self->_trackListPtr->selectPresentation(presentationId);
-
-            if (!selected)
-            {
-              self->updateStatus(ao::winui::formatResource("PresentationFailedFormat", selected.error().message));
-              return;
-            }
-
-            if (self->_session != nullptr)
-            {
-              auto const listId = self->_trackListPtr->activeListId();
-              self->_session->presentationPreferences().presentations[listId] = presentationId;
-              std::ignore = self->_session->saveSettings();
-            }
-
-            self->updateBrowserHeader();
-          }
-        });
-      flyout.Items().Append(item);
-    }
-
-    flyout.ShowAt(sender.as<Microsoft::UI::Xaml::FrameworkElement>());
-  }
-
-  void MainWindow::OnInspectorToggleClicked(Windows::Foundation::IInspectable const& /*sender*/,
-                                            Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
-  {
-    _inspectorRequested = !_inspectorRequested;
-    applyShellState(RootGrid().ActualWidth());
-  }
-
-  void MainWindow::OnTrackSelectionChanged(Windows::Foundation::IInspectable const& sender,
-                                           Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const& /*args*/)
-  {
-    if (_trackListPtr == nullptr || _applyingTrackSelection)
-    {
-      return;
-    }
-
-    auto list = sender.as<Microsoft::UI::Xaml::Controls::ListView>();
-    auto peer = get_abi(list) == get_abi(ModernTrackList()) ? ClassicTrackList() : ModernTrackList();
-    auto const selectedItems = list.SelectedItems();
-    auto const peerItems = peer.SelectedItems();
-    auto selectionsMatch = selectedItems.Size() == peerItems.Size();
-
-    for (std::uint32_t index = 0; selectionsMatch && index < selectedItems.Size(); ++index)
-    {
-      selectionsMatch = get_abi(selectedItems.GetAt(index)) == get_abi(peerItems.GetAt(index));
-    }
-
-    if (!selectionsMatch)
-    {
-      [[maybe_unused]] auto const applyingTrackSelection = ao::winui::ScopedBooleanFlag{_applyingTrackSelection};
-      peerItems.Clear();
-
-      for (auto const& item : selectedItems)
-      {
-        peerItems.Append(item);
-      }
-    }
-
-    auto selected = std::vector<ao::TrackId>{};
-
-    for (auto const& item : selectedItems)
-    {
-      if (auto row = item.try_as<ProjectedTrackRowItem>(); row && !row.IsGroupHeader() && row.TrackId() != 0)
-      {
-        selected.emplace_back(row.TrackId());
-      }
-    }
-
-    _trackListPtr->publishSelection(selected);
-    auto summary = ao::winui::resourceString("NoSelection");
-
-    if (selected.size() == 1)
-    {
-      summary = ao::winui::resourceString("ItemSelectedOne");
-    }
-    else if (!selected.empty())
-    {
-      summary = ao::winui::formatResource("ItemsSelectedFormat", selected.size());
-    }
-
-    ModernSelectionSummary().Text(to_hstring(summary));
-  }
-
-  void MainWindow::OnTrackDoubleTapped(Windows::Foundation::IInspectable const& /*sender*/,
-                                       Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const& args)
-  {
-    if (_trackListPtr == nullptr || _session == nullptr)
-    {
-      return;
-    }
-
-    if (auto row = trackRowFromEventSource(args.OriginalSource()); row && !row.IsGroupHeader())
-    {
-      auto played = _trackListPtr->play(ao::TrackId{row.TrackId()},
-                                        [this](ao::rt::ViewId const viewId, ao::TrackId const trackId)
-                                        { return _session->playTrack(viewId, trackId); });
-
-      if (!played)
-      {
-        updateStatus(ao::winui::formatResource("PlaybackFailedFormat", played.error().message));
-      }
-    }
+    auto const width = RootGrid().ActualWidth();
+    _optInspectorRequest = !_shellBuilderPtr->shellState().inspectorRevealed;
+    applyShellState(width);
   }
 
   void MainWindow::OnColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
@@ -670,8 +240,7 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void MainWindow::OnColumnsClicked(Windows::Foundation::IInspectable const& /*sender*/,
-                                    Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
+  void MainWindow::showColumnsMenu()
   {
     if (_trackListPtr == nullptr)
     {
@@ -722,10 +291,9 @@ namespace winrt::Aobus::implementation
       flyout.Items().Append(item);
     }
 
-    auto const target = ModernShell().Visibility() == Microsoft::UI::Xaml::Visibility::Visible
-                          ? ModernPresentationButton().as<Microsoft::UI::Xaml::FrameworkElement>()
-                          : ClassicTrackList().as<Microsoft::UI::Xaml::FrameworkElement>();
-    flyout.ShowAt(target);
+    // The menu is raised by a command rather than by a widget, so it anchors on
+    // the host: the frame has no element of a generation it does not own.
+    flyout.ShowAt(ShellLayoutHost());
   }
 
   void MainWindow::executeSort(std::string const& columnId)
@@ -756,7 +324,5 @@ namespace winrt::Aobus::implementation
     {
       updateStatus(ao::winui::formatResource("ColumnSettingsFailedFormat", saved.error().message));
     }
-
-    updateBrowserHeader();
   }
 } // namespace winrt::Aobus::implementation

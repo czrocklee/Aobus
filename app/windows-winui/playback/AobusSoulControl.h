@@ -28,7 +28,7 @@ namespace winrt::Aobus::implementation
     ~AobusSoulControl();
 
     void bind(ao::rt::PlaybackService& playback);
-    void unbind();
+    void unbind() noexcept;
     void setBaseStrokeWidth(double width);
     void setInnerGlyphScale(double scale);
     void setTransportIcon(ao::uimodel::TransportIcon icon);
@@ -36,11 +36,14 @@ namespace winrt::Aobus::implementation
     void setPresentationActive(bool active);
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     void applyViewState(ao::uimodel::AobusSoulViewState const& state);
     void updateAnimationRegistration();
     void updateGeometry();
     void renderFrame();
-    void stopAnimation();
+    void stopAnimation() noexcept;
 
     Microsoft::UI::Xaml::Controls::Grid _root{nullptr};
     Microsoft::UI::Xaml::Shapes::Ellipse _ring{nullptr};
@@ -60,7 +63,7 @@ namespace winrt::Aobus::implementation
     double _innerGlyphScale = 1.0;
     std::unique_ptr<ao::uimodel::AobusSoulViewModel> _viewModelPtr;
     std::optional<std::chrono::steady_clock::time_point> _optPreviousFrameTime;
-    event_token _renderingToken{};
+    Microsoft::UI::Xaml::Media::CompositionTarget::Rendering_revoker _renderingRevoker{};
     bool _rendering = false;
     bool _loaded = false;
     bool _windowVisible = true;

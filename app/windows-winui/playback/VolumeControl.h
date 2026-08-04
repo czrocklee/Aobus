@@ -9,10 +9,13 @@
 
 #include <memory>
 
+namespace ao::rt
+{
+  class PlaybackService;
+} // namespace ao::rt
+
 namespace ao::winui
 {
-  struct WinUiDependencies;
-
   struct VolumeControlConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::Slider slider{nullptr};
@@ -29,14 +32,17 @@ namespace ao::winui
     VolumeControl(VolumeControl&&) = delete;
     VolumeControl& operator=(VolumeControl&&) = delete;
 
-    void bind(WinUiDependencies const& dependencies);
-    void unbind();
+    void bind(rt::PlaybackService& playback);
+    void unbind() noexcept;
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     void applyState(uimodel::VolumeViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Slider _slider{nullptr};
-    winrt::event_token _valueChangedToken{};
+    winrt::Microsoft::UI::Xaml::Controls::Slider::ValueChanged_revoker _valueChangedRevoker{};
     std::unique_ptr<uimodel::VolumeViewModel> _viewModelPtr;
     bool _updating = false;
   };

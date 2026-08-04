@@ -42,6 +42,16 @@ class TestAuditTest(unittest.TestCase):
 
         self.assertEqual(testaudit._audit_case(case), [])
 
+    def test_audit_accepts_winui_frontend_layer(self):
+        case = testaudit.TestCase(
+            path=Path("/repo/test/unit/winui/layout/ThemeSurfaceTest.cpp"),
+            line=12,
+            name="ThemeSurface - authored slots resolve through the Windows theme",
+            tags=("winui", "unit", "theme"),
+        )
+
+        self.assertEqual(testaudit._audit_case(case), [])
+
     def test_audit_accepts_function_level_name(self):
         case = testaudit.TestCase(
             path=Path("/repo/test/unit/utility/Base64Test.cpp"),

@@ -7,7 +7,6 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
@@ -16,6 +15,8 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -44,14 +45,14 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto runtimeState = LayoutRuntimeState{};
+    auto runtimeState = uimodel::LayoutRuntimeState{};
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = LayoutBuildStateView{runtimeState},
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     SECTION("absoluteCanvas descriptor is registered as container")
@@ -109,14 +110,14 @@ namespace ao::gtk::layout::editor::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto runtimeState = LayoutRuntimeState{};
+    auto runtimeState = uimodel::LayoutRuntimeState{};
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = LayoutBuildStateView{runtimeState},
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     auto doc = LayoutDocument{};

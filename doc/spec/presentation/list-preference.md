@@ -114,7 +114,7 @@ Bulk installation during GTK restore suppresses persistence callbacks, so loadin
 ## Persistence and versioning
 
 GTK persists the preference map with other per-library track-view layout state through `GtkLayoutStateStore` in the library-specific `gtk_layout.yaml` store.
-WinUI persists the same semantic group in its platform application settings, keeps opaque ids across runtime replacement, and rebinds the shared committed-List deletion lifecycle to the new active runtime.
+WinUI persists the same semantic group in its platform application settings, keeps opaque ids across window/session replacement, and constructs the shared committed-List deletion lifecycle for each new active session.
 The `trackView.presentations` group carries required `version: 1` and represents the map as a sequence of `{listId, presentationId}` entries so duplicate identities can be rejected before map construction.
 The exact fields belong to the [persisted presentation-state reference](../../reference/presentation/persisted-state.md); group registration belongs to the [application managed-state surface](../../reference/persistence/application-config.md#group-registry).
 

@@ -4,72 +4,52 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
-  <data name="AppTitle.Text" xml:space="preserve"><value>Aobus</value></data>
-  <data name="FileMenu.Title" xml:space="preserve"><value>File</value></data>
-  <data name="OpenLibraryMenuItem.Text" xml:space="preserve"><value>Open Library...</value></data>
-  <data name="RescanMenuItem.Text" xml:space="preserve"><value>Rescan</value></data>
-  <data name="ViewMenu.Title" xml:space="preserve"><value>View</value></data>
-  <data name="ModernModeMenuItem.Text" xml:space="preserve"><value>Modern Mode</value></data>
-  <data name="ClassicColumnsMenuItem.Text" xml:space="preserve"><value>Columns...</value></data>
-  <data name="ReloadThemeMenuItem.Text" xml:space="preserve"><value>Reload Theme</value></data>
-  <data name="PlaybackMenu.Title" xml:space="preserve"><value>Playback</value></data>
-  <data name="PlayPauseMenuItem.Text" xml:space="preserve"><value>Play/Pause</value></data>
-  <data name="StopMenuItem.Text" xml:space="preserve"><value>Stop</value></data>
-  <data name="ClassicOpenButton.Content" xml:space="preserve"><value>Open</value></data>
-  <data name="ClassicRescanButton.Content" xml:space="preserve"><value>Rescan</value></data>
-  <data name="PropertiesHeading.Text" xml:space="preserve"><value>Properties</value></data>
-  <data name="TitleProperty.Text" xml:space="preserve"><value>Title:</value></data>
-  <data name="ArtistProperty.Text" xml:space="preserve"><value>Artist:</value></data>
-  <data name="AlbumProperty.Text" xml:space="preserve"><value>Album:</value></data>
-  <data name="ReadyStatus.Text" xml:space="preserve"><value>Ready</value></data>
+  <data name="FileMenuTitle" xml:space="preserve"><value>File</value></data>
+  <data name="OpenLibraryMenuItem" xml:space="preserve"><value>Open Library...</value></data>
+  <data name="RescanMenuItem" xml:space="preserve"><value>Rescan</value></data>
+  <data name="ViewMenuTitle" xml:space="preserve"><value>View</value></data>
+  <data name="ModernModeMenuItem" xml:space="preserve"><value>Modern Mode</value></data>
+  <data name="ClassicColumnsMenuItem" xml:space="preserve"><value>Columns...</value></data>
+  <data name="ReloadThemeMenuItem" xml:space="preserve"><value>Reload Theme</value></data>
+  <data name="PlaybackMenuTitle" xml:space="preserve"><value>Playback</value></data>
+  <data name="PlayPauseMenuItem" xml:space="preserve"><value>Play/Pause</value></data>
+  <data name="StopMenuItem" xml:space="preserve"><value>Stop</value></data>
   <data name="GroupTracksSuffix.Text" xml:space="preserve"><value>tracks</value></data>
   <data name="MoveColumnLeftMenuItem.Text" xml:space="preserve"><value>Move left</value></data>
   <data name="MoveColumnRightMenuItem.Text" xml:space="preserve"><value>Move right</value></data>
-  <data name="ModernNavigation.PaneTitle" xml:space="preserve"><value>Library</value></data>
-  <data name="ModernPresentationButton.Content" xml:space="preserve"><value>Library</value></data>
-  <data name="ModernFilter.PlaceholderText" xml:space="preserve"><value>Filter tracks</value></data>
-  <data name="ModernSelectionSummary.Text" xml:space="preserve"><value>No selection</value></data>
-  <data name="InspectorToggleButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Track details</value></data>
-  <data name="ModernMoreButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>More</value></data>
-  <data name="ModernOpenLibraryMenuItem.Text" xml:space="preserve"><value>Open Library...</value></data>
-  <data name="ModernRescanMenuItem.Text" xml:space="preserve"><value>Rescan Library</value></data>
-  <data name="ModernColumnsMenuItem.Text" xml:space="preserve"><value>Columns...</value></data>
-  <data name="ClassicModeMenuItem.Text" xml:space="preserve"><value>Classic Mode</value></data>
-  <data name="ModernReloadThemeMenuItem.Text" xml:space="preserve"><value>Reload Theme</value></data>
-  <data name="InspectorMetadataHeader.Text" xml:space="preserve"><value>Metadata</value></data>
-  <data name="InspectorTechnicalHeader.Text" xml:space="preserve"><value>Audio Properties</value></data>
-  <data name="InspectorShowEmpty.Content" xml:space="preserve"><value>Show empty fields</value></data>
+  <data name="TrackDetailsMenuItem" xml:space="preserve"><value>Track Details</value></data>
+  <data name="ModernOpenLibraryMenuItem" xml:space="preserve"><value>Open Library...</value></data>
+  <data name="ModernRescanMenuItem" xml:space="preserve"><value>Rescan Library</value></data>
+  <data name="ModernColumnsMenuItem" xml:space="preserve"><value>Columns...</value></data>
+  <data name="ClassicModeMenuItem" xml:space="preserve"><value>Classic Mode</value></data>
+  <data name="ModernReloadThemeMenuItem" xml:space="preserve"><value>Reload Theme</value></data>
+  <data name="InspectorMetadataHeading" xml:space="preserve"><value>Metadata</value></data>
+  <data name="InspectorTechnicalHeading" xml:space="preserve"><value>Audio Properties</value></data>
+  <data name="ShowEmptyFields" xml:space="preserve"><value>Show empty fields</value></data>
   <data name="HideEmptyFields" xml:space="preserve"><value>Hide empty fields</value></data>
   <data name="MissingOnSomeTracks" xml:space="preserve"><value>Missing on some tracks</value></data>
-  <data name="ModernNowPlayingTitle.Text" xml:space="preserve"><value>Not Playing</value></data>
-  <data name="ModernOutputButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Output device</value></data>
   <data name="OutputDeviceTooltip" xml:space="preserve"><value>Output device</value></data>
-  <data name="ModernShuffleButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Shuffle</value></data>
-  <data name="ModernPreviousButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Previous</value></data>
-  <data name="ModernNextButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Next</value></data>
-  <data name="ModernRepeatButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Repeat</value></data>
-  <data name="ModernVolumeButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Volume</value></data>
-  <data name="ModernActivityDismissButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Hide status</value></data>
-  <data name="VolumeHeading.Text" xml:space="preserve"><value>Volume</value></data>
-  <data name="NowPlayingMoreButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>More</value></data>
-  <data name="NowPlayingStopMenuItem.Text" xml:space="preserve"><value>Stop</value></data>
-  <data name="NowPlayingOpenLibraryMenuItem.Text" xml:space="preserve"><value>Open Library...</value></data>
-  <data name="NowPlayingRescanMenuItem.Text" xml:space="preserve"><value>Rescan Library</value></data>
-  <data name="NowPlayingClassicModeMenuItem.Text" xml:space="preserve"><value>Classic Mode</value></data>
-  <data name="ClassicPlayPauseButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Play/Pause</value></data>
-  <data name="ClassicStopButton.[using:Microsoft.UI.Xaml.Controls]ToolTipService.ToolTip" xml:space="preserve"><value>Stop</value></data>
-  <data name="ModernTrackCount.Text" xml:space="preserve"><value>0 tracks</value></data>
+  <data name="NowPlayingStopMenuItem" xml:space="preserve"><value>Stop</value></data>
+  <data name="NowPlayingOpenLibraryMenuItem" xml:space="preserve"><value>Open Library...</value></data>
+  <data name="NowPlayingRescanMenuItem" xml:space="preserve"><value>Rescan Library</value></data>
+  <data name="NowPlayingClassicModeMenuItem" xml:space="preserve"><value>Classic Mode</value></data>
 
   <data name="AppTitleValue" xml:space="preserve"><value>Aobus</value></data>
+  <data name="LibraryOpenLabel" xml:space="preserve"><value>Open</value></data>
+  <data name="LibraryRescanLabel" xml:space="preserve"><value>Rescan</value></data>
+  <data name="InspectorToggleTooltip" xml:space="preserve"><value>Track details</value></data>
+  <data name="MoreMenuTooltip" xml:space="preserve"><value>More</value></data>
+  <data name="NavigationPaneTitle" xml:space="preserve"><value>Library</value></data>
+  <data name="QuickFilterPlaceholder" xml:space="preserve"><value>Filter tracks</value></data>
+  <data name="VolumeTooltip" xml:space="preserve"><value>Volume</value></data>
+  <data name="VolumeHeadingLabel" xml:space="preserve"><value>Volume</value></data>
   <data name="SoulWindowTitle" xml:space="preserve"><value>Aobus Soul</value></data>
   <data name="Ready" xml:space="preserve"><value>Ready</value></data>
   <data name="ErrorFormat" xml:space="preserve"><value>Error: {0}</value></data>
-  <data name="PreparingLibrary" xml:space="preserve"><value>Preparing library...</value></data>
   <data name="RescanningLibrary" xml:space="preserve"><value>Rescanning library...</value></data>
   <data name="LibraryScanUnreadableOneFormat" xml:space="preserve"><value>Library scan found {0} unreadable file and no usable changes</value></data>
   <data name="LibraryScanUnreadableManyFormat" xml:space="preserve"><value>Library scan found {0} unreadable files and no usable changes</value></data>
   <data name="LibraryReadyFormat" xml:space="preserve"><value>Library ready: {0}</value></data>
-  <data name="LibraryOperationCancelled" xml:space="preserve"><value>Library operation cancelled</value></data>
   <data name="SaveSettingsFailedFormat" xml:space="preserve"><value>Could not save settings: {0}</value></data>
   <data name="OpenLibraryPickerButton" xml:space="preserve"><value>Open library</value></data>
   <data name="FolderPickerFailedFormat" xml:space="preserve"><value>Folder picker failed: {0}</value></data>
@@ -77,9 +57,9 @@
   <data name="ThemeReloadFailedFormat" xml:space="preserve"><value>Theme reload failed: {0}</value></data>
   <data name="ThemeReloadedFormat" xml:space="preserve"><value>Theme reloaded: {0}</value></data>
   <data name="SmtcUnavailableFormat" xml:space="preserve"><value>SMTC unavailable: {0}</value></data>
+  <data name="ShellLayoutFailedFormat" xml:space="preserve"><value>The shell layout could not be built: {0}</value></data>
   <data name="NotPlaying" xml:space="preserve"><value>Not Playing</value></data>
   <data name="UnknownArtist" xml:space="preserve"><value>Unknown Artist</value></data>
-  <data name="ConnectingAudioEngine" xml:space="preserve"><value>Connecting to audio engine...</value></data>
   <data name="ActivityStatusDetailsTooltip" xml:space="preserve"><value>View activity details</value></data>
   <data name="ActivityStatusIdleTooltip" xml:space="preserve"><value>Notifications</value></data>
   <data name="ActivityStatusHideNotificationTooltip" xml:space="preserve"><value>Hide notification from status</value></data>
@@ -91,15 +71,9 @@
   <data name="ListStatusFormat" xml:space="preserve"><value>List: {0}</value></data>
   <data name="AllTracks" xml:space="preserve"><value>All Tracks</value></data>
   <data name="PresentationFailedFormat" xml:space="preserve"><value>Presentation failed: {0}</value></data>
-  <data name="FilterFailedFormat" xml:space="preserve"><value>Filter failed: {0}</value></data>
   <data name="NoSelection" xml:space="preserve"><value>No selection</value></data>
   <data name="ItemSelectedOne" xml:space="preserve"><value>1 item selected</value></data>
   <data name="ItemsSelectedFormat" xml:space="preserve"><value>{0} items selected</value></data>
-  <data name="SelectTrack" xml:space="preserve"><value>Select a track</value></data>
-  <data name="MultipleTracks" xml:space="preserve"><value>Multiple tracks</value></data>
-  <data name="TitleValueFormat" xml:space="preserve"><value>Title: {0}</value></data>
-  <data name="ArtistValueFormat" xml:space="preserve"><value>Artist: {0}</value></data>
-  <data name="AlbumValueFormat" xml:space="preserve"><value>Album: {0}</value></data>
   <data name="PlaybackFailedFormat" xml:space="preserve"><value>Playback failed: {0}</value></data>
   <data name="ColumnResizeFailedFormat" xml:space="preserve"><value>Column resize failed: {0}</value></data>
   <data name="ColumnSettingsFailedFormat" xml:space="preserve"><value>Column settings failed: {0}</value></data>

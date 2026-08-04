@@ -18,7 +18,7 @@
 namespace ao::winui
 {
   class PreparedMemoryRandomAccessStream;
-  class WindowsThemeCoordinator;
+  class ThemeCoordinator;
 
   class CoverArtPresenter final
   {
@@ -26,7 +26,7 @@ namespace ao::winui
     CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
                       winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
                       rt::ResourceByteLoader& resources,
-                      WindowsThemeCoordinator& theme,
+                      ThemeCoordinator& theme,
                       uimodel::CoverArtPlaceholderStyle style);
     ~CoverArtPresenter();
 
@@ -36,10 +36,13 @@ namespace ao::winui
     CoverArtPresenter& operator=(CoverArtPresenter&&) = delete;
 
     void bind(async::Runtime& runtime);
-    void unbind();
+    void unbind() noexcept;
     void select(ResourceId resourceId, uimodel::CoverArtPlaceholderIdentity identity, bool hasEntity);
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     struct State;
 
     static async::Task<void> prepareAndDisplay(std::weak_ptr<State> statePtr,
@@ -51,7 +54,7 @@ namespace ao::winui
 
     std::shared_ptr<State> _statePtr;
     rt::ResourceByteLoader& _resources;
-    WindowsThemeCoordinator& _theme;
+    ThemeCoordinator& _theme;
     rt::ResourceByteLoader::Request _request;
     async::Runtime* _runtime = nullptr;
     async::TaskHandle _streamTask;

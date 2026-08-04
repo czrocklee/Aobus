@@ -63,7 +63,7 @@ The task service does not cache, decode, publish maintenance progress, or introd
 Runtime `ResourceByteLoader` is a frontend-scoped delivery component for every interactive consumer that needs encoded bytes: it coalesces equal ids, owns a bounded per-binding byte cache, and delivers immutable copyable `ResourceBytes` values through the bound runtime's callback executor.
 `ResourceBytes` shares owned storage across callbacks and remains valid after loader unbinding or cache eviction.
 The loader has one asynchronous byte-source port regardless of whether its default adapter reads through `CoreRuntime` or a focused test/composition adapter supplies bytes directly.
-WinUI's shared-runtime binding captures ownership in that source, while GTK and TUI use a borrowed-runtime binding whose `CoreRuntime` must outlive the loader and its cancelled work.
+WinUI, GTK, and TUI use borrowed-runtime bindings whose `CoreRuntime` must outlive the loader and its cancelled work; each composition root destroys the loader before releasing that runtime.
 Each spawned read retains the selected source independently of later unbinding.
 It is instantiated by a composition root rather than owned globally by `CoreRuntime`.
 GTK, TUI, WinUI, and MPRIS retain their transform-specific request and cache paths, while every frontend retains its own decode and stale-result policy.
@@ -83,11 +83,12 @@ Group-heading, Inspector, and Now Playing layout components expose style enums i
 
 ### WinUI image delivery
 
-WinUI composition owns one runtime `ResourceByteLoader` instance bound to the session's single active runtime.
-The loader uses the shared request coalescer for valid-resource reads and owns one bounded encoded-byte cache shared by all Windows presenters and SMTC.
+Each WinUI `MainWindow` owns one runtime `ResourceByteLoader` through its `UiCoordinator`, bound by reference to that window's session runtime.
+The loader uses the shared request coalescer for valid-resource reads and owns one bounded encoded-byte cache shared by all Windows presenters and SMTC in that window.
+A library replacement creates a new window and loader; it does not rebind a live loader to another runtime.
 `CoverArtPresenter` owns one generation-fenced selection, renders the fixed slot placeholder through XAML for an invalid identity, supplies the current Windows theme accent to vinyl rendering, and decodes valid bytes through the native image source.
 It copies encoded bytes into native owning memory on a worker; the callback executor only wraps that prepared memory as a Windows random-access stream and updates XAML.
-It serves realized group headings, Inspector, Now Playing, and SMTC artwork and is rebound with the rest of the runtime consumers during library replacement.
+It serves realized group headings, Inspector, Now Playing, and SMTC artwork for the window's one runtime.
 No-entity state hides group-heading and Inspector cover surfaces, while the Now Playing surface retains its configured placeholder.
 Valid-resource loading or failure leaves the corresponding surface empty.
 
@@ -183,6 +184,7 @@ Missing reads are ordinary absence; LMDB operational faults follow the storage f
 The runtime reader copies bytes before releasing its transaction.
 
 Runtime byte and GTK/MPRIS transform requests have per-interest cancellation plus an owner lifetime scope; each WinUI presenter additionally owns a generation fence and worker stream-preparation task; TUI owns one selected byte interest and cancellable transform task.
+WinUI window teardown unbinds the resource loader, SMTC bridge, and cover-art presenters before the session destroys its unique runtime; runtime shutdown joins cancelled work rather than deferring or quarantining a runtime owner.
 Resource-byte unbinding destroys its lifetime scope before clearing its shared request coalescer, cache, source, and callback-runtime binding; a later binding creates a fresh scope.
 Each delivery owner cancels external work before clearing its shared request coalescer.
 The coalescer's flight token identifies one exact start generation, so a late completion after clear cannot match a same-key replacement.

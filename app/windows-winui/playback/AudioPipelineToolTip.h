@@ -5,19 +5,33 @@
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
 
+#include <memory>
+
 namespace ao::uimodel
 {
   struct AudioPipelineViewState;
-}
+  class NowPlayingViewModel;
+} // namespace ao::uimodel
+
+namespace ao::rt
+{
+  class PlaybackService;
+} // namespace ao::rt
 
 namespace ao::winui
 {
   struct AudioPipelineToolTipConfig final
   {
-    winrt::Microsoft::UI::Xaml::Controls::Button modernAnchor{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button classicAnchor{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button anchor{nullptr};
   };
 
+  /**
+   * @brief The audio pipeline explanation attached to one anchor.
+   *
+   * Every shell hangs this on the soul button, so the tooltip follows the
+   * playback state itself rather than being fed by whichever surface happens to
+   * observe it: one anchor, one subscription, no coordination.
+   */
   class AudioPipelineToolTip final
   {
   public:
@@ -29,21 +43,18 @@ namespace ao::winui
     AudioPipelineToolTip(AudioPipelineToolTip&&) = delete;
     AudioPipelineToolTip& operator=(AudioPipelineToolTip&&) = delete;
 
-    void apply(uimodel::AudioPipelineViewState const& state);
+    void bind(rt::PlaybackService& playback);
+    void unbind() noexcept;
 
   private:
-    struct Presenter final
-    {
-      winrt::Microsoft::UI::Xaml::Controls::Button anchor{nullptr};
-      winrt::Microsoft::UI::Xaml::Controls::ToolTip toolTip{nullptr};
-      winrt::Microsoft::UI::Xaml::Controls::TextBlock text{nullptr};
-    };
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
 
-    static Presenter makePresenter(winrt::Microsoft::UI::Xaml::Controls::Button anchor);
-    static void apply(Presenter const& presenter, uimodel::AudioPipelineViewState const& state);
-    static void detach(Presenter const& presenter);
+    void apply(uimodel::AudioPipelineViewState const& state);
 
-    Presenter _modern;
-    Presenter _classic;
+    winrt::Microsoft::UI::Xaml::Controls::Button _anchor{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::ToolTip _toolTip{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock _text{nullptr};
+    std::unique_ptr<uimodel::NowPlayingViewModel> _viewModelPtr;
   };
 } // namespace ao::winui

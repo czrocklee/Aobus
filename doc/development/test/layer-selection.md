@@ -86,6 +86,12 @@ Appropriate contracts:
 - A detail popover closes when compact status becomes hidden.
 - A layout regression keeps columns stable after section collapse.
 
+## WinUI frontend tests
+
+Use `test/unit/winui/...Test.cpp` for native WinUI composition and frontend-owned behavior such as XAML resource lookup, Windows layout dialects, shell policy, startup options, and process-boundary adapters.
+
+Keep pure shared policy in `uimodel` tests. A WinUI test may use the `[winui]` layer tag when the behavior belongs to the Windows frontend even if the implementation is a small pure helper.
+
 ## Workflow, integration, and regression placement
 
 Use `[workflow]` when the test exercises multiple production components but still runs in a unit target.

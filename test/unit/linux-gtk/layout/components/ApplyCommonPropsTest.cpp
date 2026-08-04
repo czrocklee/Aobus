@@ -138,5 +138,30 @@ namespace ao::gtk::layout::test
       CHECK(width == expectedW);
       CHECK(height == expectedH);
     }
+
+    SECTION("an authored negative size request clears a component minimum")
+    {
+      auto doc = LayoutDocument{};
+      doc.root.type = "box";
+
+      auto child = LayoutNode{};
+      child.type = "spacer";
+      child.layout["widthRequest"] = LayoutValue{static_cast<std::int64_t>(-1)};
+      child.layout["heightRequest"] = LayoutValue{static_cast<std::int64_t>(-1)};
+      doc.root.children.push_back(child);
+
+      auto const compPtr = layoutRuntime.build(ctx, preparedLayout(doc));
+      auto* const box = dynamic_cast<Gtk::Box*>(&compPtr->widget());
+      REQUIRE(box != nullptr);
+
+      auto* const spacer = box->get_first_child();
+      REQUIRE(spacer != nullptr);
+
+      std::int32_t width = 0;
+      std::int32_t height = 0;
+      spacer->get_size_request(width, height);
+      CHECK(width == -1);
+      CHECK(height == -1);
+    }
   }
 } // namespace ao::gtk::layout::test

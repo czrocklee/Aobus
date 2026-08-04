@@ -372,6 +372,7 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
         return (
             parts[:2] in {("app", "windows"), ("app", "windows-winui")}
             or parts[:3] == ("test", "unit", "windows")
+            or parts[:3] == ("test", "unit", "winui")
             or "wasapi" in joined
             or "win32" in joined
             or stem.endswith("windows")
@@ -926,11 +927,11 @@ def write_merged_compile_database(
     excluded_arguments: tuple[str, ...],
     extra_entries: list[dict[str, object]],
 ) -> Path:
-    """Merge native compile commands with validated platform-provider entries."""
+    """Merge native commands with authoritative platform-provider entries."""
     merged: list[dict[str, object]] = []
     by_path: dict[str, dict[str, object]] = {}
 
-    for entry in [*(item.data for item in _compile_database_entries(build_dir)), *extra_entries]:
+    def normalize(entry: dict[str, object]) -> tuple[dict[str, object], str, Path]:
         filtered = _without_compile_arguments(entry, excluded_arguments)
         raw_file = filtered.get("file")
         if not isinstance(raw_file, str):
@@ -940,11 +941,33 @@ def write_merged_compile_database(
             directory = filtered.get("directory")
             base = Path(directory) if isinstance(directory, str) else PROJECT_ROOT
             path = base / path
-        key = _path_key(path)
-        if existing := by_path.get(key):
-            if existing != filtered:
+        return filtered, _path_key(path), path
+
+    authoritative: dict[str, dict[str, object]] = {}
+    for entry in extra_entries:
+        filtered, key, path = normalize(entry)
+        if key in authoritative:
+            if authoritative[key] != filtered:
                 raise die(f"conflicting compile commands for {absolute_path(path)}.")
             continue
+        authoritative[key] = filtered
+
+    for item in _compile_database_entries(build_dir):
+        filtered, key, path = normalize(item.data)
+        # The extra entries come from a more specific native provider, such as
+        # the Visual Studio WinUI project. The Ninja graph may also compile
+        # pure rules from that frontend for tests, but its command is not the
+        # frontend's authoritative compiler context.
+        if key in authoritative:
+            continue
+        if key in by_path:
+            if by_path[key] != filtered:
+                raise die(f"conflicting compile commands for {absolute_path(path)}.")
+            continue
+        by_path[key] = filtered
+        merged.append(filtered)
+
+    for key, filtered in authoritative.items():
         by_path[key] = filtered
         merged.append(filtered)
 

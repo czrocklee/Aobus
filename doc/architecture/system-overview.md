@@ -65,7 +65,7 @@ It adds view and workspace services, playback transport and succession, audio-pl
 `AppRuntime::create()` is likewise the sole public construction boundary and returns no interactive graph until core initialization and the required workspace-store composition have succeeded.
 It also owns narrow cross-service application commands, such as album reveal, that compose a workspace navigation result with a playback request without making either domain service depend on the other.
 The [workspace architecture](workspace.md) owns the graph's view/workspace identities and semantic sessions.
-The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns construction, restoration order, active-library replacement, and teardown coordination.
+The [interactive session lifecycle architecture](interactive-session-lifecycle.md) owns construction, restoration order, frontend-specific library transition, and teardown coordination.
 
 ### UIModel
 
@@ -84,6 +84,13 @@ TUI owns FTXUI rendering, terminal input, overlays, and its event-loop adapter.
 WinUI owns Windows App SDK application/window lifetime, XAML resources,
 Windows dispatcher adaptation, native picker and media-session integration,
 and its Modern and Classic presentation shells.
+Its Windows-only target pair is `aobus-winui-lib`, which owns all compiled
+frontend implementation, and the thin `aobus-winui` executable, which owns the
+final link and deployed resources. The library includes the shell's own layout
+catalog and dialect, element lattice, style resolution, themed surfaces,
+responsive policy, desktop and theme schemas, XAML, and native adapters.
+Windows-owned rules are tested only by the native Windows suite; the Linux gate
+does not compile a second WinUI model target.
 The CLI owns argument parsing and output encoding around `CoreRuntime` operations.
 
 ## Boundaries and dependency direction
@@ -92,7 +99,7 @@ Dependencies follow the arrows toward core libraries and never reverse from runt
 
 - Core libraries cannot include application or frontend headers.
 - Runtime cannot depend on UIModel or platform UI types.
-- UIModel may depend on runtime, but cannot include platform UI or direct storage/audio-control headers.
+- UIModel may depend on runtime, but cannot include platform UI or direct storage/audio-control headers, and cannot name or speak for any one frontend even in portable code.
 - Frontends may depend on runtime and UIModel and may contain platform adapters for core facilities.
 - CLI behavior-bearing mutations use runtime facades where those roles exist; low-level inspection, dump, verification, relink, and interchange commands still use the `MusicLibrary` escape hatch exposed by `CoreRuntime`.
 - Shared signal mechanisms live in `ao_async`, while the runtime or UIModel service that owns an event remains responsible for its payload, execution domain, and exception-containment policy.
@@ -137,8 +144,8 @@ These routes expose where a change crosses architecture owners without duplicati
 | Cover-art delivery | Stored resource -> runtime id and owned bytes -> projection/playback state -> GTK, WinUI, TUI, MPRIS, or CLI transform | [Resource delivery](resource-delivery.md), [library](library.md), [playback](playback.md), and [presentation](presentation.md) |
 | Track discovery and organization | UI authoring or CLI expression -> query compilation/evaluation -> live source membership -> projection shape -> frontend adaptation | [Track expression](track-expression.md), [library](library.md), and [presentation](presentation.md) |
 | Interactive playback | Frontend command -> UIModel/runtime command -> workspace or live-source context -> succession and transport -> Player/Engine -> platform output | [Workspace](workspace.md), [playback](playback.md), and [runtime execution](runtime-execution.md) |
-| Session restore and active-library replacement | Frontend composition root -> managed-state candidate -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |
-| Desktop shell construction | GTK layout policy -> GTK registries and widget tree; or WinUI shared policy -> native Modern/Classic XAML surfaces | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
+| Session restore and library transition | Frontend composition root -> managed state -> library-bound runtime graph -> workspace and playback restoration -> observers | [Persistence and managed state](persistence-and-managed-state.md), [interactive session lifecycle](interactive-session-lifecycle.md), [workspace](workspace.md), and [playback](playback.md) |
+| Desktop shell construction | Shared layout language -> GTK-owned policy and widget tree, or WinUI-owned policy and native Modern/Classic XAML surfaces | [Application shell](application-shell.md), [presentation](presentation.md), and [persistence and managed state](persistence-and-managed-state.md) |
 | Failure reporting | Subsystem failure -> typed result or event -> owning recovery boundary -> runtime notification or application-leaf presentation | [Failure and reporting](failure-and-reporting.md) plus the originating subsystem architecture |
 | Audio-quality presentation | Engine and provider evidence -> Player analysis -> runtime snapshot -> shared UIModel interpretation -> GTK, TUI, or WinUI rendering | [Audio quality](audio-quality.md), refining [playback](playback.md) and [presentation](presentation.md) |
 
@@ -146,7 +153,7 @@ The [architecture landscape](README.md) owns the portfolio classification, relat
 
 ## Structural constraints
 
-- One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns replacement of that graph, while [workspace](workspace.md) owns state within it.
+- One frontend runtime represents one active music library and owns every service tied to that library; [interactive session lifecycle](interactive-session-lifecycle.md) owns in-process replacement or process restart of that graph, while [workspace](workspace.md) owns state within it.
 - Cross-frontend behavioral policy belongs in runtime or UIModel, not in parallel GTK and TUI implementations.
 - Runtime services expose stable application values and narrow command surfaces instead of leaking storage transactions or audio engine objects.
 - UIModel state can be discarded and reconstructed from runtime state plus UI-local persisted preferences.

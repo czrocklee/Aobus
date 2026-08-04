@@ -8,10 +8,12 @@
 #include <ao/async/Runtime.h>
 #include <ao/async/Task.h>
 #include <ao/rt/ViewIds.h>
-#include <ao/uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.h>
 #include <ao/uimodel/library/presentation/ListPresentationPreferenceStore.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/task/LibraryScanWorkflow.h>
+#include <ao/winui/DesktopSettingsYamlSchema.h>
+#include <ao/winui/app/LibraryStartupPlan.h>
+#include <ao/winui/app/StartupOptions.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Windows.Foundation.h>
@@ -40,8 +42,6 @@ namespace ao::winui
 {
   struct LibrarySessionCallbacks final
   {
-    std::move_only_function<void() noexcept> onRuntimeChanging;
-    std::move_only_function<void() noexcept> onRuntimeChanged;
     std::function<void(std::string)> onStatus;
     std::function<void(Error const&)> onFailure;
   };
@@ -49,7 +49,9 @@ namespace ao::winui
   class [[nodiscard]] LibrarySession final
   {
   public:
-    LibrarySession(std::filesystem::path stateRoot, winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher);
+    LibrarySession(std::filesystem::path stateRoot,
+                   winrt::Microsoft::UI::Dispatching::DispatcherQueue dispatcher,
+                   StartupOptions startupOptions);
     ~LibrarySession();
 
     LibrarySession(LibrarySession const&) = delete;
@@ -58,11 +60,13 @@ namespace ao::winui
     LibrarySession& operator=(LibrarySession&&) = delete;
 
     rt::AppRuntime& runtime() const noexcept;
-    std::shared_ptr<rt::AppRuntime> runtimePtr() const noexcept { return _runtimePtr; }
+    std::filesystem::path const& musicRoot() const noexcept;
+    bool scanAfterOpen() const noexcept { return _scanAfterOpen; }
+    bool operationActive() const noexcept { return _operationActive; }
     uimodel::PlaybackCommandSurface& playbackCommands() const noexcept;
 
-    uimodel::WindowsDesktopSettings const& settings() const noexcept { return _settings; }
-    uimodel::WindowsDesktopSettings& settings() noexcept { return _settings; }
+    DesktopSettings const& settings() const noexcept { return _settings; }
+    DesktopSettings& settings() noexcept { return _settings; }
     uimodel::TrackColumnLayoutState const& columnLayouts() const noexcept { return _columnLayouts; }
     uimodel::TrackColumnLayoutState& columnLayouts() noexcept { return _columnLayouts; }
     uimodel::ListPresentationPreferenceState const& presentationPreferences() const noexcept
@@ -73,21 +77,22 @@ namespace ao::winui
     std::filesystem::path const& stateRoot() const noexcept { return _stateRoot; }
     rt::TrackPresentationSpec presentationForList(ListId listId) const;
     Result<> saveSettings();
+    /// Apply and save an explicit startup root only after native activation.
+    Result<> commitSelectedRoot();
 
     void setCallbacks(LibrarySessionCallbacks callbacks);
-    void openLibrary(std::filesystem::path root);
-    void rescan();
+    void rescan() noexcept;
     Result<> playTrack(rt::ViewId viewId, TrackId trackId);
 
   private:
     struct CallbackLifetime final
     {};
 
-    Result<std::shared_ptr<rt::AppRuntime>> createRuntime(std::filesystem::path const& root);
+    /// Quiesce all callback and runtime-facing owners before releasing the runtime.
+    void shutdown() noexcept;
+
+    Result<std::unique_ptr<rt::AppRuntime>> createRuntime(std::filesystem::path const& root);
     void bindRuntimeServices();
-    void installRuntime(std::shared_ptr<rt::AppRuntime> nextPtr,
-                        std::filesystem::path const& root,
-                        bool scanAfterInstall) noexcept;
     void startActiveScan();
     void finishActiveScan(
       std::expected<uimodel::LibraryScanWorkflowResult, uimodel::LibraryScanWorkflowFailure> result) noexcept;
@@ -101,10 +106,11 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueue _dispatcher{nullptr};
     std::unique_ptr<rt::ConfigStore> _settingsStorePtr;
     std::unique_ptr<rt::ConfigStore> _playbackStorePtr;
-    uimodel::WindowsDesktopSettings _settings{};
+    DesktopSettings _settings{};
     uimodel::TrackColumnLayoutState _columnLayouts{};
     uimodel::ListPresentationPreferenceState _presentationPreferences{};
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
+    std::optional<SelectedRootCommit> _optSelectedRootCommit;
+    std::unique_ptr<rt::AppRuntime> _runtimePtr;
     std::unique_ptr<uimodel::TrackPresentationCatalog> _presentationCatalogPtr;
     std::unique_ptr<uimodel::ListPresentationPreferenceLifecycle> _presentationPreferenceLifecyclePtr;
     std::unique_ptr<uimodel::PlaybackCommandSurface> _playbackCommandsPtr;
@@ -113,5 +119,7 @@ namespace ao::winui
     std::shared_ptr<CallbackLifetime> _callbackLifetimePtr = std::make_shared<CallbackLifetime>();
     std::string_view _operationStatusKey;
     bool _operationActive = false;
+    bool _scanAfterOpen = false;
+    bool _shutdown = false;
   };
 } // namespace ao::winui

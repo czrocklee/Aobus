@@ -93,9 +93,10 @@ The live registry additionally owns one handler and optional availability provid
 - Component and action ids are exact and case-sensitive.
 - Registering a duplicate component descriptor or action descriptor does not create a second stable identity.
 - A component is a container when its descriptor permits at least one child or has no maximum.
-- A binding is accepted only when the action id exists and the component exposes that action property slot.
+- A binding is accepted only when the action id exists and the component exposes that action property slot; an authored empty string or `none` explicitly leaves the slot unbound and suppresses its default.
 - Gio export skips an anchored or menu-presenting action unless the context provider can supply a safe anchor.
 - Tooltip construction uses only components whose surface mask admits `Tooltip`; action interaction is not attached on a tooltip surface.
+- GTK accepts `cssClasses` as a string or string list and rejects the Windows-only `styleKey` and `surface` fields.
 - Component prop kinds, defaults, enum values, child counts, and allowed surfaces are validated against the live descriptor registered beside its factory.
 
 ## Compatibility and versioning
@@ -112,6 +113,7 @@ Adding a component or action requires registration, descriptor and behavior test
 - [`LayoutComponentCatalog.h`](../../../app/include/ao/uimodel/layout/component/LayoutComponentCatalog.h) defines component descriptors and vocabulary.
 - [`LayoutActionDescriptor.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionDescriptor.h), [`LayoutActionCapabilities.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionCapabilities.h), and [`LayoutActionCatalog.h`](../../../app/include/ao/uimodel/layout/action/LayoutActionCatalog.h) define action metadata.
 - Component registrations under [`app/linux-gtk/layout/component/`](../../../app/linux-gtk/layout/component/) own per-type metadata and factories.
+- [`LayoutDialect.cpp`](../../../app/linux-gtk/layout/document/LayoutDialect.cpp) owns GTK-specific styling and authored-tooltip validation.
 - [`ShellLayoutController.cpp`](../../../app/linux-gtk/app/ShellLayoutController.cpp) owns the action inventory and handlers.
 
 ## Test authority

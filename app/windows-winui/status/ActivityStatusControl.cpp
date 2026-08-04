@@ -3,10 +3,10 @@
 
 #include "status/ActivityStatusControl.h"
 
-#include "platform/WindowsStringResources.h"
-#include <ao/rt/AppRuntime.h>
+#include "platform/StringResources.h"
+#include <ao/rt/NotificationService.h>
 #include <ao/rt/NotificationState.h>
-#include <ao/rt/library/Library.h>
+#include <ao/rt/library/LibraryTaskService.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewState.h>
 
@@ -186,27 +186,27 @@ namespace ao::winui
   ActivityStatusControl::~ActivityStatusControl()
   {
     unbind();
-    _autoDismissTickRevoker.revoke();
-    _dismissClickRevoker.revoke();
   }
 
-  void ActivityStatusControl::bind(std::shared_ptr<rt::AppRuntime> runtimePtr)
+  void ActivityStatusControl::bind(rt::NotificationService& notifications, rt::LibraryTaskService& libraryTasks)
   {
-    if (_runtimePtr == runtimePtr && _viewModelPtr)
+    if (_notifications == &notifications && _libraryTasks == &libraryTasks && _viewModelPtr)
     {
       return;
     }
 
     unbind();
-    _runtimePtr = std::move(runtimePtr);
+    resetPresentation();
+    _notifications = &notifications;
+    _libraryTasks = &libraryTasks;
 
     try
     {
       _viewModelPtr = std::make_unique<uimodel::ActivityStatusViewModel>(
-        _runtimePtr->notifications(),
+        notifications,
         [this](uimodel::ActivityStatusViewState const& state) { render(state); },
         uimodel::ActivityStatusViewModelOptions{
-          .libraryTasks = &_runtimePtr->library().taskService(),
+          .libraryTasks = &libraryTasks,
           .emitInitialState = false,
         });
       render(_viewModelPtr->viewState());
@@ -216,23 +216,28 @@ namespace ao::winui
       cancelAutoDismissTimer();
       clearDetailRows();
       _viewModelPtr.reset();
-      _runtimePtr.reset();
+      _notifications = nullptr;
+      _libraryTasks = nullptr;
       throw;
     }
   }
 
-  void ActivityStatusControl::unbind()
+  void ActivityStatusControl::unbind() noexcept
   {
+    _notifications = nullptr;
+    _libraryTasks = nullptr;
+    _viewModelPtr.reset();
     cancelAutoDismissTimer();
+    clearDetailRows();
+  }
 
+  void ActivityStatusControl::resetPresentation()
+  {
     if (_detailFlyout)
     {
       _detailFlyout.Hide();
     }
 
-    clearDetailRows();
-    _viewModelPtr.reset();
-    _runtimePtr.reset();
     render(uimodel::ActivityStatusViewState{});
   }
 
@@ -370,37 +375,36 @@ namespace ao::winui
     {
       auto button = detailDismissButton();
       Grid::SetColumn(button, 2);
-      auto const token = button.Click(
-        [this, id = item.id](
-          winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
-        {
-          if (_viewModelPtr)
-          {
-            _viewModelPtr->hideDetailNotification(id);
-          }
-        });
-      _detailDismissRegistrations.push_back(DetailDismissRegistration{.button = button, .token = token});
+      _detailDismissRevokers.push_back(
+        button.Click(winrt::auto_revoke,
+                     [this, id = item.id](winrt::Windows::Foundation::IInspectable const&,
+                                          winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
+                     {
+                       if (_viewModelPtr)
+                       {
+                         _viewModelPtr->hideDetailNotification(id);
+                       }
+                     }));
       row.Children().Append(button);
     }
 
     _detailRows.Children().Append(row);
   }
 
-  void ActivityStatusControl::clearDetailRows()
+  void ActivityStatusControl::clearDetailRows() noexcept
   {
-    for (auto const& registration : _detailDismissRegistrations)
+    _detailDismissRevokers.clear();
+
+    try
     {
-      if (registration.button)
+      if (_detailRows)
       {
-        registration.button.Click(registration.token);
+        _detailRows.Children().Clear();
       }
     }
-
-    _detailDismissRegistrations.clear();
-
-    if (_detailRows)
+    // NOLINTNEXTLINE(bugprone-empty-catch): Detail-row cleanup is best-effort after the native surface is retired.
+    catch (...)
     {
-      _detailRows.Children().Clear();
     }
   }
 
@@ -444,15 +448,31 @@ namespace ao::winui
     _autoDismissTimer.Start();
   }
 
-  void ActivityStatusControl::cancelAutoDismissTimer()
+  void ActivityStatusControl::cancelAutoDismissTimer() noexcept
   {
     if (_autoDismissTimer)
     {
-      _autoDismissTimer.Stop();
+      try
+      {
+        _autoDismissTimer.Stop();
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): The auto-dismiss timer may already be stopped during teardown.
+      catch (...)
+      {
+      }
     }
 
     ++_autoDismissGeneration;
-    _autoDismissTickRevoker.revoke();
+
+    try
+    {
+      _autoDismissTickRevoker.revoke();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Revoking a native event may already have happened during teardown.
+    catch (...)
+    {
+    }
+
     _optScheduledCompact.reset();
   }
 } // namespace ao::winui

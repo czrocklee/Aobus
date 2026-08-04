@@ -1,0 +1,293 @@
+# Built-in Windows Modern shell document.
+#
+# Shipped as an application resource and validated against the Windows layout
+# catalog. Structure only: appearance comes from RootGrid.Resources styles named
+# by styleKey, and complex native behavior stays inside each component.
+version: 1
+root:
+  id: windows-modern-root
+  type: box
+  props:
+    orientation: vertical
+  layout:
+    hexpand: true
+    vexpand: true
+  children:
+    - id: modern-title-bar
+      type: windows.titleBar
+      layout:
+        hexpand: true
+        heightRequest: 40
+        styleKey: ModernTitleBarStyle
+      children:
+        - id: modern-app-title
+          type: label
+          props:
+            resourceKey: AppTitleValue
+          layout:
+            halign: start
+            valign: center
+        - id: modern-library-path
+          type: windows.libraryPath
+          layout:
+            hexpand: true
+            halign: start
+            valign: center
+            styleKey: ModernLibraryPathStyle
+
+    - id: modern-navigation
+      type: windows.navigationPane
+      props:
+        presentation: navigationView
+      layout:
+        hexpand: true
+        vexpand: true
+        surface: modern.navigation
+      children:
+        # The inspector sizes itself from the persisted Windows settings and
+        # floats over the workspace when the resolved policy says so, so the
+        # workspace gives it a slot that follows its own width rather than a
+        # proportional divider that would keep its space while it is hidden.
+        - id: modern-workspace
+          type: box
+          props:
+            orientation: horizontal
+          layout:
+            hexpand: true
+            vexpand: true
+          children:
+            - id: modern-browser
+              type: box
+              props:
+                orientation: vertical
+              layout:
+                hexpand: true
+                vexpand: true
+              children:
+                - id: modern-track-controls
+                  type: box
+                  props:
+                    orientation: horizontal
+                    spacing: 10
+                  layout:
+                    hexpand: true
+                    heightRequest: 56
+                    styleKey: ModernTrackControlsStyle
+                  children:
+                    - id: modern-presentation-button
+                      type: track.presentationButton
+                      props:
+                        variant: title
+                      layout:
+                        widthRequest: 112
+                        valign: center
+                    - id: modern-quick-filter
+                      type: track.quickFilter
+                      layout:
+                        hexpand: true
+                        widthRequest: 420
+                        valign: center
+                    # Both read as one browser summary, which the narrower tiers
+                    # drop so the filter keeps the width it needs.
+                    - id: modern-selection-info
+                      type: status.selectionInfo
+                      props:
+                        variant: summary
+                      layout:
+                        halign: end
+                        valign: center
+                        styleKey: ModernSubduedTextStyle
+                    - id: modern-track-count
+                      type: status.trackCount
+                      props:
+                        variant: summary
+                      layout:
+                        halign: end
+                        valign: center
+                        styleKey: ModernSubduedTextStyle
+                    - id: modern-inspector-toggle
+                      type: actionButton
+                      props:
+                        resourceKey: InspectorToggleTooltip
+                        glyph: ""
+                        primaryAction: shell.toggleInspector
+                      layout:
+                        valign: center
+                        styleKey: ChromeLessButtonStyle
+                    - id: modern-overflow-menu
+                      type: menuButton
+                      props:
+                        menuId: modernOverflow
+                        resourceKey: MoreMenuTooltip
+                        glyph: ""
+                      layout:
+                        valign: center
+                        styleKey: ChromeLessButtonStyle
+                - id: modern-track-table
+                  type: track.table
+                  layout:
+                    hexpand: true
+                    vexpand: true
+                    surface: surface
+
+            - id: modern-inspector
+              type: windows.inspectorPane
+              layout:
+                vexpand: true
+                styleKey: ModernInspectorStyle
+                surface: modern.inspector
+              children:
+                # The cover is pinned above the fields rather than scrolling
+                # with them: it identifies the selection, and the fields are
+                # what the user reads past.
+                - id: modern-inspector-content
+                  type: box
+                  props:
+                    orientation: vertical
+                  layout:
+                    hexpand: true
+                    vexpand: true
+                  children:
+                    - id: modern-inspector-cover
+                      type: track.coverArt
+                      props:
+                        placeholderStyle: vinyl
+                      layout:
+                        hexpand: true
+                        styleKey: ModernInspectorCoverStyle
+                    - id: modern-track-detail
+                      type: track.detail
+                      layout:
+                        hexpand: true
+                        vexpand: true
+
+    - id: modern-now-playing
+      type: box
+      props:
+        orientation: vertical
+      layout:
+        hexpand: true
+        heightRequest: 88
+        styleKey: ModernNowPlayingStyle
+        surface: modern.nowPlaying
+      children:
+        - id: modern-seek
+          type: playback.seekSlider
+          props:
+            presentation: overlay
+          layout:
+            hexpand: true
+            heightRequest: 20
+            valign: start
+            styleKey: ModernSeekOverlayStyle
+        - id: modern-now-playing-row
+          type: box
+          props:
+            orientation: horizontal
+            spacing: 16
+          layout:
+            hexpand: true
+            vexpand: true
+            styleKey: ModernNowPlayingRowStyle
+          children:
+            - id: modern-now-playing-info
+              type: playback.nowPlayingInfo
+              layout:
+                hexpand: true
+                valign: center
+            - id: modern-transport
+              type: box
+              props:
+                orientation: horizontal
+                spacing: 16
+              layout:
+                halign: center
+                valign: center
+              children:
+                - id: modern-output-device
+                  type: playback.outputDeviceButton
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle
+                - id: modern-elapsed
+                  type: playback.timeLabel
+                  props:
+                    variant: elapsed
+                  layout:
+                    valign: center
+                    styleKey: ModernTimeLabelStyle
+                - id: modern-shuffle
+                  type: playback.transportButton
+                  props:
+                    command: shuffle
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle
+                - id: modern-previous
+                  type: playback.transportButton
+                  props:
+                    command: previous
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle
+                - id: modern-soul
+                  type: playback.soulButton
+                  props:
+                    strokeWidth: 5.0
+                    glyphScale: 0.85
+                    showGlyph: true
+                  layout:
+                    widthRequest: 60
+                    heightRequest: 60
+                    valign: center
+                - id: modern-next
+                  type: playback.transportButton
+                  props:
+                    command: next
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle
+                - id: modern-repeat
+                  type: playback.transportButton
+                  props:
+                    command: repeat
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle
+                - id: modern-duration
+                  type: playback.timeLabel
+                  props:
+                    variant: duration
+                  layout:
+                    valign: center
+                    styleKey: ModernTimeLabelStyle
+                - id: modern-volume
+                  type: playback.volumeControl
+                  props:
+                    presentation: flyout
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle
+            - id: modern-now-playing-right
+              type: box
+              props:
+                orientation: horizontal
+                spacing: 16
+              layout:
+                hexpand: true
+                halign: end
+                valign: center
+              children:
+                - id: modern-activity-status
+                  type: status.activity
+                  layout:
+                    valign: center
+                - id: modern-now-playing-menu
+                  type: menuButton
+                  props:
+                    menuId: nowPlayingOverflow
+                    resourceKey: MoreMenuTooltip
+                    glyph: ""
+                  layout:
+                    valign: center
+                    styleKey: ChromeLessButtonStyle

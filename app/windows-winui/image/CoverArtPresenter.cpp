@@ -4,7 +4,7 @@
 #include "image/CoverArtPresenter.h"
 
 #include "image/CoverArtPlaceholderRenderer.h"
-#include "theme/WindowsThemeCoordinator.h"
+#include "theme/ThemeCoordinator.h"
 #include <ao/CoreIds.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
@@ -38,7 +38,7 @@ namespace ao::winui
   CoverArtPresenter::CoverArtPresenter(winrt::Microsoft::UI::Xaml::Controls::Image image,
                                        winrt::Microsoft::UI::Xaml::Controls::Grid placeholder,
                                        rt::ResourceByteLoader& resources,
-                                       WindowsThemeCoordinator& theme,
+                                       ThemeCoordinator& theme,
                                        uimodel::CoverArtPlaceholderStyle const style)
     : _statePtr{std::make_shared<State>()}, _resources{resources}, _theme{theme}
   {
@@ -55,17 +55,40 @@ namespace ao::winui
   void CoverArtPresenter::bind(async::Runtime& runtime)
   {
     unbind();
+    resetPresentation();
     _runtime = &runtime;
     _statePtr->active = true;
   }
 
-  void CoverArtPresenter::unbind()
+  void CoverArtPresenter::unbind() noexcept
   {
-    _request.reset();
-    _streamTask.reset();
+    // Make every queued resource callback stale before cancelling its work or
+    // touching the native image surface.
     _runtime = nullptr;
     _statePtr->active = false;
     ++_statePtr->generation;
+
+    try
+    {
+      _request.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Request cancellation is best-effort after the presenter is retired.
+    catch (...)
+    {
+    }
+
+    try
+    {
+      _streamTask.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Stream-task cancellation is best-effort during presenter teardown.
+    catch (...)
+    {
+    }
+  }
+
+  void CoverArtPresenter::resetPresentation()
+  {
     _statePtr->image.Source(nullptr);
     _statePtr->image.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);
     _statePtr->placeholder.Visibility(winrt::Microsoft::UI::Xaml::Visibility::Collapsed);

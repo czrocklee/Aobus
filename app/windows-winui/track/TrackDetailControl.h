@@ -20,8 +20,19 @@ namespace ao::rt
 
 namespace ao::winui
 {
-  class CoverArtPresenter;
-  struct WinUiDependencies;
+  /**
+   * @brief What the detail control reads the focused selection through.
+   *
+   * The two shells reach it differently. A document-built inspector hands over
+   * the projection its generation already shares and owns its cover as a
+   * component of its own; the static shell has neither, so it lets the control
+   * make a projection and drives the shell-lifetime cover presenter through it.
+   */
+  struct TrackDetailBinding final
+  {
+    /// The generation's shared projection, which every detail view of it reads.
+    std::shared_ptr<rt::TrackDetailProjection> projectionPtr;
+  };
 
   struct TrackDetailControlConfig final
   {
@@ -38,20 +49,6 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::TextBlock technicalHeader{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::FontIcon technicalChevron{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel technicalRows{nullptr};
-
-    winrt::Microsoft::UI::Xaml::Controls::ScrollViewer classicFieldScroll{nullptr};
-    winrt::Microsoft::UI::Xaml::FrameworkElement classicDetailContent{nullptr};
-    winrt::Microsoft::UI::Xaml::FrameworkElement classicMetadataSection{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button classicMetadataHeaderButton{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TextBlock classicMetadataHeader{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::FontIcon classicMetadataChevron{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::StackPanel classicMetadataRows{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button classicShowEmptyButton{nullptr};
-    winrt::Microsoft::UI::Xaml::FrameworkElement classicTechnicalSection{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button classicTechnicalHeaderButton{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TextBlock classicTechnicalHeader{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::FontIcon classicTechnicalChevron{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::StackPanel classicTechnicalRows{nullptr};
   };
 
   /**
@@ -72,22 +69,21 @@ namespace ao::winui
     TrackDetailControl(TrackDetailControl&&) = delete;
     TrackDetailControl& operator=(TrackDetailControl&&) = delete;
 
-    void bind(WinUiDependencies const& dependencies);
-    void unbind();
+    void bind(TrackDetailBinding binding);
+    void unbind() noexcept;
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     void handleSnapshot(rt::TrackDetailSnapshot const& snapshot);
     void renderSnapshot();
     void renderMetadataRows(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows,
                             bool expanded,
-                            bool showEmpty,
-                            bool compact);
-    void renderTechnicalRows(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows, bool compact);
+                            bool showEmpty);
+    void renderTechnicalRows(winrt::Microsoft::UI::Xaml::Controls::StackPanel const& rows);
     void updateSectionPresentation();
-    void updateModernSectionPresentation(bool renderMetadataSection, bool renderTechnicalSection);
-    void updateClassicSectionPresentation(bool renderMetadataSection,
-                                          bool renderTechnicalSection,
-                                          bool hasMetadataFields);
+    void applySectionPresentation(bool renderMetadataSection, bool renderTechnicalSection);
     void updateSelectionPresentation();
     void resetFieldScroll();
 
@@ -105,33 +101,14 @@ namespace ao::winui
     winrt::Microsoft::UI::Xaml::Controls::FontIcon _technicalChevron{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::StackPanel _technicalRows{nullptr};
 
-    winrt::Microsoft::UI::Xaml::Controls::ScrollViewer _classicFieldScroll{nullptr};
-    winrt::Microsoft::UI::Xaml::FrameworkElement _classicDetailContent{nullptr};
-    winrt::Microsoft::UI::Xaml::FrameworkElement _classicMetadataSection{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button _classicMetadataHeaderButton{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TextBlock _classicMetadataHeader{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::FontIcon _classicMetadataChevron{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::StackPanel _classicMetadataRows{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button _classicShowEmptyButton{nullptr};
-    winrt::Microsoft::UI::Xaml::FrameworkElement _classicTechnicalSection{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button _classicTechnicalHeaderButton{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::TextBlock _classicTechnicalHeader{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::FontIcon _classicTechnicalChevron{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::StackPanel _classicTechnicalRows{nullptr};
-
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _metadataHeaderClickRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _showEmptyClickRevoker{};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _technicalHeaderClickRevoker{};
-    winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _classicMetadataHeaderClickRevoker{};
-    winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _classicShowEmptyClickRevoker{};
-    winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _classicTechnicalHeaderClickRevoker{};
 
     uimodel::TrackFieldGridSchema _schema;
     rt::TrackDetailSnapshot _snapshot;
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
-    std::unique_ptr<rt::TrackDetailProjection> _projectionPtr;
+    std::shared_ptr<rt::TrackDetailProjection> _projectionPtr;
     async::Subscription _subscription;
-    CoverArtPresenter* _coverArt = nullptr;
 
     bool _metadataExpanded = true;
     bool _technicalExpanded = false;

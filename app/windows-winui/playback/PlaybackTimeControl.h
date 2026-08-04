@@ -8,14 +8,18 @@
 #include <ao/uimodel/playback/seek/PlaybackTimeFormatter.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Media.h>
 
 #include <chrono>
 #include <memory>
 
+namespace ao::rt
+{
+  class PlaybackService;
+} // namespace ao::rt
+
 namespace ao::winui
 {
-  struct WinUiDependencies;
-
   struct PlaybackTimeControlConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::TextBlock text{nullptr};
@@ -34,14 +38,17 @@ namespace ao::winui
     PlaybackTimeControl(PlaybackTimeControl&&) = delete;
     PlaybackTimeControl& operator=(PlaybackTimeControl&&) = delete;
 
-    void bind(WinUiDependencies const& dependencies);
-    void unbind();
+    void bind(rt::PlaybackService& playback);
+    void unbind() noexcept;
     void setPresentationActive(bool active);
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     void applyState(uimodel::PlaybackPositionViewState const& state);
     void updateRenderingRegistration();
-    void stopRendering();
+    void stopRendering() noexcept;
     void renderFrame();
     void renderCurrentState();
     void updateText(std::chrono::milliseconds elapsed, std::chrono::milliseconds duration);
@@ -51,9 +58,9 @@ namespace ao::winui
     uimodel::PlaybackPositionInterpolator _interpolator;
     uimodel::PlaybackPositionViewState _state{};
     std::unique_ptr<uimodel::PlaybackPositionViewModel> _viewModelPtr;
-    winrt::event_token _loadedToken{};
-    winrt::event_token _unloadedToken{};
-    winrt::event_token _renderingToken{};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock::Loaded_revoker _loadedRevoker{};
+    winrt::Microsoft::UI::Xaml::Controls::TextBlock::Unloaded_revoker _unloadedRevoker{};
+    winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering_revoker _renderingRevoker{};
     std::chrono::seconds _lastElapsed{0};
     std::chrono::seconds _lastDuration{0};
     bool _loaded = false;

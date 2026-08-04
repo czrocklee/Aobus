@@ -26,6 +26,7 @@ KNOWN_LAYERS = frozenset(
         "tui",
         "uimodel",
         "utility",
+        "winui",
     }
 )
 

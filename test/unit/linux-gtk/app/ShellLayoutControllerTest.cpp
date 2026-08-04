@@ -179,6 +179,27 @@ namespace ao::gtk::test
       CHECK(ao::test::readFile(layoutPath) == original);
     }
 
+    SECTION("loadLayout rejects a custom layout outside the GTK catalog and preserves its file")
+    {
+      auto prefs = rt::AppPrefsState{};
+      prefs.lastLayoutPreset = "classic";
+      configStorePtr->saveAppPrefs(prefs);
+
+      auto custom = LayoutDocument{};
+      custom.root.type = "windows.navigationPane";
+      REQUIRE(storePtr->save(custom, "classic"));
+
+      auto const layoutPath = tempDir / "layouts" / "classic.yaml";
+      auto const original = ao::test::readFile(layoutPath);
+
+      controller.loadLayout();
+      REQUIRE(pumpGtkEventsUntil([&controller]
+                                 { return findNodeById(controller.activeLayout().root, "main-paned") != nullptr; }));
+
+      CHECK(controller.activeLayout().root.type == "box");
+      CHECK(ao::test::readFile(layoutPath) == original);
+    }
+
     SECTION("an over-budget editor preview preserves the active GTK tree")
     {
       controller.loadLayout();

@@ -112,7 +112,7 @@ if(AOBUS_BUILD_GTK)
   )
 endif()
 
-# ao_core_test: portable unit + integration tests
+# ao_core_test: shared and host-native unit + integration tests
 add_executable(ao_core_test
     # async tests
     unit/async/RequestCoalescerTest.cpp
@@ -279,19 +279,22 @@ add_executable(ao_core_test
     unit/uimodel/input/KeymapStoreTest.cpp
     unit/uimodel/preference/PreferencesEditorModelTest.cpp
     unit/uimodel/preference/ThemePresetTest.cpp
-    unit/uimodel/preference/WindowsThemeTest.cpp
     unit/uimodel/layout/action/LayoutActionCatalogTest.cpp
+    unit/uimodel/layout/action/LayoutActionSlotResolutionTest.cpp
     unit/uimodel/layout/action/LayoutActionValidatorTest.cpp
     unit/uimodel/layout/component/AbsoluteCanvasGeometryTest.cpp
     unit/uimodel/layout/component/LayoutComponentCatalogTest.cpp
     unit/uimodel/layout/component/LayoutComponentStateTest.cpp
     unit/uimodel/layout/component/LayoutStatePromoterTest.cpp
+    unit/uimodel/layout/component/StatefulComponentStateTest.cpp
     unit/uimodel/layout/document/LayoutModelTest.cpp
+    unit/uimodel/layout/document/LayoutPlacementTest.cpp
     unit/uimodel/layout/document/LayoutPreparationTest.cpp
+    unit/uimodel/layout/document/LayoutValidationTest.cpp
     unit/uimodel/layout/document/LayoutTemplateExpansionTest.cpp
-    unit/uimodel/layout/shell/DesktopShellPolicyTest.cpp
+    unit/uimodel/layout/shell/LayoutBuildStateViewTest.cpp
+    unit/uimodel/layout/shell/ShellGenerationSequenceTest.cpp
     unit/uimodel/layout/shell/ShellLayoutSessionModelTest.cpp
-    unit/uimodel/layout/shell/WindowsDesktopSettingsYamlSchemaTest.cpp
     unit/uimodel/presentation/CoverArtPlaceholderTest.cpp
     unit/uimodel/presentation/PresentationTextCatalogTest.cpp
     unit/uimodel/library/detail/TrackCustomMetadataTest.cpp
@@ -471,8 +474,52 @@ if(WIN32)
     unit/audio/backend/detail/WasapiGraphRegistryTest.cpp
     unit/audio/backend/detail/WasapiStringsTest.cpp
     unit/windows/platform/MemoryRandomAccessStreamTest.cpp
+
+    # Windows-owned shell rules are tested only by the native Windows suite.
+    # The normal Windows test graph uses Ninja while aobus-winui-lib requires
+    # the Visual Studio/XAML graph, so this target compiles the pure rule sources
+    # directly instead of exporting a second cross-platform frontend library.
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DestructiveLibraryRestart.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/DesktopSettingsYamlSchema.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/LibraryStartupPlan.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/StartupOptions.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/app/CommandLine.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ElementKind.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutCatalog.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/LayoutDialect.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/PlacementPlan.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellDocument.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellStatePolicy.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/StyleLookup.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ThemeSurface.cpp
+    ${CMAKE_SOURCE_DIR}/app/windows-winui/theme/Theme.cpp
+    unit/winui/app/DestructiveLibraryRestartTest.cpp
+    unit/winui/app/LibraryStartupPlanTest.cpp
+    unit/winui/app/StartupOptionsTest.cpp
+    unit/winui/app/CommandLineTest.cpp
+    unit/winui/DesktopSettingsYamlSchemaTest.cpp
+    unit/winui/FrameResourceTest.cpp
+    unit/winui/StringResourceTest.cpp
+    unit/winui/ThemeTest.cpp
+    unit/winui/layout/ElementKindTest.cpp
+    unit/winui/layout/LayoutCatalogTest.cpp
+    unit/winui/layout/LayoutDialectTest.cpp
+    unit/winui/layout/PlacementPlanTest.cpp
+    unit/winui/layout/ShellDocumentTest.cpp
+    unit/winui/layout/ShellStatePolicyTest.cpp
+    unit/winui/layout/StyleLookupTest.cpp
+    unit/winui/layout/ThemeSurfaceTest.cpp
   )
-  target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform)
+  target_include_directories(ao_core_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/app/windows-winui/include")
+  target_compile_definitions(ao_core_test PRIVATE
+    AOBUS_WINDOWS_LAYOUT_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui/layout"
+    AOBUS_WINDOWS_FRAME_XAML="${CMAKE_SOURCE_DIR}/app/windows-winui/MainWindow.xaml"
+    AOBUS_WINDOWS_WINUI_CMAKE="${CMAKE_SOURCE_DIR}/app/windows-winui/CMakeLists.txt"
+    AOBUS_WINDOWS_SHELL_BUILDER_SOURCE="${CMAKE_SOURCE_DIR}/app/windows-winui/layout/ShellBuilder.cpp"
+    AOBUS_WINDOWS_WINUI_DIR="${CMAKE_SOURCE_DIR}/app/windows-winui"
+    AOBUS_WINDOWS_RESW="${CMAKE_SOURCE_DIR}/app/windows-winui/Resources/en-US/Resources.resw")
+  target_link_libraries(ao_core_test PRIVATE advapi32 ao_windows_platform PkgRapidYaml)
 endif()
 add_test(NAME ao_core_test COMMAND ao_core_test)
 

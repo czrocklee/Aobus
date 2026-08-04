@@ -9,6 +9,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h>
 
@@ -48,8 +49,8 @@ namespace ao::gtk::layout
                      return AudioPipelinePanelVariant::Tooltip;
                    }
 
-                   return ctx2.surface == LayoutSurface::Tooltip ? AudioPipelinePanelVariant::Tooltip
-                                                                 : AudioPipelinePanelVariant::Inline;
+                   return ctx2.surface == uimodel::LayoutSurface::Tooltip ? AudioPipelinePanelVariant::Tooltip
+                                                                          : AudioPipelinePanelVariant::Inline;
                  }(ctx, node)}
         , _viewModel{ctx.runtime.playback(), [this](auto const& view) { _panel.apply(view.audioPipeline); }}
       {

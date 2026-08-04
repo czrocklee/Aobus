@@ -124,13 +124,19 @@ namespace winrt::Aobus::implementation
   void AobusSoulControl::bind(ao::rt::PlaybackService& playback)
   {
     unbind();
+    resetPresentation();
     _viewModelPtr = std::make_unique<ao::uimodel::AobusSoulViewModel>(
       playback, [this](ao::uimodel::AobusSoulViewState const& state) { applyViewState(state); });
   }
 
-  void AobusSoulControl::unbind()
+  void AobusSoulControl::unbind() noexcept
   {
     _viewModelPtr.reset();
+    stopAnimation();
+  }
+
+  void AobusSoulControl::resetPresentation()
+  {
     applyViewState({});
   }
 
@@ -194,7 +200,8 @@ namespace winrt::Aobus::implementation
     if (animate && !_rendering)
     {
       _optPreviousFrameTime.reset();
-      _renderingToken = Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
+      _renderingRevoker = Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
+        winrt::auto_revoke,
         [this](Windows::Foundation::IInspectable const&, Windows::Foundation::IInspectable const&) { renderFrame(); });
       _rendering = true;
     }
@@ -204,13 +211,10 @@ namespace winrt::Aobus::implementation
     }
   }
 
-  void AobusSoulControl::stopAnimation()
+  void AobusSoulControl::stopAnimation() noexcept
   {
-    if (_rendering)
-    {
-      Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(_renderingToken);
-      _rendering = false;
-    }
+    _renderingRevoker.revoke();
+    _rendering = false;
 
     _optPreviousFrameTime.reset();
   }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Aobus Contributors
 
+#include <ao/rt/resource/ResourceByteLoader.h>
+
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/OperationCancelled.h>
@@ -10,7 +12,6 @@
 #include <ao/rt/library/Library.h>
 #include <ao/rt/library/LibraryTaskService.h>
 #include <ao/rt/resource/ResourceByteCache.h>
-#include <ao/rt/resource/ResourceByteLoader.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -70,7 +71,7 @@ namespace ao::rt
     _asyncRuntime = &runtime;
   }
 
-  void ResourceByteLoader::unbind()
+  void ResourceByteLoader::unbind() noexcept
   {
     _scopePtr.reset();
     _requests.clear();

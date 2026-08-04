@@ -45,7 +45,8 @@ Platform-neutral document and state policy live under `app/include/ao/uimodel/la
 ## State model
 
 The shell session holds `activePresetId` and `activeLayout`.
-The GTK runtime-state carrier holds the active preset id, one `LayoutComponentStateDocument`, its store, a monotonically increasing generation, edit mode, and the node-move callback.
+The runtime-state carrier holds the active preset id, one `LayoutComponentStateDocument`, its store, a monotonically increasing generation, edit mode, and the node-move callback.
+The carrier is a platform-neutral UIModel value owned by the GTK shell controller for the window lifetime and borrowed by each build.
 
 The controller is either loading, displaying one active generation, previewing an editor working document, applying an editor save, resetting state, promoting state, or tearing down.
 These are orchestration phases rather than a published enum.
@@ -159,11 +160,12 @@ GTK responsive and component-specific behavior remains owned by the individual c
 - [`LayoutPreparation.cpp`](../../../app/uimodel/layout/document/LayoutPreparation.cpp) owns authored limits, bounded template expansion, and the prepared proof.
 - [`LayoutRuntime.cpp`](../../../app/linux-gtk/layout/runtime/LayoutRuntime.cpp), [`ComponentRegistry.cpp`](../../../app/linux-gtk/layout/runtime/ComponentRegistry.cpp), and [`LayoutHost.cpp`](../../../app/linux-gtk/layout/runtime/LayoutHost.cpp) own GTK construction; [`ComponentTooltipController.cpp`](../../../app/linux-gtk/layout/runtime/ComponentTooltipController.cpp) owns tooltip scheduling and visible-content lifetime.
 - [`LayoutDocument.cpp`](../../../app/uimodel/layout/document/LayoutDocument.cpp) and [`LayoutComponentState.cpp`](../../../app/uimodel/layout/component/LayoutComponentState.cpp) own explicit document/state schemas; [`LayoutStatePromoter.cpp`](../../../app/uimodel/layout/component/LayoutStatePromoter.cpp) owns reusable promotion policy.
+- [`StatefulComponentState.cpp`](../../../app/uimodel/layout/component/StatefulComponentState.cpp) owns component-state resolution and the write guards; [`LayoutBuildStateView.cpp`](../../../app/uimodel/layout/shell/LayoutBuildStateView.cpp) owns the live-versus-candidate state view; [`LayoutActionSlotResolution.cpp`](../../../app/uimodel/layout/action/LayoutActionSlotResolution.cpp) owns whether an authored node binds an action slot.
 - [`ShellLayoutStore.cpp`](../../../app/linux-gtk/app/ShellLayoutStore.cpp) and [`ShellLayoutComponentStateStore.cpp`](../../../app/linux-gtk/app/ShellLayoutComponentStateStore.cpp) own files.
 
 ## Test map
 
-- UIModel tests under [`test/unit/uimodel/layout/`](../../../test/unit/uimodel/layout/) protect document, bounded preparation, expansion, state, validation, promotion, and session transitions.
+- UIModel tests under [`test/unit/uimodel/layout/`](../../../test/unit/uimodel/layout/) protect document, bounded preparation, expansion, state, validation, promotion, and session transitions, plus the headless component-state write guards, build-state view, and action-slot resolution.
 - [`LayoutRuntimeBuildTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutRuntimeBuildTest.cpp), [`LayoutHostTest.cpp`](../../../test/unit/linux-gtk/layout/components/LayoutHostTest.cpp), and registry/action tests under [`test/unit/linux-gtk/layout/runtime/`](../../../test/unit/linux-gtk/layout/runtime/) protect construction and activation.
 - Editor tests under [`test/unit/linux-gtk/layout/editor/`](../../../test/unit/linux-gtk/layout/editor/) protect preview, validation, save, cancel, and template editing.
 - [`ShellLayoutControllerTest.cpp`](../../../test/unit/linux-gtk/app/ShellLayoutControllerTest.cpp) protects failed-save retention and persistable cancel restoration across the editor/controller boundary.

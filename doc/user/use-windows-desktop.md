@@ -21,11 +21,14 @@ You will open an indexed music folder in the native Windows application, browse 
 
 1. Start `Aobus.exe`. Modern mode opens by default and an empty first-run library is harmless.
 2. Choose **Open Library...** and select the root of your music library.
+   Selecting the current root does nothing.
+   Opening a different root saves and closes the current Windows process, then
+   starts a new Aobus process for the selected library; playback from the old
+   library stops and the replacement has a new window identity.
    Aobus opens an existing index directly.
-   Opening a different library stops playback from the previous library.
-   For a folder without an Aobus index, it activates the folder and then runs
-   the initial scan. If scanning fails, that folder stays open so **Rescan** can
-   retry it.
+   For a folder without an Aobus index, the new process activates the folder and
+   then runs the initial scan. If scanning fails, that folder stays open so
+   **Rescan** can retry it.
 3. Use **Folders**, **Albums**, **Artists**, **Genres**, or a list below
    **Playlists** in the navigation pane. Use the presentation button above the
    table to switch between songs, albums, artists, genres, years, classical
@@ -46,7 +49,7 @@ You will open an indexed music folder in the native Windows application, browse 
    Missing Now Playing artwork and idle playback use a transparent equalizer placeholder.
 7. Choose **Classic Mode** to use the dense menu, tree, property, status, and GTK-compatible playback layout. Choose **Modern Mode** to return. Playback, the active library, list, and presentation continue across the switch.
 8. In Classic mode, click Soul for output devices, right-click it for the system menu, hold it for full-screen Soul, or hover it to inspect the audio pipeline.
-9. Choose **Rescan** after files change. A failed scan leaves the active library open and retryable. While Open Library or Rescan is already active, another request starts nothing.
+9. Choose **Rescan** after files change. A failed scan leaves the active library open and retryable. Another Rescan while one is active starts nothing; choosing a different library instead closes the current process and cancels its work during teardown.
 10. To apply a custom theme, create `%LOCALAPPDATA%\Aobus\windows-theme.yaml` using the exact reference schema, then choose **Reload Theme**. Omit or remove the file to follow built-in and system appearance.
 
 ## Verify the result
@@ -55,7 +58,7 @@ The status area reports the selected library as ready, rows remain keyboard navi
 
 ## Troubleshooting
 
-- If a folder cannot be opened or scanned, read the status diagnostic and correct access or file problems; the previous library remains active.
+- If a selected folder cannot be opened, the successor process reports startup failure and exits; start Aobus normally to return to the previously saved library. A scan failure instead leaves the selected library open and retryable.
 - A mapped drive must be visible in the same interactive Windows sign-in that launches Aobus.
   If a service or SSH session cannot see the drive letter, select the equivalent UNC path instead.
 - If theme reload fails, correct the reported field, type, or color. The last valid theme remains visible. Removing the file and choosing **Reload Theme** restores the Windows appearance.

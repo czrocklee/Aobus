@@ -62,6 +62,16 @@ UIModel may own view projections, UI-local state machines and stores, editor cod
 It must not own GTK/GDK/Glibmm/Gio or FTXUI types, widgets and dialogs, CSS, platform scheduling, LMDB transactions or store views, direct audio player/engine/backend control, or platform-specific includes.
 Inputs arrive through stable core/runtime values, narrow runtime services, DTO snapshots, requests, and platform-neutral callbacks.
 
+### One frontend's vocabulary is not a shared model
+
+Portability is not the test. Deciding which component types a shell accepts, which XAML element each one constructs, which style targets are compatible, and which themed surfaces exist is all pure C++ that compiles anywhere - and all of it belongs to one frontend.
+A file that announces which frontend it serves is by that admission not shared, so the Windows-owned `app/windows-winui/layout/LayoutCatalog.h`, `GtkThemeSurface.cpp`, and `TuiFramePolicy.h` do not belong in `ao_app_uimodel` whatever they include.
+
+Such code goes to the frontend target that owns it. Do not create a cross-platform model target solely to make another host's gate compile frontend vocabulary. WinUI keeps these rules in the Windows-only `aobus-winui-lib`, under the `ao::winui` namespace with headers in `app/windows-winui/include/ao/winui/`; the native Windows suite tests them, while the Linux gate tests only the genuinely shared UIModel contracts.
+
+What is left in UIModel is what more than one frontend genuinely decides the same way, expressed so no frontend's name appears in it. A shared traversal that a frontend extends takes the extension as data - see `LayoutDialect` - rather than naming the frontend in a branch.
+`cmake/AssertUimodelFrontendNeutrality.cmake` enforces both halves: no file inside UIModel may be named after a frontend, and none may spell a frontend's API vocabulary in code. Naming a frontend in a comment stays allowed, because explaining that GTK derives expansion from a widget's children is exactly why a shared field is optional, and that reason belongs beside the field.
+
 ### Feature ownership
 
 - `input` owns neutral chords and keymap state.
@@ -98,7 +108,7 @@ When adding UIModel behavior:
 1. Select the existing feature capsule that owns the user concept.
 2. Choose the narrowest role suffix from the table.
 3. Mirror public header, implementation, and test paths.
-4. Keep platform mapping in the consuming frontend.
+4. Keep platform mapping in the consuming frontend, and keep one frontend's vocabulary there too.
 5. Update the organization guardrail only when introducing a justified new capsule.
 6. For shared authored copy, add or extend a typed semantic input and lock its catalog coverage and fallback in focused tests.
 

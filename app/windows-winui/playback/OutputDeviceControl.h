@@ -6,18 +6,28 @@
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.h>
 
 #include <memory>
 #include <vector>
 
+namespace ao::rt
+{
+  class PlaybackService;
+} // namespace ao::rt
+
 namespace ao::winui
 {
-  struct WinUiDependencies;
-
   struct OutputDeviceControlConfig final
   {
-    winrt::Microsoft::UI::Xaml::Controls::Button modernButton{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button classicButton{nullptr};
+    /**
+     * @brief The button that names the active output, if any surface presents it.
+     *
+     * The selector is also reachable from anchors that present nothing of their
+     * own, such as the soul button, so the presenter is optional and the control
+     * is then only a way to raise the menu.
+     */
+    winrt::Microsoft::UI::Xaml::Controls::Button presenter{nullptr};
   };
 
   class OutputDeviceControl final
@@ -31,26 +41,23 @@ namespace ao::winui
     OutputDeviceControl(OutputDeviceControl&&) = delete;
     OutputDeviceControl& operator=(OutputDeviceControl&&) = delete;
 
-    void bind(WinUiDependencies const& dependencies);
-    void unbind();
+    void bind(rt::PlaybackService& playback);
+    void unbind() noexcept;
+
+    /// Present the device menu anchored to @p anchor, refreshed from the runtime.
+    void showAt(winrt::Microsoft::UI::Xaml::FrameworkElement const& anchor);
 
   private:
-    struct ItemClickRegistration final
-    {
-      winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem item{nullptr};
-      winrt::event_token token{};
-    };
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
 
     void applyState(uimodel::OutputDeviceViewState const& state);
-    void showAt(winrt::Microsoft::UI::Xaml::Controls::Button const& anchor);
-    void closeFlyout();
+    void closeFlyout() noexcept;
 
-    winrt::Microsoft::UI::Xaml::Controls::Button _modernButton{nullptr};
-    winrt::Microsoft::UI::Xaml::Controls::Button _classicButton{nullptr};
+    winrt::Microsoft::UI::Xaml::Controls::Button _presenter{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::MenuFlyout _flyout{nullptr};
-    winrt::event_token _modernClickToken{};
-    winrt::event_token _classicClickToken{};
-    std::vector<ItemClickRegistration> _itemClickRegistrations;
+    winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _presenterClickRevoker{};
+    std::vector<winrt::Microsoft::UI::Xaml::Controls::MenuFlyoutItem::Click_revoker> _itemClickRevokers;
     std::unique_ptr<uimodel::OutputDeviceViewModel> _viewModelPtr;
     uimodel::OutputDeviceViewState _state{};
   };

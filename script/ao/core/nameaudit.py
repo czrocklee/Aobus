@@ -14,7 +14,12 @@ LINT_FIXTURE_PARTS = ("test", "integration", "lint", "fixture")
 ROLE_ALLOWED_PREFIXES: dict[str, tuple[str, ...]] = {
     "ViewModel": ("app/include/ao/uimodel/", "app/uimodel/", "test/unit/uimodel/"),
     "Service": ("app/include/ao/rt/", "app/runtime/", "test/unit/runtime/"),
-    "Component": ("app/linux-gtk/layout/", "test/unit/linux-gtk/layout/"),
+    "Component": (
+        "app/linux-gtk/layout/",
+        "app/windows-winui/layout/",
+        "test/unit/linux-gtk/layout/",
+        "test/unit/winui/layout/",
+    ),
     "Dialog": ("app/linux-gtk/", "test/unit/linux-gtk/"),
     "Widget": ("app/linux-gtk/", "test/unit/linux-gtk/"),
     "Panel": ("app/linux-gtk/", "app/tui/", "app/windows-winui/", "test/unit/linux-gtk/", "test/unit/tui/"),

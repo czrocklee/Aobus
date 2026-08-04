@@ -6,6 +6,7 @@
 #include "track/TrackRowItem.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/async/Signal.h>
 #include <ao/async/Subscription.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/ViewIds.h>
@@ -49,9 +50,9 @@ namespace ao::winui
     TrackListController(TrackListController&&) = delete;
     TrackListController& operator=(TrackListController&&) = delete;
 
-    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr, uimodel::TrackColumnLayoutState& columnLayouts);
-    void setOnChanged(std::function<void()> onChanged) { _onChanged = std::move(onChanged); }
-    void unbind();
+    void bind(rt::AppRuntime& runtime, uimodel::TrackColumnLayoutState& columnLayouts);
+    async::Signal<>& signalChanged() noexcept { return _changed; }
+    void unbind() noexcept;
     void reload();
     void setViewportWidth(double width, double trailingChromeWidth);
     void publishSelection(std::span<TrackId const> trackIds);
@@ -82,6 +83,9 @@ namespace ao::winui
     double contentWidth() const noexcept { return _contentWidth; }
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     static constexpr std::int32_t kDefaultViewportWidth = 1200;
     static constexpr double kDefaultContentWidth = 1200.0;
 
@@ -90,11 +94,11 @@ namespace ao::winui
     void refreshColumns();
     Result<> storeColumnSpecs(std::vector<uimodel::TrackColumnSolveSpec> const& specs);
     void resetProjection(std::shared_ptr<rt::TrackListProjection> projectionPtr);
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
     rt::AppRuntime* _runtime = nullptr;
     uimodel::TrackColumnLayoutState* _columnLayouts = nullptr;
     rt::ViewId _viewId{rt::kInvalidViewId};
     std::shared_ptr<rt::TrackListProjection> _projectionPtr;
+    std::shared_ptr<void> _bindingLifetimePtr;
     bool _projectionInvalidated = false;
     winrt::Windows::Foundation::Collections::IVectorView<winrt::Windows::Foundation::IInspectable> _items{nullptr};
     winrt::Windows::Foundation::Collections::IObservableVector<winrt::Windows::Foundation::IInspectable> _headers;
@@ -105,6 +109,6 @@ namespace ao::winui
     std::int32_t _surfaceViewportWidth = kDefaultViewportWidth;
     std::int32_t _trailingChromeWidth = 0;
     double _contentWidth = kDefaultContentWidth;
-    std::function<void()> _onChanged;
+    async::Signal<> _changed;
   };
 } // namespace ao::winui

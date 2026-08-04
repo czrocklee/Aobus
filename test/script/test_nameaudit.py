@@ -16,6 +16,7 @@ class NameAuditTest(unittest.TestCase):
                 "app/runtime/FooService.cpp": "class FooService final {};",
                 "app/linux-gtk/FooController.h": "class FooController final {};",
                 "app/linux-gtk/layout/component/FooComponent.cpp": "class FooComponent final {};",
+                "test/unit/winui/layout/FooComponentTest.cpp": "class FooComponent final {};",
                 "test/unit/runtime/FakeService.cpp": "class FakeService final {};",
                 "test/unit/runtime/SpyObserver.cpp": "class SpyObserver final {};",
             }

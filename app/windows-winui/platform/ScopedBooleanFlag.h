@@ -17,7 +17,7 @@ namespace ao::winui
       }
     }
 
-    ~ScopedBooleanFlag() noexcept
+    ~ScopedBooleanFlag()
     {
       if (_value != nullptr)
       {

@@ -4,7 +4,8 @@
 #include "track/TrackQuickFilterControl.h"
 
 #include "platform/ScopedBooleanFlag.h"
-#include <ao/rt/AppRuntime.h>
+#include <ao/rt/ViewService.h>
+#include <ao/rt/WorkspaceService.h>
 #include <ao/uimodel/library/track/TrackFilterViewModel.h>
 
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
@@ -41,48 +42,37 @@ namespace ao::winui
 
   TrackQuickFilterControl::~TrackQuickFilterControl()
   {
-    _commitPending = false;
-
-    if (_debounceTimer)
-    {
-      _debounceTimer.Stop();
-    }
-
-    _viewModelPtr.reset();
-    _runtimePtr.reset();
+    unbind();
   }
 
-  void TrackQuickFilterControl::bind(std::shared_ptr<rt::AppRuntime> runtimePtr)
+  void TrackQuickFilterControl::bind(rt::ViewService& views, rt::WorkspaceService& workspace)
   {
     unbind();
-    _runtimePtr = std::move(runtimePtr);
-
-    try
-    {
-      _viewModelPtr = std::make_unique<uimodel::TrackFilterViewModel>(_runtimePtr->views(),
-                                                                      _runtimePtr->workspace(),
-                                                                      [this](uimodel::TrackFilterViewState const& state)
-                                                                      { applyState(state); });
-    }
-    catch (...)
-    {
-      _runtimePtr.reset();
-      throw;
-    }
+    resetPresentation();
+    _viewModelPtr = std::make_unique<uimodel::TrackFilterViewModel>(
+      views, workspace, [this](uimodel::TrackFilterViewState const& state) { applyState(state); });
   }
 
-  void TrackQuickFilterControl::unbind()
+  void TrackQuickFilterControl::unbind() noexcept
   {
     _commitPending = false;
+    _viewModelPtr.reset();
 
     if (_debounceTimer)
     {
-      _debounceTimer.Stop();
+      try
+      {
+        _debounceTimer.Stop();
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): The debounce timer may already be stopped during teardown.
+      catch (...)
+      {
+      }
     }
+  }
 
-    _viewModelPtr.reset();
-    _runtimePtr.reset();
-
+  void TrackQuickFilterControl::resetPresentation()
+  {
     if (_input)
     {
       [[maybe_unused]] auto const applyingState = ScopedBooleanFlag{_applyingState};

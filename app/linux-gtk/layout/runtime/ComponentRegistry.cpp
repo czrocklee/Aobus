@@ -9,8 +9,9 @@
 #include "layout/runtime/DecoratedLayoutComponent.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include <ao/uimodel/layout/action/LayoutActionSlot.h>
+#include <ao/uimodel/layout/action/LayoutActionSlotResolution.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
 #include <gtkmm/label.h>
@@ -79,33 +80,9 @@ namespace ao::gtk::layout
     // Phase 2: Automatic interaction controller attachment
     auto interactionControllerPtr = std::unique_ptr<ComponentInteractionController>{};
 
-    if (optCompDesc && ctx.surface != LayoutSurface::Tooltip)
+    if (optCompDesc && ctx.surface != uimodel::LayoutSurface::Tooltip)
     {
-      auto const& policy = optCompDesc->actionPolicy;
-
-      bool hasActions = false;
-
-      auto const check = [&](std::string_view propName, uimodel::LayoutActionSlot slot)
-      {
-        if (!policy.isSlotAllowed(slot))
-        {
-          return false;
-        }
-
-        if (node.props.contains(std::string{propName}))
-        {
-          return true;
-        }
-
-        return !policy.defaultAction(slot).empty();
-      };
-
-      hasActions = check(uimodel::kPrimaryActionProp, uimodel::LayoutActionSlot::PrimaryClick) ||
-                   check(uimodel::kPrimaryLongPressActionProp, uimodel::LayoutActionSlot::PrimaryLongPress) ||
-                   check(uimodel::kSecondaryActionProp, uimodel::LayoutActionSlot::SecondaryClick) ||
-                   check(uimodel::kSecondaryLongPressActionProp, uimodel::LayoutActionSlot::SecondaryLongPress);
-
-      if (hasActions)
+      if (auto const& policy = optCompDesc->actionPolicy; uimodel::hasBoundActionSlot(policy, node))
       {
         interactionControllerPtr = std::make_unique<ComponentInteractionController>();
         interactionControllerPtr->attach(ctx, node, componentPtr->widget(), policy);
@@ -119,9 +96,9 @@ namespace ao::gtk::layout
       struct [[nodiscard]] SurfaceGuard
       {
         LayoutBuildContext& ctx;
-        LayoutSurface saved;
+        uimodel::LayoutSurface saved;
 
-        SurfaceGuard(LayoutBuildContext& ctxRef, LayoutSurface surface)
+        SurfaceGuard(LayoutBuildContext& ctxRef, uimodel::LayoutSurface surface)
           : ctx{ctxRef}, saved{surface}
         {
         }
@@ -134,12 +111,12 @@ namespace ao::gtk::layout
 
       auto const guard = SurfaceGuard{ctx, ctx.surface};
 
-      ctx.surface = LayoutSurface::Tooltip;
+      ctx.surface = uimodel::LayoutSurface::Tooltip;
 
       auto tooltipComponentPtr = std::unique_ptr<LayoutComponent>{};
 
       // Ignore nested tooltips when already building a tooltip surface.
-      if (guard.saved != LayoutSurface::Tooltip)
+      if (guard.saved != uimodel::LayoutSurface::Tooltip)
       {
         tooltipComponentPtr = create(ctx, *node.optTooltip->nodePtr);
 

@@ -1,7 +1,9 @@
 """Extract native WinUI compile commands from the Visual Studio build tree."""
 
 import json
+import re
 import subprocess
+from collections import deque
 from pathlib import Path
 
 from .paths import PROJECT_ROOT, absolute_path
@@ -9,6 +11,72 @@ from .proc import die
 
 _WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
 _TRANSLATION_UNIT_SUFFIXES = frozenset((".c", ".cc", ".cpp", ".cxx"))
+_INCLUDE_DIRECTIVE_RE = re.compile(r'^\s*#\s*include\s*([<"])([^">]+)[">]', re.MULTILINE)
+
+
+def _path_key(path: Path) -> str:
+    """Return a platform-neutral key for comparing repository paths."""
+    return str(path).replace("\\", "/").casefold()
+
+
+def _resolve_include(
+    including_file: Path,
+    delimiter: str,
+    spelling: str,
+    include_roots: tuple[Path, ...],
+    project_root: Path,
+) -> Path | None:
+    """Resolve one repository include without attempting to model compiler system headers."""
+    candidates: list[Path] = []
+    if delimiter == '"':
+        candidates.append(including_file.parent / spelling)
+    candidates.extend(root / spelling for root in include_roots)
+    for candidate in candidates:
+        resolved = absolute_path(candidate)
+        try:
+            resolved.relative_to(project_root)
+        except ValueError:
+            continue
+        if resolved.is_file():
+            return resolved
+    return None
+
+
+def _repository_include_distances(
+    source: Path,
+    *,
+    include_roots: tuple[Path, ...],
+    project_root: Path,
+) -> dict[str, int]:
+    """Index reachable repository headers and their shortest include distance from a source."""
+    distances: dict[str, int] = {}
+    visited: set[str] = {_path_key(source)}
+    pending: deque[tuple[Path, int]] = deque([(source, 0)])
+    while pending:
+        current, distance = pending.popleft()
+        try:
+            contents = current.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for match in _INCLUDE_DIRECTIVE_RE.finditer(contents):
+            dependency = _resolve_include(
+                current,
+                match.group(1),
+                match.group(2).strip(),
+                include_roots,
+                project_root,
+            )
+            if dependency is None:
+                continue
+            dependency_key = _path_key(dependency)
+            dependency_distance = distance + 1
+            previous_distance = distances.get(dependency_key)
+            if previous_distance is None or dependency_distance < previous_distance:
+                distances[dependency_key] = dependency_distance
+            if dependency_key not in visited:
+                visited.add(dependency_key)
+                pending.append((dependency, dependency_distance))
+    return distances
 
 
 def _cmake_cache_value(build_dir: Path, name: str) -> str | None:
@@ -65,7 +133,7 @@ def compile_commands(
     if not generator_instance:
         raise die(f"WinUI build tree has no CMAKE_GENERATOR_INSTANCE: {build_dir}")
     msbuild = Path(generator_instance) / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
-    project = build_dir / "app" / "windows-winui" / "aobus-winui.vcxproj"
+    project = build_dir / "app" / "windows-winui" / "aobus-winui-lib.vcxproj"
     if not msbuild.is_file():
         raise die(f"MSBuild.exe not found for the configured WinUI generator: {msbuild}")
     if not project.is_file():
@@ -141,3 +209,62 @@ def compile_commands(
         details = "\n".join(f"  {path}" for path in missing)
         raise die(f"MSBuild returned no WinUI compile command for:\n{details}")
     return commands
+
+
+def find_header_companions(
+    commands: list[dict[str, object]],
+    headers: tuple[Path, ...],
+    *,
+    project_root: Path,
+    winui_root: Path,
+) -> dict[Path, Path]:
+    """Find exact WinUI translation units that textually include selected headers.
+
+    The Visual Studio compile-command query does not expose Ninja's header dependency
+    graph.  Build a small repository-only include index from those same native WinUI
+    translation units instead of maintaining one header-to-source rule per header.  A
+    shortest reachable include wins; ties are deterministic.  Headers that cannot be
+    reached are deliberately omitted so the normal coverage check can defer them.
+    """
+    root = absolute_path(project_root)
+    source_root = absolute_path(winui_root)
+    include_roots = (
+        source_root,
+        root / "app" / "include",
+        root / "include",
+        root,
+    )
+    requested = {(_path_key(absolute_path(header))): absolute_path(header) for header in headers}
+    if not requested:
+        return {}
+
+    sources: set[Path] = set()
+    for command in commands:
+        spelling = command.get("file")
+        if not isinstance(spelling, str) or not spelling:
+            continue
+        source = Path(spelling)
+        if not source.is_absolute():
+            directory = command.get("directory")
+            if isinstance(directory, str) and directory:
+                source = Path(directory) / source
+        source = absolute_path(source)
+        try:
+            source.relative_to(source_root)
+        except ValueError:
+            continue
+        if source.suffix.lower() in _TRANSLATION_UNIT_SUFFIXES and source.is_file():
+            sources.add(source)
+
+    candidates: dict[str, list[tuple[int, str, Path]]] = {key: [] for key in requested}
+    for source in sorted(sources, key=_path_key):
+        distances = _repository_include_distances(
+            source,
+            include_roots=include_roots,
+            project_root=root,
+        )
+        for header_key in requested:
+            if distance := distances.get(header_key):
+                candidates[header_key].append((distance, _path_key(source), source))
+
+    return {requested[header_key]: min(matches)[2] for header_key, matches in candidates.items() if matches}

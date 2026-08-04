@@ -73,8 +73,7 @@ namespace ao::winui
     winrt::Windows::Media::SystemMediaTransportControls controls{nullptr};
     uimodel::PlaybackCommandSurface* commands = nullptr;
     ResourceId displayedArtworkId{kInvalidResourceId};
-    winrt::event_token buttonToken{};
-    bool hasButtonToken = false;
+    winrt::Windows::Media::SystemMediaTransportControls::ButtonPressed_revoker buttonRevoker{};
     bool active = false;
   };
 
@@ -89,7 +88,8 @@ namespace ao::winui
                                                winrt::put_abi(_statePtr->controls)));
 
     auto const weakStatePtr = std::weak_ptr<State>{_statePtr};
-    _statePtr->buttonToken = _statePtr->controls.ButtonPressed(
+    _statePtr->buttonRevoker = _statePtr->controls.ButtonPressed(
+      winrt::auto_revoke,
       [weakStatePtr](winrt::Windows::Media::SystemMediaTransportControls const&,
                      winrt::Windows::Media::SystemMediaTransportControlsButtonPressedEventArgs const& args)
       {
@@ -107,26 +107,20 @@ namespace ao::winui
             });
         }
       });
-    _statePtr->hasButtonToken = true;
   }
 
   SmtcBridge::~SmtcBridge()
   {
     unbind();
-
-    if (_statePtr->hasButtonToken)
-    {
-      _statePtr->controls.ButtonPressed(_statePtr->buttonToken);
-      _statePtr->hasButtonToken = false;
-    }
+    _statePtr->buttonRevoker.revoke();
   }
 
-  void SmtcBridge::bind(std::shared_ptr<rt::AppRuntime> runtimePtr,
+  void SmtcBridge::bind(rt::AppRuntime& runtime,
                         uimodel::PlaybackCommandSurface& commands,
                         rt::ResourceByteLoader& resourceBytes)
   {
     unbind();
-    _runtimePtr = std::move(runtimePtr);
+    _runtime = &runtime;
     _resourceBytes = &resourceBytes;
     _statePtr->active = true;
     _statePtr->commands = &commands;
@@ -136,29 +130,79 @@ namespace ao::winui
     _statePtr->controls.IsStopEnabled(true);
     _statePtr->controls.IsNextEnabled(true);
     _statePtr->controls.IsPreviousEnabled(true);
-    _snapshotSub = _runtimePtr->playback().events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
-                                                               { handleSnapshot(snapshot); });
-    handleSnapshot(_runtimePtr->playback().snapshot());
+    _snapshotSub = runtime.playback().events().onSnapshot([this](rt::PlaybackSnapshot const& snapshot) noexcept
+                                                          { handleSnapshot(snapshot); });
+    handleSnapshot(runtime.playback().snapshot());
   }
 
-  void SmtcBridge::unbind()
+  void SmtcBridge::unbind() noexcept
   {
-    _artworkRequest.reset();
-    _artworkTask.reset();
-    _snapshotSub.reset();
+    // Close admission before cancellation so queued button/artwork continuations
+    // become harmless even if native revocation is delayed.
     _statePtr->active = false;
     _statePtr->commands = nullptr;
     _statePtr->displayedArtworkId = kInvalidResourceId;
-    auto updater = _statePtr->controls.DisplayUpdater();
-    updater.Thumbnail(nullptr);
-    updater.Update();
-    _statePtr->controls.IsEnabled(false);
     _resourceBytes = nullptr;
-    _runtimePtr.reset();
+    _runtime = nullptr;
+
+    try
+    {
+      _artworkRequest.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Artwork cancellation is best-effort during SMTC teardown.
+    catch (...)
+    {
+    }
+
+    try
+    {
+      _artworkTask.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Artwork-task cancellation is best-effort during SMTC teardown.
+    catch (...)
+    {
+    }
+
+    try
+    {
+      _snapshotSub.reset();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Snapshot unsubscription is best-effort during SMTC teardown.
+    catch (...)
+    {
+    }
+
+    // Unlike an in-window widget, the system transport overlay outlives this
+    // window. Leaving it enabled with a stale thumbnail is visible to the user,
+    // so this reset is owed on teardown rather than only on rebind.
+    try
+    {
+      auto updater = _statePtr->controls.DisplayUpdater();
+      updater.Thumbnail(nullptr);
+      updater.Update();
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Clearing the system thumbnail cannot block native teardown.
+    catch (...)
+    {
+    }
+
+    try
+    {
+      _statePtr->controls.IsEnabled(false);
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Disabling the system transport controls is best-effort at teardown.
+    catch (...)
+    {
+    }
   }
 
   void SmtcBridge::handleSnapshot(rt::PlaybackSnapshot const& snapshot)
   {
+    if (!_statePtr->active)
+    {
+      return;
+    }
+
     auto const& transport = snapshot.transport;
     _statePtr->controls.PlaybackStatus(playbackStatus(transport.transport));
     auto updater = _statePtr->controls.DisplayUpdater();
@@ -190,6 +234,11 @@ namespace ao::winui
 
   void SmtcBridge::updateArtwork(ResourceId const resourceId)
   {
+    if (!_statePtr->active || _resourceBytes == nullptr || _runtime == nullptr)
+    {
+      return;
+    }
+
     _artworkRequest.reset();
     _artworkTask.reset();
     auto const statePtr = std::weak_ptr<State>{_statePtr};
@@ -198,21 +247,19 @@ namespace ao::winui
       [this, statePtr, resourceId](rt::ResourceBytes bytes)
       {
         if (auto lockedStatePtr = statePtr.lock(); lockedStatePtr && lockedStatePtr->active &&
-                                                   lockedStatePtr->displayedArtworkId == resourceId && !bytes.empty())
+                                                   lockedStatePtr->displayedArtworkId == resourceId && !bytes.empty() &&
+                                                   _runtime != nullptr)
         {
-          auto runtimePtr = _runtimePtr;
-          _artworkTask = runtimePtr->async().spawnCancellable(
-            [statePtr, runtimePtr = std::move(runtimePtr), resourceId, bytes = std::move(bytes)](
-              std::stop_token const stopToken) mutable
-            {
-              return prepareAndWriteArtwork(statePtr, std::move(runtimePtr), resourceId, std::move(bytes), stopToken);
-            });
+          auto* const runtime = &_runtime->async();
+          _artworkTask = runtime->spawnCancellable(
+            [statePtr, runtime, resourceId, bytes = std::move(bytes)](std::stop_token const stopToken) mutable
+            { return prepareAndWriteArtwork(statePtr, runtime, resourceId, std::move(bytes), stopToken); });
         }
       });
   }
 
   async::Task<void> SmtcBridge::prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
-                                                       std::shared_ptr<rt::AppRuntime> runtimePtr,
+                                                       async::Runtime* const runtime,
                                                        ResourceId const resourceId,
                                                        rt::ResourceBytes bytes,
                                                        std::stop_token const stopToken)
@@ -221,17 +268,16 @@ namespace ao::winui
 
     try
     {
-      co_await runtimePtr->async().resumeOnWorker(stopToken);
+      co_await runtime->resumeOnWorker(stopToken);
       prepared = prepareMemoryRandomAccessStream(bytes.view());
     }
     catch (...)
     {
       async::rethrowIfOperationCancelled();
-      runtimePtr->async().reportUnhandledException(
-        std::current_exception(), "Windows SMTC cover-art stream preparation");
+      runtime->reportUnhandledException(std::current_exception(), "Windows SMTC cover-art stream preparation");
     }
 
-    co_await runtimePtr->async().resumeOnCallbackExecutor(stopToken);
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
 
     if (auto lockedStatePtr = statePtr.lock();
         lockedStatePtr && lockedStatePtr->active && lockedStatePtr->displayedArtworkId == resourceId)

@@ -6,8 +6,8 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/StatefulComponentState.h"
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/StatefulComponentState.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -38,7 +38,7 @@ namespace ao::gtk::layout
     {
     public:
       SplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _state{ctx, node, kSplitComponentType}
+        : _state{ctx.runtimeState, ctx.buildState, ctx.surface, node, kSplitComponentType}
       {
         if (node.children.size() != 2)
         {
@@ -193,7 +193,7 @@ namespace ao::gtk::layout
         bool previous;
       };
 
-      StatefulComponentState _state;
+      uimodel::StatefulComponentState _state;
       AllocationObserver _allocationRoot;
       Gtk::Paned _paned;
       sigc::connection _positionChangedConn;

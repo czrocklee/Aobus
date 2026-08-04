@@ -6,9 +6,9 @@
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/StatefulComponentState.h"
 #include <ao/rt/Log.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/StatefulComponentState.h>
 #include <ao/uimodel/layout/component/StatefulLayoutComponentType.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -173,7 +173,7 @@ namespace ao::gtk::layout
       };
 
       CollapsibleSplitComponent(LayoutBuildContext& ctx, LayoutNode const& node)
-        : _state{ctx, node, kCollapsibleSplitComponentType}
+        : _state{ctx.runtimeState, ctx.buildState, ctx.surface, node, kCollapsibleSplitComponentType}
       {
         if (node.children.size() != 2)
         {
@@ -673,7 +673,7 @@ namespace ao::gtk::layout
         }
       }
 
-      StatefulComponentState _state;
+      uimodel::StatefulComponentState _state;
       AllocationObserver _allocationRoot;
       Gtk::Box _container;
       Gtk::Box _gutterBox;

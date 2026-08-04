@@ -17,7 +17,8 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class LibraryTaskService;
+  class NotificationService;
 }
 
 namespace ao::uimodel
@@ -53,23 +54,20 @@ namespace ao::winui
     ActivityStatusControl(ActivityStatusControl&&) = delete;
     ActivityStatusControl& operator=(ActivityStatusControl&&) = delete;
 
-    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr);
-    void unbind();
+    void bind(rt::NotificationService& notifications, rt::LibraryTaskService& libraryTasks);
+    void unbind() noexcept;
 
   private:
-    struct DetailDismissRegistration final
-    {
-      winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
-      winrt::event_token token{};
-    };
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
 
     void render(uimodel::ActivityStatusViewState const& state);
     void renderDetail(uimodel::ActivityStatusViewState const& state);
     void appendTaskDetail(uimodel::ActivityTaskDetail const& task);
     void appendNotificationDetail(uimodel::ActivityDetailItem const& item);
-    void clearDetailRows();
+    void clearDetailRows() noexcept;
     void syncAutoDismissTimer(uimodel::ActivityCompactState const& compact);
-    void cancelAutoDismissTimer();
+    void cancelAutoDismissTimer() noexcept;
 
     winrt::Microsoft::UI::Xaml::Controls::Grid _root{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button _detailButton{nullptr};
@@ -83,8 +81,9 @@ namespace ao::winui
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer _autoDismissTimer{nullptr};
     winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _dismissClickRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _autoDismissTickRevoker{};
-    std::vector<DetailDismissRegistration> _detailDismissRegistrations;
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
+    std::vector<winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker> _detailDismissRevokers;
+    rt::NotificationService* _notifications = nullptr;
+    rt::LibraryTaskService* _libraryTasks = nullptr;
     std::unique_ptr<uimodel::ActivityStatusViewModel> _viewModelPtr;
     std::optional<uimodel::ActivityCompactState> _optScheduledCompact;
     std::uint64_t _autoDismissGeneration = 0;

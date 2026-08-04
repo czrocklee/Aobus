@@ -8,6 +8,7 @@
 #include "ShellLayoutStore.h"
 #include "app/GtkUiDependencies.h"
 #include "app/ThemeCoordinator.h"
+#include "layout/document/LayoutDialect.h"
 #include "layout/document/LayoutPresets.h"
 #include "layout/editor/LayoutEditorDialog.h"
 #include "layout/runtime/ActionRegistry.h"
@@ -46,6 +47,8 @@
 #include <ao/uimodel/layout/component/LayoutStatePromoter.h>
 #include <ao/uimodel/layout/document/LayoutNodeId.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/document/LayoutValidation.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 #include <ao/uimodel/playback/command/PlaybackCommand.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
@@ -82,9 +85,32 @@ namespace ao::gtk
       uimodel::LayoutComponentStateDocument componentState;
     };
 
+    Result<uimodel::PreparedLayout> prepareValidatedLayout(uimodel::LayoutDocument const& document,
+                                                           uimodel::LayoutDocumentLimits const& limits,
+                                                           uimodel::LayoutComponentCatalog const& components,
+                                                           uimodel::LayoutActionCatalog const& actions)
+    {
+      auto prepared = uimodel::prepareLayout(document, limits);
+
+      if (!prepared)
+      {
+        return std::unexpected{prepared.error()};
+      }
+
+      if (auto validated = uimodel::requireValidLayout(*prepared, components, actions, layout::layoutDialect());
+          !validated)
+      {
+        return std::unexpected{validated.error()};
+      }
+
+      return prepared;
+    }
+
     LayoutLoadResult loadLayoutOnWorker(ShellLayoutStore& store,
                                         ShellLayoutComponentStateStore* componentStateStore,
-                                        AppConfigStore& configStore)
+                                        AppConfigStore& configStore,
+                                        uimodel::LayoutComponentCatalog const& components,
+                                        uimodel::LayoutActionCatalog const& actions)
     {
       auto prefs = rt::AppPrefsState{};
       configStore.loadAppPrefs(prefs);
@@ -121,7 +147,7 @@ namespace ao::gtk
         doc = layout::makeBuiltInLayout(presetId);
       }
 
-      auto prepared = uimodel::prepareLayout(doc, store.limits());
+      auto prepared = prepareValidatedLayout(doc, store.limits(), components, actions);
 
       if (!prepared && usingCustomLayout)
       {
@@ -129,7 +155,7 @@ namespace ao::gtk
                      selection.presetId,
                      prepared.error().message);
         doc = layout::makeBuiltInLayout(presetId);
-        prepared = uimodel::prepareLayout(doc, store.limits());
+        prepared = prepareValidatedLayout(doc, store.limits(), components, actions);
       }
 
       if (!prepared)
@@ -580,7 +606,7 @@ namespace ao::gtk
 
   Result<layout::LayoutHost::PreparedTree> ShellLayoutController::prepareHost(
     uimodel::PreparedLayout const& preparedLayout,
-    layout::LayoutBuildStateView buildState)
+    uimodel::LayoutBuildStateView buildState)
   {
     auto ctx = layout::LayoutBuildContext{.registry = _registry,
                                           .actionRegistry = _actionRegistry,
@@ -600,12 +626,12 @@ namespace ao::gtk
 
   void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc)
   {
-    rebuildHost(doc, layout::LayoutBuildStateView{_runtimeState});
+    rebuildHost(doc, uimodel::LayoutBuildStateView{_runtimeState});
   }
 
-  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc, layout::LayoutBuildStateView buildState)
+  void ShellLayoutController::rebuildHost(uimodel::LayoutDocument const& doc, uimodel::LayoutBuildStateView buildState)
   {
-    auto prepared = uimodel::prepareLayout(doc, layoutLimits());
+    auto prepared = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
     if (!prepared)
     {
@@ -626,49 +652,66 @@ namespace ao::gtk
 
   void ShellLayoutController::loadLayout()
   {
-    auto& runtime = _runtime.async();
-    runtime.spawnWithLifetime(
-      &_tasks,
-      [self = this,
-       storePtr = _layoutStorePtr,
-       componentStateStorePtr = _componentStateStorePtr,
-       configStorePtr = _configStorePtr](std::stop_token const stopToken) mutable
-      {
-        return self->loadLayoutWorkflow(
-          std::move(storePtr), std::move(componentStateStorePtr), std::move(configStorePtr), stopToken);
-      });
+    auto* const asyncRuntime = &_runtime.async();
+    // startCancellable invokes the task factory on a worker. Snapshot all
+    // controller-owned inputs before publishing the lazy coroutine.
+    auto componentCatalog = _registry.catalog();
+    auto actionCatalog = _actionRegistry.catalog();
+
+    asyncRuntime->spawnWithLifetime(&_tasks,
+                                    [controller = this,
+                                     asyncRuntime,
+                                     storePtr = _layoutStorePtr,
+                                     componentStateStorePtr = _componentStateStorePtr,
+                                     configStorePtr = _configStorePtr,
+                                     componentCatalog = std::move(componentCatalog),
+                                     actionCatalog = std::move(actionCatalog)](std::stop_token const stopToken) mutable
+                                    {
+                                      return loadLayoutWorkflow(controller,
+                                                                asyncRuntime,
+                                                                std::move(storePtr),
+                                                                std::move(componentStateStorePtr),
+                                                                std::move(configStorePtr),
+                                                                std::move(componentCatalog),
+                                                                std::move(actionCatalog),
+                                                                stopToken);
+                                    });
   }
 
   async::Task<void> ShellLayoutController::loadLayoutWorkflow(
+    ShellLayoutController* const controller,
+    async::Runtime* const asyncRuntime,
     std::shared_ptr<ShellLayoutStore> layoutStorePtr,
     std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
     std::shared_ptr<AppConfigStore> configStorePtr,
+    uimodel::LayoutComponentCatalog componentCatalog,
+    uimodel::LayoutActionCatalog actionCatalog,
     std::stop_token const stopToken)
   {
-    APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started on UI thread");
+    APP_LOG_DEBUG("ShellLayoutController: loadLayout coroutine started");
 
-    auto& asyncRuntime = _runtime.async();
     auto optResult = std::optional<LayoutLoadResult>{};
     bool failed = false;
 
     try
     {
-      co_await asyncRuntime.resumeOnWorker(stopToken);
+      co_await asyncRuntime->resumeOnWorker(stopToken);
       APP_LOG_DEBUG("ShellLayoutController: loading layout config on background worker thread");
 
       if (layoutStorePtr && configStorePtr)
       {
-        optResult = loadLayoutOnWorker(*layoutStorePtr, componentStateStorePtr.get(), *configStorePtr);
+        optResult = loadLayoutOnWorker(
+          *layoutStorePtr, componentStateStorePtr.get(), *configStorePtr, componentCatalog, actionCatalog);
       }
     }
     catch (...)
     {
       async::rethrowIfOperationCancelled();
-      asyncRuntime.reportUnhandledException(std::current_exception(), "shell layout load workflow");
+      asyncRuntime->reportUnhandledException(std::current_exception(), "shell layout load workflow");
       failed = true;
     }
 
-    co_await asyncRuntime.resumeOnCallbackExecutor(stopToken);
+    co_await asyncRuntime->resumeOnCallbackExecutor(stopToken);
 
     if (failed)
     {
@@ -681,10 +724,10 @@ namespace ao::gtk
     }
 
     APP_LOG_DEBUG("ShellLayoutController: resumed on UI thread, applying layout");
-    applyLoadedLayoutWithFaultReporting(std::move(optResult->presetId),
-                                        std::move(optResult->document),
-                                        std::move(optResult->preparedLayout),
-                                        std::move(optResult->componentState));
+    controller->applyLoadedLayoutWithFaultReporting(std::move(optResult->presetId),
+                                                    std::move(optResult->document),
+                                                    std::move(optResult->preparedLayout),
+                                                    std::move(optResult->componentState));
   }
 
   void ShellLayoutController::applyLoadedLayoutWithFaultReporting(std::string presetId,
@@ -709,7 +752,7 @@ namespace ao::gtk
                                                 uimodel::LayoutComponentStateDocument componentState)
   {
     auto pending = prepareHost(
-      preparedLayout, layout::LayoutBuildStateView{presetId, componentState, _runtimeState.componentStateGeneration});
+      preparedLayout, uimodel::LayoutBuildStateView{presetId, componentState, _runtimeState.componentStateGeneration});
 
     if (!pending)
     {
@@ -826,7 +869,7 @@ namespace ao::gtk
         {
           auto const snapshot = _session.snapshot();
           rebuildHost(snapshot.layout,
-                      layout::LayoutBuildStateView{
+                      uimodel::LayoutBuildStateView{
                         snapshot.presetId, _runtimeState.componentState, _runtimeState.componentStateGeneration});
           _themeCoordinator.setTheme(oldTheme);
         }
@@ -841,7 +884,7 @@ namespace ao::gtk
 
     for (auto const& [id, doc] : result.modified)
     {
-      auto prepared = uimodel::prepareLayout(doc, layoutLimits());
+      auto prepared = prepareValidatedLayout(doc, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
       if (!prepared)
       {
@@ -852,7 +895,8 @@ namespace ao::gtk
       preparedModified.emplace(id, std::move(*prepared));
     }
 
-    auto activePrepared = uimodel::prepareLayout(result.activeDocument, layoutLimits());
+    auto activePrepared =
+      prepareValidatedLayout(result.activeDocument, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
     if (!activePrepared)
     {
@@ -874,7 +918,7 @@ namespace ao::gtk
 
     auto pending = prepareHost(
       *activePrepared,
-      layout::LayoutBuildStateView{result.activePresetId, nextComponentState, _runtimeState.componentStateGeneration});
+      uimodel::LayoutBuildStateView{result.activePresetId, nextComponentState, _runtimeState.componentStateGeneration});
 
     if (!pending)
     {
@@ -947,7 +991,8 @@ namespace ao::gtk
   {
     auto const presetId = uimodel::ShellLayoutSessionModel::activeOrDefaultPresetId(_session.snapshot().presetId);
     auto nextComponentState = uimodel::ShellLayoutSessionModel::emptyComponentState(presetId);
-    auto prepared = uimodel::prepareLayout(_session.snapshot().layout, layoutLimits());
+    auto prepared = prepareValidatedLayout(
+      _session.snapshot().layout, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
     if (!prepared)
     {
@@ -957,7 +1002,7 @@ namespace ao::gtk
     }
 
     auto pending = prepareHost(
-      *prepared, layout::LayoutBuildStateView{presetId, nextComponentState, _runtimeState.componentStateGeneration});
+      *prepared, uimodel::LayoutBuildStateView{presetId, nextComponentState, _runtimeState.componentStateGeneration});
 
     if (!pending)
     {
@@ -1019,7 +1064,8 @@ namespace ao::gtk
                                                       uimodel::LayoutComponentStateDocument promotedState)
   {
     auto const& presetId = promotedState.preset;
-    auto prepared = uimodel::prepareLayout(promotedLayout, layoutLimits());
+    auto prepared =
+      prepareValidatedLayout(promotedLayout, layoutLimits(), _registry.catalog(), _actionRegistry.catalog());
 
     if (!prepared)
     {
@@ -1028,7 +1074,7 @@ namespace ao::gtk
     }
 
     auto pending = prepareHost(
-      *prepared, layout::LayoutBuildStateView{presetId, promotedState, _runtimeState.componentStateGeneration});
+      *prepared, uimodel::LayoutBuildStateView{presetId, promotedState, _runtimeState.componentStateGeneration});
 
     if (!pending)
     {

@@ -5,6 +5,8 @@ endif()
 set(AOBUS_NO_COVER_NOTE_ASSET "${CMAKE_SOURCE_DIR}/asset/ui/no-cover/note.svg")
 set(AOBUS_NO_COVER_VINYL_ASSET "${CMAKE_SOURCE_DIR}/asset/ui/no-cover/vinyl.svg")
 set(AOBUS_NO_COVER_EQUALIZER_ASSET "${CMAKE_SOURCE_DIR}/asset/ui/no-cover/equalizer.svg")
+set(AOBUS_MODERN_LAYOUT_ASSET "${CMAKE_CURRENT_SOURCE_DIR}/layout/windows_modern_layout.yaml")
+set(AOBUS_CLASSIC_LAYOUT_ASSET "${CMAKE_CURRENT_SOURCE_DIR}/layout/windows_classic_layout.yaml")
 set(AOBUS_SOUL_MARK_ASSET "${CMAKE_SOURCE_DIR}/asset/brand/SoulMark.svg")
 set(AOBUS_BRAND_LICENSE_ASSET "${CMAKE_SOURCE_DIR}/asset/brand/LICENSE.txt")
 set(AOBUS_NO_COVER_ASSETS
@@ -13,37 +15,99 @@ set(AOBUS_NO_COVER_ASSETS
   ${AOBUS_NO_COVER_EQUALIZER_ASSET}
   ${AOBUS_SOUL_MARK_ASSET}
   ${AOBUS_BRAND_LICENSE_ASSET})
+set(AOBUS_SHELL_LAYOUT_ASSETS
+  ${AOBUS_MODERN_LAYOUT_ASSET}
+  ${AOBUS_CLASSIC_LAYOUT_ASSET})
 
-add_executable(aobus-winui WIN32
-  ${AOBUS_NO_COVER_ASSETS}
+# All compiled Windows implementation belongs to one frontend library. The
+# executable below is only the final link and deployed-resource boundary; WinUI
+# generates its application entry point while compiling App.xaml in the library.
+set(AOBUS_WINUI_LIBRARY_SOURCES
   App.xaml
   App.xaml.cpp
   App.xaml.h
+  app/DestructiveLibraryRestart.cpp
+  app/DesktopSettingsYamlSchema.cpp
   app/DispatcherQueueExecutor.cpp
   app/DispatcherQueueExecutor.h
+  app/LibraryStartupPlan.cpp
+  app/LibraryWindowSession.cpp
+  app/LibraryWindowSession.h
   app/LibrarySession.cpp
   app/LibrarySession.h
-  app/WindowsUiCoordinator.cpp
-  app/WindowsUiCoordinator.h
-  app/WinUiDependencies.h
+  app/StartupOptions.cpp
+  app/CommandLine.cpp
+  app/UiCoordinator.cpp
+  app/UiCoordinator.h
   image/CoverArtPresenter.cpp
   image/CoverArtPresenter.h
   image/CoverArtPlaceholderRenderer.cpp
   image/CoverArtPlaceholderRenderer.h
+  layout/ElementKind.cpp
+  layout/LayoutCatalog.cpp
+  layout/LayoutDialect.cpp
+  layout/PlacementPlan.cpp
+  layout/ShellDocument.cpp
+  layout/ShellStatePolicy.cpp
+  layout/StyleLookup.cpp
+  layout/ThemeSurface.cpp
+  layout/component/container/ContainerRegistry.cpp
+  layout/component/generic/GenericRegistry.cpp
+  layout/component/playback/NowPlayingInfo.cpp
+  layout/component/playback/NowPlayingInfo.h
+  layout/component/playback/PlaybackRegistry.cpp
+  layout/component/playback/SoulButton.cpp
+  layout/component/playback/SoulButton.h
+  layout/component/shell/NavigationPane.cpp
+  layout/component/shell/NavigationPane.h
+  layout/component/shell/PaneSplitter.cpp
+  layout/component/shell/PaneSplitter.h
+  layout/component/shell/ShellRegistry.cpp
+  layout/component/status/StatusRegistry.cpp
+  layout/component/track/TrackCoverArt.cpp
+  layout/component/track/TrackCoverArt.h
+  layout/component/track/TrackDetail.cpp
+  layout/component/track/TrackDetail.h
+  layout/component/track/TrackRegistry.cpp
+  layout/component/track/TrackTable.cpp
+  layout/component/track/TrackTable.h
+  layout/runtime/ActionBinder.cpp
+  layout/runtime/ActionBinder.h
+  layout/runtime/ActionRegistry.cpp
+  layout/runtime/ActionRegistry.h
+  layout/runtime/CommonLayoutProps.cpp
+  layout/runtime/CommonLayoutProps.h
+  layout/runtime/ComponentRegistrations.h
+  layout/runtime/ComponentRegistry.cpp
+  layout/runtime/ComponentRegistry.h
+  layout/runtime/FocusedDetail.cpp
+  layout/runtime/FocusedDetail.h
+  layout/runtime/LayoutBuildContext.h
+  layout/runtime/LayoutComponent.h
+  layout/runtime/LayoutHost.cpp
+  layout/runtime/LayoutHost.h
+  layout/runtime/ResourceLookup.cpp
+  layout/runtime/ResourceLookup.h
+  layout/runtime/ShellLibraryAccess.h
+  layout/runtime/UiSubscription.h
+  layout/ShellBuilder.cpp
+  layout/ShellBuilder.h
+  layout/ShellPresetSource.cpp
+  layout/ShellPresetSource.h
   platform/ScopedBooleanFlag.h
+  platform/ProcessLauncher.cpp
+  platform/ProcessLauncher.h
   platform/SmtcBridge.cpp
   platform/SmtcBridge.h
-  platform/WindowsStringResources.cpp
-  platform/WindowsStringResources.h
-  playback/AudioPipelineToolTip.cpp
-  playback/AudioPipelineToolTip.h
+  platform/StringResources.cpp
+  platform/StringResources.h
   playback/AobusSoulControl.cpp
   playback/AobusSoulControl.h
+  playback/AudioPipelineToolTip.cpp
+  playback/AudioPipelineToolTip.h
   playback/MainWindowPlayback.cpp
   playback/OutputDeviceControl.cpp
   playback/OutputDeviceControl.h
-  playback/PlaybackControls.cpp
-  playback/PlaybackControls.h
   playback/PlaybackTimeControl.cpp
   playback/PlaybackTimeControl.h
   playback/SeekControl.cpp
@@ -54,16 +118,14 @@ add_executable(aobus-winui WIN32
   playback/TransportButton.h
   playback/VolumeControl.cpp
   playback/VolumeControl.h
+  shell/MainWindowShell.cpp
   status/ActivityStatusControl.cpp
   status/ActivityStatusControl.h
-  Project.idl
-  Resources/en-US/Resources.resw
-  MainWindow.xaml
-  MainWindow.xaml.cpp
-  MainWindow.xaml.h
-  shell/MainWindowShell.cpp
-  theme/WindowsThemeCoordinator.cpp
-  theme/WindowsThemeCoordinator.h
+  theme/Theme.cpp
+  theme/SurfaceBrushes.cpp
+  theme/SurfaceBrushes.h
+  theme/ThemeCoordinator.cpp
+  theme/ThemeCoordinator.h
   track/MainWindowTrack.cpp
   track/TrackCellItem.cpp
   track/TrackCellItem.h
@@ -77,71 +139,56 @@ add_executable(aobus-winui WIN32
   track/TrackQuickFilterControl.h
   track/TrackRowItem.cpp
   track/TrackRowItem.h
-  app.manifest
-  pch.h
-)
-
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
-  App.xaml
-  App.xaml.cpp
-  App.xaml.h
-  app/DispatcherQueueExecutor.cpp
-  app/DispatcherQueueExecutor.h
-  app/LibrarySession.cpp
-  app/LibrarySession.h
-  app/WindowsUiCoordinator.cpp
-  app/WindowsUiCoordinator.h
-  app/WinUiDependencies.h
-  image/CoverArtPresenter.cpp
-  image/CoverArtPresenter.h
-  image/CoverArtPlaceholderRenderer.cpp
-  image/CoverArtPlaceholderRenderer.h
-  platform/ScopedBooleanFlag.h
-  platform/SmtcBridge.cpp
-  platform/SmtcBridge.h
-  platform/WindowsStringResources.cpp
-  platform/WindowsStringResources.h
-  playback/AudioPipelineToolTip.cpp
-  playback/AudioPipelineToolTip.h
-  playback/AobusSoulControl.cpp
-  playback/AobusSoulControl.h
-  playback/MainWindowPlayback.cpp
-  playback/OutputDeviceControl.cpp
-  playback/OutputDeviceControl.h
-  playback/PlaybackControls.cpp
-  playback/PlaybackControls.h
-  playback/PlaybackTimeControl.cpp
-  playback/PlaybackTimeControl.h
-  playback/SeekControl.cpp
-  playback/SeekControl.h
-  playback/SoulTransportButton.cpp
-  playback/SoulTransportButton.h
-  playback/TransportButton.cpp
-  playback/TransportButton.h
-  playback/VolumeControl.cpp
-  playback/VolumeControl.h
-  status/ActivityStatusControl.cpp
-  status/ActivityStatusControl.h
   MainWindow.xaml
   MainWindow.xaml.cpp
   MainWindow.xaml.h
-  shell/MainWindowShell.cpp
-  theme/WindowsThemeCoordinator.cpp
-  theme/WindowsThemeCoordinator.h
-  track/MainWindowTrack.cpp
-  track/TrackCellItem.cpp
-  track/TrackCellItem.h
-  track/TrackDetailControl.cpp
-  track/TrackDetailControl.h
-  track/TrackItemView.cpp
-  track/TrackItemView.h
-  track/TrackListController.cpp
-  track/TrackListController.h
-  track/TrackQuickFilterControl.cpp
-  track/TrackQuickFilterControl.h
-  track/TrackRowItem.cpp
-  track/TrackRowItem.h)
-source_group("Asset" FILES ${AOBUS_NO_COVER_ASSETS})
+  Project.idl
+  pch.h
+)
+
+add_library(aobus-winui-lib STATIC ${AOBUS_WINUI_LIBRARY_SOURCES})
+target_precompile_headers(aobus-winui-lib PRIVATE pch.h)
+target_compile_options(aobus-winui-lib PRIVATE /bigobj)
+target_include_directories(aobus-winui-lib PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(aobus-winui-lib
+  PUBLIC
+    ao_app_runtime
+    ao_app_uimodel
+    ao_windows_platform
+    PkgRapidYaml
+  PRIVATE
+    runtimeobject.lib
+    shell32.lib)
+add_dependencies(aobus-winui-lib
+  ao_frontend_library_path_boundary_check
+  ao_windows_winui_core_boundary_report
+  ao_windows_winui_event_revoker_guardrail
+  ao_windows_winui_leaf_capability_guardrail
+  ao_windows_winui_state_subscription_guardrail)
+
+add_executable(aobus-winui WIN32
+  ${AOBUS_NO_COVER_ASSETS}
+  ${AOBUS_SHELL_LAYOUT_ASSETS}
+  Resources/en-US/Resources.resw
+  app.manifest
+)
+target_include_directories(aobus-winui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(aobus-winui PRIVATE
+  aobus-winui-lib
+  runtimeobject.lib
+  shell32.lib)
+# App.xaml generates wWinMain inside the static archive. Select the Unicode CRT
+# entry explicitly so the linker extracts that object without /WHOLEARCHIVE,
+# which would also extract and duplicate generated XAML metadata providers.
+target_link_options(aobus-winui PRIVATE /ENTRY:wWinMainCRTStartup)
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
+  ${AOBUS_WINUI_LIBRARY_SOURCES}
+  Resources/en-US/Resources.resw
+  app.manifest)
+source_group("Asset" FILES ${AOBUS_NO_COVER_ASSETS} ${AOBUS_SHELL_LAYOUT_ASSETS})
 
 set_source_files_properties(App.xaml PROPERTIES
   VS_XAML_TYPE ApplicationDefinition)
@@ -174,6 +221,14 @@ set_source_files_properties(${AOBUS_BRAND_LICENSE_ASSET} PROPERTIES
   VS_TOOL_OVERRIDE Content
   VS_COPY_TO_OUT_DIR PreserveNewest
   VS_SETTINGS "Link=Assets\\Brand\\LICENSE.txt")
+set_source_files_properties(${AOBUS_MODERN_LAYOUT_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\Layout\\windows_modern_layout.yaml")
+set_source_files_properties(${AOBUS_CLASSIC_LAYOUT_ASSET} PROPERTIES
+  VS_TOOL_OVERRIDE Content
+  VS_COPY_TO_OUT_DIR PreserveNewest
+  VS_SETTINGS "Link=Assets\\Layout\\windows_classic_layout.yaml")
 set_source_files_properties(App.xaml.cpp PROPERTIES
   VS_SETTINGS "DependentUpon=App.xaml")
 set_source_files_properties(App.xaml.h PROPERTIES
@@ -189,17 +244,6 @@ set_source_files_properties(track/TrackRowItem.cpp PROPERTIES
 set_source_files_properties(track/TrackCellItem.cpp PROPERTIES
   VS_SETTINGS "DependentUpon=TrackCellItem.h")
 
-target_precompile_headers(aobus-winui PRIVATE pch.h)
-target_compile_options(aobus-winui PRIVATE /bigobj)
-target_include_directories(aobus-winui PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(aobus-winui PRIVATE
-  ao_app_runtime
-  ao_app_uimodel
-  ao_windows_platform
-  runtimeobject.lib
-)
-
 set_target_properties(aobus-winui PROPERTIES
   OUTPUT_NAME Aobus
   VS_GLOBAL_AppContainerApplication false
@@ -212,5 +256,15 @@ set_target_properties(aobus-winui PROPERTIES
   VS_GLOBAL_TargetName Aobus
   VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
   WindowsTargetPlatformVersion 10.0.26100.0)
+set_target_properties(aobus-winui-lib PROPERTIES
+  VS_GLOBAL_AppContainerApplication false
+  VS_GLOBAL_ApplicationType "Windows Store"
+  VS_GLOBAL_ApplicationTypeRevision 10.0
+  VS_GLOBAL_DesktopCompatible true
+  VS_GLOBAL_MinimumVisualStudioVersion 18.0
+  VS_GLOBAL_RootNamespace Aobus
+  VS_GLOBAL_WindowsTargetPlatformMinVersion 10.0.26100.0
+  WindowsTargetPlatformVersion 10.0.26100.0)
 
-aobus_enable_windows_app_sdk(aobus-winui)
+aobus_enable_windows_app_sdk(aobus-winui-lib STATIC_LIBRARY)
+aobus_enable_windows_app_sdk(aobus-winui APPLICATION)

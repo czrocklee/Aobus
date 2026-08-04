@@ -385,6 +385,22 @@ class CompileCommandCoverageTest(unittest.TestCase):
                 with self.subTest(path=path):
                     self.assertTrue(tidyengine._is_platform_incompatible(path, root))
 
+    def test_winui_sources_are_incompatible_with_the_linux_native_graph(self):
+        root = Path("/repo")
+        paths = (
+            root / "test" / "unit" / "winui" / "ThemeTest.cpp",
+            root / "test" / "unit" / "winui" / "layout" / "LayoutDialectTest.cpp",
+        )
+
+        with mock.patch.object(
+            tidyengine.builddir,
+            "platform_profile",
+            return_value=tidyengine.builddir.LINUX_PROFILE,
+        ):
+            for path in paths:
+                with self.subTest(path=path):
+                    self.assertTrue(tidyengine._is_platform_incompatible(path, root))
+
     def test_explicit_lint_fixture_can_borrow_native_flags(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "repo"
@@ -545,7 +561,7 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
             self.assertNotIn(" /GL ", entries[1]["command"])
             self.assertIn("/GL-", entries[1]["command"])
 
-    def test_merge_filters_and_rejects_conflicting_translation_units(self):
+    def test_merge_filters_and_prefers_authoritative_translation_units(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             build_dir = root / "build"
@@ -567,12 +583,21 @@ class FilteredCompileDatabaseTest(unittest.TestCase):
             self.assertEqual([Path(entry["file"]) for entry in entries], [first, second])
             self.assertTrue(all(" /c " not in entry["command"] for entry in entries))
 
+            override = [{"directory": str(root), "file": str(first), "command": f"clang-cl {first}"}]
+            tidyengine.write_merged_compile_database(build_dir, destination, (), override)
+            entries = json.loads((destination / "compile_commands.json").read_text(encoding="utf-8"))
+            self.assertEqual([Path(entry["file"]) for entry in entries], [first])
+            self.assertEqual(entries[0]["command"], f"clang-cl {first}")
+
             with self.assertRaises(SystemExit):
                 tidyengine.write_merged_compile_database(
                     build_dir,
                     destination,
                     (),
-                    [{"directory": str(root), "file": str(first), "command": f"clang-cl {first}"}],
+                    [
+                        {"directory": str(root), "file": str(first), "command": f"clang-cl {first}"},
+                        {"directory": str(root), "file": str(first), "command": f"clang-cl --different {first}"},
+                    ],
                 )
 
 

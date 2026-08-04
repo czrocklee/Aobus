@@ -3,30 +3,81 @@
 
 #include "App.xaml.h"
 
-#include "MainWindow.xaml.h"
-#include "app/LibrarySession.h"
-#include "pch.h"
-#include "platform/WindowsStringResources.h"
+#include "app/LibraryWindowSession.h"
+#include "platform/ProcessLauncher.h"
+#include "platform/StringResources.h"
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/rt/Log.h>
+#include <ao/winui/app/DestructiveLibraryRestart.h>
 
+#include <windows.h>
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Xaml.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
+#include <expected>
 #include <filesystem>
+#include <format>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <tuple>
+#include <utility>
 
 namespace winrt::Aobus::implementation
 {
   namespace
   {
     constexpr std::size_t kEnvironmentBufferLength = 32'768;
+
+    /**
+     * @brief Last resort for an exception that escaped a no-throw boundary.
+     *
+     * The floor exists so that such a bug leaves a diagnostic rather than a
+     * bare crash dialog. It is not a licence to skip cleanup: every teardown
+     * path still has to release its own owners, and reaching here at all means
+     * one of them was written wrong.
+     */
+    [[noreturn]] void reportTerminate() noexcept
+    {
+      try
+      {
+        if (std::current_exception())
+        {
+          try
+          {
+            std::rethrow_exception(std::current_exception());
+          }
+          catch (std::exception const& error)
+          {
+            APP_LOG_CRITICAL("WinUI terminating on an escaped exception: {}", error.what());
+          }
+          catch (...)
+          {
+            APP_LOG_CRITICAL("WinUI terminating on an escaped unknown exception");
+          }
+        }
+        else
+        {
+          APP_LOG_CRITICAL("WinUI terminating without an active exception");
+        }
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): Reporting is the only thing left to fail, and it already did.
+      catch (...)
+      {
+        // Reporting is the only thing left to fail, and it just did.
+      }
+
+      // Quit without unwinding: whatever invariant broke, running more
+      // destructors over it is how a diagnosable fault becomes a corrupt one.
+      std::_Exit(EXIT_FAILURE);
+    }
 
     std::filesystem::path stateRoot()
     {
@@ -55,96 +106,228 @@ namespace winrt::Aobus::implementation
         ::MessageBoxW(nullptr, L"Aobus could not start.", L"Aobus", MB_OK | MB_ICONERROR);
       }
     }
+
+    bool sameDirectory(std::filesystem::path const& left, std::filesystem::path const& right) noexcept
+    {
+      auto error = std::error_code{};
+      auto const equivalent = std::filesystem::equivalent(left, right, error);
+      return !error ? equivalent : left.lexically_normal() == right.lexically_normal();
+    }
+
+    ao::Result<std::filesystem::path> normalizeRestartRoot(std::filesystem::path root)
+    {
+      if (root.empty())
+      {
+        return ao::makeError(ao::Error::Code::InvalidInput, "The selected library path is empty");
+      }
+
+      auto error = std::error_code{};
+      auto absolute = std::filesystem::absolute(std::move(root), error);
+
+      if (error)
+      {
+        return ao::makeError(
+          ao::Error::Code::IoError, std::format("Failed to resolve the selected library path: {}", error.message()));
+      }
+
+      return absolute.lexically_normal();
+    }
   } // namespace
 
   App::App()
   {
+    std::ignore = std::set_terminate(&reportTerminate);
     InitializeComponent();
   }
 
   App::~App() = default;
 
+  void App::exitApplication() noexcept
+  {
+    _dispatcher = nullptr;
+
+    try
+    {
+      Microsoft::UI::Xaml::Application::Current().Exit();
+    }
+    catch (...)
+    {
+      ::PostQuitMessage(1);
+    }
+  }
+
+  void App::reportRestartLaunchFailure(ao::Error const& error) noexcept
+  {
+    try
+    {
+      APP_LOG_CRITICAL("WinUI successor launch failed: {}", error.message);
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): The failure callback must not prevent the startup error dialog.
+    catch (...)
+    {
+    }
+
+    showStartupFailure(error.message);
+  }
+
+  ao::Result<> App::requestLibraryRestart(std::filesystem::path root)
+  {
+    if (_processPhase != ProcessPhase::Running || !_windowSessionPtr || !_windowSessionPtr->active())
+    {
+      return ao::makeError(ao::Error::Code::ResourceBusy, "A WinUI process transition is already in progress");
+    }
+
+    auto normalized = normalizeRestartRoot(std::move(root));
+
+    if (!normalized)
+    {
+      return std::unexpected{normalized.error()};
+    }
+
+    if (sameDirectory(*normalized, _windowSessionPtr->musicRoot()))
+    {
+      return {};
+    }
+
+    if (!_dispatcher)
+    {
+      return ao::makeError(ao::Error::Code::InvalidState, "The WinUI dispatcher is unavailable");
+    }
+
+    _processPhase = ProcessPhase::RestartQueued;
+    auto const weak = get_weak();
+
+    try
+    {
+      auto const queued = _dispatcher.TryEnqueue(
+        [weak, root = std::move(*normalized)] mutable
+        {
+          if (auto self = weak.get(); self)
+          {
+            self->performLibraryRestart(std::move(root));
+          }
+        });
+
+      if (!queued)
+      {
+        _processPhase = ProcessPhase::Running;
+        return ao::makeError(
+          ao::Error::Code::ResourceBusy, "The WinUI dispatcher rejected the library restart request");
+      }
+    }
+    catch (std::exception const& error)
+    {
+      _processPhase = ProcessPhase::Running;
+      return ao::makeError(
+        ao::Error::Code::InitFailed, std::format("Failed to queue the library restart: {}", error.what()));
+    }
+    catch (...)
+    {
+      _processPhase = ProcessPhase::Running;
+      return ao::makeError(ao::Error::Code::InitFailed, "Failed to queue the library restart: unknown exception");
+    }
+
+    return {};
+  }
+
+  void App::performLibraryRestart(std::filesystem::path root) noexcept
+  {
+    if (_processPhase != ProcessPhase::RestartQueued)
+    {
+      return;
+    }
+
+    _processPhase = ProcessPhase::Exiting;
+
+    // Releasing the owner releases its window first: LibraryWindowSession
+    // declares its session before its window, so reverse member destruction
+    // fixes that order without this call site restating it.
+    std::ignore = ao::winui::executeDestructiveLibraryRestart({
+      .releaseActiveGraph = [this] { _windowSessionPtr.reset(); },
+      .launchSuccessor = [root = std::move(root)] { return ao::winui::launchLibraryProcess(root); },
+      .reportLaunchFailure = [this](ao::Error const& error) { reportRestartLaunchFailure(error); },
+      .exitProcess = [this] { exitApplication(); },
+    });
+  }
+
+  void App::handleWindowClosed() noexcept
+  {
+    // Once a restart is queued, the queued dispatcher turn owns successor
+    // launch even if the user closes the old HWND before that turn runs.
+    if (_processPhase == ProcessPhase::RestartQueued)
+    {
+      return;
+    }
+
+    _processPhase = ProcessPhase::Exiting;
+    exitApplication();
+  }
+
   void App::OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const& /*args*/)
   {
     auto const failLaunch = [this](std::string detail) noexcept
     {
+      _processPhase = ProcessPhase::Exiting;
+
       try
       {
         APP_LOG_CRITICAL("WinUI startup failed: {}", detail);
       }
-      // Startup failure reporting is best-effort and must continue to teardown.
-      // NOLINTNEXTLINE(bugprone-empty-catch)
+      // NOLINTNEXTLINE(bugprone-empty-catch): Logging cannot be allowed to mask the startup failure path.
       catch (...)
       {
       }
 
-      try
+      if (_windowSessionPtr)
       {
-        if (_window && _hasWindowClosedToken)
-        {
-          _window.Closed(_windowClosedToken);
-        }
-
-        _hasWindowClosedToken = false;
-      }
-      catch (...)
-      {
-        _hasWindowClosedToken = false;
+        _windowSessionPtr->retire();
+        _windowSessionPtr.reset();
       }
 
-      try
-      {
-        if (_window)
-        {
-          winrt::get_self<MainWindow>(_window.as<winrt::Aobus::MainWindow>())->retire();
-        }
-      }
-      // The failed window may already have torn down its implementation.
-      // NOLINTNEXTLINE(bugprone-empty-catch)
-      catch (...)
-      {
-      }
-
-      _window = nullptr;
-      _sessionPtr.reset();
-      _dispatcher = nullptr;
       showStartupFailure(detail);
-
-      try
-      {
-        Microsoft::UI::Xaml::Application::Current().Exit();
-      }
-      catch (...)
-      {
-        ::PostQuitMessage(1);
-      }
+      exitApplication();
     };
 
     try
     {
       _dispatcher = Microsoft::UI::Dispatching::DispatcherQueue::GetForCurrentThread();
-      _sessionPtr = std::make_unique<ao::winui::LibrarySession>(stateRoot(), _dispatcher);
-      auto mainWindow = winrt::make<MainWindow>();
-      auto* const mainWindowImpl = winrt::get_self<MainWindow>(mainWindow);
-      mainWindowImpl->initialize(*_sessionPtr);
-      _window = mainWindow;
-      _windowClosedToken = _window.Closed(
-        [this, mainWindowImpl](
-          Windows::Foundation::IInspectable const& sender, Microsoft::UI::Xaml::WindowEventArgs const&)
+      auto startupOptions = ao::winui::readStartupOptions();
+
+      if (!startupOptions)
+      {
+        ao::throwException<ao::Exception>(startupOptions.error().message);
+      }
+
+      _windowSessionPtr = std::make_unique<ao::winui::LibraryWindowSession>(stateRoot(), _dispatcher);
+      auto const weak = get_weak();
+      auto started = _windowSessionPtr->start(
+        std::move(*startupOptions),
+        [weak](std::filesystem::path root) -> ao::Result<>
         {
-          if (_hasWindowClosedToken)
+          if (auto self = weak.get(); self)
           {
-            sender.as<Microsoft::UI::Xaml::Window>().Closed(_windowClosedToken);
-            _hasWindowClosedToken = false;
+            return self->requestLibraryRestart(std::move(root));
           }
 
-          mainWindowImpl->retire();
-          _sessionPtr.reset();
-          _window = nullptr;
-          _dispatcher = nullptr;
+          return ao::makeError(ao::Error::Code::InvalidState, "The WinUI application is shutting down");
+        },
+        [weak] noexcept
+        {
+          if (auto self = weak.get(); self)
+          {
+            self->handleWindowClosed();
+          }
         });
-      _hasWindowClosedToken = true;
-      _window.Activate();
+
+      if (!started)
+      {
+        ao::throwException<ao::Exception>(started.error().message);
+      }
+
+      if (_processPhase != ProcessPhase::Exiting)
+      {
+        _processPhase = ProcessPhase::Running;
+      }
     }
     catch (winrt::hresult_error const& error)
     {

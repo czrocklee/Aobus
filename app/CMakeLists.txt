@@ -87,25 +87,29 @@ add_library(ao_app_uimodel STATIC
     uimodel/presentation/CoverArtPlaceholder.cpp
     uimodel/presentation/PresentationTextCatalog.cpp
     uimodel/layout/action/LayoutActionCatalog.cpp
+    uimodel/layout/action/LayoutActionSlotResolution.cpp
     uimodel/layout/action/LayoutActionValidator.cpp
     uimodel/layout/component/AbsoluteCanvasGeometry.cpp
     uimodel/layout/component/LayoutComponentActionPolicy.cpp
     uimodel/layout/component/LayoutComponentCatalog.cpp
     uimodel/layout/component/LayoutComponentState.cpp
     uimodel/layout/component/LayoutStatePromoter.cpp
+    uimodel/layout/component/StatefulComponentState.cpp
     uimodel/layout/document/LayoutDocument.cpp
+    uimodel/layout/document/LayoutDocumentLoader.cpp
     uimodel/layout/document/LayoutNodeId.cpp
+    uimodel/layout/document/LayoutPlacement.cpp
     uimodel/layout/document/LayoutPreparation.cpp
+    uimodel/layout/document/LayoutValidation.cpp
     uimodel/layout/document/LayoutValue.cpp
-    uimodel/layout/shell/DesktopShellPolicy.cpp
+    uimodel/layout/shell/LayoutBuildStateView.cpp
+    uimodel/layout/shell/ShellGenerationSequence.cpp
     uimodel/layout/shell/ShellLayoutSessionModel.cpp
-    uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.cpp
     uimodel/input/KeyChord.cpp
     uimodel/input/KeymapModel.cpp
     uimodel/input/KeyRepeatGuard.cpp
     uimodel/input/KeymapStore.cpp
     uimodel/preference/PreferencesEditorModel.cpp
-    uimodel/preference/WindowsTheme.cpp
     uimodel/field/TrackFieldEditCodec.cpp
     uimodel/field/TrackFieldEditPolicy.cpp
     uimodel/field/TrackFieldFormatter.cpp
@@ -191,6 +195,22 @@ add_custom_target(ao_uimodel_organization_guardrail
 )
 
 add_dependencies(ao_app_uimodel ao_uimodel_organization_guardrail)
+
+# A frontend's own vocabulary is not a shared model, however portable its code
+# is. The guardrail names the frontends rather than a spelling of "platform"
+# because a frontend-owned LayoutCatalog.h passes every include check there is:
+# it has no platform includes to find.
+add_custom_target(ao_uimodel_frontend_vocabulary_guardrail
+  COMMAND ${CMAKE_COMMAND}
+          "-DPUBLIC_ROOT=${CMAKE_SOURCE_DIR}/app/include/ao/uimodel"
+          "-DSOURCE_ROOT=${CMAKE_SOURCE_DIR}/app/uimodel"
+          "-DTEST_ROOT=${CMAKE_SOURCE_DIR}/test/unit/uimodel"
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertUimodelFrontendNeutrality.cmake
+  COMMENT "Checking no frontend names a file inside ao_app_uimodel"
+  VERBATIM
+)
+
+add_dependencies(ao_app_uimodel ao_uimodel_frontend_vocabulary_guardrail)
 
 # --- Layering boundary guardrails ---
 # Cleared boundaries run in enforce mode and are attached to the owning target.
@@ -483,17 +503,46 @@ if(AOBUS_BUILD_TUI)
   )
 endif()
 
-if(AOBUS_BUILD_WINUI)
-  add_custom_target(ao_windows_winui_core_boundary_report
-    COMMAND ${CMAKE_COMMAND}
-            "-DROOTS=${CMAKE_SOURCE_DIR}/app/windows-winui"
-            "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
-            -DMODE=enforce
-            -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
-    COMMENT "Checking direct storage/library dependencies in the WinUI frontend"
-    VERBATIM
-  )
-endif()
+add_custom_target(ao_windows_winui_core_boundary_report
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOTS=${CMAKE_SOURCE_DIR}/app/windows-winui"
+          "-DFORBIDDEN_REGEX_FILE=${AO_FORBIDDEN_FRONTEND_CORE_INCLUDE_REGEX_FILE}"
+          -DMODE=enforce
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertNoForbiddenIncludes.cmake
+  COMMENT "Checking direct storage/library dependencies in the WinUI frontend"
+  VERBATIM
+)
+
+# Hand-revoked WinRT events are what grew the frontend's teardown catches, and
+# no lint the project runs can see them: a comment in the catch satisfies
+# bugprone-empty-catch.
+add_custom_target(ao_windows_winui_event_revoker_guardrail
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOT=${CMAKE_SOURCE_DIR}/app/windows-winui"
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertWinUiEventRevokers.cmake
+  COMMENT "Checking WinUI revokes WinRT events by destructor rather than by hand"
+  VERBATIM
+)
+
+# UI state delivery is source-owned and component-scoped. Keep the removed
+# virtual callback/raw observer graph from returning in the native WinUI target.
+add_custom_target(ao_windows_winui_state_subscription_guardrail
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOT=${CMAKE_SOURCE_DIR}/app/windows-winui"
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertWinUiStateSubscriptions.cmake
+  COMMENT "Checking WinUI state delivery remains subscription-owned"
+  VERBATIM
+)
+
+# Generation components and leaf adapters bind exact capabilities. Session and
+# runtime composition remain at MainWindow, UiCoordinator, and ShellBuilder.
+add_custom_target(ao_windows_winui_leaf_capability_guardrail
+  COMMAND ${CMAKE_COMMAND}
+          "-DROOT=${CMAKE_SOURCE_DIR}/app/windows-winui"
+          -P ${CMAKE_SOURCE_DIR}/cmake/AssertWinUiLeafCapabilities.cmake
+  COMMENT "Checking WinUI leaves receive narrow capabilities"
+  VERBATIM
+)
 
 add_custom_target(ao_frontend_library_path_boundary_check
   COMMAND ${CMAKE_COMMAND}
@@ -516,6 +565,7 @@ add_custom_target(ao_layering_boundary_report
     ao_shared_signal_boundary_check
     ao_uimodel_platform_boundary_report
     ao_uimodel_core_boundary_report
+    ao_uimodel_frontend_vocabulary_guardrail
 )
 if(AOBUS_BUILD_GTK)
   add_dependencies(ao_layering_boundary_report ao_linux_gtk_core_boundary_report)
@@ -523,9 +573,7 @@ endif()
 if(AOBUS_BUILD_TUI)
   add_dependencies(ao_layering_boundary_report ao_tui_core_boundary_report)
 endif()
-if(AOBUS_BUILD_WINUI)
-  add_dependencies(ao_layering_boundary_report ao_windows_winui_core_boundary_report)
-endif()
+add_dependencies(ao_layering_boundary_report ao_windows_winui_core_boundary_report)
 
 # Configure-time check: ao_app_uimodel must not link platform UI targets
 get_target_property(_ao_uimodel_links ao_app_uimodel LINK_LIBRARIES)

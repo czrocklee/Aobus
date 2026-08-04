@@ -45,10 +45,10 @@ namespace ao::winui
     SmtcBridge(SmtcBridge&&) = delete;
     SmtcBridge& operator=(SmtcBridge&&) = delete;
 
-    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr,
+    void bind(rt::AppRuntime& runtime,
               uimodel::PlaybackCommandSurface& commands,
               rt::ResourceByteLoader& resourceBytes);
-    void unbind();
+    void unbind() noexcept;
 
   private:
     struct State;
@@ -56,14 +56,14 @@ namespace ao::winui
     void handleSnapshot(rt::PlaybackSnapshot const& snapshot);
     void updateArtwork(ResourceId resourceId);
     static async::Task<void> prepareAndWriteArtwork(std::weak_ptr<State> statePtr,
-                                                    std::shared_ptr<rt::AppRuntime> runtimePtr,
+                                                    async::Runtime* runtime,
                                                     ResourceId resourceId,
                                                     rt::ResourceBytes bytes,
                                                     std::stop_token stopToken);
     static void writeArtworkStream(State& state, ResourceId resourceId, PreparedMemoryRandomAccessStream prepared);
 
     std::shared_ptr<State> _statePtr;
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
+    rt::AppRuntime* _runtime = nullptr;
     rt::ResourceByteLoader* _resourceBytes = nullptr;
     async::Subscription _snapshotSub;
     utility::ScopedRegistration _artworkRequest;

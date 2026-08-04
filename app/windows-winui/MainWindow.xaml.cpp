@@ -4,28 +4,23 @@
 #include "MainWindow.xaml.h"
 
 #include "app/LibrarySession.h"
-#include "app/WinUiDependencies.h"
-#include "app/WindowsUiCoordinator.h"
-#include "image/CoverArtPresenter.h"
+#include "app/UiCoordinator.h"
+// The window's own destructor destroys the group-cover presenters it retains.
+#include "image/CoverArtPresenter.h" // NOLINT(misc-include-cleaner)
+#include "layout/ShellBuilder.h"
 #include "pch.h"
-#include "platform/SmtcBridge.h"
-#include "platform/WindowsStringResources.h"
-#include "playback/AobusSoulControl.h"
-#include "playback/AudioPipelineToolTip.h"
-#include "playback/PlaybackControls.h"
-#include "theme/WindowsThemeCoordinator.h"
-#include "track/TrackListController.h"
+#include "platform/SmtcBridge.h" // NOLINT(misc-include-cleaner)
+#include "platform/StringResources.h"
+#include "playback/OutputDeviceControl.h"
+#include "theme/ThemeCoordinator.h"
 
 #if __has_include("MainWindow.g.cpp")
 #include "MainWindow.g.cpp"
 #endif
 
 #include <ao/Error.h>
-#include <ao/rt/AppRuntime.h>
-#include <ao/rt/playback/PlaybackService.h>
 // MainWindow's out-of-line destructor requires the unique_ptr target to be complete.
 #include <ao/uimodel/playback/now-playing/NowPlayingViewModel.h> // NOLINT(misc-include-cleaner)
-#include <ao/utility/Path.h>
 
 #include <winrt/Microsoft.UI.Dispatching.h>
 #include <winrt/Microsoft.UI.Windowing.h>
@@ -40,6 +35,8 @@
 #include <winrt/Windows.Graphics.h>
 #include <winrt/Windows.UI.h>
 
+#include <exception>
+#include <format>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -47,17 +44,9 @@
 
 namespace winrt::Aobus::implementation
 {
-  namespace
-  {
-    constexpr double kModernSoulStrokeWidth = 5.0;
-    constexpr double kModernSoulGlyphScale = 0.85;
-  } // namespace
-
   MainWindow::MainWindow()
   {
     InitializeComponent();
-    get_self<AobusSoulControl>(ModernSoul())->setBaseStrokeWidth(kModernSoulStrokeWidth);
-    get_self<AobusSoulControl>(ModernSoul())->setInnerGlyphScale(kModernSoulGlyphScale);
     Title(ao::winui::resourceHstring(L"AppTitleValue"));
 
     try
@@ -72,165 +61,34 @@ namespace winrt::Aobus::implementation
       // composition-disabled desktops.
     }
 
-    applyShellState(RootGrid().ActualWidth());
-
-    _appWindowChangedToken = AppWindow().Changed(
-      [this](
-        Microsoft::UI::Windowing::AppWindow const&, Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
-      {
-        if (args.DidVisibilityChange() || args.DidPresenterChange())
-        {
-          updateSoulWindowActivity();
-        }
-      });
-    _hasAppWindowChangedToken = true;
-    _closedToken = Closed(
-      [this](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::WindowEventArgs const&)
-      {
-        if (_hasAppWindowChangedToken)
-        {
-          AppWindow().Changed(_appWindowChangedToken);
-          _hasAppWindowChangedToken = false;
-        }
-
-        if (_hasClosedToken)
-        {
-          Closed(_closedToken);
-          _hasClosedToken = false;
-        }
-
-        saveWindowState();
-        shutdown();
-      });
-    _hasClosedToken = true;
+    auto const weak = get_weak();
+    _appWindowChangedRevoker =
+      AppWindow().Changed(winrt::auto_revoke,
+                          [weak](Microsoft::UI::Windowing::AppWindow const&,
+                                 Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
+                          {
+                            if (args.DidVisibilityChange() || args.DidPresenterChange())
+                            {
+                              if (auto self = weak.get(); self)
+                              {
+                                self->updateSoulWindowActivity();
+                              }
+                            }
+                          });
     updateSoulWindowActivity();
   }
 
   MainWindow::~MainWindow()
   {
-    if (_hasAppWindowChangedToken)
-    {
-      AppWindow().Changed(_appWindowChangedToken);
-      _hasAppWindowChangedToken = false;
-    }
-
-    if (_hasClosedToken)
-    {
-      Closed(_closedToken);
-      _hasClosedToken = false;
-    }
-
     shutdown();
   }
 
-  void MainWindow::initialize(ao::winui::LibrarySession& session)
+  void MainWindow::initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart)
   {
     _session = &session;
-    _playbackControlsPtr = std::make_unique<ao::winui::PlaybackControls>(ao::winui::PlaybackControlsConfig{
-      .modern =
-        {
-          .shuffleButton = ModernShuffleButton(),
-          .previousButton = ModernPreviousButton(),
-          .outputButton = ModernOutputButton(),
-          .soulButton = ModernSoulButton(),
-          .soul = ModernSoul().as<Microsoft::UI::Xaml::Controls::ContentControl>(),
-          .nextButton = ModernNextButton(),
-          .repeatButton = ModernRepeatButton(),
-          .seek = ModernSeek(),
-          .elapsed = ModernElapsed(),
-          .duration = ModernDuration(),
-          .volume = ModernVolume(),
-        },
-      .classic =
-        {
-          .previousButton = ClassicPreviousButton(),
-          .nextButton = ClassicNextButton(),
-          .soulButton = ClassicSoulButton(),
-          .playPauseButton = ClassicPlayPauseButton(),
-          .stopButton = ClassicStopButton(),
-          .seek = ClassicSeek(),
-          .time = ClassicTime(),
-          .volume = ClassicVolume(),
-        },
-    });
-    _audioPipelineToolTipPtr = std::make_unique<ao::winui::AudioPipelineToolTip>(ao::winui::AudioPipelineToolTipConfig{
-      .modernAnchor = ModernSoulButton(),
-      .classicAnchor = ClassicSoulButton(),
-    });
-
+    _requestRestart = std::move(requestRestart);
     auto weak = get_weak();
-    auto views = ao::winui::WindowsUiViewDependencies{
-      .quickFilterInput = ModernFilter(),
-      .inspectorCoverImage = InspectorCoverImage(),
-      .inspectorCoverPlaceholder = InspectorCoverPlaceholder(),
-      .trackDetail =
-        {
-          .fieldScroll = InspectorFieldScroll(),
-          .detailContent = InspectorDetailContent(),
-          .metadataHeaderButton = InspectorMetadataHeaderButton(),
-          .metadataHeader = InspectorMetadataHeader(),
-          .metadataChevron = InspectorMetadataChevron(),
-          .metadataRows = InspectorMetadataRows(),
-          .showEmptyButton = InspectorShowEmpty(),
-          .technicalHeaderButton = InspectorTechnicalHeaderButton(),
-          .technicalHeader = InspectorTechnicalHeader(),
-          .technicalChevron = InspectorTechnicalChevron(),
-          .technicalRows = InspectorTechnicalRows(),
-          .classicFieldScroll = ClassicDetailScroll(),
-          .classicDetailContent = ClassicDetailContent(),
-          .classicMetadataSection = ClassicMetadataSection(),
-          .classicMetadataHeaderButton = ClassicMetadataHeaderButton(),
-          .classicMetadataHeader = ClassicMetadataHeader(),
-          .classicMetadataChevron = ClassicMetadataChevron(),
-          .classicMetadataRows = ClassicMetadataRows(),
-          .classicShowEmptyButton = ClassicShowEmpty(),
-          .classicTechnicalSection = ClassicTechnicalSection(),
-          .classicTechnicalHeaderButton = ClassicTechnicalHeaderButton(),
-          .classicTechnicalHeader = ClassicTechnicalHeader(),
-          .classicTechnicalChevron = ClassicTechnicalChevron(),
-          .classicTechnicalRows = ClassicTechnicalRows(),
-        },
-      .activityStatus =
-        {
-          .root = ModernActivityStatus(),
-          .detailButton = ModernActivityDetailButton(),
-          .spinner = ModernActivitySpinner(),
-          .statusIcon = ModernActivityStatusIcon(),
-          .label = ModernActivityLabel(),
-          .progress = ModernActivityProgress(),
-          .dismissButton = ModernActivityDismissButton(),
-          .reserveIdle = true,
-        },
-      .nowPlayingCoverImage = NowPlayingCoverImage(),
-      .nowPlayingCoverPlaceholder = NowPlayingCoverPlaceholder(),
-    };
-    auto callbacks = ao::winui::WindowsUiCoordinatorCallbacks{
-      .onTrackListChanged =
-        [weak]
-      {
-        if (auto self = weak.get(); self)
-        {
-          self->updateBrowserHeader();
-        }
-      },
-      .onRuntimeChanging =
-        [weak] noexcept
-      {
-        if (auto self = weak.get(); self)
-        {
-          self->clearGroupCoverPresenters();
-          self->unbindPlayback();
-        }
-      },
-      .onRuntimeChanged =
-        [weak] noexcept
-      {
-        if (auto self = weak.get(); self)
-        {
-          self->reconcileLibrary();
-          self->bindPlayback();
-        }
-      },
+    auto callbacks = ao::winui::UiCoordinatorCallbacks{
       .onStatus =
         [weak](std::string status)
       {
@@ -248,80 +106,175 @@ namespace winrt::Aobus::implementation
         }
       },
     };
-    _coordinatorPtr =
-      std::make_unique<ao::winui::WindowsUiCoordinator>(session, std::move(views), std::move(callbacks));
-    auto const dependencies = _coordinatorPtr->uiDependencies();
-    _trackListPtr = &dependencies.trackList;
-    _resourceBytes = &dependencies.resourceBytes;
-    _nowPlayingCoverArtPtr = &dependencies.nowPlayingCoverArt;
-    _themePtr = &dependencies.theme;
+    _coordinatorPtr = std::make_unique<ao::winui::UiCoordinator>(session, std::move(callbacks));
+    _trackListPtr = &_coordinatorPtr->trackList();
+    _resourceBytes = &_coordinatorPtr->resourceBytes();
+    _themePtr = &_coordinatorPtr->theme();
 
     if (auto theme = _themePtr->reload(); theme)
     {
       applyTheme(*theme);
     }
 
+    // Built before the first resolved policy, which is what asks it for a shell.
+    createShellBuilder();
+    updateSoulWindowActivity();
     reconcileLibrary();
-    bindPlayback();
     restoreWindowPlacement();
     applyShellState(RootGrid().ActualWidth());
-    ModernLibraryPath().Text(to_hstring(ao::utility::pathToUtf8(session.runtime().musicRoot())));
     updateStatus(ao::winui::resourceString("Ready"));
+    _sessionPhase = SessionPhase::Prepared;
   }
 
-  void MainWindow::shutdown()
+  ao::Result<> MainWindow::activate()
   {
-    if (_shutdown)
+    if (_sessionPhase != SessionPhase::Prepared)
+    {
+      return ao::makeError(ao::Error::Code::InvalidState, "Only a prepared WinUI session can be activated");
+    }
+
+    try
+    {
+      // SMTC and the frame's process-visible playback adapters are activated
+      // only after the native window has been activated by its session owner.
+      bindPlayback();
+      _sessionPhase = SessionPhase::Active;
+      return {};
+    }
+    catch (std::exception const& error)
+    {
+      return ao::makeError(
+        ao::Error::Code::InitFailed, std::format("Failed to activate WinUI playback adapters: {}", error.what()));
+    }
+    catch (...)
+    {
+      return ao::makeError(
+        ao::Error::Code::InitFailed, "Failed to activate WinUI playback adapters: unknown exception");
+    }
+  }
+
+  void MainWindow::createShellBuilder()
+  {
+    // The selector belongs to the frame rather than to a generation: the node
+    // that raises it only names an action, and the menu it opens has to outlive
+    // whichever shell was on screen when it was asked for.
+    _shellOutputDevicePtr = std::make_unique<ao::winui::OutputDeviceControl>(ao::winui::OutputDeviceControlConfig{});
+
+    auto weak = get_weak();
+    auto const command = [weak](void (MainWindow::*method)())
+    {
+      return [weak, method]
+      {
+        if (auto self = weak.get(); self)
+        {
+          ((*self).*method)();
+        }
+      };
+    };
+
+    _shellBuilderPtr = std::make_unique<ao::winui::layout::ShellBuilder>(
+      *_session,
+      ao::winui::layout::ShellBuilderConfig{
+        .host = ShellLayoutHost(),
+        .resources = RootGrid().Resources(),
+        // The window owns the builder, so these are reached only from a build
+        // the window itself started while it still owns the coordinator.
+        .trackList = _coordinatorPtr->trackList(),
+        .resourceBytes = _coordinatorPtr->resourceBytes(),
+        .theme = _coordinatorPtr->theme(),
+        .activeTheme = [this] { return _themeOverride; },
+        .saveSettings = command(&MainWindow::saveWindowState),
+        .commands = {
+          .openLibrary =
+            [weak]
+          {
+            if (auto self = weak.get(); self)
+            {
+              self->pickLibrary();
+            }
+          },
+          .rescanLibrary = command(&MainWindow::rescanLibrary),
+          .toggleInspector = command(&MainWindow::toggleInspector),
+          .toggleShellMode = command(&MainWindow::toggleShellMode),
+          .chooseColumns = command(&MainWindow::showColumnsMenu),
+          .reloadTheme = command(&MainWindow::reloadTheme),
+          .playPause = command(&MainWindow::playPause),
+          .stop = command(&MainWindow::stopPlayback),
+          .showSoul = command(&MainWindow::showFullscreenSoul),
+          .showSystemMenu = command(&MainWindow::showSystemMenu),
+          .showOutputDeviceSelector =
+            [weak](Microsoft::UI::Xaml::FrameworkElement const& anchor)
+          {
+            if (auto self = weak.get(); self)
+            {
+              self->showOutputDeviceSelector(anchor);
+            }
+          },
+        },
+      });
+  }
+
+  void MainWindow::shutdown() noexcept
+  {
+    if (_sessionPhase == SessionPhase::Retired)
     {
       return;
     }
 
-    _shutdown = true;
+    // Marked retired up front, so a callback that re-enters during teardown
+    // turns around at the guard above. Retirement is still not terminal in the
+    // other sense: every step below is independent, so a native revocation
+    // failure cannot suppress the remaining quiescence.
+    _sessionPhase = SessionPhase::Retired;
+    _requestRestart = {};
 
+    _appWindowChangedRevoker.revoke();
     clearGroupCoverPresenters();
 
-    if (_coordinatorPtr)
-    {
-      _coordinatorPtr->retire();
-    }
+    // Generation callbacks and all generation-owned runtime borrowers go away
+    // before the coordinator/resource loader is released. Releasing the owner
+    // is the retirement: each destructor runs its own quiescence, so the order
+    // of these resets is the whole contract.
+    _shellBuilderPtr.reset();
 
-    if (_smtcPtr)
-    {
-      _smtcPtr->unbind();
-    }
+    // SMTC and fullscreen playback adapters must stop observing the runtime
+    // before the coordinator releases its resource and track services.
+    unbindPlayback();
+    _coordinatorPtr.reset();
 
-    if (_fullscreenSoul)
-    {
-      get_self<AobusSoulControl>(_fullscreenSoul)->unbind();
-    }
+    _soulWindowChangedRevoker.revoke();
 
     if (_soulWindow)
     {
-      if (_hasSoulWindowChangedToken)
+      try
       {
-        _soulWindow.AppWindow().Changed(_soulWindowChangedToken);
-        _hasSoulWindowChangedToken = false;
+        _soulWindow.Close();
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): The native soul window may already be closed during teardown.
+      catch (...)
+      {
+        // Releasing the native wrapper below still retires the owner graph.
       }
 
-      _soulWindow.Close();
       _soulWindow = nullptr;
-      _fullscreenSoul = nullptr;
     }
 
-    unbindPlayback();
+    _fullscreenSoul = nullptr;
+    _shellOutputDevicePtr.reset();
     _smtcPtr.reset();
-    _audioPipelineToolTipPtr.reset();
-    _playbackControlsPtr.reset();
     _trackListPtr = nullptr;
     _resourceBytes = nullptr;
-    _nowPlayingCoverArtPtr = nullptr;
     _themePtr = nullptr;
-    _coordinatorPtr.reset();
     _session = nullptr;
   }
 
-  void MainWindow::retire()
+  void MainWindow::retire() noexcept
   {
+    if (_sessionPhase == SessionPhase::Active)
+    {
+      saveWindowState();
+    }
+
     shutdown();
   }
 } // namespace winrt::Aobus::implementation

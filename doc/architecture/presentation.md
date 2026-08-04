@@ -15,7 +15,7 @@ It defines what belongs in runtime, UIModel, GTK, WinUI, TUI, and CLI and how st
 It does not define exact layouts, widget behavior, terminal key bindings, command syntax, display strings, or editor validation rules.
 Those facts belong in specifications, reference documents, and user/development guides.
 It also does not own track-source membership or expression semantics; those boundaries belong to the [library](library.md) and [track expression](track-expression.md) architectures.
-Workspace authority belongs to the [workspace architecture](workspace.md); interactive runtime composition, startup restoration, and active-library replacement belong to the [interactive session lifecycle architecture](interactive-session-lifecycle.md).
+Workspace authority belongs to the [workspace architecture](workspace.md); interactive runtime composition, startup restoration, and frontend-specific library transition belong to the [interactive session lifecycle architecture](interactive-session-lifecycle.md).
 The declarative layout document, shell session, action/component registries, GTK factory graph, component state, and shortcut adaptation belong to the [application shell architecture](application-shell.md).
 
 ## System context
@@ -136,10 +136,17 @@ WinUI owns Windows App SDK application/window lifetime, XAML resources,
 dispatcher adaptation, Windows-native controls, FolderPicker, SMTC, and native
 WASAPI registration. Its Modern and Classic shells consume the same runtime
 playback, workspace, track-row, cover-art, quality, and Soul authorities. Shared
-UIModel owns its responsive breakpoints, strict settings/theme schemas, grouped
-display-index mapping, bounded row and artwork cache policy, and Soul geometry
-and motion; WinUI owns XAML rendering, HWND integration, visibility, pointer
-gestures, and frame scheduling.
+UIModel owns grouped display-index mapping, bounded row and artwork cache policy,
+and Soul geometry and motion. WinUI owns its responsive breakpoints, XAML
+rendering, HWND integration, visibility, pointer gestures, and frame scheduling.
+
+What is this shell's own but needs no XAML to decide - its layout catalog and
+dialect, its element lattice and style resolution, its themed surfaces, and its
+strict settings and theme schemas - remains in the Windows-only
+`aobus-winui-lib`, not shared UIModel. These sources stay separable from XAML
+construction where useful, but only the native Windows suite compiles their
+frontend-specific tests; naming a frontend is what keeps them out of the shared
+model, not what they include.
 
 ### CLI
 
@@ -267,7 +274,7 @@ The owner, teardown, and guarded callbacks are confined to one GLib main context
 - [`LayoutRuntime`](../../app/linux-gtk/layout/runtime/LayoutRuntime.h) and [`LayoutBuildContext`](../../app/linux-gtk/layout/runtime/LayoutBuildContext.h) build GTK layout values into widgets.
 - [`app/tui/App.cpp`](../../app/tui/App.cpp) composes runtime, selected UIModel objects, terminal controllers, and rendering.
 - [`CliRuntime`](../../app/cli/CliRuntime.h) is the non-interactive adapter boundary.
-- [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`WindowsStringResources`](../../app/windows-winui/platform/WindowsStringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
+- [`aobus-winui-lib`](../../app/windows-winui/CMakeLists.txt), [`MainWindow`](../../app/windows-winui/MainWindow.xaml), [`ShellBuilder`](../../app/windows-winui/layout/ShellBuilder.h), [`TrackListController`](../../app/windows-winui/track/TrackListController.h), [`TrackItemView`](../../app/windows-winui/track/TrackItemView.h), [`StringResources`](../../app/windows-winui/platform/StringResources.h), and [`AobusSoulControl`](../../app/windows-winui/playback/AobusSoulControl.h) define WinUI presentation adaptation.
 - [`AssertUimodelOrganization.cmake`](../../cmake/AssertUimodelOrganization.cmake) and [`AssertNoForbiddenIncludes.cmake`](../../cmake/AssertNoForbiddenIncludes.cmake) enforce organization, dependency, and platform-vocabulary constraints.
 
 ## Test map

@@ -3,9 +3,7 @@
 
 #include "playback/VolumeControl.h"
 
-#include "app/WinUiDependencies.h"
 #include "platform/ScopedBooleanFlag.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
@@ -20,7 +18,8 @@ namespace ao::winui
   VolumeControl::VolumeControl(VolumeControlConfig config)
     : _slider{std::move(config.slider)}
   {
-    _valueChangedToken = _slider.ValueChanged(
+    _valueChangedRevoker = _slider.ValueChanged(
+      winrt::auto_revoke,
       [this](winrt::Windows::Foundation::IInspectable const&,
              winrt::Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const& args)
       {
@@ -34,24 +33,23 @@ namespace ao::winui
   VolumeControl::~VolumeControl()
   {
     unbind();
-
-    if (_slider)
-    {
-      _slider.ValueChanged(_valueChangedToken);
-    }
   }
 
-  void VolumeControl::bind(WinUiDependencies const& dependencies)
+  void VolumeControl::bind(ao::rt::PlaybackService& playback)
   {
     unbind();
+    resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::VolumeViewModel>(
-      dependencies.runtime.playback(), [this](uimodel::VolumeViewState const& state) { applyState(state); });
+      playback, [this](uimodel::VolumeViewState const& state) { applyState(state); });
   }
 
-  void VolumeControl::unbind()
+  void VolumeControl::unbind() noexcept
   {
     _viewModelPtr.reset();
+  }
 
+  void VolumeControl::resetPresentation()
+  {
     if (_slider)
     {
       _slider.IsEnabled(false);

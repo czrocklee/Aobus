@@ -3,9 +3,7 @@
 
 #include "playback/SeekControl.h"
 
-#include "app/WinUiDependencies.h"
 #include "platform/ScopedBooleanFlag.h"
-#include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/FrameClock.h>
 #include <ao/uimodel/playback/seek/PlaybackPositionViewModel.h>
@@ -33,6 +31,7 @@ namespace ao::winui
     constexpr double kIdleTrackHeight = 2.0;
     constexpr double kPointerOverTrackHeight = 6.0;
     constexpr double kModernThumbSize = 20.0;
+    constexpr auto kThumbTemplateKey = std::wstring_view{L"ModernSeekThumbTemplate"};
     constexpr auto kFinalSeekDebounceInterval = std::chrono::milliseconds{50};
 
     winrt::Microsoft::UI::Xaml::FrameworkElement findNamedElement(
@@ -70,6 +69,7 @@ namespace ao::winui
 
   SeekControl::SeekControl(SeekControlConfig config)
     : _slider{std::move(config.slider)}
+    , _thumbTemplate{std::move(config.thumbTemplate)}
     , _modernOverlay{config.modernOverlay}
     , _finalSeekTimer{_slider.DispatcherQueue().CreateTimer()}
     , _loaded{_slider.IsLoaded()}
@@ -77,11 +77,13 @@ namespace ao::winui
   {
     _finalSeekTimer.Interval(kFinalSeekDebounceInterval);
     _finalSeekTimer.IsRepeating(false);
-    _finalSeekTickToken =
-      _finalSeekTimer.Tick([this](winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer const&,
+    _finalSeekTickRevoker =
+      _finalSeekTimer.Tick(winrt::auto_revoke,
+                           [this](winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer const&,
                                   winrt::Windows::Foundation::IInspectable const&) { commitPendingFinalSeek(); });
 
-    _valueChangedToken = _slider.ValueChanged(
+    _valueChangedRevoker = _slider.ValueChanged(
+      winrt::auto_revoke,
       [this](winrt::Windows::Foundation::IInspectable const&,
              winrt::Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const& args)
       {
@@ -123,7 +125,8 @@ namespace ao::winui
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler, true);
     _slider.AddHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler, true);
 
-    _loadedToken = _slider.Loaded(
+    _loadedRevoker = _slider.Loaded(
+      winrt::auto_revoke,
       [this](winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
       {
         _loaded = true;
@@ -136,7 +139,8 @@ namespace ao::winui
 
         updateRenderingRegistration();
       });
-    _unloadedToken = _slider.Unloaded(
+    _unloadedRevoker = _slider.Unloaded(
+      winrt::auto_revoke,
       [this](winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
       {
         _loaded = false;
@@ -157,44 +161,60 @@ namespace ao::winui
   {
     unbind();
 
-    if (_slider)
+    try
     {
-      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler);
-      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler);
-      _slider.RemoveHandler(
-        winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerCaptureLostHandler);
-      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerEnteredEvent(), _pointerEnteredHandler);
-      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler);
-      _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler);
-      _slider.ValueChanged(_valueChangedToken);
-      _slider.Loaded(_loadedToken);
-      _slider.Unloaded(_unloadedToken);
+      if (_slider)
+      {
+        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerPressedEvent(), _pointerPressedHandler);
+        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerReleasedEvent(), _pointerReleasedHandler);
+        _slider.RemoveHandler(
+          winrt::Microsoft::UI::Xaml::UIElement::PointerCaptureLostEvent(), _pointerCaptureLostHandler);
+        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerEnteredEvent(), _pointerEnteredHandler);
+        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerMovedEvent(), _pointerMovedHandler);
+        _slider.RemoveHandler(winrt::Microsoft::UI::Xaml::UIElement::PointerExitedEvent(), _pointerExitedHandler);
+      }
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): Routed-event removal is best-effort while the control is retiring.
+    catch (...)
+    {
+      // Routed-event handlers are registered by AddHandler, which has no
+      // revoker. The revoker members below release every real WinRT event.
     }
 
-    if (_finalSeekTimer)
+    try
     {
-      _finalSeekTimer.Stop();
-      _finalSeekTimer.Tick(_finalSeekTickToken);
+      if (_finalSeekTimer)
+      {
+        _finalSeekTimer.Stop();
+      }
+    }
+    // NOLINTNEXTLINE(bugprone-empty-catch): The final seek timer may already be stopped during teardown.
+    catch (...)
+    {
     }
   }
 
-  void SeekControl::bind(WinUiDependencies const& dependencies)
+  void SeekControl::bind(ao::rt::PlaybackService& playback)
   {
     unbind();
+    resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::PlaybackPositionViewModel>(
-      dependencies.runtime.playback(), [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
+      playback, [this](uimodel::PlaybackPositionViewState const& state) { applyState(state); });
   }
 
-  void SeekControl::unbind()
+  void SeekControl::unbind() noexcept
   {
+    _viewModelPtr.reset();
     cancelPendingFinalSeek();
     stopRendering();
-    _viewModelPtr.reset();
     _interaction.reset();
     _interpolator.reset();
     _state = {};
     _hasState = false;
+  }
 
+  void SeekControl::resetPresentation()
+  {
     if (_slider && _presentationActive)
     {
       setSliderRange(std::chrono::milliseconds{0});
@@ -356,13 +376,20 @@ namespace ao::winui
     updateRenderingRegistration();
   }
 
-  void SeekControl::cancelPendingFinalSeek()
+  void SeekControl::cancelPendingFinalSeek() noexcept
   {
     _finalSeekPending = false;
 
     if (_finalSeekTimer)
     {
-      _finalSeekTimer.Stop();
+      try
+      {
+        _finalSeekTimer.Stop();
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): A stale timer cannot prevent control teardown.
+      catch (...)
+      {
+      }
     }
   }
 
@@ -513,8 +540,13 @@ namespace ao::winui
 
     if (auto const thumb = _thumbElement.try_as<winrt::Microsoft::UI::Xaml::Controls::Primitives::Thumb>(); thumb)
     {
-      auto const templateResource = _slider.Resources().Lookup(winrt::box_value(L"ModernSeekThumbTemplate"));
-      thumb.Template(templateResource.as<winrt::Microsoft::UI::Xaml::Controls::ControlTemplate>());
+      // Sizing the thumb is what makes the overlay hit region usable, so it is
+      // applied whether or not the frame replaced the thumb's own template.
+      if (auto const thumbTemplate = resolveThumbTemplate(); thumbTemplate)
+      {
+        thumb.Template(thumbTemplate);
+      }
+
       thumb.MinWidth(kModernThumbSize);
       thumb.MinHeight(kModernThumbSize);
       thumb.Width(kModernThumbSize);
@@ -525,6 +557,26 @@ namespace ao::winui
     applyPointerVisual();
   }
 
+  winrt::Microsoft::UI::Xaml::Controls::ControlTemplate SeekControl::resolveThumbTemplate() const
+  {
+    if (_thumbTemplate)
+    {
+      return _thumbTemplate;
+    }
+
+    // A slider built from a document carries no resources of its own, so an
+    // absent key means the frame draws the stock thumb, not that anything failed.
+    auto const key = winrt::box_value(kThumbTemplateKey);
+    auto const resources = _slider.Resources();
+
+    if (!resources || !resources.HasKey(key))
+    {
+      return nullptr;
+    }
+
+    return resources.Lookup(key).try_as<winrt::Microsoft::UI::Xaml::Controls::ControlTemplate>();
+  }
+
   void SeekControl::updateRenderingRegistration()
   {
     auto const shouldRender = _presentationActive && _loaded && _hasState && _interpolator.isPlaying() &&
@@ -532,7 +584,8 @@ namespace ao::winui
 
     if (shouldRender && !_rendering)
     {
-      _renderingToken = winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
+      _renderingRevoker = winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(
+        winrt::auto_revoke,
         [this](winrt::Windows::Foundation::IInspectable const&, winrt::Windows::Foundation::IInspectable const&)
         { renderFrame(); });
       _rendering = true;
@@ -543,14 +596,15 @@ namespace ao::winui
     }
   }
 
-  void SeekControl::stopRendering()
+  void SeekControl::stopRendering() noexcept
   {
     if (!_rendering)
     {
       return;
     }
 
-    winrt::Microsoft::UI::Xaml::Media::CompositionTarget::Rendering(_renderingToken);
+    _renderingRevoker.revoke();
+
     _rendering = false;
   }
 

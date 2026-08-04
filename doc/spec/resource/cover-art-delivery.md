@@ -111,7 +111,7 @@ The slot defaults are:
 
 GTK exposes those choices through `tracks.table.groupCoverPlaceholderStyle`, `track.coverArt.placeholderStyle`, and `playback.image.placeholderStyle`.
 Unknown values fall back to the slot default and produce a diagnostic.
-WinUI uses the same fixed mapping in this version and exposes no placeholder setting or persistence.
+WinUI exposes the inspector choice through `track.coverArt.placeholderStyle` in its shell preset documents, and uses the fixed mapping wherever a slot authors nothing. Neither the group heading nor the Now Playing slot is authored, and no placeholder choice is persisted.
 
 The shared SVG assets for `note`, `vinyl`, and `equalizer` live under `asset/ui/no-cover/`; `soul` reuses the authoritative brand mark under `asset/brand/`.
 GTK packages them as GResources and WinUI packages them as application content; both packages include the brand license alongside the Soul mark.

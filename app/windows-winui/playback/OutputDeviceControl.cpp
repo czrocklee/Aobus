@@ -3,12 +3,8 @@
 
 #include "playback/OutputDeviceControl.h"
 
-#include "app/WinUiDependencies.h"
-#include "platform/WindowsStringResources.h"
-#include <ao/rt/AppRuntime.h>
+#include "platform/StringResources.h"
 #include <ao/uimodel/playback/output/OutputDeviceViewModel.h>
-
-#include <winrt/Microsoft.UI.Xaml.Controls.h>
 
 #include <format>
 #include <memory>
@@ -17,57 +13,58 @@
 namespace ao::winui
 {
   OutputDeviceControl::OutputDeviceControl(OutputDeviceControlConfig config)
-    : _modernButton{std::move(config.modernButton)}, _classicButton{std::move(config.classicButton)}
+    : _presenter{std::move(config.presenter)}
   {
-    _modernClickToken =
-      _modernButton.Click([this](winrt::Windows::Foundation::IInspectable const&,
-                                 winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { showAt(_modernButton); });
-    _classicClickToken =
-      _classicButton.Click([this](winrt::Windows::Foundation::IInspectable const&,
-                                  winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { showAt(_classicButton); });
+    if (_presenter)
+    {
+      _presenterClickRevoker = _presenter.Click(
+        winrt::auto_revoke,
+        [this](winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
+        { showAt(_presenter); });
+    }
   }
 
   OutputDeviceControl::~OutputDeviceControl()
   {
     unbind();
-
-    if (_modernButton)
-    {
-      _modernButton.Click(_modernClickToken);
-    }
-
-    if (_classicButton)
-    {
-      _classicButton.Click(_classicClickToken);
-    }
   }
 
-  void OutputDeviceControl::bind(WinUiDependencies const& dependencies)
+  void OutputDeviceControl::bind(ao::rt::PlaybackService& playback)
   {
     unbind();
+    resetPresentation();
     _viewModelPtr = std::make_unique<uimodel::OutputDeviceViewModel>(
-      dependencies.runtime.playback(), [this](uimodel::OutputDeviceViewState const& state) { applyState(state); });
+      playback, [this](uimodel::OutputDeviceViewState const& state) { applyState(state); });
     _viewModelPtr->refresh();
   }
 
-  void OutputDeviceControl::unbind()
+  void OutputDeviceControl::unbind() noexcept
   {
-    closeFlyout();
     _viewModelPtr.reset();
+    closeFlyout();
     _state = {};
+  }
 
-    if (_modernButton)
+  void OutputDeviceControl::resetPresentation()
+  {
+    if (_presenter)
     {
-      _modernButton.Content(winrt::box_value(L"--"));
+      _presenter.Content(winrt::box_value(L"--"));
       winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
-        _modernButton, winrt::box_value(resourceHstring(L"OutputDeviceTooltip")));
+        _presenter, winrt::box_value(resourceHstring(L"OutputDeviceTooltip")));
     }
   }
 
   void OutputDeviceControl::applyState(uimodel::OutputDeviceViewState const& state)
   {
     _state = state;
-    _modernButton.Content(winrt::box_value(winrt::to_hstring(state.outputBackendSummary)));
+
+    if (!_presenter)
+    {
+      return;
+    }
+
+    _presenter.Content(winrt::box_value(winrt::to_hstring(state.outputBackendSummary)));
     auto tooltip = winrt::Windows::Foundation::IInspectable{winrt::box_value(resourceHstring(L"OutputDeviceTooltip"))};
 
     if (!state.outputDeviceStatus.empty())
@@ -75,12 +72,12 @@ namespace ao::winui
       tooltip = winrt::box_value(winrt::to_hstring(state.outputDeviceStatus));
     }
 
-    winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_modernButton, tooltip);
+    winrt::Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(_presenter, tooltip);
   }
 
-  void OutputDeviceControl::showAt(winrt::Microsoft::UI::Xaml::Controls::Button const& anchor)
+  void OutputDeviceControl::showAt(winrt::Microsoft::UI::Xaml::FrameworkElement const& anchor)
   {
-    if (!_viewModelPtr)
+    if (!_viewModelPtr || !anchor)
     {
       return;
     }
@@ -100,7 +97,8 @@ namespace ao::winui
       }
       else
       {
-        auto const token = item.Click(
+        _itemClickRevokers.push_back(item.Click(
+          winrt::auto_revoke,
           [this, backendId = row.backendId, deviceId = row.deviceId, profileId = row.profileId](
             winrt::Windows::Foundation::IInspectable const&, winrt::Microsoft::UI::Xaml::RoutedEventArgs const&)
           {
@@ -108,8 +106,7 @@ namespace ao::winui
             {
               _viewModelPtr->selectOutputDevice(backendId, deviceId, profileId);
             }
-          });
-        _itemClickRegistrations.push_back(ItemClickRegistration{.item = item, .token = token});
+          }));
       }
 
       _flyout.Items().Append(item);
@@ -126,21 +123,21 @@ namespace ao::winui
     _flyout.ShowAt(anchor);
   }
 
-  void OutputDeviceControl::closeFlyout()
+  void OutputDeviceControl::closeFlyout() noexcept
   {
-    for (auto const& registration : _itemClickRegistrations)
-    {
-      if (registration.item)
-      {
-        registration.item.Click(registration.token);
-      }
-    }
-
-    _itemClickRegistrations.clear();
+    _itemClickRevokers.clear();
 
     if (_flyout)
     {
-      _flyout.Hide();
+      try
+      {
+        _flyout.Hide();
+      }
+      // NOLINTNEXTLINE(bugprone-empty-catch): Hiding a projected flyout cannot block its owner release.
+      catch (...)
+      {
+      }
+
       _flyout = nullptr;
     }
   }

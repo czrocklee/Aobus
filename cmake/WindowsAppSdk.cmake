@@ -231,9 +231,13 @@ function(aobus_enable_cppwinrt target)
     VS_GLOBAL_ForceImportAfterCppTargets "${targets_file}")
 endfunction()
 
-function(aobus_enable_windows_app_sdk target)
+function(aobus_enable_windows_app_sdk target role)
   if(NOT TARGET "${target}")
     message(FATAL_ERROR "Windows App SDK target does not exist: ${target}")
+  endif()
+  if(NOT role STREQUAL "APPLICATION" AND NOT role STREQUAL "STATIC_LIBRARY")
+    message(FATAL_ERROR
+      "aobus_enable_windows_app_sdk expects APPLICATION or STATIC_LIBRARY for ${target}.")
   endif()
   if(NOT AOBUS_NUGET_PACKAGES_DIR)
     message(FATAL_ERROR "Call aobus_restore_windows_app_sdk before configuring ${target}.")
@@ -254,13 +258,53 @@ function(aobus_enable_windows_app_sdk target)
     string(APPEND targets_imports "${import}")
   endforeach()
 
-  set(props_file "${CMAKE_CURRENT_BINARY_DIR}/Aobus.WinUI.props")
-  set(targets_file "${CMAKE_CURRENT_BINARY_DIR}/Aobus.WinUI.targets")
+  set(output_type)
+  set(generated_module)
+  set(midl_settings)
+  set(runtime_link_settings)
+  if(role STREQUAL "APPLICATION")
+    # The final link consumes the XAML metadata provider from its project
+    # reference; generating another provider here creates duplicate symbols.
+    string(CONCAT output_type
+      "    <OutputType>WinExe</OutputType>\n"
+      "    <CppWinRTAddXamlMetaDataProviderIdl>false</CppWinRTAddXamlMetaDataProviderIdl>\n")
+    string(CONCAT runtime_link_settings
+      "    <Link>\n"
+      "      <AdditionalDependencies>"
+      "$(_FoundationLibFolder)\\Microsoft.WindowsAppRuntime.Bootstrap.lib;"
+      "$(_FoundationLibFolder)\\Microsoft.WindowsAppRuntime.lib;"
+      "%(AdditionalDependencies)</AdditionalDependencies>\n"
+      "    </Link>\n")
+  else()
+    # ConfigurationType remains StaticLibrary. WinExe tells the XAML targets
+    # that this target owns App.xaml and must generate its wWinMain entry object.
+    set(output_type "    <OutputType>WinExe</OutputType>\n")
+    string(CONCAT midl_settings
+      "    <Midl>\n"
+      "      <OutputDirectory>$(ProjectDir)</OutputDirectory>\n"
+      "    </Midl>\n")
+    string(CONCAT generated_module
+      "  <Target Name=\"AobusNormalizeMidlOutputDirectory\"\n"
+      "          BeforeTargets=\"Midl;GetCppWinRTMdMergeInputs\">\n"
+      "    <ItemGroup>\n"
+      "      <Midl Update=\"@(Midl)\">\n"
+      "        <OutputDirectory>$(ProjectDir)</OutputDirectory>\n"
+      "      </Midl>\n"
+      "    </ItemGroup>\n"
+      "  </Target>\n"
+      "  <ItemGroup>\n"
+      "    <ClCompile Include=\"$(GeneratedFilesDir)module.g.cpp\" />\n"
+      "  </ItemGroup>\n")
+  endif()
+
+  set(props_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.WinUI.props")
+  set(targets_file "${CMAKE_CURRENT_BINARY_DIR}/${target}.WinUI.targets")
   file(WRITE "${props_file}"
     "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
     "  <PropertyGroup>\n"
-    "    <OutputType>WinExe</OutputType>\n"
+    "${output_type}"
     "    <UseWinUI>true</UseWinUI>\n"
+    "    <GeneratedFilesDir>$(IntDir)Generated Files\\</GeneratedFilesDir>\n"
     "    <WindowsAppContainer>false</WindowsAppContainer>\n"
     "    <AppxPackage>false</AppxPackage>\n"
     "    <WindowsPackageType>None</WindowsPackageType>\n"
@@ -287,27 +331,10 @@ function(aobus_enable_windows_app_sdk target)
     "    <WindowsPackageType>None</WindowsPackageType>\n"
     "  </PropertyGroup>\n"
     "  <ItemDefinitionGroup>\n"
-    "    <Midl>\n"
-    "      <OutputDirectory>$(ProjectDir)</OutputDirectory>\n"
-    "    </Midl>\n"
-    "    <Link>\n"
-    "      <AdditionalDependencies>"
-    "$(_FoundationLibFolder)\\Microsoft.WindowsAppRuntime.Bootstrap.lib;"
-    "$(_FoundationLibFolder)\\Microsoft.WindowsAppRuntime.lib;"
-    "%(AdditionalDependencies)</AdditionalDependencies>\n"
-    "    </Link>\n"
+    "${midl_settings}"
+    "${runtime_link_settings}"
     "  </ItemDefinitionGroup>\n"
-    "  <Target Name=\"AobusNormalizeMidlOutputDirectory\"\n"
-    "          BeforeTargets=\"Midl;GetCppWinRTMdMergeInputs\">\n"
-    "    <ItemGroup>\n"
-    "      <Midl Update=\"@(Midl)\">\n"
-    "        <OutputDirectory>$(ProjectDir)</OutputDirectory>\n"
-    "      </Midl>\n"
-    "    </ItemGroup>\n"
-    "  </Target>\n"
-    "  <ItemGroup>\n"
-    "    <ClCompile Include=\"$(GeneratedFilesDir)module.g.cpp\" />\n"
-    "  </ItemGroup>\n"
+    "${generated_module}"
     "</Project>\n")
 
   configure_file(

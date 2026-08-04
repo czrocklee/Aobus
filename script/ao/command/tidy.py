@@ -44,11 +44,6 @@ examples:
 
 ALL_FOLDERS = ["lib", "app", "include", "script", "test", "tool"]
 WINUI_ROOT = PROJECT_ROOT / "app" / "windows-winui"
-WINUI_HEADER_COMPANIONS = {
-    WINUI_ROOT / "pch.h": WINUI_ROOT / "App.xaml.cpp",
-    WINUI_ROOT / "app" / "WinUiDependencies.h": WINUI_ROOT / "playback" / "SeekControl.cpp",
-    WINUI_ROOT / "platform" / "ScopedBooleanFlag.h": WINUI_ROOT / "playback" / "SeekControl.cpp",
-}
 WINDOWS_EXCLUDED_COMPILE_ARGUMENTS = ("/Zc:preprocessor", "/c", "/ZW:nostdlib", "/GL")
 WINDOWS_FORCED_CMAKE_PCH_PATTERN = r'/FI(?:"[^"]*[/\\]cmake_pch\.hxx"|[^\s]*[/\\]cmake_pch\.hxx)'
 
@@ -774,6 +769,20 @@ def run_command(args: argparse.Namespace) -> int:
 
         selected = [*buckets["STRICT"], *buckets["RELAXED"]]
         winui_commands = prepare_winui_compile_commands(args, build_dir, toolchain, selected)
+        automatic_winui_companions = (
+            winuitidy.find_header_companions(
+                winui_commands,
+                tuple(
+                    path
+                    for path in selected
+                    if is_winui_path(path) and path.suffix.lower() in {".h", ".hh", ".hpp", ".hxx"}
+                ),
+                project_root=PROJECT_ROOT,
+                winui_root=WINUI_ROOT,
+            )
+            if toolchain.resource_dir is not None
+            else {}
+        )
         native_database_dir = build_dir
         if toolchain.resource_dir is not None:
             native_database_dir = tidyengine.make_tmpdir("tidy-windows-db-")
@@ -788,7 +797,7 @@ def run_command(args: argparse.Namespace) -> int:
         coverage_plan = tidyengine.compile_command_plan(
             native_database_dir,
             selected,
-            explicit_header_companions=WINUI_HEADER_COMPANIONS if toolchain.resource_dir is not None else None,
+            explicit_header_companions=(automatic_winui_companions if toolchain.resource_dir is not None else None),
             additional_dependency_build_dirs=additional_dependency_build_directories(
                 build_dir,
                 path_was_explicit=args.path is not None,

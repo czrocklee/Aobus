@@ -17,7 +17,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             build_dir = root / "build"
             generator = root / "vs"
             msbuild = generator / "MSBuild" / "Current" / "Bin" / "MSBuild.exe"
-            project = build_dir / "app" / "windows-winui" / "aobus-winui.vcxproj"
+            project = build_dir / "app" / "windows-winui" / "aobus-winui-lib.vcxproj"
             clang_cl = root / "llvm" / "bin" / "clang-cl.exe"
             first = source_root / "app" / "windows-winui" / "First.cpp"
             second = source_root / "app" / "windows-winui" / "detail" / "Second.cpp"
@@ -58,8 +58,53 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             self.assertTrue(all(str(clang_cl) in str(entry["command"]) for entry in commands))
             self.assertTrue(all("/DWINUI" in str(entry["command"]) for entry in commands))
             self.assertNotIn(str(generated), "\n".join(str(entry) for entry in commands))
+            self.assertIn(str(project), run.call_args.args[0])
             self.assertIn("-getTargetResult:GetCompileCommands", run.call_args.args[0])
             self.assertIn("/p:Configuration=Release", run.call_args.args[0])
+
+    def test_indexes_header_companions_from_the_winui_include_graph(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            winui_root = root / "app" / "windows-winui"
+            source = winui_root / "layout" / "ShellBuilder.cpp"
+            bridge = winui_root / "layout" / "ShellBuilder.h"
+            header = winui_root / "layout" / "runtime" / "ShellLibraryAccess.h"
+            pch = winui_root / "pch.h"
+            for path in (source, bridge, header, pch):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('#include "pch.h"\n#include "ShellBuilder.h"\n', encoding="utf-8")
+            bridge.write_text('#include "layout/runtime/ShellLibraryAccess.h"\n', encoding="utf-8")
+            header.write_text("#pragma once\n", encoding="utf-8")
+            pch.write_text("#pragma once\n", encoding="utf-8")
+
+            companions = winuitidy.find_header_companions(
+                [{"directory": str(root), "file": str(source), "command": "clang-cl /c ShellBuilder.cpp"}],
+                (header, pch),
+                project_root=root,
+                winui_root=winui_root,
+            )
+
+            self.assertEqual(companions, {header: source, pch: source})
+
+    def test_unreachable_header_is_left_for_normal_coverage_handling(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "repo"
+            winui_root = root / "app" / "windows-winui"
+            source = winui_root / "App.xaml.cpp"
+            header = winui_root / "layout" / "runtime" / "Unused.h"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            header.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('#include "pch.h"\n', encoding="utf-8")
+            header.write_text("#pragma once\n", encoding="utf-8")
+
+            companions = winuitidy.find_header_companions(
+                [{"file": str(source)}],
+                (header,),
+                project_root=root,
+                winui_root=winui_root,
+            )
+
+            self.assertEqual(companions, {})
 
     def test_missing_required_translation_unit_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -71,7 +116,7 @@ class WinUiCompileCommandsTest(unittest.TestCase):
             missing = source_root / "app" / "windows-winui" / "Missing.cpp"
             paths = (
                 generator / "MSBuild" / "Current" / "Bin" / "MSBuild.exe",
-                build_dir / "app" / "windows-winui" / "aobus-winui.vcxproj",
+                build_dir / "app" / "windows-winui" / "aobus-winui-lib.vcxproj",
                 root / "llvm" / "bin" / "clang-cl.exe",
                 source,
             )

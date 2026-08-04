@@ -8,13 +8,14 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutBuildContext.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 
 #include <glibmm/refptr.h>
@@ -83,7 +84,7 @@ namespace ao::gtk::layout::test
                 .runtime = *runtimePtr,
                 .parentWindow = window,
                 .runtimeState = runtimeState,
-                .buildState = LayoutBuildStateView{runtimeState},
+                .buildState = uimodel::LayoutBuildStateView{runtimeState},
                 .dependencies = dependencies}
       , layoutRuntime{components}
     {
@@ -117,7 +118,7 @@ namespace ao::gtk::layout::test
     ComponentRegistry components;
     ActionRegistry actions;
     Gtk::Window window;
-    LayoutRuntimeState runtimeState;
+    uimodel::LayoutRuntimeState runtimeState;
     GtkUiDependencies dependencies;
     LayoutBuildContext context;
     LayoutRuntime layoutRuntime;
@@ -187,7 +188,7 @@ namespace ao::gtk::layout::test
                                       .runtime = *_statePtr->runtimePtr,
                                       .parentWindow = _statePtr->window,
                                       .runtimeState = _statePtr->runtimeState,
-                                      .buildState = LayoutBuildStateView{_statePtr->runtimeState},
+                                      .buildState = uimodel::LayoutBuildStateView{_statePtr->runtimeState},
                                       .dependencies = _statePtr->dependencies,
                                       .detailScope = _statePtr->trackDetailScopePtr.get()};
     return _statePtr->components.create(context, node);

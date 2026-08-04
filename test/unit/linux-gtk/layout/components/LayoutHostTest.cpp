@@ -9,7 +9,6 @@
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "layout/document/LayoutPresets.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
@@ -21,6 +20,8 @@
 #include <ao/uimodel/layout/document/LayoutDocument.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/application.h>
@@ -59,14 +60,14 @@ namespace ao::gtk::layout::test
 
     auto window = Gtk::Window{};
     auto const actionRegistry = ActionRegistry{};
-    auto runtimeState = LayoutRuntimeState{};
+    auto runtimeState = uimodel::LayoutRuntimeState{};
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = *runtimePtr,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = LayoutBuildStateView{runtimeState},
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     auto host = LayoutHost{registry};
@@ -181,14 +182,14 @@ namespace ao::gtk::layout::test
       auto const tempDir2 = ao::test::TempDir{};
       std::unique_ptr<rt::AppRuntime> runtime2Ptr = makeRuntime(tempDir2);
       auto const actionRegistry2 = ActionRegistry{};
-      auto runtimeState2 = LayoutRuntimeState{};
+      auto runtimeState2 = uimodel::LayoutRuntimeState{};
       auto dependencies2 = GtkUiDependencies{};
       auto ctx2 = LayoutBuildContext{.registry = registry2,
                                      .actionRegistry = actionRegistry2,
                                      .runtime = *runtime2Ptr,
                                      .parentWindow = window2,
                                      .runtimeState = runtimeState2,
-                                     .buildState = LayoutBuildStateView{runtimeState2},
+                                     .buildState = uimodel::LayoutBuildStateView{runtimeState2},
                                      .dependencies = dependencies2};
 
       auto doc = LayoutDocument{};

@@ -18,7 +18,7 @@ The theme document is strict and unversioned.
 
 ## Code boundary
 
-The [system architecture](../../architecture/system-overview.md), [application shell architecture](../../architecture/application-shell.md), and [Windows desktop shell specification](../../spec/shell/windows-desktop.md) define ownership and behavior. UIModel owns both schemas; the WinUI composition root owns their platform location and application.
+The [system architecture](../../architecture/system-overview.md), [application shell architecture](../../architecture/application-shell.md), and [Windows desktop shell specification](../../spec/shell/windows-desktop.md) define ownership and behavior. The Windows-only `aobus-winui-lib` owns both schemas; the WinUI composition root owns their platform location and application.
 
 ## Surface
 
@@ -68,6 +68,9 @@ The theme has no compatibility envelope: adding, removing, or renaming a token r
 Reload installs only a completely valid candidate.
 
 Saving Windows settings serializes `desktop`, `trackView.columnLayouts`, and `trackView.presentations` into one `saveTogether()` candidate and replaces the file atomically.
+A destructive library restart destroys the parent `LibrarySession` and its settings writer before process creation.
+The successor initially retains the loaded `lastLibraryPath`; an explicit requested root replaces that in-memory value and becomes eligible for `saveTogether()` only after successor activation.
+Failed successor startup therefore leaves the prior durable field unchanged.
 The settings and theme files remain separate writer domains; changing or rejecting one does not mutate the other.
 
 ## Examples
@@ -111,14 +114,15 @@ classic:
 
 ## Implementation authority
 
-- [`WindowsDesktopSettingsYamlSchema`](../../../app/include/ao/uimodel/layout/shell/WindowsDesktopSettingsYamlSchema.h)
-- [`WindowsThemeYamlSchema`](../../../app/include/ao/uimodel/preference/WindowsTheme.h)
-- [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.cpp) and [`WindowsThemeCoordinator`](../../../app/windows-winui/theme/WindowsThemeCoordinator.cpp)
+- [`DesktopSettingsYamlSchema`](../../../app/windows-winui/include/ao/winui/DesktopSettingsYamlSchema.h)
+- [`ThemeYamlSchema`](../../../app/windows-winui/include/ao/winui/Theme.h)
+- [`LibraryStartupPlan`](../../../app/windows-winui/include/ao/winui/app/LibraryStartupPlan.h), [`LibrarySession`](../../../app/windows-winui/app/LibrarySession.cpp), and [`ThemeCoordinator`](../../../app/windows-winui/theme/ThemeCoordinator.cpp)
 
 ## Test authority
 
-- [`WindowsDesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/uimodel/layout/shell/WindowsDesktopSettingsYamlSchemaTest.cpp)
-- [`WindowsThemeTest.cpp`](../../../test/unit/uimodel/preference/WindowsThemeTest.cpp)
+- [`DesktopSettingsYamlSchemaTest.cpp`](../../../test/unit/winui/DesktopSettingsYamlSchemaTest.cpp)
+- [`LibraryStartupPlanTest.cpp`](../../../test/unit/winui/app/LibraryStartupPlanTest.cpp)
+- [`ThemeTest.cpp`](../../../test/unit/winui/ThemeTest.cpp)
 
 ## Related documents
 

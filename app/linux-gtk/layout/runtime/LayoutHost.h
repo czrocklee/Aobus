@@ -16,13 +16,13 @@
 namespace ao::uimodel
 {
   class PreparedLayout;
-}
+  struct LayoutRuntimeState;
+} // namespace ao::uimodel
 
 namespace ao::gtk::layout
 {
   class ComponentRegistry;
   struct LayoutBuildContext;
-  struct LayoutRuntimeState;
 
   /**
    * @brief A GTK widget that hosts a dynamic layout.
@@ -63,7 +63,7 @@ namespace ao::gtk::layout
     /**
      * @brief Invalidate the previous generation and install a prepared tree as one host replacement.
      */
-    void commit(LayoutRuntimeState& runtimeState, PreparedTree prepared);
+    void commit(uimodel::LayoutRuntimeState& runtimeState, PreparedTree prepared);
 
     /**
      * @brief Destroy the active layout tree without invalidating its final state writes.

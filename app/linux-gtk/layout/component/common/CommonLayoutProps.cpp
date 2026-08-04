@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include "CommonLayoutProps.h"
 
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/document/LayoutPlacement.h>
 
 #include <gtkmm/enums.h>
 #include <gtkmm/widget.h>
@@ -11,109 +12,104 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace ao::gtk::layout
 {
-  using namespace uimodel;
   namespace
   {
-    std::optional<Gtk::Align> parseAlign(std::string_view alignment)
+    /// The document's alignment vocabulary in the spelling GTK's own enum uses.
+    Gtk::Align toGtkAlign(uimodel::LayoutAlignment const alignment)
     {
-      if (alignment == "fill")
+      switch (alignment)
       {
-        return Gtk::Align::FILL;
+        case uimodel::LayoutAlignment::Fill: return Gtk::Align::FILL;
+        case uimodel::LayoutAlignment::Start: return Gtk::Align::START;
+        case uimodel::LayoutAlignment::End: return Gtk::Align::END;
+        case uimodel::LayoutAlignment::Center: return Gtk::Align::CENTER;
       }
 
-      if (alignment == "start")
+      return Gtk::Align::FILL;
+    }
+
+    /// GTK spells "no minimum" as a negative request, which is what an unset field means.
+    std::int32_t toSizeRequest(std::optional<double> const& optMinimum)
+    {
+      return optMinimum ? static_cast<std::int32_t>(*optMinimum) : -1;
+    }
+
+    /**
+     * @brief Apply the CSS classes @p node authors.
+     *
+     * Styling is the one common field the two shells do not share: GTK styles
+     * through CSS classes and the Windows shell through XAML resources, so each
+     * frontend reads its own styling field and rejects the other's.
+     */
+    void applyCssClasses(Gtk::Widget& widget, uimodel::LayoutNode const& node)
+    {
+      auto const it = node.layout.find("cssClasses");
+
+      if (it == node.layout.end())
       {
-        return Gtk::Align::START;
+        return;
       }
 
-      if (alignment == "end")
-      {
-        return Gtk::Align::END;
-      }
-
-      if (alignment == "center")
-      {
-        return Gtk::Align::CENTER;
-      }
-
-      return std::nullopt;
-    }
-  } // namespace
-
-  void applyCommonProps(Gtk::Widget& widget, LayoutNode const& node)
-  {
-    auto const& layout = node.layout;
-
-    if (auto const it = layout.find("hexpand"); it != layout.end())
-    {
-      widget.set_hexpand(it->second.asBool());
-    }
-
-    if (auto const it = layout.find("vexpand"); it != layout.end())
-    {
-      widget.set_vexpand(it->second.asBool());
-    }
-
-    if (auto const it = layout.find("halign"); it != layout.end())
-    {
-      if (auto const optAlignment = parseAlign(it->second.asString()); optAlignment)
-      {
-        widget.set_halign(*optAlignment);
-      }
-    }
-
-    if (auto const it = layout.find("valign"); it != layout.end())
-    {
-      if (auto const optAlignment = parseAlign(it->second.asString()); optAlignment)
-      {
-        widget.set_valign(*optAlignment);
-      }
-    }
-
-    std::int32_t width = -1;
-    std::int32_t height = -1;
-    bool sizeChanged = false;
-
-    if (auto const it = layout.find("widthRequest"); it != layout.end())
-    {
-      width = static_cast<std::int32_t>(it->second.asInt());
-      sizeChanged = true;
-    }
-
-    if (auto const it = layout.find("heightRequest"); it != layout.end())
-    {
-      height = static_cast<std::int32_t>(it->second.asInt());
-      sizeChanged = true;
-    }
-
-    if (sizeChanged)
-    {
-      widget.set_size_request(width, height);
-    }
-
-    if (auto const it = layout.find("visible"); it != layout.end())
-    {
-      widget.set_visible(it->second.asBool());
-    }
-
-    if (auto const it = layout.find("cssClasses"); it != layout.end())
-    {
       if (auto const* classes = it->second.getIf<std::vector<std::string>>(); classes != nullptr)
       {
         for (auto const& className : *classes)
         {
           widget.add_css_class(className);
         }
+
+        return;
       }
-      else if (auto const className = it->second.asString(); !className.empty())
+
+      if (auto const className = it->second.asString(); !className.empty())
       {
         widget.add_css_class(className);
       }
     }
+  } // namespace
+
+  void applyCommonProps(Gtk::Widget& widget, uimodel::LayoutNode const& node)
+  {
+    auto const placement = uimodel::planLayoutPlacement(node);
+
+    // Left alone when unauthored: GTK derives expansion from a widget's
+    // children until something states it, and stating false would stop that.
+    if (placement.optHorizontalExpand)
+    {
+      widget.set_hexpand(*placement.optHorizontalExpand);
+    }
+
+    if (placement.optVerticalExpand)
+    {
+      widget.set_vexpand(*placement.optVerticalExpand);
+    }
+
+    if (placement.optHorizontalAlignment)
+    {
+      widget.set_halign(toGtkAlign(*placement.optHorizontalAlignment));
+    }
+
+    if (placement.optVerticalAlignment)
+    {
+      widget.set_valign(toGtkAlign(*placement.optVerticalAlignment));
+    }
+
+    if (placement.widthRequestAuthored || placement.heightRequestAuthored)
+    {
+      widget.set_size_request(toSizeRequest(placement.optMinWidth), toSizeRequest(placement.optMinHeight));
+    }
+
+    // Left alone when unauthored, like expansion, but for a sharper reason: a
+    // component may already have hidden itself because it has nothing to show,
+    // and a document that said nothing must not reveal it.
+    if (placement.optAuthoredVisible)
+    {
+      widget.set_visible(*placement.optAuthoredVisible);
+    }
+
+    applyCssClasses(widget, node);
   }
 } // namespace ao::gtk::layout

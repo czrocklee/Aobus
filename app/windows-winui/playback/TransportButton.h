@@ -10,10 +10,13 @@
 
 #include <memory>
 
+namespace ao::rt
+{
+  class PlaybackService;
+} // namespace ao::rt
+
 namespace ao::winui
 {
-  struct WinUiDependencies;
-
   struct TransportButtonConfig final
   {
     winrt::Microsoft::UI::Xaml::Controls::Button button{nullptr};
@@ -32,17 +35,20 @@ namespace ao::winui
     TransportButton(TransportButton&&) = delete;
     TransportButton& operator=(TransportButton&&) = delete;
 
-    void bind(WinUiDependencies const& dependencies);
-    void unbind();
+    void bind(rt::PlaybackService& playback, uimodel::PlaybackCommandSurface& commands);
+    void unbind() noexcept;
     void activate();
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     void applyState(uimodel::TransportViewState const& state);
 
     winrt::Microsoft::UI::Xaml::Controls::Button _button{nullptr};
     uimodel::PlaybackCommand _command = uimodel::PlaybackCommand::PlayPause;
     bool _showLabel = false;
-    winrt::event_token _clickToken{};
+    winrt::Microsoft::UI::Xaml::Controls::Button::Click_revoker _clickRevoker{};
     std::unique_ptr<uimodel::TransportViewModel> _viewModelPtr;
   };
 } // namespace ao::winui

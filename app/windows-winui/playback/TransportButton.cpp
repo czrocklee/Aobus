@@ -3,9 +3,7 @@
 
 #include "playback/TransportButton.h"
 
-#include "app/WinUiDependencies.h"
-#include "platform/WindowsStringResources.h"
-#include <ao/rt/AppRuntime.h>
+#include "platform/StringResources.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
 
@@ -64,35 +62,35 @@ namespace ao::winui
   TransportButton::TransportButton(TransportButtonConfig config)
     : _button{std::move(config.button)}, _command{config.command}, _showLabel{config.showLabel}
   {
-    _clickToken = _button.Click([this](winrt::Windows::Foundation::IInspectable const&,
-                                       winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { activate(); });
+    _clickRevoker = _button.Click(winrt::auto_revoke,
+                                  [this](winrt::Windows::Foundation::IInspectable const&,
+                                         winrt::Microsoft::UI::Xaml::RoutedEventArgs const&) { activate(); });
   }
 
   TransportButton::~TransportButton()
   {
     unbind();
-
-    if (_button)
-    {
-      _button.Click(_clickToken);
-    }
   }
 
-  void TransportButton::bind(WinUiDependencies const& dependencies)
+  void TransportButton::bind(ao::rt::PlaybackService& playback, ao::uimodel::PlaybackCommandSurface& commands)
   {
     unbind();
-    _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(dependencies.runtime.playback(),
-                                                                  dependencies.playbackCommands,
+    resetPresentation();
+    _viewModelPtr = std::make_unique<uimodel::TransportViewModel>(playback,
+                                                                  commands,
                                                                   _command,
                                                                   _showLabel,
                                                                   [this](uimodel::TransportViewState const& state)
                                                                   { applyState(state); });
   }
 
-  void TransportButton::unbind()
+  void TransportButton::unbind() noexcept
   {
     _viewModelPtr.reset();
+  }
 
+  void TransportButton::resetPresentation()
+  {
     if (_button)
     {
       _button.IsEnabled(false);

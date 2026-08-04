@@ -3,18 +3,16 @@
 
 #pragma once
 
-#include "layout/runtime/LayoutRuntimeState.h"
-#include <ao/uimodel/layout/component/LayoutComponentState.h>
+#include <ao/uimodel/layout/component/LayoutSurface.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
 #include <gtkmm/window.h>
 #include <sigc++/connection.h>
 #include <sigc++/functors/slot.h>
 
 #include <chrono>
-#include <cstdint>
 #include <functional>
-#include <string_view>
-#include <utility>
 
 namespace ao::rt
 {
@@ -33,66 +31,6 @@ namespace ao::gtk::layout
   class ComponentRegistry;
   class ActionRegistry;
 
-  enum class LayoutSurface : std::uint8_t
-  {
-    Main,
-    Tooltip,
-  };
-
-  /// State read while constructing one tree: either the live carrier or an explicit replacement candidate.
-  class LayoutBuildStateView final
-  {
-  public:
-    explicit LayoutBuildStateView(LayoutRuntimeState const& state)
-      : _runtimeState{&state}
-    {
-    }
-
-    LayoutBuildStateView(std::string_view preset,
-                         uimodel::LayoutComponentStateDocument const& stateDocument,
-                         std::uint64_t stateGeneration,
-                         bool isEditMode = false,
-                         LayoutNodeMovedFn nodeMoved = {})
-      : _presetId{preset}
-      , _document{&stateDocument}
-      , _generation{stateGeneration}
-      , _editMode{isEditMode}
-      , _onNodeMoved{std::move(nodeMoved)}
-      , _hasGenerationOverride{true}
-    {
-    }
-
-    std::string_view presetId() const noexcept
-    {
-      return _runtimeState == nullptr ? _presetId : std::string_view{_runtimeState->activePresetId};
-    }
-
-    uimodel::LayoutComponentStateDocument const& document() const noexcept
-    {
-      return _runtimeState == nullptr ? *_document : _runtimeState->componentState;
-    }
-
-    std::uint64_t generation() const noexcept;
-
-    bool isEditMode() const noexcept { return _runtimeState == nullptr ? _editMode : _runtimeState->editMode; }
-
-    LayoutNodeMovedFn const& onNodeMoved() const noexcept
-    {
-      return _runtimeState == nullptr ? _onNodeMoved : _runtimeState->onNodeMoved;
-    }
-
-    void overrideGeneration(std::uint64_t generation) noexcept;
-
-  private:
-    LayoutRuntimeState const* _runtimeState = nullptr;
-    std::string_view _presetId{};
-    uimodel::LayoutComponentStateDocument const* _document = nullptr;
-    std::uint64_t _generation = 0;
-    bool _editMode = false;
-    LayoutNodeMovedFn _onNodeMoved{};
-    bool _hasGenerationOverride = false;
-  };
-
   /**
    * @brief Passive per-build carrier: borrows the collaborators, state and
    * environment a single layout build needs.
@@ -103,20 +41,24 @@ namespace ao::gtk::layout
    * construction state (`buildState`), borrowed collaborator wiring
    * (`dependencies`), and build-traversal scope (`detailScope`/`detailUndo`,
    * saved/restored by TrackDetailScope).
+   *
+   * The surface kind, shell-lifetime runtime state and build-state view are
+   * platform-neutral UIModel values; only the window, dependency aggregate,
+   * detail scope and timeout scheduler are GTK-specific.
    */
   struct LayoutBuildContext final
   {
-    LayoutSurface surface = LayoutSurface::Main;
+    uimodel::LayoutSurface surface = uimodel::LayoutSurface::Main;
     ComponentRegistry const& registry;
     ActionRegistry const& actionRegistry;
     rt::AppRuntime& runtime;
     Gtk::Window& parentWindow;
 
     /// Mutable runtime state borrowed from the owning shell; outlives any single build.
-    LayoutRuntimeState& runtimeState;
+    uimodel::LayoutRuntimeState& runtimeState;
 
     /// Candidate state read during construction; components retain only copied entries and the stable runtime state.
-    LayoutBuildStateView buildState;
+    uimodel::LayoutBuildStateView buildState;
 
     /// Borrowed collaborator wiring from the GTK application layer.
     GtkUiDependencies const& dependencies;

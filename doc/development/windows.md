@@ -188,6 +188,10 @@ invocations and Visual Studio are unnecessary.
 `ao.bat check` builds the Debug WinUI configuration after the normal Windows Debug graph, except in the MSVC AddressSanitizer profile.
 `ao.bat check release` builds the IPO/LTCG-enabled WinUI Release configuration after validating the complete native Release graph.
 
+The WinUI graph has one Windows-only static frontend library, `aobus-winui-lib`, which owns all compiled C++, XAML, IDL, and generated C++/WinRT implementation.
+The thin `aobus-winui` executable owns the final link, manifest, string resources, and deployed assets.
+WinUI-owned pure-rule tests are included in `ao_core_test` only by the normal native Windows profile; Linux neither builds those tests nor exports a second cross-platform WinUI model library.
+
 The portal uses one concurrency limit for both CMake's project scheduling and
 MSBuild's cross-project C++ compiler scheduling. By default it leaves one
 logical processor available. Set `CMAKE_BUILD_PARALLEL_LEVEL` to a positive
@@ -207,6 +211,13 @@ required. Launch must occur in an interactive desktop session: SSH service
 session 0 can build and verify the executable but cannot display it, and the
 portal asks the developer to run `ao.bat run winui` inside the active RDP
 session.
+
+The generated WinUI project does not relink when only a library it depends on
+changed. Editing shared code such as `app/uimodel/` recompiles that library and
+reports success, but `Aobus.exe` keeps its previous contents, so the running app
+still shows the old behaviour. Delete the executable before rebuilding when a
+change lands outside `app/windows-winui/`, or pass `--clean`. Only the WinUI
+project is affected: the test trees `ao.bat check` builds relink normally.
 
 The repository's `vcpkg-configuration.json` selects both the default registry
 snapshot and the Boost-scoped snapshot. `dependency-contract.json` owns the

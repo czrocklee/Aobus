@@ -5,9 +5,9 @@
 
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
-#include "layout/runtime/LayoutRuntimeState.h"
 #include <ao/Error.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
 #include <gtkmm/enums.h>
 
@@ -88,7 +88,7 @@ namespace ao::gtk::layout
     }
   }
 
-  void LayoutHost::commit(LayoutRuntimeState& runtimeState, PreparedTree prepared)
+  void LayoutHost::commit(uimodel::LayoutRuntimeState& runtimeState, PreparedTree prepared)
   {
     // Invalidate pending writes before the retiring generation is detached or destroyed.
     runtimeState.componentStateGeneration = prepared._componentStateGeneration;

@@ -7,7 +7,6 @@
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
-#include "layout/runtime/LayoutRuntimeState.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
@@ -15,6 +14,8 @@
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/box.h>
@@ -52,14 +53,14 @@ namespace ao::gtk::layout::test
     registry.registerAction({.id = "secondaryLong", .label = "Secondary Long", .category = "Test"},
                             [&](auto&) { secondaryLongPressed = true; });
 
-    auto runtimeState = LayoutRuntimeState{};
+    auto runtimeState = uimodel::LayoutRuntimeState{};
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = compRegistry,
                                   .actionRegistry = registry,
                                   .runtime = fixture.runtime(),
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = LayoutBuildStateView{runtimeState},
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
 
     SECTION("attaches primary click to Gtk::Button")

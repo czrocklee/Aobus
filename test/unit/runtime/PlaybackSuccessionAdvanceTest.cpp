@@ -46,8 +46,17 @@ namespace ao::rt::test
 
     REQUIRE(drained);
     fixture.transport.renderTarget->handleDrainComplete();
-    fixture.transport.executor.checkQueued(std::chrono::seconds{5});
-    fixture.transport.executor.drain();
+
+    // The drain only enqueues a render-thread signal, so the advance lands an
+    // executor hop after the first queued task. Waiting for the advance itself
+    // rather than for a queued task keeps the pump thread out of the race.
+    REQUIRE(fixture.transport.executor.drainUntil(
+      [&]
+      {
+        return fixture.successionPtr->state().currentTrackId == fixture.secondTrackId &&
+               playbackTransport.state().transport == audio::Transport::Playing;
+      },
+      std::chrono::seconds{5}));
 
     CHECK(fixture.successionPtr->state().currentTrackId == fixture.secondTrackId);
     CHECK(playbackTransport.state().nowPlaying.trackId == fixture.secondTrackId);

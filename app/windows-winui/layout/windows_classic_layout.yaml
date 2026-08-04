@@ -1,0 +1,193 @@
+# Built-in Windows Classic shell document.
+#
+# Shipped as an application resource and validated against the Windows layout
+# catalog. The playback strip keeps the specified Soul, Play/Pause, Stop, Seek,
+# Time, Volume order; menus and column behavior stay native to their components.
+version: 1
+root:
+  id: windows-classic-root
+  type: box
+  props:
+    orientation: vertical
+  layout:
+    hexpand: true
+    vexpand: true
+  children:
+    - id: classic-menu-bar
+      type: windows.menuBar
+      layout:
+        hexpand: true
+        halign: start
+
+    - id: classic-playback-strip
+      type: box
+      props:
+        orientation: horizontal
+        spacing: 6
+      layout:
+        hexpand: true
+        heightRequest: 48
+        styleKey: ClassicPlaybackStripStyle
+        surface: surface
+      children:
+        # Classic keeps a dedicated play/pause button, so the soul spends its
+        # primary click on the output device selector instead of the transport.
+        - id: classic-soul
+          type: playback.soulButton
+          props:
+            showGlyph: false
+            primaryAction: playback.showOutputDeviceSelector
+          layout:
+            widthRequest: 32
+            heightRequest: 32
+            valign: center
+        - id: classic-play-pause
+          type: playback.transportButton
+          props:
+            command: playPause
+          layout:
+            valign: center
+        - id: classic-stop
+          type: playback.transportButton
+          props:
+            command: stop
+          layout:
+            valign: center
+        - id: classic-seek
+          type: playback.seekSlider
+          props:
+            presentation: inline
+          layout:
+            hexpand: true
+            valign: center
+        - id: classic-time
+          type: playback.timeLabel
+          props:
+            variant: combined
+          layout:
+            widthRequest: 110
+            halign: center
+            valign: center
+        - id: classic-volume
+          type: playback.volumeControl
+          props:
+            presentation: inline
+          layout:
+            widthRequest: 150
+            valign: center
+
+    - id: classic-toolbar
+      type: box
+      props:
+        orientation: horizontal
+        spacing: 4
+      layout:
+        hexpand: true
+        heightRequest: 38
+        styleKey: ClassicToolbarStyle
+        surface: classic.toolbar
+      children:
+        - id: classic-open-library
+          type: actionButton
+          props:
+            resourceKey: LibraryOpenLabel
+            primaryAction: library.open
+          layout:
+            valign: center
+        - id: classic-rescan
+          type: actionButton
+          props:
+            resourceKey: LibraryRescanLabel
+            primaryAction: library.rescan
+          layout:
+            valign: center
+        - id: classic-previous
+          type: playback.transportButton
+          props:
+            command: previous
+          layout:
+            valign: center
+        - id: classic-next
+          type: playback.transportButton
+          props:
+            command: next
+          layout:
+            valign: center
+
+    # The navigation and inspector panes size themselves from the persisted
+    # Windows settings and collapse entirely when the resolved policy hides
+    # them, so the workspace allocates them slots that follow their own width
+    # instead of a proportional divider that would keep their space.
+    - id: classic-workspace
+      type: box
+      props:
+        orientation: horizontal
+      layout:
+        hexpand: true
+        vexpand: true
+      children:
+        - id: classic-navigation
+          type: windows.navigationPane
+          props:
+            presentation: tree
+          layout:
+            vexpand: true
+            surface: classic.tree
+        - id: classic-track-table
+          type: track.table
+          layout:
+            hexpand: true
+            vexpand: true
+            surface: surface
+        - id: classic-inspector
+          type: windows.inspectorPane
+          layout:
+            vexpand: true
+            styleKey: ClassicInspectorStyle
+            surface: classic.tree
+          children:
+            # The artwork is pinned above the property rows rather than
+            # scrolling with them, as in Modern: it names the selection the
+            # rows describe. Classic sizes it smaller and squarer than Modern
+            # does, which is the density difference between the two shells
+            # rather than a different reading of the same selection.
+            - id: classic-inspector-content
+              type: box
+              props:
+                orientation: vertical
+              layout:
+                hexpand: true
+                vexpand: true
+              children:
+                - id: classic-inspector-cover
+                  type: track.coverArt
+                  props:
+                    placeholderStyle: vinyl
+                  layout:
+                    hexpand: true
+                    styleKey: ClassicInspectorCoverStyle
+                - id: classic-track-detail
+                  type: track.detail
+                  layout:
+                    hexpand: true
+                    vexpand: true
+
+    - id: classic-status-bar
+      type: windows.statusBar
+      layout:
+        hexpand: true
+        heightRequest: 26
+        styleKey: ClassicStatusBarStyle
+        surface: classic.statusBar
+      children:
+        - id: classic-status-message
+          type: status.message
+          layout:
+            halign: start
+            valign: center
+        - id: classic-status-track-count
+          type: status.trackCount
+          layout:
+            hexpand: true
+            halign: end
+            valign: center

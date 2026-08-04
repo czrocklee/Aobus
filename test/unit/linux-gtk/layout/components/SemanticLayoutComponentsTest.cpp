@@ -9,7 +9,6 @@
 #include "app/linux-gtk/layout/runtime/ActionRegistry.h"
 #include "app/linux-gtk/layout/runtime/ComponentRegistry.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
-#include "app/linux-gtk/layout/runtime/LayoutRuntimeState.h"
 #include "app/linux-gtk/track/TrackRowCache.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridWidgets.h"
@@ -42,6 +41,8 @@
 #include <ao/rt/projection/TrackDetailSnapshot.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 #include <ao/uimodel/library/property/TrackAuthoringSession.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -896,14 +897,14 @@ namespace ao::gtk::layout::test
     LayoutRuntime::registerStandardComponents(registry);
 
     auto actionRegistry = ActionRegistry{};
-    auto runtimeState = LayoutRuntimeState{};
+    auto runtimeState = uimodel::LayoutRuntimeState{};
     auto dependencies = GtkUiDependencies{};
     auto ctx = LayoutBuildContext{.registry = registry,
                                   .actionRegistry = actionRegistry,
                                   .runtime = runtime,
                                   .parentWindow = window,
                                   .runtimeState = runtimeState,
-                                  .buildState = LayoutBuildStateView{runtimeState},
+                                  .buildState = uimodel::LayoutBuildStateView{runtimeState},
                                   .dependencies = dependencies};
     dependencies.trackPageHost = &pageHost;
     auto pendingDebounce = sigc::slot<bool()>{};

@@ -51,6 +51,7 @@ The testing layers from `layer-selection.md` map to first tags like this:
 | `runtime` | `[runtime]` |
 | `uimodel` | `[uimodel]` |
 | `linux-gtk` | `[gtk]` |
+| WinUI frontend | `[winui]` |
 | TUI frontend | `[tui]` |
 | CLI frontend | `[cli]` |
 | council tool | `[council]` |
@@ -64,6 +65,7 @@ Recommended layer tags:
 - `[runtime]`
 - `[uimodel]`
 - `[gtk]`
+- `[winui]`
 - `[audio]`
 - `[tag]`
 - `[utility]`

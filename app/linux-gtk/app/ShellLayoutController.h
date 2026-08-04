@@ -13,7 +13,6 @@
 #include "layout/runtime/GioActionBridge.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutHost.h"
-#include "layout/runtime/LayoutRuntimeState.h"
 #include <ao/Error.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/Subscription.h>
@@ -22,8 +21,11 @@
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
 #include <ao/uimodel/layout/action/LayoutActionCatalog.h>
 #include <ao/uimodel/layout/action/LayoutActionDescriptor.h>
+#include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
 #include <ao/uimodel/layout/component/LayoutComponentState.h>
 #include <ao/uimodel/layout/document/LayoutPreparation.h>
+#include <ao/uimodel/layout/shell/LayoutBuildStateView.h>
+#include <ao/uimodel/layout/shell/LayoutRuntimeState.h>
 #include <ao/uimodel/layout/shell/ShellLayoutSessionModel.h>
 
 #include <gtkmm/window.h>
@@ -40,6 +42,11 @@
 namespace ao::rt
 {
   class AppRuntime;
+}
+
+namespace ao::async
+{
+  class Runtime;
 }
 
 namespace ao::uimodel
@@ -94,7 +101,7 @@ namespace ao::gtk
 
     layout::ComponentRegistry& registry() { return _registry; }
     uimodel::LayoutActionCatalog const& actionCatalog() const { return _actionRegistry.catalog(); }
-    layout::LayoutRuntimeState const& runtimeState() const { return _runtimeState; }
+    uimodel::LayoutRuntimeState const& runtimeState() const { return _runtimeState; }
     layout::LayoutHost& host() { return _host; }
     uimodel::LayoutDocument const& activeLayout() const { return _session.snapshot().layout; }
 
@@ -133,10 +140,14 @@ namespace ao::gtk
                            uimodel::LayoutDocument document,
                            uimodel::PreparedLayout preparedLayout,
                            uimodel::LayoutComponentStateDocument componentState);
-    async::Task<void> loadLayoutWorkflow(std::shared_ptr<ShellLayoutStore> layoutStorePtr,
-                                         std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
-                                         std::shared_ptr<AppConfigStore> configStorePtr,
-                                         std::stop_token stopToken);
+    static async::Task<void> loadLayoutWorkflow(ShellLayoutController* controller,
+                                                async::Runtime* asyncRuntime,
+                                                std::shared_ptr<ShellLayoutStore> layoutStorePtr,
+                                                std::shared_ptr<ShellLayoutComponentStateStore> componentStateStorePtr,
+                                                std::shared_ptr<AppConfigStore> configStorePtr,
+                                                uimodel::LayoutComponentCatalog componentCatalog,
+                                                uimodel::LayoutActionCatalog actionCatalog,
+                                                std::stop_token stopToken);
     void applyLoadedLayoutWithFaultReporting(std::string presetId,
                                              uimodel::LayoutDocument document,
                                              uimodel::PreparedLayout preparedLayout,
@@ -145,19 +156,19 @@ namespace ao::gtk
     Result<> handleEditorSaveRequested(layout::editor::LayoutSaveResult const& result);
 
     Result<layout::LayoutHost::PreparedTree> prepareHost(uimodel::PreparedLayout const& layout,
-                                                         layout::LayoutBuildStateView buildState);
+                                                         uimodel::LayoutBuildStateView buildState);
 
     uimodel::LayoutDocumentLimits const& layoutLimits() const noexcept;
 
     /// Prepares and commits a replacement against the current shell state, retaining the old tree on rejection.
     void rebuildHost(uimodel::LayoutDocument const& doc);
-    void rebuildHost(uimodel::LayoutDocument const& doc, layout::LayoutBuildStateView buildState);
+    void rebuildHost(uimodel::LayoutDocument const& doc, uimodel::LayoutBuildStateView buildState);
 
     rt::AppRuntime& _runtime;
     Gtk::Window& _parentWindow;
     layout::ComponentRegistry _registry;
     layout::ActionRegistry _actionRegistry;
-    layout::LayoutRuntimeState _runtimeState;
+    uimodel::LayoutRuntimeState _runtimeState;
     GtkUiDependencies _dependencies;
     layout::LayoutHost _host;
     PopoverAttachment _outputDevicePopover;

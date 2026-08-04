@@ -5,21 +5,23 @@
 
 #include "MainWindow.g.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/TrackField.h>
+// The loaded theme override is held here, so its type is part of the frame.
+#include <ao/winui/Theme.h>
 
 #include <cstdint>
-#include <map>
+#include <filesystem>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace ao::uimodel
 {
-  struct DesktopShellViewState;
-  class NowPlayingViewModel;
-  struct NowPlayingViewState;
-  struct WindowsTheme;
+  class TransportViewModel;
 }
 
 namespace ao::rt
@@ -29,54 +31,44 @@ namespace ao::rt
 
 namespace ao::winui
 {
-  class AudioPipelineToolTip;
   class CoverArtPresenter;
   class LibrarySession;
-  class PlaybackControls;
+  class OutputDeviceControl;
   class SmtcBridge;
   class TrackListController;
-  class WindowsUiCoordinator;
-  class WindowsThemeCoordinator;
+  class UiCoordinator;
+  class ThemeCoordinator;
+}
+
+namespace ao::winui::layout
+{
+  class ShellBuilder;
 }
 
 namespace winrt::Aobus::implementation
 {
   struct MainWindow : MainWindowT<MainWindow>
   {
+    /// What the frame will answer to. Every value here is one some caller asks about.
+    enum class SessionPhase : std::uint8_t
+    {
+      Constructed,
+      Prepared,
+      Active,
+      Retired,
+    };
+
+    using RestartLibraryCallback = std::move_only_function<ao::Result<>(std::filesystem::path)>;
+
     MainWindow();
     ~MainWindow();
 
-    void initialize(ao::winui::LibrarySession& session);
-    void retire();
+    void initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart);
+    ao::Result<> activate();
+    void retire() noexcept;
 
     void OnRootSizeChanged(Windows::Foundation::IInspectable const&,
                            Microsoft::UI::Xaml::SizeChangedEventArgs const& args);
-    void OnOpenLibraryClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnRescanClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnToggleModeClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnReloadThemeClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnPlayPauseClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnStopClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnClassicSoulHolding(Windows::Foundation::IInspectable const&,
-                              Microsoft::UI::Xaml::Input::HoldingRoutedEventArgs const& args);
-    void OnClassicSoulRightTapped(Windows::Foundation::IInspectable const&,
-                                  Microsoft::UI::Xaml::Input::RightTappedRoutedEventArgs const& args);
-    void OnSystemMenuClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnNavigationSelectionChanged(
-      Windows::Foundation::IInspectable const&,
-      Microsoft::UI::Xaml::Controls::NavigationViewSelectionChangedEventArgs const& args);
-    void OnClassicTreeSelectionChanged(Microsoft::UI::Xaml::Controls::TreeView const&,
-                                       Microsoft::UI::Xaml::Controls::TreeViewSelectionChangedEventArgs const&);
-    void OnTrackSelectionChanged(Windows::Foundation::IInspectable const& sender,
-                                 Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const&);
-    void OnTrackDoubleTapped(Windows::Foundation::IInspectable const& sender,
-                             Microsoft::UI::Xaml::Input::DoubleTappedRoutedEventArgs const&);
-    void OnTrackViewportSizeChanged(Windows::Foundation::IInspectable const&,
-                                    Microsoft::UI::Xaml::SizeChangedEventArgs const& args);
-    void OnPaneResizeDelta(Windows::Foundation::IInspectable const& sender,
-                           Microsoft::UI::Xaml::Controls::Primitives::DragDeltaEventArgs const& args);
-    void OnPaneResizeCompleted(Windows::Foundation::IInspectable const&,
-                               Microsoft::UI::Xaml::Controls::Primitives::DragCompletedEventArgs const&);
     void OnColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
                                Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnColumnResizeCompleted(Windows::Foundation::IInspectable const& sender,
@@ -84,11 +76,6 @@ namespace winrt::Aobus::implementation
     void OnColumnMoveLeftClicked(Windows::Foundation::IInspectable const& sender,
                                  Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnColumnMoveRightClicked(Windows::Foundation::IInspectable const& sender,
-                                  Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnColumnsClicked(Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnPresentationClicked(Windows::Foundation::IInspectable const& sender,
-                               Microsoft::UI::Xaml::RoutedEventArgs const&);
-    void OnInspectorToggleClicked(Windows::Foundation::IInspectable const&,
                                   Microsoft::UI::Xaml::RoutedEventArgs const&);
     void OnGroupCoverLoaded(Windows::Foundation::IInspectable const& sender,
                             Microsoft::UI::Xaml::RoutedEventArgs const&);
@@ -98,81 +85,85 @@ namespace winrt::Aobus::implementation
                               Microsoft::UI::Xaml::RoutedEventArgs const&);
 
   private:
-    struct NavigationEntry final
-    {
-      ao::ListId listId = ao::kInvalidListId;
-      std::string label{};
-    };
-
     struct GroupCoverPresenterEntry final
     {
       winrt::weak_ref<Microsoft::UI::Xaml::Controls::Grid> tile;
       std::unique_ptr<ao::winui::CoverArtPresenter> presenterPtr;
     };
 
-    void shutdown();
+    void shutdown() noexcept;
+    /// Stand up the document-built shell and hand it the frame's own commands.
+    void createShellBuilder();
     void reconcileLibrary();
-    void rebuildNavigation();
-    void navigateTo(NavigationEntry const& entry);
-    void updateBrowserHeader();
-    void updateTrackSurfaceWidth();
     void refreshGroupCoverPresenter(Windows::Foundation::IInspectable const& sender);
-    void clearGroupCoverPresenters();
-    void unbindPlayback();
+    void clearGroupCoverPresenters() noexcept;
+    void unbindPlayback() noexcept;
     void bindPlayback();
     void applyShellState(double width);
-    void applyShellModePresentation(ao::uimodel::DesktopShellViewState const& state,
-                                    bool modern,
-                                    bool presentationChanged,
-                                    std::vector<Windows::Foundation::IInspectable> const& selectedItems);
-    void applyNavigationPresentation(ao::uimodel::DesktopShellViewState const& state,
-                                     bool modern,
-                                     double navigationWidth);
-    void applyInspectorPresentation(ao::uimodel::DesktopShellViewState const& state,
-                                    bool modern,
-                                    double inspectorWidth);
-    void applyResponsiveLayout(ao::uimodel::DesktopShellViewState const& state,
-                               double navigationWidth,
-                               double inspectorWidth);
     void restoreWindowPlacement();
-    void saveWindowState();
-    void applyTheme(ao::uimodel::WindowsTheme const& theme);
+    void saveWindowState() noexcept;
+    void applyTheme(ao::winui::Theme const& theme);
     void applySystemTheme();
+    void rebuildForTheme();
     void updateStatus(std::string const& status);
-    void updateNowPlaying(ao::uimodel::NowPlayingViewState const& state);
     void updateSoulWindowActivity();
     void updateFullscreenSoulWindowActivity();
     void showFullscreenSoul();
     void showSystemMenu();
+
+    /**
+     * @name Frame commands
+     *
+     * What a shell asks the window to do. Named rather than reached through
+     * event handlers, because the document-built shell invokes them from an
+     * action registry that knows nothing about XAML events.
+     * @{
+     */
+    void rescanLibrary();
+    void playPause();
+    void stopPlayback();
+    void toggleInspector();
+    void toggleShellMode();
+    void reloadTheme();
+    void showColumnsMenu();
+    void showOutputDeviceSelector(Microsoft::UI::Xaml::FrameworkElement const& anchor);
+    /// @}
+
     void executeSort(std::string const& columnId);
     void moveColumn(Windows::Foundation::IInspectable const& sender, std::int32_t offset);
     winrt::fire_and_forget pickLibrary();
 
     ao::winui::LibrarySession* _session = nullptr;
-    std::unique_ptr<ao::winui::WindowsUiCoordinator> _coordinatorPtr;
+    RestartLibraryCallback _requestRestart;
+    std::unique_ptr<ao::winui::UiCoordinator> _coordinatorPtr;
+    /// The one shell there is; null only before `initialize` and after `shutdown`.
+    std::unique_ptr<ao::winui::layout::ShellBuilder> _shellBuilderPtr;
+    /// The selector a document's soul or output button raises, which no generation owns.
+    std::unique_ptr<ao::winui::OutputDeviceControl> _shellOutputDevicePtr;
+    /// The loaded theme override, or nothing while Windows' own appearance is in force.
+    std::optional<ao::winui::Theme> _themeOverride;
     ao::winui::TrackListController* _trackListPtr = nullptr;
     ao::rt::ResourceByteLoader* _resourceBytes = nullptr;
-    ao::winui::CoverArtPresenter* _nowPlayingCoverArtPtr = nullptr;
     std::unique_ptr<ao::winui::SmtcBridge> _smtcPtr;
-    ao::winui::WindowsThemeCoordinator* _themePtr = nullptr;
-    std::unique_ptr<ao::winui::PlaybackControls> _playbackControlsPtr;
-    std::unique_ptr<ao::winui::AudioPipelineToolTip> _audioPipelineToolTipPtr;
-    std::unique_ptr<ao::uimodel::NowPlayingViewModel> _nowPlayingPtr;
+    ao::winui::ThemeCoordinator* _themePtr = nullptr;
+    /// The two transport commands a preset's menu can name but no menu item can drive.
+    std::unique_ptr<ao::uimodel::TransportViewModel> _playPausePtr;
+    std::unique_ptr<ao::uimodel::TransportViewModel> _stopPtr;
     Microsoft::UI::Xaml::Window _soulWindow{nullptr};
     Aobus::AobusSoulControl _fullscreenSoul{nullptr};
-    event_token _appWindowChangedToken{};
-    event_token _closedToken{};
-    event_token _soulWindowChangedToken{};
-    bool _inspectorRequested = false;
-    bool _applyingNavigation = false;
-    bool _applyingTrackSelection = false;
-    std::map<ao::ListId, NavigationEntry> _navigationEntriesById;
+    Microsoft::UI::Windowing::AppWindow::Changed_revoker _appWindowChangedRevoker{};
+    Microsoft::UI::Windowing::AppWindow::Changed_revoker _soulWindowChangedRevoker{};
+    /**
+     * @brief What the user last asked of the inspector, if anything.
+     *
+     * Empty until they ask, which is what lets each presentation start where it
+     * belongs: inline showing, overlay hidden. Held by the frame rather than by
+     * a generation so a mode or theme rebuild does not answer for the user, and
+     * deliberately not persisted: it is a reveal, not a setting.
+     */
+    std::optional<bool> _optInspectorRequest;
     std::unordered_map<void const*, GroupCoverPresenterEntry> _groupCoverPresenters;
-    bool _hasAppWindowChangedToken = false;
-    bool _hasClosedToken = false;
-    bool _hasSoulWindowChangedToken = false;
-    bool _paneResizeDirty = false;
-    bool _shutdown = false;
+    SessionPhase _sessionPhase = SessionPhase::Constructed;
   };
 }
 

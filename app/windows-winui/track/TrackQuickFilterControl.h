@@ -13,7 +13,8 @@
 
 namespace ao::rt
 {
-  class AppRuntime;
+  class ViewService;
+  class WorkspaceService;
 }
 
 namespace ao::uimodel
@@ -41,10 +42,13 @@ namespace ao::winui
     TrackQuickFilterControl(TrackQuickFilterControl&&) = delete;
     TrackQuickFilterControl& operator=(TrackQuickFilterControl&&) = delete;
 
-    void bind(std::shared_ptr<rt::AppRuntime> runtimePtr);
-    void unbind();
+    void bind(rt::ViewService& views, rt::WorkspaceService& workspace);
+    void unbind() noexcept;
 
   private:
+    /// Blank the widget between bindings. Only a rebind has anything to show.
+    void resetPresentation();
+
     void handleTextChanged(winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBoxTextChangedEventArgs const& args);
     void commitPendingText();
     void applyState(uimodel::TrackFilterViewState const& state);
@@ -54,7 +58,6 @@ namespace ao::winui
     std::function<void(std::string)> _onError;
     winrt::Microsoft::UI::Xaml::Controls::AutoSuggestBox::TextChanged_revoker _textChangedRevoker{};
     winrt::Microsoft::UI::Dispatching::DispatcherQueueTimer::Tick_revoker _debounceTickRevoker{};
-    std::shared_ptr<rt::AppRuntime> _runtimePtr;
     std::unique_ptr<uimodel::TrackFilterViewModel> _viewModelPtr;
     std::chrono::steady_clock::time_point _commitDeadline{};
     bool _applyingState = false;

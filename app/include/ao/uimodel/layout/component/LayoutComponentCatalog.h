@@ -5,6 +5,7 @@
 
 #include <ao/uimodel/layout/action/LayoutActionBinding.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
+#include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/utility/TransparentStringHash.h>
 
@@ -15,7 +16,6 @@
 #include <optional>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <vector>
 
 namespace ao::uimodel
@@ -77,14 +77,6 @@ namespace ao::uimodel
 
     return "Unknown";
   }
-
-  enum class LayoutSurfaceCapability : std::uint8_t
-  {
-    Main = 1,
-    Tooltip = 2,
-  };
-
-  using LayoutSurfaceCapabilityMask = std::underlying_type_t<LayoutSurfaceCapability>;
 
   struct LayoutComponentDescriptor final
   {

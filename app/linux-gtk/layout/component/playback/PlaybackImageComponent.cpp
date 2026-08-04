@@ -22,6 +22,7 @@
 #include <ao/rt/playback/PlaybackSnapshot.h>
 #include <ao/uimodel/layout/component/LayoutComponentActionPolicy.h>
 #include <ao/uimodel/layout/component/LayoutComponentCatalog.h>
+#include <ao/uimodel/layout/component/LayoutSurface.h>
 #include <ao/uimodel/layout/document/LayoutNode.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
 
@@ -109,7 +110,7 @@ namespace ao::gtk::layout
 
       PlaybackImageComponent(LayoutBuildContext& ctx, LayoutNode const& node)
         : _runtime{ctx.runtime}
-        , _tooltipSurface{ctx.surface == LayoutSurface::Tooltip}
+        , _tooltipSurface{ctx.surface == uimodel::LayoutSurface::Tooltip}
         , _authoredVisible{node.layoutOr<bool>("visible", true)}
       {
         if (ctx.dependencies.imageLoader == nullptr)
@@ -346,30 +347,33 @@ namespace ao::gtk::layout
 
   void registerPlaybackImageComponent(ComponentRegistry& registry)
   {
-    registry.registerComponent({.type = "playback.image",
-                                .displayName = "Playback Cover Art",
-                                .category = LayoutComponentCategory::Playback,
-                                .props = {{.name = "targetSize",
-                                           .kind = LayoutPropertyKind::Int,
-                                           .label = "Target Size",
-                                           .defaultValue = LayoutValue{static_cast<std::int64_t>(kThumbnailSize)}},
-                                          {.name = "forceSquare",
-                                           .kind = LayoutPropertyKind::Bool,
-                                           .label = "Force Square",
-                                           .defaultValue = LayoutValue{false}},
-                                          {.name = "action",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Action",
-                                           .defaultValue = LayoutValue{"none"},
-                                           .enumValues = {"none", "jumpToAlbum"}},
-                                          {.name = "placeholderStyle",
-                                           .kind = LayoutPropertyKind::Enum,
-                                           .label = "Placeholder Style",
-                                           .defaultValue = LayoutValue{"equalizer"},
-                                           .enumValues = coverArtPlaceholderStyleIds()}},
-                                .minChildren = 0,
-                                .optMaxChildren = 0,
-                                .actionPolicy = uimodel::kExternalSecondaryActions},
-                               createPlaybackImage);
+    registry.registerComponent(
+      {.type = "playback.image",
+       .displayName = "Playback Cover Art",
+       .category = LayoutComponentCategory::Playback,
+       .props = {{.name = "targetSize",
+                  .kind = LayoutPropertyKind::Int,
+                  .label = "Target Size",
+                  .defaultValue = LayoutValue{static_cast<std::int64_t>(kThumbnailSize)}},
+                 {.name = "forceSquare",
+                  .kind = LayoutPropertyKind::Bool,
+                  .label = "Force Square",
+                  .defaultValue = LayoutValue{false}},
+                 {.name = "action",
+                  .kind = LayoutPropertyKind::Enum,
+                  .label = "Action",
+                  .defaultValue = LayoutValue{"none"},
+                  .enumValues = {"none", "jumpToAlbum"}},
+                 {.name = "placeholderStyle",
+                  .kind = LayoutPropertyKind::Enum,
+                  .label = "Placeholder Style",
+                  .defaultValue = LayoutValue{"equalizer"},
+                  .enumValues = coverArtPlaceholderStyleIds()}},
+       .minChildren = 0,
+       .optMaxChildren = 0,
+       .surfaces = static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Main) |
+                   static_cast<uimodel::LayoutSurfaceCapabilityMask>(uimodel::LayoutSurfaceCapability::Tooltip),
+       .actionPolicy = uimodel::kExternalSecondaryActions},
+      createPlaybackImage);
   }
 } // namespace ao::gtk::layout

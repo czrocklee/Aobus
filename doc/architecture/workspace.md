@@ -12,7 +12,7 @@ summary: Defines runtime view identity, workspace aggregate ownership, navigatio
 This document owns the application-runtime graph for views and the workspace that contains them.
 It defines runtime view identity, source and projection ownership, the open and focused view aggregate, navigation history, and the semantic state captured for workspace restoration.
 
-It does not own frontend startup, active-library replacement, process shutdown, track-source membership, playback succession, persisted field schemas, or widget layout.
+It does not own frontend startup, library replacement or process restart, process shutdown, track-source membership, playback succession, persisted field schemas, or widget layout.
 Those concerns belong to the interactive session lifecycle, library, playback, persistence, presentation, and reference owners linked below.
 
 ## System context

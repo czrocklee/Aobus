@@ -64,7 +64,7 @@ namespace ao::rt
     // A borrowed runtime must outlive this loader and all work cancelled by it.
     void bind(CoreRuntime& runtime);
     void bind(async::Runtime& runtime, ReadBytes readBytes);
-    void unbind();
+    void unbind() noexcept;
     Request request(ResourceId resourceId, OnReady onReady);
 
   private:

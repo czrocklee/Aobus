@@ -83,3 +83,4 @@ Use the [reference template](../template/reference.md).
 ## Windows
 
 - [Windows desktop state](windows/desktop-state.md) enumerates native desktop settings and semantic theme files, fields, defaults, validation, and versioning.
+- [Windows layout catalog](windows/layout-catalog.md) enumerates Windows shell component and action ids, accepted layout fields, native element mapping, style-key resolution, and the built-in preset documents.
