@@ -193,9 +193,11 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES
 source_group("Asset" FILES ${AOBUS_NO_COVER_ASSETS} ${AOBUS_SHELL_LAYOUT_ASSETS})
 
 set_source_files_properties(App.xaml PROPERTIES
-  VS_XAML_TYPE ApplicationDefinition)
+  VS_XAML_TYPE ApplicationDefinition
+  VS_SETTINGS "Link=App.xaml")
 set_source_files_properties(MainWindow.xaml PROPERTIES
-  VS_TOOL_OVERRIDE Page)
+  VS_TOOL_OVERRIDE Page
+  VS_SETTINGS "Link=MainWindow.xaml")
 set_source_files_properties(Project.idl PROPERTIES
   VS_TOOL_OVERRIDE Midl
   VS_SETTINGS "SubType=Code;OutputDirectory=$(ProjectDir)")

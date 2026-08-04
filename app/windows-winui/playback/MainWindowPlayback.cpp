@@ -188,25 +188,14 @@ namespace winrt::Aobus::implementation
     root.Children().Append(_fullscreenSoul);
     _soulWindow.Content(root);
     auto weak = get_weak();
-    _soulWindowChangedRevoker =
-      _soulWindow.AppWindow().Changed(winrt::auto_revoke,
-                                      [weak](Microsoft::UI::Windowing::AppWindow const&,
-                                             Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
-                                      {
-                                        if ((args.DidVisibilityChange() || args.DidPresenterChange()))
-                                        {
-                                          if (auto self = weak.get(); self)
-                                          {
-                                            self->updateFullscreenSoulWindowActivity();
-                                          }
-                                        }
-                                      });
+    _soulWindowChangedSub =
+      subscribeAppWindowChanges(_soulWindow.AppWindow(), &MainWindow::updateFullscreenSoulWindowActivity);
     _soulWindow.Closed(
       [weak](Windows::Foundation::IInspectable const&, Microsoft::UI::Xaml::WindowEventArgs const&)
       {
         if (auto self = weak.get(); self)
         {
-          self->_soulWindowChangedRevoker.revoke();
+          self->_soulWindowChangedSub.reset();
 
           if (self->_fullscreenSoul)
           {

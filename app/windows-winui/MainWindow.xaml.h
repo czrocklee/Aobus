@@ -7,6 +7,7 @@
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/rt/TrackField.h>
+#include <ao/utility/ScopedRegistration.h>
 // The loaded theme override is held here, so its type is part of the frame.
 #include <ao/winui/Theme.h>
 
@@ -106,6 +107,8 @@ namespace winrt::Aobus::implementation
     void applySystemTheme();
     void rebuildForTheme();
     void updateStatus(std::string const& status);
+    [[nodiscard]] ao::utility::ScopedRegistration subscribeAppWindowChanges(
+      Microsoft::UI::Windowing::AppWindow window, void (MainWindow::*updateActivity)());
     void updateSoulWindowActivity();
     void updateFullscreenSoulWindowActivity();
     void showFullscreenSoul();
@@ -151,8 +154,8 @@ namespace winrt::Aobus::implementation
     std::unique_ptr<ao::uimodel::TransportViewModel> _stopPtr;
     Microsoft::UI::Xaml::Window _soulWindow{nullptr};
     Aobus::AobusSoulControl _fullscreenSoul{nullptr};
-    Microsoft::UI::Windowing::AppWindow::Changed_revoker _appWindowChangedRevoker{};
-    Microsoft::UI::Windowing::AppWindow::Changed_revoker _soulWindowChangedRevoker{};
+    ao::utility::ScopedRegistration _appWindowChangedSub;
+    ao::utility::ScopedRegistration _soulWindowChangedSub;
     /**
      * @brief What the user last asked of the inspector, if anything.
      *

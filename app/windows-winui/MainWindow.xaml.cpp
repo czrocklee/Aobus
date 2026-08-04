@@ -54,26 +54,37 @@ namespace winrt::Aobus::implementation
     ao::winui::runOptionalWinRt(
       "enabling the Mica backdrop", [this] { SystemBackdrop(Microsoft::UI::Xaml::Media::MicaBackdrop{}); });
 
-    auto const weak = get_weak();
-    _appWindowChangedRevoker =
-      AppWindow().Changed(winrt::auto_revoke,
-                          [weak](Microsoft::UI::Windowing::AppWindow const&,
-                                 Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
-                          {
-                            if (args.DidVisibilityChange() || args.DidPresenterChange())
-                            {
-                              if (auto self = weak.get(); self)
-                              {
-                                self->updateSoulWindowActivity();
-                              }
-                            }
-                          });
+    _appWindowChangedSub = subscribeAppWindowChanges(AppWindow(), &MainWindow::updateSoulWindowActivity);
     updateSoulWindowActivity();
   }
 
   MainWindow::~MainWindow()
   {
     shutdown();
+  }
+
+  ao::utility::ScopedRegistration MainWindow::subscribeAppWindowChanges(
+    Microsoft::UI::Windowing::AppWindow window, void (MainWindow::*const updateActivity)())
+  {
+    auto const weak = get_weak();
+    auto const token = window.Changed(
+      [weak, updateActivity](Microsoft::UI::Windowing::AppWindow const&,
+                             Microsoft::UI::Windowing::AppWindowChangedEventArgs const& args)
+      {
+        if (args.DidVisibilityChange() || args.DidPresenterChange())
+        {
+          if (auto self = weak.get(); self)
+          {
+            ((*self).*updateActivity)();
+          }
+        }
+      });
+
+    // AppWindow does not implement IWeakReferenceSource, so its auto_revoke
+    // overload crashes while constructing the revoker. Keep the source alive
+    // in the cleanup closure and use its noexcept event removal overload.
+    return ao::utility::ScopedRegistration{
+      [window = std::move(window), token] noexcept { window.Changed(token); }};
   }
 
   void MainWindow::initialize(ao::winui::LibrarySession& session, RestartLibraryCallback requestRestart)
@@ -221,7 +232,7 @@ namespace winrt::Aobus::implementation
     _sessionPhase = SessionPhase::Retired;
     _requestRestart = {};
 
-    _appWindowChangedRevoker.revoke();
+    _appWindowChangedSub.reset();
     clearGroupCoverPresenters();
 
     // Generation callbacks and all generation-owned runtime borrowers go away
@@ -235,7 +246,7 @@ namespace winrt::Aobus::implementation
     unbindPlayback();
     _coordinatorPtr.reset();
 
-    _soulWindowChangedRevoker.revoke();
+    _soulWindowChangedSub.reset();
 
     if (_soulWindow)
     {

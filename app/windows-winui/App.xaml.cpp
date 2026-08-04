@@ -36,6 +36,9 @@ namespace winrt::Aobus::implementation
   namespace
   {
     constexpr std::size_t kEnvironmentBufferLength = 32'768;
+    constexpr auto kErrorDialogFlags = MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST;
+
+    void showStartupFailure(std::string_view detail) noexcept;
 
     /**
      * @brief Last resort for an exception that escaped a no-throw boundary.
@@ -55,15 +58,18 @@ namespace winrt::Aobus::implementation
         }
         catch (std::exception const& error)
         {
+          showStartupFailure(error.what());
           ao::winui::logWinUiCritical("WinUI terminating on an escaped exception", error.what());
         }
         catch (...)
         {
+          showStartupFailure("An unknown exception escaped a no-throw boundary.");
           ao::winui::logWinUiCritical("WinUI terminating", "escaped unknown exception");
         }
       }
       else
       {
+        showStartupFailure("Aobus terminated without an active exception.");
         ao::winui::logWinUiCritical("WinUI terminating", "no active exception");
       }
 
@@ -92,11 +98,11 @@ namespace winrt::Aobus::implementation
         auto const message = ao::winui::formatResource("StartupFailureFormat", detail);
         auto const messageText = to_hstring(message);
         auto const title = ao::winui::resourceHstring(L"AppTitleValue");
-        ::MessageBoxW(nullptr, messageText.c_str(), title.c_str(), MB_OK | MB_ICONERROR);
+        ::MessageBoxW(nullptr, messageText.c_str(), title.c_str(), kErrorDialogFlags);
       }
       catch (...)
       {
-        ::MessageBoxW(nullptr, L"Aobus could not start.", L"Aobus", MB_OK | MB_ICONERROR);
+        ::MessageBoxW(nullptr, L"Aobus could not start.", L"Aobus", kErrorDialogFlags);
       }
     }
 
@@ -163,9 +169,8 @@ namespace winrt::Aobus::implementation
 
   void App::reportRestartLaunchFailure(ao::Error const& error) noexcept
   {
-    ao::winui::logWinUiCritical("WinUI successor launch failed", error.message);
-
     showStartupFailure(error.message);
+    ao::winui::logWinUiCritical("WinUI successor launch failed", error.message);
   }
 
   ao::Result<> App::requestLibraryRestart(std::filesystem::path root)
@@ -263,9 +268,10 @@ namespace winrt::Aobus::implementation
 
   void App::OnLaunched(Microsoft::UI::Xaml::LaunchActivatedEventArgs const& /*args*/)
   {
-    auto const failLaunch = [this](std::string detail) noexcept
+    auto const failLaunch = [this](std::string_view const detail) noexcept
     {
       _processPhase = ProcessPhase::Exiting;
+      showStartupFailure(detail);
       ao::winui::logWinUiCritical("WinUI startup failed", detail);
 
       if (_windowSessionPtr)
@@ -274,7 +280,6 @@ namespace winrt::Aobus::implementation
         _windowSessionPtr.reset();
       }
 
-      showStartupFailure(detail);
       exitApplication();
     };
 
