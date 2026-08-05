@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 
 namespace ao::gtk
 {
@@ -26,6 +27,20 @@ namespace ao::gtk
   {
     constexpr std::int32_t kMinimumRefreshDelta = 2;
     constexpr double kRefreshDeltaRatio = 0.05;
+    // Keep small cached images synchronous while ensuring the measured 12 MP
+    // and 32 MP cover-art cases take the worker path.
+    constexpr std::uint64_t kWorkerRenderMinimumSourcePixels = 4'000'000;
+
+    bool shouldRenderHighQualityOffThread(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
+    {
+      if (!pixbufPtr || pixbufPtr->get_width() <= 0 || pixbufPtr->get_height() <= 0)
+      {
+        return false;
+      }
+
+      return static_cast<std::uint64_t>(pixbufPtr->get_width()) * static_cast<std::uint64_t>(pixbufPtr->get_height()) >=
+             kWorkerRenderMinimumSourcePixels;
+    }
 
     Glib::RefPtr<Gdk::Pixbuf> centerCropToAspect(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr, RenderTarget const target)
     {
@@ -126,6 +141,8 @@ namespace ao::gtk
 
   ImageWidget::~ImageWidget()
   {
+    _renderCallbacks.close();
+    cancelPendingRender();
     _refreshConnection.disconnect();
     _resizeSettleConnection.disconnect();
   }
@@ -158,6 +175,14 @@ namespace ao::gtk
     }
   }
 
+  void ImageWidget::setHighQualityRenderer(HighQualityRenderer renderer)
+  {
+    cancelPendingRender();
+    _highQualityRenderer = std::move(renderer);
+    invalidateRenderedImage();
+    queueRefresh();
+  }
+
   void ImageWidget::setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr)
   {
     if (!pixbufPtr)
@@ -166,8 +191,17 @@ namespace ao::gtk
       return;
     }
 
+    bool const sourceChanged = pixbufPtr != _sourcePixbufPtr;
     _sourcePixbufPtr = pixbufPtr;
     invalidateRenderedImage();
+
+    // An asynchronous high-quality render must not leave artwork from the
+    // previous resource visible while the new source is being processed.
+    if (sourceChanged && _highQualityRenderer)
+    {
+      set_paintable({});
+    }
+
     queueRefresh();
   }
 
@@ -182,12 +216,92 @@ namespace ao::gtk
 
   void ImageWidget::invalidateRenderedImage()
   {
+    cancelPendingRender();
     _renderedSourcePixbufPtr.reset();
     _renderedTargetPixelWidth = 0;
     _renderedTargetPixelHeight = 0;
     _renderedPixelWidth = 0;
     _renderedPixelHeight = 0;
     _renderedWithInterim = false;
+  }
+
+  void ImageWidget::cancelPendingRender()
+  {
+    ++_renderGeneration;
+    _renderPending = false;
+    _pendingSourcePixbufPtr.reset();
+    _pendingTargetPixelWidth = 0;
+    _pendingTargetPixelHeight = 0;
+    _pendingRenderedPixelWidth = 0;
+    _pendingRenderedPixelHeight = 0;
+    _renderRequest.reset();
+  }
+
+  bool ImageWidget::pendingRenderMatches(Glib::RefPtr<Gdk::Pixbuf> const& sourcePixbufPtr,
+                                         RenderTarget const target,
+                                         RenderTarget const renderedSize) const
+  {
+    return _renderPending && _pendingSourcePixbufPtr == sourcePixbufPtr && _pendingTargetPixelWidth == target.width &&
+           _pendingTargetPixelHeight == target.height && _pendingRenderedPixelWidth == renderedSize.width &&
+           _pendingRenderedPixelHeight == renderedSize.height;
+  }
+
+  void ImageWidget::requestHighQualityRender(Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                             Glib::RefPtr<Gdk::Pixbuf> renderedSourcePixbufPtr,
+                                             RenderTarget const target,
+                                             RenderTarget const renderedSize)
+  {
+    cancelPendingRender();
+    _renderPending = true;
+    _pendingSourcePixbufPtr = renderedSourcePixbufPtr;
+    _pendingTargetPixelWidth = target.width;
+    _pendingTargetPixelHeight = target.height;
+    _pendingRenderedPixelWidth = renderedSize.width;
+    _pendingRenderedPixelHeight = renderedSize.height;
+    auto const generation = _renderGeneration;
+
+    auto completion = _renderCallbacks.guard(
+      [this, generation, renderedSourcePixbufPtr, target, renderedSize](Glib::RefPtr<Gdk::Pixbuf> renderedPixbufPtr)
+      {
+        if (!_renderPending || generation != _renderGeneration)
+        {
+          return;
+        }
+
+        _renderPending = false;
+        _pendingSourcePixbufPtr.reset();
+        _pendingTargetPixelWidth = 0;
+        _pendingTargetPixelHeight = 0;
+        _pendingRenderedPixelWidth = 0;
+        _pendingRenderedPixelHeight = 0;
+
+        if (!renderedPixbufPtr)
+        {
+          return;
+        }
+
+        publishRenderedImage(renderedSourcePixbufPtr, renderedPixbufPtr, target, renderedSize, false);
+      });
+
+    _renderRequest = _highQualityRenderer(std::move(sourcePixbufPtr), renderedSize, std::move(completion));
+  }
+
+  void ImageWidget::publishRenderedImage(Glib::RefPtr<Gdk::Pixbuf> const& renderedSourcePixbufPtr,
+                                         Glib::RefPtr<Gdk::Pixbuf> const& renderedPixbufPtr,
+                                         RenderTarget const target,
+                                         RenderTarget const renderedSize,
+                                         bool const interim)
+  {
+    _renderedSourcePixbufPtr = renderedSourcePixbufPtr;
+    _renderedTargetPixelWidth = target.width;
+    _renderedTargetPixelHeight = target.height;
+    _renderedPixelWidth = renderedSize.width;
+    _renderedPixelHeight = renderedSize.height;
+    _renderedWithInterim = interim;
+
+    // Gdk::Texture belongs to the GTK presentation boundary even when the
+    // immutable Pixbuf pixels were scaled on a worker.
+    set_paintable(Gdk::Texture::create_for_pixbuf(renderedPixbufPtr));
   }
 
   void ImageWidget::size_allocate_vfunc(int width, int height, int baseline)
@@ -271,6 +385,11 @@ namespace ao::gtk
       return;
     }
 
+    if (pendingRenderMatches(_sourcePixbufPtr, target, fitTarget))
+    {
+      return;
+    }
+
     bool const sourceChanged = _sourcePixbufPtr != _renderedSourcePixbufPtr;
     bool const sizeChanged =
       shouldRefresh({.width = _renderedTargetPixelWidth, .height = _renderedTargetPixelHeight}, target);
@@ -302,10 +421,21 @@ namespace ao::gtk
       return;
     }
 
-    auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
-    bool scaled = false;
+    bool const scaled =
+      fitTarget.width != sourcePixbufPtr->get_width() || fitTarget.height != sourcePixbufPtr->get_height();
 
-    if (fitTarget.width == sourcePixbufPtr->get_width() && fitTarget.height == sourcePixbufPtr->get_height())
+    // Base the threshold on the effective source after center crop: discarded
+    // pixels do not contribute to the HYPER resample cost.
+    if (scaled && !_resizeActive && _highQualityRenderer && shouldRenderHighQualityOffThread(sourcePixbufPtr))
+    {
+      requestHighQualityRender(sourcePixbufPtr, _sourcePixbufPtr, target, fitTarget);
+      return;
+    }
+
+    cancelPendingRender();
+    auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+
+    if (!scaled)
     {
       renderedPixbufPtr = sourcePixbufPtr;
     }
@@ -313,19 +443,11 @@ namespace ao::gtk
     {
       auto const interp = _resizeActive ? Gdk::InterpType::BILINEAR : Gdk::InterpType::HYPER;
       renderedPixbufPtr = sourcePixbufPtr->scale_simple(fitTarget.width, fitTarget.height, interp);
-      scaled = true;
     }
 
-    _renderedSourcePixbufPtr = _sourcePixbufPtr;
-    _renderedTargetPixelWidth = target.width;
-    _renderedTargetPixelHeight = target.height;
-    _renderedPixelWidth = fitTarget.width;
-    _renderedPixelHeight = fitTarget.height;
     // Only an actual downscale with the cheap filter counts as interim; a 1:1
     // blit is already full fidelity.
-    _renderedWithInterim = scaled && _resizeActive;
-
-    set_paintable(Gdk::Texture::create_for_pixbuf(renderedPixbufPtr));
+    publishRenderedImage(_sourcePixbufPtr, renderedPixbufPtr, target, fitTarget, scaled && _resizeActive);
   }
 
   RenderTarget ImageWidget::requestedRenderTarget() const

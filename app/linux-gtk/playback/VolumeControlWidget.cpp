@@ -3,6 +3,7 @@
 
 #include "playback/VolumeControlWidget.h"
 
+#include "common/AccessibleLabel.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/output/VolumeViewModel.h>
 
@@ -133,7 +134,7 @@ namespace ao::gtk
     vbox->append(_scale);
 
     _muteButton.set_icon_name("audio-volume-muted-symbolic");
-    _muteButton.set_tooltip_text("Toggle Mute");
+    setTooltipAndAccessibleLabel(_muteButton, "Toggle Mute");
     _muteButton.set_halign(Gtk::Align::CENTER);
     _muteButton.signal_toggled().connect(
       [this]
@@ -177,7 +178,7 @@ namespace ao::gtk
     if (view.visible)
     {
       _updating = true;
-      _button.set_tooltip_text(view.tooltip);
+      setTooltipAndAccessibleLabel(_button, view.tooltip);
       _icon.set_from_icon_name(volumeIndicatorIconName(view.indicatorKind));
 
       _scale.set_value(view.volume);

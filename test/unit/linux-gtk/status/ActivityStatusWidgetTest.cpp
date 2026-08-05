@@ -70,6 +70,7 @@ namespace ao::gtk::test
       CHECK(status.widget().get_visible());
       CHECK(status.label().get_text() == "Partial import");
       CHECK(status.dismissButton().get_visible());
+      CHECK(hasAccessibleLabel(status.dismissButton(), "Hide status"));
       CHECK(hasCssClass(status.widget(), "ao-activity-status-warning"));
     }
   }
@@ -148,6 +149,7 @@ namespace ao::gtk::test
 
       auto* const dismissButton = findWidgetByClass<Gtk::Button>(status.detailContent(), "ao-activity-detail-dismiss");
       REQUIRE(dismissButton != nullptr);
+      CHECK(hasAccessibleLabel(*dismissButton, "Hide notification from status"));
       emitClicked(*dismissButton);
       mounted.drain();
 

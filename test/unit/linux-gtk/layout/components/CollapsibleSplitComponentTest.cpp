@@ -3,6 +3,7 @@
 
 #include "ContainerTestHelpers.h"
 #include "app/linux-gtk/layout/runtime/LayoutRuntime.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkLayoutTestSupport.h"
 #include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
@@ -26,6 +27,7 @@ namespace ao::gtk::layout::test
   using namespace uimodel;
   using ao::gtk::test::AllocationHost;
   using ao::gtk::test::emitClicked;
+  using ao::gtk::test::hasAccessibleLabel;
   using ao::gtk::test::measureWidget;
 
   TEST_CASE("CollapsibleSplitComponent - applies reveal sizing and persists panel state", "[gtk][unit][geometry]")
@@ -63,8 +65,12 @@ namespace ao::gtk::layout::test
       REQUIRE(handleWidget != nullptr);
       auto* const handleButton = dynamic_cast<Gtk::Button*>(handleWidget);
       REQUIRE(handleButton != nullptr);
+      auto windowFixture = ao::gtk::test::GtkWindowFixture{};
+      windowFixture.mount(compPtr->widget());
+      windowFixture.present();
       CHECK(handleButton->get_valign() == Gtk::Align::CENTER);
       CHECK_FALSE(handleButton->get_vexpand());
+      CHECK(hasAccessibleLabel(*handleButton, "Expand panel"));
 
       auto* const revealer = dynamic_cast<Gtk::Revealer*>(gutterBox->get_next_sibling());
       REQUIRE(revealer != nullptr);
@@ -73,6 +79,7 @@ namespace ao::gtk::layout::test
 
       emitClicked(*handleButton);
       CHECK(revealer->get_reveal_child() == true);
+      CHECK(hasAccessibleLabel(*handleButton, "Collapse panel"));
 
       auto* const paneSizer = revealer->get_child();
       REQUIRE(paneSizer != nullptr);

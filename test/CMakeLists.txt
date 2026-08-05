@@ -754,6 +754,7 @@ add_executable(ao_gtk_test
     unit/linux-gtk/playback/OutputDeviceListItemsTest.cpp
     unit/linux-gtk/playback/TransportButtonTest.cpp
     unit/linux-gtk/playback/VolumeControlWidgetTest.cpp
+    unit/linux-gtk/GtkTestMain.cpp
 )
 
 target_link_libraries(ao_gtk_test PRIVATE
@@ -762,7 +763,7 @@ target_link_libraries(ao_gtk_test PRIVATE
     ao_test_support_runtime
     PkgGTKMM
     ao_test_options
-    Catch2::Catch2WithMain
+    Catch2::Catch2
     FakeIt::FakeIt-catch
 )
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")

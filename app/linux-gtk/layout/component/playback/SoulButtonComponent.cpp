@@ -3,6 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
+#include "common/AccessibleLabel.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -46,6 +47,7 @@ namespace ao::gtk::layout
         _button.set_has_frame(false);
         _button.add_css_class("ao-soul-button");
         _button.set_child(_soul);
+        setAccessibleLabel(_button, "Aobus Soul");
 
         _soul.set_halign(Gtk::Align::FILL);
         _soul.set_valign(Gtk::Align::FILL);

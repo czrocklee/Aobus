@@ -332,6 +332,40 @@ namespace ao::winui::test
     }
   }
 
+  TEST_CASE("FrameResource - track column events bind their required field id", "[winui][unit][layout]")
+  {
+    auto const tags = xamlTags(readFile(std::filesystem::path{AOBUS_WINDOWS_FRAME_XAML}));
+    auto const tagForHandler = [&tags](std::string_view const eventName,
+                                       std::string_view const handler) -> std::optional<std::string>
+    {
+      auto const it = std::ranges::find_if(
+        tags, [eventName, handler](std::string const& tag) { return attribute(tag, eventName) == handler; });
+
+      if (it == tags.end())
+      {
+        return std::nullopt;
+      }
+
+      return *it;
+    };
+
+    auto const optHeader = tagForHandler("Click", "OnColumnHeaderClicked");
+    REQUIRE(optHeader);
+    CHECK(attribute(*optHeader, "Tag") == "{x:Bind FieldId}");
+
+    auto const optResize = tagForHandler("DragCompleted", "OnColumnResizeCompleted");
+    REQUIRE(optResize);
+    CHECK(attribute(*optResize, "Tag") == "{x:Bind FieldId}");
+
+    auto const optMoveLeft = tagForHandler("Click", "OnColumnMoveLeftClicked");
+    REQUIRE(optMoveLeft);
+    CHECK(attribute(*optMoveLeft, "Tag") == "{x:Bind FieldId}");
+
+    auto const optMoveRight = tagForHandler("Click", "OnColumnMoveRightClicked");
+    REQUIRE(optMoveRight);
+    CHECK(attribute(*optMoveRight, "Tag") == "{x:Bind FieldId}");
+  }
+
   TEST_CASE("FrameResource - the window frame declares the Classic chrome rounding a retro theme replaces",
             "[winui][unit][layout]")
   {

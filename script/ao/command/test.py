@@ -119,7 +119,10 @@ def virtual_gtk_display() -> Generator[dict[str, str], None, None]:
 
         display = f":{display_number}"
         print(f"GTK display: Xvfb {display}")
-        yield {"DISPLAY": display, "GDK_BACKEND": "x11", "GDK_DISABLE": "gl,vulkan", "GSK_RENDERER": "cairo"}
+        # GDK/GTK environment defaults (GDK_BACKEND, GDK_DISABLE, GSK_RENDERER,
+        # GTK_A11Y) are set by the test binary itself (GtkTestMain.cpp); the
+        # runner only provides the Xvfb display.
+        yield {"DISPLAY": display}
     finally:
         server.terminate()
         try:

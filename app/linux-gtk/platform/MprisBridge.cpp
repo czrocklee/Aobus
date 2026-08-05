@@ -312,9 +312,9 @@ namespace ao::gtk::platform
 
     bool dispatchSetRate(double const rate) const { return endpoint.dispatchSetRate(rate); }
 
-    bool dispatchSetVolume(double const volume) { return endpoint.dispatchSetVolume(volume); }
+    void dispatchSetVolume(double const volume) { endpoint.dispatchSetVolume(volume); }
 
-    bool dispatchSetShuffle(bool const shuffle) { return endpoint.dispatchSetShuffle(shuffle); }
+    void dispatchSetShuffle(bool const shuffle) { endpoint.dispatchSetShuffle(shuffle); }
 
     bool dispatchSetLoopStatus(std::string_view const loopStatus) { return endpoint.dispatchSetLoopStatus(loopStatus); }
 

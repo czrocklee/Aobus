@@ -5,6 +5,7 @@
 
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
 #include "test/unit/linux-gtk/GtkRuntimeTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include <ao/rt/playback/PlaybackService.h>
 
@@ -34,17 +35,20 @@ namespace ao::gtk::test
     auto window = Gtk::Window{};
     window.set_child(*btn);
     window.set_default_size(100, 20);
+    window.present();
 
     drainGtkEvents();
 
     CHECK(btn->get_visible());
     CHECK(btn->get_tooltip_text() == "Volume: 50%");
+    CHECK(hasAccessibleLabel(*btn, "Volume: 50%"));
     CHECK(icon->get_icon_name() == "audio-volume-medium-symbolic");
 
     playback.commands().setMuted(true);
     drainGtkEvents();
 
     CHECK(icon->get_icon_name() == "audio-volume-muted-symbolic");
+    CHECK(hasAccessibleLabel(*btn, "Volume: 50% (Muted)"));
 
     playback.commands().setMuted(false);
     playback.commands().setVolume(0.25F);

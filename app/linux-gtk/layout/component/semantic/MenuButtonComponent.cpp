@@ -3,6 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
+#include "common/AccessibleLabel.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -28,6 +29,8 @@ namespace ao::gtk::layout
     public:
       MenuButtonComponent(LayoutBuildContext& ctx, LayoutNode const& node)
       {
+        setTooltipAndAccessibleLabel(_button, "Application menu");
+
         if (auto const icon = node.propertyOr<std::string>("icon", ""); !icon.empty())
         {
           _button.set_icon_name(icon);

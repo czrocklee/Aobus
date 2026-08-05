@@ -3,6 +3,7 @@
 
 #include "layout/component/track/TrackFieldGridWidgets.h"
 
+#include "common/AccessibleLabel.h"
 #include "common/WidgetMeasure.h"
 #include "completion/EntryCompletionController.h"
 #include <ao/rt/completion/CompletionResult.h>
@@ -159,7 +160,7 @@ namespace ao::gtk::layout::track_field_grid
     _editButton.set_focusable(true);
     _editButton.add_css_class("ao-icon-button");
     _editButton.add_css_class("ao-detail-field-edit-hint");
-    _editButton.set_tooltip_text("Edit Value");
+    setTooltipAndAccessibleLabel(_editButton, "Edit Value");
     _editButton.set_visible(false);
     _editButton.signal_clicked().connect(sigc::track_object([this] { startEditing(); }, *this));
 

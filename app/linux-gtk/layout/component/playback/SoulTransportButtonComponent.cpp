@@ -4,6 +4,7 @@
 #include "PlaybackComponentRegistrations.h"
 #include "app/AobusSoul.h"
 #include "app/GtkUiDependencies.h"
+#include "common/AccessibleLabel.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -103,6 +104,7 @@ namespace ao::gtk::layout
         }
 
         _button.set_sensitive(view.enabled);
+        setAccessibleLabel(_button, view.tooltip);
 
         if (!_hasComplexTooltip)
         {

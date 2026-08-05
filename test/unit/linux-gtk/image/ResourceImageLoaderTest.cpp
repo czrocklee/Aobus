@@ -4,6 +4,7 @@
 #include "image/ResourceImageLoader.h"
 
 #include "image/ImageCache.h"
+#include "image/ImageRenderPolicy.h"
 #include "platform/MprisArtUrlCache.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -123,6 +124,31 @@ namespace ao::gtk::test
       CHECK(receivedPtr->get_width() == 256);
       CHECK(loader.getFull(validResourceId).get() == receivedPtr.get());
       CHECK_FALSE(loader.getThumbnail(validResourceId, kPixelSize));
+    }
+
+    SECTION("high-quality render publishes the worker result on the GTK executor")
+    {
+      auto const ownerThread = std::this_thread::get_id();
+      auto sourcePixbufPtr = makePixbuf(512, 384);
+      sourcePixbufPtr->fill(0x4f82baffU);
+      auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+      auto callbackThread = std::thread::id{};
+      auto request = loader.requestHighQualityRender(sourcePixbufPtr,
+                                                     RenderTarget{.width = 96, .height = 72},
+                                                     [&](Glib::RefPtr<Gdk::Pixbuf> const& resultPtr)
+                                                     {
+                                                       callbackThread = std::this_thread::get_id();
+                                                       renderedPixbufPtr = resultPtr;
+                                                     });
+      REQUIRE(request);
+
+      REQUIRE(pumpGtkEventsUntil([&] { return static_cast<bool>(renderedPixbufPtr); }));
+      CHECK(callbackThread == ownerThread);
+      CHECK(renderedPixbufPtr->get_width() == 96);
+      CHECK(renderedPixbufPtr->get_height() == 72);
+      // Rendered frames are widget-owned and intentionally do not expand the
+      // shared decoded-resource cache.
+      CHECK_FALSE(loader.getThumbnail(validResourceId, 96));
     }
 
     SECTION("request decodes off-thread, populates the cache, and invokes the callback")

@@ -3,6 +3,7 @@
 
 #include "SemanticComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
+#include "common/AccessibleLabel.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -52,7 +53,7 @@ namespace ao::gtk::layout
         _container.append(stack);
 
         // Handle
-        _handle.set_icon_name("pan-start-symbolic");
+        updateHandlePresentation(false);
         _handle.add_css_class("ao-detail-handle");
         _handle.set_valign(Gtk::Align::CENTER);
         _handle.set_focus_on_click(false);
@@ -79,13 +80,19 @@ namespace ao::gtk::layout
           {
             bool const active = _handle.get_active();
             _revealer.set_reveal_child(active);
-            _handle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
+            updateHandlePresentation(active);
           });
       }
 
       Gtk::Widget& widget() override { return _container; }
 
     private:
+      void updateHandlePresentation(bool const active)
+      {
+        _handle.set_icon_name(active ? "pan-end-symbolic" : "pan-start-symbolic");
+        setTooltipAndAccessibleLabel(_handle, active ? "Hide details" : "Show details");
+      }
+
       Gtk::Box _container;
       Gtk::ToggleButton _handle;
       Gtk::Revealer _revealer;

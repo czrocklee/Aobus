@@ -3,6 +3,7 @@
 
 #include "tag/TagEditor.h"
 
+#include "common/AccessibleLabel.h"
 #include "common/DismissController.h"
 #include "common/WidgetMeasure.h"
 #include "layout/LayoutConstants.h"
@@ -170,6 +171,7 @@ namespace ao::gtk
         _removeBtn.set_valign(Gtk::Align::CENTER);
         _removeBtn.set_margin_end(kRemoveBtnMarginEnd);
         _removeBtn.add_css_class("ao-tag-chip-remove");
+        setTooltipAndAccessibleLabel(_removeBtn, "Remove tag " + tag);
         append(_removeBtn);
 
         add_css_class("ao-tag-chip");

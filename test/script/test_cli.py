@@ -485,7 +485,9 @@ class CliParseTest(unittest.TestCase):
         )
         run.assert_called_once_with(
             [str(binary), "[layout]"],
-            env={"DISPLAY": ":42", "GDK_BACKEND": "x11", "GDK_DISABLE": "gl,vulkan", "GSK_RENDERER": "cairo"},
+            # GDK/GTK environment defaults are set by the test binary itself
+            # (GtkTestMain.cpp); the runner only provides the Xvfb display.
+            env={"DISPLAY": ":42"},
             log=None,
             append=False,
         )

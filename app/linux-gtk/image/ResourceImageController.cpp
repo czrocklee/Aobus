@@ -4,6 +4,8 @@
 #include "image/ResourceImageController.h"
 
 #include "image/CoverArtView.h"
+#include "image/ImageRenderPolicy.h"
+#include "image/ImageWidget.h"
 #include "image/ResourceImageLoader.h"
 #include <ao/CoreIds.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -27,6 +29,22 @@ namespace ao::gtk
                                                                             {})}
     , _imageAvailabilityChanged{std::move(imageAvailabilityChanged)}
   {
+    _widget.setHighQualityRenderer(
+      [loader = &_loader](Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                          RenderTarget const renderedSize,
+                          ImageWidget::RenderedImageReady onReady)
+      {
+        return loader->requestHighQualityRender(
+          std::move(sourcePixbufPtr),
+          renderedSize,
+          [onReady = std::move(onReady)](Glib::RefPtr<Gdk::Pixbuf> const& renderedPixbufPtr) mutable
+          {
+            if (onReady)
+            {
+              onReady(renderedPixbufPtr);
+            }
+          });
+      });
   }
 
   void ResourceImageController::enableThumbnailMode(std::int32_t logicalSizePx)

@@ -38,7 +38,13 @@ namespace ao::winui::layout
 
     bool contains(std::string_view id) const;
 
-    /// Invoke @p id if it is registered, and report whether a handler ran.
+    /**
+     * @brief Invoke @p id if it is registered, and report whether a handler ran.
+     *
+     * Handler exceptions propagate. The registry has no command-specific
+     * rollback authority and therefore cannot convert a partially applied
+     * command into ordinary success.
+     */
     bool invoke(std::string_view id, ActionContext const& context) const;
 
   private:

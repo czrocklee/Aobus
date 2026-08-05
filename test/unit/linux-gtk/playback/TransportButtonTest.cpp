@@ -26,9 +26,13 @@ namespace ao::gtk::test
       auto button = TransportButton{playback, commands, TransportButton::Action::PlayPause};
       auto* const gtkButton = dynamic_cast<Gtk::Button*>(&button.widget());
       REQUIRE(gtkButton != nullptr);
+      auto windowFixture = GtkWindowFixture{};
+      windowFixture.mount(button.widget());
+      windowFixture.present();
 
       CHECK_FALSE(gtkButton->get_icon_name().empty());
       CHECK(gtkButton->has_css_class("ao-playback-button"));
+      CHECK(hasAccessibleLabel(*gtkButton, "Play"));
     }
 
     SECTION("Play action routes clicks to selection playback callback")

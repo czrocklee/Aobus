@@ -686,13 +686,13 @@ namespace ao::gtk::platform::test
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
-    CHECK(endpoint.dispatchSetVolume(0.42));
+    endpoint.dispatchSetVolume(0.42);
     CHECK(playback.snapshot().transport.volume.level == Catch::Approx{0.42F});
 
-    CHECK(endpoint.dispatchSetVolume(5.0));
+    endpoint.dispatchSetVolume(5.0);
     CHECK(playback.snapshot().transport.volume.level == 1.0F);
 
-    CHECK(endpoint.dispatchSetVolume(-1.0));
+    endpoint.dispatchSetVolume(-1.0);
     CHECK(playback.snapshot().transport.volume.level == 0.0F);
   }
 
@@ -738,7 +738,7 @@ namespace ao::gtk::platform::test
     auto callbacks = MprisBridge::Callbacks{};
     auto endpoint = MprisPlaybackEndpoint{playback, commands, callbacks};
 
-    CHECK(endpoint.dispatchSetShuffle(true));
+    endpoint.dispatchSetShuffle(true);
     CHECK(playback.snapshot().succession.shuffle == rt::ShuffleMode::On);
 
     CHECK(endpoint.dispatchSetLoopStatus("Track"));
@@ -782,7 +782,7 @@ namespace ao::gtk::platform::test
     CHECK(endpoint.dispatchSetLoopStatus("None"));
     REQUIRE_FALSE(playback.snapshot().succession.hasNext);
 
-    CHECK(endpoint.dispatchSetShuffle(true));
+    endpoint.dispatchSetShuffle(true);
     CHECK(playback.snapshot().succession.hasNext);
   }
 

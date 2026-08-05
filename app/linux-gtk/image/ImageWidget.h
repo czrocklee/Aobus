@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include "common/MainContextCallbackScope.h"
 #include "image/ImageRenderPolicy.h"
+#include <ao/utility/ScopedRegistration.h>
 
 #include <gdkmm/pixbuf.h>
 #include <glibmm/refptr.h>
@@ -11,12 +13,20 @@
 #include <sigc++/connection.h>
 
 #include <cstdint>
+#include <functional>
 
 namespace ao::gtk
 {
   class ImageWidget final : public Gtk::Picture
   {
   public:
+    // The renderer owns only immutable Pixbuf input. It must deliver completion
+    // on this widget's GTK main context, and resetting the returned registration
+    // must prevent any not-yet-entered owner callback from being delivered.
+    using RenderedImageReady = std::function<void(Glib::RefPtr<Gdk::Pixbuf>)>;
+    using HighQualityRenderer =
+      std::function<utility::ScopedRegistration(Glib::RefPtr<Gdk::Pixbuf>, RenderTarget, RenderedImageReady)>;
+
     ImageWidget();
     ~ImageWidget() override;
 
@@ -29,6 +39,7 @@ namespace ao::gtk
 
     void setMaxRenderSize(std::int32_t width, std::int32_t height);
     void setForceSquareTarget(bool forceSquare);
+    void setHighQualityRenderer(HighQualityRenderer renderer);
     double displayScale() const;
 
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);
@@ -42,6 +53,19 @@ namespace ao::gtk
     void refreshRenderedImage();
     void queueRefresh();
     void beginResizeSettle();
+    void cancelPendingRender();
+    bool pendingRenderMatches(Glib::RefPtr<Gdk::Pixbuf> const& sourcePixbufPtr,
+                              RenderTarget target,
+                              RenderTarget renderedSize) const;
+    void requestHighQualityRender(Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                  Glib::RefPtr<Gdk::Pixbuf> renderedSourcePixbufPtr,
+                                  RenderTarget target,
+                                  RenderTarget renderedSize);
+    void publishRenderedImage(Glib::RefPtr<Gdk::Pixbuf> const& renderedSourcePixbufPtr,
+                              Glib::RefPtr<Gdk::Pixbuf> const& renderedPixbufPtr,
+                              RenderTarget target,
+                              RenderTarget renderedSize,
+                              bool interim);
     RenderTarget requestedRenderTarget() const;
 
     // Source state
@@ -70,5 +94,20 @@ namespace ao::gtk
     sigc::connection _resizeSettleConnection;
     bool _resizeActive = false;
     bool _renderedWithInterim = false;
+
+    // Full-quality scaling may run off-thread, but every request and completion
+    // remains owned by this GTK-main-context widget. The callback scope rejects
+    // a completion retained past widget teardown; the generation rejects a
+    // completion superseded by a source or target change.
+    HighQualityRenderer _highQualityRenderer;
+    MainContextCallbackScope _renderCallbacks;
+    utility::ScopedRegistration _renderRequest;
+    Glib::RefPtr<Gdk::Pixbuf> _pendingSourcePixbufPtr;
+    std::int32_t _pendingTargetPixelWidth = 0;
+    std::int32_t _pendingTargetPixelHeight = 0;
+    std::int32_t _pendingRenderedPixelWidth = 0;
+    std::int32_t _pendingRenderedPixelHeight = 0;
+    std::uint64_t _renderGeneration = 0;
+    bool _renderPending = false;
   };
 } // namespace ao::gtk

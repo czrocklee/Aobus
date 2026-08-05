@@ -2,6 +2,7 @@
 // Copyright (c) 2024-2026 Aobus Contributors
 
 #include "TrackComponentRegistrations.h"
+#include "common/AccessibleLabel.h"
 #include "layout/component/track/TrackDetailScope.h"
 #include "layout/component/track/TrackDetailUndo.h"
 #include "layout/component/track/TrackFieldGridCustomControls.h"
@@ -792,7 +793,7 @@ namespace ao::gtk::layout
         row.deleteButton.set_has_frame(false);
         row.deleteButton.add_css_class("ao-icon-button");
         row.deleteButton.add_css_class("ao-detail-field-delete");
-        row.deleteButton.set_tooltip_text("Delete Custom Metadata");
+        setTooltipAndAccessibleLabel(row.deleteButton, "Delete Custom Metadata");
         row.deleteButton.signal_clicked().connect([this, key = row.key] { handleCustomDeleted(key); });
 
         row.partialIcon.set_from_icon_name("dialog-warning-symbolic");

@@ -4,6 +4,7 @@
 #include "LayoutEditorDialog.h"
 
 #include "app/AppDialog.h"
+#include "common/AccessibleLabel.h"
 #include "layout/document/LayoutPresets.h"
 #include "layout/runtime/ActionRegistry.h"
 #include "layout/runtime/ComponentRegistry.h"
@@ -223,7 +224,7 @@ namespace ao::gtk::layout::editor
     _comboThemePresets.append("modern", "Modern Theme");
 
     _btnReset.set_icon_name("view-refresh-symbolic");
-    _btnReset.set_tooltip_text("Reset to selected preset's default layout");
+    setTooltipAndAccessibleLabel(_btnReset, "Reset to selected preset's default layout");
     _btnReset.add_css_class("flat");
 
     _actionGroupPtr = Gio::SimpleActionGroup::create();
@@ -260,23 +261,23 @@ namespace ao::gtk::layout::editor
     }
 
     _btnAdd.set_icon_name("list-add-symbolic");
-    _btnAdd.set_tooltip_text("Add Child");
+    setTooltipAndAccessibleLabel(_btnAdd, "Add Child");
     _btnAdd.set_menu_model(addMenuPtr);
 
     _btnWrap.set_icon_name("object-group-symbolic");
-    _btnWrap.set_tooltip_text("Wrap Node");
+    setTooltipAndAccessibleLabel(_btnWrap, "Wrap Node");
     _btnWrap.set_menu_model(wrapMenuPtr);
 
     _btnRemove.set_icon_name("user-trash-symbolic");
-    _btnRemove.set_tooltip_text("Remove Node");
+    setTooltipAndAccessibleLabel(_btnRemove, "Remove Node");
     _btnRemove.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleRemoveNodeClicked));
 
     _btnUp.set_icon_name("go-up-symbolic");
-    _btnUp.set_tooltip_text("Move Up");
+    setTooltipAndAccessibleLabel(_btnUp, "Move Up");
     _btnUp.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleMoveUpClicked));
 
     _btnDown.set_icon_name("go-down-symbolic");
-    _btnDown.set_tooltip_text("Move Down");
+    setTooltipAndAccessibleLabel(_btnDown, "Move Down");
     _btnDown.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleMoveDownClicked));
 
     _btnReset.signal_clicked().connect(sigc::mem_fun(*this, &LayoutEditorDialog::handleResetDefaultClicked));

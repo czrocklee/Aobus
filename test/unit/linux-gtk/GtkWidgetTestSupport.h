@@ -48,6 +48,7 @@ namespace ao::gtk::test
   Gtk::Label* findLabelByText(Gtk::Widget& root, std::string const& text);
   Gtk::Button* findButtonByLabel(Gtk::Widget& root, std::string const& labelText);
   bool hasCssClass(Gtk::Widget const& widget, std::string_view cssClass);
+  bool hasAccessibleLabel(Gtk::Widget& widget, std::string_view label);
 
   void emitClicked(Gtk::Button& button);
   void emitActivate(Gtk::Entry& entry);

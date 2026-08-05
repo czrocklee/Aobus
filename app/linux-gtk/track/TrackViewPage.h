@@ -149,7 +149,6 @@ namespace ao::gtk
       uimodel::defaultCoverArtPlaceholderStyle(uimodel::CoverArtPlaceholderSlot::GroupHeading)};
 
     sigc::scoped_connection _themeRefreshConnection;
-    sigc::scoped_connection _modelChangedConnection;
 
     // Controllers (owned)
     std::unique_ptr<TrackColumnViewHost> _viewHostPtr;

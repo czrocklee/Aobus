@@ -4,6 +4,7 @@
 #include "image/ResourceImageLoader.h"
 
 #include "image/ImageCache.h"
+#include "image/ImageRenderPolicy.h"
 #include <ao/CoreIds.h>
 #include <ao/async/LifetimeScope.h>
 #include <ao/async/OperationCancelled.h>
@@ -154,6 +155,26 @@ namespace ao::gtk
     return request(ImageCacheKey::thumbnail(resourceId, std::max(1, physicalPixelSize)), std::move(onReady));
   }
 
+  ResourceImageLoader::Request ResourceImageLoader::requestHighQualityRender(Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                                                             RenderTarget const renderedSize,
+                                                                             OnImageReady onReady)
+  {
+    if (!sourcePixbufPtr || renderedSize.width <= 0 || renderedSize.height <= 0)
+    {
+      if (onReady)
+      {
+        onReady({});
+      }
+
+      return {};
+    }
+
+    return _runtime.spawnCancellable(
+      [runtime = &_runtime, sourcePixbufPtr = std::move(sourcePixbufPtr), renderedSize, onReady = std::move(onReady)](
+        std::stop_token const stopToken) mutable
+      { return render(runtime, std::move(sourcePixbufPtr), renderedSize, std::move(onReady), stopToken); });
+  }
+
   void ResourceImageLoader::prefetchThumbnail(ResourceId const resourceId, std::int32_t const physicalPixelSize)
   {
     prefetch(ImageCacheKey::thumbnail(resourceId, std::max(1, physicalPixelSize)));
@@ -279,5 +300,36 @@ namespace ao::gtk
     }
 
     loader->_requests.complete(token, decodedPtr);
+  }
+
+  async::Task<void> ResourceImageLoader::render(async::Runtime* const runtime,
+                                                Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                                RenderTarget const renderedSize,
+                                                OnImageReady onReady,
+                                                std::stop_token const stopToken)
+  {
+    auto renderedPixbufPtr = Glib::RefPtr<Gdk::Pixbuf>{};
+
+    try
+    {
+      co_await runtime->resumeOnWorker(stopToken);
+
+      // Pixbuf pixel storage is immutable for the duration of this request.
+      // GTK widgets and textures remain confined to the callback executor.
+      renderedPixbufPtr =
+        sourcePixbufPtr->scale_simple(renderedSize.width, renderedSize.height, Gdk::InterpType::HYPER);
+    }
+    catch (...)
+    {
+      async::rethrowIfOperationCancelled();
+      runtime->reportUnhandledException(std::current_exception(), "GTK high-quality image render workflow");
+    }
+
+    co_await runtime->resumeOnCallbackExecutor(stopToken);
+
+    if (onReady)
+    {
+      onReady(renderedPixbufPtr);
+    }
   }
 } // namespace ao::gtk

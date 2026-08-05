@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "app/FormBuilder.h"
+#include "common/AccessibleLabel.h"
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackPresentation.h>
 #include <ao/uimodel/library/presentation/CustomPresentationEditorModel.h>
@@ -67,7 +68,7 @@ namespace ao::gtk
     void configureRowIconButton(Gtk::Button& button, std::string_view iconName, std::string_view tooltip)
     {
       button.set_icon_name(std::string{iconName});
-      button.set_tooltip_text(std::string{tooltip});
+      setTooltipAndAccessibleLabel(button, tooltip);
       button.set_size_request(kRowIconButtonSize, kRowIconButtonSize);
       button.add_css_class("flat");
     }
@@ -89,7 +90,7 @@ namespace ao::gtk
     void configureSectionAddButton(Gtk::Button& button, std::string_view tooltip)
     {
       button.set_icon_name("list-add-symbolic");
-      button.set_tooltip_text(std::string{tooltip});
+      setTooltipAndAccessibleLabel(button, tooltip);
       button.set_size_request(kSectionActionButtonSize, kSectionActionButtonSize);
       button.add_css_class("flat");
     }

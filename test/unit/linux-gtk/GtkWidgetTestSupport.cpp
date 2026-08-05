@@ -4,6 +4,7 @@
 #include "GtkWidgetTestSupport.h"
 
 #include <glib-object.h>
+#include <gtk/gtk.h>
 #include <gtkmm/button.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/eventcontroller.h>
@@ -54,6 +55,21 @@ namespace ao::gtk::test
     auto const classes = widget.get_css_classes();
     return std::ranges::any_of(
       classes, [cssClass](auto const& name) { return std::string_view{name.raw()} == cssClass; });
+  }
+
+  bool hasAccessibleLabel(Gtk::Widget& widget, std::string_view const label)
+  {
+    auto const expected = std::string{label};
+    auto* const mismatch = ::gtk_test_accessible_check_property(
+      GTK_ACCESSIBLE(widget.gobj()), GTK_ACCESSIBLE_PROPERTY_LABEL, expected.c_str());
+
+    if (mismatch == nullptr)
+    {
+      return true;
+    }
+
+    ::g_free(mismatch);
+    return false;
   }
 
   void emitClicked(Gtk::Button& button)

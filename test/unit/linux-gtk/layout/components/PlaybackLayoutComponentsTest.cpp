@@ -3,6 +3,8 @@
 
 #include "app/AobusSoul.h"
 #include "app/linux-gtk/layout/runtime/LayoutComponent.h"
+#include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
+#include "test/unit/linux-gtk/GtkWidgetTestSupport.h"
 #include "test/unit/linux-gtk/layout/LayoutTestSupport.h"
 #include <ao/uimodel/layout/document/LayoutNode.h>
 
@@ -169,8 +171,12 @@ namespace ao::gtk::layout::test
 
       auto* const button = dynamic_cast<Gtk::Button*>(&compPtr->widget());
       REQUIRE(button != nullptr);
+      auto windowFixture = ao::gtk::test::GtkWindowFixture{};
+      windowFixture.mount(compPtr->widget());
+      windowFixture.present();
       CHECK(button->get_has_frame() == false);
       CHECK(button->has_css_class("ao-soul-button"));
+      CHECK(ao::gtk::test::hasAccessibleLabel(*button, "Aobus Soul"));
 
       auto* const soul = button->get_child();
       REQUIRE(soul != nullptr);

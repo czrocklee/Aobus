@@ -5,6 +5,7 @@
 
 #include "app/AppDialog.h"
 #include "app/GtkAccelTranslator.h"
+#include "common/AccessibleLabel.h"
 #include <ao/uimodel/input/KeyChord.h>
 #include <ao/uimodel/input/KeymapModel.h>
 #include <ao/uimodel/layout/action/LayoutActionCapabilities.h>
@@ -325,7 +326,7 @@ namespace ao::gtk
 
         auto* const removeButton = Gtk::make_managed<Gtk::Button>("✕");
         removeButton->add_css_class("flat");
-        removeButton->set_tooltip_text("Remove " + chord.toString());
+        setTooltipAndAccessibleLabel(*removeButton, "Remove " + chord.toString());
         removeButton->signal_clicked().connect([this, id = action.id, chord] { unbindChord(id, chord); });
         chip->append(*removeButton);
 

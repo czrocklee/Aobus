@@ -3,6 +3,7 @@
 
 #include "PlaybackComponentRegistrations.h"
 #include "app/GtkUiDependencies.h"
+#include "common/AccessibleLabel.h"
 #include "image/CoverArtView.h"
 #include "image/ImageWidgetLayout.h"
 #include "image/ResourceImageController.h"
@@ -170,6 +171,8 @@ namespace ao::gtk::layout
 
           return Action::None;
         }();
+
+        setAccessibleLabel(_button, _action == Action::JumpToAlbum ? "Show current album" : "Now playing cover art");
 
         if (forceSquare)
         {

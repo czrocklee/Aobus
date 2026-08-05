@@ -38,6 +38,7 @@ namespace ao::gtk::test
       spec.visibleFields = {rt::TrackField::Title, rt::TrackField::Artist};
 
       auto dialog = TrackCustomViewDialog{window, spec, "Initial Label"};
+      dialog.present();
       drainGtkEvents();
 
       for (auto* const button : collectAll<Gtk::Button>(dialog))
@@ -48,6 +49,13 @@ namespace ao::gtk::test
         CHECK(button->get_label() != "Remove");
         CHECK(button->get_label() != "Add Sort Field");
         CHECK(button->get_label() != "Add Column");
+
+        if (!button->get_icon_name().empty())
+        {
+          auto const tooltip = button->get_tooltip_text();
+          REQUIRE_FALSE(tooltip.empty());
+          CHECK(hasAccessibleLabel(*button, tooltip.raw()));
+        }
       }
     }
 

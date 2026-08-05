@@ -35,6 +35,7 @@ namespace ao::gtk
     void setTargetSize(std::int32_t size);
     void setMaxRenderSize(std::int32_t width, std::int32_t height);
     void setForceSquareTarget(bool forceSquare);
+    void setHighQualityRenderer(ImageWidget::HighQualityRenderer renderer);
     double displayScale() const;
 
     void setImagePixbuf(Glib::RefPtr<Gdk::Pixbuf> const& pixbufPtr);

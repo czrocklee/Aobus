@@ -131,6 +131,11 @@ namespace ao::gtk
     _image.setForceSquareTarget(forceSquare);
   }
 
+  void CoverArtView::setHighQualityRenderer(ImageWidget::HighQualityRenderer renderer)
+  {
+    _image.setHighQualityRenderer(std::move(renderer));
+  }
+
   double CoverArtView::displayScale() const
   {
     return _image.displayScale();

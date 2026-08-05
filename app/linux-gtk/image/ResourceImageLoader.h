@@ -4,6 +4,7 @@
 #pragma once
 
 #include "image/ImageCache.h"
+#include "image/ImageRenderPolicy.h"
 #include <ao/CoreIds.h>
 #include <ao/async/RequestCoalescer.h>
 #include <ao/async/Task.h>
@@ -60,6 +61,9 @@ namespace ao::gtk
 
     Request requestFull(ResourceId resourceId, OnImageReady onReady);
     Request requestThumbnail(ResourceId resourceId, std::int32_t physicalPixelSize, OnImageReady onReady);
+    Request requestHighQualityRender(Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                     RenderTarget renderedSize,
+                                     OnImageReady onReady);
     void prefetchThumbnail(ResourceId resourceId, std::int32_t physicalPixelSize);
 
   private:
@@ -75,6 +79,11 @@ namespace ao::gtk
                                     ImageCacheKey key,
                                     Requests::FlightToken token,
                                     rt::ResourceBytes bytes,
+                                    std::stop_token stopToken);
+    static async::Task<void> render(async::Runtime* runtime,
+                                    Glib::RefPtr<Gdk::Pixbuf> sourcePixbufPtr,
+                                    RenderTarget renderedSize,
+                                    OnImageReady onReady,
                                     std::stop_token stopToken);
 
     rt::ResourceByteLoader& _byteLoader;

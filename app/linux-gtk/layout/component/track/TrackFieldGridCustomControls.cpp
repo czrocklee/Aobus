@@ -3,6 +3,8 @@
 
 #include "TrackFieldGridCustomControls.h"
 
+#include "common/AccessibleLabel.h"
+
 #include <gtkmm/enums.h>
 #include <gtkmm/popover.h>
 #include <sigc++/signal.h>
@@ -38,7 +40,7 @@ namespace ao::gtk::layout::track_field_grid
     _button.set_has_frame(false);
     _button.add_css_class("ao-icon-button");
     _button.add_css_class("ao-detail-add-custom-metadata-button");
-    _button.set_tooltip_text("Add Custom Metadata");
+    setTooltipAndAccessibleLabel(_button, "Add Custom Metadata");
     _button.signal_clicked().connect([this] { openPopover(); });
 
     _popover.set_parent(_button);

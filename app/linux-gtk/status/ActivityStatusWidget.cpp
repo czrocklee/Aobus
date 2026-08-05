@@ -3,6 +3,7 @@
 
 #include "status/ActivityStatusWidget.h"
 
+#include "common/AccessibleLabel.h"
 #include "layout/LayoutConstants.h"
 #include <ao/rt/NotificationState.h>
 #include <ao/uimodel/status/activity/ActivityStatusViewModel.h>
@@ -128,7 +129,7 @@ namespace ao::gtk
     _dismissButton.add_css_class("flat");
     _dismissButton.add_css_class("ao-activity-status-dismiss");
     _dismissButton.set_icon_name("window-close-symbolic");
-    _dismissButton.set_tooltip_text("Hide status");
+    setTooltipAndAccessibleLabel(_dismissButton, "Hide status");
     _dismissButton.signal_clicked().connect([this] { handleDismissClicked(); });
 
     _detailBox.add_css_class("ao-activity-detail");
@@ -288,7 +289,7 @@ namespace ao::gtk
       dismissButton->add_css_class("flat");
       dismissButton->add_css_class("ao-activity-detail-dismiss");
       dismissButton->set_icon_name("window-close-symbolic");
-      dismissButton->set_tooltip_text("Hide notification from status");
+      setTooltipAndAccessibleLabel(*dismissButton, "Hide notification from status");
       dismissButton->signal_clicked().connect([this, id = item.id] { handleDetailDismissClicked(id); });
       header->append(*dismissButton);
     }

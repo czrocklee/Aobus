@@ -3,6 +3,7 @@
 
 #include "track/TrackOrderDragController.h"
 
+#include "common/AccessibleLabel.h"
 #include "track/TrackRowBinding.h"
 #include "track/TrackRowObject.h"
 #include "track/TrackSelectionController.h"
@@ -22,8 +23,6 @@
 #include <glib-object.h>
 #include <glib.h>
 #include <glibmm/refptr.h>
-#include <glibmm/value.h>
-#include <gtkmm/accessible.h>
 #include <gtkmm/box.h>
 #include <gtkmm/columnview.h>
 #include <gtkmm/columnviewcolumn.h>
@@ -106,14 +105,6 @@ namespace ao::gtk
       }
 
       return nullptr;
-    }
-
-    void setAccessibleLabel(Gtk::Accessible& accessible, std::string const& text)
-    {
-      auto value = Glib::Value<std::string>{};
-      value.init(Glib::Value<std::string>::value_type());
-      value.set(text);
-      accessible.update_property(Gtk::Accessible::Property::LABEL, value);
     }
   } // namespace
 

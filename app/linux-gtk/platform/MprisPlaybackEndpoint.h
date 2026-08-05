@@ -36,8 +36,8 @@ namespace ao::gtk::platform
     bool dispatchSeek(std::int64_t offsetUs);
     bool dispatchSetPosition(std::string_view requestedTrackObjectPath, std::int64_t positionUs);
     bool dispatchSetRate(double rate) const;
-    bool dispatchSetVolume(double volume);
-    bool dispatchSetShuffle(bool shuffle);
+    void dispatchSetVolume(double volume);
+    void dispatchSetShuffle(bool shuffle);
     bool dispatchSetLoopStatus(std::string_view loopStatus);
     std::optional<bool> playerCapabilityProperty(std::string_view propertyName) const;
 

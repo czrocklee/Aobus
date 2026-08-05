@@ -48,6 +48,7 @@ add_library(aobus-gtk-lib STATIC
     preference/ShortcutEditorWidget.cpp
     preference/PreferencesWindow.cpp
 
+    common/AccessibleLabel.cpp
     common/DismissController.cpp
     common/MainContextCallbackScope.cpp
     common/PopoverAttachment.cpp

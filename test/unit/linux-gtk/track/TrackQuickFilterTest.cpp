@@ -31,8 +31,17 @@ namespace ao::gtk::test
     auto& runtime = fixture.runtime();
 
     auto filter = TrackQuickFilter{runtime};
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(filter);
+    windowFixture.present();
     CHECK(filter.has_css_class("ao-quick-filter"));
     CHECK(filter.entry().has_css_class("ao-quick-filter-entry"));
+    auto* const clearButton = findWidgetByClass<Gtk::Button>(filter, "ao-quick-filter-clear");
+    auto* const createButton = findWidgetByClass<Gtk::Button>(filter, "ao-quick-filter-create");
+    REQUIRE(clearButton != nullptr);
+    REQUIRE(createButton != nullptr);
+    CHECK(hasAccessibleLabel(*clearButton, "Clear filter"));
+    CHECK(hasAccessibleLabel(*createButton, "Create List from current filter"));
 
     // Just verify it wires up and doesn't crash
     REQUIRE(runtime.workspace().navigate({.target = rt::GlobalViewKind::AllTracks}));

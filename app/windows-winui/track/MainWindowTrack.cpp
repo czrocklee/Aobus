@@ -9,6 +9,7 @@
 #include "platform/StringResources.h"
 #include "track/TrackListController.h"
 #include <ao/CoreIds.h>
+#include <ao/Exception.h>
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/TrackField.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
@@ -29,6 +30,36 @@ namespace winrt::Aobus::implementation
   namespace
   {
     using ProjectedTrackRowItem = ::winrt::Aobus::TrackRowItem;
+
+    std::string requiredColumnFieldId(Windows::Foundation::IInspectable const& sender)
+    {
+      // These tags are supplied by the shipped template or by showColumnsMenu;
+      // absence is broken frontend wiring, not recoverable user input. The
+      // exception intentionally leaves the XAML event handler and reaches the
+      // application's terminal boundary; continuing could mutate the wrong field.
+      auto const element = sender.try_as<Microsoft::UI::Xaml::FrameworkElement>();
+
+      if (!element)
+      {
+        ao::throwException<ao::Exception>("MainWindow column field-id binding requires a FrameworkElement sender");
+      }
+
+      auto const tag = element.Tag().try_as<Windows::Foundation::IPropertyValue>();
+
+      if (!tag || tag.Type() != Windows::Foundation::PropertyType::String)
+      {
+        ao::throwException<ao::Exception>("MainWindow column field-id binding requires a string Tag");
+      }
+
+      auto fieldId = to_string(tag.GetString());
+
+      if (fieldId.empty())
+      {
+        ao::throwException<ao::Exception>("MainWindow column field-id binding requires a non-empty Tag");
+      }
+
+      return fieldId;
+    }
   } // namespace
 
   void MainWindow::reconcileLibrary()
@@ -173,10 +204,7 @@ namespace winrt::Aobus::implementation
   void MainWindow::OnColumnHeaderClicked(Windows::Foundation::IInspectable const& sender,
                                          Microsoft::UI::Xaml::RoutedEventArgs const& /*args*/)
   {
-    if (auto button = sender.try_as<Microsoft::UI::Xaml::Controls::Button>(); button)
-    {
-      executeSort(to_string(unbox_value_or<hstring>(button.Tag(), L"title")));
-    }
+    executeSort(requiredColumnFieldId(sender));
   }
 
   void MainWindow::OnColumnResizeCompleted(
@@ -191,8 +219,7 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    auto element = sender.try_as<Microsoft::UI::Xaml::FrameworkElement>();
-    auto const fieldId = element ? to_string(unbox_value_or<hstring>(element.Tag(), L"")) : std::string{};
+    auto const fieldId = requiredColumnFieldId(sender);
 
     if (auto resized = _trackListPtr->resizeColumn(fieldId, args.HorizontalChange()); !resized)
     {
@@ -225,8 +252,7 @@ namespace winrt::Aobus::implementation
       return;
     }
 
-    auto element = sender.try_as<Microsoft::UI::Xaml::FrameworkElement>();
-    auto const fieldId = element ? to_string(unbox_value_or<hstring>(element.Tag(), L"")) : std::string{};
+    auto const fieldId = requiredColumnFieldId(sender);
 
     if (auto moved = _trackListPtr->moveColumn(fieldId, offset); !moved)
     {
@@ -270,7 +296,7 @@ namespace winrt::Aobus::implementation
             return;
           }
 
-          auto const fieldId = to_string(unbox_value_or<hstring>(toggle.Tag(), L""));
+          auto const fieldId = requiredColumnFieldId(sender);
           auto changed = self->_trackListPtr->setColumnVisible(fieldId, toggle.IsChecked());
 
           if (!changed)

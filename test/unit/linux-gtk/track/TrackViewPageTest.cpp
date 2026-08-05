@@ -36,6 +36,7 @@
 #include <ao/uimodel/library/presentation/TrackColumnLayoutStore.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <gtkmm/box.h>
 #include <gtkmm/entry.h>
 #include <gtkmm/enums.h>
 #include <gtkmm/stack.h>
@@ -284,8 +285,15 @@ namespace ao::gtk::test
     auto byteLoader = rt::ResourceByteLoader{runtime};
     auto thumbnailLoader = ResourceImageLoader{byteLoader, imageCache, runtime.async()};
     auto page = TrackViewPage{listId, modelPtr, layoutStore, runtime, thumbnailLoader, manual->spec, viewId};
+    auto windowFixture = GtkWindowFixture{};
+    windowFixture.mount(page);
+    windowFixture.present();
 
     CHECK(page.hasOrderDragHandle());
+    auto* const dragHandle = findWidgetByClass<Gtk::Box>(page, "ao-order-drag-handle");
+    REQUIRE(dragHandle != nullptr);
+    CHECK(dragHandle->get_tooltip_text() == "Drag to rearrange tracks in Manual Order");
+    CHECK(hasAccessibleLabel(*dragHandle, "Rearrange track"));
 
     REQUIRE(runtime.views().setPresentation(viewId, rt::defaultTrackPresentationSpec()));
     page.applyPresentation(rt::defaultTrackPresentationSpec());

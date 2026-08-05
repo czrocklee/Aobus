@@ -3,6 +3,7 @@
 
 #include "track/TrackQuickFilter.h"
 
+#include "common/AccessibleLabel.h"
 #include "completion/EntryCompletionController.h"
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/completion/CompletionResult.h>
@@ -81,7 +82,7 @@ namespace ao::gtk
     _clearButton.add_css_class("ao-quick-filter-clear");
     _clearButton.set_icon_name("edit-clear-symbolic");
     _clearButton.set_has_frame(false);
-    _clearButton.set_tooltip_text("Clear filter");
+    setTooltipAndAccessibleLabel(_clearButton, "Clear filter");
     _clearButton.set_visible(false);
     _clearButton.signal_clicked().connect(sigc::mem_fun(*this, &TrackQuickFilter::handleClearClicked));
 
@@ -89,7 +90,7 @@ namespace ao::gtk
     _createSmartListButton.add_css_class("ao-quick-filter-create");
     _createSmartListButton.set_icon_name("list-add-symbolic");
     _createSmartListButton.set_has_frame(false);
-    _createSmartListButton.set_tooltip_text("Create List from current filter");
+    setTooltipAndAccessibleLabel(_createSmartListButton, "Create List from current filter");
     _createSmartListButton.set_sensitive(false);
     _createSmartListButton.signal_clicked().connect(
       sigc::mem_fun(*this, &TrackQuickFilter::handleCreateSmartListClicked));

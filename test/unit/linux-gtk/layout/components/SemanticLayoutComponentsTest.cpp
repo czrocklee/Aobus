@@ -220,8 +220,12 @@ namespace ao::gtk::layout::test
 
       auto* const menuButton = dynamic_cast<Gtk::MenuButton*>(&compPtr->widget());
       REQUIRE(menuButton != nullptr);
+      auto windowFixture = ao::gtk::test::GtkWindowFixture{};
+      windowFixture.mount(compPtr->widget());
+      windowFixture.present();
       CHECK(menuButton->get_icon_name() == "test-icon");
       CHECK(menuButton->get_menu_model() == menuModelPtr);
+      CHECK(ao::gtk::test::hasAccessibleLabel(*menuButton, "Application menu"));
     }
 
     SECTION("app.menuBar tolerates absent menu model")

@@ -3,6 +3,7 @@
 
 #include "AllocationObserver.h"
 #include "ContainerComponentRegistrations.h"
+#include "common/AccessibleLabel.h"
 #include "layout/runtime/ComponentRegistry.h"
 #include "layout/runtime/LayoutBuildContext.h"
 #include "layout/runtime/LayoutComponent.h"
@@ -649,7 +650,9 @@ namespace ao::gtk::layout
 
       void updateHandleIcon()
       {
-        if (bool const revealed = _revealer.get_reveal_child(); _orientation == Gtk::Orientation::HORIZONTAL)
+        bool const revealed = _revealer.get_reveal_child();
+
+        if (_orientation == Gtk::Orientation::HORIZONTAL)
         {
           if (_collapseSide == Side::Start)
           {
@@ -671,6 +674,8 @@ namespace ao::gtk::layout
             _toggleButton.set_icon_name(revealed ? "pan-down-symbolic" : "pan-up-symbolic");
           }
         }
+
+        setTooltipAndAccessibleLabel(_toggleButton, revealed ? "Collapse panel" : "Expand panel");
       }
 
       uimodel::StatefulComponentState _state;

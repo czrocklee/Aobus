@@ -5,6 +5,7 @@
 
 #include "image/CoverArtView.h"
 #include "image/ImageCache.h"
+#include "image/ImageRenderPolicy.h"
 #include "image/ResourceImageController.h"
 #include "image/ResourceImageLoader.h"
 #include "test/unit/linux-gtk/GtkApplicationTestSupport.h"
@@ -17,6 +18,7 @@
 #include <ao/rt/AppRuntime.h>
 #include <ao/rt/resource/ResourceByteLoader.h>
 #include <ao/uimodel/presentation/CoverArtPlaceholder.h>
+#include <ao/utility/ScopedRegistration.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <gtkmm/drawingarea.h>
@@ -24,9 +26,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace ao::gtk::test
@@ -235,6 +241,134 @@ namespace ao::gtk::test
       CHECK(paintablePtr->get_intrinsic_width() == 58 * scaleFactor);
       CHECK(paintablePtr->get_intrinsic_height() == 58 * scaleFactor);
     }
+  }
+
+  TEST_CASE("ImageWidget - superseded high-quality render cannot publish stale pixels",
+            "[gtk][regression][image][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto completions = std::vector<ImageWidget::RenderedImageReady>{};
+    auto cancellations = std::vector<std::shared_ptr<bool>>{};
+    auto requestedSizes = std::vector<RenderTarget>{};
+    auto widget = ImageWidget{};
+    widget.setHighQualityRenderer(
+      [&](Glib::RefPtr<Gdk::Pixbuf> /*sourcePixbufPtr*/,
+          RenderTarget const renderedSize,
+          ImageWidget::RenderedImageReady onReady)
+      {
+        auto cancelledPtr = std::make_shared<bool>(false);
+        cancellations.push_back(cancelledPtr);
+        requestedSizes.push_back(renderedSize);
+        completions.push_back(std::move(onReady));
+        return utility::ScopedRegistration{[cancelledPtr] { *cancelledPtr = true; }};
+      });
+
+    auto const scaleFactor = widget.get_scale_factor();
+    widget.setTargetSize(56);
+    widget.setImagePixbuf(makePixbuf(2000, 2000));
+    drainGtkEvents();
+
+    REQUIRE(completions.size() == 1);
+    REQUIRE(cancellations.size() == 1);
+    CHECK(requestedSizes[0].width == 56 * scaleFactor);
+    CHECK(requestedSizes[0].height == 56 * scaleFactor);
+    CHECK_FALSE(widget.get_paintable());
+
+    widget.setImagePixbuf(makePixbuf(2500, 2500));
+    drainGtkEvents();
+
+    REQUIRE(completions.size() == 2);
+    REQUIRE(cancellations.size() == 2);
+    CHECK(*cancellations[0]);
+
+    // Exercise a hostile renderer that invokes a completion even after its
+    // request was cancelled. The widget generation must reject it.
+    completions[0](makePixbuf(24, 24));
+    CHECK_FALSE(widget.get_paintable());
+
+    completions[1](makePixbuf(requestedSizes[1].width, requestedSizes[1].height));
+    auto const paintablePtr = widget.get_paintable();
+    REQUIRE(paintablePtr);
+    CHECK(paintablePtr->get_intrinsic_width() == 56 * scaleFactor);
+    CHECK(paintablePtr->get_intrinsic_height() == 56 * scaleFactor);
+  }
+
+  TEST_CASE("ImageWidget - resize keeps its interim frame until worker quality render completes",
+            "[gtk][regression][image][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto completions = std::vector<ImageWidget::RenderedImageReady>{};
+    auto requestedSizes = std::vector<RenderTarget>{};
+    auto widget = ImageWidget{};
+    widget.setHighQualityRenderer(
+      [&](Glib::RefPtr<Gdk::Pixbuf> /*sourcePixbufPtr*/,
+          RenderTarget const renderedSize,
+          ImageWidget::RenderedImageReady onReady)
+      {
+        requestedSizes.push_back(renderedSize);
+        completions.push_back(std::move(onReady));
+        return utility::ScopedRegistration{[] {}};
+      });
+
+    auto const scaleFactor = widget.get_scale_factor();
+    widget.setTargetSize(56);
+    widget.setImagePixbuf(makePixbuf(2000, 2000));
+    drainGtkEvents();
+
+    REQUIRE(completions.size() == 1);
+    completions[0](makePixbuf(requestedSizes[0].width, requestedSizes[0].height));
+    auto const firstPaintablePtr = widget.get_paintable();
+    REQUIRE(firstPaintablePtr);
+
+    widget.setTargetSize(96);
+    drainGtkEvents();
+
+    auto const interimPaintablePtr = widget.get_paintable();
+    REQUIRE(interimPaintablePtr);
+    CHECK(interimPaintablePtr.get() != firstPaintablePtr.get());
+    CHECK(interimPaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
+    CHECK(completions.size() == 1);
+
+    REQUIRE(pumpGtkEventsUntil([&] { return completions.size() == 2; }, std::chrono::seconds{5}));
+    CHECK(widget.get_paintable().get() == interimPaintablePtr.get());
+    CHECK(requestedSizes[1].width == 96 * scaleFactor);
+    CHECK(requestedSizes[1].height == 96 * scaleFactor);
+
+    completions[1](makePixbuf(requestedSizes[1].width, requestedSizes[1].height));
+    auto const settledPaintablePtr = widget.get_paintable();
+    REQUIRE(settledPaintablePtr);
+    CHECK(settledPaintablePtr.get() != interimPaintablePtr.get());
+    CHECK(settledPaintablePtr->get_intrinsic_width() == 96 * scaleFactor);
+  }
+
+  TEST_CASE("ImageWidget - destruction cancels and invalidates a retained render completion",
+            "[gtk][regression][image][concurrency]")
+  {
+    [[maybe_unused]] auto const appPtr = ensureGtkApplication();
+    auto completion = ImageWidget::RenderedImageReady{};
+    auto cancelledPtr = std::make_shared<bool>(false);
+
+    {
+      auto widget = ImageWidget{};
+      widget.setHighQualityRenderer(
+        [&](Glib::RefPtr<Gdk::Pixbuf> /*sourcePixbufPtr*/,
+            RenderTarget const /*renderedSize*/,
+            ImageWidget::RenderedImageReady onReady)
+        {
+          completion = std::move(onReady);
+          return utility::ScopedRegistration{[cancelledPtr] { *cancelledPtr = true; }};
+        });
+      widget.setTargetSize(56);
+      widget.setImagePixbuf(makePixbuf(2000, 2000));
+      drainGtkEvents();
+      REQUIRE(completion);
+    }
+
+    CHECK(*cancelledPtr);
+
+    // The renderer is allowed to retain its callback after cancellation. The
+    // main-context scope turns this late invocation into a no-op under ASan.
+    completion(makePixbuf(56, 56));
   }
 
   TEST_CASE("CoverArtView - renders every placeholder style and yields to real artwork",

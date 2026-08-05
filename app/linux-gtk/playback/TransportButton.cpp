@@ -3,6 +3,7 @@
 
 #include "playback/TransportButton.h"
 
+#include "common/AccessibleLabel.h"
 #include <ao/rt/playback/PlaybackService.h>
 #include <ao/uimodel/playback/command/PlaybackCommandSurface.h>
 #include <ao/uimodel/playback/transport/TransportViewModel.h>
@@ -71,7 +72,7 @@ namespace ao::gtk
   void TransportButton::applyState(ao::uimodel::TransportViewState const& view)
   {
     _button.set_icon_name(mapIconName(view.icon));
-    _button.set_tooltip_text(view.tooltip);
+    setTooltipAndAccessibleLabel(_button, view.tooltip);
     _button.set_sensitive(view.enabled);
 
     if (!view.label.empty())

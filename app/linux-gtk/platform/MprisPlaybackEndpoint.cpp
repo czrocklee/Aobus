@@ -120,16 +120,14 @@ namespace ao::gtk::platform
     return true;
   }
 
-  bool MprisPlaybackEndpoint::dispatchSetVolume(double const volume)
+  void MprisPlaybackEndpoint::dispatchSetVolume(double const volume)
   {
     _playbackCommands.setVolume(static_cast<float>(volume));
-    return true;
   }
 
-  bool MprisPlaybackEndpoint::dispatchSetShuffle(bool const shuffle)
+  void MprisPlaybackEndpoint::dispatchSetShuffle(bool const shuffle)
   {
     _playbackCommands.setShuffleMode(shuffle ? rt::ShuffleMode::On : rt::ShuffleMode::Off);
-    return true;
   }
 
   bool MprisPlaybackEndpoint::dispatchSetLoopStatus(std::string_view const loopStatus)
