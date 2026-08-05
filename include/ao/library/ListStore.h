@@ -61,8 +61,8 @@ namespace ao::library
     Iterator begin() const;
     EndSentinel end() const { return {}; }
 
-    // Absence is the only recoverable miss. Storage faults and structurally
-    // corrupt records throw (see lmdb).
+    // Absence is the only recoverable miss. Storage faults and a post-open
+    // structural invariant breach throw ao::Exception (see lmdb).
     std::optional<ListView> get(ListId id) const;
 
   private:
@@ -93,7 +93,7 @@ namespace ao::library
     bool operator==(EndSentinel /*unused*/) const { return *this == Iterator{}; }
     Iterator& operator++();
     void operator++(std::int32_t) { ++*this; }
-    // Throws when the stored record is structurally corrupt.
+    // Throws ao::Exception when a row violates the open-time storage invariant.
     value_type operator*() const;
 
   private:
@@ -116,8 +116,8 @@ namespace ao::library
     bool remove(ListId id);
     Result<> clear();
 
-    // Absence is the only recoverable miss. Storage faults and structurally
-    // corrupt records throw.
+    // Absence is the only recoverable miss. Storage faults and a post-open
+    // structural invariant breach throw ao::Exception.
     std::optional<ListView> get(ListId id) const;
 
   private:

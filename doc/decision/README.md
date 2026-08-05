@@ -20,7 +20,11 @@ Use the [decision template](../template/decision.md).
 ## Accepted decisions
 
 - [Decision 0001: unify saved Lists with an independent order overlay](0001-unified-list-ordering.md)
-- [Decision 0002: fail closed at the library integrity boundary](0002-fail-closed-library-integrity.md)
 - [Decision 0003: terminate on live library publication fault](0003-terminate-on-library-publication-fault.md)
 - [Decision 0004: adopt layout documents for WinUI shell composition](0004-adopt-layout-documents-for-winui-shell-composition.md)
 - [Decision 0005: use process restart for WinUI library switching](0005-use-process-restart-for-winui-library-switching.md)
+- [Decision 0006: validate before exposure and fail fast on live iterator faults](0006-validate-open-fail-fast-live-iterator.md)
+
+## Superseded decisions
+
+- [Decision 0002: fail closed at the library integrity boundary](0002-fail-closed-library-integrity.md), superseded by [Decision 0006](0006-validate-open-fail-fast-live-iterator.md).

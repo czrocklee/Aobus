@@ -19,7 +19,6 @@
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
 #include <ao/library/ResourceStore.h>
-#include <ao/lmdb/TransactionFailure.h>
 #include <ao/rt/Log.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 #include <ao/rt/library/AudioIdentityIndexer.h>
@@ -168,50 +167,44 @@ namespace ao::rt
         return CoordinatedScanResult{.result = std::move(*revalidationResult)};
       }
 
-      try
+      auto mutationResult = mutationService.beginMaintenanceMutation(maintenance);
+
+      if (!mutationResult)
       {
-        auto mutationResult = mutationService.beginMaintenanceMutation(maintenance);
+        return std::unexpected{mutationResult.error()};
+      }
 
-        if (!mutationResult)
-        {
-          return std::unexpected{mutationResult.error()};
-        }
+      auto mutation = std::move(*mutationResult);
+      auto applyResult = mutation.apply([&operation, stopToken](library::WriteTransaction& transaction)
+                                        { return operation.apply(transaction, stopToken); });
 
-        auto mutation = std::move(*mutationResult);
-        auto applyResult = operation.apply(mutation.transaction(), stopToken);
+      if (!applyResult)
+      {
+        return std::unexpected{applyResult.error()};
+      }
 
-        if (!applyResult)
-        {
-          return std::unexpected{applyResult.error()};
-        }
+      if (operation.cancelled())
+      {
+        return CoordinatedScanResult{.result = std::move(*applyResult), .cancelled = true};
+      }
 
-        if (operation.cancelled())
-        {
-          return CoordinatedScanResult{.result = std::move(*applyResult), .cancelled = true};
-        }
-
-        if (!operation.transactionShouldCommit())
-        {
-          return CoordinatedScanResult{.result = std::move(*applyResult)};
-        }
-
-        auto mutatedIds = applyResult->mutatedIds;
-        mutatedIds.append_range(applyResult->relinkedIds);
-        auto commitResult = mutation.commit(
-          LibraryChangeSet{.tracksInserted = applyResult->insertedIds, .tracksMutated = std::move(mutatedIds)});
-
-        if (!commitResult)
-        {
-          return std::unexpected{commitResult.error()};
-        }
-
-        applyResult->libraryRevision = commitResult->libraryRevision;
+      if (!operation.transactionShouldCommit())
+      {
         return CoordinatedScanResult{.result = std::move(*applyResult)};
       }
-      catch (lmdb::TransactionFailure const& failure)
+
+      auto mutatedIds = applyResult->mutatedIds;
+      mutatedIds.append_range(applyResult->relinkedIds);
+      auto commitResult = mutation.commit(
+        LibraryChangeSet{.tracksInserted = applyResult->insertedIds, .tracksMutated = std::move(mutatedIds)});
+
+      if (!commitResult)
       {
-        return std::unexpected{failure.error()};
+        return std::unexpected{commitResult.error()};
       }
+
+      applyResult->libraryRevision = commitResult->libraryRevision;
+      return CoordinatedScanResult{.result = std::move(*applyResult)};
     }
 
     void logLibraryTaskFailure(std::string_view stage, std::string_view uri, std::string_view message)
@@ -289,34 +282,28 @@ namespace ao::rt
       return [mutationServiceRaw = &mutationService, maintenanceRaw = &maintenance, libraryRaw = &library](
                std::span<AudioIdentityWriteCandidate const> candidates) -> Result<AudioIdentityBatchCommitResult>
       {
-        try
+        auto mutationResult = mutationServiceRaw->beginMaintenanceMutation(*maintenanceRaw);
+
+        if (!mutationResult)
         {
-          auto mutationResult = mutationServiceRaw->beginMaintenanceMutation(*maintenanceRaw);
+          return std::unexpected{mutationResult.error()};
+        }
 
-          if (!mutationResult)
-          {
-            return std::unexpected{mutationResult.error()};
-          }
+        auto mutation = std::move(*mutationResult);
+        auto result = mutation.apply([libraryRaw, candidates](library::WriteTransaction& transaction)
+                                     { return applyAudioIdentityBatch(*libraryRaw, transaction, candidates); });
 
-          auto mutation = std::move(*mutationResult);
-          auto result = applyAudioIdentityBatch(*libraryRaw, mutation.transaction(), candidates);
-
-          if (!result || result->completedCount == 0)
-          {
-            return result;
-          }
-
-          if (auto commitResult = mutation.commit(LibraryChangeSet{}); !commitResult)
-          {
-            return std::unexpected{commitResult.error()};
-          }
-
+        if (!result || result->completedCount == 0)
+        {
           return result;
         }
-        catch (lmdb::TransactionFailure const& failure)
+
+        if (auto commitResult = mutation.commit(LibraryChangeSet{}); !commitResult)
         {
-          return std::unexpected{failure.error()};
+          return std::unexpected{commitResult.error()};
         }
+
+        return result;
       };
     }
 
@@ -545,7 +532,8 @@ namespace ao::rt
           }
 
           auto mutation = std::move(*mutationResult);
-          auto reportResult = importOperation.preview(*preparedResult, mutation.transaction());
+          auto reportResult = mutation.apply([&importOperation, &preparedResult](library::WriteTransaction& transaction)
+                                             { return importOperation.preview(*preparedResult, transaction); });
 
           if (!reportResult)
           {
@@ -558,10 +546,6 @@ namespace ao::rt
                                                                              availability.runtimeInstanceId,
                                                                              targetRevision)};
         }());
-    }
-    catch (lmdb::TransactionFailure const& failure)
-    {
-      optResult.emplace(std::unexpected{failure.error()});
     }
     catch (std::exception const& error)
     {
@@ -681,26 +665,30 @@ namespace ao::rt
           }
 
           auto mutation = std::move(*mutationResult);
-          auto importResult = importOperation.apply(binding.prepared, mutation.transaction());
+          auto importResult = mutation.apply([&importOperation, &binding](library::WriteTransaction& transaction)
+                                             { return importOperation.apply(binding.prepared, transaction); });
 
           if (!importResult)
           {
             return std::unexpected{importResult.error()};
           }
 
-          auto changeSet = importOperation.buildChangeSet(binding.prepared, mutation.transaction());
+          auto changeSetResult = mutation.apply(
+            [&importOperation, &binding](library::WriteTransaction& transaction) -> Result<LibraryChangeSet>
+            { return importOperation.buildChangeSet(binding.prepared, transaction); });
 
-          if (auto commitResult = mutation.commit(std::move(changeSet)); !commitResult)
+          if (!changeSetResult)
+          {
+            return std::unexpected{changeSetResult.error()};
+          }
+
+          if (auto commitResult = mutation.commit(std::move(*changeSetResult)); !commitResult)
           {
             return std::unexpected{commitResult.error()};
           }
 
           return *importResult;
         }());
-    }
-    catch (lmdb::TransactionFailure const& failure)
-    {
-      optResult.emplace(std::unexpected{failure.error()});
     }
     catch (std::exception const& error)
     {

@@ -6,22 +6,23 @@
 #include "FileManifestValidation.h"
 #include "LibraryIdentity.h"
 #include "TrackRecordValidation.h"
+#include "detail/LibraryError.h"
+#include "lmdb/detail/TransactionFailure.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/ExceptionFormat.h>
 #include <ao/library/DictionaryStore.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/ListStore.h>
+#include <ao/library/ListView.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/lmdb/TransactionFailure.h>
 
 #include <algorithm>
 #include <array>
@@ -196,6 +197,33 @@ namespace ao::library
       return {};
     }
 
+    Result<> validateListDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
+    {
+      auto const reader = database.reader(transaction);
+
+      for (auto const& [key, payload] : reader)
+      {
+        auto id = decodePersistedId(key, "List database");
+
+        if (!id)
+        {
+          return std::unexpected{id.error()};
+        }
+
+        if (*id == 0)
+        {
+          return makeError(Error::Code::CorruptData, "List database contains the reserved id zero");
+        }
+
+        if (!ListView{payload}.isValid())
+        {
+          return makeError(Error::Code::CorruptData, std::format("List {} record is structurally corrupt", *id));
+        }
+      }
+
+      return {};
+    }
+
     Result<> validateManifestDatabase(lmdb::Database const& database, lmdb::ReadTransaction const& transaction)
     {
       auto const reader = database.reader(transaction);
@@ -353,6 +381,11 @@ namespace ao::library
         return std::unexpected{validation.error()};
       }
 
+      if (auto validation = validateListDatabase(*listsDb, *initializationTransaction); !validation)
+      {
+        return std::unexpected{validation.error()};
+      }
+
       if (auto validation = validateManifestDatabase(*manifestDb, *initializationTransaction); !validation)
       {
         return std::unexpected{validation.error()};
@@ -448,7 +481,7 @@ namespace ao::library
       _implPtr = std::move(implPtr);
       return {};
     }
-    catch (lmdb::TransactionFailure const& failure)
+    catch (lmdb::detail::TransactionFailure const& failure)
     {
       // open() is the sole public recoverable constructor and must not leak the
       // lexical transaction-unwind marker to its caller. The local Impl candidate
@@ -488,7 +521,21 @@ namespace ao::library
       throwException<Exception>("Failed to begin write transaction: {}", transaction.error().message);
     }
 
-    _implPtr->metadataStore.bumpRevision(transaction->native(_implPtr->identity));
+    try
+    {
+      _implPtr->metadataStore.bumpRevision(transaction->native(_implPtr->identity));
+    }
+    catch (lmdb::detail::TransactionFailure const& failure)
+    {
+      transaction->abort();
+      throwException<Exception>("Failed to initialize write transaction: {}", failure.error().message);
+    }
+    catch (...)
+    {
+      transaction->abort();
+      throw;
+    }
+
     return std::move(*transaction);
   }
 

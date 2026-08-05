@@ -3,6 +3,8 @@
 
 #include <ao/library/TrackBuilder.h>
 
+#include "detail/LibraryError.h"
+#include "lmdb/detail/TransactionFailure.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioScalars.h>
 #include <ao/CoreIds.h>
@@ -14,8 +16,6 @@
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
-#include <ao/library/detail/LibraryError.h>
-#include <ao/lmdb/TransactionFailure.h>
 #include <ao/utility/ByteView.h>
 
 #include <gsl-lite/gsl-lite.hpp>
@@ -83,7 +83,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        lmdb::throwTransactionFailure(std::move(idResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(idResult.error()));
       }
 
       return *idResult;
@@ -655,7 +655,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      lmdb::throwTransactionFailure(ex.error());
+      lmdb::detail::throwTransactionFailure(ex.error());
     }
   }
 
@@ -677,7 +677,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      lmdb::throwTransactionFailure(ex.error());
+      lmdb::detail::throwTransactionFailure(ex.error());
     }
   }
 
@@ -709,7 +709,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      lmdb::throwTransactionFailure(ex.error());
+      lmdb::detail::throwTransactionFailure(ex.error());
     }
   }
 
@@ -730,7 +730,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        lmdb::throwTransactionFailure(std::move(idResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(idResult.error()));
       }
 
       prepared._tagIds.push_back(*idResult);
@@ -855,7 +855,7 @@ namespace ao::library
 
       if (!idResult)
       {
-        lmdb::throwTransactionFailure(std::move(idResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(idResult.error()));
       }
 
       resolvedPairs.emplace_back(*idResult, value);
@@ -885,7 +885,7 @@ namespace ao::library
 
       if (!resourceResult)
       {
-        lmdb::throwTransactionFailure(std::move(resourceResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(resourceResult.error()));
       }
 
       _coverArt.push_back({.resourceId = *resourceResult, .type = pending.type});
@@ -1137,7 +1137,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      lmdb::throwTransactionFailure(ex.error());
+      lmdb::detail::throwTransactionFailure(ex.error());
     }
   }
 
@@ -1154,7 +1154,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      lmdb::throwTransactionFailure(ex.error());
+      lmdb::detail::throwTransactionFailure(ex.error());
     }
   }
 
@@ -1172,7 +1172,7 @@ namespace ao::library
     }
     catch (detail::LibraryException const& ex)
     {
-      lmdb::throwTransactionFailure(ex.error());
+      lmdb::detail::throwTransactionFailure(ex.error());
     }
   }
 } // namespace ao::library

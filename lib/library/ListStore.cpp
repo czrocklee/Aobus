@@ -5,10 +5,11 @@
 
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/library/ListView.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
@@ -26,7 +27,7 @@ namespace ao::library
   {
     [[noreturn]] void throwCorruptList(ListId const id)
     {
-      detail::throwLibraryError(Error::Code::CorruptData, std::format("List {} record is structurally corrupt", id));
+      throwException<Exception>("List {} record is structurally corrupt after library validation", id);
     }
 
     Result<ListView> validateListPayload(std::span<std::byte const> const data, std::string_view const operation)

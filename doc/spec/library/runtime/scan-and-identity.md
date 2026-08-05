@@ -45,7 +45,7 @@ The runtime-private `ScanApplyOperation::run()` is the distinct offline composit
 - A relink preserves `TrackId` and updates the track URI and manifest binding together or not at all.
 - Automatic relinking requires one missing row and one new file with exactly equal non-pending audio identity.
 - Identity backfill never commits a hash for a row or file whose live size or modification time changed after snapshot.
-- Persisted manifest corruption stops plan construction or backfill with `CorruptData`; it is not a per-file `Error` item and no partial plan or later manifest row is delivered.
+- Persisted manifest corruption present at open rejects the library with `CorruptData`; a post-open manifest iterator integrity breach raises the infrastructure exception and delivers no partial plan or later row.
 - Before scan apply mutates any item, every plan item that names an existing Track must still have valid hot and cold records; missing evidence is `CorruptData` and is never reinterpreted as a new Track.
 
 ## Plan classification
@@ -64,7 +64,8 @@ The planner recursively walks the configured music root, skips unsupported and n
 A missing root or root-level walk failure is a plan-building error.
 Per-entry problems may appear as error items without erasing other classifications.
 These item errors describe external filesystem, path-resolution, or media inspection failures.
-Malformed persisted manifest keys or values instead fail the complete `buildPlan()` result at the first bad row, because continuing would make corrupt storage look like an ordinary missing file.
+A malformed manifest found by a point read fails the complete `buildPlan()` result at that row.
+A malformed row found by manifest iteration after the library passed its open gate raises the infrastructure exception, because continuing would make corrupt storage look like an ordinary missing file and the iterator has no partial-result contract.
 An entry that is present but cannot be resolved or inspected safely is `Error`, not also `Missing`; its existing manifest row remains unchanged when the plan is applied.
 The planner reads the persisted library id, committed revision, and manifest from the same LMDB snapshot and stores that binding in the returned plan.
 
@@ -130,8 +131,8 @@ Aobus never writes a guessed identity.
 2. Fingerprint files concurrently outside LMDB transactions; the default concurrency is `clamp(hardware_concurrency / 2, 2, 4)`.
 3. Acquire one bounded coordinator mutation per serial write-back batch, re-read every row, and commit identities for rows still available, pending, and stat-equal.
 
-Per-file failures are reported and counted without aborting the run; database failures fail the operation.
-Manifest iteration validates each persisted row and returns `CorruptData` at the existing task boundary rather than skipping it or treating it as pending work.
+Per-file failures are reported and counted without aborting the run; recoverable database failures fail the operation.
+Manifest iteration validates each persisted row and raises the general infrastructure exception on a post-open integrity breach rather than skipping it, treating it as pending work, or translating the private iterator mechanism in runtime.
 Progress callbacks are serialized but may run on worker-pool threads.
 
 Cancellation stops hashing at chunk boundaries, commits valid rows already completed in the current batch, leaves unfinished rows pending, and propagates `OperationCancelled` after callback-owner maintenance cleanup.
@@ -148,8 +149,9 @@ Pairing the 128-bit signature with payload length is the complete equality key.
 ## Failure and cancellation
 
 Filesystem, mapping, tag parsing, media corruption, database, and resource-limit failures use `Result` or the per-item failure channel according to whether useful plan/application work can continue.
-Safely detected malformed persisted manifest or Track evidence is operation-level `CorruptData`, not an external-item failure that permits continuation.
-Any post-effect storage failure exits the complete scan transaction owner through `lmdb::TransactionFailure`; the outer boundary translates it only after the transaction has aborted.
+Safely detected malformed persisted manifest or Track evidence at a declared `Result` boundary is operation-level `CorruptData`, not an external-item failure that permits continuation.
+Post-open manifest iterator corruption is an invariant fault and propagates through the general exception channel.
+Any post-effect storage failure reaches the scan's root `WriteTransaction::apply()` boundary; that owner aborts the complete scan transaction before returning the carried `Error`.
 Cancellation is cooperative during payload hashing and before commit.
 The shared UIModel workflow distinguishes an up-to-date plan, an errors-only
 plan, and an actionable plan before application. Frontends remain responsible

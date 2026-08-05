@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/lmdb/detail/TransactionFailure.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Environment.h>
-#include <ao/lmdb/TransactionFailure.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -365,7 +365,7 @@ namespace ao::lmdb::test
           std::ignore = writer.create(3, oversized);
           FAIL("oversized create should throw");
         }
-        catch (TransactionFailure const& failure)
+        catch (detail::TransactionFailure const& failure)
         {
           CHECK(failure.error().code == Error::Code::IoError);
         }
@@ -378,7 +378,7 @@ namespace ao::lmdb::test
           std::ignore = writer.create(3, oversized.size());
           FAIL("oversized reserved create should throw");
         }
-        catch (TransactionFailure const& failure)
+        catch (detail::TransactionFailure const& failure)
         {
           CHECK(failure.error().code == Error::Code::IoError);
         }
@@ -391,7 +391,7 @@ namespace ao::lmdb::test
           std::ignore = writer.update(1, oversized);
           FAIL("oversized update should throw");
         }
-        catch (TransactionFailure const& failure)
+        catch (detail::TransactionFailure const& failure)
         {
           CHECK(failure.error().code == Error::Code::IoError);
         }
@@ -404,7 +404,7 @@ namespace ao::lmdb::test
           std::ignore = writer.update(1, oversized.size());
           FAIL("oversized reserved update should throw");
         }
-        catch (TransactionFailure const& failure)
+        catch (detail::TransactionFailure const& failure)
         {
           CHECK(failure.error().code == Error::Code::IoError);
         }

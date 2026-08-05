@@ -24,8 +24,8 @@ Each row records the outgoing direct edges of one active proposal; sequence numb
 
 | RFC | Hard | Conditional | Integration |
 |---|---|---|---|
-| [RFC 0001: Result-oriented library mutations and write savepoints](0001-library-mutation-savepoints.md) | None | None | None |
+| [RFC 0001: Library mutation write savepoints](0001-library-mutation-savepoints.md) | None | None | None |
 
 ## Proposal inventory
 
-- [RFC 0001: Result-oriented library mutations and write savepoints](0001-library-mutation-savepoints.md) proposes one recoverable Result contract for library mutations, nested LMDB savepoints under one writer authority, and a transaction-chain Dictionary journal.
+- [RFC 0001: Library mutation write savepoints](0001-library-mutation-savepoints.md) proposes nested LMDB savepoints under the current root Result boundary, one writer authority, and a transaction-chain Dictionary journal.

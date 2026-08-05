@@ -13,6 +13,7 @@
 #include <ao/Exception.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestStore.h>
+#include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
@@ -22,7 +23,6 @@
 #include <ao/library/WritableMusicLibrary.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/lmdb/Transaction.h>
-#include <ao/lmdb/TransactionFailure.h>
 #include <ao/utility/ByteView.h>
 
 #include <catch2/catch_test_macros.hpp>
@@ -256,6 +256,34 @@ namespace ao::library::test
     }
   }
 
+  TEST_CASE("MusicLibrary - rejects invalid persisted List state", "[library][unit][music-library][integrity]")
+  {
+    auto const temp = ao::test::TempDir{};
+    initializeLibrary(temp.path());
+
+    SECTION("List keys must be nonzero")
+    {
+      auto const validPayload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
+      createRawIntegerRow(temp.path(), "lists", 0, validPayload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("List keys must have the native 32-bit width")
+    {
+      auto const shortKey = std::array{std::byte{1}, std::byte{0}};
+      auto const validPayload = ao::test::requireValue(ListBuilder::makeEmpty().serialize());
+      createRawIntegerKeyRow(temp.path(), "lists", shortKey, validPayload);
+      requireCorruptLibrary(temp.path());
+    }
+
+    SECTION("List payloads must have the exact canonical layout")
+    {
+      auto const invalidPayload = std::array{std::byte{0x42}};
+      createRawIntegerRow(temp.path(), "lists", 1, invalidPayload);
+      requireCorruptLibrary(temp.path());
+    }
+  }
+
   TEST_CASE("MusicLibrary - rejects invalid persisted manifest state", "[library][unit][music-library][integrity]")
   {
     auto const temp = ao::test::TempDir{};
@@ -416,26 +444,18 @@ namespace ao::library::test
         MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
       auto secondSmallLibrary = ao::test::requireValue(
         MusicLibrary::open(temp.path(), temp.path() / "small-db", MusicLibrary::Options{.mapSize = kMapSize}));
-      auto optFailure = std::optional<Error>{};
       {
         auto writerResult = WritableMusicLibrary::acquire(smallLibrary);
         REQUIRE(writerResult);
-
-        try
-        {
-          auto transaction = writerResult->writeTransaction();
-          auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
-          std::ignore = smallLibrary.resources().writer(transaction).create(oversizedValue);
-          FAIL("an oversized resource write should fail the transaction");
-        }
-        catch (lmdb::TransactionFailure const& transactionFailure)
-        {
-          optFailure = transactionFailure.error();
-        }
+        auto transaction = writerResult->writeTransaction();
+        auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
+        auto failureResult =
+          transaction.apply([&smallLibrary, &oversizedValue](WriteTransaction& activeTransaction)
+                            { return smallLibrary.resources().writer(activeTransaction).create(oversizedValue); });
+        REQUIRE_FALSE(failureResult);
+        CHECK(failureResult.error().code == Error::Code::IoError);
       }
 
-      REQUIRE(optFailure);
-      CHECK(optFailure->code == Error::Code::IoError);
       REQUIRE(WritableMusicLibrary::acquire(secondSmallLibrary));
     }
   }

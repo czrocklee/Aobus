@@ -63,6 +63,8 @@ namespace ao::library
      * Yields entries in strictly increasing lexicographic byte order of the
      * URI key (the manifest database uses LMDB's default memcmp comparator).
      * URI-cursor pagination over the manifest depends on this ordering.
+     * A row that violates the open-time storage invariant throws ao::Exception;
+     * iteration never yields a corrupt-row variant or a partial-success result.
      */
     class Iterator final
     {

@@ -14,10 +14,11 @@ namespace ao::library::detail
 {
   // Short-range control-flow exception internal to the library store/serialization
   // layer. Carries a recoverable Error raised with throwLibraryError across a
-  // short implementation-only call chain. Catch it only at the nearest existing
-  // Result, command, or task boundary that owns the complete library operation.
-  // Keep the catch narrow to this type so a non-domain fault (e.g.
-  // std::bad_alloc) is never laundered into a recoverable code.
+  // short implementation-only call chain. Catch it only at the nearest
+  // ao::library-owned Result boundary that owns the complete operation. Runtime,
+  // CLI, and frontend code must never name this type. Keep the catch narrow so a
+  // non-domain fault (e.g. std::bad_alloc) is never laundered into a recoverable
+  // code.
   class LibraryException final : public Exception
   {
   public:

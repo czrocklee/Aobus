@@ -66,6 +66,8 @@ The subsystem where an outcome originates owns its initial semantic classificati
 External data, devices, storage, user input, formats, and resource limits use recoverable result channels when the caller can report or react.
 Ordinary absence, end-of-stream, no-op, and other normal domain states remain values rather than manufactured errors.
 Broken internal preconditions and impossible in-memory states use invariant exceptions or contracts because downstream application policy cannot recover them safely.
+Persisted structure that can be inspected before exposure remains recoverable at the library-open boundary.
+Once that complete gate has established a store invariant, a later invalid row from an iterator is an infrastructure fault: the iterator has no partial-result or safe-continuation protocol, and application code must not manufacture one by catching a private store exception.
 
 Core subsystems expose typed errors and values without knowing runtime notifications, UIModel state, widgets, terminal cells, or CLI formatting.
 Private subsystem exceptions may simplify local implementation only when the public subsystem boundary translates them back into its declared channel.
@@ -75,6 +77,11 @@ Private subsystem exceptions may simplify local implementation only when the pub
 Each composition boundary preserves the semantic distinction chosen by the origin.
 A runtime operation that already has a `Result` channel propagates recoverable lower errors rather than laundering them into an exception or empty value.
 A boundary may add operation context or translate a third-party exception, but it does not infer behavior from message text or discard diagnostic origin information.
+
+A private storage exception may cross only the shortest core-library scope needed to restore transactional safety or reach another library-owned `Result` boundary.
+Before a library write wrapper is exposed, construction catches a native begin or revision-initialization failure, releases writer authority, and raises the library's general infrastructure exception because no recoverable caller branch exists.
+For an exposed library write, the root `WriteTransaction` owner catches the native mutation marker, aborts and terminalizes the transaction, and only then returns its carried `Error`; the runtime consumes that `Result` and never names the lower exception type.
+An unrelated exception is not reclassified: the same owner aborts first and then rethrows it to the established invariant boundary.
 
 Runtime may reclassify a lower outcome only because the enclosing application operation defines a narrower meaning.
 For example, a confirmed lookup miss may become an optional value, while a store fault cannot become “not found” merely because the caller has no error UI.
@@ -241,6 +248,7 @@ They do not invent domain recovery or silently continue mutation from a partiall
 - A future-returning task has one explicit exception owner and is not also diagnosed as an unobserved coroutine.
 - An injected async exception handler is diagnostic-only, may run concurrently, and cannot mutate executor-affine application state.
 - A catch-all at a composition leaf may contain and log an unexpected fault but cannot convert it into an ordinary success value.
+- A validated-store iterator treats end as a normal value and propagates any later cursor or row-integrity fault through the general invariant channel; runtime and frontend code do not catch private storage carriers to create a partial result.
 
 ## Failure, cancellation, and lifetime boundaries
 

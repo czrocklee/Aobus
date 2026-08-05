@@ -10,6 +10,8 @@
 #include "test/unit/runtime/AppRuntimeTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/rt/TrackField.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/LibraryChanges.h>
@@ -227,15 +229,21 @@ namespace ao::rt::test
     auto mutationService = LibraryMutationService{
       mutationExecutor, library::test::requireWritableLibrary(libraryFixture.library()), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto const secondId = library::test::addTrack(libraryFixture.library(),
-                                                  mutation.transaction(),
-                                                  library::test::TrackSpec{
-                                                    .title = "Second Title",
-                                                    .artist = "Second Artist",
-                                                    .work = "Second Work",
-                                                    .tags = {"Second Tag"},
-                                                    .customMetadata = {{"Second Key", "Value"}},
-                                                  });
+    auto secondIdResult = mutation.apply(
+      [&libraryFixture](library::WriteTransaction& transaction) -> Result<TrackId>
+      {
+        return library::test::addTrack(libraryFixture.library(),
+                                       transaction,
+                                       library::test::TrackSpec{
+                                         .title = "Second Title",
+                                         .artist = "Second Artist",
+                                         .work = "Second Work",
+                                         .tags = {"Second Tag"},
+                                         .customMetadata = {{"Second Key", "Value"}},
+                                       });
+      });
+    REQUIRE(secondIdResult);
+    auto const secondId = *secondIdResult;
     REQUIRE(mutation.commit(LibraryChangeSet{.tracksInserted = {secondId}}));
 
     // Storage is committed, but publication is still queued. Every vocabulary

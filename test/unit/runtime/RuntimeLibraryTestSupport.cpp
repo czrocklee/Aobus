@@ -231,7 +231,10 @@ namespace ao::rt::test
     auto executor = InlineExecutor{};
     auto mutationService = LibraryMutationService{executor, library::test::requireWritableLibrary(storage), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto const trackId = library::test::addTrack(storage, mutation.transaction(), spec);
+    auto trackIdResult = mutation.apply([&storage, &spec](library::WriteTransaction& transaction) -> Result<TrackId>
+                                        { return library::test::addTrack(storage, transaction, spec); });
+    REQUIRE(trackIdResult);
+    auto const trackId = *trackIdResult;
     REQUIRE(mutation.commit(LibraryChangeSet{
       .libraryReset = libraryReset,
       .tracksInserted = {trackId},

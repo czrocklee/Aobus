@@ -160,7 +160,10 @@ namespace ao::rt
   {
   }
 
-  LibraryMutationService::Mutation::~Mutation() = default;
+  LibraryMutationService::Mutation::~Mutation()
+  {
+    abort();
+  }
 
   LibraryMutationService::Mutation::Mutation(Mutation&& other) noexcept
     : _owner{std::exchange(other._owner, nullptr)}
@@ -170,9 +173,20 @@ namespace ao::rt
   {
   }
 
-  library::WriteTransaction& LibraryMutationService::Mutation::transaction() noexcept
+  void LibraryMutationService::Mutation::abort() noexcept
   {
-    return _transaction;
+    if (_terminal)
+    {
+      return;
+    }
+
+    _terminal = true;
+    _transaction.abort();
+
+    if (_writerLock.owns_lock())
+    {
+      _writerLock.unlock();
+    }
   }
 
   Result<LibraryMutationService::CommitInfo> LibraryMutationService::Mutation::commit(LibraryChangeSet changeSet)
@@ -182,7 +196,15 @@ namespace ao::rt
       return makeError(Error::Code::InvalidState, "Library mutation is already terminal");
     }
 
-    return _owner->commit(*this, std::move(changeSet));
+    try
+    {
+      return _owner->commit(*this, std::move(changeSet));
+    }
+    catch (...)
+    {
+      abort();
+      throw;
+    }
   }
 
   LibraryMutationService::MaintenanceGuard::MaintenanceGuard(std::weak_ptr<LifetimeState> lifetimeStatePtr,
@@ -610,17 +632,7 @@ namespace ao::rt
       mutation._writerLock.unlock();
     };
 
-    std::uint64_t revision = 0;
-
-    try
-    {
-      revision = _library.libraryRevision(mutation._transaction);
-    }
-    catch (...)
-    {
-      releaseMutation();
-      throw;
-    }
+    auto const revision = _library.libraryRevision(mutation._transaction);
 
     std::uint64_t expectedRevision = 0;
 

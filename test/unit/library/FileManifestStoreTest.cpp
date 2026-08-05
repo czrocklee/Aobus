@@ -1,29 +1,58 @@
 // SPDX-License-Identifier: MIT
-// Copyright (c) 2024-2025 Aobus Contributors
+// Copyright (c) 2024-2026 Aobus Contributors
 
 #include <ao/library/FileManifestStore.h>
 
 #include "test/unit/library/LibraryStoreTestSupport.h"
+#include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include <ao/Error.h>
 #include <ao/library/FileManifestBuilder.h>
 #include <ao/library/FileManifestLayout.h>
+#include <ao/lmdb/Database.h>
+#include <ao/lmdb/Environment.h>
+#include <ao/lmdb/Transaction.h>
+#include <ao/utility/ByteView.h>
 #include <ao/utility/Xxh3.h>
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace ao::library::test
 {
+  namespace
+  {
+    void seedPostOpenMalformedManifest(std::filesystem::path const& databasePath)
+    {
+      auto environmentResult = lmdb::Environment::open(
+        databasePath.string(), {.flags = lmdb::kEnvNoTls, .maxDatabases = 8, .mapSize = kTestMusicLibraryMapSize});
+      REQUIRE(environmentResult);
+      auto environment = std::move(*environmentResult);
+      auto transactionResult = lmdb::WriteTransaction::begin(environment);
+      REQUIRE(transactionResult);
+      auto transaction = std::move(*transactionResult);
+      auto manifestResult = lmdb::Database::open(transaction, "file_manifest", lmdb::Database::KeyKind::Blob);
+      REQUIRE(manifestResult);
+      auto const malformedKey = utility::bytes::view(std::string_view{"zz"});
+      auto const payload = FileManifestBuilder::makeEmpty().trackId(TrackId{1}).serialize();
+      REQUIRE(manifestResult->writer(transaction).create(malformedKey, payload));
+      REQUIRE(transaction.commit());
+    }
+  } // namespace
+
   TEST_CASE("FileManifestStore - create returns ValueTooLarge for invalid URI length", "[library][unit][manifest]")
   {
     auto fixture = LibraryStoreFixture{};
@@ -220,6 +249,19 @@ namespace ao::library::test
     auto const result = store.reader(rtxn).get("song.flac");
     REQUIRE_FALSE(result);
     CHECK(result.error().code == Error::Code::NotFound);
+  }
+
+  TEST_CASE("FileManifestStore - post-open corrupt iterator rows fail fast",
+            "[library][regression][manifest][integrity]")
+  {
+    auto fixture = LibraryStoreFixture{};
+    seedPostOpenMalformedManifest(fixture.temp.path() / "db");
+    auto transaction = fixture.library.readTransaction();
+    auto iterator = fixture.library.manifest().reader(transaction).begin();
+
+    CHECK_THROWS_WITH(std::ignore = *iterator,
+                      "File manifest iterator encountered invalid data after library validation: File manifest key has "
+                      "an invalid size");
   }
 
   TEST_CASE("FileManifestStore - exact payload validation is item-relative atomic",

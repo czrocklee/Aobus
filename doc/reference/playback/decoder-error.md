@@ -16,7 +16,7 @@ Lifecycle and recovery semantics belong to the [decoder session specification](.
 ## Code boundary
 
 Public decoder APIs live under `include/ao/audio/` and return `ao::Result`.
-Private translation support lives in `include/ao/audio/detail/DecoderError.h`.
+Private translation support lives in `lib/audio/detail/DecoderError.h` and is not part of the public include surface.
 The exact common error vocabulary belongs to the [error value reference](../failure/error.md).
 
 ## Factory surface
@@ -96,7 +96,7 @@ if (!session)
 
 - [`DecoderFactory.cpp`](../../../lib/audio/DecoderFactory.cpp) owns extension and MP4 sample-entry routing.
 - [`DecoderSession.h`](../../../include/ao/audio/DecoderSession.h) owns the common public operation surface.
-- [`DecoderError.h`](../../../include/ao/audio/detail/DecoderError.h) owns private translation values and helpers.
+- [`DecoderError.h`](../../../lib/audio/detail/DecoderError.h) owns private translation values and helpers.
 - Codec session implementations under [`lib/audio/`](../../../lib/audio/) own their operation-specific messages and lower propagation.
 
 ## Test authority

@@ -8,6 +8,7 @@
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/WritableLibraryTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
+#include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestBuilder.h>
@@ -25,6 +26,7 @@
 #include <filesystem>
 #include <stop_token>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -57,8 +59,7 @@ namespace ao::rt::test
       progressPaths, [](std::filesystem::path const& path) { return path.filename() == "song.flac"; }));
   }
 
-  TEST_CASE("LibraryScan - corrupt manifest iteration returns no partial plan",
-            "[runtime][regression][scan][integrity]")
+  TEST_CASE("LibraryScan - post-open corrupt manifest iteration fails fast", "[runtime][regression][scan][integrity]")
   {
     auto libraryFixture = MusicLibraryFixture{};
 
@@ -86,9 +87,7 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto const result = LibraryScan{libraryFixture.library()}.buildPlan();
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    CHECK_THROWS_AS(std::ignore = LibraryScan{libraryFixture.library()}.buildPlan(), Exception);
   }
 
   TEST_CASE("LibraryScan - applyPlan imports new tracks", "[runtime][unit][library][scan]")

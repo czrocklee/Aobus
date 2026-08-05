@@ -9,13 +9,13 @@
 #include <string>
 #include <utility>
 
-namespace ao::lmdb
+namespace ao::lmdb::detail
 {
   /**
    * Signals a write-operation failure that makes the owning transaction
    * unusable. The exception is control flow inside a transaction-owning
-   * operation; callers translate it to Result only after the transaction
-   * owner has unwound and its destructor has rolled the transaction back.
+   * operation; the nearest library transaction owner explicitly aborts before
+   * translating it to Result or propagating an infrastructure exception.
    */
   class TransactionFailure final : public Exception
   {
@@ -32,4 +32,4 @@ namespace ao::lmdb
   };
 
   [[noreturn]] void throwTransactionFailure(Error error);
-} // namespace ao::lmdb
+} // namespace ao::lmdb::detail

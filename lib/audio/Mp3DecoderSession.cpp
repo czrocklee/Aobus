@@ -3,6 +3,7 @@
 
 #include <ao/audio/Mp3DecoderSession.h>
 
+#include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/MappedFileCursor.h"
 #include "detail/TimeConversion.h"
@@ -13,7 +14,6 @@
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/detail/DecoderError.h>
 #include <ao/audio/detail/Mpg123Runtime.h>
 #include <ao/utility/ByteView.h>
 

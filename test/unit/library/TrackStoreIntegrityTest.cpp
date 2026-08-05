@@ -11,12 +11,10 @@
 #include <ao/library/TrackLayout.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
-#include <ao/library/detail/LibraryError.h>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <tuple>
 
 namespace ao::library::test
 {
@@ -126,16 +124,11 @@ namespace ao::library::test
 
     auto writer = fixture.library.tracks().writer(transaction);
 
-    // Track zero is a caller contract violation, not a recoverable miss, so it
-    // must not read back as NotFound just because no row occupies key zero.
-    try
-    {
-      std::ignore = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *prepared);
-      FAIL("reserved Track id did not raise a corruption fault");
-    }
-    catch (detail::LibraryException const& error)
-    {
-      CHECK(error.error().code == Error::Code::CorruptData);
-    }
+    // Track zero is a corrupt target, not a recoverable miss, so it must not
+    // read back as NotFound just because no row occupies key zero.
+    auto const result = updatePreparedHotTrackRecord(writer, kInvalidTrackId, *prepared);
+    REQUIRE_FALSE(result);
+    CHECK(result.error().code == Error::Code::CorruptData);
+    REQUIRE(transaction.commit());
   }
 } // namespace ao::library::test

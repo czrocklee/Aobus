@@ -101,7 +101,8 @@ Callers parse JSON rather than relying on byte-exact whitespace from the ryml em
 ## Failure and cancellation
 
 Query/format compilation, unknown ids, invalid list ancestry, unsupported operation, storage, import/export, resource IO, scan, and verification failures become `CommandError`, print one diagnostic, and exit `1`.
-Safely detected malformed dictionary, Track, or manifest state rejects runtime construction or the enclosing operation as `CorruptData`; it is not skipped by stats, dump, scan, or identity commands, and the invocation exits nonzero.
+Safely detected malformed dictionary, Track, List, or manifest state present during runtime construction rejects it as `CorruptData`.
+A later validated-store iterator integrity breach is an internal Aobus exception rather than a command error; neither case is skipped by stats, dump, scan, export, or identity commands, and the invocation exits nonzero.
 Unexpected Aobus invariant exceptions are labeled internal errors; other exceptions use the generic CLI error leaf.
 
 The CLI command invocation is synchronous at its adapter boundary.

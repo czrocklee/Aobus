@@ -20,6 +20,8 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace ao::async
@@ -55,13 +57,44 @@ namespace ao::rt
       Mutation(Mutation&& other) noexcept;
       Mutation& operator=(Mutation&& other) = delete;
 
-      library::WriteTransaction& transaction() noexcept;
+      // An error result or exception terminalizes this mutation and releases
+      // writer admission. Later apply() or commit() calls return InvalidState.
+      template<
+        typename Function,
+        typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Function, library::WriteTransaction&>>>
+        requires library::detail::IsResult<OperationResult>::value
+      OperationResult apply(Function&& function)
+      {
+        if (_owner == nullptr || _terminal)
+        {
+          return makeError(Error::Code::InvalidState, "Library mutation is already terminal");
+        }
+
+        try
+        {
+          auto result = _transaction.apply(std::forward<Function>(function));
+
+          if (!result)
+          {
+            abort();
+          }
+
+          return result;
+        }
+        catch (...)
+        {
+          abort();
+          throw;
+        }
+      }
+
       Result<CommitInfo> commit(LibraryChangeSet changeSet);
 
     private:
       Mutation(LibraryMutationService& owner,
                std::unique_lock<std::mutex> writerLock,
                library::WriteTransaction transaction);
+      void abort() noexcept;
 
       LibraryMutationService* _owner = nullptr;
       std::unique_lock<std::mutex> _writerLock;

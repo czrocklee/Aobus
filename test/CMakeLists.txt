@@ -212,6 +212,7 @@ add_executable(ao_core_test
     unit/library/AudioIdentityTest.cpp
     unit/library/ListStoreTest.cpp
     unit/library/ResourceStoreTest.cpp
+    unit/library/WriteTransactionTest.cpp
 
     unit/library/TrackStoreTest.cpp
     unit/library/TrackWriteTest.cpp

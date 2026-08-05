@@ -3,6 +3,7 @@
 
 #include <ao/audio/WavDecoderSession.h>
 
+#include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include <ao/AudioCodec.h>
 #include <ao/Error.h>
@@ -11,7 +12,6 @@
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/detail/DecoderError.h>
 #include <ao/media/wav/Riff.h>
 #include <ao/utility/MappedFile.h>
 

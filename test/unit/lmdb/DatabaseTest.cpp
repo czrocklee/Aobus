@@ -3,12 +3,12 @@
 
 #include <ao/lmdb/Database.h>
 
+#include "lib/lmdb/detail/TransactionFailure.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/lmdb/LmdbTestSupport.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/lmdb/Environment.h>
-#include <ao/lmdb/TransactionFailure.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
@@ -82,7 +82,7 @@ namespace ao::lmdb::test
       std::ignore = Database::open(transaction, "second");
       FAIL("opening a database beyond maxdbs should throw");
     }
-    catch (TransactionFailure const& transactionFailure)
+    catch (detail::TransactionFailure const& transactionFailure)
     {
       optFailure = transactionFailure.error();
     }

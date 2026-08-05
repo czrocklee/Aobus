@@ -25,7 +25,7 @@ This surface belongs to the **core libraries** layer in the [system architecture
 The library is one LMDB environment at the database path passed to `MusicLibrary::open`; normal application composition supplies `<music-root>/.aobus/library`.
 `MusicLibrary::open` uses `MDB_NOTLS`, allows eight named databases, and defaults to a 1 GiB map unless `MusicLibrary::Options::mapSize` overrides it.
 It is the sole public recoverable construction boundary for `MusicLibrary` and returns `Result<MusicLibrary>`; there is no throwing public constructor or exception compatibility path.
-It validates the metadata/version gate and the dictionary, Track, and manifest invariants described below before exposing any store.
+It validates the metadata/version gate and the dictionary, Track, List, and manifest invariants described below before exposing any store.
 An absent metadata header initializes a library only when every named database is empty; data without that header is `CorruptData`, not a partially initialized new library.
 
 The database is host-local rather than an interchange format.
@@ -39,7 +39,10 @@ Integer keys use LMDB native word order and record structs are host-endian; [lib
 
 `MusicLibrary::readTransaction()` returns a move-only `ReadTransaction` that directly owns one native LMDB read snapshot.
 Failure to begin the native transaction raises the library's general storage exception; this API has no recoverable typed-error channel.
-`WritableMusicLibrary::acquire(MusicLibrary&)` returns the explicit move-only capability that can create a `WriteTransaction`; `MusicLibrary` exposes no public write-transaction factory.
+`WritableMusicLibrary::acquire(MusicLibrary&)` returns the explicit move-only capability whose `writeTransaction()` factory returns a `WriteTransaction`; `MusicLibrary` exposes no public write-transaction factory.
+The factory performs native begin and the transaction's one staged revision bump before exposing the wrapper.
+Either failure releases the process writer gate and discards the transaction's lease-anchor reference, then raises the library's general storage exception instead of creating a recoverable authoring result.
+The originating writable capability continues to hold its process session lease.
 The write wrapper owns one native transaction, its transaction-local dictionary writer, the process writer gate, and a shared anchor to the writable capability's lease.
 
 The specialized stores are const service handles.
@@ -72,7 +75,7 @@ All integer identifiers are 32-bit values and reserve `0` as invalid.
 - A track is appended to `tracks_hot` first and written to `tracks_cold` under the same id.
 - A resource key starts from the low 32 bits of XXH3-64, remaps zero to one, and linearly probes with full-content comparison; identical bytes reuse the existing id.
 - Dictionary ids produced by current writers are the dense committed range `1..entryCount`; new text receives the next id, repeated text reuses its existing id, and committed ids are never deleted or rebound.
-- Persisted dictionary and Track integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, while Track keys are nonzero matching hot/cold pairs.
+- Persisted dictionary, Track, and List integer keys are exactly four native bytes before conversion; dictionary keys are the dense range `1..N`, Track keys are nonzero matching hot/cold pairs, and List keys are nonzero.
 - An aborted transaction-local dictionary tail has no durable identity and its ids may be reused by a later transaction.
 - The dictionary persists id-to-string rows and rebuilds its string-to-id index in memory when opened; that same traversal validates key width, dense order, and text uniqueness before the store is exposed.
 - Manifest keys are normalized root-relative URI bytes, limited to 500 bytes, then zero-padded to a four-byte multiple; an oversized key returns `ValueTooLarge`.
@@ -120,7 +123,7 @@ Those gates check every representable size and the canonical Track URI before di
 That private zero-copy path reserves the hot value, fills every byte, validates it, and lets the reservation leave scope before reserving the cold value.
 Updates follow the same per-side sequence.
 Prepared writes fill a transaction-owned reservation and validate the complete bytes before the reservation leaves scope.
-A canonical post-fill validation failure is an internal `InvalidState` fault; it escapes the mutation scope and the owning transaction destructor aborts the transaction.
+A canonical post-fill validation failure is an internal `InvalidState` fault; the root operation owner explicitly aborts the transaction before rethrowing it.
 
 Create requires both canonical payloads and allocates the identity by appending to `tracks_hot`, then creates the same key in `tracks_cold`.
 A cold-key conflict after hot allocation is `CorruptData` and rolls back the hot row.
@@ -128,11 +131,14 @@ After open establishes the exact-pair invariant, update helpers do not rescan th
 A single-side update checks its target row and returns `NotFound` without terminating the transaction when that row is absent.
 `updatePreparedTrackRecord()` checks the hot target once before its first mutation, then relies on the established pair invariant for the cold replacement.
 It changes both sides as one logical operation.
-If any multi-side mutation reaches its first successful storage update and a later storage step fails, the mutation raises `lmdb::TransactionFailure`; the owner unwinds before translating the failure to its enclosing `Result` boundary.
+If any multi-side mutation reaches its first successful storage update and a later storage step fails, the mutation raises `lmdb::detail::TransactionFailure`; the root operation owner explicitly aborts before translating the failure to its enclosing `Result` boundary.
 
-Expected no-mutation outcomes (`NotFound`, `Conflict` from an exclusive create, and integer-key exhaustion) are returned as `Result` values and leave the write transaction usable.
-An LMDB fault from a mutation path is carried by `lmdb::TransactionFailure` because continuing or committing could expose only a successful prefix of the logical operation.
-The exception is caught only outside the lexical transaction owner, after destruction has rolled back every uncommitted row; no public library writer exposes a transaction that may be continued after failure.
+Expected no-mutation outcomes (`NotFound`, `Conflict` from an exclusive create, and integer-key exhaustion) are returned as `Result` values and leave the lower store transaction mechanically usable.
+When such an error is the result of a root `WriteTransaction::apply()` body, root policy still aborts the complete transaction before returning it.
+An LMDB fault from a mutation path is carried by `lmdb::detail::TransactionFailure` because continuing or committing could expose only a successful prefix of the logical operation.
+`WriteTransaction::apply()` catches that marker, explicitly aborts every uncommitted row, terminalizes the wrapper, and returns the carried error.
+`WriteTransaction::commit()` provides the same containment for a mutation fault during dictionary preparation.
+No public runtime writer exposes a transaction that may be continued after either failure.
 
 `TrackStore::Writer::remove()` deletes both physical keys without decoding their values and returns whether the Track pair existed; both absent returns false.
 The write surface is not a damaged-database repair path because a one-sided physical Track cannot pass open.
@@ -218,7 +224,8 @@ Manifest point reads, iteration, and writes share one exact record validator.
 Keys must be nonempty canonical `LibraryUri` bytes with the minimal zero padding needed to reach a four-byte multiple.
 Values must be exactly 48 bytes, carry a nonzero Track id, a declared status, three zero reserved bytes, and either both parts of an audio identity or neither.
 `FileManifestStore::Writer::put()` validates the key and value before its first LMDB mutation.
-Only a point-read `NotFound` may be interpreted as absence; a malformed value is `CorruptData`, and iterator dereference stops the enclosing operation through the private library error carrier rather than skipping the row.
+Only a point-read `NotFound` may be interpreted as absence, and a malformed point-read value is `CorruptData`.
+Iterator dereference after a successful open assumes the validated store invariant; a malformed row raises the general `ao::Exception` infrastructure channel rather than skipping the row, returning partial output, or exposing a private library carrier.
 
 ## Validation rules
 
@@ -226,7 +233,7 @@ Builders are the only record producers and own overflow and structural validatio
 `ListStore::Writer::create()` and `update()` repeat the complete structural gate before issuing an LMDB mutation; creation returns only the durable-candidate `ListId`, never a transaction-bound `ListView`.
 An invalid payload returns `CorruptData`, and update leaves the prior value unchanged.
 
-Open completes the metadata/version gate, validates dictionary key width, dense ids, and unique text while building its in-memory index, merge-checks the hot/cold Track key sets and validates canonical records plus every dictionary reference, and validates every manifest key and value.
+Open completes the metadata/version gate, validates dictionary key width, dense ids, and unique text while building its in-memory index, merge-checks the hot/cold Track key sets and validates canonical records plus every dictionary reference, validates every List key and record, and validates every manifest key and value.
 These gates all complete before exposure; their internal evaluation order is not an error-precedence contract.
 The first observed failure returns `CorruptData` for the complete open.
 No `MusicLibrary`, runtime source, partial All Tracks membership, or salvage-row view is exposed.
@@ -245,9 +252,9 @@ Those linear checks do not add a per-row scan to normal decoded access.
 A directly constructed invalid `ListView` retains its raw-view safety behavior: `isValid()` is false and decoded fields are empty or invalid.
 That `ListView` behavior is not the `ListStore` absence contract.
 For `ListStore::Reader::get()` and `ListStore::Writer::get()`, `nullopt` means only that the key is absent.
-A structurally invalid stored value throws `library::detail::LibraryException` carrying `CorruptData`; dereferencing a List iterator does the same.
+A structurally invalid stored value after successful open throws the general `ao::Exception`; dereferencing a List iterator does the same.
 Callers therefore cannot mistake storage corruption for a missing List or silently omit a corrupt row from a full scan.
-An exception during a write transaction unwinds through the transaction owner and aborts every uncommitted mutation.
+An exception escaping a root write body is rethrown only after the transaction owner has explicitly aborted every uncommitted mutation.
 
 `TrackStore::Reader::get()` and `visitTracks()` use a different partial-view contract: an absent row is skipped/returned as `nullopt`, while a loaded but structurally invalid hot or cold side is returned in a `TrackView` with its validity query false.
 Visitors and other consumers must check the required side before decoded access; a contract failure after earlier visitor calls is not rolled back or reclassified as absence.
@@ -264,7 +271,7 @@ It cannot turn an underlying mapped-file fault into a recoverable record-validat
 
 Opening a database whose metadata magic or stored library version is invalid returns `CorruptData`.
 There is no migration path today; the current reset-and-rescan recovery instruction loses database-only user-authored state and must be treated as an explicit destructive fallback rather than a reconstruction guarantee.
-Safely detected malformed dictionary, Track, or manifest state likewise rejects open as a unit.
+Safely detected malformed dictionary, Track, List, or manifest state likewise rejects open as a unit.
 Preserving curation requires a usable YAML export or another backup made before damage; Aobus does not assume a damaged database can still be exported.
 The Track write sequencing, validation, and return-value contracts do not change stored bytes, so they require neither a format-version increment nor a migration.
 
@@ -289,10 +296,11 @@ Transaction-local dictionary publication does not change the row shape or librar
 
 ## Test authority
 
-- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers environment, metadata, revision, version, and dictionary/open integrity behavior.
+- [`MusicLibraryTest.cpp`](../../../../test/unit/library/MusicLibraryTest.cpp) covers environment, metadata, revision, version, and dictionary/Track/List/manifest open integrity behavior.
 - [`LibraryUriTest.cpp`](../../../../test/unit/library/LibraryUriTest.cpp) locks parsing and the allocation-free persisted canonical predicate to the same canonical spelling.
 - [`ListLayoutTest.cpp`](../../../../test/unit/library/ListLayoutTest.cpp), [`ListBuilderTest.cpp`](../../../../test/unit/library/ListBuilderTest.cpp), and [`ListViewTest.cpp`](../../../../test/unit/library/ListViewTest.cpp) lock the 20-byte header, field offsets, canonical packing, checked sizing, and padding gate.
-- [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks pre-mutation validation and fail-closed point-read, writer-read, and iteration behavior.
+- [`ListStoreTest.cpp`](../../../../test/unit/library/ListStoreTest.cpp) locks pre-mutation validation and post-open fail-fast point-read, writer-read, and iteration behavior.
+- [`FileManifestStoreTest.cpp`](../../../../test/unit/library/FileManifestStoreTest.cpp) locks manifest validation, point-read outcomes, and post-open iterator fail-fast behavior.
 - [`TrackStoreRawLayoutTest.cpp`](../../../../test/unit/library/TrackStoreRawLayoutTest.cpp) locks record layout, load modes, and ordinary store behavior.
 - [`TrackStoreIntegrityTest.cpp`](../../../../test/unit/library/TrackStoreIntegrityTest.cpp) locks reserved-id rejection and the canonical sweep over persisted records.
 - Other layout and serialization tests under [`test/unit/library/`](../../../../test/unit/library/) lock the remaining record sizes, alignment, validation, and store behavior.

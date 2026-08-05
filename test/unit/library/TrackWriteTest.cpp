@@ -4,6 +4,7 @@
 #include <ao/library/TrackWrite.h>
 
 #include "lib/library/TrackRecordValidation.h"
+#include "lib/lmdb/detail/TransactionFailure.h"
 #include "test/unit/TestFixtureSupport.h"
 #include "test/unit/library/MusicLibraryTestSupport.h"
 #include "test/unit/library/TrackStoreTestSupport.h"
@@ -15,7 +16,6 @@
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WriteTransaction.h>
-#include <ao/lmdb/TransactionFailure.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <lmdb.h>
@@ -228,7 +228,7 @@ namespace ao::library::test
         [[maybe_unused]] auto result = updatePreparedTrackRecord(updateWriter, trackId, updatedHot, updatedCold);
         FAIL("updatePreparedTrackRecord should abort when the cold reservation cannot fit");
       }
-      catch (lmdb::TransactionFailure const& transactionFailure)
+      catch (lmdb::detail::TransactionFailure const& transactionFailure)
       {
         optFailure = transactionFailure.error();
       }

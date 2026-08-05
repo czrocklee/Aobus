@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2025 Aobus Contributors
 
+#include <ao/query/ExecutionPlan.h>
+
+#include "detail/QueryError.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
 #include <ao/Error.h>
-#include <ao/query/ExecutionPlan.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/query/detail/Bytecode.h>
 #include <ao/query/detail/FieldResolver.h>
 #include <ao/query/detail/Predicate.h>
-#include <ao/query/detail/QueryError.h>
 #include <ao/utility/String.h>
 #include <ao/utility/VariantVisitor.h>
 

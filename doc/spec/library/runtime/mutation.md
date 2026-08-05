@@ -34,6 +34,7 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - **Order binding** is runtime-created evidence containing one runtime instance id, committed library revision, saved List id, and complete effective source order.
 - **Interactive admission** accepts a command only while authoring is `Available` and no earlier commit is awaiting publication completion.
 - **Dictionary overlay** is the write-transaction-local text/id delta used while serializing records; it is not visible through committed dictionary reads.
+- **Root operation boundary** is `WriteTransaction::apply()` and, for live writes, `LibraryMutationService::Mutation::apply()`; it owns rollback before a failed body can return or throw outward.
 - **Raw order** is a saved List's persisted rank sequence, including ids currently hidden by its parent or local expression.
 
 ## Invariants
@@ -43,9 +44,10 @@ The private `LibraryMutationService` owns the one core writable capability and e
 - One `LibraryMutationService` exclusively owns live-runtime write authority; public runtime consumers cannot create a committing transaction.
 - One writer command owns at most one write transaction and is independently atomic.
 - A sequence of writer calls is a sequence of commits; the API exposes no caller-controlled multi-command transaction.
-- Item neutrality is relative to transaction state at item entry: a rejected item adds no staged mutation of its own, while the revision bump already staged by `WriteTransaction` is outside that delta.
-- A recoverable item rejection that permits later work completes all pure hot/cold size, URI, record-integrity, and reconstruction validation before dictionary, resource, or record mutation.
-- A failure after an item's first staged mutation exits the complete lexical transaction-owner scope through `lmdb::TransactionFailure`; no catch inside that scope may continue writing or commit, and library code does not use nested transactions as savepoints.
+- Every transaction-dependent command body runs through the root operation boundary and returns `Result<T>`.
+- Any error returned by that body aborts and terminalizes the complete root before the error is exposed; an unexpected exception does the same before being rethrown.
+- Private `lmdb::detail::TransactionFailure` and `library::detail::LibraryException` carriers may unwind lower mutation helpers only as far as `WriteTransaction`, which catches them exactly, aborts, and returns the carried error.
+- Library code does not expose nested transactions or item savepoints, so no batch owner continues after a failed root body.
 - An effective command commits one revision and publishes exactly one matching changeset through the coordinator before authoring becomes available at that revision.
 - Interactive commands are rejected throughout import, scan-apply, and audio-identity maintenance.
 - Metadata and tag commits require a current target binding and revalidate runtime identity, availability, revision, and every target while holding coordinator writer ownership.
@@ -67,8 +69,9 @@ Pure misses use the value channel selected by the method: `false`, an empty valu
 Selection-tag intersection treats a stale selected track id as contributing no tags, so the result becomes empty.
 The all-tags query returns distinct tag text and usage counts ordered by descending frequency and then ascending name.
 
-Runtime construction receives only a `MusicLibrary` whose persisted dictionary, paired Track records, dictionary references, and manifest rows passed the open-time integrity gate.
-Safely detected corruption at a later point-read or iterator boundary is never collapsed to a miss or partial result; the enclosing operation returns `CorruptData` where it has a typed boundary.
+Runtime construction receives only a `MusicLibrary` whose persisted dictionary, paired Track records, dictionary references, List rows, and manifest rows passed the open-time integrity gate.
+Safely detected corruption at a later point-read is never collapsed to a miss and returns `CorruptData` where that method has a typed boundary.
+A List or manifest iterator row that violates the established gate instead raises the general infrastructure exception; runtime does not catch a private carrier to return partial output.
 
 ## Track commands
 
@@ -177,10 +180,12 @@ A missing list returns `NotFound`.
 
 Synchronous commands are not cooperatively cancellable.
 All recoverable input and persistence failures use `Result`; malformed internal edit coordinates and impossible invariants remain programmer errors.
+Native transaction begin and revision initialization occur before a `Mutation` is exposed and have no recoverable authoring branch; failure releases writer admission and propagates through the library's general storage-exception boundary.
 
-Pre-effect validation errors may return directly while their item is neutral.
-Once dictionary, resource, or record state has been staged, a storage or canonical postcondition failure unwinds the transaction owner before it is translated to `Result`.
-For a single-item command, a direct `Result` return is valid only when that return also destroys the mutation owner and therefore aborts; a multi-item owner never catches and continues after a post-effect failure.
+Pure validation may return before a transaction is acquired.
+Once a root exists, a command-body `Result` error is exposed only by `apply()`, which explicitly aborts and releases writer ownership even when the C++ transaction or mutation wrapper remains alive.
+Storage mutation faults and recoverable library failures carried by the two private markers are translated at that same boundary after abort; runtime code never catches either marker.
+The current non-nested model provides whole-root rollback only, so a multi-item owner cannot catch an item failure and continue writing later items.
 
 No command publishes a change for a failed, previewed, or no-op transaction.
 When commit fails, staged dictionary mappings are rolled back before readers resume, and allocated ids and prepared resources are not observable as successful command results.
@@ -204,16 +209,17 @@ Exact records and identifier allocation belong to the [library database referenc
 - [`LibraryWriter.h`](../../../../app/include/ao/rt/library/LibraryWriter.h) defines commands and reply values.
 - [`LibraryWriter.cpp`](../../../../app/runtime/library/LibraryWriter.cpp) owns command validation and transaction orchestration.
 - [`LibraryAuthoring.h`](../../../../app/include/ao/rt/library/LibraryAuthoring.h) defines availability, target bindings, and typed outcomes.
-- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns live-runtime admission, commit, and publication completion.
+- [`LibraryMutationService.h`](../../../../app/runtime/library/LibraryMutationService.h) owns live-runtime admission, root-body execution, terminalization, commit, and publication completion.
 - [`MusicLibrary.h`](../../../../include/ao/library/MusicLibrary.h) defines the lower physical facade.
 - [`ReadTransaction.h`](../../../../include/ao/library/ReadTransaction.h) defines read-snapshot ownership and the store-read capability.
-- [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) defines coherent native-write and dictionary-overlay ownership.
+- [`WriteTransaction.h`](../../../../include/ao/library/WriteTransaction.h) defines coherent native-write and dictionary-overlay ownership plus the non-nested root execution boundary.
 
 ## Test map
 
 - [`LibraryReaderTest.cpp`](../../../../test/unit/runtime/library/LibraryReaderTest.cpp) proves coherent runtime values.
+- [`WriteTransactionTest.cpp`](../../../../test/unit/library/WriteTransactionTest.cpp) proves root error containment, rollback, terminal state, and writer-gate reuse.
 - `LibraryWriter*Test.cpp` under [`test/unit/runtime/library/`](../../../../test/unit/runtime/library/) proves metadata, tags, Lists, saved ordering, track creation/deletion, dictionary-neutral previews, errors, and publication boundaries.
-- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, no-op binding retention, and publication reentrancy closure.
+- [`LibraryAuthoringTest.cpp`](../../../../test/unit/runtime/library/LibraryAuthoringTest.cpp) proves binding precedence, all-or-none target validation, failed-mutation admission release, no-op binding retention, and publication reentrancy closure.
 
 ## Related documents
 

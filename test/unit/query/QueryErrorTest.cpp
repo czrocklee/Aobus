@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/query/detail/QueryError.h"
+
 #include <ao/Error.h>
-#include <ao/query/detail/QueryError.h>
 
 #include <catch2/catch_test_macros.hpp>
 

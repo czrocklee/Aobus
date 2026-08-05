@@ -3,6 +3,7 @@
 
 #include <ao/audio/AlacDecoderSession.h>
 
+#include "detail/DecoderError.h"
 #include "detail/DecoderOutputAdapter.h"
 #include "detail/Mp4PacketSource.h"
 #include <ao/AudioCodec.h>
@@ -11,7 +12,6 @@
 #include <ao/audio/PcmBlock.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/SignalFormat.h>
-#include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/ByteView.h>
 
 #include <alac/ALACAudioTypes.h>

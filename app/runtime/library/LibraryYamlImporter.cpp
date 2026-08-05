@@ -23,7 +23,6 @@
 #include <ao/library/TrackStore.h>
 #include <ao/library/TrackWrite.h>
 #include <ao/library/WritableMusicLibrary.h>
-#include <ao/lmdb/TransactionFailure.h>
 #include <ao/query/Parser.h>
 #include <ao/query/QueryCompiler.h>
 #include <ao/rt/TrackField.h>
@@ -806,27 +805,21 @@ namespace ao::rt
       return std::unexpected{writableResult.error()};
     }
 
-    try
+    auto transaction = writableResult->writeTransaction();
+    auto reportResult = transaction.apply([&operation, &preparedResult](library::WriteTransaction& activeTransaction)
+                                          { return operation.apply(*preparedResult, activeTransaction); });
+
+    if (!reportResult)
     {
-      auto transaction = writableResult->writeTransaction();
-      auto reportResult = operation.apply(*preparedResult, transaction);
-
-      if (!reportResult)
-      {
-        return reportResult;
-      }
-
-      if (auto commitResult = transaction.commit(); !commitResult)
-      {
-        return std::unexpected{commitResult.error()};
-      }
-
       return reportResult;
     }
-    catch (lmdb::TransactionFailure const& failure)
+
+    if (auto commitResult = transaction.commit(); !commitResult)
     {
-      return std::unexpected{failure.error()};
+      return std::unexpected{commitResult.error()};
     }
+
+    return reportResult;
   }
 
   Result<ImportReport> LibraryYamlImporter::previewImportFromYamlOffline(std::filesystem::path const& path,
@@ -847,15 +840,9 @@ namespace ao::rt
       return std::unexpected{writableResult.error()};
     }
 
-    try
-    {
-      auto transaction = writableResult->writeTransaction();
-      return operation.preview(*preparedResult, transaction);
-    }
-    catch (lmdb::TransactionFailure const& failure)
-    {
-      return std::unexpected{failure.error()};
-    }
+    auto transaction = writableResult->writeTransaction();
+    return transaction.apply([&operation, &preparedResult](library::WriteTransaction& activeTransaction)
+                             { return operation.preview(*preparedResult, activeTransaction); });
   }
 
   Result<LibraryYamlImportOperation::PreparedImport>

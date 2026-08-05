@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/library/detail/LibraryError.h"
+
 #include <ao/Error.h>
-#include <ao/library/detail/LibraryError.h>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include <ao/query/FormatExpression.h>
+
+#include "detail/QueryError.h"
 #include <ao/AudioCodec.h>
 #include <ao/AudioCodecText.h>
 #include <ao/AudioScalars.h>
@@ -10,9 +13,7 @@
 #include <ao/library/TrackView.h>
 #include <ao/query/Expression.h>
 #include <ao/query/Field.h>
-#include <ao/query/FormatExpression.h>
 #include <ao/query/detail/FieldResolver.h>
-#include <ao/query/detail/QueryError.h>
 #include <ao/utility/VariantVisitor.h>
 
 #include <gsl-lite/gsl-lite.hpp>

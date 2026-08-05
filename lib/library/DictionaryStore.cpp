@@ -3,10 +3,10 @@
 
 #include <ao/library/DictionaryStore.h>
 
+#include "detail/LibraryError.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/Exception.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
 #include <ao/lmdb/Transaction.h>
 #include <ao/utility/ByteView.h>

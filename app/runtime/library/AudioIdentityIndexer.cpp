@@ -13,7 +13,6 @@
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/AudioIdentityIndex.h>
 
@@ -88,89 +87,75 @@ namespace ao::rt
       return FileStatSnapshot{.fileSize = static_cast<std::uint64_t>(fileSize), .mtime = toManifestMtime(writeTime)};
     }
 
-    Result<std::vector<PendingIdentityRow>> collectPendingRows(library::MusicLibrary& ml,
-                                                               std::optional<std::string> const& optAfterUri)
+    std::vector<PendingIdentityRow> collectPendingRows(library::MusicLibrary& ml,
+                                                       std::optional<std::string> const& optAfterUri)
     {
-      try
+      auto rows = std::vector<PendingIdentityRow>{};
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.manifest().reader(transaction);
+
+      for (auto const& [uriView, view] : reader)
       {
-        auto rows = std::vector<PendingIdentityRow>{};
-        auto const transaction = ml.readTransaction();
-        auto const reader = ml.manifest().reader(transaction);
+        auto uri = std::string{uriView};
 
-        for (auto const& [uriView, view] : reader)
+        // Pagination relies on the manifest reader yielding URIs in strictly
+        // increasing lexicographic byte order (LMDB's default memcmp
+        // comparator for blob keys); a custom comparator would break it.
+        if (optAfterUri && uri <= *optAfterUri)
         {
-          auto uri = std::string{uriView};
-
-          // Pagination relies on the manifest reader yielding URIs in strictly
-          // increasing lexicographic byte order (LMDB's default memcmp
-          // comparator for blob keys); a custom comparator would break it.
-          if (optAfterUri && uri <= *optAfterUri)
-          {
-            continue;
-          }
-
-          if (view.status() != library::FileStatus::Available ||
-              library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
-          {
-            continue;
-          }
-
-          auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .mtime = view.mtime()};
-
-          if (auto parsed = library::LibraryUri::parse(uri); !parsed)
-          {
-            row.pathError = parsed.error().message;
-          }
-          else if (auto resolved = parsed->resolveUnder(ml.rootPath()); resolved)
-          {
-            row.fullPath = std::move(*resolved);
-          }
-          else
-          {
-            row.pathError = resolved.error().message;
-          }
-
-          rows.push_back(std::move(row));
-
-          if (rows.size() == kPendingIdentityBatchSize)
-          {
-            break;
-          }
+          continue;
         }
 
-        return rows;
+        if (view.status() != library::FileStatus::Available ||
+            library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
+        {
+          continue;
+        }
+
+        auto row = PendingIdentityRow{.uri = uri, .fileSize = view.fileSize(), .mtime = view.mtime()};
+
+        if (auto parsed = library::LibraryUri::parse(uri); !parsed)
+        {
+          row.pathError = parsed.error().message;
+        }
+        else if (auto resolved = parsed->resolveUnder(ml.rootPath()); resolved)
+        {
+          row.fullPath = std::move(*resolved);
+        }
+        else
+        {
+          row.pathError = resolved.error().message;
+        }
+
+        rows.push_back(std::move(row));
+
+        if (rows.size() == kPendingIdentityBatchSize)
+        {
+          break;
+        }
       }
-      catch (library::detail::LibraryException const& error)
-      {
-        return std::unexpected{error.error()};
-      }
+
+      return rows;
     }
 
-    Result<std::int32_t> countPendingRows(library::MusicLibrary& ml)
+    std::int32_t countPendingRows(library::MusicLibrary& ml)
     {
-      try
-      {
-        std::int32_t count = 0;
-        auto const transaction = ml.readTransaction();
-        auto const reader = ml.manifest().reader(transaction);
+      std::int32_t count = 0;
+      auto const transaction = ml.readTransaction();
+      auto const reader = ml.manifest().reader(transaction);
 
-        for (auto const& [uriView, view] : reader)
+      for (auto const& [uriView, view] : reader)
+      {
+        std::ignore = uriView;
+
+        if (view.status() == library::FileStatus::Available &&
+            !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
         {
-          std::ignore = uriView;
-
-          if (view.status() == library::FileStatus::Available &&
-              !library::hasAudioIdentity(view.audioPayloadLength(), view.audioSignature()))
-          {
-            ++count;
-          }
+          ++count;
         }
+      }
 
-        return count;
-      }
-      catch (library::detail::LibraryException const& error)
-      {
-        return std::unexpected{error.error()};
-      }
+      return count;
     }
 
     std::size_t effectiveConcurrency(std::size_t requested)
@@ -415,14 +400,7 @@ namespace ao::rt
     auto const fingerprint =
       options.fingerprint ? std::move(options.fingerprint) : FingerprintFunction{fingerprintAudioFile};
     auto const concurrency = effectiveConcurrency(options.maxConcurrency);
-    auto totalCountResult = countPendingRows(_library);
-
-    if (!totalCountResult)
-    {
-      co_return std::unexpected{totalCountResult.error()};
-    }
-
-    auto const totalCount = *totalCountResult;
+    auto const totalCount = countPendingRows(_library);
     auto processedCount = std::atomic<std::int32_t>{0};
     auto callbackMutex = std::mutex{};
     auto optAfterUri = std::optional<std::string>{};
@@ -437,14 +415,7 @@ namespace ao::rt
       // Phase 1: snapshot a batch of pending rows. A plain read transaction is
       // a consistent LMDB snapshot, and every row is revalidated before its
       // write, so no mutation lock is needed here.
-      auto rowsResult = collectPendingRows(_library, optAfterUri);
-
-      if (!rowsResult)
-      {
-        co_return std::unexpected{rowsResult.error()};
-      }
-
-      auto rows = std::move(*rowsResult);
+      auto rows = collectPendingRows(_library, optAfterUri);
 
       if (rows.empty())
       {

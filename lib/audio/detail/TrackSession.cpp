@@ -3,6 +3,7 @@
 
 #include "TrackSession.h"
 
+#include "DecoderError.h"
 #include <ao/Error.h>
 #include <ao/audio/DecoderFactory.h>
 #include <ao/audio/DecoderSession.h>
@@ -11,7 +12,6 @@
 #include <ao/audio/PlaybackInput.h>
 #include <ao/audio/SampleEncoding.h>
 #include <ao/audio/StreamingSource.h>
-#include <ao/audio/detail/DecoderError.h>
 #include <ao/utility/StrongTypeFormatter.h>
 
 #include <chrono>

@@ -18,7 +18,7 @@ It delegates the exact `Error` fields and code inventory to the [error value ref
 ## Code boundary
 
 The top-level layer direction is defined by the [system architecture](../../architecture/system-overview.md), and failure ownership is refined by the [failure and reporting architecture](../../architecture/failure-and-reporting.md).
-The shared recoverable and invariant-fault foundations are public core-library types under `include/ao/`; cancellation belongs to `include/ao/async/`; runtime services under `app/include/ao/rt/` preserve or deliberately narrow those channels without depending on UIModel or a frontend.
+The shared recoverable and invariant-fault foundations are public core-library types under `include/ao/`; subsystem-private translation carriers remain under their owning `lib/` implementation when no public consumer requires their declarations; cancellation belongs to `include/ao/async/`; runtime services under `app/include/ao/rt/` preserve or deliberately narrow those channels without depending on UIModel or a frontend.
 
 Core code must not depend on runtime notifications or presentation state to classify an outcome.
 UIModel and frontends may adapt an already classified outcome for interaction or display, but they must not recover subsystem state by interpreting an error message.
@@ -72,13 +72,18 @@ When runtime composes a lower operation, it follows the enclosing operation's de
 2. An operation with a `Result` channel propagates every recoverable lower error unless it explicitly and losslessly reclassifies one code.
 3. An operation without a recoverable channel may collapse only its documented normal miss; every unexpected lower failure remains an invariant fault and preserves diagnostic origin.
 4. A transactional mutation either commits its complete effective change or reports/raises its declared failure; it never reports success after silently committing a successful subset.
+5. A root library write body returns `Result<T>` through its transaction owner; any error terminalizes that root before it crosses the boundary, while an unrelated exception is rethrown only after the same rollback.
 
 ## Failure and cancellation
 
 External files, user-authored text, persisted records, IO, devices, unsupported formats or capabilities, and resource exhaustion are recoverable when the public caller can react.
 Being off a real-time path does not change this classification.
+Library write-transaction construction has no actionable authoring branch: native begin or revision-initialization failure first unwinds writer ownership, then raises the established general storage exception rather than returning an operation `Result`.
 
 Public parsing or media boundaries may use a private error-carrying exception internally, but their public `Result` boundary catches only that private leaf.
+The library transaction owner follows the same exact-catch rule for its private native mutation marker; runtime and frontend code do not catch that storage type.
+The library owner also translates its private recoverable carrier at its own open or root-write boundary.
+After a complete open validates an iterable structured store, a later row-integrity failure from that iterator is instead an invariant fault: it propagates as the general exception channel and is not converted into a partial operation result by runtime or frontend code.
 Unrelated exceptions, including allocation and logic faults, are not converted to domain errors by a broad catch.
 
 Cancellable coroutines propagate `ao::async::OperationCancelled` until the
@@ -137,7 +142,7 @@ Cancellation after diagnosis may suppress stale presentation, but it cannot eras
 - [`TaskFuture.h`](../../../include/ao/async/TaskFuture.h) defines explicit caller-owned result and exception transport without requiring default-constructible task values.
 - [`Runtime.h`](../../../include/ao/async/Runtime.h), [`Runtime.cpp`](../../../lib/async/Runtime.cpp), and [`LifetimeScope.cpp`](../../../lib/async/LifetimeScope.cpp) implement terminal ownership, cancellation exclusion, fallback, and bookkeeping order.
 - [`UiWorkflow.h`](../../../app/linux-gtk/common/UiWorkflow.h) implements diagnostic-before-presentation ordering for GTK workflows.
-- Domain-private translation helpers live under subsystem `detail/` boundaries such as [`DecoderError.h`](../../../include/ao/audio/detail/DecoderError.h), [`LibraryError.h`](../../../include/ao/library/detail/LibraryError.h), [`QueryError.h`](../../../include/ao/query/detail/QueryError.h), and [`MediaError.h`](../../../include/ao/media/detail/MediaError.h).
+- Domain-private translation helpers live behind subsystem implementation boundaries: [`DecoderError.h`](../../../lib/audio/detail/DecoderError.h), [`LibraryError.h`](../../../lib/library/detail/LibraryError.h), [`MediaError.h`](../../../lib/media/detail/MediaError.h), and [`QueryError.h`](../../../lib/query/detail/QueryError.h).
 
 ## Test map
 

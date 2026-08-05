@@ -6,8 +6,12 @@
 #include <ao/Error.h>
 #include <ao/library/DictionaryStore.h>
 
+#include <expected>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <type_traits>
+#include <utility>
 
 namespace ao::lmdb
 {
@@ -20,7 +24,15 @@ namespace ao::library
   namespace detail
   {
     class LibraryIdentity;
-  }
+
+    template<typename Type>
+    struct IsResult : std::false_type
+    {};
+
+    template<typename Value>
+    struct IsResult<Result<Value>> : std::true_type
+    {};
+  } // namespace detail
 
   class FileManifestStore;
   class ListStore;
@@ -54,6 +66,60 @@ namespace ao::library
     WriteTransaction& operator=(WriteTransaction&& other) noexcept;
 
     DictionaryStore::Writer& dictionary();
+
+    /**
+     * Runs one root write operation inside this transaction.
+     *
+     * A recoverable operation error, native transaction failure, or private
+     * library error carrier aborts the whole transaction before the error is
+     * returned. Any other exception also aborts the transaction before it is
+     * rethrown. Successful operations leave the transaction active for commit().
+     * The callback cannot nest apply() or commit the transaction; savepoint
+     * semantics are not provided.
+     */
+    template<typename Function,
+             typename OperationResult = std::remove_cvref_t<std::invoke_result_t<Function, WriteTransaction&>>>
+      requires detail::IsResult<OperationResult>::value
+    OperationResult apply(Function&& function)
+    {
+      try
+      {
+        auto optResult = std::optional<OperationResult>{};
+        auto boundaryResult = applyBoundary(
+          [&function, &optResult](WriteTransaction& transaction) -> Result<>
+          {
+            optResult.emplace(std::invoke(std::forward<Function>(function), transaction));
+
+            if (!*optResult)
+            {
+              return std::unexpected{std::move(optResult->error())};
+            }
+
+            return {};
+          });
+
+        if (!boundaryResult)
+        {
+          return std::unexpected{std::move(boundaryResult.error())};
+        }
+
+        if (optResult)
+        {
+          return std::move(*optResult);
+        }
+
+        abort();
+        return makeError(Error::Code::InvalidState, "Library write operation produced no result");
+      }
+      catch (...)
+      {
+        // This also covers allocation or result-transfer failure outside the
+        // erased callback invocation itself.
+        abort();
+        throw;
+      }
+    }
+
     Result<> commit();
     // Explicitly terminates an active transaction. The destructor performs the
     // same rollback when an operation unwinds without committing.
@@ -67,6 +133,7 @@ namespace ao::library
                                           Options options,
                                           std::shared_ptr<void const> writerSessionAnchorPtr = {});
     explicit WriteTransaction(std::unique_ptr<Impl> implPtr);
+    Result<> applyBoundary(std::move_only_function<Result<>(WriteTransaction&)> function);
 
     lmdb::WriteTransaction& native(detail::LibraryIdentity const& identity);
     lmdb::WriteTransaction const& native(detail::LibraryIdentity const& identity) const;

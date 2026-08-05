@@ -9,10 +9,10 @@
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/ListBuilder.h>
 #include <ao/library/ListStore.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Environment.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/library/Library.h>
@@ -44,12 +44,8 @@ namespace ao::rt::test
       std::span<std::byte const> payload{};
     };
 
-    void seedRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
+    void appendRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
     {
-      {
-        [[maybe_unused]] auto library = library::test::makeTestMusicLibrary(path, path);
-      }
-
       auto environment = lmdb::test::openEnvironment(path, {.flags = lmdb::kEnvNoTls, .maxDatabases = 8});
       auto transaction = lmdb::test::beginWriteTransaction(environment);
       auto database = lmdb::test::openDatabase(transaction, "lists");
@@ -61,6 +57,15 @@ namespace ao::rt::test
       }
 
       REQUIRE(transaction.commit());
+    }
+
+    void seedRawListRecords(std::filesystem::path const& path, std::span<RawListRecord const> const records)
+    {
+      {
+        [[maybe_unused]] auto library = library::test::makeTestMusicLibrary(path, path);
+      }
+
+      appendRawListRecords(path, records);
     }
   } // namespace
 
@@ -565,24 +570,16 @@ namespace ao::rt::test
     auto const corruptPayload = std::array<std::byte, 4>{};
     seedRawListRecords(temp.path(),
                        std::array{RawListRecord{.listId = 1, .payload = rootPayload},
-                                  RawListRecord{.listId = 2, .payload = childPayload},
-                                  RawListRecord{.listId = 3, .payload = corruptPayload}});
+                                  RawListRecord{.listId = 2, .payload = childPayload}});
     auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path());
+    appendRawListRecords(temp.path(), std::array{RawListRecord{.listId = 3, .payload = corruptPayload}});
     auto changes = makeStateOnlyLibraryChanges(musicLibrary);
     auto writerFixture = LibraryWriterFixture{musicLibrary, changes};
     auto events = std::vector<LibraryChangeSet>{};
     auto subscription =
       changes.onChanged([&events](LibraryChangeSet const& event) noexcept { events.push_back(event); });
 
-    try
-    {
-      std::ignore = writerFixture.writer().deleteListAndDescendants(ListId{1});
-      FAIL("corrupt List subtree scan did not throw");
-    }
-    catch (library::detail::LibraryException const& error)
-    {
-      CHECK(error.error().code == Error::Code::CorruptData);
-    }
+    CHECK_THROWS_AS(std::ignore = writerFixture.writer().deleteListAndDescendants(ListId{1}), Exception);
 
     auto transaction = musicLibrary.readTransaction();
     auto reader = musicLibrary.lists().reader(transaction);

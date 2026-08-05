@@ -4,6 +4,8 @@
 #include <ao/library/WriteTransaction.h>
 
 #include "LibraryIdentity.h"
+#include "detail/LibraryError.h"
+#include "lmdb/detail/TransactionFailure.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/library/DictionaryStore.h>
@@ -11,6 +13,7 @@
 #include <ao/lmdb/Transaction.h>
 
 #include <expected>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -39,6 +42,7 @@ namespace ao::library
 
     void finishFailure() noexcept
     {
+      operationActive = false;
       dictionaryWriter.rollbackPublication();
       transaction.abort();
 
@@ -56,6 +60,7 @@ namespace ao::library
     detail::LibraryIdentity const* identity;
     std::optional<Error> optInjectedCommitFailure;
     std::shared_ptr<void const> writerSessionAnchorPtr;
+    bool operationActive = false;
   };
 
   Result<WriteTransaction> WriteTransaction::begin(lmdb::Environment& environment,
@@ -119,6 +124,49 @@ namespace ao::library
     return _implPtr->dictionaryWriter;
   }
 
+  Result<> WriteTransaction::applyBoundary(std::move_only_function<Result<>(WriteTransaction&)> function)
+  {
+    if (_implPtr == nullptr || !_implPtr->transaction.isActive())
+    {
+      return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
+    }
+
+    if (_implPtr->operationActive)
+    {
+      return makeError(Error::Code::InvalidState, "Library write transaction already has an active operation");
+    }
+
+    _implPtr->operationActive = true;
+
+    try
+    {
+      if (auto result = std::invoke(function, *this); !result)
+      {
+        abort();
+        return std::unexpected{std::move(result.error())};
+      }
+
+      if (_implPtr == nullptr || !_implPtr->transaction.isActive())
+      {
+        abort();
+        return makeError(Error::Code::InvalidState, "Library write operation terminated its transaction");
+      }
+
+      _implPtr->operationActive = false;
+      return {};
+    }
+    catch (lmdb::detail::TransactionFailure const& failure)
+    {
+      abort();
+      return std::unexpected{failure.error()};
+    }
+    catch (detail::LibraryException const& failure)
+    {
+      abort();
+      return std::unexpected{failure.error()};
+    }
+  }
+
   Result<> WriteTransaction::commit()
   {
     if (_implPtr == nullptr)
@@ -132,6 +180,11 @@ namespace ao::library
       // the LMDB scope; finish the outer dictionary and writer lifetime.
       _implPtr->finishFailure();
       return makeError(Error::Code::InvalidState, "Library write transaction is no longer active");
+    }
+
+    if (_implPtr->operationActive)
+    {
+      return makeError(Error::Code::InvalidState, "Cannot commit during a library write operation");
     }
 
     auto result = Result<>{};
@@ -149,6 +202,11 @@ namespace ao::library
       {
         result = _implPtr->transaction.commit();
       }
+    }
+    catch (lmdb::detail::TransactionFailure const& failure)
+    {
+      _implPtr->finishFailure();
+      return std::unexpected{failure.error()};
     }
     catch (...)
     {

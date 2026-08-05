@@ -14,6 +14,7 @@
 #include "test/unit/runtime/AsyncTestSupport.h"
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/async/OperationCancelled.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/AudioIdentity.h>
@@ -48,6 +49,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -200,7 +202,7 @@ namespace ao::rt::test
     CHECK(manifestHasIdentity(ml, "song.flac"));
   }
 
-  TEST_CASE("AudioIdentityIndexer - corrupt manifest iteration returns an error",
+  TEST_CASE("AudioIdentityIndexer - post-open corrupt manifest iteration fails fast",
             "[runtime][regression][audio-identity][integrity]")
   {
     auto const temp = ao::test::TempDir{};
@@ -226,9 +228,7 @@ namespace ao::rt::test
       REQUIRE(transaction.commit());
     }
 
-    auto const result = runIndexPending(ml);
-    REQUIRE_FALSE(result);
-    CHECK(result.error().code == Error::Code::CorruptData);
+    CHECK_THROWS_AS(std::ignore = runIndexPending(ml), Exception);
   }
 
   TEST_CASE("AudioIdentityIndexer - concurrent backfill fills many pending rows",

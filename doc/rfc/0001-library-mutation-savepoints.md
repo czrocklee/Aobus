@@ -3,42 +3,31 @@ id: rfc.0001.library-mutation-savepoints
 type: rfc
 status: draft
 domain: library
-summary: Proposes result-oriented library mutation boundaries backed by nested LMDB write savepoints and one transaction-chain dictionary journal.
+summary: Proposes nested LMDB write savepoints and one transaction-chain dictionary journal on top of the current root Result boundary.
 depends-on: none
 ---
-# RFC 0001: Result-oriented library mutations and write savepoints
+# RFC 0001: Library mutation write savepoints
 
 ## Problem
 
-The current library failure model is safe but requires callers to understand too many overlapping propagation rules.
-The [failure architecture](../architecture/failure-and-reporting.md) and [outcome channel specification](../spec/failure/outcome-channel.md) distinguish recoverable `Result<T>` values, invariant exceptions, private domain exceptions, and transaction-unwind exceptions.
-The [library architecture](../architecture/library.md) and [runtime mutation specification](../spec/library/runtime/mutation.md) additionally distinguish failures before and after an item's first staged mutation.
+The current [library architecture](../architecture/library.md), [outcome channel specification](../spec/failure/outcome-channel.md), and [runtime mutation specification](../spec/library/runtime/mutation.md) already define a non-nested root execution boundary.
+`WriteTransaction::apply()` accepts a `Result<T>`-returning body, aborts the complete root on an error or private native transaction marker, and aborts before rethrowing an unrelated exception.
+`LibraryMutationService::Mutation::apply()` additionally releases live writer admission, and offline scan/import owners use the same core boundary.
+No runtime writer, task, scan, or importer catches `lmdb::detail::TransactionFailure`.
+Root construction is deliberately outside that recoverable operation channel: native begin and the one revision initialization occur before the wrapper is exposed, and failure unwinds writer ownership before propagating as the library's general storage exception.
 
-That distinction protects atomicity, but it is dynamic rather than apparent from a function signature.
-Several `Result<T>`-returning functions may still throw a recoverable transaction marker after staging begins.
-Representative examples are `TrackBuilder::prepare*` in [`TrackBuilder.cpp`](../../lib/library/TrackBuilder.cpp) and the prepared Track write functions in [`TrackWrite.cpp`](../../lib/library/TrackWrite.cpp).
-A caller must therefore inspect both a returned `Result` and the possibility of `lmdb::TransactionFailure` escaping the call even though that second recoverable channel is not expressed by the function signature.
-
-The supposedly private failure mechanisms also cross their intended implementation boundaries.
-`library::detail::LibraryException` is declared under [`include/ao/library/detail/`](../../include/ao/library/detail/LibraryError.h), yet runtime scanning and audio-identity indexing catch it directly, and the CLI argument adapter catches it around command parsing.
-`lmdb::TransactionFailure` is caught repeatedly throughout `app/runtime/library/`, including `LibraryWriter`, `LibraryTaskService`, `ScanApplyOperation`, and the YAML importer.
-The application layer consequently knows which lower storage exception means “unwind before converting to `Result`.”
-
-The current rule can be summarized as follows:
+That baseline makes whole-root commands safe and gives their callers one recoverable channel:
 
 ```text
-pure or pre-effect failure
-  -> return Result
-
-failure after the first staged effect
-  -> throw TransactionFailure
-  -> unwind the complete transaction owner
-  -> catch outside that owner
-  -> return Result
+root body returns Result error or a private mutation marker escapes a helper
+  -> WriteTransaction aborts and terminalizes the root
+  -> Mutation releases coordinator admission when present
+  -> caller receives Result error
 ```
 
-This model is correct for a non-nested transaction, because returning an error into a still-live transaction scope could let a caller commit a successful prefix.
-It also creates duplicated preflight checks, result-to-exception translations, exception-to-result adapters, and transaction-state knowledge across otherwise unrelated library operations.
+It deliberately cannot preserve earlier root work after one already-mutated item fails.
+A batch that is specified to skip an item and continue must therefore complete every recoverable item check before staging, or abort the entire batch.
+Several lower helpers still use short-range transaction markers internally, but their current library-owned boundaries contain them; root containment does not by itself normalize every helper signature or enable item-local recovery.
 
 The core LMDB adapter already supports a native child write transaction through `lmdb::WriteTransaction::begin(parent)` and tests child commit and abort in [`TransactionTest.cpp`](../../test/unit/lmdb/TransactionTest.cpp).
 The library layer deliberately does not expose that capability today.
@@ -47,10 +36,7 @@ Its root write wrapper owns one dictionary overlay, one native writer, one proce
 Naively adding a child `library::WriteTransaction` would not solve the problem.
 It would attempt to reacquire the non-recursive writer gate, allocate dictionary IDs from committed state instead of parent-staged state, make a child blind to the parent's dictionary overlay, risk publishing a child delta before the root commit, and leave parent-bound cursor wrappers usable while the native parent is suspended.
 
-The proposal needs to answer two separate questions:
-
-1. Can recoverable library mutations expose one `Result<T>` channel without weakening rollback guarantees?
-2. Can nested savepoints be implemented under one writer authority without replacing the current dense dictionary, stable borrowed views, fast committed lookup, or atomic publication model?
+The remaining proposal asks whether nested savepoints can preserve a usable parent after an item-local failure under one writer authority, without replacing the current dense dictionary, stable borrowed views, fast committed lookup, or atomic publication model.
 
 ## Dependencies
 
@@ -60,14 +46,14 @@ The proposal needs to answer two separate questions:
 
 ## Goals
 
-- Make recoverable failures from public library and runtime mutation operations observable through `Result<T>` rather than recoverable exceptions.
+- Preserve the current root `Result<T>` containment and whole-root rollback contract.
 - Preserve exception or contract failure for broken invariants, allocation failure, and unexpected storage or program faults.
 - Keep one process-serialized root writer authority and exactly one usable active write-transaction leaf at any time.
 - Add stack-disciplined native child transactions as savepoints rather than as concurrent writers.
 - Let an explicitly recoverable sub-operation return an error after staging without leaving a committable partial sub-operation in its parent.
 - Keep root commit as the only durability, dictionary publication, revision publication, and application change-publication boundary.
 - Preserve dense append-only committed `DictionaryId` values, reuse of aborted tail IDs, store-lifetime dictionary text views, fast committed text lookup, batch binding, and all-or-none publication to concurrent readers.
-- Hide `lmdb::TransactionFailure` and any short-range library failure carrier inside transaction or operation owners.
+- Keep `lmdb::detail::TransactionFailure` and any short-range library failure carrier inside transaction or operation owners.
 - Make stale parent or child writers fail before native cursor access.
 - Retain pure preflight where it improves failure reporting or avoids unnecessary savepoint work, while removing its role as the only protection against partial commit.
 - Give batch owners an explicit policy choice between continuing after an item-local child rollback and aborting the complete root operation.
@@ -97,6 +83,7 @@ The target contract separates observable outcomes from private unwinding mechani
 | Recoverable command, parse, media, validation, storage, or commit failure | `Result<T>` | Public |
 | Recoverable failure inside a savepoint | `Result<T>` returned to the savepoint owner | Internal operation API |
 | Native mutation fault that still uses an exception internally | Exact private catch by the active transaction owner, followed by rollback and `Result` translation | LMDB/library implementation only |
+| Root construction or revision-initialization failure | General storage exception after writer-ownership unwind | Library infrastructure boundary |
 | Broken invariant or unexpected fault | `ao::Exception`, another exact exception, or contract failure | Propagates to the established invariant boundary |
 | Failure after durable root commit in mandatory revision or publication infrastructure | Terminal infrastructure handling | Runtime implementation only |
 
@@ -109,11 +96,12 @@ Its current uses are reclassified by origin:
 - Pure validation and external-data rejection return `Result`.
 - A recoverable mutation rejection returns `Result` through a root or child execution boundary that has already rolled back the affected transaction.
 - A canonical postcondition that is impossible after successful preflight and prepared-value construction is an invariant fault.
-- Safely detected persisted corruption retains the operation-level `CorruptData` policy owned by the relevant specification, but any iterator-local exception used to cross a C++ interface is caught inside `ao::library` rather than by runtime or CLI code.
+- Safely detected persisted corruption before library exposure retains the open-level `CorruptData` policy.
+  After that gate establishes an iterable store invariant, a later row-integrity breach is a general infrastructure exception rather than a recoverable private carrier; runtime and CLI code name neither private type.
 
-`lmdb::TransactionFailure` may remain temporarily inside the independent LMDB adapter because a native mutation can fail through an interface that cannot yet return safely into its current transaction.
-No runtime writer, task, scan, importer, or CLI adapter catches that type after this proposal is implemented.
-The root or savepoint execution owner catches it, terminates the affected transaction scope, and returns the carried `Error`.
+`lmdb::detail::TransactionFailure` currently remains inside the independent LMDB and library adapters because a native mutation can fail through an interface that cannot safely return into its active transaction.
+The implemented root execution owner catches it, aborts the root, and returns the carried `Error`; no runtime writer, task, scan, or importer catches that type.
+The proposed savepoint owner extends the same containment to a child, subject to the conservative root-terminal policy below.
 
 ### One writer authority and one active leaf
 
@@ -146,31 +134,21 @@ The implementation uses “writer” consistently for two different concepts.
 The root chain owns one logical writer authority, while store-specific `Database::Writer` values are cursor wrappers bound to the current active leaf.
 Several Track, List, Manifest, Resource, Metadata, and Dictionary cursor wrappers may exist inside one leaf, but they confer no additional writer authority and cannot cross a savepoint transition as usable handles.
 
-### Root operation owner
+### Implemented root-operation prerequisite
 
 Single-command mutation does not require a native child merely to hide an exception.
-The root operation owner can contain the existing transaction marker directly.
-
-The private runtime `LibraryMutationService::Mutation` gains an execution boundary conceptually equivalent to:
+The current authorities cited in [Problem](#problem) own the implemented behavior; this RFC relies on the following shape only as a prerequisite:
 
 ```cpp
 template<typename Function>
 auto Mutation::apply(Function&& function)
-  -> std::invoke_result_t<Function, library::WriteContext&>;
+  -> std::invoke_result_t<Function, library::WriteTransaction&>;
 ```
 
-The callback result type is constrained to `Result<T>`, and `apply` returns that same type rather than nesting one `Result` inside another.
-`apply` invokes the command body with the root `WriteContext`.
-If the body returns an error, `apply` explicitly aborts and terminalizes the root before returning that error.
-If the body throws `lmdb::TransactionFailure`, `apply` copies the carried `Error`, explicitly aborts and terminalizes the root, and returns the error.
-If the body throws any other exception, `apply` aborts and terminalizes the root and rethrows the original exception.
-A successful `apply` leaves the root active so the existing coordinator can validate and commit the matching `LibraryChangeSet`.
-
-Offline operations receive an equivalent owner inside the core library or their existing operation object.
-They do not duplicate the catch/abort/translation sequence.
-
-This boundary is the minimum change needed to hide transaction exceptions from ordinary mutation code.
-Nested savepoints are added only where the parent needs to remain usable after a recoverable sub-operation failure.
+The callback result is constrained to `Result<T>` and is returned without another wrapper.
+Any error terminalizes the root; success leaves it active for a separate commit.
+The callback cannot nest `apply()` or call `commit()`, so the current API does not accidentally imply savepoint behavior.
+This RFC adds children only where a parent must remain usable after a recoverable sub-operation failure.
 
 ### Savepoint execution API
 
@@ -415,17 +393,12 @@ The ownership assumptions are:
 
 ## Alternatives
 
-### Keep the current preflight-plus-unwind rule
+### Keep the current root-only boundary
 
-The status quo has the smallest implementation risk and already preserves atomicity.
-It retains the dynamic first-effect rule, recoverable exceptions crossing `Result` signatures, repeated adapters, and direct application knowledge of LMDB transaction control.
+The current root `apply` boundary already preserves atomicity and hides native mutation markers from ordinary application code.
+Stopping there has the smallest further implementation risk and is sufficient for every command that abandons its complete root transaction on any error.
+It retains preflight as the only way for a batch to reject one item and continue, and it cannot preserve a parent while rolling back only that already-mutated item.
 It remains the fallback if savepoint performance or cursor safety cannot be demonstrated.
-
-### Hide transaction markers only at root owners
-
-`Mutation::apply` and an offline equivalent can hide `TransactionFailure` without nested transactions.
-This is the recommended first migration phase and may be sufficient for every command that abandons its complete root transaction on any error.
-It cannot preserve a parent while rolling back only one already-mutated batch item.
 
 ### Mark the root transaction as poisoned
 
@@ -487,27 +460,27 @@ The reverse-index alternative would require a separate RFC or an accepted amendm
 ### Source and behavior compatibility
 
 The proposal intentionally changes private and core mutation APIs during heavy development.
-There is no compatibility wrapper for callers that directly catch `library::detail::LibraryException` or `lmdb::TransactionFailure`.
-Runtime and CLI code move to `Result` consumption at operation boundaries.
+The current root boundary and validated-iterator policy have removed application catches of both private carriers; there is no compatibility wrapper for code that tries to reintroduce either type above `ao::library`.
+Runtime and CLI code consume `Result` at operation boundaries.
 
 Existing command success, no-op, preview, stale, unavailable, and failure semantics remain unchanged unless an owning subsystem specification explicitly adopts a new item-continuation policy.
 Existing post-commit infrastructure termination behavior remains unchanged.
 
 ### Incremental implementation
 
-The implementation proceeds in reversible phases.
+Root-owner containment is an implemented prerequisite rather than a remaining RFC phase.
+The remaining implementation proceeds in reversible phases.
 
-1. Add root-owner `apply` boundaries to `LibraryMutationService::Mutation` and offline transaction owners, centralize exact transaction-marker containment, and remove repeated application catches without adding native children.
-2. Add an explicit root `WriteSession`, active-leaf identity, parent suspension, and callback-scoped child execution around the already-supported native LMDB child transaction.
-3. Split committed Dictionary state from the root-owned `DictionaryWriteSession`, replace child-local allocation with the chain journal and checkpoints, and preserve root-only publication.
-4. Add cursor/epoch rejection and reacquisition across child transitions for every store writer and transaction-bound reader surface.
-5. Enable savepoints in one batch path whose existing semantics already distinguish item-local failure, initially the scan apply path or an isolated test operation.
-6. Measure savepoint and cursor overhead before enabling additional item-level children.
-7. Normalize mutation signatures so recoverable errors return `Result`, ceremonial success-only results use their narrow success shape, and shared private exception types no longer leak above their owner.
-8. Update the current architecture, specifications, reference, and decision record only after the selected behavior is implemented and validated.
+1. Add an explicit root `WriteSession`, active-leaf identity, parent suspension, and callback-scoped child execution around the already-supported native LMDB child transaction.
+2. Split committed Dictionary state from the root-owned `DictionaryWriteSession`, replace child-local allocation with the chain journal and checkpoints, and preserve root-only publication.
+3. Add cursor/epoch rejection and reacquisition across child transitions for every store writer and transaction-bound reader surface.
+4. Enable savepoints in one batch path whose existing semantics already distinguish item-local failure, initially the scan apply path or an isolated test operation.
+5. Measure savepoint and cursor overhead before enabling additional item-level children.
+6. Normalize remaining mutation signatures so recoverable errors return `Result`, ceremonial success-only results use their narrow success shape, and existing private-carrier confinement is preserved.
+7. Update the current architecture, specifications, reference, and decision record only after the selected behavior is implemented and validated.
 
 Each phase keeps the root transaction abort path available.
-If nested enablement is rolled back before current documentation is promoted, the root-owner containment work remains independently useful.
+If nested enablement is rolled back, the current root-owner containment remains independently useful and authoritative.
 
 ### Platform impact
 
@@ -551,10 +524,10 @@ No frontend API or toolkit lifetime changes.
 
 ### Failure-channel tests
 
-- A recoverable body error before and after staged writes returns the same structured `Error` after the correct rollback.
-- No runtime or CLI production file includes or catches `library::detail::LibraryException` or `lmdb::TransactionFailure` for an ordinary operation.
-- Unknown exceptions preserve their dynamic type and diagnostic location after the root is made non-committable.
-- Failed root commit returns a structured error from a terminal transaction.
+- Existing root regression gates continue to prove recoverable body errors, native mutation faults, unexpected exceptions, terminal commit behavior, and immediate writer-admission reuse.
+- No runtime or CLI production file includes or catches `library::detail::LibraryException` for an ordinary operation, and the current confinement of `lmdb::detail::TransactionFailure` is preserved.
+- A recoverable child body error before and after staged writes returns the same structured `Error` after child rollback under the selected continuation policy.
+- Unknown exceptions preserve their dynamic type and diagnostic location after the child and root are made non-committable.
 - Post-commit revision or publication failures retain terminal infrastructure behavior.
 - Message text is never used to choose child continuation or root abort.
 
@@ -568,8 +541,7 @@ No frontend API or toolkit lifetime changes.
 
 ### Performance and concurrency validation
 
-- Benchmark root-only interactive commands against the current implementation to ensure root containment adds no material overhead.
-- Benchmark savepoint-per-item scan and import workloads at representative and large library sizes before broad rollout.
+- Benchmark savepoint-per-item scan and import workloads against the current root-only implementation at representative and large library sizes before broad rollout.
 - Measure dictionary interning, cursor reconstruction, child begin/merge, and root publication separately.
 - Preserve or deliberately revise the existing performance baselines only after review.
 - Run deterministic concurrent-reader publication tests and the governed concurrency suite.
@@ -578,7 +550,7 @@ No frontend API or toolkit lifetime changes.
 
 ### Acceptance criteria
 
-- Ordinary runtime and CLI mutation code consumes one recoverable `Result` channel and names no lower transaction exception.
+- Ordinary runtime and CLI mutation code consumes one recoverable `Result` channel, names no private library exception, and preserves current native-marker confinement.
 - No failed savepoint can leave a partial child effect committable in its parent.
 - No child publishes dictionary or application state.
 - Dense IDs, aborted-tail reuse, stable dictionary text views, and all-or-none concurrent publication remain proven.
@@ -597,21 +569,20 @@ No frontend API or toolkit lifetime changes.
 - Which current success-only `Result<>` methods should become `void`, and which should retain `Result` for future or third-party failures?
 - Should the LMDB adapter eventually replace internal transaction exceptions with a terminalizing result API for child-bound writers, or is exact owner containment sufficient?
 - What measured child-per-item overhead is acceptable for a large consumer music library?
-- Should safely detected post-open persisted corruption remain a recoverable operation result everywhere, or may a validated store classify selected impossible read failures as infrastructure faults?
 
 ## Promotion plan
 
 If accepted and implemented, this RFC updates the following current authorities:
 
-- [Library architecture](../architecture/library.md): writer-chain ownership, one active leaf, root-only publication, and runtime/core boundary containment.
-- [Failure and reporting architecture](../architecture/failure-and-reporting.md): private transaction-marker containment without changing public recoverable and invariant channels.
-- [Outcome channel specification](../spec/failure/outcome-channel.md): recoverable exception containment at root and savepoint owners.
+- [Library architecture](../architecture/library.md): writer-chain ownership, one active leaf, child containment, and root-only publication.
+- [Failure and reporting architecture](../architecture/failure-and-reporting.md): child transaction-marker containment without changing public recoverable and invariant channels.
+- [Outcome channel specification](../spec/failure/outcome-channel.md): recoverable exception containment at savepoint owners.
 - [LMDB operation specification](../spec/storage/lmdb-operation.md): parent suspension, child merge/abort, stale cursor behavior, and failed-child-commit policy.
 - [Library access and mutation specification](../spec/library/runtime/mutation.md): savepoint behavior, item continuation authority, and removal of the first-effect exception rule where savepoints apply.
 - [Library change publication specification](../spec/library/runtime/change-publication.md): root-only visibility and publication after child merges.
 - [Library database reference](../reference/library/storage/database.md): transaction-chain and Dictionary write-session mechanics without changing the physical format.
 
-Acceptance also creates a decision record for the durable rationale behind root-owner Result containment, nested savepoints, and the chain-wide Dictionary journal, including rejection of gapped IDs, content-derived IDs, a persistent reverse index, and child-overlay adoption.
+Acceptance also creates a decision record for the durable rationale behind nested savepoints and the chain-wide Dictionary journal, including rejection of gapped IDs, content-derived IDs, a persistent reverse index, and child-overlay adoption.
 
 Implementation and test maps in the promoted documents will link the final `WriteTransaction`, `WriteContext`, `DictionaryWriteSession`, `LibraryMutationService`, LMDB transaction, and focused test symbols.
 No user guide is expected because the proposal changes no user task or visible command surface.

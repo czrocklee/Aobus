@@ -1,7 +1,7 @@
 ---
 id: decision.0002.fail-closed-library-integrity
 type: decision
-status: accepted
+status: superseded
 domain: library
 summary: Rejects safely detected persisted dictionary, Track, and manifest corruption at open or operation boundaries instead of exposing salvage rows or degraded runtime state.
 ---
@@ -72,4 +72,4 @@ Safe repair requires format-specific authority over which facts may be discarded
 
 ## Supersession
 
-Not superseded.
+Superseded by [Decision 0006](0006-validate-open-fail-fast-live-iterator.md), which retains complete open-time rejection, extends it to Lists, and changes post-open iterator integrity faults to the infrastructure channel.

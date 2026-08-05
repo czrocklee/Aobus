@@ -4,13 +4,13 @@
 #include <ao/rt/library/LibraryScan.h>
 
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/AudioIdentity.h>
 #include <ao/library/FileManifestStore.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/MetadataLayout.h>
 #include <ao/library/MetadataStore.h>
 #include <ao/library/MusicLibrary.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/media/file/File.h>
 #include <ao/rt/library/ScanPlan.h>
 #include <ao/utility/Hash128.h>
@@ -62,11 +62,11 @@ namespace ao::rt
       }
     };
 
-    void scanEntry(std::filesystem::path const& path,
-                   std::string const& uri,
-                   library::FileManifestStore::Reader const& manifestReader,
-                   std::unordered_set<std::string>& seenUris,
-                   std::vector<ScanItem>& items)
+    Result<> scanEntry(std::filesystem::path const& path,
+                       std::string const& uri,
+                       library::FileManifestStore::Reader const& manifestReader,
+                       std::unordered_set<std::string>& seenUris,
+                       std::vector<ScanItem>& items)
     {
       auto entryEc = std::error_code{};
       bool isFile = false;
@@ -87,12 +87,12 @@ namespace ao::rt
         auto item = ScanItem{
           .uri = uri, .fullPath = path, .classification = ScanClassification::Error, .errorMessage = entryEc.message()};
         items.push_back(std::move(item));
-        return;
+        return {};
       }
 
       if (!isFile)
       {
-        return;
+        return {};
       }
 
       // Only files we can actually decode belong in the plan. Everything else -
@@ -100,12 +100,12 @@ namespace ao::rt
       // a literal .alac) - is not music we support and is ignored here.
       if (!media::file::File::isSupported(utility::pathFromUtf8(uri)))
       {
-        return;
+        return {};
       }
 
       if (!seenUris.insert(uri).second)
       {
-        return;
+        return {};
       }
 
       auto item = ScanItem{.uri = uri, .fullPath = path, .classification = ScanClassification::Error};
@@ -130,7 +130,7 @@ namespace ao::rt
           }
           else
           {
-            library::detail::throwLibraryError(std::move(manifestResult.error()));
+            return std::unexpected{manifestResult.error()};
           }
         }
         else
@@ -150,7 +150,7 @@ namespace ao::rt
           }
         }
       }
-      catch (library::detail::LibraryException const&)
+      catch (Exception const&)
       {
         throw;
       }
@@ -161,6 +161,7 @@ namespace ao::rt
       }
 
       items.push_back(std::move(item));
+      return {};
     }
     bool hasBlockedUriPrefix(std::string_view uri, std::unordered_set<std::string> const& blockedUriPrefixes)
     {
@@ -328,14 +329,7 @@ namespace ao::rt
 
   Result<ScanPlan> LibraryScan::buildPlan(BuildProgressCallback progress)
   {
-    try
-    {
-      return buildPlanUnchecked(std::move(progress));
-    }
-    catch (library::detail::LibraryException const& error)
-    {
-      return std::unexpected{error.error()};
-    }
+    return buildPlanUnchecked(std::move(progress));
   }
 
   Result<ScanPlan> LibraryScan::buildPlanUnchecked(BuildProgressCallback progress)
@@ -478,7 +472,11 @@ namespace ao::rt
         }
       }
 
-      scanEntry(*resolvedPath, std::string{canonicalUri->value()}, manifestReader, seenUris, items);
+      if (auto result = scanEntry(*resolvedPath, std::string{canonicalUri->value()}, manifestReader, seenUris, items);
+          !result)
+      {
+        return std::unexpected{result.error()};
+      }
 
       it.increment(ec);
 

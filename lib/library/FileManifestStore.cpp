@@ -5,11 +5,12 @@
 
 #include "FileManifestValidation.h"
 #include <ao/Error.h>
+#include <ao/Exception.h>
+#include <ao/ExceptionFormat.h>
 #include <ao/library/FileManifestView.h>
 #include <ao/library/LibraryUri.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/WriteTransaction.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/utility/ByteView.h>
 
 #include <array>
@@ -134,14 +135,15 @@ namespace ao::library
 
     if (!validation)
     {
-      detail::throwLibraryError(std::move(validation.error()));
+      throwException<Exception>(
+        "File manifest iterator encountered invalid data after library validation: {}", validation.error().message);
     }
 
     auto view = FileManifestView{pair.second};
 
     if (!view.isValid())
     {
-      detail::throwLibraryError(Error::Code::CorruptData, "File manifest payload is misaligned");
+      throwException<Exception>("File manifest iterator encountered a misaligned payload after library validation");
     }
 
     return {validation->uri, view};

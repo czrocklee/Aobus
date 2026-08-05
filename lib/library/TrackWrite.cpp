@@ -4,13 +4,14 @@
 #include <ao/library/TrackWrite.h>
 
 #include "TrackRecordValidation.h"
+#include "detail/LibraryError.h"
+#include "lmdb/detail/TransactionFailure.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
+#include <ao/Exception.h>
 #include <ao/library/TrackBuilder.h>
 #include <ao/library/TrackStore.h>
-#include <ao/library/detail/LibraryError.h>
 #include <ao/lmdb/Database.h>
-#include <ao/lmdb/TransactionFailure.h>
 
 #include <cstdint>
 #include <expected>
@@ -43,7 +44,7 @@ namespace ao::library::detail
 
         if (auto validation = validateSerializedHotTrack(hotBytes); !validation)
         {
-          throwLibraryError(Error::Code::InvalidState, "Prepared hot Track record is not canonical");
+          throwException<Exception>("Prepared hot Track record is not canonical");
         }
       }
 
@@ -59,7 +60,7 @@ namespace ao::library::detail
                             std::format("Cold Track record {} already exists without its hot side", rawTrackId));
         }
 
-        lmdb::throwTransactionFailure(std::move(error));
+        lmdb::detail::throwTransactionFailure(std::move(error));
       }
 
       auto const coldBytes = *coldResult;
@@ -67,7 +68,7 @@ namespace ao::library::detail
 
       if (auto validation = validateSerializedColdTrack(coldBytes); !validation)
       {
-        throwLibraryError(Error::Code::InvalidState, "Prepared cold Track record is not canonical");
+        throwException<Exception>("Prepared cold Track record is not canonical");
       }
 
       return TrackId{rawTrackId};
@@ -117,7 +118,7 @@ namespace ao::library::detail
     {
       if (trackId == kInvalidTrackId)
       {
-        throwLibraryError(Error::Code::CorruptData, "Track zero is reserved");
+        return makeError(Error::Code::CorruptData, "Track zero is reserved");
       }
 
       if (!target.get(trackId.raw()))
@@ -136,7 +137,7 @@ namespace ao::library::detail
 
       if (!hotResult)
       {
-        lmdb::throwTransactionFailure(std::move(hotResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(hotResult.error()));
       }
 
       auto const hotBytes = *hotResult;
@@ -144,7 +145,7 @@ namespace ao::library::detail
 
       if (auto validation = validateSerializedHotTrack(hotBytes); !validation)
       {
-        throwLibraryError(Error::Code::InvalidState, "Prepared hot Track record is not canonical");
+        throwException<Exception>("Prepared hot Track record is not canonical");
       }
     }
 
@@ -156,7 +157,7 @@ namespace ao::library::detail
 
       if (!coldResult)
       {
-        lmdb::throwTransactionFailure(std::move(coldResult.error()));
+        lmdb::detail::throwTransactionFailure(std::move(coldResult.error()));
       }
 
       auto const coldBytes = *coldResult;
@@ -164,7 +165,7 @@ namespace ao::library::detail
 
       if (auto validation = validateSerializedColdTrack(coldBytes); !validation)
       {
-        throwLibraryError(Error::Code::InvalidState, "Prepared cold Track record is not canonical");
+        throwException<Exception>("Prepared cold Track record is not canonical");
       }
     }
   };

@@ -3,13 +3,13 @@
 
 #include <ao/library/TrackStore.h>
 
+#include "lmdb/detail/TransactionFailure.h"
 #include <ao/CoreIds.h>
 #include <ao/Error.h>
 #include <ao/library/ReadTransaction.h>
 #include <ao/library/TrackView.h>
 #include <ao/library/WriteTransaction.h>
 #include <ao/lmdb/Database.h>
-#include <ao/lmdb/TransactionFailure.h>
 
 #include <gsl-lite/gsl-lite.hpp>
 
@@ -315,12 +315,12 @@ namespace ao::library
   {
     if (auto result = _hotWriter.clear(); !result)
     {
-      lmdb::throwTransactionFailure(std::move(result.error()));
+      lmdb::detail::throwTransactionFailure(std::move(result.error()));
     }
 
     if (auto result = _coldWriter.clear(); !result)
     {
-      lmdb::throwTransactionFailure(std::move(result.error()));
+      lmdb::detail::throwTransactionFailure(std::move(result.error()));
     }
 
     return {};

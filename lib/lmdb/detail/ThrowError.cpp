@@ -4,10 +4,10 @@
 #include "ThrowError.h"
 
 #include "ResultError.h"
+#include "TransactionFailure.h"
 #include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/ExceptionFormat.h>
-#include <ao/lmdb/TransactionFailure.h>
 
 #include <lmdb.h>
 
@@ -27,8 +27,8 @@ namespace ao::lmdb
 
   [[noreturn]] void throwOnMutationError(char const* origin, std::int32_t code, std::source_location location)
   {
-    throw TransactionFailure{Error{.code = errorCodeFor(code),
-                                   .message = std::format("{}: {}", origin, ::mdb_strerror(code)),
-                                   .location = location}};
+    throw detail::TransactionFailure{Error{.code = errorCodeFor(code),
+                                           .message = std::format("{}: {}", origin, ::mdb_strerror(code)),
+                                           .location = location}};
   }
 } // namespace ao::lmdb

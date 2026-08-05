@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2024-2026 Aobus Contributors
 
+#include "lib/audio/detail/DecoderError.h"
+
 #include <ao/Error.h>
 #include <ao/audio/DecoderSession.h>
 #include <ao/audio/PcmSource.h>
-#include <ao/audio/detail/DecoderError.h>
 
 #include <catch2/catch_test_macros.hpp>
 

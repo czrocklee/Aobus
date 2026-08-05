@@ -10,6 +10,7 @@
 #include "test/unit/runtime/ExecutorTestSupport.h"
 #include "test/unit/runtime/RuntimeLibraryTestSupport.h"
 #include <ao/CoreIds.h>
+#include <ao/Error.h>
 #include <ao/Exception.h>
 #include <ao/async/Runtime.h>
 #include <ao/library/ListStore.h>
@@ -17,7 +18,6 @@
 #include <ao/library/ResourceStore.h>
 #include <ao/library/TrackStore.h>
 #include <ao/library/WritableMusicLibrary.h>
-#include <ao/lmdb/TransactionFailure.h>
 #include <ao/rt/TrackMutation.h>
 #include <ao/rt/VirtualListIds.h>
 #include <ao/rt/library/Library.h>
@@ -25,6 +25,7 @@
 #include <ao/rt/library/LibraryWriter.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <algorithm>
 #include <array>
@@ -164,11 +165,17 @@ namespace ao::rt::test
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
     auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-    auto listWriter = musicLibrary.lists().writer(mutation.transaction());
+    auto optListWriter = std::optional<library::ListStore::Writer>{};
+    REQUIRE(mutation.apply(
+      [&musicLibrary, &optListWriter](library::WriteTransaction& transaction) -> Result<>
+      {
+        optListWriter.emplace(musicLibrary.lists().writer(transaction));
+        return {};
+      }));
 
     REQUIRE(mutation.commit(LibraryChangeSet{}));
 
-    CHECK_THROWS_AS(listWriter.get(ListId{1}), Exception);
+    CHECK_THROWS_AS(optListWriter->get(ListId{1}), Exception);
   }
 
   TEST_CASE("Library authoring - storage mutation failure unwinds the mutation scope",
@@ -183,25 +190,54 @@ namespace ao::rt::test
     auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
     auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
     auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
-    auto optFailure = std::optional<Error>{};
+    auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+    auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
+    auto failureResult =
+      mutation.apply([&musicLibrary, &oversizedValue](library::WriteTransaction& transaction)
+                     { return musicLibrary.resources().writer(transaction).create(oversizedValue); });
 
+    REQUIRE_FALSE(failureResult);
+    CHECK(failureResult.error().code == Error::Code::IoError);
+
+    auto commitResult = mutation.commit(LibraryChangeSet{});
+    REQUIRE_FALSE(commitResult);
+    CHECK(commitResult.error().code == Error::Code::InvalidState);
+
+    // A failed mutation must release admission before its wrapper is destroyed.
+    REQUIRE(mutationService.beginInteractiveMutation());
+  }
+
+  TEST_CASE("Library authoring - failed root operation releases coordinator admission immediately",
+            "[runtime][unit][library-authoring][concurrency]")
+  {
+    auto const temp = ao::test::TempDir{};
+    auto musicLibrary = library::test::makeTestMusicLibrary(temp.path(), temp.path() / "db");
+    auto executor = InlineExecutor{};
+    auto readTransaction = musicLibrary.readTransaction();
+    auto changes = LibraryChanges{executor, musicLibrary.libraryRevision(readTransaction)};
+    auto writableLibrary = ao::test::requireValue(library::WritableMusicLibrary::acquire(musicLibrary));
+    auto mutationService = LibraryMutationService{executor, std::move(writableLibrary), changes};
+
+    SECTION("Result error")
     {
-      try
-      {
-        auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
-        auto const oversizedValue = std::vector<std::byte>(kMapSize * 4);
+      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+      auto failureResult = mutation.apply([](library::WriteTransaction&) -> Result<>
+                                          { return makeError(Error::Code::Conflict, "rejected"); });
 
-        [[maybe_unused]] auto result = musicLibrary.resources().writer(mutation.transaction()).create(oversizedValue);
-        FAIL("an oversized resource write should throw");
-      }
-      catch (lmdb::TransactionFailure const& transactionFailure)
-      {
-        optFailure = transactionFailure.error();
-      }
+      REQUIRE_FALSE(failureResult);
+      CHECK(failureResult.error().code == Error::Code::Conflict);
+      REQUIRE(mutationService.beginInteractiveMutation());
     }
 
-    REQUIRE(optFailure);
-    CHECK(optFailure->code == Error::Code::IoError);
+    SECTION("unexpected exception")
+    {
+      auto mutation = ao::test::requireValue(mutationService.beginInteractiveMutation());
+
+      CHECK_THROWS_WITH(
+        mutation.apply([](library::WriteTransaction&) -> Result<> { throw Exception{"unexpected mutation failure"}; }),
+        "unexpected mutation failure");
+      REQUIRE(mutationService.beginInteractiveMutation());
+    }
   }
 
   TEST_CASE("Library authoring - semantic no-op preserves the current binding", "[runtime][unit][library-authoring]")
