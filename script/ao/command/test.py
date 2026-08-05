@@ -51,7 +51,6 @@ SUITES = {
     "cli": SuiteSpec("CLI", "catch2", "ao_cli_test"),
     "gtk": SuiteSpec("GTK", "catch2", "ao_gtk_test"),
     "integration": SuiteSpec("Integration", "catch2", "ao_integration_test"),
-    "council": SuiteSpec("Council", "catch2", "ao_council_test"),
     "tooling": SuiteSpec("Tooling Tests", "tooling"),
     "lint": SuiteSpec("Lint Integration", "lint", "AobusLintPlugin"),
 }

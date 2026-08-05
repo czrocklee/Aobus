@@ -17,7 +17,6 @@ The `./ao test` command exposes individual suites and two suite groups:
 - `cli`: command-line frontend Catch2 tests (`ao_cli_test`).
 - `gtk`: GTK Catch2 tests (`ao_gtk_test`).
 - `integration`: standalone integration tests (`ao_integration_test`).
-- `council`: council C++ tests (`ao_council_test`).
 - `tooling`: Python tests for the `./ao` tooling.
 - `lint`: integration tests for the Aobus clang-tidy plugin.
 - `default`: the native fast-loop group. Linux runs core and GTK; Windows runs core and TUI.
@@ -26,10 +25,10 @@ The `./ao test` command exposes individual suites and two suite groups:
 - `concurrency`: every native Catch2 suite, filtered to `[concurrency]` tests.
 
 `default` is intentionally the normal development loop. On Linux, the TUI, CLI,
-integration, council, tooling, and lint suites take longer, so they are included
+integration, tooling, and lint suites take longer, so they are included
 only when selected directly or through `all`. The Windows `all` group contains
 core, TUI, CLI, integration, and tooling. The normal Windows presets do not
-build GTK, the council tool, or the lint integration suite. Native `ao.bat tidy`
+build GTK or the lint integration suite. Native `ao.bat tidy`
 uses a separate `windows-tidy` preset that builds the self-contained
 `AobusClangTidy.exe`.
 

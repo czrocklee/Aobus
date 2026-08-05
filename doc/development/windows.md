@@ -9,7 +9,7 @@ summary: Defines the native Windows setup, build, test, and local-state workflow
 
 The native Windows build provides the CLI and FTXUI terminal applications, the
 native WinUI 3 desktop frontend, the shared core libraries, native tests, and a
-dedicated clang-tidy configuration. The GTK frontend and council tool are not
+dedicated clang-tidy configuration. The GTK frontend is not
 available in the Windows development profile.
 
 The source checkout may live on a local disk, a mapped drive such as `Y:`, or a

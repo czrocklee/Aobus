@@ -40,7 +40,6 @@ nix-shell --run "cmake --build $DEBUG_BUILD_DIR --parallel"
 ./ao test --core "test filter"
 ./ao test --gtk "test filter"
 ./ao test --integration "test filter"
-./ao test --council "test filter"
 ```
 
 Inspect build logs instead of rerunning full builds when a previous run already captured the failure:
@@ -107,7 +106,3 @@ Focused commands are diagnosis tools:
 After the focused diagnosis is done, return to the project validation policy.
 
 Run formatting, docs, or broad coverage only after the functional issue is fixed, and only when required by the user's requested deliverable. Run clang-tidy only when the user explicitly asks for linting, clang-tidy, lint cleanup, or clang-tidy findings in the current session.
-
-## High-Stakes Diagnoses And Reviews (optional)
-
-For most failures, diagnose solo with the loop above. When the call is genuinely high-stakes and a wrong judgment is costly — a subtle concurrency/lifetime root cause with competing hypotheses, an error-contract or architecture decision the fix forces, or reviewing a large/risky change — **suggest** convening a multi-model council to the user and explain why. Council activation is user-opt-in per `run-council`; do not convene one on your own judgment. Once the user asks for it, load `run-council` and follow its current intent schema. It gathers a cross-vendor frontier panel that drafts, challenges each other, and returns an advisory dossier; you still synthesize the final verdict after checking claims against the repository. It is **expensive** — do not suggest it for routine bugs.

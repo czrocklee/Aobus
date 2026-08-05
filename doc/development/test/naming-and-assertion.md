@@ -54,7 +54,6 @@ The testing layers from `layer-selection.md` map to first tags like this:
 | WinUI frontend | `[winui]` |
 | TUI frontend | `[tui]` |
 | CLI frontend | `[cli]` |
-| council tool | `[council]` |
 | performance baselines (`test/perf/`) | `[perf]` |
 
 Recommended layer tags:
@@ -70,7 +69,6 @@ Recommended layer tags:
 - `[tag]`
 - `[utility]`
 - `[cli]`
-- `[council]`
 - `[lmdb]`
 - `[media]`
 - `[perf]`

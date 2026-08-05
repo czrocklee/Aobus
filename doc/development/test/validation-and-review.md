@@ -82,7 +82,6 @@ a concrete failure or hypothesis needs a tighter feedback loop:
 ./ao test --core "Component - behavior"
 ./ao test --gtk "Component - behavior"
 ./ao test --integration "Component - behavior"
-./ao test --council "Component - behavior"
 ```
 
 Do not run a ladder of suite filters as a substitute for `./ao check`.

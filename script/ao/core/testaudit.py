@@ -14,7 +14,6 @@ KNOWN_LAYERS = frozenset(
         "audio",
         "cli",
         "core",
-        "council",
         "gtk",
         "library",
         "lmdb",

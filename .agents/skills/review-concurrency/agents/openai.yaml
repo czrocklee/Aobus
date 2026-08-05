@@ -1,6 +1,0 @@
-# OpenAI Codex CLI skill interface metadata, consumed by council members
-# running on the codex harness (config/agent-council.yaml).
-interface:
-  display_name: "Review Concurrency"
-  short_description: "Audit and validate Aobus thread-safety changes"
-  default_prompt: "Use $review-concurrency to audit this change for races, cancellation, and lifetime safety."

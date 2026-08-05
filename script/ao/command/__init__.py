@@ -8,7 +8,6 @@ from . import (
     analyze,
     build,
     check,
-    council,
     coverage,
     deps,
     docs,
@@ -39,5 +38,4 @@ COMMAND_MODULES = (
     format_command,
     hygiene,
     run,
-    council,
 )

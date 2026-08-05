@@ -381,9 +381,7 @@ def _is_platform_incompatible(path: Path, root: Path) -> bool:
     if profile == "windows":
         return (
             parts[:2] == ("app", "linux-gtk")
-            or parts[:2] in {("tool", "council"), ("test", "council")}
             or parts[:3] == ("test", "unit", "linux-gtk")
-            or parts[:3] in {("test", "unit", "council"), ("test", "integration", "council")}
             or "alsa" in joined
             or "pipewire" in joined
             or stem.endswith("linux")

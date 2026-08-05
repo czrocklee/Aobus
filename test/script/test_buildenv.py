@@ -31,7 +31,6 @@ class BuildEnvTest(unittest.TestCase):
 
     def test_requires_build_env_answers_by_command_name(self):
         self.assertTrue(buildenv.requires_build_env("build"))
-        self.assertFalse(buildenv.requires_build_env("council"))
         self.assertFalse(buildenv.requires_build_env("no-such-command"))
         self.assertFalse(buildenv.requires_build_env(""))
 

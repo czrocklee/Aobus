@@ -11,7 +11,6 @@ from unittest import mock
 from ao.__main__ import main, make_parser, parse_arguments
 from ao.command import build as build_command
 from ao.command import check as check_command
-from ao.command import council as council_command
 from ao.command import coverage as coverage_command
 from ao.command import run as run_command_mod
 from ao.command import test as test_command
@@ -147,7 +146,6 @@ class CliParseTest(unittest.TestCase):
             "format",
             "hygiene",
             "run",
-            "council",
         ):
             self.assertIn(command, buffer.getvalue())
         self.assertNotIn("selftest", buffer.getvalue())
@@ -350,49 +348,6 @@ class CliParseTest(unittest.TestCase):
 
         run.assert_not_called()
 
-    def test_council_forwards_subcommand_arguments(self):
-        args = self.parse(
-            ["council", "-p", "/tmp/aobus-test-build", "-n", "validate-config", "--registry", "config.yaml"]
-        )
-        self.assertEqual(args.path, "/tmp/aobus-test-build")
-        self.assertTrue(args.no_build)
-        self.assertEqual(args.council_args, ["validate-config", "--registry", "config.yaml"])
-
-    def test_council_builds_and_runs_selected_executable(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            binary = build_dir / "tool" / "council" / "aobus-council"
-            binary.parent.mkdir(parents=True)
-            binary.touch()
-            args = self.parse(["council", "-p", str(build_dir), "validate-config", "--registry", "config.yaml"])
-
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
-                with mock.patch.object(
-                    council_command.build,
-                    "parallel_build_arguments",
-                    return_value=["--parallel", "8"],
-                ):
-                    with mock.patch.object(council_command, "run", return_value=0) as run:
-                        self.assertEqual(council_command.run_command(args), 0)
-
-        self.assertEqual(
-            run.call_args_list[0].args[0],
-            ["cmake", "--build", str(build_dir), "--parallel", "8", "--target", "aobus-council"],
-        )
-        self.assertEqual(run.call_args_list[1].args[0], [str(binary), "validate-config", "--registry", "config.yaml"])
-
-    def test_council_rejects_windows_before_building_an_unsupported_target(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            build_dir = Path(temp_dir)
-            args = self.parse(["council", "-p", str(build_dir), "validate-config"])
-
-            with mock.patch.object(builddir, "platform_profile", return_value=builddir.WINDOWS_PROFILE):
-                with mock.patch.object(council_command, "run") as run:
-                    with self.assertRaisesRegex(SystemExit, "1"):
-                        council_command.run_command(args)
-
-        run.assert_not_called()
-
     def test_test_suite_shortcuts(self):
         with mock.patch.object(builddir, "platform_profile", return_value=builddir.LINUX_PROFILE):
             args = self.parse(["test", "--gtk", "[layout],[model]", "-n", "--clang", "--asan"])
@@ -428,7 +383,6 @@ class CliParseTest(unittest.TestCase):
                 "cli": ["ao_cli_test"],
                 "gtk": ["ao_gtk_test"],
                 "integration": ["ao_integration_test"],
-                "council": ["ao_council_test"],
             },
         )
 
@@ -440,7 +394,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "gtk", "integration", "council", "tooling", "lint"),
+            ("core", "tui", "cli", "gtk", "integration", "tooling", "lint"),
             Path("/tmp/aobus-test-build"),
             test_filter="",
             list_only=False,
@@ -457,7 +411,7 @@ class CliParseTest(unittest.TestCase):
 
         self.assertEqual(
             [call.args[0] for call in run_suite.call_args_list],
-            ["core", "tui", "cli", "gtk", "integration", "council"],
+            ["core", "tui", "cli", "gtk", "integration"],
         )
         self.assertEqual([call.args[0] for call in run_non_catch2.call_args_list], ["tooling", "lint"])
 
@@ -744,7 +698,7 @@ class CliParseTest(unittest.TestCase):
                 self.assertEqual(test_command.run_command(args), 0)
 
         run_suites.assert_called_once_with(
-            ("core", "tui", "cli", "gtk", "integration", "council"),
+            ("core", "tui", "cli", "gtk", "integration"),
             Path("/tmp/aobus-test-build"),
             test_filter="[concurrency]",
             list_only=False,

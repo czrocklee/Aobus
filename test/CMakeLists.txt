@@ -603,31 +603,6 @@ target_link_libraries(ao_cli_test PRIVATE
 add_test(NAME ao_cli_test COMMAND ao_cli_test)
 endif()
 
-if(AOBUS_BUILD_TOOLS)
-# ao_council_test: council tool unit and integration tests
-add_executable(ao_council_test
-    council/TestSupport.cpp
-    unit/council/CouncilSchemaTest.cpp
-    unit/council/IntentSerializationTest.cpp
-    unit/council/RegistrySerializationTest.cpp
-    unit/council/SchedulerTest.cpp
-    unit/council/SubstrateTest.cpp
-    unit/council/YamlStreamSerializationTest.cpp
-    integration/council/CliTest.cpp
-    integration/council/RunnerTest.cpp
-    integration/council/ProcessRunnerTest.cpp
-    integration/council/SubstrateTest.cpp
-)
-target_include_directories(ao_council_test PRIVATE "${CMAKE_SOURCE_DIR}")
-target_link_libraries(ao_council_test PRIVATE ao_council ao_test_support_common Catch2::Catch2WithMain)
-target_compile_definitions(ao_council_test PRIVATE
-  AOBUS_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-  AOBUS_COUNCIL_EXE="$<TARGET_FILE:aobus-council>"
-)
-add_dependencies(ao_council_test aobus-council)
-add_test(NAME ao_council_test COMMAND ao_council_test)
-endif()
-
 # ao_integration_test: standalone integration tests (full gate only, not the default ./ao test loop)
 add_executable(ao_integration_test
     integration/audio/DecoderIntegrationTest.cpp

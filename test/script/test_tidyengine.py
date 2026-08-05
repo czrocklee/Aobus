@@ -346,7 +346,7 @@ class CompileCommandCoverageTest(unittest.TestCase):
             root = Path(temp_dir) / "repo"
             build_dir = Path(temp_dir) / "build"
             native = root / "test" / "unit" / "utility" / "AtomicFileTest.cpp"
-            header = root / "test" / "council" / "TestSupport.h"
+            header = root / "test" / "unit" / "media" / "TestSupport.h"
             for path in (native, header):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
@@ -366,24 +366,6 @@ class CompileCommandCoverageTest(unittest.TestCase):
             self.assertEqual(list(plan.deferred), [header])
             self.assertEqual(list(plan.targets), [])
             self.assertFalse(plan.deferral_details[0].is_platform_incompatible)
-
-    def test_council_sources_are_incompatible_with_the_windows_native_graph(self):
-        root = Path("C:/repo")
-        paths = (
-            root / "tool" / "council" / "Engine.cpp",
-            root / "test" / "council" / "TestSupport.cpp",
-            root / "test" / "unit" / "council" / "EngineTest.cpp",
-            root / "test" / "integration" / "council" / "RunnerTest.cpp",
-        )
-
-        with mock.patch.object(
-            tidyengine.builddir,
-            "platform_profile",
-            return_value=tidyengine.builddir.WINDOWS_PROFILE,
-        ):
-            for path in paths:
-                with self.subTest(path=path):
-                    self.assertTrue(tidyengine._is_platform_incompatible(path, root))
 
     def test_winui_sources_are_incompatible_with_the_linux_native_graph(self):
         root = Path("/repo")
